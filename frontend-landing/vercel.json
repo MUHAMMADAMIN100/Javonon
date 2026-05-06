@@ -1,7 +1,7 @@
 {
   "rewrites": [
-    { "source": "/admin", "destination": "https://grant-china-crm.vercel.app/admin" },
-    { "source": "/admin/(.*)", "destination": "https://grant-china-crm.vercel.app/admin/$1" },
+    { "source": "/admin", "destination": "https://javonon-crm.vercel.app/admin" },
+    { "source": "/admin/(.*)", "destination": "https://javonon-crm.vercel.app/admin/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

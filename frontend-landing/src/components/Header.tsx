@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom';
 import Icon from '../Icon';
 
 const NAV_ITEMS: { href: string; label: string }[] = [
-  { href: '/#services', label: 'Программы' },
-  { href: '/#directions', label: 'Направления' },
+  { href: '/#services', label: 'Услуги' },
+  { href: '/#directions', label: 'Страны' },
   { href: '/#advantages', label: 'Преимущества' },
   { href: '/#testimonials', label: 'Отзывы' },
   { href: '/#contacts', label: 'Контакты' },
@@ -14,19 +14,13 @@ const NAV_ITEMS: { href: string; label: string }[] = [
 export default function Header() {
   const [open, setOpen] = useState(false);
 
-  // Блокируем прокрутку body, пока открыто мобильное меню
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
-    return () => {
-      document.body.style.overflow = '';
-    };
+    return () => { document.body.style.overflow = ''; };
   }, [open]);
 
-  // Закрываем по Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -42,16 +36,14 @@ export default function Header() {
         <motion.a
           href="#"
           className="logo"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
         >
-          <span className="brand-text">
-            <span className="brand-grant">GRANT</span>
-            <span className="brand-china">CHINA</span>
-          </span>
+          <span className="logo-mark">J</span>
+          <span className="logo-text">Javonon</span>
         </motion.a>
 
-        <nav className="nav nav-desktop">
+        <nav className="nav">
           {NAV_ITEMS.map((item) => (
             <motion.a key={item.href} href={item.href} whileHover={{ y: -2 }}>
               {item.label}
@@ -59,18 +51,18 @@ export default function Header() {
           ))}
         </nav>
 
-        <div className="header-actions header-actions-desktop">
-          <Link to="/login" className="btn btn-outline header-action-btn">
+        <div className="header-actions">
+          <Link to="/login" className="header-login">
             <Icon name="person" size={18} />
             <span>Вход</span>
           </Link>
           <motion.a
             href="#apply"
-            className="btn btn-primary header-action-btn"
-            whileHover={{ scale: 1.05, y: -2 }}
-            whileTap={{ scale: 0.95 }}
+            className="btn btn-primary btn-small"
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
           >
-            Оставить заявку
+            Подать заявку
           </motion.a>
         </div>
 
@@ -78,78 +70,43 @@ export default function Header() {
           type="button"
           className="header-burger"
           aria-label={open ? 'Закрыть меню' : 'Открыть меню'}
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen(true)}
         >
-          <Icon name={open ? 'close' : 'menu'} size={26} />
+          <Icon name="menu" size={24} />
         </button>
       </div>
 
       <AnimatePresence>
         {open && (
-          <>
-            <motion.div
-              key="backdrop"
-              className="header-mobile-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setOpen(false)}
-            />
-            <motion.div
-              key="drawer"
-              className="header-mobile-drawer"
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'tween', duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <div className="header-mobile-top">
-                <span className="brand-text" style={{ fontSize: 20 }}>
-                  <span className="brand-grant">GRANT</span>
-                  <span className="brand-china">CHINA</span>
-                </span>
-                <button
-                  type="button"
-                  className="header-mobile-close"
-                  aria-label="Закрыть меню"
-                  onClick={() => setOpen(false)}
-                >
-                  <Icon name="close" size={24} />
-                </button>
-              </div>
-
-              <nav className="header-mobile-nav">
-                {NAV_ITEMS.map((item) => (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                  >
-                    {item.label}
-                  </a>
-                ))}
-              </nav>
-
-              <div className="header-mobile-actions">
-                <Link
-                  to="/login"
-                  className="btn btn-secondary"
-                  onClick={() => setOpen(false)}
-                >
-                  <Icon name="person" size={18} />
-                  <span>Вход</span>
-                </Link>
-                <a
-                  href="#apply"
-                  className="btn btn-primary"
-                  onClick={() => setOpen(false)}
-                >
-                  Оставить заявку
+          <motion.div
+            className="mobile-drawer open"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setOpen(false)}
+          >
+            <div className="mobile-drawer-inner" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="mobile-drawer-close"
+                aria-label="Закрыть меню"
+                onClick={() => setOpen(false)}
+              >
+                <Icon name="close" size={22} />
+              </button>
+              {NAV_ITEMS.map((item) => (
+                <a key={item.href} href={item.href} onClick={() => setOpen(false)}>
+                  {item.label}
                 </a>
-              </div>
-            </motion.div>
-          </>
+              ))}
+              <Link to="/login" className="btn btn-ghost" onClick={() => setOpen(false)}>
+                <Icon name="person" size={18} /> Вход в кабинет
+              </Link>
+              <a href="#apply" className="btn btn-primary" onClick={() => setOpen(false)}>
+                Подать заявку
+              </a>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.header>

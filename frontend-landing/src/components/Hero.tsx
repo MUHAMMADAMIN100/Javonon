@@ -7,79 +7,105 @@ export default function Hero() {
     <section className="hero">
       <div className="container">
         <motion.div
-          className="hero-grid"
+          className="hero-inner"
           variants={staggerContainer}
           initial="hidden"
           animate="show"
         >
           <div>
             <motion.span className="hero-eyebrow" variants={fadeUp}>
-              <Icon name="school" size={18} style={{ marginRight: 6 }} />
-              Образование в Китае с 2020 года
+              <span className="dot" />
+              Международная платформа грантов · 2026
             </motion.span>
             <motion.h1 variants={fadeUp}>
-              Обучение в <span className="accent">лучших вузах Китая</span> — без посредников
+              Получи <span className="gradient">грант на обучение</span> в лучших университетах мира
             </motion.h1>
-            <motion.p variants={fadeUp}>
-              Помогаем студентам поступить на языковые курсы, колледж, бакалавриат
-              и в магистратуру, в топ-университеты Китая. Полное сопровождение:
-              от выбора программы до зачисления.
+            <motion.p className="lead" variants={fadeUp}>
+              Javonon — твой проводник к стипендиям США, Великобритании, Германии,
+              Кореи, Китая, Японии и других стран. Подбор программы, документы, виза,
+              сопровождение от первого письма до зачисления.
             </motion.p>
-            <motion.div className="hero-cta" variants={fadeUp}>
+            <motion.div className="hero-actions" variants={fadeUp}>
               <motion.a
                 href="#apply"
-                className="btn btn-primary btn-large hero-cta-btn"
-                whileHover={{ scale: 1.04, y: -2 }}
+                className="btn btn-primary btn-large"
+                whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.97 }}
               >
-                Получить консультацию
+                <Icon name="rocket_launch" size={20} />
+                Подать на грант
               </motion.a>
               <motion.a
-                href="#services"
-                className="btn btn-outline btn-large hero-cta-btn"
-                whileHover={{ scale: 1.04, y: -2 }}
+                href="#directions"
+                className="btn btn-outline btn-large"
+                whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.97 }}
               >
-                Программы обучения
+                Все направления
               </motion.a>
             </motion.div>
-          </div>
-          <motion.div
-            className="hero-image"
-            variants={scaleIn}
-            animate={{
-              y: [0, -12, 0],
-              transition: { y: { duration: 4, repeat: Infinity, ease: 'easeInOut' } },
-            }}
-          >
-            <div className="hero-brand">
-              <span className="brand-text hero-brand-text">
-                <span className="brand-grant">GRANT</span>
-                <span className="brand-china">CHINA</span>
-              </span>
-              <div className="hero-brand-sub">Образование в Китае</div>
-            </div>
-          </motion.div>
-        </motion.div>
 
-        <motion.div
-          className="stats"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.3 }}
-        >
-          {[
-            { num: '823', label: 'студентов отправили' },
-            { num: '100+', label: 'вузов-партнёров' },
-            { num: '6', label: 'лет на рынке' },
-            { num: '100%', label: 'успешных зачислений' },
-          ].map((s) => (
-            <motion.div key={s.label} variants={fadeUp}>
-              <div className="stat-num">{s.num}</div>
-              <div className="stat-label">{s.label}</div>
+            <motion.div className="hero-stats" variants={staggerContainer}>
+              {[
+                { num: '40+', label: 'стран-партнёров' },
+                { num: '1200+', label: 'студентов получили грант' },
+                { num: '94%', label: 'успешных заявок' },
+              ].map((s) => (
+                <motion.div key={s.label} variants={fadeUp}>
+                  <div className="hero-stat-num">{s.num}</div>
+                  <div className="hero-stat-label">{s.label}</div>
+                </motion.div>
+              ))}
             </motion.div>
-          ))}
+          </div>
+
+          <motion.div className="hero-visual" variants={scaleIn}>
+            <div className="hero-card">
+              <div className="hero-globe">🌍</div>
+            </div>
+
+            <motion.div
+              className="hero-badge hero-badge-1"
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <div className="hero-badge-icon">
+                <Icon name="verified" size={22} />
+              </div>
+              <div className="hero-badge-text">
+                <strong>Fulbright</strong>
+                <span>США · Магистратура</span>
+              </div>
+            </motion.div>
+
+            <motion.div
+              className="hero-badge hero-badge-2"
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
+            >
+              <div className="hero-badge-icon">
+                <Icon name="school" size={22} />
+              </div>
+              <div className="hero-badge-text">
+                <strong>DAAD</strong>
+                <span>Германия · Бакалавриат</span>
+              </div>
+            </motion.div>
+
+            <motion.div
+              className="hero-badge hero-badge-3"
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
+            >
+              <div className="hero-badge-icon">
+                <Icon name="public" size={22} />
+              </div>
+              <div className="hero-badge-text">
+                <strong>+38 стран</strong>
+                <span>Открыты заявки</span>
+              </div>
+            </motion.div>
+          </motion.div>
         </motion.div>
       </div>
     </section>

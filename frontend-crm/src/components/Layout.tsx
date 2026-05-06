@@ -13,7 +13,7 @@ const TITLES: Record<string, string> = {
 
 export default function Layout() {
   const loc = useLocation();
-  const title = Object.entries(TITLES).find(([k]) => loc.pathname.startsWith(k))?.[1] || 'GrantChina CRM';
+  const title = Object.entries(TITLES).find(([k]) => loc.pathname.startsWith(k))?.[1] || 'Javonon CRM';
 
   return (
     <div className="app-layout">

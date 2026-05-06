@@ -158,7 +158,7 @@ export class ProgramsService {
     };
   }
 
-  private buildCaption(program: Program, header = '🎓 *Новая программа в GrantChina*'): string {
+  private buildCaption(program: Program, header = '🎓 *Новая программа на Javonon*'): string {
     return (
       `${header}\n\n` +
       `📚 *${this.escape(program.name)}*\n` +
@@ -208,7 +208,7 @@ export class ProgramsService {
 
   private async notifyChannelUpdate(program: Program, imageChanged: boolean) {
     if (!program.telegramMessageId) return;
-    const caption = this.buildCaption(program, '🎓 *Программа GrantChina*');
+    const caption = this.buildCaption(program, '🎓 *Программа Javonon*');
     const photoUrl = this.buildPhotoUrl(program);
 
     // Если картинка не менялась — просто обновляем подпись/текст и выходим.

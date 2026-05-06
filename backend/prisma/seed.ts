@@ -6,8 +6,8 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  const adminEmail = 'admin@grantchina.local';
-  const employeeEmail = 'employee@grantchina.local';
+  const adminEmail = 'admin@javonon.local';
+  const employeeEmail = 'employee@javonon.local';
 
   const adminPassword = await bcrypt.hash('admin123', 10);
   const employeePassword = await bcrypt.hash('employee123', 10);
@@ -34,21 +34,21 @@ async function main() {
     },
   });
 
-  // Несколько демо-заявок
+  // Несколько демо-заявок (международные направления)
   const demoApps = [
     {
       fullName: 'Иванов Алексей Петрович',
       phone: '+992 900 123 456',
       email: 'alex@example.com',
       direction: Direction.BACHELOR,
-      comment: 'Интересует обучение в Шанхае.',
+      comment: 'Интересует грант на бакалавриат в США.',
       status: ApplicationStatus.NEW,
     },
     {
       fullName: 'Каримова Малика',
       phone: '+992 901 222 333',
       direction: Direction.LANGUAGE,
-      comment: 'Хочу выучить китайский с нуля.',
+      comment: 'Хочу пройти языковую программу в Германии.',
       status: ApplicationStatus.IN_PROGRESS,
     },
     {
@@ -56,6 +56,7 @@ async function main() {
       phone: '+992 555 777 888',
       email: 'farr@example.com',
       direction: Direction.MASTER,
+      comment: 'Магистратура в Южной Корее, IT-направление.',
       status: ApplicationStatus.NEW,
     },
   ];
@@ -68,8 +69,8 @@ async function main() {
   }
 
   console.log('✅ Seed complete.');
-  console.log('   Admin:    admin@grantchina.local / admin123');
-  console.log('   Employee: employee@grantchina.local / employee123');
+  console.log('   Admin:    admin@javonon.local / admin123');
+  console.log('   Employee: employee@javonon.local / employee123');
 }
 
 main()

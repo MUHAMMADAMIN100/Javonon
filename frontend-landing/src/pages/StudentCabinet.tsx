@@ -145,10 +145,8 @@ export default function StudentCabinet() {
       <header className="stu-header">
         <div className="container stu-header-inner">
           <Link to="/" className="logo">
-            <span className="brand-text" style={{ fontSize: 22 }}>
-              <span className="brand-grant">GRANT</span>
-              <span className="brand-china">CHINA</span>
-            </span>
+            <span className="logo-mark">J</span>
+            <span className="logo-text">Javonon</span>
           </Link>
           <div className="stu-header-user">
             <div className="stu-header-name">{me.fullName}</div>

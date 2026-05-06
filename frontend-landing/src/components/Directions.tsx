@@ -1,74 +1,73 @@
 import { motion } from 'framer-motion';
 import { fadeUp, staggerContainer, viewportOnce } from '../motion';
-import Icon from '../Icon';
 
-const directions = [
+const countries = [
   {
-    icon: 'auto_stories',
-    title: 'Гуманитарные науки',
-    text: 'Филология, история, культурология, философия, международные отношения',
+    flag: '🇺🇸',
+    title: 'США',
+    text: 'Fulbright, Hubert Humphrey, Schwarzman — топовые гранты Айви-лиги.',
+    tags: ['Fulbright', 'Magistracy', 'PhD'],
   },
   {
-    icon: 'trending_up',
-    title: 'Экономика и бизнес',
-    text: 'Менеджмент, финансы, маркетинг, международная торговля',
+    flag: '🇬🇧',
+    title: 'Великобритания',
+    text: 'Chevening, Commonwealth, GREAT — обучение в Oxford, Cambridge, LSE.',
+    tags: ['Chevening', 'Master', '1 год'],
   },
   {
-    icon: 'code',
-    title: 'Информационные технологии',
-    text: 'Программирование, AI, Data Science, кибербезопасность',
+    flag: '🇩🇪',
+    title: 'Германия',
+    text: 'DAAD, Erasmus+ — бесплатные госуниверситеты + ежемесячная стипендия.',
+    tags: ['DAAD', 'Бакалавриат', 'Магистратура'],
   },
   {
-    icon: 'engineering',
-    title: 'Инженерия и технические науки',
-    text: 'Электроника, машиностроение, автоматизация, робототехника',
+    flag: '🇰🇷',
+    title: 'Южная Корея',
+    text: 'GKS — год корейского + полная оплата обучения и проживания.',
+    tags: ['GKS', 'Bachelor', 'IT'],
   },
   {
-    icon: 'medical_services',
-    title: 'Медицина и биология',
-    text: 'MBBS, фармакология, биотехнология, генетика, стоматология',
+    flag: '🇨🇳',
+    title: 'Китай',
+    text: 'CSC, Confucius — гранты в Tsinghua, Peking University, Fudan.',
+    tags: ['CSC', 'HSK', 'Engineering'],
   },
   {
-    icon: 'gavel',
-    title: 'Юриспруденция',
-    text: 'Международное и коммерческое право, правоведение',
+    flag: '🇯🇵',
+    title: 'Япония',
+    text: 'MEXT — стипендия от правительства Японии, лучшие исследовательские лаборатории.',
+    tags: ['MEXT', 'Research', 'PhD'],
   },
   {
-    icon: 'palette',
-    title: 'Творческие направления',
-    text: 'Дизайн, изобразительное искусство, архитектура, анимация, музыка',
+    flag: '🇹🇷',
+    title: 'Турция',
+    text: 'Türkiye Bursları — полное покрытие обучения и проживания + год турецкого.',
+    tags: ['YÖS', 'Bachelor', 'Все направления'],
   },
   {
-    icon: 'sports_soccer',
-    title: 'Физическая культура и спорт',
-    text: 'Спортивный менеджмент, тренерство, физвоспитание',
-  },
-  {
-    icon: 'flight_takeoff',
-    title: 'Туризм и сервис',
-    text: 'Гостиничный бизнес, индустрия гостеприимства, международный туризм',
-  },
-  {
-    icon: 'cast_for_education',
-    title: 'Педагогика',
-    text: 'Преподавание китайского, психология, методика обучения',
+    flag: '🇪🇺',
+    title: 'Евросоюз',
+    text: 'Erasmus Mundus — совместные магистратуры в 2-4 странах ЕС с одной заявки.',
+    tags: ['Erasmus', 'Joint Master', 'EU'],
   },
 ];
 
 export default function Directions() {
   return (
-    <section id="directions" className="section section-soft">
+    <section id="directions" className="alt">
       <div className="container">
         <motion.div
+          className="section-head"
           variants={staggerContainer}
           initial="hidden"
           whileInView="show"
           viewport={viewportOnce}
         >
-          <motion.div className="section-eyebrow" variants={fadeUp}>Направления</motion.div>
-          <motion.h2 variants={fadeUp}>Чему можно учиться в Китае</motion.h2>
-          <motion.p className="section-sub" variants={fadeUp}>
-            Более 10 направлений подготовки в лучших университетах КНР — от гуманитарных наук до IT и медицины
+          <motion.div className="section-eyebrow" variants={fadeUp}>Страны и гранты</motion.div>
+          <motion.h2 variants={fadeUp}>Учись там, где мечтаешь</motion.h2>
+          <motion.p variants={fadeUp}>
+            Работаем напрямую с университетами и государственными грантовыми программами.
+            Открыто <strong>40+ направлений</strong> по всему миру.
           </motion.p>
         </motion.div>
 
@@ -79,22 +78,21 @@ export default function Directions() {
           whileInView="show"
           viewport={viewportOnce}
         >
-          {directions.map((d) => (
+          {countries.map((d) => (
             <motion.div
               key={d.title}
               className="direction-card"
               variants={fadeUp}
-              whileHover={{ y: -6, transition: { duration: 0.25 } }}
+              whileHover={{ y: -6 }}
             >
-              <motion.div
-                className="direction-icon"
-                whileHover={{ scale: 1.12, rotate: 5 }}
-                transition={{ type: 'spring', stiffness: 300 }}
-              >
-                <Icon name={d.icon} size={28} />
-              </motion.div>
+              <span className="direction-flag">{d.flag}</span>
               <h3>{d.title}</h3>
               <p>{d.text}</p>
+              <div className="direction-tags">
+                {d.tags.map((t) => (
+                  <span key={t} className="direction-tag">{t}</span>
+                ))}
+              </div>
             </motion.div>
           ))}
         </motion.div>

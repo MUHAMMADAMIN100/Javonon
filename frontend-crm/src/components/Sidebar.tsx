@@ -35,10 +35,8 @@ export default function Sidebar() {
         whileHover={{ scale: 1.03 }}
         transition={{ type: 'spring', stiffness: 300 }}
       >
-        <span className="brand-text">
-          <span className="brand-grant">GRANT</span>
-          <span className="brand-china">CHINA</span>
-        </span>
+        <span className="logo-mark">J</span>
+        <span className="logo-text">Javonon</span>
       </motion.div>
       <motion.nav
         className="sidebar-nav"

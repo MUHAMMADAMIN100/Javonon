@@ -38,6 +38,16 @@ backend/node_modules/.prisma/
 # Vite
 frontend-landing/dist/
 frontend-crm/dist/
+frontend-landing/dev-dist/
+frontend-landing/public/sw.js
+frontend-landing/public/workbox-*.js
 
 # TS build info
 *.tsbuildinfo
+
+# OS / system
+desktop.ini
+
+# Coverage
+coverage/
+.nyc_output/

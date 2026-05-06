@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// CRM деплоится по пути /admin (и на собственном домене grant-china-crm.vercel.app/admin,
-// и проксируется через grantchina.tj/admin). Поэтому base = '/admin/'.
+// CRM Javonon деплоится по пути /admin (и на собственном домене javonon-crm.vercel.app/admin,
+// и проксируется через javonon.vercel.app/admin). Поэтому base = '/admin/'.
 export default defineConfig({
   base: '/admin/',
   plugins: [react()],

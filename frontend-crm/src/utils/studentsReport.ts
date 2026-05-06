@@ -113,7 +113,7 @@ export async function generateStudentsReport(params: {
   ];
 
   const doc = new Document({
-    creator: 'GrantChina CRM',
+    creator: 'Javonon CRM',
     title: `Отчёт по студентам ${periodText}`,
     styles: {
       default: {
@@ -136,7 +136,7 @@ export async function generateStudentsReport(params: {
               new Paragraph({
                 alignment: AlignmentType.RIGHT,
                 children: [
-                  new TextRun({ text: 'GrantChina — Отчёт по студентам', color: '888888', size: 16 }),
+                  new TextRun({ text: 'Javonon — Отчёт по студентам', color: '888888', size: 16 }),
                 ],
               }),
             ],
@@ -159,7 +159,7 @@ export async function generateStudentsReport(params: {
         },
         children: [
           new Paragraph({
-            children: [new TextRun({ text: 'GrantChina', bold: true, color: 'D52B2B', size: 40 })],
+            children: [new TextRun({ text: 'Javonon', bold: true, color: '047857', size: 40 })],
           }),
           new Paragraph({
             heading: HeadingLevel.HEADING_1,
@@ -220,6 +220,6 @@ export async function generateStudentsReport(params: {
   });
 
   const blob = await Packer.toBlob(doc);
-  const fileName = `grantchina-students-${new Date().toISOString().slice(0, 10)}.docx`;
+  const fileName = `javonon-students-${new Date().toISOString().slice(0, 10)}.docx`;
   saveAs(blob, fileName);
 }

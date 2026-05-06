@@ -1,7 +1,7 @@
 {
-  "name": "grantchina-backend",
+  "name": "javonon-backend",
   "version": "1.0.0",
-  "description": "GrantChina CRM backend (NestJS + Prisma + PostgreSQL)",
+  "description": "Javonon — international grants platform backend (NestJS + Prisma + PostgreSQL)",
   "private": true,
   "scripts": {
     "build": "nest build",

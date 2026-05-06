@@ -1,16 +1,16 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: grantchina-db
+    container_name: javonon-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: grantchina
-      POSTGRES_USER: grantchina
-      POSTGRES_PASSWORD: grantchina
+      POSTGRES_DB: javonon
+      POSTGRES_USER: javonon
+      POSTGRES_PASSWORD: javonon
     ports:
       - "5432:5432"
     volumes:
-      - grantchina_pgdata:/var/lib/postgresql/data
+      - javonon_pgdata:/var/lib/postgresql/data
 
 volumes:
-  grantchina_pgdata:
+  javonon_pgdata:

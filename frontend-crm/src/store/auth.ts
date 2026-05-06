@@ -17,26 +17,26 @@ export const useAuth = create<AuthState>((set) => ({
 
   async login(email, password) {
     const { token, user } = await apiLogin(email, password);
-    localStorage.setItem('grantchina_token', token);
+    localStorage.setItem('javonon_token', token);
     connectRealtime(token);
     set({ user });
   },
 
   logout() {
-    localStorage.removeItem('grantchina_token');
+    localStorage.removeItem('javonon_token');
     disconnectRealtime();
     set({ user: null });
   },
 
   async init() {
-    const token = localStorage.getItem('grantchina_token');
+    const token = localStorage.getItem('javonon_token');
     if (!token) { set({ initialized: true }); return; }
     try {
       const user = await apiMe();
       connectRealtime(token);
       set({ user, initialized: true });
     } catch {
-      localStorage.removeItem('grantchina_token');
+      localStorage.removeItem('javonon_token');
       set({ user: null, initialized: true });
     }
   },

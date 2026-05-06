@@ -12,7 +12,7 @@ export class MailService {
   constructor(private config: ConfigService) {
     this.apiKey = config.get<string>('BREVO_API_KEY') || null;
     this.fromEmail = config.get<string>('MAIL_FROM_EMAIL') || '';
-    this.fromName = config.get<string>('MAIL_FROM_NAME') || 'GrantChina';
+    this.fromName = config.get<string>('MAIL_FROM_NAME') || 'Javonon';
     this.adminEmail = config.get<string>('ADMIN_EMAIL') || null;
 
     if (this.apiKey && this.fromEmail) {

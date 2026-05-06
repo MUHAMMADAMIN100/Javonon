@@ -7,34 +7,28 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'backlogoo.png'],
+      includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'GrantChina — обучение в Китае',
-        short_name: 'GrantChina',
-        description: 'Помогаем студентам поступить в топ-университеты Китая',
-        theme_color: '#e72727',
+        name: 'Javonon — международные гранты',
+        short_name: 'Javonon',
+        description: 'Получи грант на обучение в лучших университетах мира',
+        theme_color: '#10b981',
         background_color: '#ffffff',
         display: 'standalone',
         scope: '/',
         start_url: '/',
         lang: 'ru',
         icons: [
-          { src: '/backlogoo.png', sizes: '192x192', type: 'image/png' },
-          { src: '/backlogoo.png', sizes: '512x512', type: 'image/png' },
-          { src: '/backlogoo.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: '/favicon.svg', sizes: '192x192', type: 'image/svg+xml' },
+          { src: '/favicon.svg', sizes: '512x512', type: 'image/svg+xml' },
+          { src: '/favicon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' },
         ],
       },
       workbox: {
-        // Service worker сразу активируется при новом билде и забирает контроль
-        // над всеми открытыми клиентами — старая закэшированная версия не "залипает".
         skipWaiting: true,
         clientsClaim: true,
-        // Не кэшируем /admin (это проксированный CRM-бандл с другим life-cycle)
-        // и не кэшируем POST/api запросы.
         navigateFallbackDenylist: [/^\/admin/, /^\/api/],
         globPatterns: ['**/*.{js,css,html,ico,png,jpg,jpeg,svg,webp,woff2}'],
-        // Дефолт у workbox — 2 MiB; backlogoo.png (~2.4 MB) и тестимониалы (~3 MB)
-        // в него не влазят и валят билд. Поднимаем до 6 MiB.
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         runtimeCaching: [
           {
@@ -42,6 +36,14 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: {
               cacheName: 'flag-images',
+              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/images\.unsplash\.com\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'unsplash-images',
               expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },

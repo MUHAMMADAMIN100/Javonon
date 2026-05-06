@@ -94,7 +94,7 @@ export default function StudentNew() {
 
   const copyBoth = async () => {
     if (!credentials) return;
-    const text = `Логин: ${credentials.email}\nПароль: ${credentials.password}\nВход: https://grant-china-landing.vercel.app/login`;
+    const text = `Логин: ${credentials.email}\nПароль: ${credentials.password}\nВход: https://javonon.vercel.app/login`;
     try {
       await navigator.clipboard.writeText(text);
       toast('Данные скопированы', 'success');
@@ -208,7 +208,7 @@ export default function StudentNew() {
               <div className="creds-box">
                 <CredRow label="Логин" value={credentials.email} />
                 <CredRow label="Пароль" value={credentials.password} />
-                <CredRow label="Ссылка" value="grantchina.tj/login" small />
+                <CredRow label="Ссылка" value="javonon.vercel.app/login" small />
               </div>
 
               <div className="dialog-actions">

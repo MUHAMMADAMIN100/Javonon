@@ -174,7 +174,7 @@ export default function StudentDetail() {
 
   const copyCreds = async () => {
     if (!credentials) return;
-    const text = `Логин: ${credentials.email}\nПароль: ${credentials.password}\nВход: https://grant-china-landing.vercel.app/login`;
+    const text = `Логин: ${credentials.email}\nПароль: ${credentials.password}\nВход: https://javonon.vercel.app/login`;
     try {
       await navigator.clipboard.writeText(text);
       toast('Скопировано', 'success');

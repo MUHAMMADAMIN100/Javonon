@@ -4,95 +4,56 @@ import Icon from '../Icon';
 
 const services = [
   {
-    iconClass: 'bachelor',
-    icon: 'school',
-    title: 'Бакалавриат',
-    text: 'Высшее образование в престижных вузах Китая на английском или китайском языке.',
-    items: [
-      'Подбор университета и программы',
-      'Подача документов и виза',
-      'Помощь со стипендией CSC',
-      'Сопровождение по приезду',
-    ],
+    icon: 'travel_explore',
+    title: 'Подбор грантов',
+    text: 'Анализируем твой профиль и подбираем стипендии, на которые ты реально пройдёшь — от полностью покрываемых до частичных.',
   },
   {
-    iconClass: 'master',
-    icon: 'workspace_premium',
-    title: 'Магистратура',
-    text: 'Получите магистерскую степень в одном из топ-200 университетов мира.',
-    items: [
-      'Анализ вашего профиля',
-      'Подготовка motivation letter',
-      'Гранты и стипендии',
-      'Подготовка к интервью',
-    ],
+    icon: 'description',
+    title: 'Документы под ключ',
+    text: 'Мотивационное письмо, рекомендации, перевод и нотариальное заверение — всё готовим вместе с экспертами.',
   },
   {
-    iconClass: 'language',
-    icon: 'translate',
-    title: 'Языковые курсы',
-    text: 'Интенсивное изучение китайского языка с погружением в культуру.',
-    items: [
-      'Курсы от 6 месяцев до 2 лет',
-      'Подготовка к HSK',
-      'Студенческая виза X',
-      'Проживание в кампусе',
-    ],
+    icon: 'language',
+    title: 'Языковая подготовка',
+    text: 'Курсы IELTS, TOEFL, TOPIK, HSK, TestDaF — целевая подготовка к экзамену, который требует университет.',
   },
   {
-    iconClass: 'language',
-    icon: 'menu_book',
-    title: 'Языковой + колледж',
-    text: 'Год языковой подготовки + 3 года колледжа на китайском.',
-    items: [
-      'Старт без HSK',
-      'Гарантия места в колледже',
-      'Доступная стоимость',
-      'Подача с 16 лет',
-    ],
+    icon: 'flight_takeoff',
+    title: 'Виза и переезд',
+    text: 'Полное сопровождение визового процесса, помощь с поиском жилья, страховкой и встречей в аэропорту.',
   },
   {
-    iconClass: 'bachelor',
-    icon: 'auto_stories',
-    title: 'Языковой + бакалавриат',
-    text: 'Год языковой подготовки + 4 года бакалавриата в топ-вузе Китая.',
-    items: [
-      'Поступление без знания китайского',
-      'Подготовка к HSK 4',
-      'Стипендиальные программы',
-      'Полное сопровождение',
-    ],
+    icon: 'forum',
+    title: 'Подготовка к интервью',
+    text: 'Mock-собеседования с консультантами, разбор типичных вопросов комиссии, работа над презентацией.',
   },
   {
-    iconClass: 'master',
-    icon: 'school',
-    title: 'Колледж',
-    text: 'Профессиональное обучение 3 года: IT, медицина, дизайн, бизнес.',
-    items: [
-      'Практика-ориентированное обучение',
-      'Старт с HSK 3',
-      'Гибкие сроки 2-3 года',
-      'Гарантия зачисления',
-    ],
+    icon: 'support_agent',
+    title: 'Поддержка 24/7',
+    text: 'Личный менеджер на связи весь путь — от первой консультации до момента, когда ты стоишь на пороге университета.',
   },
 ];
 
 export default function Services() {
   return (
-    <section id="services" className="section">
+    <section id="services">
       <div className="container">
         <motion.div
+          className="section-head"
           variants={staggerContainer}
           initial="hidden"
           whileInView="show"
           viewport={viewportOnce}
         >
           <motion.div className="section-eyebrow" variants={fadeUp}>
-            Программы обучения
+            Что мы делаем
           </motion.div>
-          <motion.h2 variants={fadeUp}>Шесть направлений, тысячи возможностей</motion.h2>
-          <motion.p className="section-sub" variants={fadeUp}>
-            Выбирайте программу — и мы поможем поступить в выбранный вуз Китая под ключ
+          <motion.h2 variants={fadeUp}>
+            Полный цикл сопровождения — от заявки до зачисления
+          </motion.h2>
+          <motion.p variants={fadeUp}>
+            Не оставляем тебя один на один с бумажками и сроками. Каждый шаг — с экспертом.
           </motion.p>
         </motion.div>
 
@@ -108,21 +69,13 @@ export default function Services() {
               key={s.title}
               className="service-card"
               variants={fadeUp}
-              whileHover={{ y: -8, transition: { duration: 0.25 } }}
+              whileHover={{ y: -6 }}
             >
-              <motion.div
-                className={`service-icon ${s.iconClass}`}
-                whileHover={{ rotate: [0, -8, 8, 0], transition: { duration: 0.5 } }}
-              >
-                <Icon name={s.icon} size={32} />
-              </motion.div>
+              <div className="service-icon">
+                <Icon name={s.icon} size={28} />
+              </div>
               <h3>{s.title}</h3>
               <p>{s.text}</p>
-              <ul>
-                {s.items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
             </motion.div>
           ))}
         </motion.div>

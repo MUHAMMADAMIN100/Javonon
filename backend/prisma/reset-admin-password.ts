@@ -7,7 +7,7 @@
  * НЕ удаляет данные — только UPDATE поля password у одного юзера.
  *
  * Запуск:
- *   # default — admin@grantchina.local → admin123
+ *   # default — admin@javonon.local → admin123
  *   ts-node prisma/reset-admin-password.ts
  *
  *   # custom через env
@@ -23,7 +23,7 @@ import * as bcrypt from 'bcryptjs';
 async function main() {
   const prisma = new PrismaClient();
 
-  const rawEmail = process.env.RESET_EMAIL || 'admin@grantchina.local';
+  const rawEmail = process.env.RESET_EMAIL || 'admin@javonon.local';
   const rawPassword = process.env.RESET_PASSWORD || 'admin123';
 
   // Нормализуем так же, как делает login() в auth.service.

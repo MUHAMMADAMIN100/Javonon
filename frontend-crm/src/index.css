@@ -1,15 +1,17 @@
 :root {
-  --bg: #f5f7fb;
+  --bg: #f6f9f7;
   --bg-card: #ffffff;
-  --bg-sidebar: #1a1f2e;
-  --bg-sidebar-hover: #252b3d;
-  --text: #1a1f2e;
-  --text-soft: #5b6478;
-  --text-light: #9ca3af;
-  --primary: #d52b2b;
-  --primary-soft: #fff0f0;
-  --primary-dark: #a51f1f;
-  --border: #e3e7ef;
+  --bg-sidebar: #022c22;
+  --bg-sidebar-hover: #064e3b;
+  --text: #0f172a;
+  --text-soft: #475569;
+  --text-light: #94a3b8;
+  --primary: #10b981;
+  --primary-soft: #ecfdf5;
+  --primary-dark: #047857;
+  --primary-darker: #064e3b;
+  --primary-light: #34d399;
+  --border: #e2e8f0;
   --success: #10b981;
   --success-soft: #ecfdf5;
   --warning: #f59e0b;
@@ -19,17 +21,19 @@
   --danger: #ef4444;
   --danger-soft: #fef2f2;
   --radius: 10px;
-  --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
+  --font-display: 'Manrope', 'Inter', system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 a { color: inherit; text-decoration: none; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
@@ -60,18 +64,41 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   position: sticky; top: 0; height: 100vh;
 }
 .sidebar-logo {
-  padding: 18px 20px; display: flex; align-items: center; justify-content: center;
+  padding: 22px 20px;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
   background: transparent;
+  cursor: default;
 }
-.sidebar-logo-image {
-  height: 64px; width: auto; display: block;
+.sidebar-logo-image { height: 64px; width: auto; display: block; }
+.logo-mark {
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--primary-light), var(--primary));
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  box-shadow: 0 6px 14px rgba(16, 185, 129, 0.35);
+  flex-shrink: 0;
+}
+.logo-text {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, white 0%, var(--primary-light) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 .brand-text {
-  font-family: 'Noto Sans Myanmar', system-ui, -apple-system, sans-serif;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 800;
   font-size: 22px;
-  letter-spacing: 1.5px;
+  letter-spacing: -0.01em;
   display: inline-flex; align-items: center; gap: 4px;
   white-space: nowrap;
 }
@@ -336,6 +363,17 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   letter-spacing: 2.5px;
 }
 .login-brand .brand-grant { color: var(--text); }
+.login-brand-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--text) 0%, var(--primary-dark) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-top: 6px;
+}
 .login-logo-label {
   font-size: 14px; font-weight: 700;
   letter-spacing: 3px; color: var(--primary);

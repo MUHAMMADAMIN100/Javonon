@@ -54,10 +54,8 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.4 }}
         >
-          <span className="brand-text login-brand">
-            <span className="brand-grant">GRANT</span>
-            <span className="brand-china">CHINA</span>
-          </span>
+          <span className="logo-mark" style={{ width: 48, height: 48, fontSize: 24 }}>J</span>
+          <span className="login-brand-name">Javonon</span>
           <span className="login-logo-label">CRM</span>
         </motion.div>
         <AnimatePresence>

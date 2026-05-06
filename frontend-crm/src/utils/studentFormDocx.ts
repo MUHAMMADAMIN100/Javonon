@@ -72,7 +72,7 @@ export async function generateStudentFormDocx(studentName: string, form: any): P
     // Шапка
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: 'GrantChina', bold: true, size: 40, color: 'D52B2B' })],
+      children: [new TextRun({ text: 'Javonon', bold: true, size: 40, color: '047857' })],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -186,7 +186,7 @@ export async function generateStudentFormDocx(studentName: string, form: any): P
   }
 
   const doc = new Document({
-    creator: 'GrantChina CRM',
+    creator: 'Javonon CRM',
     title: `Application Form — ${studentName}`,
     styles: {
       default: {

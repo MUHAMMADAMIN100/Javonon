@@ -76,12 +76,12 @@ export class ApplicationsService {
     const labelNext = ApplicationsService.STATUS_LABEL[next] || next;
     const labelPrev = ApplicationsService.STATUS_LABEL[prev] || prev;
     if (next === 'ENROLLED') {
-      return `🎉 GrantChina: Поздравляем! Вы зачислены. Подробности в личном кабинете.`;
+      return `🎉 Javonon: Поздравляем! Вы зачислены. Подробности в личном кабинете.`;
     }
     if (this.isDowngrade(prev, next)) {
-      return `GrantChina: Заявка возвращена с «${labelPrev}» на «${labelNext}». Свяжитесь с менеджером для уточнений.`;
+      return `Javonon: Заявка возвращена с «${labelPrev}» на «${labelNext}». Свяжитесь с менеджером для уточнений.`;
     }
-    return `GrantChina: Статус Вашей заявки изменён: «${labelPrev}» → «${labelNext}».`;
+    return `Javonon: Статус Вашей заявки изменён: «${labelPrev}» → «${labelNext}».`;
   }
 
   /** Возвращает первый непустой номер телефона: из заявки, потом из связанного студента. */
@@ -129,7 +129,7 @@ export class ApplicationsService {
     });
 
     const tgText =
-      `🆕 *Новая заявка GrantChina*\n` +
+      `🆕 *Новая заявка Javonon*\n` +
       `*ФИО:* ${app.fullName}\n` +
       `*Телефон:* ${app.phone}\n` +
       (app.email ? `*Email:* ${app.email}\n` : '') +
@@ -153,7 +153,7 @@ export class ApplicationsService {
     this.sms
       .send(
         app.phone,
-        `GrantChina: Ваша заявка получена. Менеджер свяжется с Вами в ближайшее время.`,
+        `Javonon: Ваша заявка получена. Менеджер свяжется с Вами в ближайшее время.`,
       )
       .catch(() => undefined);
 

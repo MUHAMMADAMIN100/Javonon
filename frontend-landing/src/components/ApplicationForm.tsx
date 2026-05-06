@@ -137,15 +137,16 @@ export default function ApplicationForm() {
     <section id="apply" className="form-section">
       <div className="container">
         <motion.div
+          className="section-head"
           variants={staggerContainer}
           initial="hidden"
           whileInView="show"
           viewport={viewportOnce}
         >
-          <motion.div className="section-eyebrow" variants={fadeUp}>Заявка</motion.div>
-          <motion.h2 variants={fadeUp}>Получите бесплатную консультацию</motion.h2>
-          <motion.p className="section-sub" variants={fadeUp}>
-            Оставьте заявку — менеджер свяжется в течение часа и подберёт программу под вас
+          <motion.div className="section-eyebrow" variants={fadeUp}>Подать заявку</motion.div>
+          <motion.h2 variants={fadeUp}>Получи бесплатную консультацию</motion.h2>
+          <motion.p variants={fadeUp}>
+            Оставь заявку — менеджер свяжется в течение часа и подберёт грант под твой профиль.
           </motion.p>
         </motion.div>
 
@@ -158,6 +159,9 @@ export default function ApplicationForm() {
           viewport={viewportOnce}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         >
+          <h3>Расскажи о себе</h3>
+          <p className="form-sub">Поля, отмеченные *, обязательны для заполнения</p>
+
           <AnimatePresence>
             {success && (
               <motion.div
@@ -167,8 +171,11 @@ export default function ApplicationForm() {
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.3 }}
               >
-                <Icon name="check_circle" size={20} style={{ marginRight: 8, color: 'var(--success)' }} />
-                Заявка отправлена! Мы свяжемся с вами в ближайшее время.
+                <div className="ok-icon"><Icon name="check_circle" size={32} /></div>
+                <div>Заявка получена!</div>
+                <div style={{ fontWeight: 400, fontSize: 14, marginTop: 6 }}>
+                  Менеджер Javonon свяжется с тобой в течение часа.
+                </div>
               </motion.div>
             )}
             {serverError && (
@@ -277,7 +284,7 @@ export default function ApplicationForm() {
               value={comment}
               onChange={(e) => handleFieldChange('comment', e.target.value)}
               onBlur={() => handleBlur('comment')}
-              placeholder="Расскажите о ваших целях, желаемом городе или вузе..."
+              placeholder="Расскажи о своих целях: страна мечты, направление, ожидаемый бюджет..."
               maxLength={MAX_COMMENT}
               className={invalid('comment') ? 'input-error' : ''}
             />
@@ -298,13 +305,15 @@ export default function ApplicationForm() {
           <motion.button
             type="submit"
             className="btn btn-primary btn-large"
-            style={{ width: '100%' }}
             disabled={submitting}
             whileHover={!submitting ? { scale: 1.02, y: -2 } : {}}
             whileTap={!submitting ? { scale: 0.98 } : {}}
           >
-            {submitting ? 'Отправляем...' : 'Отправить заявку'}
+            {submitting ? 'Отправляем...' : 'Подать заявку на грант'}
           </motion.button>
+          <p className="form-hint">
+            Нажимая кнопку, ты соглашаешься на обработку персональных данных
+          </p>
         </motion.form>
       </div>
     </section>

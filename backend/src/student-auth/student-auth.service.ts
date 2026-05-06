@@ -50,16 +50,16 @@ export class StudentAuthService {
       data: { password: passwordHash },
     });
     // Отправляем письмо со ссылкой и новым паролем
-    const loginUrl = process.env.STUDENT_LOGIN_URL || 'https://grantchina.tj/login';
+    const loginUrl = process.env.STUDENT_LOGIN_URL || 'https://javonon.vercel.app/login';
     this.mail
       .send(
         student.email!,
-        'GrantChina — новый пароль для входа в кабинет',
+        'Javonon — новый пароль для входа в кабинет',
         `<p>Здравствуйте, <b>${student.fullName}</b>!</p>
          <p>Вы запросили сброс пароля. Ваш новый пароль:</p>
          <p style="font-size:18px;font-weight:bold;letter-spacing:1px;">${newPassword}</p>
          <p>Войдите в личный кабинет: <a href="${loginUrl}">${loginUrl}</a></p>
-         <p>Если вы не запрашивали смену пароля — обратитесь к менеджеру GrantChina.</p>`,
+         <p>Если вы не запрашивали смену пароля — обратитесь к менеджеру Javonon.</p>`,
       )
       .catch(() => undefined);
     return { ok: true };

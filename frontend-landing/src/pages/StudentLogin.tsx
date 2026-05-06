@@ -55,15 +55,15 @@ export default function StudentLogin() {
         </Link>
 
         <div className="stu-login-brand">
-          <span className="brand-text" style={{ fontSize: 32 }}>
-            <span className="brand-grant">GRANT</span>
-            <span className="brand-china">CHINA</span>
-          </span>
+          <a href="/" className="logo" style={{ fontSize: 28, justifyContent: 'center' }}>
+            <span className="logo-mark">J</span>
+            <span className="logo-text">Javonon</span>
+          </a>
         </div>
 
         <h2 className="stu-login-title">Личный кабинет студента</h2>
         <p className="stu-login-sub">
-          Войдите, используя email и пароль, которые выдал вам менеджер Grant China.
+          Войди, используя email и пароль, которые выдал твой менеджер Javonon.
         </p>
 
         {error && (

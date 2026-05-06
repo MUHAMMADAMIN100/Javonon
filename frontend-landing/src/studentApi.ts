@@ -4,7 +4,7 @@ import { connectStudentRealtime, disconnectStudentRealtime } from './realtime';
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
 export const API_BASE = API_URL.replace(/\/api$/, '');
 
-const TOKEN_KEY = 'grantchina_student_token';
+const TOKEN_KEY = 'javonon_student_token';
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t: string) => {

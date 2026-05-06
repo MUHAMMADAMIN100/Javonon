@@ -13,12 +13,13 @@ async function bootstrap() {
     .filter(Boolean);
 
   // Всегда разрешаем основные домены проекта (даже если их забыли в env).
-  // Wildcard *.grantchina.tj и *.vercel.app поддерживаются ниже.
+  // Wildcard *.javonon.com и *.vercel.app поддерживаются ниже.
   const ALWAYS_ALLOWED_HOSTS = [
-    'grantchina.tj',
-    'www.grantchina.tj',
-    'grant-china-crm.vercel.app',
-    'grant-china-landing.vercel.app',
+    'javonon.com',
+    'www.javonon.com',
+    'javonon-crm.vercel.app',
+    'javonon-landing.vercel.app',
+    'javonon.vercel.app',
     'localhost:5173',
     'localhost:5174',
   ];
@@ -34,8 +35,8 @@ async function bootstrap() {
       }
       // Хардкод: основные домены проекта
       if (ALWAYS_ALLOWED_HOSTS.includes(host)) return cb(null, true);
-      // Wildcard *.grantchina.tj и *.vercel.app
-      if (host.endsWith('.grantchina.tj') || host.endsWith('.vercel.app')) {
+      // Wildcard *.javonon.com и *.vercel.app
+      if (host.endsWith('.javonon.com') || host.endsWith('.vercel.app')) {
         return cb(null, true);
       }
       // Если CORS_ORIGINS не задан — разрешаем всё (как раньше)
@@ -63,6 +64,6 @@ async function bootstrap() {
 
   const port = parseInt(config.get<string>('PORT') || '3001', 10);
   await app.listen(port);
-  console.log(`🚀 GrantChina API: http://localhost:${port}/api`);
+  console.log(`🚀 Javonon API: http://localhost:${port}/api`);
 }
 bootstrap();
