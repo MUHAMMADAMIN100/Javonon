@@ -88,7 +88,7 @@ export default function Users() {
           />
         </div>
         {creating && (
-          <form onSubmit={onCreate} style={{ marginBottom: 22, padding: 18, background: '#f5f7fb', borderRadius: 10 }}>
+          <form onSubmit={onCreate} style={{ marginBottom: 22, padding: 24, background: 'var(--bg-soft)', border: '1px solid var(--border-soft)', borderRadius: 18 }}>
             {error && <div className="error-banner">{error}</div>}
             <div className="form-grid-2">
               <div className="form-group">

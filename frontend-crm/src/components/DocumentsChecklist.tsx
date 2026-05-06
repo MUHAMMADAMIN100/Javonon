@@ -280,7 +280,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
                 <span className="doc-icon"><Icon name="description" size={20} /></span>
                 <div className="doc-info">
                   <div className="doc-name">
-                    <a href={`${API_BASE}${d.url}`} target="_blank" rel="noreferrer" style={{ color: '#d52b2b' }}>
+                    <a href={`${API_BASE}${d.url}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-dark)', textDecoration: 'underline', textUnderlineOffset: 3 }}>
                       {d.originalName}
                     </a>
                   </div>

@@ -78,13 +78,14 @@ export default class ErrorBoundary extends Component<Props, State> {
               onClick={this.reset}
               style={{
                 padding: '10px 24px',
-                background: '#e72727',
+                background: '#0a0f0d',
                 color: 'white',
                 border: 'none',
-                borderRadius: 8,
-                fontSize: 15,
-                fontWeight: 600,
+                borderRadius: 100,
+                fontSize: 14,
+                fontWeight: 500,
                 cursor: 'pointer',
+                letterSpacing: '-0.01em',
               }}
             >
               Перезагрузить страницу

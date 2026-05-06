@@ -70,8 +70,7 @@ export default function UnsavedChangesDialog({
               </button>
               <button
                 type="button"
-                className="btn btn-primary"
-                style={{ background: 'var(--danger, #ef4444)', borderColor: 'var(--danger, #ef4444)' }}
+                className="btn btn-danger"
                 onClick={onConfirm}
               >
                 {confirmLabel}
