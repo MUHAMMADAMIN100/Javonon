@@ -2,16 +2,16 @@ import { motion } from 'framer-motion';
 import Icon from '../Icon';
 
 const COUNTRIES = [
-  { flag: '🇺🇸', name: 'United States', tags: ['Fulbright', 'Hubert Humphrey', 'Schwarzman'] },
-  { flag: '🇬🇧', name: 'United Kingdom', tags: ['Chevening', 'Commonwealth', 'GREAT'] },
-  { flag: '🇩🇪', name: 'Germany', tags: ['DAAD', 'Bayerische', 'Heinrich Böll'] },
-  { flag: '🇰🇷', name: 'South Korea', tags: ['GKS', 'POSCO', 'Yonsei'] },
-  { flag: '🇨🇳', name: 'China', tags: ['CSC', 'Confucius', 'Tsinghua'] },
-  { flag: '🇯🇵', name: 'Japan', tags: ['MEXT', 'JASSO', 'Honjo'] },
-  { flag: '🇪🇺', name: 'European Union', tags: ['Erasmus Mundus', 'Marie Curie'] },
-  { flag: '🇹🇷', name: 'Türkiye', tags: ['Türkiye Bursları', 'YÖS'] },
-  { flag: '🇨🇦', name: 'Canada', tags: ['Vanier', 'Trudeau', 'OGS'] },
-  { flag: '🇦🇺', name: 'Australia', tags: ['Australia Awards', 'RTP'] },
+  { flag: '🇺🇸', name: 'США', tags: ['Fulbright', 'Hubert Humphrey', 'Schwarzman'] },
+  { flag: '🇬🇧', name: 'Великобритания', tags: ['Chevening', 'Commonwealth', 'GREAT'] },
+  { flag: '🇩🇪', name: 'Германия', tags: ['DAAD', 'Bayerische', 'Heinrich Böll'] },
+  { flag: '🇰🇷', name: 'Южная Корея', tags: ['GKS', 'POSCO', 'Yonsei'] },
+  { flag: '🇨🇳', name: 'Китай', tags: ['CSC', 'Confucius', 'Tsinghua'] },
+  { flag: '🇯🇵', name: 'Япония', tags: ['MEXT', 'JASSO', 'Honjo'] },
+  { flag: '🇪🇺', name: 'Евросоюз', tags: ['Erasmus Mundus', 'Marie Curie'] },
+  { flag: '🇹🇷', name: 'Турция', tags: ['Türkiye Bursları', 'YÖS'] },
+  { flag: '🇨🇦', name: 'Канада', tags: ['Vanier', 'Trudeau', 'OGS'] },
+  { flag: '🇦🇺', name: 'Австралия', tags: ['Australia Awards', 'RTP'] },
 ];
 
 const fadeUp = {
@@ -28,16 +28,17 @@ export default function Directions() {
       <div className="container">
         <div className="section-head">
           <div>
-            <span className="eyebrow on-dark">Where you'll go</span>
+            <span className="eyebrow on-dark">Куда ты поедешь</span>
             <h2 className="display">
-              Forty countries.<br />
-              <em>One application form.</em>
+              Сорок стран.<br />
+              <em>Одна анкета.</em>
             </h2>
           </div>
           <p>
-            We work with government grant bodies, university scholarships and
-            private foundations across six continents. You apply once, we route
-            you to the openings that fit.
+            Мы работаем напрямую с государственными грантовыми программами,
+            университетскими стипендиями и частными фондами на шести
+            континентах. Ты подаёшь заявку один раз — мы распределяем по
+            подходящим направлениям.
           </p>
         </div>
 

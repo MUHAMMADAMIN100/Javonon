@@ -2,36 +2,36 @@ import { motion } from 'framer-motion';
 
 const VOICES = [
   {
-    initials: 'AK',
-    name: 'Aigerim K.',
-    where: 'Tsinghua · MS AI · CSC fully-funded',
+    initials: 'АК',
+    name: 'Айгерим К.',
+    where: 'Tsinghua · Магистратура AI · CSC, полный грант',
     flag: '🇨🇳',
     quote:
-      'I had been rejected twice on my own. Javonon rewrote my story without rewriting me — and I walked into Tsinghua with the full grant.',
+      'Я подавала самостоятельно дважды — оба раза отказ. Javonon переписали мою историю, не переписывая меня. И я зашла в Tsinghua с полным грантом.',
   },
   {
-    initials: 'AS',
-    name: 'Ahmad S.',
-    where: 'TU Munich · BSc CS · DAAD',
+    initials: 'АС',
+    name: 'Ахмад С.',
+    where: 'TU Munich · Бакалавриат CS · DAAD',
     flag: '🇩🇪',
     quote:
-      'They told me Germany without German was possible. Eighteen months later I\'m in Munich, paying nothing, working at a research lab.',
+      'Мне сказали, что Германия без немецкого реальна. Через 18 месяцев я в Мюнхене, не плачу за обучение и работаю в исследовательской лаборатории.',
   },
   {
-    initials: 'JL',
-    name: 'Jamshed L.',
-    where: 'Yonsei · BA · Global Korea Scholarship',
+    initials: 'ДЛ',
+    name: 'Джамшед Л.',
+    where: 'Yonsei · Бакалавриат · Global Korea Scholarship',
     flag: '🇰🇷',
     quote:
-      'Three rounds, language test, interview in Seoul. They prepped me for every single one. The acceptance email still feels unreal.',
+      'Три тура отбора, языковой тест, интервью в Сеуле. Команда подготовила меня к каждому шагу. Письмо о зачислении до сих пор кажется нереальным.',
   },
   {
-    initials: 'MS',
-    name: 'Madina S.',
-    where: 'University of Manchester · MA · Chevening',
+    initials: 'МС',
+    name: 'Мадина С.',
+    where: 'University of Manchester · Магистратура · Chevening',
     flag: '🇬🇧',
     quote:
-      'Chevening is brutal. The Javonon team treated my essays like they were applying themselves. I got the call in May.',
+      'Chevening — это серьёзный конкурс. Команда Javonon отнеслась к моим эссе так, будто подаёт сама. Я получила звонок в мае.',
   },
 ];
 
@@ -49,16 +49,16 @@ export default function Testimonials() {
       <div className="container">
         <div className="section-head">
           <div>
-            <span className="eyebrow on-dark">Voices</span>
+            <span className="eyebrow on-dark">Истории</span>
             <h2 className="display">
-              Twelve hundred names.<br />
-              <em>Four of them, here.</em>
+              Тысяча двести имён.<br />
+              <em>Четыре из них — здесь.</em>
             </h2>
           </div>
           <p>
-            We could put statistics here. We'd rather put humans. These four
-            scholars came to us with the same fear as you — and walked out with
-            an acceptance letter.
+            Мы могли бы поставить тут статистику. Лучше поставим людей.
+            Эти четыре студента пришли с теми же страхами, что у тебя — и
+            ушли с письмом о зачислении.
           </p>
         </div>
 

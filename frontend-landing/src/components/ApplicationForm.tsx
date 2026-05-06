@@ -11,10 +11,10 @@ const MAX_COMMENT = 500;
 type Errors = Partial<Record<'fullName' | 'phone' | 'email' | 'comment', string>>;
 
 const PERKS = [
-  'Free 30-min discovery call',
-  'Manager replies in 30 minutes',
-  'Money-back guarantee',
-  'Lifelong alumni network',
+  'Бесплатная консультация 30 минут',
+  'Менеджер отвечает за 30 минут',
+  'Гарантия по договору',
+  'Сообщество выпускников на годы',
 ];
 
 export default function ApplicationForm() {
@@ -32,31 +32,31 @@ export default function ApplicationForm() {
   const validateField = (field: keyof Errors, value: string): string | undefined => {
     if (field === 'fullName') {
       const v = value.trim();
-      if (!v) return 'Please tell us your name';
-      if (v.length < 2) return 'Name is too short';
-      if (v.length > MAX_NAME) return `Max ${MAX_NAME} characters`;
-      if (!/[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ]/.test(v)) return 'Letters only, please';
+      if (!v) return 'Введи своё имя';
+      if (v.length < 2) return 'Имя слишком короткое';
+      if (v.length > MAX_NAME) return `Максимум ${MAX_NAME} символов`;
+      if (!/[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ]/.test(v)) return 'Только буквы';
       return;
     }
     if (field === 'phone') {
       const v = (value || '').trim();
-      if (!v) return 'Phone is required';
+      if (!v) return 'Укажи телефон';
       const matched = COUNTRIES.find((c) => v.startsWith(c.code));
-      if (!matched) return 'Pick a country code';
+      if (!matched) return 'Выбери код страны';
       const digits = v.slice(matched.code.length).replace(/\D/g, '');
-      if (digits.length < matched.minDigits) return `${matched.minDigits} digits expected`;
-      if (digits.length > matched.maxDigits) return `Too long`;
+      if (digits.length < matched.minDigits) return `Нужно ${matched.minDigits} цифр`;
+      if (digits.length > matched.maxDigits) return `Слишком длинный номер`;
       return;
     }
     if (field === 'email') {
       const v = value.trim();
       if (!v) return;
-      if (v.length > MAX_EMAIL) return `Max ${MAX_EMAIL} characters`;
-      if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v)) return 'Invalid email';
+      if (v.length > MAX_EMAIL) return `Максимум ${MAX_EMAIL} символов`;
+      if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v)) return 'Некорректный email';
       return;
     }
     if (field === 'comment') {
-      if (value.length > MAX_COMMENT) return `Max ${MAX_COMMENT} characters`;
+      if (value.length > MAX_COMMENT) return `Максимум ${MAX_COMMENT} символов`;
       return;
     }
     return;
@@ -130,7 +130,7 @@ export default function ApplicationForm() {
       setTouched({});
       setTimeout(() => setSuccess(false), 8000);
     } catch (err: any) {
-      setServerError(err?.message || 'Something went wrong. Please try again.');
+      setServerError(err?.message || 'Что-то пошло не так. Попробуй ещё раз.');
     } finally {
       setSubmitting(false);
     }
@@ -142,14 +142,15 @@ export default function ApplicationForm() {
     <section id="apply" className="cta">
       <div className="container cta-grid">
         <div className="cta-left">
-          <span className="eyebrow on-dark">Apply now</span>
+          <span className="eyebrow on-dark">Подать заявку</span>
           <h2>
-            Tell us about yourself.<br />
-            <em>We'll do the rest.</em>
+            Расскажи о себе.<br />
+            <em>Остальное — наша работа.</em>
           </h2>
           <p>
-            One short form. A real human reads it within 30 minutes during business
-            hours. No bots, no autoresponders, no "your call is important to us".
+            Одна короткая форма. Реальный человек прочитает её в течение 30 минут
+            в рабочее время. Никаких ботов, автоответчиков и "ваш звонок очень
+            важен для нас".
           </p>
           <ul className="cta-list">
             {PERKS.map((p) => (
@@ -170,8 +171,8 @@ export default function ApplicationForm() {
             viewport={{ once: true }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="form-eyebrow">Step 01 · About you</div>
-            <h3>Start your journey</h3>
+            <div className="form-eyebrow">Шаг 01 · О тебе</div>
+            <h3>Начни путь к гранту</h3>
 
             <AnimatePresence>
               {success && (
@@ -182,9 +183,9 @@ export default function ApplicationForm() {
                   exit={{ opacity: 0, scale: 0.9 }}
                 >
                   <div className="ok-icon"><Icon name="check" size={28} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 500 }}>Application received</div>
+                  <div style={{ fontSize: 18, fontWeight: 500 }}>Заявка получена</div>
                   <div style={{ fontWeight: 400, fontSize: 14, marginTop: 8, color: 'var(--night-text-soft)' }}>
-                    A Javonon manager will contact you within the next 30 minutes.
+                    Менеджер Javonon свяжется с тобой в течение 30 минут.
                   </div>
                 </motion.div>
               )}
@@ -199,13 +200,13 @@ export default function ApplicationForm() {
             {!success && (
               <>
                 <div className="form-row">
-                  <label>Full name</label>
+                  <label>ФИО</label>
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => handleFieldChange('fullName', e.target.value)}
                     onBlur={() => handleBlur('fullName')}
-                    placeholder="John Doe"
+                    placeholder="Иванов Иван Иванович"
                     maxLength={MAX_NAME}
                     className={invalid('fullName') ? 'error' : ''}
                     autoComplete="name"
@@ -214,7 +215,7 @@ export default function ApplicationForm() {
                 </div>
 
                 <div className="form-row">
-                  <label>Phone number</label>
+                  <label>Телефон</label>
                   <PhoneInput
                     value={phone}
                     onChange={(v) => handleFieldChange('phone', v)}
@@ -224,7 +225,7 @@ export default function ApplicationForm() {
                 </div>
 
                 <div className="form-row">
-                  <label>Email <span style={{ opacity: 0.5 }}>(optional)</span></label>
+                  <label>Email <span style={{ opacity: 0.5 }}>(не обязательно)</span></label>
                   <input
                     type="email"
                     value={email}
@@ -239,7 +240,7 @@ export default function ApplicationForm() {
                 </div>
 
                 <div className="form-row">
-                  <label>Your goal</label>
+                  <label>Цель</label>
                   <select value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
                     {(Object.keys(DIRECTION_LABEL) as Direction[]).map((d) => (
                       <option key={d} value={d}>{DIRECTION_LABEL[d]}</option>
@@ -249,14 +250,14 @@ export default function ApplicationForm() {
 
                 <div className="form-row">
                   <label>
-                    Anything we should know?
+                    Что важно знать?
                     <span className="form-counter">{comment.length}/{MAX_COMMENT}</span>
                   </label>
                   <textarea
                     value={comment}
                     onChange={(e) => handleFieldChange('comment', e.target.value)}
                     onBlur={() => handleBlur('comment')}
-                    placeholder="Country, university, deadline, budget — whatever helps us help you."
+                    placeholder="Страна, университет, дедлайн, бюджет — всё, что поможет нам помочь тебе."
                     maxLength={MAX_COMMENT}
                     className={invalid('comment') ? 'error' : ''}
                   />
@@ -270,12 +271,12 @@ export default function ApplicationForm() {
                   whileHover={!submitting ? { scale: 1.02 } : {}}
                   whileTap={!submitting ? { scale: 0.98 } : {}}
                 >
-                  {submitting ? 'Sending...' : (
-                    <>Send application <Icon name="arrow_outward" size={18} /></>
+                  {submitting ? 'Отправляем...' : (
+                    <>Отправить заявку <Icon name="arrow_outward" size={18} /></>
                   )}
                 </motion.button>
                 <p className="form-hint">
-                  By submitting you agree to our data policy
+                  Нажимая кнопку, ты соглашаешься с обработкой данных
                 </p>
               </>
             )}

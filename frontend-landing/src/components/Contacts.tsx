@@ -7,27 +7,27 @@ const CONTACTS = [
     label: 'Email',
     value: 'hello@javonon.com',
     href: 'mailto:hello@javonon.com',
-    sub: 'Replies within 30 minutes',
+    sub: 'Ответ за 30 минут',
   },
   {
     icon: 'send',
     label: 'Telegram',
     value: '@javonon',
     href: 'https://t.me/javonon',
-    sub: 'Fastest channel',
+    sub: 'Самый быстрый канал',
   },
   {
     icon: 'call',
-    label: 'Phone',
+    label: 'Телефон',
     value: '+992 900 000 000',
     href: 'tel:+992900000000',
-    sub: 'Mon–Sat, 9am–7pm',
+    sub: 'Пн–Сб, 9:00–19:00',
   },
   {
     icon: 'location_on',
-    label: 'Office',
-    value: 'Dushanbe, TJ',
-    sub: 'Rudaki avenue 55',
+    label: 'Офис',
+    value: 'Душанбе',
+    sub: 'пр. Рудаки, 55',
   },
 ];
 
@@ -45,15 +45,15 @@ export default function Contacts() {
       <div className="container">
         <div className="section-head">
           <div>
-            <span className="eyebrow">Get in touch</span>
+            <span className="eyebrow">Связаться</span>
             <h2 className="display">
-              Talk to a human.<br />
-              <em>Today, if you want.</em>
+              Поговори с человеком.<br />
+              <em>Уже сегодня.</em>
             </h2>
           </div>
           <p>
-            Pick the channel that suits you. We answer the same way on all of them —
-            quickly, in your language, with a real person on the other side.
+            Выбери удобный канал. Мы отвечаем одинаково быстро во всех — реальный
+            человек на связи, на твоём языке, без скриптов.
           </p>
         </div>
 

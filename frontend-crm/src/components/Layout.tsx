@@ -4,16 +4,21 @@ import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
 import RealtimeStatusBanner from './RealtimeStatusBanner';
 
-const TITLES: Record<string, string> = {
-  '/dashboard': 'Дашборд',
-  '/applications': 'Заявки',
-  '/students': 'Студенты',
-  '/users': 'Пользователи',
+// Каждая запись: текст до <em>, italic-акцент, и слаг для mono-эйбра.
+const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
+  '/dashboard': { eyebrow: 'OVERVIEW · 01', pre: 'Картина', em: 'дня.' },
+  '/applications': { eyebrow: 'INBOUND · 02', pre: 'Заявки', em: 'студентов.' },
+  '/students': { eyebrow: 'PIPELINE · 03', pre: 'Студенты', em: 'в работе.' },
+  '/programs': { eyebrow: 'CATALOG · 04', pre: 'Программы', em: 'и гранты.' },
+  '/tasks': { eyebrow: 'WORK · 05', pre: 'Задачи', em: 'команды.' },
+  '/activity': { eyebrow: 'AUDIT · 06', pre: 'Хронология', em: 'действий.' },
+  '/users': { eyebrow: 'TEAM · 07', pre: 'Сотрудники', em: 'Javonon.' },
 };
 
 export default function Layout() {
   const loc = useLocation();
-  const title = Object.entries(TITLES).find(([k]) => loc.pathname.startsWith(k))?.[1] || 'Javonon CRM';
+  const meta = Object.entries(TITLES).find(([k]) => loc.pathname.startsWith(k))?.[1]
+    || { eyebrow: 'JAVONON · CRM', pre: 'Панель', em: 'управления.' };
 
   return (
     <div className="app-layout">
@@ -28,14 +33,17 @@ export default function Layout() {
         >
           <AnimatePresence mode="wait">
             <motion.div
-              key={title}
-              className="topbar-title"
+              key={meta.eyebrow}
+              className="topbar-title-block"
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
               transition={{ duration: 0.2 }}
             >
-              {title}
+              <div className="topbar-eyebrow">{meta.eyebrow}</div>
+              <div className="topbar-title">
+                {meta.pre} <em>{meta.em}</em>
+              </div>
             </motion.div>
           </AnimatePresence>
           <div className="topbar-actions">

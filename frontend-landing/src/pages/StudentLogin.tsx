@@ -15,8 +15,8 @@ export default function StudentLogin() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const errors = {
-    email: compose(required('Email is required'), emailRule())(email),
-    password: compose(required('Password is required'), passwordRule())(password),
+    email: compose(required('Введи email'), emailRule())(email),
+    password: compose(required('Введи пароль'), passwordRule())(password),
   };
   const showErr = (k: 'email' | 'password') => touched[k] && errors[k];
   const isInvalid = hasErrors(errors);
@@ -35,7 +35,7 @@ export default function StudentLogin() {
       await studentLogin(email.trim(), password);
       navigate('/cabinet');
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Wrong email or password');
+      setError(err?.response?.data?.message || 'Неверный email или пароль');
     } finally {
       setLoading(false);
     }
@@ -50,12 +50,12 @@ export default function StudentLogin() {
             <span>Javonon</span>
           </Link>
           <h1 className="display">
-            Welcome back,<br />
-            <em>scholar.</em>
+            С возвращением,<br />
+            <em>студент.</em>
           </h1>
           <p>
-            Your personal cabinet — application status, documents, programmes,
-            and direct line to your manager.
+            Твой личный кабинет — статус заявок, документы, программы и прямая
+            линия с менеджером.
           </p>
         </div>
 
@@ -66,10 +66,10 @@ export default function StudentLogin() {
           transition={{ delay: 0.5, duration: 0.6 }}
         >
           <div className="stu-login-quote-text">
-            "I logged in every day to track my Chevening application. The team
-            saw every comment in real time."
+            "Я заходила в кабинет каждый день, чтобы следить за заявкой на
+            Chevening. Команда видела каждый мой комментарий в реальном времени."
           </div>
-          <div className="stu-login-quote-author">— Madina S. · Manchester '25</div>
+          <div className="stu-login-quote-author">— Мадина С. · Manchester '25</div>
         </motion.div>
       </aside>
 
@@ -82,12 +82,12 @@ export default function StudentLogin() {
         >
           <Link to="/" className="stu-login-back">
             <Icon name="arrow_back" size={14} />
-            Back to home
+            На главную
           </Link>
 
-          <h2 className="display">Sign in.</h2>
+          <h2 className="display">Вход.</h2>
           <p className="stu-login-sub">
-            Use the email and password your Javonon manager gave you.
+            Используй email и пароль, которые тебе выдал менеджер Javonon.
           </p>
 
           {error && (
@@ -117,13 +117,13 @@ export default function StudentLogin() {
               {showErr('email') && <div className="form-error">{errors.email}</div>}
             </div>
             <div className="form-row">
-              <label>Password</label>
+              <label>Пароль</label>
               <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => setTouched((t) => ({ ...t, password: true }))}
                 className={showErr('password') ? 'input-error' : ''}
-                placeholder="Your password"
+                placeholder="Твой пароль"
                 required
                 autoComplete="current-password"
               />
@@ -137,13 +137,13 @@ export default function StudentLogin() {
               whileHover={!loading && !isInvalid ? { scale: 1.02 } : {}}
               whileTap={!loading && !isInvalid ? { scale: 0.98 } : {}}
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? 'Входим...' : 'Войти'}
             </motion.button>
           </form>
 
           <p className="stu-login-hint">
-            No account yet? <Link to="/#apply">Apply for a grant</Link> — we'll set
-            up your cabinet after the first call.
+            Ещё нет аккаунта? <Link to="/#apply">Подай заявку</Link> — мы заведём
+            кабинет после первого звонка.
           </p>
         </motion.div>
       </div>

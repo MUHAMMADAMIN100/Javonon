@@ -39,7 +39,7 @@ export default function Hero() {
           animate="show"
         >
           <span className="hero-tag-pill">Live</span>
-          Open call · Spring 2026 cohort closing in 38 days
+          Открыт набор · Поток весна 2026 · Закрытие через 38 дней
         </motion.span>
 
         <motion.h1
@@ -49,8 +49,8 @@ export default function Hero() {
           initial="hidden"
           animate="show"
         >
-          The world is your <em>campus.</em><br />
-          We pay your <span className="underline">tuition.</span>
+          Мир — твой <em>кампус.</em><br />
+          Стипендию <span className="underline">оплачиваем</span> мы.
         </motion.h1>
 
         <div className="hero-grid">
@@ -62,9 +62,9 @@ export default function Hero() {
               initial="hidden"
               animate="show"
             >
-              Javonon places ambitious students at top-ranked universities through{' '}
-              <strong>fully-funded international grants</strong> — Fulbright, DAAD, Chevening,
-              GKS, MEXT, CSC, Erasmus and beyond.
+              Javonon помогает амбициозным студентам поступать в топ-университеты мира
+              через <strong>полностью оплачиваемые международные гранты</strong> — Fulbright,
+              DAAD, Chevening, GKS, MEXT, CSC, Erasmus и другие.
             </motion.p>
 
             <motion.div
@@ -75,11 +75,11 @@ export default function Hero() {
               animate="show"
             >
               <a href="#apply" className="btn btn-primary btn-large">
-                Start your application
+                Подать заявку
                 <Icon name="arrow_outward" size={18} />
               </a>
               <a href="#countries" className="btn btn-ghost-dark btn-large">
-                Browse countries
+                Все страны
               </a>
             </motion.div>
           </div>
@@ -95,7 +95,7 @@ export default function Hero() {
               <div className="hero-stat-num">
                 40<span className="plus">+</span>
               </div>
-              <div className="hero-stat-label">Countries · Active grants</div>
+              <div className="hero-stat-label">Стран · Активных грантов</div>
             </motion.div>
             <motion.div
               className="hero-stat"
@@ -107,7 +107,7 @@ export default function Hero() {
               <div className="hero-stat-num">
                 1.2<span style={{ fontSize: 32 }}>K</span>
               </div>
-              <div className="hero-stat-label">Scholars placed since 2020</div>
+              <div className="hero-stat-label">Студентов с грантом · с 2020</div>
             </motion.div>
             <motion.div
               className="hero-stat"
@@ -117,7 +117,7 @@ export default function Hero() {
               animate="show"
             >
               <div className="hero-stat-num">94<span className="plus">%</span></div>
-              <div className="hero-stat-label">Application success rate</div>
+              <div className="hero-stat-label">Успешных заявок</div>
             </motion.div>
           </div>
         </div>

@@ -12,9 +12,9 @@ export default function Footer() {
               <span>Javonon</span>
             </a>
             <p>
-              International grants platform — Fulbright, DAAD, Chevening,
-              GKS, MEXT, CSC, Erasmus and beyond. From application to
-              admission, with a real human at every step.
+              Международная платформа грантов на образование — Fulbright,
+              DAAD, Chevening, GKS, MEXT, CSC, Erasmus и другие. От заявки
+              до зачисления, с реальным человеком на каждом шаге.
             </p>
             <div className="footer-socials">
               <a href="https://t.me/javonon" target="_blank" rel="noreferrer" aria-label="Telegram">
@@ -33,18 +33,18 @@ export default function Footer() {
           </div>
 
           <div>
-            <h4>Navigate</h4>
+            <h4>Навигация</h4>
             <ul>
-              <li><a href="#services">Process</a></li>
-              <li><a href="#countries">Countries</a></li>
-              <li><a href="#how">How it works</a></li>
-              <li><a href="#voices">Voices</a></li>
-              <li><a href="#apply">Apply</a></li>
+              <li><a href="#services">Услуги</a></li>
+              <li><a href="#countries">Страны</a></li>
+              <li><a href="#how">Как это работает</a></li>
+              <li><a href="#voices">Истории</a></li>
+              <li><a href="#apply">Подать заявку</a></li>
             </ul>
           </div>
 
           <div>
-            <h4>Grants</h4>
+            <h4>Гранты</h4>
             <ul>
               <li><a href="#countries">🇺🇸 Fulbright</a></li>
               <li><a href="#countries">🇬🇧 Chevening</a></li>
@@ -56,19 +56,19 @@ export default function Footer() {
           </div>
 
           <div>
-            <h4>Contact</h4>
+            <h4>Контакты</h4>
             <ul>
               <li><a href="mailto:hello@javonon.com">hello@javonon.com</a></li>
               <li><a href="https://t.me/javonon">@javonon</a></li>
               <li><a href="tel:+992900000000">+992 900 000 000</a></li>
-              <li>Dushanbe, Tajikistan</li>
+              <li>Душанбе, Таджикистан</li>
             </ul>
           </div>
         </div>
 
         <div className="footer-bottom">
-          <div>© {year} JAVONON · INTERNATIONAL GRANTS</div>
-          <div>BUILT FOR AMBITIOUS MINDS</div>
+          <div>© {year} JAVONON · МЕЖДУНАРОДНЫЕ ГРАНТЫ</div>
+          <div>СОЗДАНО ДЛЯ АМБИЦИОЗНЫХ УМОВ</div>
         </div>
       </div>
 

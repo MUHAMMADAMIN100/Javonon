@@ -15,14 +15,15 @@ export default function Services() {
       <div className="container">
         <div className="section-head">
           <div>
-            <span className="eyebrow">What we do</span>
+            <span className="eyebrow">Что мы делаем</span>
             <h2 className="display">
-              One partner from <em>maybe</em><br />to admission letter.
+              Один партнёр — от <em>сомнений</em><br />до письма о зачислении.
             </h2>
           </div>
           <p>
-            We don't just file paperwork. We engineer your candidacy — choosing the
-            right grants, sharpening your story, and getting you across the line.
+            Мы не просто оформляем бумаги. Мы выстраиваем твою кандидатуру —
+            подбираем подходящие гранты, прокачиваем твою историю и доводим
+            до результата.
           </p>
         </div>
 
@@ -39,12 +40,12 @@ export default function Services() {
               <div className="bento-icon">
                 <Icon name="travel_explore" size={24} />
               </div>
-              <h3>Grant matching with surgical precision.</h3>
+              <h3>Подбор грантов с хирургической точностью.</h3>
             </div>
             <p>
-              We map your profile against 60+ active scholarships and shortlist the
-              ones where you're not just eligible — you're competitive. No spam
-              applications. Only signal.
+              Мы сопоставляем твой профиль с 60+ активными стипендиями и оставляем
+              те, где ты не просто проходишь по критериям — ты конкурентоспособен.
+              Никаких "выстрелов в воздух". Только работающие варианты.
             </p>
             <span className="bento-num">01</span>
           </motion.div>
@@ -60,8 +61,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="edit_document" size={22} />
             </div>
-            <h3>Application craft</h3>
-            <p>Personal statements, motivation letters, study plans — written with you, not for you.</p>
+            <h3>Документы с характером</h3>
+            <p>Мотивационные письма, study plan, рекомендации — пишем вместе с тобой, а не за тебя.</p>
             <span className="bento-num">02</span>
           </motion.div>
 
@@ -76,8 +77,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="forum" size={22} />
             </div>
-            <h3>Interview labs</h3>
-            <p>Mock interviews with alumni who passed your exact committee.</p>
+            <h3>Mock-интервью</h3>
+            <p>Тренировочные собеседования с выпускниками, прошедшими твою комиссию.</p>
             <span className="bento-num">03</span>
           </motion.div>
 
@@ -92,8 +93,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="language" size={22} />
             </div>
-            <h3>Test prep</h3>
-            <p>IELTS, TOEFL, GRE, GMAT, HSK, TOPIK — targeted prep for your university.</p>
+            <h3>Подготовка к экзаменам</h3>
+            <p>IELTS, TOEFL, GRE, GMAT, HSK, TOPIK — целевая подготовка под университет.</p>
             <span className="bento-num">04</span>
           </motion.div>
 
@@ -108,8 +109,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="flight_takeoff" size={22} />
             </div>
-            <h3>Visa & relocation</h3>
-            <p>Embassy paperwork, housing, airport pickup, first-week onboarding.</p>
+            <h3>Виза и переезд</h3>
+            <p>Документы в посольство, поиск жилья, встреча в аэропорту, первая неделя на месте.</p>
             <span className="bento-num">05</span>
           </motion.div>
 
@@ -124,8 +125,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="favorite" size={22} />
             </div>
-            <h3>Lifelong network</h3>
-            <p>You're never an alumnus of Javonon — you're family. Mentorship, referrals, opportunities long after the diploma.</p>
+            <h3>Сообщество выпускников</h3>
+            <p>Ты не просто бывший клиент — ты часть семьи Javonon. Менторство, рекомендации, новые возможности на годы вперёд.</p>
             <span className="bento-num">06</span>
           </motion.div>
 
@@ -140,8 +141,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="bolt" size={22} />
             </div>
-            <h3>30-min response time</h3>
-            <p>Your dedicated manager replies within half an hour during business hours. No tickets, no queues.</p>
+            <h3>Ответ за 30 минут</h3>
+            <p>Твой персональный менеджер на связи в рабочее время. Никаких очередей и тикет-систем.</p>
             <span className="bento-num">07</span>
           </motion.div>
         </div>

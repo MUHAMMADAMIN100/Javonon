@@ -55,27 +55,27 @@ export default function Login() {
 
         <div>
           <h1>
-            Operate the<br />
-            <em>scholar pipeline.</em>
+            Управляй потоком<br />
+            <em>студентов.</em>
           </h1>
           <p>
-            Internal control room for managers and admins. Track applications,
-            students, programmes, and grant outcomes — in real time.
+            Внутренняя панель для менеджеров и администраторов. Заявки, студенты,
+            программы и результаты по грантам — в реальном времени.
           </p>
         </div>
 
         <div className="login-aside-stats">
           <div>
             <div className="login-aside-stat-num">40+</div>
-            <div className="login-aside-stat-label">Countries</div>
+            <div className="login-aside-stat-label">Стран</div>
           </div>
           <div>
             <div className="login-aside-stat-num">1.2K</div>
-            <div className="login-aside-stat-label">Scholars</div>
+            <div className="login-aside-stat-label">Студентов</div>
           </div>
           <div>
             <div className="login-aside-stat-num">94%</div>
-            <div className="login-aside-stat-label">Success</div>
+            <div className="login-aside-stat-label">Успех</div>
           </div>
         </div>
       </motion.aside>
@@ -98,8 +98,8 @@ export default function Login() {
           <span className="login-logo-label">CRM</span>
         </motion.div>
 
-        <h2>Sign in.</h2>
-        <p className="login-sub">Use your manager credentials to access the control room.</p>
+        <h2>Вход в панель.</h2>
+        <p className="login-sub">Используйте учётные данные менеджера для доступа к рабочей среде.</p>
 
         <AnimatePresence>
           {error && (
@@ -131,7 +131,7 @@ export default function Login() {
           {showErr('email') && <div className="form-error-text">{errors.email}</div>}
         </div>
         <div className="form-group">
-          <label>Password</label>
+          <label>Пароль</label>
           <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -151,8 +151,8 @@ export default function Login() {
           whileHover={!submitting ? { scale: 1.01 } : {}}
           whileTap={!submitting ? { scale: 0.99 } : {}}
         >
-          {submitting ? 'Signing in...' : (
-            <>Sign in <Icon name="arrow_outward" size={16} /></>
+          {submitting ? 'Входим...' : (
+            <>Войти <Icon name="arrow_outward" size={16} /></>
           )}
         </motion.button>
       </motion.form>

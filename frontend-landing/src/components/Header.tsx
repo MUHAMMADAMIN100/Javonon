@@ -4,11 +4,11 @@ import { Link } from 'react-router-dom';
 import Icon from '../Icon';
 
 const NAV_ITEMS = [
-  { href: '#services', label: 'Process' },
-  { href: '#countries', label: 'Countries' },
-  { href: '#how', label: 'How it works' },
-  { href: '#voices', label: 'Voices' },
-  { href: '#apply', label: 'Apply' },
+  { href: '#services', label: 'Услуги' },
+  { href: '#countries', label: 'Страны' },
+  { href: '#how', label: 'Как это работает' },
+  { href: '#voices', label: 'Истории' },
+  { href: '#apply', label: 'Заявка' },
 ];
 
 export default function Header() {
@@ -55,16 +55,16 @@ export default function Header() {
         <div className="header-cta">
           <Link to="/login" className="btn-pill ghost">
             <Icon name="lock" size={14} />
-            Student
+            Кабинет
           </Link>
           <a href="#apply" className="btn-pill solid">
-            Apply now
+            Подать заявку
             <Icon name="arrow_outward" size={16} />
           </a>
           <button
             type="button"
             className="burger"
-            aria-label="Open menu"
+            aria-label="Открыть меню"
             onClick={() => setOpen(true)}
           >
             <Icon name="menu" size={20} />
@@ -95,7 +95,7 @@ export default function Header() {
                 type="button"
                 className="burger"
                 onClick={() => setOpen(false)}
-                aria-label="Close menu"
+                aria-label="Закрыть меню"
               >
                 <Icon name="close" size={20} />
               </button>
@@ -130,10 +130,10 @@ export default function Header() {
             </nav>
             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
               <Link to="/login" className="btn btn-ghost-dark" onClick={() => setOpen(false)}>
-                <Icon name="lock" size={18} /> Student access
+                <Icon name="lock" size={18} /> Личный кабинет
               </Link>
               <a href="#apply" className="btn btn-primary" onClick={() => setOpen(false)}>
-                Apply for a grant
+                Подать заявку
                 <Icon name="arrow_outward" size={18} />
               </a>
             </div>

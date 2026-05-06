@@ -3,23 +3,23 @@ import { motion } from 'framer-motion';
 const STEPS = [
   {
     n: '01',
-    title: 'Discovery call',
-    text: 'A free 30-minute conversation to map your goals, profile and timeline. We tell you honestly what\'s possible.',
+    title: 'Бесплатная консультация',
+    text: '30-минутный разговор, чтобы понять твои цели, профиль и сроки. Мы честно говорим, что реально, а что нет.',
   },
   {
     n: '02',
-    title: 'Grant shortlist',
-    text: 'Within 5 days you get a personalised shortlist of 3–5 scholarships where your odds are real.',
+    title: 'Шортлист грантов',
+    text: 'За 5 дней ты получаешь персональный список из 3–5 стипендий, где у тебя реальные шансы пройти.',
   },
   {
     n: '03',
-    title: 'Apply with us',
-    text: 'Documents, essays, recommendations, translations — engineered with you, week by week, until submission.',
+    title: 'Подаём вместе',
+    text: 'Документы, эссе, рекомендации, переводы — оформляем неделя за неделей до момента подачи.',
   },
   {
     n: '04',
-    title: 'Pack your bags',
-    text: 'Visa, housing, relocation, first-week support. Your only job is to show up and study.',
+    title: 'Собирай чемодан',
+    text: 'Виза, жильё, переезд, поддержка в первую неделю. Твоя задача — приехать и учиться.',
   },
 ];
 
@@ -37,16 +37,16 @@ export default function Advantages() {
       <div className="container">
         <div className="section-head">
           <div>
-            <span className="eyebrow">How it works</span>
+            <span className="eyebrow">Как это работает</span>
             <h2 className="display">
-              Four steps.<br />
-              <em>One acceptance letter.</em>
+              Четыре шага.<br />
+              <em>Одно письмо о зачислении.</em>
             </h2>
           </div>
           <p>
-            We're not a bureaucracy and we're not a magic wand. We're a small team
-            of people who have done this for 1,200 students before you — and we're
-            allergic to wasting your time.
+            Мы не бюрократическая машина и не волшебная палочка. Мы — небольшая
+            команда, которая прошла этот путь с 1200 студентами до тебя — и мы
+            не любим тратить твоё время впустую.
           </p>
         </div>
 
