@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { compose, email as emailRule, hasErrors, minLen, required, validateAll } from '../utils/validators';
 import PasswordInput from '../components/PasswordInput';
+import Icon from '../Icon';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -41,12 +42,50 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      <motion.aside
+        className="login-aside"
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="login-aside-brand">
+          <span className="logo-mark">J</span>
+          <span>Javonon</span>
+        </div>
+
+        <div>
+          <h1>
+            Operate the<br />
+            <em>scholar pipeline.</em>
+          </h1>
+          <p>
+            Internal control room for managers and admins. Track applications,
+            students, programmes, and grant outcomes — in real time.
+          </p>
+        </div>
+
+        <div className="login-aside-stats">
+          <div>
+            <div className="login-aside-stat-num">40+</div>
+            <div className="login-aside-stat-label">Countries</div>
+          </div>
+          <div>
+            <div className="login-aside-stat-num">1.2K</div>
+            <div className="login-aside-stat-label">Scholars</div>
+          </div>
+          <div>
+            <div className="login-aside-stat-num">94%</div>
+            <div className="login-aside-stat-label">Success</div>
+          </div>
+        </div>
+      </motion.aside>
+
       <motion.form
         className="login-card"
         onSubmit={onSubmit}
-        initial={{ opacity: 0, y: 30, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
       >
         <motion.div
           className="login-logo"
@@ -54,10 +93,14 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.4 }}
         >
-          <span className="logo-mark" style={{ width: 48, height: 48, fontSize: 24 }}>J</span>
+          <span className="logo-mark">J</span>
           <span className="login-brand-name">Javonon</span>
           <span className="login-logo-label">CRM</span>
         </motion.div>
+
+        <h2>Sign in.</h2>
+        <p className="login-sub">Use your manager credentials to access the control room.</p>
+
         <AnimatePresence>
           {error && (
             <motion.div
@@ -67,16 +110,13 @@ export default function Login() {
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.35 }}
             >
+              <Icon name="error" size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
               {error}
             </motion.div>
           )}
         </AnimatePresence>
-        <motion.div
-          className="form-group"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.3 }}
-        >
+
+        <div className="form-group">
           <label>Email</label>
           <input
             type="email"
@@ -84,40 +124,36 @@ export default function Login() {
             onChange={(e) => setEmail(e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, email: true }))}
             className={showErr('email') ? 'input-error' : ''}
+            placeholder="you@javonon.com"
             required
             autoComplete="email"
           />
           {showErr('email') && <div className="form-error-text">{errors.email}</div>}
-        </motion.div>
-        <motion.div
-          className="form-group"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.3 }}
-        >
-          <label>Пароль</label>
+        </div>
+        <div className="form-group">
+          <label>Password</label>
           <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, password: true }))}
             className={showErr('password') ? 'input-error' : ''}
+            placeholder="••••••••"
             required
             autoComplete="current-password"
           />
           {showErr('password') && <div className="form-error-text">{errors.password}</div>}
-        </motion.div>
+        </div>
         <motion.button
           type="submit"
           className="btn btn-primary"
           style={{ width: '100%', justifyContent: 'center' }}
           disabled={submitting}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, duration: 0.3 }}
-          whileHover={!submitting ? { scale: 1.02, y: -2 } : {}}
-          whileTap={!submitting ? { scale: 0.98 } : {}}
+          whileHover={!submitting ? { scale: 1.01 } : {}}
+          whileTap={!submitting ? { scale: 0.99 } : {}}
         >
-          {submitting ? 'Вход...' : 'Войти'}
+          {submitting ? 'Signing in...' : (
+            <>Sign in <Icon name="arrow_outward" size={16} /></>
+          )}
         </motion.button>
       </motion.form>
     </div>

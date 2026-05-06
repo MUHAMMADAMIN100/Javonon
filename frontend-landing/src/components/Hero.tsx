@@ -1,113 +1,140 @@
 import { motion } from 'framer-motion';
-import { fadeUp, staggerContainer, scaleIn } from '../motion';
 import Icon from '../Icon';
 
+const UNIVERSITIES = [
+  'Harvard',
+  'Tsinghua',
+  'Oxford',
+  'TU Munich',
+  'Sapienza',
+  'KAIST',
+  'Sorbonne',
+  'University of Tokyo',
+  'Cambridge',
+  'ETH Zürich',
+  'Boğaziçi',
+  'NTU Singapore',
+];
+
+const fade = {
+  hidden: { opacity: 0, y: 24 },
+  show: (i: number) => ({
+    opacity: 1, y: 0,
+    transition: { delay: i * 0.06, duration: 0.6, ease: [0.22, 1, 0.36, 1] as const },
+  }),
+};
+
 export default function Hero() {
+  // Дублируем для бесшовного marquee
+  const marqueeItems = [...UNIVERSITIES, ...UNIVERSITIES];
+
   return (
     <section className="hero">
-      <div className="container">
-        <motion.div
-          className="hero-inner"
-          variants={staggerContainer}
+      <div className="container hero-content">
+        <motion.span
+          className="hero-tag"
+          variants={fade}
+          custom={0}
           initial="hidden"
           animate="show"
         >
-          <div>
-            <motion.span className="hero-eyebrow" variants={fadeUp}>
-              <span className="dot" />
-              Международная платформа грантов · 2026
-            </motion.span>
-            <motion.h1 variants={fadeUp}>
-              Получи <span className="gradient">грант на обучение</span> в лучших университетах мира
-            </motion.h1>
-            <motion.p className="lead" variants={fadeUp}>
-              Javonon — твой проводник к стипендиям США, Великобритании, Германии,
-              Кореи, Китая, Японии и других стран. Подбор программы, документы, виза,
-              сопровождение от первого письма до зачисления.
-            </motion.p>
-            <motion.div className="hero-actions" variants={fadeUp}>
-              <motion.a
-                href="#apply"
-                className="btn btn-primary btn-large"
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                <Icon name="rocket_launch" size={20} />
-                Подать на грант
-              </motion.a>
-              <motion.a
-                href="#directions"
-                className="btn btn-outline btn-large"
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                Все направления
-              </motion.a>
-            </motion.div>
+          <span className="hero-tag-pill">Live</span>
+          Open call · Spring 2026 cohort closing in 38 days
+        </motion.span>
 
-            <motion.div className="hero-stats" variants={staggerContainer}>
-              {[
-                { num: '40+', label: 'стран-партнёров' },
-                { num: '1200+', label: 'студентов получили грант' },
-                { num: '94%', label: 'успешных заявок' },
-              ].map((s) => (
-                <motion.div key={s.label} variants={fadeUp}>
-                  <div className="hero-stat-num">{s.num}</div>
-                  <div className="hero-stat-label">{s.label}</div>
-                </motion.div>
-              ))}
+        <motion.h1
+          className="display"
+          variants={fade}
+          custom={1}
+          initial="hidden"
+          animate="show"
+        >
+          The world is your <em>campus.</em><br />
+          We pay your <span className="underline">tuition.</span>
+        </motion.h1>
+
+        <div className="hero-grid">
+          <div>
+            <motion.p
+              className="hero-lead"
+              variants={fade}
+              custom={2}
+              initial="hidden"
+              animate="show"
+            >
+              Javonon places ambitious students at top-ranked universities through{' '}
+              <strong>fully-funded international grants</strong> — Fulbright, DAAD, Chevening,
+              GKS, MEXT, CSC, Erasmus and beyond.
+            </motion.p>
+
+            <motion.div
+              className="hero-actions"
+              variants={fade}
+              custom={3}
+              initial="hidden"
+              animate="show"
+            >
+              <a href="#apply" className="btn btn-primary btn-large">
+                Start your application
+                <Icon name="arrow_outward" size={18} />
+              </a>
+              <a href="#countries" className="btn btn-ghost-dark btn-large">
+                Browse countries
+              </a>
             </motion.div>
           </div>
 
-          <motion.div className="hero-visual" variants={scaleIn}>
-            <div className="hero-card">
-              <div className="hero-globe">🌍</div>
-            </div>
-
+          <div className="hero-stats">
             <motion.div
-              className="hero-badge hero-badge-1"
-              animate={{ y: [0, -8, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+              className="hero-stat"
+              variants={fade}
+              custom={4}
+              initial="hidden"
+              animate="show"
             >
-              <div className="hero-badge-icon">
-                <Icon name="verified" size={22} />
+              <div className="hero-stat-num">
+                40<span className="plus">+</span>
               </div>
-              <div className="hero-badge-text">
-                <strong>Fulbright</strong>
-                <span>США · Магистратура</span>
-              </div>
+              <div className="hero-stat-label">Countries · Active grants</div>
             </motion.div>
-
             <motion.div
-              className="hero-badge hero-badge-2"
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
+              className="hero-stat"
+              variants={fade}
+              custom={5}
+              initial="hidden"
+              animate="show"
             >
-              <div className="hero-badge-icon">
-                <Icon name="school" size={22} />
+              <div className="hero-stat-num">
+                1.2<span style={{ fontSize: 32 }}>K</span>
               </div>
-              <div className="hero-badge-text">
-                <strong>DAAD</strong>
-                <span>Германия · Бакалавриат</span>
-              </div>
+              <div className="hero-stat-label">Scholars placed since 2020</div>
             </motion.div>
-
             <motion.div
-              className="hero-badge hero-badge-3"
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
+              className="hero-stat"
+              variants={fade}
+              custom={6}
+              initial="hidden"
+              animate="show"
             >
-              <div className="hero-badge-icon">
-                <Icon name="public" size={22} />
-              </div>
-              <div className="hero-badge-text">
-                <strong>+38 стран</strong>
-                <span>Открыты заявки</span>
-              </div>
+              <div className="hero-stat-num">94<span className="plus">%</span></div>
+              <div className="hero-stat-label">Application success rate</div>
             </motion.div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </div>
+
+      <motion.div
+        className="marquee"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.6, duration: 0.8 }}
+      >
+        <div className="marquee-track">
+          {marqueeItems.map((u, i) => (
+            <span key={i} className="marquee-item">{u}</span>
+          ))}
+        </div>
+      </motion.div>
     </section>
   );
 }

@@ -144,15 +144,15 @@ export default function StudentCabinet() {
       <RealtimeStatusBanner />
       <header className="stu-header">
         <div className="container stu-header-inner">
-          <Link to="/" className="logo">
-            <span className="logo-mark">J</span>
-            <span className="logo-text">Javonon</span>
+          <Link to="/" className="brand">
+            <span className="brand-dot">J</span>
+            <span>Javonon</span>
           </Link>
           <div className="stu-header-user">
             <div className="stu-header-name">{me.fullName}</div>
-            <button className="btn btn-outline" onClick={logout}>
-              <Icon name="logout" size={18} style={{ marginRight: 4 }} />
-              Выйти
+            <button className="btn-pill ghost" onClick={logout}>
+              <Icon name="logout" size={16} />
+              Sign out
             </button>
           </div>
         </div>

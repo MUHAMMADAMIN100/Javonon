@@ -1,101 +1,71 @@
 import { motion } from 'framer-motion';
-import { fadeUp, staggerContainer, viewportOnce } from '../motion';
+import Icon from '../Icon';
 
-const countries = [
-  {
-    flag: '🇺🇸',
-    title: 'США',
-    text: 'Fulbright, Hubert Humphrey, Schwarzman — топовые гранты Айви-лиги.',
-    tags: ['Fulbright', 'Magistracy', 'PhD'],
-  },
-  {
-    flag: '🇬🇧',
-    title: 'Великобритания',
-    text: 'Chevening, Commonwealth, GREAT — обучение в Oxford, Cambridge, LSE.',
-    tags: ['Chevening', 'Master', '1 год'],
-  },
-  {
-    flag: '🇩🇪',
-    title: 'Германия',
-    text: 'DAAD, Erasmus+ — бесплатные госуниверситеты + ежемесячная стипендия.',
-    tags: ['DAAD', 'Бакалавриат', 'Магистратура'],
-  },
-  {
-    flag: '🇰🇷',
-    title: 'Южная Корея',
-    text: 'GKS — год корейского + полная оплата обучения и проживания.',
-    tags: ['GKS', 'Bachelor', 'IT'],
-  },
-  {
-    flag: '🇨🇳',
-    title: 'Китай',
-    text: 'CSC, Confucius — гранты в Tsinghua, Peking University, Fudan.',
-    tags: ['CSC', 'HSK', 'Engineering'],
-  },
-  {
-    flag: '🇯🇵',
-    title: 'Япония',
-    text: 'MEXT — стипендия от правительства Японии, лучшие исследовательские лаборатории.',
-    tags: ['MEXT', 'Research', 'PhD'],
-  },
-  {
-    flag: '🇹🇷',
-    title: 'Турция',
-    text: 'Türkiye Bursları — полное покрытие обучения и проживания + год турецкого.',
-    tags: ['YÖS', 'Bachelor', 'Все направления'],
-  },
-  {
-    flag: '🇪🇺',
-    title: 'Евросоюз',
-    text: 'Erasmus Mundus — совместные магистратуры в 2-4 странах ЕС с одной заявки.',
-    tags: ['Erasmus', 'Joint Master', 'EU'],
-  },
+const COUNTRIES = [
+  { flag: '🇺🇸', name: 'United States', tags: ['Fulbright', 'Hubert Humphrey', 'Schwarzman'] },
+  { flag: '🇬🇧', name: 'United Kingdom', tags: ['Chevening', 'Commonwealth', 'GREAT'] },
+  { flag: '🇩🇪', name: 'Germany', tags: ['DAAD', 'Bayerische', 'Heinrich Böll'] },
+  { flag: '🇰🇷', name: 'South Korea', tags: ['GKS', 'POSCO', 'Yonsei'] },
+  { flag: '🇨🇳', name: 'China', tags: ['CSC', 'Confucius', 'Tsinghua'] },
+  { flag: '🇯🇵', name: 'Japan', tags: ['MEXT', 'JASSO', 'Honjo'] },
+  { flag: '🇪🇺', name: 'European Union', tags: ['Erasmus Mundus', 'Marie Curie'] },
+  { flag: '🇹🇷', name: 'Türkiye', tags: ['Türkiye Bursları', 'YÖS'] },
+  { flag: '🇨🇦', name: 'Canada', tags: ['Vanier', 'Trudeau', 'OGS'] },
+  { flag: '🇦🇺', name: 'Australia', tags: ['Australia Awards', 'RTP'] },
 ];
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: (i: number) => ({
+    opacity: 1, y: 0,
+    transition: { delay: i * 0.05, duration: 0.5, ease: [0.22, 1, 0.36, 1] as const },
+  }),
+};
 
 export default function Directions() {
   return (
-    <section id="directions" className="alt">
+    <section id="countries" className="dark">
       <div className="container">
-        <motion.div
-          className="section-head"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={viewportOnce}
-        >
-          <motion.div className="section-eyebrow" variants={fadeUp}>Страны и гранты</motion.div>
-          <motion.h2 variants={fadeUp}>Учись там, где мечтаешь</motion.h2>
-          <motion.p variants={fadeUp}>
-            Работаем напрямую с университетами и государственными грантовыми программами.
-            Открыто <strong>40+ направлений</strong> по всему миру.
-          </motion.p>
-        </motion.div>
+        <div className="section-head">
+          <div>
+            <span className="eyebrow on-dark">Where you'll go</span>
+            <h2 className="display">
+              Forty countries.<br />
+              <em>One application form.</em>
+            </h2>
+          </div>
+          <p>
+            We work with government grant bodies, university scholarships and
+            private foundations across six continents. You apply once, we route
+            you to the openings that fit.
+          </p>
+        </div>
 
-        <motion.div
-          className="directions-grid"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={viewportOnce}
-        >
-          {countries.map((d) => (
-            <motion.div
-              key={d.title}
-              className="direction-card"
+        <div className="countries-list">
+          {COUNTRIES.map((c, i) => (
+            <motion.a
+              key={c.name}
+              href="#apply"
+              className="country-row"
               variants={fadeUp}
-              whileHover={{ y: -6 }}
+              custom={i}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true, amount: 0.1 }}
             >
-              <span className="direction-flag">{d.flag}</span>
-              <h3>{d.title}</h3>
-              <p>{d.text}</p>
-              <div className="direction-tags">
-                {d.tags.map((t) => (
-                  <span key={t} className="direction-tag">{t}</span>
+              <span className="country-flag">{c.flag}</span>
+              <span className="country-name">{c.name}</span>
+              <span className="country-tags">
+                {c.tags.map((t) => (
+                  <span key={t} className="country-tag">{t}</span>
                 ))}
-              </div>
-            </motion.div>
+              </span>
+              <span className="country-arrow">
+                <Icon name="arrow_outward" size={28} />
+              </span>
+            </motion.a>
           ))}
-        </motion.div>
+        </div>
       </div>
     </section>
   );

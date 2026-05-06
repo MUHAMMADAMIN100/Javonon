@@ -3,16 +3,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import Icon from '../Icon';
 
-const NAV_ITEMS: { href: string; label: string }[] = [
-  { href: '/#services', label: 'Услуги' },
-  { href: '/#directions', label: 'Страны' },
-  { href: '/#advantages', label: 'Преимущества' },
-  { href: '/#testimonials', label: 'Отзывы' },
-  { href: '/#contacts', label: 'Контакты' },
+const NAV_ITEMS = [
+  { href: '#services', label: 'Process' },
+  { href: '#countries', label: 'Countries' },
+  { href: '#how', label: 'How it works' },
+  { href: '#voices', label: 'Voices' },
+  { href: '#apply', label: 'Apply' },
 ];
 
 export default function Header() {
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
@@ -27,83 +35,106 @@ export default function Header() {
 
   return (
     <motion.header
-      className="header"
-      initial={{ y: -60, opacity: 0 }}
+      className={`header${scrolled ? ' scrolled' : ''}`}
+      initial={{ y: -40, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className="container header-inner">
-        <motion.a
-          href="#"
-          className="logo"
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-        >
-          <span className="logo-mark">J</span>
-          <span className="logo-text">Javonon</span>
-        </motion.a>
+      <div className="container header-row">
+        <a href="#" className="brand">
+          <span className="brand-dot">J</span>
+          <span>Javonon</span>
+        </a>
 
         <nav className="nav">
-          {NAV_ITEMS.map((item) => (
-            <motion.a key={item.href} href={item.href} whileHover={{ y: -2 }}>
-              {item.label}
-            </motion.a>
+          {NAV_ITEMS.map((i) => (
+            <a key={i.href} href={i.href}>{i.label}</a>
           ))}
         </nav>
 
-        <div className="header-actions">
-          <Link to="/login" className="header-login">
-            <Icon name="person" size={18} />
-            <span>Вход</span>
+        <div className="header-cta">
+          <Link to="/login" className="btn-pill ghost">
+            <Icon name="lock" size={14} />
+            Student
           </Link>
-          <motion.a
-            href="#apply"
-            className="btn btn-primary btn-small"
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
+          <a href="#apply" className="btn-pill solid">
+            Apply now
+            <Icon name="arrow_outward" size={16} />
+          </a>
+          <button
+            type="button"
+            className="burger"
+            aria-label="Open menu"
+            onClick={() => setOpen(true)}
           >
-            Подать заявку
-          </motion.a>
+            <Icon name="menu" size={20} />
+          </button>
         </div>
-
-        <button
-          type="button"
-          className="header-burger"
-          aria-label={open ? 'Закрыть меню' : 'Открыть меню'}
-          onClick={() => setOpen(true)}
-        >
-          <Icon name="menu" size={24} />
-        </button>
       </div>
 
       <AnimatePresence>
         {open && (
           <motion.div
-            className="mobile-drawer open"
+            style={{
+              position: 'fixed', inset: 0, zIndex: 200,
+              background: 'rgba(5, 7, 6, 0.96)',
+              backdropFilter: 'blur(20px)',
+              padding: 32,
+              display: 'flex', flexDirection: 'column',
+            }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setOpen(false)}
           >
-            <div className="mobile-drawer-inner" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="brand" style={{ color: 'white' }}>
+                <span className="brand-dot">J</span>
+                <span>Javonon</span>
+              </span>
               <button
                 type="button"
-                className="mobile-drawer-close"
-                aria-label="Закрыть меню"
+                className="burger"
                 onClick={() => setOpen(false)}
+                aria-label="Close menu"
               >
-                <Icon name="close" size={22} />
+                <Icon name="close" size={20} />
               </button>
-              {NAV_ITEMS.map((item) => (
-                <a key={item.href} href={item.href} onClick={() => setOpen(false)}>
-                  {item.label}
-                </a>
+            </div>
+            <nav
+              style={{
+                marginTop: 64,
+                display: 'flex', flexDirection: 'column', gap: 4,
+                fontFamily: 'var(--display)',
+              }}
+            >
+              {NAV_ITEMS.map((i, idx) => (
+                <motion.a
+                  key={i.href}
+                  href={i.href}
+                  onClick={() => setOpen(false)}
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 + 0.1 }}
+                  style={{
+                    fontSize: 48,
+                    color: 'white',
+                    padding: '12px 0',
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    fontWeight: 500,
+                    letterSpacing: '-0.02em',
+                  }}
+                >
+                  {i.label}
+                </motion.a>
               ))}
-              <Link to="/login" className="btn btn-ghost" onClick={() => setOpen(false)}>
-                <Icon name="person" size={18} /> Вход в кабинет
+            </nav>
+            <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Link to="/login" className="btn btn-ghost-dark" onClick={() => setOpen(false)}>
+                <Icon name="lock" size={18} /> Student access
               </Link>
               <a href="#apply" className="btn btn-primary" onClick={() => setOpen(false)}>
-                Подать заявку
+                Apply for a grant
+                <Icon name="arrow_outward" size={18} />
               </a>
             </div>
           </motion.div>

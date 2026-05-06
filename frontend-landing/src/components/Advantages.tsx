@@ -1,82 +1,72 @@
 import { motion } from 'framer-motion';
-import { fadeUp, staggerContainer, viewportOnce } from '../motion';
-import Icon from '../Icon';
 
-const advantages = [
+const STEPS = [
   {
-    icon: 'handshake',
-    title: 'Прямые партнёрства',
-    text: 'Соглашения с 40+ университетами и государственными грантовыми фондами в Европе, Азии и Америке.',
+    n: '01',
+    title: 'Discovery call',
+    text: 'A free 30-minute conversation to map your goals, profile and timeline. We tell you honestly what\'s possible.',
   },
   {
-    icon: 'savings',
-    title: 'Бесплатная консультация',
-    text: 'Первая встреча — без оплаты. Расскажем шансы, посчитаем бюджет и подберём вариант.',
+    n: '02',
+    title: 'Grant shortlist',
+    text: 'Within 5 days you get a personalised shortlist of 3–5 scholarships where your odds are real.',
   },
   {
-    icon: 'checklist',
-    title: 'Прозрачный процесс',
-    text: 'Каждый этап в личном кабинете: загруженные документы, статусы заявок, дедлайны.',
+    n: '03',
+    title: 'Apply with us',
+    text: 'Documents, essays, recommendations, translations — engineered with you, week by week, until submission.',
   },
   {
-    icon: 'bolt',
-    title: 'Быстрый отклик',
-    text: 'Менеджер отвечает в течение 30 минут в рабочее время. Никаких "перезвоним завтра".',
-  },
-  {
-    icon: 'emoji_events',
-    title: 'Опыт 6+ лет',
-    text: '1200+ студентов получили грант через нашу платформу. 94% положительных решений по заявкам.',
-  },
-  {
-    icon: 'verified_user',
-    title: 'Гарантия по договору',
-    text: 'Если по нашей вине грант не оформлен — возвращаем 100% оплаты. Без вопросов.',
+    n: '04',
+    title: 'Pack your bags',
+    text: 'Visa, housing, relocation, first-week support. Your only job is to show up and study.',
   },
 ];
 
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: (i: number) => ({
+    opacity: 1, y: 0,
+    transition: { delay: i * 0.08, duration: 0.5, ease: [0.22, 1, 0.36, 1] as const },
+  }),
+};
+
 export default function Advantages() {
   return (
-    <section id="advantages">
+    <section id="how">
       <div className="container">
-        <motion.div
-          className="section-head"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={viewportOnce}
-        >
-          <motion.div className="section-eyebrow" variants={fadeUp}>Почему Javonon</motion.div>
-          <motion.h2 variants={fadeUp}>Шесть причин начать с нами</motion.h2>
-          <motion.p variants={fadeUp}>
-            Мы не агентство-посредник. Мы — твоя команда поддержки на пути к стипендии.
-          </motion.p>
-        </motion.div>
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">How it works</span>
+            <h2 className="display">
+              Four steps.<br />
+              <em>One acceptance letter.</em>
+            </h2>
+          </div>
+          <p>
+            We're not a bureaucracy and we're not a magic wand. We're a small team
+            of people who have done this for 1,200 students before you — and we're
+            allergic to wasting your time.
+          </p>
+        </div>
 
-        <motion.div
-          className="advantages-grid"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={viewportOnce}
-        >
-          {advantages.map((a) => (
+        <div className="process-grid">
+          {STEPS.map((s, i) => (
             <motion.div
-              key={a.title}
-              className="advantage-card"
+              key={s.n}
+              className="process-step"
               variants={fadeUp}
-              whileHover={{ y: -4 }}
+              custom={i}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true, amount: 0.2 }}
             >
-              <div className="advantage-icon">
-                <Icon name={a.icon} size={24} />
-              </div>
-              <div>
-                <h3>{a.title}</h3>
-                <p>{a.text}</p>
-              </div>
+              <div className="process-num">{s.n}</div>
+              <h3>{s.title}</h3>
+              <p>{s.text}</p>
             </motion.div>
           ))}
-        </motion.div>
+        </div>
       </div>
     </section>
   );

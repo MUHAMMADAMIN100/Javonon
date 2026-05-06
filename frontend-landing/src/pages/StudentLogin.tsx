@@ -15,8 +15,8 @@ export default function StudentLogin() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const errors = {
-    email: compose(required('Введите email'), emailRule())(email),
-    password: compose(required('Введите пароль'), passwordRule())(password),
+    email: compose(required('Email is required'), emailRule())(email),
+    password: compose(required('Password is required'), passwordRule())(password),
   };
   const showErr = (k: 'email' | 'password') => touched[k] && errors[k];
   const isInvalid = hasErrors(errors);
@@ -35,7 +35,7 @@ export default function StudentLogin() {
       await studentLogin(email.trim(), password);
       navigate('/cabinet');
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Неверный email или пароль');
+      setError(err?.response?.data?.message || 'Wrong email or password');
     } finally {
       setLoading(false);
     }
@@ -43,84 +43,110 @@ export default function StudentLogin() {
 
   return (
     <div className="stu-login-page">
-      <motion.div
-        className="stu-login-card"
-        initial={{ opacity: 0, y: 30, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <Link to="/" className="stu-login-home">
-          <Icon name="arrow_back" size={18} />
-          На главную
-        </Link>
-
-        <div className="stu-login-brand">
-          <a href="/" className="logo" style={{ fontSize: 28, justifyContent: 'center' }}>
-            <span className="logo-mark">J</span>
-            <span className="logo-text">Javonon</span>
-          </a>
+      <aside className="stu-login-aside">
+        <div className="stu-login-aside-content">
+          <Link to="/" className="brand" style={{ marginBottom: 64 }}>
+            <span className="brand-dot">J</span>
+            <span>Javonon</span>
+          </Link>
+          <h1 className="display">
+            Welcome back,<br />
+            <em>scholar.</em>
+          </h1>
+          <p>
+            Your personal cabinet — application status, documents, programmes,
+            and direct line to your manager.
+          </p>
         </div>
 
-        <h2 className="stu-login-title">Личный кабинет студента</h2>
-        <p className="stu-login-sub">
-          Войди, используя email и пароль, которые выдал твой менеджер Javonon.
-        </p>
-
-        {error && (
-          <motion.div
-            className="stu-login-error"
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
-            transition={{ duration: 0.4 }}
-          >
-            <Icon name="error" size={18} /> {error}
-          </motion.div>
-        )}
-
-        <form onSubmit={onSubmit}>
-          <div className="form-row">
-            <label>Email *</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-              className={showErr('email') ? 'input-error' : ''}
-              placeholder="you@example.com"
-              required
-              autoComplete="email"
-            />
-            {showErr('email') && <div className="form-error">{errors.email}</div>}
+        <motion.div
+          className="stu-login-quote"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5, duration: 0.6 }}
+        >
+          <div className="stu-login-quote-text">
+            "I logged in every day to track my Chevening application. The team
+            saw every comment in real time."
           </div>
-          <div className="form-row">
-            <label>Пароль *</label>
-            <PasswordInput
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-              className={showErr('password') ? 'input-error' : ''}
-              placeholder="Пароль, выданный менеджером"
-              required
-              autoComplete="current-password"
-            />
-            {showErr('password') && <div className="form-error">{errors.password}</div>}
-          </div>
-          <motion.button
-            type="submit"
-            className="btn btn-primary btn-large"
-            style={{ width: '100%' }}
-            disabled={loading || isInvalid}
-            whileHover={!loading && !isInvalid ? { scale: 1.02, y: -2 } : {}}
-            whileTap={!loading && !isInvalid ? { scale: 0.98 } : {}}
-          >
-            {loading ? 'Вход...' : 'Войти'}
-          </motion.button>
-        </form>
+          <div className="stu-login-quote-author">— Madina S. · Manchester '25</div>
+        </motion.div>
+      </aside>
 
-        <p className="stu-login-hint">
-          Нет аккаунта? Оставьте заявку на <Link to="/#apply">главной</Link> — мы создадим вам личный кабинет после первого контакта.
-        </p>
-      </motion.div>
+      <div className="stu-login-main">
+        <motion.div
+          className="stu-login-card"
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <Link to="/" className="stu-login-back">
+            <Icon name="arrow_back" size={14} />
+            Back to home
+          </Link>
+
+          <h2 className="display">Sign in.</h2>
+          <p className="stu-login-sub">
+            Use the email and password your Javonon manager gave you.
+          </p>
+
+          {error && (
+            <motion.div
+              className="stu-login-error"
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
+              transition={{ duration: 0.4 }}
+            >
+              <Icon name="error" size={18} /> {error}
+            </motion.div>
+          )}
+
+          <form onSubmit={onSubmit}>
+            <div className="form-row">
+              <label>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                className={showErr('email') ? 'input-error' : ''}
+                placeholder="you@example.com"
+                required
+                autoComplete="email"
+              />
+              {showErr('email') && <div className="form-error">{errors.email}</div>}
+            </div>
+            <div className="form-row">
+              <label>Password</label>
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+                className={showErr('password') ? 'input-error' : ''}
+                placeholder="Your password"
+                required
+                autoComplete="current-password"
+              />
+              {showErr('password') && <div className="form-error">{errors.password}</div>}
+            </div>
+            <motion.button
+              type="submit"
+              className="btn btn-primary"
+              style={{ width: '100%', justifyContent: 'center' }}
+              disabled={loading || isInvalid}
+              whileHover={!loading && !isInvalid ? { scale: 1.02 } : {}}
+              whileTap={!loading && !isInvalid ? { scale: 0.98 } : {}}
+            >
+              {loading ? 'Signing in...' : 'Sign in'}
+            </motion.button>
+          </form>
+
+          <p className="stu-login-hint">
+            No account yet? <Link to="/#apply">Apply for a grant</Link> — we'll set
+            up your cabinet after the first call.
+          </p>
+        </motion.div>
+      </div>
     </div>
   );
 }

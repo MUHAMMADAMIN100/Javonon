@@ -1,84 +1,150 @@
 import { motion } from 'framer-motion';
-import { fadeUp, staggerContainer, viewportOnce } from '../motion';
 import Icon from '../Icon';
 
-const services = [
-  {
-    icon: 'travel_explore',
-    title: 'Подбор грантов',
-    text: 'Анализируем твой профиль и подбираем стипендии, на которые ты реально пройдёшь — от полностью покрываемых до частичных.',
-  },
-  {
-    icon: 'description',
-    title: 'Документы под ключ',
-    text: 'Мотивационное письмо, рекомендации, перевод и нотариальное заверение — всё готовим вместе с экспертами.',
-  },
-  {
-    icon: 'language',
-    title: 'Языковая подготовка',
-    text: 'Курсы IELTS, TOEFL, TOPIK, HSK, TestDaF — целевая подготовка к экзамену, который требует университет.',
-  },
-  {
-    icon: 'flight_takeoff',
-    title: 'Виза и переезд',
-    text: 'Полное сопровождение визового процесса, помощь с поиском жилья, страховкой и встречей в аэропорту.',
-  },
-  {
-    icon: 'forum',
-    title: 'Подготовка к интервью',
-    text: 'Mock-собеседования с консультантами, разбор типичных вопросов комиссии, работа над презентацией.',
-  },
-  {
-    icon: 'support_agent',
-    title: 'Поддержка 24/7',
-    text: 'Личный менеджер на связи весь путь — от первой консультации до момента, когда ты стоишь на пороге университета.',
-  },
-];
+const fadeUp = {
+  hidden: { opacity: 0, y: 32 },
+  show: (i: number) => ({
+    opacity: 1, y: 0,
+    transition: { delay: i * 0.05, duration: 0.6, ease: [0.22, 1, 0.36, 1] as const },
+  }),
+};
 
 export default function Services() {
   return (
     <section id="services">
       <div className="container">
-        <motion.div
-          className="section-head"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={viewportOnce}
-        >
-          <motion.div className="section-eyebrow" variants={fadeUp}>
-            Что мы делаем
-          </motion.div>
-          <motion.h2 variants={fadeUp}>
-            Полный цикл сопровождения — от заявки до зачисления
-          </motion.h2>
-          <motion.p variants={fadeUp}>
-            Не оставляем тебя один на один с бумажками и сроками. Каждый шаг — с экспертом.
-          </motion.p>
-        </motion.div>
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">What we do</span>
+            <h2 className="display">
+              One partner from <em>maybe</em><br />to admission letter.
+            </h2>
+          </div>
+          <p>
+            We don't just file paperwork. We engineer your candidacy — choosing the
+            right grants, sharpening your story, and getting you across the line.
+          </p>
+        </div>
 
-        <motion.div
-          className="services-grid"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={viewportOnce}
-        >
-          {services.map((s) => (
-            <motion.div
-              key={s.title}
-              className="service-card"
-              variants={fadeUp}
-              whileHover={{ y: -6 }}
-            >
-              <div className="service-icon">
-                <Icon name={s.icon} size={28} />
+        <div className="bento">
+          <motion.div
+            className="bento-card feature span-4 row-2"
+            variants={fadeUp}
+            custom={0}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+          >
+            <div>
+              <div className="bento-icon">
+                <Icon name="travel_explore" size={24} />
               </div>
-              <h3>{s.title}</h3>
-              <p>{s.text}</p>
-            </motion.div>
-          ))}
-        </motion.div>
+              <h3>Grant matching with surgical precision.</h3>
+            </div>
+            <p>
+              We map your profile against 60+ active scholarships and shortlist the
+              ones where you're not just eligible — you're competitive. No spam
+              applications. Only signal.
+            </p>
+            <span className="bento-num">01</span>
+          </motion.div>
+
+          <motion.div
+            className="bento-card span-2"
+            variants={fadeUp}
+            custom={1}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+          >
+            <div className="bento-icon">
+              <Icon name="edit_document" size={22} />
+            </div>
+            <h3>Application craft</h3>
+            <p>Personal statements, motivation letters, study plans — written with you, not for you.</p>
+            <span className="bento-num">02</span>
+          </motion.div>
+
+          <motion.div
+            className="bento-card accent span-2"
+            variants={fadeUp}
+            custom={2}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+          >
+            <div className="bento-icon">
+              <Icon name="forum" size={22} />
+            </div>
+            <h3>Interview labs</h3>
+            <p>Mock interviews with alumni who passed your exact committee.</p>
+            <span className="bento-num">03</span>
+          </motion.div>
+
+          <motion.div
+            className="bento-card span-2"
+            variants={fadeUp}
+            custom={3}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+          >
+            <div className="bento-icon">
+              <Icon name="language" size={22} />
+            </div>
+            <h3>Test prep</h3>
+            <p>IELTS, TOEFL, GRE, GMAT, HSK, TOPIK — targeted prep for your university.</p>
+            <span className="bento-num">04</span>
+          </motion.div>
+
+          <motion.div
+            className="bento-card span-2"
+            variants={fadeUp}
+            custom={4}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+          >
+            <div className="bento-icon">
+              <Icon name="flight_takeoff" size={22} />
+            </div>
+            <h3>Visa & relocation</h3>
+            <p>Embassy paperwork, housing, airport pickup, first-week onboarding.</p>
+            <span className="bento-num">05</span>
+          </motion.div>
+
+          <motion.div
+            className="bento-card span-3"
+            variants={fadeUp}
+            custom={5}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+          >
+            <div className="bento-icon">
+              <Icon name="favorite" size={22} />
+            </div>
+            <h3>Lifelong network</h3>
+            <p>You're never an alumnus of Javonon — you're family. Mentorship, referrals, opportunities long after the diploma.</p>
+            <span className="bento-num">06</span>
+          </motion.div>
+
+          <motion.div
+            className="bento-card span-3"
+            variants={fadeUp}
+            custom={6}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.2 }}
+          >
+            <div className="bento-icon">
+              <Icon name="bolt" size={22} />
+            </div>
+            <h3>30-min response time</h3>
+            <p>Your dedicated manager replies within half an hour during business hours. No tickets, no queues.</p>
+            <span className="bento-num">07</span>
+          </motion.div>
+        </div>
       </div>
     </section>
   );
