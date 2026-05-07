@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import { KpiRow, leaderboard } from '../api/kpi';
 import { ROLE_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
@@ -17,16 +18,17 @@ const RANGES: Array<{ label: string; days: number | null }> = [
 
 export default function Kpi() {
   const me = useAuth((s) => s.user);
-  const [rows, setRows] = useState<KpiRow[]>([]);
   const [rangeIdx, setRangeIdx] = useState(2); // 30 days по умолчанию
 
-  useEffect(() => {
-    const r = RANGES[rangeIdx];
-    const params = r.days
-      ? { from: new Date(Date.now() - r.days * 24 * 60 * 60 * 1000).toISOString() }
-      : undefined;
-    leaderboard(params).then(setRows).catch(() => setRows([]));
-  }, [rangeIdx]);
+  const r = RANGES[rangeIdx];
+  const params = r.days
+    ? { from: new Date(Date.now() - r.days * 24 * 60 * 60 * 1000).toISOString() }
+    : undefined;
+  const kpiQuery = useQuery<KpiRow[]>({
+    queryKey: ['kpi', 'leaderboard', rangeIdx],
+    queryFn: () => leaderboard(params),
+  });
+  const rows = kpiQuery.data ?? [];
 
   const top = rows[0];
   const myRow = rows.find((r) => r.id === me?.id);

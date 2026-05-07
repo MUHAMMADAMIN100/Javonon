@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChatRoom,
   ChatMessage,
@@ -13,6 +14,8 @@ import { listUsers } from '../api/users';
 import { useAuth } from '../store/auth';
 import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, tempId } from '../lib/optimistic';
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -26,38 +29,47 @@ function initials(name: string) {
 
 export default function Chat() {
   const me = useAuth((s) => s.user);
-  const [rooms, setRooms] = useState<ChatRoom[]>([]);
+  const qc = useQueryClient();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [users, setUsers] = useState<any[]>([]);
   const [showNewDirect, setShowNewDirect] = useState(false);
   const [showNewTeam, setShowNewTeam] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const refreshRooms = async () => {
-    const r = await listChatRooms();
-    setRooms(r);
-    if (!activeId && r.length) setActiveId(r[0].id);
-  };
+  const roomsKey = keys.chat.rooms();
+  const roomsQuery = useQuery<ChatRoom[]>({
+    queryKey: roomsKey,
+    queryFn: () => listChatRooms(),
+  });
+  const rooms = roomsQuery.data ?? [];
 
-  useEffect(() => { refreshRooms(); }, []);
-
+  // Auto-select первую комнату при первой загрузке.
   useEffect(() => {
-    if (!activeId) return;
-    getChatRoom(activeId).then((d) => setMessages(d.messages)).catch(() => {});
-  }, [activeId]);
+    if (!activeId && rooms.length) setActiveId(rooms[0].id);
+  }, [rooms, activeId]);
 
-  useEffect(() => {
-    listUsers().then(setUsers).catch(() => {});
-  }, []);
+  const messagesKey = activeId ? keys.chat.room(activeId) : ['chat', 'room', null];
+  const messagesQuery = useQuery({
+    queryKey: messagesKey,
+    queryFn: () => getChatRoom(activeId!).then((d) => d.messages),
+    enabled: !!activeId,
+  });
+  const messages = messagesQuery.data ?? [];
 
+  const usersQuery = useQuery({
+    queryKey: keys.users.list(),
+    queryFn: () => listUsers(),
+  });
+  const users = usersQuery.data ?? [];
+
+  // Realtime: новое сообщение → добавляем в кеш мгновенно (без перезагрузки).
   useRealtimeEvent('chat:message', (data: any) => {
     if (data.roomId === activeId) {
-      setMessages((prev) => [...prev, data.message]);
+      qc.setQueryData<ChatMessage[]>(messagesKey, (cur) => optimistic.append(cur, data.message));
     }
-    refreshRooms();
+    qc.invalidateQueries({ queryKey: keys.chat.unread() });
+    qc.invalidateQueries({ queryKey: roomsKey });
   });
 
   useEffect(() => {
@@ -66,23 +78,47 @@ export default function Chat() {
     }
   }, [messages]);
 
-  const send = async (e: React.FormEvent) => {
+  // SEND — оптимистично добавляем сообщение мгновенно с tempId.
+  // На invalidate реальное сообщение из сервера приедет с настоящим id.
+  const sendMut = useInvalidatingMutation({
+    mutationFn: ({ roomId, text }: { roomId: string; text: string }) => sendChatMessage(roomId, text),
+    invalidate: [keys.chat.all],
+    onError: (e: any) => {
+      // При ошибке откатываем optimistic-сообщение по префиксу tmp-.
+      qc.setQueryData<ChatMessage[]>(messagesKey, (cur) => (cur ?? []).filter((m) => !m.id.startsWith('tmp-')));
+    },
+  });
+
+  const send = (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeId || !input.trim()) return;
-    try {
-      const msg = await sendChatMessage(activeId, input);
-      setMessages((prev) => [...prev, msg]);
-      setInput('');
-      refreshRooms();
-    } catch {}
+    const text = input;
+    // 1) optimistic add
+    const optimisticMsg: ChatMessage = {
+      id: tempId(),
+      roomId: activeId,
+      authorId: me?.id || '',
+      author: me ? { id: me.id, fullName: me.fullName, role: me.role } : undefined,
+      text,
+      mentionsIds: [],
+      createdAt: new Date().toISOString(),
+      editedAt: null,
+    };
+    qc.setQueryData<ChatMessage[]>(messagesKey, (cur) => optimistic.append(cur, optimisticMsg));
+    setInput('');
+    // 2) actually send
+    sendMut.mutate({ roomId: activeId, text });
   };
 
-  const startDirect = async (userId: string) => {
-    const room = await createDirectRoom(userId);
-    setShowNewDirect(false);
-    await refreshRooms();
-    setActiveId(room.id);
-  };
+  const directMut = useInvalidatingMutation({
+    mutationFn: createDirectRoom,
+    invalidate: [keys.chat.rooms()],
+    onSuccess: (room: any) => {
+      setShowNewDirect(false);
+      setActiveId(room.id);
+    },
+  });
+  const startDirect = (userId: string) => directMut.mutate(userId);
 
   const activeRoom = rooms.find((r) => r.id === activeId);
 
@@ -188,7 +224,7 @@ export default function Chat() {
                 onCreate={async (title, memberIds) => {
                   const room = await createTeamRoom(title, memberIds);
                   setShowNewTeam(false);
-                  await refreshRooms();
+                  qc.invalidateQueries({ queryKey: roomsKey });
                   setActiveId(room.id);
                 }}
                 onCancel={() => setShowNewTeam(false)}

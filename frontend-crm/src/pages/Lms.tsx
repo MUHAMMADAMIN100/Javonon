@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Course,
   CourseDetail,
@@ -16,44 +17,69 @@ import {
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
 export default function Lms() {
   const me = useAuth((s) => s.user);
   const { toast, confirm } = useUI();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [selected, setSelected] = useState<CourseDetail | null>(null);
+  const qc = useQueryClient();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const isAdmin = me?.role === 'ADMIN';
 
-  const refresh = async () => {
-    const c = await listCourses();
-    setCourses(c);
-    if (selected) {
-      const fresh = await getCourseAdmin(selected.id);
-      setSelected(fresh);
-    }
-  };
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
+  const coursesKey = keys.lms.courses();
+  const coursesQuery = useQuery({
+    queryKey: coursesKey,
+    queryFn: () => listCourses(),
+  });
+  const courses = coursesQuery.data ?? [];
 
-  const onCreateCourse = async (data: { title: string; description?: string }) => {
-    try {
-      const c = await createCourse(data);
+  const selectedQuery = useQuery({
+    queryKey: selectedId ? keys.lms.course(selectedId) : ['lms', 'course', null],
+    queryFn: () => getCourseAdmin(selectedId!),
+    enabled: !!selectedId,
+  });
+  const selected = selectedQuery.data ?? null;
+
+  const createMut = useInvalidatingMutation({
+    mutationFn: createCourse,
+    invalidate: [keys.lms.all],
+    onSuccess: (c) => {
       toast('Курс создан', 'success');
       setShowNew(false);
-      const all = await listCourses();
-      setCourses(all);
-      const det = await getCourseAdmin(c.id);
-      setSelected(det);
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+      setSelectedId(c.id);
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  // Toggle publish — оптимистично переключаем флаг.
+  const togglePublishMut = useOptimisticMutation<Course, Course, Course[]>({
+    mutationFn: (c) => updateCourse(c.id, { published: !c.published }),
+    queryKey: coursesKey,
+    applyOptimistic: (cur, c) => optimistic.updateById(cur, c.id, { published: !c.published } as Partial<Course>),
+    invalidateAlso: [keys.lms.all],
+    onSuccess: (_d, c) => toast(c.published ? 'Снято с публикации' : 'Опубликовано', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const deleteCourseMut = useOptimisticMutation<unknown, string, Course[]>({
+    mutationFn: deleteCourse,
+    queryKey: coursesKey,
+    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    invalidateAlso: [keys.lms.all],
+    onSuccess: () => {
+      toast('Курс удалён', 'success');
+      setSelectedId(null);
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const onCreateCourse = (data: { title: string; description?: string }) => {
+    createMut.mutate(data);
   };
 
-  const togglePublish = async (c: Course) => {
-    await updateCourse(c.id, { published: !c.published });
-    toast(c.published ? 'Снято с публикации' : 'Опубликовано', 'success');
-    await refresh();
-  };
+  const togglePublish = (c: Course) => togglePublishMut.mutate(c);
 
   const onDeleteCourse = async (c: Course) => {
     const ok = await confirm({
@@ -63,11 +89,11 @@ export default function Lms() {
       confirmText: 'Удалить',
     });
     if (!ok) return;
-    await deleteCourse(c.id);
-    toast('Курс удалён', 'success');
-    setSelected(null);
-    await refresh();
+    deleteCourseMut.mutate(c.id);
   };
+
+  // Просто helper, чтобы CourseEditor мог триггерить рефреш.
+  const refresh = () => qc.invalidateQueries({ queryKey: keys.lms.all });
 
   return (
     <>
@@ -122,10 +148,7 @@ export default function Lms() {
             {courses.map((c) => (
               <button
                 key={c.id}
-                onClick={async () => {
-                  const det = await getCourseAdmin(c.id);
-                  setSelected(det);
-                }}
+                onClick={() => setSelectedId(c.id)}
                 style={{
                   display: 'block',
                   width: '100%',

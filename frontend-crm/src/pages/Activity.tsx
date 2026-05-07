@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listActivity, ACTIVITY_LABEL, type ActivityAction, type ActivityEntry } from '../api/activity';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
@@ -14,30 +15,31 @@ const ACTION_BADGE: Record<ActivityAction, string> = {
 };
 
 export default function Activity() {
-  const [items, setItems] = useState<ActivityEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
   const [action, setAction] = useState<ActivityAction | ''>('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-
-  const load = () => {
-    setLoading(true);
-    listActivity({
-      action: action || undefined,
-      from: from ? new Date(from).toISOString() : undefined,
-      to: to ? new Date(to + 'T23:59:59').toISOString() : undefined,
-    })
-      .then(setItems)
-      .finally(() => setLoading(false));
-  };
+  const [debounced, setDebounced] = useState({ action: '' as ActivityAction | '', from: '', to: '' });
 
   useEffect(() => {
-    const t = setTimeout(load, 250);
+    const t = setTimeout(() => setDebounced({ action, from, to }), 250);
     return () => clearTimeout(t);
   }, [action, from, to]);
 
+  const filters = {
+    action: debounced.action || undefined,
+    from: debounced.from ? new Date(debounced.from).toISOString() : undefined,
+    to: debounced.to ? new Date(debounced.to + 'T23:59:59').toISOString() : undefined,
+  };
+  const activityQuery = useQuery<ActivityEntry[]>({
+    queryKey: ['activity', filters],
+    queryFn: () => listActivity(filters),
+  });
+  const items = activityQuery.data ?? [];
+  const loading = activityQuery.isLoading;
+
   useRealtime({
-    'activity:new': () => load(),
+    'activity:new': () => qc.invalidateQueries({ queryKey: ['activity'] }),
   });
 
   const reset = () => {

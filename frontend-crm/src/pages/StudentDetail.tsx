@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignStudentManager, deleteStudent, ensureStudentApplication, getStudent, regenerateStudentPassword, updateStudent, uploadPhoto } from '../api/students';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Direction, Student, StudentStatus } from '../api/types';
@@ -7,6 +8,8 @@ import { DIRECTION_LABEL, STUDENT_STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import DocumentsChecklist from '../components/DocumentsChecklist';
 import InteractionsLog from '../components/InteractionsLog';
 import StudentPaymentsSection from '../components/StudentPaymentsSection';
@@ -50,13 +53,37 @@ export default function StudentDetail() {
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
-  const [student, setStudent] = useState<Student | null>(null);
+  const qc = useQueryClient();
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
-  const [regenerating, setRegenerating] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const studentKey = id ? keys.students.one(id) : ['students', 'one', null];
+  const studentQuery = useQuery<Student>({
+    queryKey: studentKey,
+    queryFn: () => getStudent(id!),
+    enabled: !!id,
+  });
+  const student = studentQuery.data ?? null;
+
+  // Когда придёт student с сервера — синхронизируем форму редактирования.
+  useEffect(() => {
+    if (student) {
+      setForm({
+        fullName: student.fullName,
+        phones: student.phones.join(', '),
+        email: student.email || '',
+        direction: student.direction,
+        cabinet: student.cabinet,
+        status: student.status,
+        comment: student.comment || '',
+      });
+    }
+  }, [student?.id, student?.fullName, student?.email, student?.direction, student?.cabinet, student?.status, student?.comment, student?.phones]);
+
+  const reload = () => qc.invalidateQueries({ queryKey: studentKey });
 
   const formErrors = form
     ? validateAll(
@@ -82,23 +109,6 @@ export default function StudentDetail() {
     : {};
   const showErr = (k: string) => touched[k] && (formErrors as any)[k];
 
-  const reload = async () => {
-    if (!id) return;
-    const s = await getStudent(id);
-    setStudent(s);
-    setForm({
-      fullName: s.fullName,
-      phones: s.phones.join(', '),
-      email: s.email || '',
-      direction: s.direction,
-      cabinet: s.cabinet,
-      status: s.status,
-      comment: s.comment || '',
-    });
-  };
-
-  useEffect(() => { reload(); }, [id]);
-
   useRealtime({
     'student:updated': (data: any) => { if (data?.studentId === id) reload(); },
     'document:uploaded': (data: any) => { if (data?.studentId === id) reload(); },
@@ -109,7 +119,54 @@ export default function StudentDetail() {
     },
   });
 
-  const onSave = async () => {
+  // UPDATE — оптимистично патчим student в кеше.
+  const updateMut = useOptimisticMutation<Student, Parameters<typeof updateStudent>[1], Student>({
+    mutationFn: (patch) => updateStudent(id!, patch),
+    queryKey: studentKey,
+    applyOptimistic: (cur, patch) => optimistic.patch(cur, patch as Partial<Student>),
+    invalidateAlso: [keys.students.all],
+    onSuccess: () => {
+      toast('Данные сохранены', 'success');
+      setEdit(false);
+      setTouched({});
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка сохранения', 'error'),
+  });
+
+  const photoMut = useInvalidatingMutation({
+    mutationFn: (file: File) => uploadPhoto(id!, file),
+    invalidate: [studentKey, keys.students.all],
+    onSuccess: () => toast('Фото загружено', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка загрузки', 'error'),
+  });
+
+  const reassignMut = useOptimisticMutation<Student, { managerId?: string | null; chinaManagerId?: string | null }, Student>({
+    mutationFn: (patch) => assignStudentManager(id!, patch),
+    queryKey: studentKey,
+    applyOptimistic: (cur, patch) => optimistic.patch(cur, patch as Partial<Student>),
+    invalidateAlso: [keys.students.all, keys.applications.all],
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const regenMut = useInvalidatingMutation({
+    mutationFn: () => regenerateStudentPassword(id!),
+    invalidate: [studentKey],
+    onSuccess: (cr: any) => setCredentials(cr),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+  const regenerating = regenMut.isPending;
+
+  const deleteMut = useInvalidatingMutation({
+    mutationFn: () => deleteStudent(id!),
+    invalidate: [keys.students.all],
+    onSuccess: () => {
+      toast('Студент удалён', 'success');
+      navigate('/students');
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка удаления', 'error'),
+  });
+
+  const onSave = () => {
     if (!id || !form) return;
     setTouched({ fullName: true, phones: true, email: true, cabinet: true, comment: true });
     if (hasErrors(formErrors)) {
@@ -117,41 +174,26 @@ export default function StudentDetail() {
       return;
     }
     const phones = form.phones.split(',').map((p: string) => p.trim()).filter(Boolean);
-    try {
-      await updateStudent(id, {
-        fullName: form.fullName.trim(),
-        phones,
-        email: form.email?.trim() || undefined,
-        direction: form.direction,
-        cabinet: parseInt(form.cabinet, 10),
-        status: form.status,
-        comment: form.comment?.trim() || undefined,
-      });
-      toast('Данные сохранены', 'success');
-      await reload();
-      setEdit(false);
-      setTouched({});
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка сохранения', 'error');
-    }
+    updateMut.mutate({
+      fullName: form.fullName.trim(),
+      phones,
+      email: form.email?.trim() || undefined,
+      direction: form.direction,
+      cabinet: parseInt(form.cabinet, 10),
+      status: form.status,
+      comment: form.comment?.trim() || undefined,
+    });
   };
 
-  const onPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !id) return;
-    try {
-      await uploadPhoto(id, file);
-      toast('Фото загружено', 'success');
-      await reload();
-    } catch (err: any) {
-      toast(err?.response?.data?.message || 'Ошибка загрузки', 'error');
-    }
+    photoMut.mutate(file);
   };
 
-  const onReassign = async (patch: { managerId?: string | null; chinaManagerId?: string | null }) => {
+  const onReassign = async (patch: { managerId?: string | null; chinaManagerId?: string | null }): Promise<void> => {
     if (!id) return;
-    await assignStudentManager(id, patch);
-    await reload();
+    await reassignMut.mutateAsync(patch);
   };
 
   const onRegenerate = async () => {
@@ -163,15 +205,7 @@ export default function StudentDetail() {
       danger: true,
     });
     if (!ok) return;
-    setRegenerating(true);
-    try {
-      const cr = await regenerateStudentPassword(id);
-      setCredentials(cr);
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    } finally {
-      setRegenerating(false);
-    }
+    regenMut.mutate(undefined as any);
   };
 
   const copyCreds = async () => {
@@ -194,13 +228,7 @@ export default function StudentDetail() {
       danger: true,
     });
     if (!ok) return;
-    try {
-      await deleteStudent(id);
-      toast('Студент удалён', 'success');
-      navigate('/students');
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка удаления', 'error');
-    }
+    deleteMut.mutate(undefined as any);
   };
 
   if (!student || !form) return <div className="empty">Загрузка...</div>;

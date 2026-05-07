@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   API_BASE,
   clearToken,
@@ -19,6 +20,7 @@ import CoursesSection from '../components/CoursesSection';
 import InteractionsHistory from '../components/InteractionsHistory';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import Icon from '../Icon';
+import { lkeys, optimistic, useOptimisticMutation } from '../queryClient';
 
 const DIRECTION_LABEL: Record<string, string> = {
   BACHELOR: 'Бакалавриат',
@@ -56,8 +58,7 @@ const fmtBytes = (b: number) => {
 
 export default function StudentCabinet() {
   const navigate = useNavigate();
-  const [me, setMe] = useState<StudentMe | null>(null);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
   const [uploading, setUploading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [tab, setTab] = useState<'home' | 'programs' | 'payments' | 'courses' | 'interactions'>('home');
@@ -76,33 +77,47 @@ export default function StudentCabinet() {
       return;
     }
     if (!getSocket()) connectStudentRealtime(token);
-    load(true); // первый заход — показать спиннер
   }, []);
 
-  useStudentRealtime({
-    'student:updated': () => load(),
-    'document:uploaded': () => load(),
-    'document:deleted': () => load(),
-    'application:updated': () => load(),
+  const meKey = lkeys.cabinet.me();
+  const meQuery = useQuery<StudentMe>({
+    queryKey: meKey,
+    queryFn: studentMe,
   });
+  const me = meQuery.data ?? null;
+  const loading = meQuery.isLoading;
 
-  const load = async (showSpinner = false) => {
-    if (showSpinner) setLoading(true);
-    try {
-      const data = await studentMe();
-      setMe(data);
-    } catch {
+  // Если запрос /me провалился (401) — кикаем на /login.
+  useEffect(() => {
+    if (meQuery.isError) {
       clearToken();
       navigate('/login', { replace: true });
-    } finally {
-      if (showSpinner) setLoading(false);
     }
-  };
+  }, [meQuery.isError, navigate]);
+
+  useStudentRealtime({
+    'student:updated': () => qc.invalidateQueries({ queryKey: meKey }),
+    'document:uploaded': () => qc.invalidateQueries({ queryKey: meKey }),
+    'document:deleted': () => qc.invalidateQueries({ queryKey: meKey }),
+    'application:updated': () => qc.invalidateQueries({ queryKey: meKey }),
+  });
 
   const logout = () => {
     clearToken();
     navigate('/login');
   };
+
+  // DELETE document — оптимистично убираем из me.documents мгновенно.
+  const deleteDocMut = useOptimisticMutation<unknown, string, StudentMe>({
+    mutationFn: studentDeleteDocument,
+    queryKey: meKey,
+    applyOptimistic: (cur, id) => {
+      if (!cur) return cur;
+      return { ...cur, documents: (cur.documents || []).filter((d) => d.id !== id) };
+    },
+    onSuccess: () => showToast('ok', 'Документ удалён'),
+    onError: (err: any) => showToast('err', err?.response?.data?.message || 'Ошибка'),
+  });
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
     const files = Array.from(e.target.files || []);
@@ -113,7 +128,7 @@ export default function StudentCabinet() {
         await studentUploadDocument(file, type);
       }
       showToast('ok', files.length > 1 ? `Загружено: ${files.length}` : 'Документ загружен');
-      await load();
+      qc.invalidateQueries({ queryKey: meKey });
     } catch (err: any) {
       showToast('err', err?.response?.data?.message || 'Ошибка загрузки');
     } finally {
@@ -122,15 +137,9 @@ export default function StudentCabinet() {
     }
   };
 
-  const onDelete = async (docId: string) => {
+  const onDelete = (docId: string) => {
     if (!confirm('Удалить документ?')) return;
-    try {
-      await studentDeleteDocument(docId);
-      showToast('ok', 'Документ удалён');
-      await load();
-    } catch (err: any) {
-      showToast('err', err?.response?.data?.message || 'Ошибка');
-    }
+    deleteDocMut.mutate(docId);
   };
 
   if (loading || !me) {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignApplicationManager, deleteApplication, getApplication, updateApplication } from '../api/applications';
 import { getStudent, updateStudent, uploadPhoto } from '../api/students';
 import type { Application, ApplicationStatus, Direction, Student, StudentStatus } from '../api/types';
@@ -7,6 +8,8 @@ import { APPLICATION_STAGES, DIRECTION_LABEL, STAGE_INDEX, STATUS_BADGE, STATUS_
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import DocumentsChecklist, { REQUIRED_DOCUMENTS } from '../components/DocumentsChecklist';
 import DirectionOptions from '../components/DirectionOptions';
 import ManagerBar from '../components/ManagerBar';
@@ -23,13 +26,49 @@ export default function ApplicationDetail() {
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
-  const [app, setApp] = useState<Application | null>(null);
-  const [student, setStudent] = useState<Student | null>(null);
+  const qc = useQueryClient();
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const appKey = id ? keys.applications.one(id) : ['applications', 'one', null];
+  const appQuery = useQuery<Application>({
+    queryKey: appKey,
+    queryFn: () => getApplication(id!),
+    enabled: !!id,
+  });
+  const app = appQuery.data ?? null;
+  const error = appQuery.error ? (appQuery.error as any).message : null;
+
+  const studentId = app?.studentId;
+  const studentKey = studentId ? keys.students.one(studentId) : ['students', 'one', null];
+  const studentQuery = useQuery<Student>({
+    queryKey: studentKey,
+    queryFn: () => getStudent(studentId!),
+    enabled: !!studentId,
+  });
+  const student = studentQuery.data ?? null;
+
+  // Когда student приходит — синхронизируем форму.
+  useEffect(() => {
+    if (student) {
+      setForm({
+        fullName: student.fullName,
+        phones: student.phones.join(', '),
+        email: student.email || '',
+        direction: student.direction,
+        cabinet: student.cabinet,
+        status: student.status,
+        comment: student.comment || '',
+      });
+    }
+  }, [student?.id, student?.fullName, student?.email, student?.direction, student?.cabinet, student?.status, student?.comment, student?.phones]);
+
+  const reload = () => {
+    qc.invalidateQueries({ queryKey: appKey });
+    if (studentId) qc.invalidateQueries({ queryKey: studentKey });
+  };
 
   const formErrors = form
     ? validateAll(
@@ -55,67 +94,83 @@ export default function ApplicationDetail() {
     : {};
   const showErr = (k: string) => touched[k] && (formErrors as any)[k];
 
-  const reload = async () => {
-    if (!id) return;
-    try {
-      const a = await getApplication(id);
-      setApp(a);
-      if (a.studentId) {
-        const s = await getStudent(a.studentId);
-        setStudent(s);
-        setForm({
-          fullName: s.fullName,
-          phones: s.phones.join(', '),
-          email: s.email || '',
-          direction: s.direction,
-          cabinet: s.cabinet,
-          status: s.status,
-          comment: s.comment || '',
-        });
-      } else {
-        setStudent(null);
-      }
-    } catch (e: any) {
-      setError(e.message);
-    }
-  };
-
-  useEffect(() => { reload(); }, [id]);
-
   useRealtime({
     'application:updated': (data: any) => {
-      if (data?.application?.id === id || data?.studentId === app?.studentId) reload();
+      if (data?.application?.id === id || data?.studentId === studentId) reload();
     },
     'student:updated': (data: any) => {
-      if (data?.studentId && data.studentId === app?.studentId) reload();
+      if (data?.studentId && data.studentId === studentId) reload();
     },
     'document:uploaded': (data: any) => {
-      if (data?.studentId === app?.studentId) reload();
+      if (data?.studentId === studentId) reload();
     },
     'document:deleted': (data: any) => {
-      if (data?.studentId === app?.studentId) reload();
+      if (data?.studentId === studentId) reload();
     },
     'form:updated': (data: any) => {
-      if (data?.studentId === app?.studentId) reload();
+      if (data?.studentId === studentId) reload();
     },
   });
 
-  const onStatus = async (status: ApplicationStatus) => {
-    if (!id) return;
-    try {
-      await updateApplication(id, { status });
+  // STATUS — оптимистичное переключение этапа.
+  const statusMut = useOptimisticMutation<Application, ApplicationStatus, Application>({
+    mutationFn: (status) => updateApplication(id!, { status }),
+    queryKey: appKey,
+    applyOptimistic: (cur, status) => optimistic.patch(cur, { status }),
+    invalidateAlso: [keys.applications.all, keys.students.all],
+    onSuccess: (_d, status) => {
       if (status === 'IN_PROGRESS') toast('Заявка взята в работу. Создана карточка студента.', 'success');
       if (status === 'COMPLETED') toast('Заявка завершена. Студент доступен в разделе «Студенты».', 'success');
-      await reload();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка изменения статуса', 'error');
-    }
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка изменения статуса', 'error'),
+  });
+
+  const reassignMut = useOptimisticMutation<Application, { managerId?: string | null; chinaManagerId?: string | null }, Application>({
+    mutationFn: (patch) => assignApplicationManager(id!, patch),
+    queryKey: appKey,
+    applyOptimistic: (cur, patch) => optimistic.patch(cur, patch as Partial<Application>),
+    invalidateAlso: [keys.applications.all, keys.students.all],
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const deleteMut = useInvalidatingMutation({
+    mutationFn: () => deleteApplication(id!),
+    invalidate: [keys.applications.all, keys.students.all],
+    onSuccess: () => {
+      toast('Заявка удалена', 'success');
+      navigate('/applications');
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка удаления', 'error'),
+  });
+
+  const updateStudentMut = useOptimisticMutation<Student, Parameters<typeof updateStudent>[1], Student>({
+    mutationFn: (patch) => updateStudent(studentId!, patch),
+    queryKey: studentKey,
+    applyOptimistic: (cur, patch) => optimistic.patch(cur, patch as Partial<Student>),
+    invalidateAlso: [keys.students.all, keys.applications.all],
+    onSuccess: () => {
+      toast('Данные сохранены', 'success');
+      setEdit(false);
+      setTouched({});
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка сохранения', 'error'),
+  });
+
+  const photoMut = useInvalidatingMutation({
+    mutationFn: (file: File) => uploadPhoto(studentId!, file),
+    invalidate: [studentKey, keys.students.all],
+    onSuccess: () => toast('Фото загружено', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка загрузки', 'error'),
+  });
+
+  const onStatus = (status: ApplicationStatus) => {
+    if (!id) return;
+    statusMut.mutate(status);
   };
 
-  const onReassign = async (patch: { managerId?: string | null; chinaManagerId?: string | null }) => {
+  const onReassign = async (patch: { managerId?: string | null; chinaManagerId?: string | null }): Promise<void> => {
     if (!id) return;
-    await assignApplicationManager(id, patch);
-    await reload();
+    await reassignMut.mutateAsync(patch);
   };
 
   const onDeleteApp = async () => {
@@ -129,16 +184,10 @@ export default function ApplicationDetail() {
       danger: true,
     });
     if (!ok) return;
-    try {
-      await deleteApplication(id);
-      toast('Заявка удалена', 'success');
-      navigate('/applications');
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка удаления', 'error');
-    }
+    deleteMut.mutate(undefined as any);
   };
 
-  const onSave = async () => {
+  const onSave = () => {
     if (!student || !form) return;
     setTouched({ fullName: true, phones: true, email: true, cabinet: true, comment: true });
     if (hasErrors(formErrors)) {
@@ -146,35 +195,21 @@ export default function ApplicationDetail() {
       return;
     }
     const phones = form.phones.split(',').map((p: string) => p.trim()).filter(Boolean);
-    try {
-      await updateStudent(student.id, {
-        fullName: form.fullName.trim(),
-        phones,
-        email: form.email?.trim() || undefined,
-        direction: form.direction,
-        cabinet: parseInt(form.cabinet, 10),
-        status: form.status,
-        comment: form.comment?.trim() || undefined,
-      });
-      toast('Данные сохранены', 'success');
-      await reload();
-      setEdit(false);
-      setTouched({});
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка сохранения', 'error');
-    }
+    updateStudentMut.mutate({
+      fullName: form.fullName.trim(),
+      phones,
+      email: form.email?.trim() || undefined,
+      direction: form.direction,
+      cabinet: parseInt(form.cabinet, 10),
+      status: form.status,
+      comment: form.comment?.trim() || undefined,
+    });
   };
 
-  const onPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !student) return;
-    try {
-      await uploadPhoto(student.id, file);
-      toast('Фото загружено', 'success');
-      await reload();
-    } catch (err: any) {
-      toast(err?.response?.data?.message || 'Ошибка загрузки', 'error');
-    }
+    photoMut.mutate(file);
   };
 
   if (error) return <div className="error-banner">{error}</div>;

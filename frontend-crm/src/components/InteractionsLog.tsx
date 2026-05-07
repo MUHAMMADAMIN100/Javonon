@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Interaction,
   InteractionType,
@@ -12,6 +13,8 @@ import {
 import { useUI } from '../ui/Dialogs';
 import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
 const TYPES: InteractionType[] = ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'SMS', 'TELEGRAM', 'WHATSAPP'];
 
@@ -30,25 +33,39 @@ function fmtRelative(iso: string) {
 
 export default function InteractionsLog({ studentId, canEdit = true }: { studentId: string; canEdit?: boolean }) {
   const { toast, confirm } = useUI();
-  const [items, setItems] = useState<Interaction[]>([]);
+  const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
 
-  const refresh = () => {
-    if (!studentId) return;
-    listInteractions(studentId).then(setItems).catch(() => setItems([]));
-  };
-  useEffect(() => { refresh(); }, [studentId]);
-  useRealtimeEvent('interaction:new', () => refresh());
+  const listKey = keys.interactions.list(studentId);
+  const interactionsQuery = useQuery<Interaction[]>({
+    queryKey: listKey,
+    queryFn: () => listInteractions(studentId),
+    enabled: !!studentId,
+  });
+  const items = interactionsQuery.data ?? [];
 
-  const onCreate = async (data: { type: InteractionType; summary: string; details?: string; visibleToStudent: boolean }) => {
-    try {
-      await createInteraction({ ...data, studentId });
+  useRealtimeEvent('interaction:new', () => qc.invalidateQueries({ queryKey: listKey }));
+
+  const createMut = useInvalidatingMutation({
+    mutationFn: createInteraction,
+    invalidate: [listKey],
+    onSuccess: () => {
       toast('Запись добавлена', 'success');
       setShowForm(false);
-      refresh();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const deleteMut = useOptimisticMutation<unknown, string, Interaction[]>({
+    mutationFn: deleteInteraction,
+    queryKey: listKey,
+    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    onSuccess: () => toast('Удалено', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const onCreate = (data: { type: InteractionType; summary: string; details?: string; visibleToStudent: boolean }) => {
+    createMut.mutate({ ...data, studentId });
   };
 
   const onDelete = async (it: Interaction) => {
@@ -59,9 +76,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
       confirmText: 'Удалить',
     });
     if (!ok) return;
-    await deleteInteraction(it.id);
-    toast('Удалено', 'success');
-    refresh();
+    deleteMut.mutate(it.id);
   };
 
   return (

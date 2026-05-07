@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import { applicationStats } from '../api/applications';
 import { studentStats } from '../api/students';
 import { financeSummary, pendingPayments, type FinanceSummary } from '../api/finance';
 import { leaderboard, type KpiRow } from '../api/kpi';
 import { DIRECTION_LABEL, STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
+import { keys } from '../lib/queryKeys';
 
 function fmtMoney(n: number, c = 'USD') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -25,23 +26,32 @@ export default function Dashboard() {
   const isAccountant = me?.role === 'ACCOUNTANT';
   const showFinance = isAdmin || isAccountant;
 
-  const [appStats, setAppStats] = useState<any>(null);
-  const [stuStats, setStuStats] = useState<any>(null);
-  const [finance, setFinance] = useState<FinanceSummary | null>(null);
-  const [pending, setPending] = useState<any[]>([]);
-  const [topPerformers, setTopPerformers] = useState<KpiRow[]>([]);
+  const appStatsQuery = useQuery({ queryKey: ['applications', 'stats'], queryFn: () => applicationStats() });
+  const appStats = appStatsQuery.data ?? null;
 
-  useEffect(() => {
-    applicationStats().then(setAppStats).catch(() => {});
-    studentStats().then(setStuStats).catch(() => {});
-    if (showFinance) {
-      financeSummary().then(setFinance).catch(() => {});
-      pendingPayments().then(setPending).catch(() => {});
-    }
-    if (isAdmin) {
-      leaderboard().then((rs) => setTopPerformers(rs.slice(0, 3))).catch(() => {});
-    }
-  }, [showFinance, isAdmin]);
+  const stuStatsQuery = useQuery({ queryKey: keys.students.stats(), queryFn: () => studentStats() });
+  const stuStats = stuStatsQuery.data ?? null;
+
+  const financeQuery = useQuery<FinanceSummary>({
+    queryKey: keys.finance.summary(),
+    queryFn: () => financeSummary(),
+    enabled: showFinance,
+  });
+  const finance = financeQuery.data ?? null;
+
+  const pendingQuery = useQuery<any[]>({
+    queryKey: keys.finance.pending(),
+    queryFn: () => pendingPayments(),
+    enabled: showFinance,
+  });
+  const pending = pendingQuery.data ?? [];
+
+  const leaderQuery = useQuery<KpiRow[]>({
+    queryKey: ['kpi', 'leaderboard', 'top3'],
+    queryFn: () => leaderboard(),
+    enabled: isAdmin,
+  });
+  const topPerformers = (leaderQuery.data ?? []).slice(0, 3);
 
   const newCount = appStats?.byStatus?.find((s: any) => s.status === 'NEW')?._count || 0;
   const inProgress =

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Transaction,
   TransactionType,
@@ -22,6 +23,8 @@ import Icon from '../Icon';
 import { aiAddTransaction } from '../api/ai';
 import { financeTimeseries, type TimeseriesPoint } from '../api/finance';
 import { listPayments, confirmPayment, rejectPayment, type Payment, PAYMENT_METHOD_LABEL } from '../api/payments';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
 function fmtMoney(n: number, currency = 'USD'): string {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -33,34 +36,102 @@ function fmtDate(iso: string): string {
 
 export default function Finance() {
   const { toast, confirm } = useUI();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [summary, setSummary] = useState<FinanceSummary | null>(null);
-  const [pending, setPending] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const qc = useQueryClient();
   const [filterType, setFilterType] = useState<TransactionType | ''>('');
   const [showForm, setShowForm] = useState(false);
   const [aiInput, setAiInput] = useState('');
-  const [aiBusy, setAiBusy] = useState(false);
-  const [series, setSeries] = useState<TimeseriesPoint[]>([]);
-  const [paymentRequests, setPaymentRequests] = useState<Payment[]>([]);
 
-  const refresh = async () => {
-    try {
-      const [txs, sum, pp, ts, pyR] = await Promise.all([
-        listTransactions(filterType ? { type: filterType, take: 200 } : { take: 200 }),
-        financeSummary(),
-        pendingPayments(),
-        financeTimeseries({ bucket: 'week' }),
-        listPayments('PENDING'),
-      ]);
-      setTransactions(txs);
-      setSummary(sum);
-      setPending(pp);
-      setSeries(ts);
-      setPaymentRequests(pyR);
-    } catch {}
+  const txKey = keys.finance.transactions(filterType ? { type: filterType, take: 200 } : { take: 200 });
+  const txQuery = useQuery({
+    queryKey: txKey,
+    queryFn: () => listTransactions(filterType ? { type: filterType, take: 200 } : { take: 200 }),
+  });
+  const transactions = txQuery.data ?? [];
+
+  const summaryQuery = useQuery({
+    queryKey: keys.finance.summary(),
+    queryFn: () => financeSummary(),
+  });
+  const summary = summaryQuery.data ?? null;
+
+  const pendingQuery = useQuery({
+    queryKey: keys.finance.pending(),
+    queryFn: () => pendingPayments(),
+  });
+  const pending = pendingQuery.data ?? [];
+
+  const seriesQuery = useQuery({
+    queryKey: keys.finance.timeseries({ bucket: 'week' }),
+    queryFn: () => financeTimeseries({ bucket: 'week' }),
+  });
+  const series = seriesQuery.data ?? [];
+
+  const paymentsKey = keys.payments.list({ status: 'PENDING' });
+  const paymentsQuery = useQuery({
+    queryKey: paymentsKey,
+    queryFn: () => listPayments('PENDING'),
+  });
+  const paymentRequests = paymentsQuery.data ?? [];
+
+  const studentsQuery = useQuery({
+    queryKey: keys.students.list(),
+    queryFn: () => listStudents({}),
+  });
+  const students = studentsQuery.data ?? [];
+
+  const usersQuery = useQuery({
+    queryKey: keys.users.list(),
+    queryFn: () => listUsers(),
+  });
+  const users = usersQuery.data ?? [];
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: keys.finance.all });
+    qc.invalidateQueries({ queryKey: keys.payments.all });
   };
+
+  // Confirm payment — оптимистично убираем из PENDING-списка.
+  const confirmPayMut = useOptimisticMutation<Payment, Payment, Payment[]>({
+    mutationFn: (p) => confirmPayment(p.id, {}),
+    queryKey: paymentsKey,
+    applyOptimistic: (cur, p) => optimistic.removeById(cur, p.id),
+    invalidateAlso: [keys.finance.all, keys.payments.all],
+    onSuccess: () => toast('Оплата подтверждена', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const rejectPayMut = useOptimisticMutation<Payment, Payment, Payment[]>({
+    mutationFn: (p) => rejectPayment(p.id),
+    queryKey: paymentsKey,
+    applyOptimistic: (cur, p) => optimistic.removeById(cur, p.id),
+    invalidateAlso: [keys.payments.all],
+    onSuccess: () => toast('Отклонено', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const deleteTxMut = useOptimisticMutation<unknown, string, Transaction[]>({
+    mutationFn: deleteTransaction,
+    queryKey: txKey,
+    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    invalidateAlso: [keys.finance.all],
+    onSuccess: () => toast('Удалено', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const aiMut = useInvalidatingMutation({
+    mutationFn: aiAddTransaction,
+    invalidate: [keys.finance.all],
+    onSuccess: (res: any) => {
+      if (res.ok) {
+        toast(`Добавлено: ${res.transaction?.type === 'INCOME' ? '+' : '−'}${res.transaction?.amount}${res.transaction?.currency}`, 'success');
+        setAiInput('');
+      } else {
+        toast(res.error || 'Не распознано', 'error');
+      }
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+  const aiBusy = aiMut.isPending;
 
   const onConfirmPayment = async (p: Payment) => {
     const ok = await confirm({
@@ -69,13 +140,7 @@ export default function Finance() {
       confirmText: 'Подтвердить',
     });
     if (!ok) return;
-    try {
-      await confirmPayment(p.id, {});
-      toast('Оплата подтверждена', 'success');
-      await refresh();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+    confirmPayMut.mutate(p);
   };
 
   const onRejectPayment = async (p: Payment) => {
@@ -86,40 +151,14 @@ export default function Finance() {
       confirmText: 'Отклонить',
     });
     if (!ok) return;
-    try {
-      await rejectPayment(p.id);
-      toast('Отклонено', 'success');
-      await refresh();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+    rejectPayMut.mutate(p);
   };
 
-  const onAi = async (e: React.FormEvent) => {
+  const onAi = (e: React.FormEvent) => {
     e.preventDefault();
     if (!aiInput.trim() || aiBusy) return;
-    setAiBusy(true);
-    try {
-      const res = await aiAddTransaction(aiInput);
-      if (res.ok) {
-        toast(`Добавлено: ${res.transaction?.type === 'INCOME' ? '+' : '−'}${res.transaction?.amount}${res.transaction?.currency}`, 'success');
-        setAiInput('');
-        await refresh();
-      } else {
-        toast(res.error || 'Не распознано', 'error');
-      }
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    } finally {
-      setAiBusy(false);
-    }
+    aiMut.mutate(aiInput);
   };
-
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [filterType]);
-  useEffect(() => {
-    listStudents({}).then((rs) => setStudents(rs)).catch(() => {});
-    listUsers().then((rs) => setUsers(rs)).catch(() => {});
-  }, []);
 
   const onDelete = async (t: Transaction) => {
     const ok = await confirm({
@@ -129,13 +168,7 @@ export default function Finance() {
       confirmText: 'Удалить',
     });
     if (!ok) return;
-    try {
-      await deleteTransaction(t.id);
-      toast('Удалено', 'success');
-      await refresh();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+    deleteTxMut.mutate(t.id);
   };
 
   return (
@@ -434,10 +467,10 @@ export default function Finance() {
             users={users}
             preselect={preselectedStudent}
             onClose={() => { setShowForm(false); setPreselectedStudent(null); }}
-            onCreated={async () => {
+            onCreated={() => {
               setShowForm(false);
               setPreselectedStudent(null);
-              await refresh();
+              refresh();
             }}
           />
         )}

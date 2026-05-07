@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listStudents } from '../api/students';
 import { listUsers } from '../api/users';
-import type { Direction, Student, User } from '../api/types';
+import type { Direction } from '../api/types';
 import { DIRECTION_LABEL, STATUS_BADGE, STATUS_LABEL, STUDENT_STATUS_BADGE, STUDENT_STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
@@ -12,6 +13,7 @@ import { generateStudentsReport } from '../utils/studentsReport';
 import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
 import Icon from '../Icon';
+import { keys } from '../lib/queryKeys';
 
 type Scope = 'all' | 'mine';
 
@@ -21,66 +23,58 @@ export default function Students() {
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
   const { toast } = useUI();
-  const [items, setItems] = useState<Student[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [direction, setDirection] = useState<Direction | ''>('');
-  // Один объединённый фильтр: либо этап заявки (NEW/DOCS_REVIEW/.../ENROLLED),
-  // либо особый студенческий статус (PAUSED/GRADUATED/ARCHIVED).
   const [stageFilter, setStageFilter] = useState<string>('');
   const [cabinet, setCabinet] = useState('');
   const [manager, setManager] = useState<string>('');
   const isAdmin = me?.role === 'ADMIN';
-  // Менеджер видит только своих студентов; админ может переключать.
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
-  const [loading, setLoading] = useState(true);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportFrom, setReportFrom] = useState('');
   const [reportTo, setReportTo] = useState('');
   const [generating, setGenerating] = useState(false);
   const [page, setPage] = useState(1);
 
-  const load = () => {
-    setLoading(true);
-    listStudents({
-      search: search || undefined,
-      direction: direction || undefined,
-      cabinet: cabinet ? parseInt(cabinet, 10) : undefined,
-      mine: scope === 'mine',
-      manager: manager || undefined,
-    })
-      .then(setItems)
-      .finally(() => setLoading(false));
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const filters = {
+    search: debouncedSearch || undefined,
+    direction: direction || undefined,
+    cabinet: cabinet ? parseInt(cabinet, 10) : undefined,
+    mine: scope === 'mine',
+    manager: manager || undefined,
   };
 
-  useEffect(() => {
-    setPage(1); // при смене любого фильтра — на первую страницу
-    const t = setTimeout(load, 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, direction, cabinet, scope, manager]);
+  const studentsQuery = useQuery({
+    queryKey: keys.students.list(filters),
+    queryFn: () => listStudents(filters),
+  });
+  const items = studentsQuery.data ?? [];
+  const loading = studentsQuery.isLoading;
 
-  // Фильтр по этапу — клиентский, чтобы не трогать backend. Особые
-  // статусы студента (PAUSED/GRADUATED/ARCHIVED) тоже идут через этот же
-  // фильтр для удобства.
-  const SPECIAL_STUDENT_STATUSES = ['PAUSED', 'GRADUATED', 'ARCHIVED'];
+  // Сброс страницы при смене любого фильтра.
   useEffect(() => {
     setPage(1);
-  }, [stageFilter]);
+  }, [debouncedSearch, direction, cabinet, scope, manager, stageFilter]);
 
+  // Клиентский фильтр по этапу/специальному статусу.
+  const SPECIAL_STUDENT_STATUSES = ['PAUSED', 'GRADUATED', 'ARCHIVED'];
   const filteredItems = stageFilter
     ? items.filter((s) => {
         if (SPECIAL_STUDENT_STATUSES.includes(stageFilter)) {
           return s.status === stageFilter;
         }
-        // Этап заявки — берём последнюю, фильтруем активных
         if (s.status !== 'ACTIVE') return false;
         return s.applications?.[0]?.status === stageFilter;
       })
     : items;
 
-  // При изменении набора студентов извне (realtime/удаление) — корректируем
-  // текущую страницу, чтобы не остаться на пустой.
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
     if (page > totalPages) setPage(totalPages);
@@ -88,16 +82,17 @@ export default function Students() {
 
   const pagedItems = filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Список пользователей для фильтра по менеджерам — только админу
-  useEffect(() => {
-    if (!isAdmin) return;
-    listUsers().then(setUsers).catch(() => {});
-  }, [isAdmin]);
+  const usersQuery = useQuery({
+    queryKey: keys.users.list(),
+    queryFn: () => listUsers(),
+    enabled: isAdmin,
+  });
+  const users = usersQuery.data ?? [];
 
   useRealtime({
-    'student:updated': () => load(),
-    'application:new': () => load(),
-    'application:updated': () => load(),
+    'student:updated': () => qc.invalidateQueries({ queryKey: keys.students.all }),
+    'application:new': () => qc.invalidateQueries({ queryKey: keys.students.all }),
+    'application:updated': () => qc.invalidateQueries({ queryKey: keys.students.all }),
   });
 
   const reportDatesValid =

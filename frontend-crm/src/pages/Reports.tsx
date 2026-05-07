@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import { reportToday, reportsMine, upsertReport, type DailyReport } from '../api/reports';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', weekday: 'short' });
@@ -10,8 +13,6 @@ function fmtDate(iso: string) {
 
 export default function Reports() {
   const { toast } = useUI();
-  const [today, setToday] = useState<DailyReport | null>(null);
-  const [history, setHistory] = useState<DailyReport[]>([]);
   const [calls, setCalls] = useState('0');
   const [meetings, setMeetings] = useState('0');
   const [contacted, setContacted] = useState('0');
@@ -19,46 +20,55 @@ export default function Reports() {
   const [salesAmount, setSalesAmount] = useState('0');
   const [activity, setActivity] = useState('');
   const [challenges, setChallenges] = useState('');
-  const [saving, setSaving] = useState(false);
 
-  const refresh = async () => {
-    try {
-      const t = await reportToday();
-      setToday(t);
-      if (t) {
-        setCalls(String(t.callsCount));
-        setMeetings(String(t.meetingsCount));
-        setContacted(String(t.applicationsContacted));
-        setSalesCount(String(t.salesCount));
-        setSalesAmount(String(t.salesAmount));
-        setActivity(t.activitySummary || '');
-        setChallenges(t.challenges || '');
-      }
-      const h = await reportsMine({ take: 30 });
-      setHistory(h);
-    } catch {}
-  };
-  useEffect(() => { refresh(); }, []);
+  const todayKey = keys.reports.today();
+  const todayQuery = useQuery<DailyReport | null>({
+    queryKey: todayKey,
+    queryFn: () => reportToday(),
+  });
+  const today = todayQuery.data ?? null;
 
-  const onSave = async () => {
-    setSaving(true);
-    try {
-      await upsertReport({
-        callsCount: parseInt(calls, 10) || 0,
-        meetingsCount: parseInt(meetings, 10) || 0,
-        applicationsContacted: parseInt(contacted, 10) || 0,
-        salesCount: parseInt(salesCount, 10) || 0,
-        salesAmount: parseFloat(salesAmount) || 0,
-        activitySummary: activity.trim() || undefined,
-        challenges: challenges.trim() || undefined,
-      });
-      toast('Отчёт сохранён', 'success');
-      await refresh();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    } finally {
-      setSaving(false);
+  const historyKey = keys.reports.mine({ take: 30 });
+  const historyQuery = useQuery<DailyReport[]>({
+    queryKey: historyKey,
+    queryFn: () => reportsMine({ take: 30 }),
+  });
+  const history = historyQuery.data ?? [];
+
+  // При загрузке/обновлении today — синкаем форму.
+  useEffect(() => {
+    if (today) {
+      setCalls(String(today.callsCount));
+      setMeetings(String(today.meetingsCount));
+      setContacted(String(today.applicationsContacted));
+      setSalesCount(String(today.salesCount));
+      setSalesAmount(String(today.salesAmount));
+      setActivity(today.activitySummary || '');
+      setChallenges(today.challenges || '');
     }
+  }, [today?.id, today?.callsCount, today?.meetingsCount, today?.applicationsContacted, today?.salesCount, today?.salesAmount, today?.activitySummary, today?.challenges]);
+
+  // Оптимистично патчим today + invalidate history.
+  const upsertMut = useOptimisticMutation<DailyReport, Parameters<typeof upsertReport>[0], DailyReport | null>({
+    mutationFn: upsertReport,
+    queryKey: todayKey,
+    applyOptimistic: (cur, dto) => optimistic.patch(cur || ({} as DailyReport), dto as Partial<DailyReport>),
+    invalidateAlso: [historyKey],
+    onSuccess: () => toast('Отчёт сохранён', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+  const saving = upsertMut.isPending;
+
+  const onSave = () => {
+    upsertMut.mutate({
+      callsCount: parseInt(calls, 10) || 0,
+      meetingsCount: parseInt(meetings, 10) || 0,
+      applicationsContacted: parseInt(contacted, 10) || 0,
+      salesCount: parseInt(salesCount, 10) || 0,
+      salesAmount: parseFloat(salesAmount) || 0,
+      activitySummary: activity.trim() || undefined,
+      challenges: challenges.trim() || undefined,
+    });
   };
 
   const totalCalls = history.reduce((s, r) => s + r.callsCount, 0);

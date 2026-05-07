@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   TimeEntry,
   clockIn as apiClockIn,
@@ -11,6 +12,8 @@ import {
 } from '../api/time';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import { keys } from '../lib/queryKeys';
+import { useOptimisticMutation } from '../lib/optimistic';
 
 function fmtMin(min: number): string {
   if (min <= 0) return '0м';
@@ -35,9 +38,7 @@ function fmtDate(iso: string): string {
 
 export default function TimeTracker() {
   const { toast } = useUI();
-  const [today, setToday] = useState<TimeEntry | null>(null);
-  const [history, setHistory] = useState<TimeEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+  const qc = useQueryClient();
 
   // Live timer for "сейчас работаю" badge
   const [, setTick] = useState(0);
@@ -46,33 +47,62 @@ export default function TimeTracker() {
     return () => clearInterval(t);
   }, []);
 
-  const refresh = async () => {
-    try {
-      const [t, h] = await Promise.all([getToday(), getHistory({ take: 30 })]);
-      setToday(t);
-      setHistory(h);
-    } catch {}
-  };
+  const todayKey = keys.time.today();
+  const historyKey = keys.time.history({ take: 30 });
 
-  useEffect(() => { refresh(); }, []);
+  const todayQuery = useQuery<TimeEntry | null>({
+    queryKey: todayKey,
+    queryFn: () => getToday(),
+  });
+  const today = todayQuery.data ?? null;
+
+  const historyQuery = useQuery<TimeEntry[]>({
+    queryKey: historyKey,
+    queryFn: () => getHistory({ take: 30 }),
+  });
+  const history = historyQuery.data ?? [];
 
   const status = today?.status || 'OFF';
   const isWorking = status === 'WORKING';
   const isOnLunch = status === 'ON_LUNCH';
   const isClockedOut = !today || status === 'OFF';
 
-  const action = async (fn: () => Promise<TimeEntry>, msg: string) => {
-    setLoading(true);
-    try {
-      await fn();
-      toast(msg, 'success');
-      await refresh();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Все 4 экшена — оптимистично переключают status в today.
+  // Если сервер вернёт 400 (например double clock-in) — TanStack откатит.
+  const buildMut = (fn: () => Promise<TimeEntry>, optimisticPatch: Partial<TimeEntry>, successMsg: string) =>
+    useOptimisticMutation<TimeEntry, void, TimeEntry | null>({
+      mutationFn: fn,
+      queryKey: todayKey,
+      applyOptimistic: (cur) => {
+        if (!cur) {
+          return {
+            id: 'tmp',
+            userId: '',
+            status: 'WORKING',
+            clockIn: new Date().toISOString(),
+            lunchOut: null,
+            lunchIn: null,
+            clockOut: null,
+            totalMinutes: 0,
+            totalLunchMinutes: 0,
+            lateMinutes: 0,
+            ...optimisticPatch,
+          } as TimeEntry;
+        }
+        return { ...cur, ...optimisticPatch } as TimeEntry;
+      },
+      invalidateAlso: [historyKey, keys.time.team()],
+      onSuccess: () => toast(successMsg, 'success'),
+      onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    });
+
+  const clockInMut = buildMut(apiClockIn, { status: 'WORKING', clockIn: new Date().toISOString() }, 'Рабочий день начат');
+  const lunchOutMut = buildMut(apiLunchOut, { status: 'ON_LUNCH', lunchOut: new Date().toISOString() }, 'Ушли на обед');
+  const lunchInMut = buildMut(apiLunchIn, { status: 'WORKING', lunchIn: new Date().toISOString() }, 'Вернулись с обеда');
+  const clockOutMut = buildMut(apiClockOut, { status: 'OFF', clockOut: new Date().toISOString() }, 'Рабочий день завершён');
+
+  const loading = clockInMut.isPending || lunchOutMut.isPending || lunchInMut.isPending || clockOutMut.isPending;
+  void qc; // reserved for future cross-key invalidations
 
   // Live elapsed time
   let elapsedMin = 0;
@@ -170,7 +200,7 @@ export default function TimeTracker() {
           {isClockedOut && (
             <motion.button
               className="btn btn-primary"
-              onClick={() => action(apiClockIn, 'Рабочий день начат')}
+              onClick={() => clockInMut.mutate()}
               disabled={loading}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -184,7 +214,7 @@ export default function TimeTracker() {
             <>
               <motion.button
                 className="btn btn-secondary"
-                onClick={() => action(apiLunchOut, 'Ушли на обед')}
+                onClick={() => lunchOutMut.mutate()}
                 disabled={loading}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -194,7 +224,7 @@ export default function TimeTracker() {
               </motion.button>
               <motion.button
                 className="btn btn-primary"
-                onClick={() => action(apiClockOut, 'Рабочий день завершён')}
+                onClick={() => clockOutMut.mutate()}
                 disabled={loading}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -208,7 +238,7 @@ export default function TimeTracker() {
             <>
               <motion.button
                 className="btn btn-primary"
-                onClick={() => action(apiLunchIn, 'Вернулись с обеда')}
+                onClick={() => lunchInMut.mutate()}
                 disabled={loading}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -219,7 +249,7 @@ export default function TimeTracker() {
               </motion.button>
               <motion.button
                 className="btn btn-secondary"
-                onClick={() => action(apiClockOut, 'Рабочий день завершён')}
+                onClick={() => clockOutMut.mutate()}
                 disabled={loading}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}

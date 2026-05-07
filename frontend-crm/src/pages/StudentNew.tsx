@@ -8,6 +8,8 @@ import Icon from '../Icon';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, phoneRule, required, validateAll } from '../utils/validators';
 import PhoneInput from '../components/PhoneInput';
 import BackButton from '../components/BackButton';
+import { keys } from '../lib/queryKeys';
+import { useInvalidatingMutation } from '../lib/optimistic';
 
 // Строка-копируемое поле для модалки выдачи доступа.
 function CredRow({ label, value, small }: { label: string; value: string; small?: boolean }) {
@@ -45,7 +47,6 @@ export default function StudentNew() {
   const [email, setEmail] = useState('');
   const [direction, setDirection] = useState<Direction>('BACHELOR');
   const [comment, setComment] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<
     | { id: string; email: string; password: string; fullName: string }
@@ -65,31 +66,33 @@ export default function StudentNew() {
   const showErr = (k: keyof typeof errors) => touched[k] && errors[k];
   const isInvalid = hasErrors(errors);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTouched({ fullName: true, phone: true, email: true, comment: true });
-    if (isInvalid) return;
-    setError(null);
-    setSubmitting(true);
-    try {
-      const res: any = await createStudent({
-        fullName,
-        phones: phone ? [phone] : [],
-        email,
-        direction,
-        comment: comment || undefined,
-      });
+  const createMut = useInvalidatingMutation({
+    mutationFn: createStudent,
+    invalidate: [keys.students.all, keys.applications.all],
+    onSuccess: (res: any) => {
       setCredentials({
         id: res.id,
         email: res.email,
         password: res.plainPassword,
         fullName: res.fullName,
       });
-    } catch (e: any) {
-      setError(e.response?.data?.message?.toString() || 'Ошибка создания');
-    } finally {
-      setSubmitting(false);
-    }
+    },
+    onError: (e: any) => setError(e.response?.data?.message?.toString() || 'Ошибка создания'),
+  });
+  const submitting = createMut.isPending;
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setTouched({ fullName: true, phone: true, email: true, comment: true });
+    if (isInvalid) return;
+    setError(null);
+    createMut.mutate({
+      fullName,
+      phones: phone ? [phone] : [],
+      email,
+      direction,
+      comment: comment || undefined,
+    });
   };
 
   const copyBoth = async () => {

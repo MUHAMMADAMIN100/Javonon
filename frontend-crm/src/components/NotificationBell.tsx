@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listNotifications, markAllRead, markRead, unreadCount } from '../api/notifications';
 import type { Notification } from '../api/types';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 
 function notificationHref(n: Notification): string | null {
   const p = n.payload || {};
@@ -18,17 +21,28 @@ function notificationHref(n: Notification): string | null {
 
 export default function NotificationBell() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [count, setCount] = useState(0);
-  const [items, setItems] = useState<Notification[]>([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [onlyUnread, setOnlyUnread] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const refreshCount = async () => {
-    try { setCount(await unreadCount()); } catch {}
-  };
+  const countQuery = useQuery<number>({
+    queryKey: keys.notifications.unread(),
+    queryFn: () => unreadCount(),
+    refetchInterval: 30_000,
+  });
+  const count = countQuery.data ?? 0;
+
+  // Список грузится только когда панель открыта.
+  const listKey = keys.notifications.list();
+  const listQuery = useQuery<Notification[]>({
+    queryKey: listKey,
+    queryFn: () => listNotifications(),
+    enabled: open,
+  });
+  const items = listQuery.data ?? [];
 
   const filtered = items.filter((n) => {
     if (onlyUnread && n.read) return false;
@@ -44,26 +58,11 @@ export default function NotificationBell() {
     return true;
   });
 
-  useEffect(() => {
-    refreshCount();
-    const t = setInterval(refreshCount, 30000);
-    return () => clearInterval(t);
-  }, []);
-
   useRealtime({
     'notification:new': () => {
-      refreshCount();
-      if (open) {
-        listNotifications().then(setItems).catch(() => {});
-      }
+      qc.invalidateQueries({ queryKey: keys.notifications.all });
     },
   });
-
-  useEffect(() => {
-    if (open) {
-      listNotifications().then(setItems).catch(() => {});
-    }
-  }, [open]);
 
   // Закрытие по клику вне панели/кнопки
   useEffect(() => {
@@ -85,11 +84,26 @@ export default function NotificationBell() {
     };
   }, [open]);
 
-  const onItemClick = async (n: Notification) => {
+  // Optimistic mark single as read.
+  const markReadMut = useOptimisticMutation<unknown, string, Notification[]>({
+    mutationFn: markRead,
+    queryKey: listKey,
+    applyOptimistic: (cur, id) => optimistic.updateById(cur, id, { read: true } as Partial<Notification>),
+    invalidateAlso: [keys.notifications.unread()],
+  });
+
+  const markAllMut = useOptimisticMutation<unknown, void, Notification[]>({
+    mutationFn: () => markAllRead(),
+    queryKey: listKey,
+    applyOptimistic: (cur) => (cur ?? []).map((n) => ({ ...n, read: true })),
+    invalidateAlso: [keys.notifications.unread()],
+  });
+
+  const onItemClick = (n: Notification) => {
     if (!n.read) {
-      await markRead(n.id).catch(() => {});
-      setItems((prev) => prev.map((i) => (i.id === n.id ? { ...i, read: true } : i)));
-      refreshCount();
+      markReadMut.mutate(n.id);
+      // Оптимистично обновляем счётчик: декремент.
+      qc.setQueryData<number>(keys.notifications.unread(), (c) => Math.max(0, (c ?? 0) - 1));
     }
     const href = notificationHref(n);
     if (href) {
@@ -98,10 +112,9 @@ export default function NotificationBell() {
     }
   };
 
-  const onMarkAll = async () => {
-    await markAllRead();
-    setItems((prev) => prev.map((i) => ({ ...i, read: true })));
-    setCount(0);
+  const onMarkAll = () => {
+    markAllMut.mutate();
+    qc.setQueryData<number>(keys.notifications.unread(), 0);
   };
 
   return (
@@ -209,11 +222,10 @@ export default function NotificationBell() {
                       <button
                         className="notif-item-read"
                         title="Отметить прочитанным"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          await markRead(n.id).catch(() => {});
-                          setItems((prev) => prev.map((i) => (i.id === n.id ? { ...i, read: true } : i)));
-                          refreshCount();
+                          markReadMut.mutate(n.id);
+                          qc.setQueryData<number>(keys.notifications.unread(), (c) => Math.max(0, (c ?? 0) - 1));
                         }}
                       >
                         <Icon name="done" size={16} />
