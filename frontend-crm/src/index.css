@@ -2113,6 +2113,29 @@ select.input-error {
 .password-toggle:hover { color: var(--primary, #d52b2b); background: rgba(0,0,0,0.04); }
 .password-toggle:focus-visible { outline: 2px solid var(--primary, #d52b2b); outline-offset: 1px; }
 
+/* Javonon Group brand SVG logo */
+.sidebar-brand-img {
+  height: 36px;
+  width: auto;
+  display: block;
+  /* Логотип в тёмном sidebar — белый */
+  filter: brightness(0) saturate(100%) invert(100%);
+}
+.login-aside-logo {
+  height: 48px;
+  width: auto;
+  display: block;
+  /* Тёмный левый блок — белый лого */
+  filter: brightness(0) saturate(100%) invert(100%);
+}
+.login-form-logo {
+  height: 44px;
+  width: auto;
+  display: block;
+  margin-bottom: 4px;
+  /* На белом фоне — тёмный лого (использует сам цвет SVG) */
+}
+
 /* ============================================================
    EDITORIAL OVERRIDES — Javonon premium style for ALL CRM
    Full visual harmonisation with the landing page.

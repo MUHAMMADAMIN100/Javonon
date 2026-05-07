@@ -7,9 +7,8 @@ export default function Footer() {
       <div className="container">
         <div className="footer-top">
           <div className="footer-brand">
-            <a href="#" className="brand">
-              <span className="brand-dot">J</span>
-              <span>Javonon</span>
+            <a href="#" className="brand brand-img brand-img-light" aria-label="Javonon">
+              <img src="/javonon-logo.svg" alt="Javonon" />
             </a>
             <p>
               Международная платформа грантов на образование — Fulbright,

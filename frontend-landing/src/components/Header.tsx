@@ -41,9 +41,8 @@ export default function Header() {
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
     >
       <div className="container header-row">
-        <a href="#" className="brand">
-          <span className="brand-dot">J</span>
-          <span>Javonon</span>
+        <a href="#" className="brand brand-img" aria-label="Javonon">
+          <img src="/javonon-logo.svg" alt="Javonon" />
         </a>
 
         <nav className="nav">
@@ -87,9 +86,8 @@ export default function Header() {
             exit={{ opacity: 0 }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="brand" style={{ color: 'white' }}>
-                <span className="brand-dot">J</span>
-                <span>Javonon</span>
+              <span className="brand brand-img brand-img-light" aria-label="Javonon">
+                <img src="/javonon-logo.svg" alt="Javonon" />
               </span>
               <button
                 type="button"

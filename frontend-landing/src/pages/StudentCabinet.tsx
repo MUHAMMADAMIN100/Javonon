@@ -147,9 +147,8 @@ export default function StudentCabinet() {
       <RealtimeStatusBanner />
       <header className="stu-header">
         <div className="container stu-header-inner">
-          <Link to="/" className="brand">
-            <span className="brand-dot">J</span>
-            <span>Javonon</span>
+          <Link to="/" className="brand brand-img" aria-label="Javonon">
+            <img src="/javonon-logo.svg" alt="Javonon" />
           </Link>
           <div className="stu-header-user">
             <div className="stu-header-name">{me.fullName}</div>

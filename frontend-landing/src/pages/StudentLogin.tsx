@@ -45,9 +45,8 @@ export default function StudentLogin() {
     <div className="stu-login-page">
       <aside className="stu-login-aside">
         <div className="stu-login-aside-content">
-          <Link to="/" className="brand" style={{ marginBottom: 64 }}>
-            <span className="brand-dot">J</span>
-            <span>Javonon</span>
+          <Link to="/" className="brand brand-img brand-img-light" aria-label="Javonon" style={{ marginBottom: 64, display: 'inline-flex' }}>
+            <img src="/javonon-logo.svg" alt="Javonon" />
           </Link>
           <h1 className="display">
             С возвращением,<br />

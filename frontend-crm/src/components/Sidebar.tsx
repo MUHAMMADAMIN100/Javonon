@@ -59,8 +59,7 @@ export default function Sidebar() {
         whileHover={{ scale: 1.03 }}
         transition={{ type: 'spring', stiffness: 300 }}
       >
-        <span className="logo-mark">J</span>
-        <span className="logo-text">Javonon</span>
+        <img src="/javonon-logo.svg" alt="Javonon" className="sidebar-brand-img" />
       </motion.div>
       <motion.nav
         className="sidebar-nav"

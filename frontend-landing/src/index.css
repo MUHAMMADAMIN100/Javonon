@@ -159,6 +159,36 @@ input, textarea, select { font-family: inherit; }
   font-size: 22px;
   letter-spacing: -0.02em;
 }
+
+/* Логотип-картинка (Javonon Group brand SVG) */
+.brand.brand-img {
+  gap: 0;
+  font-size: 0;
+}
+.brand-img img {
+  height: 36px;
+  width: auto;
+  display: block;
+}
+/* По умолчанию header светится на тёмном hero — лого белый */
+.header .brand-img img,
+.footer .brand-img img,
+.cta .brand-img img,
+.stu-login-aside .brand-img img,
+.brand-img-light img {
+  filter: brightness(0) saturate(100%) invert(100%);
+}
+/* Когда хедер scrolled (белый фон) — лого тёмный */
+.header.scrolled .brand-img img {
+  filter: none;
+}
+/* В кабинете студента (белый stu-header) — тёмный лого */
+.stu-header .brand-img img {
+  filter: none;
+}
+@media (max-width: 720px) {
+  .brand-img img { height: 28px; }
+}
 .brand-dot {
   width: 28px; height: 28px;
   border-radius: 8px;

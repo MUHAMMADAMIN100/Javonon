@@ -49,8 +49,7 @@ export default function Login() {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="login-aside-brand">
-          <span className="logo-mark">J</span>
-          <span>Javonon</span>
+          <img src="/javonon-logo.svg" alt="Javonon" className="login-aside-logo" />
         </div>
 
         <div>
@@ -93,8 +92,7 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.4 }}
         >
-          <span className="logo-mark">J</span>
-          <span className="login-brand-name">Javonon</span>
+          <img src="/javonon-logo.svg" alt="Javonon" className="login-form-logo" />
           <span className="login-logo-label">CRM</span>
         </motion.div>
 
