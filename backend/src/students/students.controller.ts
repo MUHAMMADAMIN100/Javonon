@@ -23,6 +23,7 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { normalizeDocumentType } from '../common/documents';
 
 const uploadStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
@@ -163,6 +164,7 @@ export class StudentsController {
     @CurrentUser() user: any,
   ) {
     if (!file) throw new BadRequestException('Файл не передан');
+    if (file.size === 0) throw new BadRequestException('Файл пустой');
     const url = `/uploads/${file.filename}`;
     return this.students.addDocument(
       id,
@@ -173,7 +175,7 @@ export class StudentsController {
         size: file.size,
         url,
       },
-      type || 'OTHER',
+      normalizeDocumentType(type),
       user,
     );
   }

@@ -429,8 +429,12 @@ export class ApplicationsService {
   }
 
   async remove(id: string, user: CurrentUser) {
+    // QA-fix: удалять заявки (вместе со студентом) может только ADMIN.
+    // EMPLOYEE без назначения раньше мог удалить любую неназначенную заявку.
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('Удалять заявки может только администратор');
+    }
     const app = await this.findOne(id);
-    this.ensureCanEdit(app, user);
     if (app.studentId) {
       await this.prisma.student.delete({ where: { id: app.studentId } }).catch(() => undefined);
     }

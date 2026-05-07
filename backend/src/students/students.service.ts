@@ -384,8 +384,12 @@ export class StudentsService {
   }
 
   async remove(id: string, user: CurrentUser) {
-    const existing = await this.findOne(id);
-    this.ensureCanEdit(existing, user);
+    // QA-fix: удаление студента — только ADMIN.
+    // Раньше любой EMPLOYEE мог удалить студента без назначенного менеджера.
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('Удалять студентов может только администратор');
+    }
+    await this.findOne(id); // проверяем существование (бросит NotFoundException если нет)
     await this.prisma.student.delete({ where: { id } });
     return { ok: true };
   }

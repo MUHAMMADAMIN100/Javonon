@@ -124,7 +124,17 @@ export class LmsService {
     return all.filter((c) => !enrolledIds.includes(c.id));
   }
 
-  async enroll(studentId: string, courseId: string) {
+  async enroll(studentId: string, courseId: string, byAdmin = false) {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, published: true },
+    });
+    if (!course) throw new NotFoundException('Курс не найден');
+    // QA-fix: студент может записаться только на опубликованный курс.
+    // Админ может записать на любой (для подготовки или приватного доступа).
+    if (!byAdmin && !course.published) {
+      throw new BadRequestException('Курс пока не опубликован');
+    }
     return this.prisma.enrollment.upsert({
       where: { courseId_studentId: { courseId, studentId } },
       update: {},
@@ -158,6 +168,18 @@ export class LmsService {
   }
 
   async markLessonComplete(lessonId: string, studentId: string) {
+    // QA-fix: студент должен быть записан на курс этого урока.
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: { id: true, courseId: true },
+    });
+    if (!lesson) throw new NotFoundException('Урок не найден');
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: { courseId_studentId: { courseId: lesson.courseId, studentId } },
+    });
+    if (!enrollment) {
+      throw new BadRequestException('Сначала запишитесь на курс');
+    }
     return this.prisma.lessonProgress.upsert({
       where: { lessonId_studentId: { lessonId, studentId } },
       update: { completed: true, completedAt: new Date() },

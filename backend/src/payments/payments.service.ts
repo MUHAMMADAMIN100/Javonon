@@ -15,11 +15,21 @@ export class PaymentsService {
   /** Студент создаёт payment-запрос. */
   async createByStudent(studentId: string, dto: { amount: number; currency?: string; method?: PaymentMethod; comment?: string }) {
     if (!dto.amount || dto.amount <= 0) throw new BadRequestException('Сумма должна быть > 0');
+    // QA-fix: валидируем method (был 500 при FOOBAR)
+    const VALID_METHODS: PaymentMethod[] = ['CARD', 'BANK_TRANSFER', 'CASH', 'CRYPTO', 'OTHER'];
+    if (dto.method && !VALID_METHODS.includes(dto.method)) {
+      throw new BadRequestException('Неизвестный способ оплаты');
+    }
+    // QA-fix: валидируем валюту (3 латинские буквы)
+    const cur = (dto.currency || 'USD').toUpperCase();
+    if (!/^[A-Z]{3}$/.test(cur)) {
+      throw new BadRequestException('Валюта должна быть 3-буквенным кодом (USD, EUR, и т.д.)');
+    }
     const payment = await this.prisma.payment.create({
       data: {
         studentId,
-        amount: dto.amount,
-        currency: dto.currency || 'USD',
+        amount: Math.round(dto.amount * 100) / 100, // округляем до копеек
+        currency: cur,
         method: dto.method || 'BANK_TRANSFER',
         comment: dto.comment?.trim() || null,
       },

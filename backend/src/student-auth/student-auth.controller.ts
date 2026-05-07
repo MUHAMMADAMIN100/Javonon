@@ -20,6 +20,7 @@ import { extname } from 'path';
 import { randomUUID } from 'crypto';
 import { StudentAuthService } from './student-auth.service';
 import { StudentJwtGuard } from './student-jwt.guard';
+import { normalizeDocumentType } from '../common/documents';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -141,8 +142,10 @@ export class StudentAuthController {
     @Body('type') type: string | undefined,
   ) {
     if (!file) throw new BadRequestException('Файл не передан');
+    if (file.size === 0) throw new BadRequestException('Файл пустой');
     const url = `/uploads/${file.filename}`;
-    const docType = type || 'OTHER';
+    // QA-fix: валидируем type — невалидное значение нормализуем в OTHER
+    const docType = normalizeDocumentType(type);
     if (docType !== 'OTHER') {
       await this.prisma.document.deleteMany({ where: { studentId: user.id, type: docType } });
     }

@@ -69,7 +69,7 @@ export class LmsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   enrollStudent(@Param('id') courseId: string, @Body() body: { studentId: string }) {
-    return this.svc.enroll(body.studentId, courseId);
+    return this.svc.enroll(body.studentId, courseId, true);
   }
 }
 
