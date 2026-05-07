@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { createUser, deleteUser, listUsers, updateUser } from '../api/users';
 import type { Role, User } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, passwordRule, required, validateAll } from '../utils/validators';
 import ChangePasswordModal from '../components/ChangePasswordModal';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
 export default function Users() {
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
-  const [items, setItems] = useState<User[]>([]);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ email: '', fullName: '', password: '', role: 'EMPLOYEE' as Role });
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [pwdTarget, setPwdTarget] = useState<User | null>(null);
 
   const formErrors = validateAll(
@@ -28,32 +31,55 @@ export default function Users() {
   const showErr = (k: keyof typeof formErrors) => touched[k] && formErrors[k];
   const formInvalid = hasErrors(formErrors);
 
-  const load = () => listUsers(search || undefined).then(setItems).catch(() => {});
   useEffect(() => {
-    const t = setTimeout(load, 300);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const onCreate = async (e: React.FormEvent) => {
+  const listKey = ['users', 'list', { search: debouncedSearch || undefined }] as const;
+  const usersQuery = useQuery({
+    queryKey: listKey,
+    queryFn: () => listUsers(debouncedSearch || undefined),
+  });
+  const items = usersQuery.data ?? [];
+
+  const createMut = useInvalidatingMutation({
+    mutationFn: createUser,
+    invalidate: [keys.users.all],
+    onSuccess: () => {
+      setCreating(false);
+      setForm({ email: '', fullName: '', password: '', role: 'EMPLOYEE' });
+      setTouched({});
+      setError(null);
+    },
+    onError: (e: any) => setError(e.response?.data?.message?.toString() || 'Ошибка создания'),
+  });
+
+  const updateMut = useOptimisticMutation<User, { id: string; patch: Partial<User> }, User[]>({
+    mutationFn: ({ id, patch }) => updateUser(id, patch as any),
+    queryKey: listKey,
+    applyOptimistic: (cur, { id, patch }) => optimistic.updateById(cur, id, patch),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const deleteMut = useOptimisticMutation<unknown, string, User[]>({
+    mutationFn: deleteUser,
+    queryKey: listKey,
+    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    onSuccess: () => toast('Пользователь удалён', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const onCreate = (e: React.FormEvent) => {
     e.preventDefault();
     setTouched({ email: true, fullName: true, password: true });
     if (formInvalid) return;
     setError(null);
-    try {
-      await createUser(form);
-      setCreating(false);
-      setForm({ email: '', fullName: '', password: '', role: 'EMPLOYEE' });
-      setTouched({});
-      load();
-    } catch (e: any) {
-      setError(e.response?.data?.message?.toString() || 'Ошибка создания');
-    }
+    createMut.mutate(form);
   };
 
-  const onChangeRole = async (u: User, role: Role) => {
-    await updateUser(u.id, { role });
-    load();
+  const onChangeRole = (u: User, role: Role) => {
+    updateMut.mutate({ id: u.id, patch: { role } });
   };
 
   const onDelete = async (u: User) => {
@@ -68,9 +94,7 @@ export default function Users() {
       danger: true,
     });
     if (!ok) return;
-    await deleteUser(u.id);
-    toast('Пользователь удалён', 'success');
-    load();
+    deleteMut.mutate(u.id);
   };
 
   return (

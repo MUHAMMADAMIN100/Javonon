@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import {
   SalaryRecord,
   SalaryPreview,
@@ -13,6 +14,8 @@ import { listUsers } from '../api/users';
 import { ROLE_LABEL } from '../api/types';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
 function fmtMoney(n: number, c = 'USD') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -32,49 +35,77 @@ function defaultMonthRange() {
 
 export default function Salary() {
   const { toast, confirm } = useUI();
-  const [users, setUsers] = useState<any[]>([]);
-  const [records, setRecords] = useState<SalaryRecord[]>([]);
   const [userId, setUserId] = useState<string>('');
   const [{ start, end }, setRange] = useState(defaultMonthRange());
   const [kpiBonus, setKpiBonus] = useState('0');
   const [comment, setComment] = useState('');
-  const [preview, setPreview] = useState<SalaryPreview | null>(null);
 
-  const refresh = () => {
-    listSalaries().then(setRecords).catch(() => {});
-  };
+  const usersQuery = useQuery({
+    queryKey: keys.users.list(),
+    queryFn: () => listUsers(),
+  });
+  const users = usersQuery.data ?? [];
 
+  // Auto-select первого пользователя при загрузке.
   useEffect(() => {
-    listUsers().then((u) => {
-      setUsers(u);
-      if (!userId && u.length) setUserId(u[0].id);
-    }).catch(() => {});
-    refresh();
-  }, []);
+    if (!userId && users.length) setUserId(users[0].id);
+  }, [users, userId]);
 
-  useEffect(() => {
-    if (!userId || !start || !end) return;
-    previewSalary({ userId, periodStart: start, periodEnd: end, kpiBonus: parseFloat(kpiBonus) || 0 })
-      .then(setPreview)
-      .catch(() => setPreview(null));
-  }, [userId, start, end, kpiBonus]);
+  const recordsKey = keys.salary.list();
+  const recordsQuery = useQuery({
+    queryKey: recordsKey,
+    queryFn: () => listSalaries(),
+  });
+  const records: SalaryRecord[] = recordsQuery.data ?? [];
 
-  const onCreate = async () => {
-    if (!userId) return;
-    try {
-      await createSalary({
-        userId,
-        periodStart: start,
-        periodEnd: end,
-        kpiBonus: parseFloat(kpiBonus) || 0,
-        comment: comment.trim() || undefined,
-      });
+  // Live-preview через useQuery (кешируется по параметрам, мгновенно при возврате).
+  const previewQuery = useQuery<SalaryPreview>({
+    queryKey: keys.salary.preview({ userId, start, end, kpiBonus }),
+    queryFn: () => previewSalary({ userId, periodStart: start, periodEnd: end, kpiBonus: parseFloat(kpiBonus) || 0 }),
+    enabled: !!userId && !!start && !!end,
+  });
+  const preview = previewQuery.data ?? null;
+
+  const createMut = useInvalidatingMutation({
+    mutationFn: createSalary,
+    invalidate: [keys.salary.all],
+    onSuccess: () => {
       toast('Расчёт сохранён', 'success');
       setComment('');
-      refresh();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  // Pay — оптимистично переключаем status DRAFT → PAID + paidAt.
+  const payMut = useOptimisticMutation<SalaryRecord, string, SalaryRecord[]>({
+    mutationFn: paySalary,
+    queryKey: recordsKey,
+    applyOptimistic: (cur, id) => optimistic.updateById(cur, id, {
+      status: 'PAID',
+      paidAt: new Date().toISOString(),
+    } as Partial<SalaryRecord>),
+    invalidateAlso: [keys.finance.all],
+    onSuccess: () => toast('Зарплата выплачена', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const deleteMut = useOptimisticMutation<unknown, string, SalaryRecord[]>({
+    mutationFn: deleteSalary,
+    queryKey: recordsKey,
+    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    onSuccess: () => toast('Удалено', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const onCreate = () => {
+    if (!userId) return;
+    createMut.mutate({
+      userId,
+      periodStart: start,
+      periodEnd: end,
+      kpiBonus: parseFloat(kpiBonus) || 0,
+      comment: comment.trim() || undefined,
+    });
   };
 
   const onPay = async (r: SalaryRecord) => {
@@ -84,13 +115,7 @@ export default function Salary() {
       confirmText: 'Выплатить',
     });
     if (!ok) return;
-    try {
-      await paySalary(r.id);
-      toast('Зарплата выплачена', 'success');
-      refresh();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+    payMut.mutate(r.id);
   };
 
   const onDelete = async (r: SalaryRecord) => {
@@ -101,13 +126,7 @@ export default function Salary() {
       confirmText: 'Удалить',
     });
     if (!ok) return;
-    try {
-      await deleteSalary(r.id);
-      toast('Удалено', 'success');
-      refresh();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+    deleteMut.mutate(r.id);
   };
 
   return (

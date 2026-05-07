@@ -1,59 +1,89 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createTask, deleteTask, listTasks, updateTask } from '../api/tasks';
 import { listUsers } from '../api/users';
-import type { Task, TaskStatus, User } from '../api/types';
+import type { Task, TaskStatus } from '../api/types';
 import { TASK_STATUS_BADGE, TASK_STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import { compose, hasErrors, maxLen, minLen, required, validateAll } from '../utils/validators';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
 type Scope = 'all' | 'mine';
 
 export default function Tasks() {
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
+  const qc = useQueryClient();
   const isAdmin = me?.role === 'ADMIN';
-  const [items, setItems] = useState<Task[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', assignedToId: '', deadline: '' });
-  const [submitting, setSubmitting] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = await listTasks(scope === 'mine', search || undefined);
-      setItems(data);
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка загрузки', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Дебаунс поиска: 300ms — чтобы не дёргать сервер на каждое нажатие.
   useEffect(() => {
-    const t = setTimeout(load, 300);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, search]);
+  }, [search]);
 
+  const listKey = keys.tasks.list({ mine: scope === 'mine', search: debouncedSearch || undefined });
+  const tasksQuery = useQuery({
+    queryKey: listKey,
+    queryFn: () => listTasks(scope === 'mine', debouncedSearch || undefined),
+  });
+  const items = tasksQuery.data ?? [];
+  const loading = tasksQuery.isLoading;
+
+  const usersQuery = useQuery({
+    queryKey: keys.users.list(),
+    queryFn: () => listUsers(),
+    enabled: isAdmin,
+  });
+  const users = usersQuery.data ?? [];
+
+  // Realtime → инвалидируем кеш, TanStack сам перечитает.
   useRealtime({
-    'task:new': () => load(),
-    'task:updated': () => load(),
-    'task:deleted': () => load(),
+    'task:new': () => qc.invalidateQueries({ queryKey: keys.tasks.all }),
+    'task:updated': () => qc.invalidateQueries({ queryKey: keys.tasks.all }),
+    'task:deleted': () => qc.invalidateQueries({ queryKey: keys.tasks.all }),
   });
 
-  useEffect(() => {
-    if (isAdmin) {
-      listUsers().then(setUsers).catch(() => {});
-    }
-  }, [isAdmin]);
+  // CREATE — серверный id auto-gen, поэтому без оптимистики (только invalidate).
+  const createMut = useInvalidatingMutation({
+    mutationFn: createTask,
+    invalidate: [keys.tasks.all, keys.tasks.stats()],
+    onSuccess: () => {
+      toast('Задача создана. Сотрудник получит email и уведомление.', 'success');
+      setForm({ title: '', description: '', assignedToId: '', deadline: '' });
+      setCreating(false);
+    },
+    onError: (err: any) => toast(err?.response?.data?.message || 'Ошибка создания', 'error'),
+  });
+
+  // UPDATE STATUS — горячий UX, делаем оптимистично (мгновенное переключение).
+  const updateMut = useOptimisticMutation<Task, { id: string; patch: Parameters<typeof updateTask>[1] }, Task[]>({
+    mutationFn: ({ id, patch }) => updateTask(id, patch),
+    queryKey: listKey,
+    applyOptimistic: (cur, { id, patch }) => optimistic.updateById(cur, id, patch as Partial<Task>),
+    invalidateAlso: [keys.tasks.stats()],
+    onError: (err: any) => toast(err?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  // DELETE — оптимистично убираем из списка.
+  const deleteMut = useOptimisticMutation<unknown, string, Task[]>({
+    mutationFn: deleteTask,
+    queryKey: listKey,
+    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    invalidateAlso: [keys.tasks.stats()],
+    onSuccess: () => toast('Задача удалена', 'success'),
+    onError: (err: any) => toast(err?.response?.data?.message || 'Ошибка удаления', 'error'),
+  });
 
   const formErrors = validateAll(
     { title: form.title, description: form.description, assignedToId: form.assignedToId },
@@ -65,42 +95,27 @@ export default function Tasks() {
   );
   const formInvalid = hasErrors(formErrors);
 
-  const onCreate = async (e: React.FormEvent) => {
+  const onCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (formInvalid) {
       toast('Заполните все поля корректно', 'error');
       return;
     }
-    setSubmitting(true);
-    try {
-      await createTask({
-        title: form.title.trim(),
-        description: form.description.trim(),
-        assignedToId: form.assignedToId,
-        deadline: form.deadline || undefined,
-      });
-      toast('Задача создана. Сотрудник получит email и уведомление.', 'success');
-      setForm({ title: '', description: '', assignedToId: '', deadline: '' });
-      setCreating(false);
-      await load();
-    } catch (err: any) {
-      toast(err?.response?.data?.message || 'Ошибка создания', 'error');
-    } finally {
-      setSubmitting(false);
-    }
+    createMut.mutate({
+      title: form.title.trim(),
+      description: form.description.trim(),
+      assignedToId: form.assignedToId,
+      deadline: form.deadline || undefined,
+    });
   };
+  const submitting = createMut.isPending;
 
-  const setStatus = async (t: Task, next: TaskStatus) => {
+  const setStatus = (t: Task, next: TaskStatus) => {
     if (t.status === next) return;
-    try {
-      await updateTask(t.id, { status: next });
-      if (next === 'DONE') toast('Задача выполнена', 'success');
-      else if (next === 'IN_PROGRESS') toast('Задача взята в работу', 'success');
-      else toast('Задача возвращена в очередь', 'info');
-      await load();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+    if (next === 'DONE') toast('Задача выполнена', 'success');
+    else if (next === 'IN_PROGRESS') toast('Задача взята в работу', 'success');
+    else toast('Задача возвращена в очередь', 'info');
+    updateMut.mutate({ id: t.id, patch: { status: next } });
   };
 
   const onDelete = async (t: Task) => {
@@ -111,13 +126,7 @@ export default function Tasks() {
       danger: true,
     });
     if (!ok) return;
-    try {
-      await deleteTask(t.id);
-      toast('Задача удалена', 'success');
-      await load();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка удаления', 'error');
-    }
+    deleteMut.mutate(t.id);
   };
 
   return (

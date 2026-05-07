@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listApplications } from '../api/applications';
 import { listUsers } from '../api/users';
-import type { Application, ApplicationStatus, Direction, User } from '../api/types';
+import type { ApplicationStatus, Direction } from '../api/types';
 import { DIRECTION_LABEL, STATUS_BADGE, STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
+import { keys } from '../lib/queryKeys';
 
 type Scope = 'all' | 'mine';
 
@@ -18,40 +20,50 @@ const PAGE_SIZE = 5;
 export default function Applications() {
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
-  const [items, setItems] = useState<Application[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState<ApplicationStatus | ''>('');
   const [direction, setDirection] = useState<Direction | ''>('');
   const [manager, setManager] = useState<string>('');
   const isAdmin = me?.role === 'ADMIN';
   // Менеджер видит только свои заявки; админ может переключать.
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
 
-  const load = () => {
-    setLoading(true);
-    listApplications({
-      search: search || undefined,
-      status: status || undefined,
-      direction: direction || undefined,
-      mine: scope === 'mine',
-      manager: manager || undefined,
-    })
-      .then(setItems)
-      .finally(() => setLoading(false));
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Сбросить страницу при смене фильтров.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, status, direction, scope, manager]);
+
+  const filters = {
+    search: debouncedSearch || undefined,
+    status: status || undefined,
+    direction: direction || undefined,
+    mine: scope === 'mine',
+    manager: manager || undefined,
   };
 
-  useEffect(() => {
-    setPage(1); // при смене любого фильтра — на первую страницу
-    const t = setTimeout(load, 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, status, direction, scope, manager]);
+  const appsQuery = useQuery({
+    queryKey: keys.applications.list(filters),
+    queryFn: () => listApplications(filters),
+  });
+  const items = appsQuery.data ?? [];
+  const loading = appsQuery.isLoading;
 
-  // При изменении набора заявок извне (realtime/удаление) — корректируем
-  // текущую страницу, чтобы не остаться на пустой.
+  const usersQuery = useQuery({
+    queryKey: keys.users.list(),
+    queryFn: () => listUsers(),
+    enabled: isAdmin,
+  });
+  const users = usersQuery.data ?? [];
+
+  // При изменении набора заявок извне — корректируем текущую страницу.
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
     if (page > totalPages) setPage(totalPages);
@@ -59,16 +71,10 @@ export default function Applications() {
 
   const pagedItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Список пользователей для фильтра по менеджерам — только админу
-  useEffect(() => {
-    if (!isAdmin) return;
-    listUsers().then(setUsers).catch(() => {});
-  }, [isAdmin]);
-
   useRealtime({
-    'application:new': () => load(),
-    'application:updated': () => load(),
-    'application:deleted': () => load(),
+    'application:new': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
+    'application:updated': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
+    'application:deleted': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
   });
 
   return (

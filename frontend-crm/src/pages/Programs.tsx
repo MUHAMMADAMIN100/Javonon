@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createProgram, deleteProgram, listPrograms, programImageUrl, updateProgram, uploadProgramImage, type Program } from '../api/programs';
 import type { Direction } from '../api/types';
 import { DIRECTION_LABEL } from '../api/types';
@@ -9,6 +10,8 @@ import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import DirectionOptions from '../components/DirectionOptions';
 import { compose, hasErrors, maxLen, minLen, positive, required, validateAll } from '../utils/validators';
+import { keys } from '../lib/queryKeys';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
 const emptyForm: Partial<Program> = {
   name: '',
@@ -27,14 +30,13 @@ const emptyForm: Partial<Program> = {
 export default function Programs() {
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
+  const qc = useQueryClient();
   const isAdmin = me?.role === 'ADMIN';
-  const [items, setItems] = useState<Program[]>([]);
   const [city, setCity] = useState('');
   const [major, setMajor] = useState('');
   const [direction, setDirection] = useState<Direction | ''>('');
-  const [loading, setLoading] = useState(true);
+  const [debounced, setDebounced] = useState({ city: '', major: '', direction: '' as Direction | '' });
   const [editing, setEditing] = useState<Partial<Program> | null>(null);
-  const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [pendingPreview, setPendingPreview] = useState<string | null>(null);
@@ -45,6 +47,12 @@ export default function Programs() {
       if (pendingPreview) URL.revokeObjectURL(pendingPreview);
     };
   }, [pendingPreview]);
+
+  // Debounce фильтров (300ms): не дёргать сервер на каждое нажатие.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced({ city, major, direction }), 300);
+    return () => clearTimeout(t);
+  }, [city, major, direction]);
 
   const openCreate = () => {
     setPendingImage(null);
@@ -61,26 +69,67 @@ export default function Programs() {
     }
   };
 
-  const load = () => {
-    setLoading(true);
-    listPrograms({
-      city: city || undefined,
-      major: major || undefined,
-      direction: direction || undefined,
-    })
-      .then(setItems)
-      .finally(() => setLoading(false));
+  const filters = {
+    city: debounced.city || undefined,
+    major: debounced.major || undefined,
+    direction: debounced.direction || undefined,
   };
-
-  useEffect(() => {
-    const t = setTimeout(load, 300);
-    return () => clearTimeout(t);
-  }, [city, major, direction]);
+  const listKey = keys.programs.list();
+  const filteredKey = ['programs', 'list', filters] as const;
+  const programsQuery = useQuery({
+    queryKey: filteredKey,
+    queryFn: () => listPrograms(filters),
+  });
+  const items = programsQuery.data ?? [];
+  const loading = programsQuery.isLoading;
 
   useRealtime({
-    'program:new': () => load(),
-    'program:updated': () => load(),
-    'program:deleted': () => load(),
+    'program:new': () => qc.invalidateQueries({ queryKey: keys.programs.all }),
+    'program:updated': () => qc.invalidateQueries({ queryKey: keys.programs.all }),
+    'program:deleted': () => qc.invalidateQueries({ queryKey: keys.programs.all }),
+  });
+
+  const saveMut = useInvalidatingMutation({
+    mutationFn: async (vars: { editing: Partial<Program>; pendingImage: File | null }) => {
+      const payload = {
+        ...vars.editing,
+        cost: typeof vars.editing.cost === 'string' ? parseFloat(vars.editing.cost) : vars.editing.cost,
+      };
+      if (vars.editing.id) {
+        return updateProgram(vars.editing.id, payload);
+      }
+      return createProgram(payload, vars.pendingImage);
+    },
+    invalidate: [keys.programs.all],
+    onSuccess: (_data, vars) => {
+      toast(vars.editing.id ? 'Программа обновлена' : 'Программа создана', 'success');
+      closeEditor();
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка сохранения', 'error'),
+  });
+  const saving = saveMut.isPending;
+
+  const deleteMut = useOptimisticMutation<unknown, string, Program[]>({
+    mutationFn: deleteProgram,
+    queryKey: filteredKey,
+    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    invalidateAlso: [keys.programs.all],
+    onSuccess: () => toast('Программа удалена', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
+
+  const uploadImageMut = useInvalidatingMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => uploadProgramImage(id, file),
+    invalidate: [keys.programs.all],
+    onSuccess: (data) => {
+      setEditing((cur) => (cur ? { ...cur, imageUrl: data.imageUrl } : cur));
+      toast('Картинка загружена', 'success');
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка загрузки', 'error'),
+    onSettled: () => {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    },
   });
 
   const formErrors = editing
@@ -103,59 +152,22 @@ export default function Programs() {
     : {};
   const formInvalid = hasErrors(formErrors);
 
-  const onSave = async (e: React.FormEvent) => {
+  const onSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing || formInvalid) return;
-    setSaving(true);
-    try {
-      const payload = {
-        ...editing,
-        cost: typeof editing.cost === 'string' ? parseFloat(editing.cost) : editing.cost,
-      };
-      if (editing.id) {
-        await updateProgram(editing.id, payload);
-        toast('Программа обновлена', 'success');
-      } else {
-        await createProgram(payload, pendingImage);
-        toast('Программа создана', 'success');
-      }
-      closeEditor();
-      load();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка сохранения', 'error');
-    } finally {
-      setSaving(false);
-    }
+    saveMut.mutate({ editing, pendingImage });
   };
 
   const onPickImage = (file: File) => {
     if (editing?.id) {
       // существующая программа — грузим сразу через отдельный endpoint
-      onUploadImage(file);
+      setUploadingImage(true);
+      uploadImageMut.mutate({ id: editing.id, file });
     } else {
       // новая — держим в памяти, отправим вместе с создания
       setPendingImage(file);
       if (pendingPreview) URL.revokeObjectURL(pendingPreview);
       setPendingPreview(URL.createObjectURL(file));
-    }
-  };
-
-  const onUploadImage = async (file: File) => {
-    if (!editing?.id) {
-      toast('Сначала сохраните программу, затем загрузите картинку', 'info');
-      return;
-    }
-    setUploadingImage(true);
-    try {
-      const updated = await uploadProgramImage(editing.id, file);
-      setEditing({ ...editing, imageUrl: updated.imageUrl });
-      toast('Картинка загружена', 'success');
-      load();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка загрузки', 'error');
-    } finally {
-      setUploadingImage(false);
-      if (imageInputRef.current) imageInputRef.current.value = '';
     }
   };
 
@@ -167,13 +179,7 @@ export default function Programs() {
       danger: true,
     });
     if (!ok) return;
-    try {
-      await deleteProgram(p.id);
-      toast('Программа удалена', 'success');
-      load();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
-    }
+    deleteMut.mutate(p.id);
   };
 
   return (
