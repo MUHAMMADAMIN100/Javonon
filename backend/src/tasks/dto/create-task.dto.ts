@@ -1,4 +1,4 @@
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsDateString, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateTaskDto {
   @IsString()
@@ -13,4 +13,8 @@ export class CreateTaskDto {
 
   @IsString()
   assignedToId: string;
+
+  @IsOptional()
+  @IsDateString()
+  deadline?: string;
 }

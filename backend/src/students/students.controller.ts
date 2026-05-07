@@ -91,6 +91,11 @@ export class StudentsController {
     return this.students.findOne(id);
   }
 
+  @Get(':id/payments')
+  payments(@Param('id') id: string) {
+    return this.students.paymentsHistory(id);
+  }
+
   @Post()
   create(@Body() dto: CreateStudentDto, @CurrentUser() user: any) {
     return this.students.create(dto, user);

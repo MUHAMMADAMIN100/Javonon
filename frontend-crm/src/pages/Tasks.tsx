@@ -22,7 +22,7 @@ export default function Tasks() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', assignedToId: '' });
+  const [form, setForm] = useState({ title: '', description: '', assignedToId: '', deadline: '' });
   const [submitting, setSubmitting] = useState(false);
 
   const load = async () => {
@@ -77,9 +77,10 @@ export default function Tasks() {
         title: form.title.trim(),
         description: form.description.trim(),
         assignedToId: form.assignedToId,
+        deadline: form.deadline || undefined,
       });
       toast('Задача создана. Сотрудник получит email и уведомление.', 'success');
-      setForm({ title: '', description: '', assignedToId: '' });
+      setForm({ title: '', description: '', assignedToId: '', deadline: '' });
       setCreating(false);
       await load();
     } catch (err: any) {
@@ -220,11 +221,19 @@ export default function Tasks() {
                   ))}
                 </select>
               </div>
+              <div className="form-group">
+                <label>Дедлайн (опционально)</label>
+                <input
+                  type="datetime-local"
+                  value={form.deadline}
+                  onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+                />
+              </div>
               <div className="form-actions">
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => { setCreating(false); setForm({ title: '', description: '', assignedToId: '' }); }}
+                  onClick={() => { setCreating(false); setForm({ title: '', description: '', assignedToId: '', deadline: '' }); }}
                 >
                   Отмена
                 </button>
@@ -293,8 +302,24 @@ export default function Tasks() {
                             От: {t.createdBy.fullName}
                           </span>
                         )}
+                        {t.deadline && (() => {
+                          const dl = new Date(t.deadline);
+                          const now = new Date();
+                          const ms = dl.getTime() - now.getTime();
+                          const isOverdue = ms < 0 && t.status !== 'DONE';
+                          const isSoon = ms >= 0 && ms < 24 * 60 * 60 * 1000 && t.status !== 'DONE';
+                          const cls = isOverdue ? 'badge-danger' : isSoon ? 'badge-warning' : 'badge-info';
+                          const label = isOverdue ? 'ПРОСРОЧЕНО' : isSoon ? 'СРОЧНО' : '';
+                          return (
+                            <span className={`badge ${cls}`} style={{ fontFamily: 'var(--font-mono)' }}>
+                              <Icon name="schedule" size={12} />
+                              {label && <strong style={{ marginRight: 4 }}>{label}</strong>}
+                              до {dl.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          );
+                        })()}
                         <span className="task-meta-item">
-                          <Icon name="schedule" size={14} />
+                          <Icon name="event" size={14} />
                           {new Date(t.createdAt).toLocaleDateString('ru-RU')}
                         </span>
                       </div>

@@ -88,6 +88,67 @@ export class CronService {
   }
 
   /**
+   * Каждый час — напоминание о приближающемся дедлайне (за 24ч)
+   * + уведомление о просрочке. Идемпотентно через флаги в Task.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async deadlineReminders() {
+    this.logger.log('Cron: deadlineReminders');
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    // 1) Напомнить за 24 часа до дедлайна (один раз)
+    const upcoming = await this.prisma.task.findMany({
+      where: {
+        status: { in: ['TODO', 'IN_PROGRESS'] },
+        deadline: { lte: in24h, gt: now },
+        deadlineReminderSent: false,
+      },
+      include: { assignedTo: { select: { id: true, fullName: true } } },
+    });
+    for (const t of upcoming) {
+      await this.notifications.notifyUser(t.assignedToId, {
+        type: 'TASK_DEADLINE_SOON',
+        title: '⏳ Дедлайн через 24 часа',
+        message: `«${t.title}» — закрой или попроси перенос.`,
+        payload: { taskId: t.id, deadline: t.deadline },
+      });
+      await this.prisma.task.update({
+        where: { id: t.id },
+        data: { deadlineReminderSent: true },
+      });
+    }
+
+    // 2) Уведомить о просрочке (один раз)
+    const overdue = await this.prisma.task.findMany({
+      where: {
+        status: { in: ['TODO', 'IN_PROGRESS'] },
+        deadline: { lt: now },
+        overdueNotified: false,
+      },
+    });
+    for (const t of overdue) {
+      await this.notifications.notifyUser(t.assignedToId, {
+        type: 'TASK_OVERDUE',
+        title: '🔴 Задача просрочена',
+        message: `«${t.title}» — дедлайн прошёл.`,
+        payload: { taskId: t.id, deadline: t.deadline },
+      });
+      // Уведомляем и админов
+      await this.notifications.notifyAdmins({
+        type: 'TASK_OVERDUE_ADMIN',
+        title: '🔴 Задача просрочена сотрудником',
+        message: `«${t.title}»`,
+        payload: { taskId: t.id, assignedToId: t.assignedToId },
+      });
+      await this.prisma.task.update({
+        where: { id: t.id },
+        data: { overdueNotified: true },
+      });
+    }
+  }
+
+  /**
    * Каждое утро в 09:00 — напоминание о просроченных/висящих задачах.
    */
   @Cron('0 9 * * 1-5', { timeZone: 'Asia/Dushanbe' })

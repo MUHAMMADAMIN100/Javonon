@@ -9,6 +9,7 @@ import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
 import DocumentsChecklist from '../components/DocumentsChecklist';
 import InteractionsLog from '../components/InteractionsLog';
+import StudentPaymentsSection from '../components/StudentPaymentsSection';
 import ManagerBar from '../components/ManagerBar';
 import ApplicationFormSection from '../components/ApplicationFormSection';
 import ApplicationStatusStepper from '../components/ApplicationStatusStepper';
@@ -432,6 +433,10 @@ export default function StudentDetail() {
           onChange={reload}
           editable={canEdit}
         />
+
+        <div style={{ marginTop: 28 }}>
+          <StudentPaymentsSection studentId={student.id} />
+        </div>
 
         <div style={{ marginTop: 28 }}>
           <InteractionsLog studentId={student.id} canEdit={canEdit} />

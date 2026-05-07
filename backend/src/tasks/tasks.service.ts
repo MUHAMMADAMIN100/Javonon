@@ -36,6 +36,7 @@ export class TasksService {
         description: dto.description.trim(),
         assignedToId: dto.assignedToId,
         createdById: user.id,
+        deadline: dto.deadline ? new Date(dto.deadline) : null,
       },
       include: TASK_INCLUDE,
     });
@@ -119,6 +120,12 @@ export class TasksService {
         ...(dto.description !== undefined ? { description: dto.description } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
         ...(dto.assignedToId !== undefined ? { assignedToId: dto.assignedToId } : {}),
+        ...(dto.deadline !== undefined ? {
+          deadline: dto.deadline ? new Date(dto.deadline) : null,
+          // Сбрасываем флаги напоминаний — будут отправлены заново при новом дедлайне
+          deadlineReminderSent: false,
+          overdueNotified: false,
+        } : {}),
       },
       include: TASK_INCLUDE,
     });

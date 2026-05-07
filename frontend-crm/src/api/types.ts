@@ -122,6 +122,9 @@ export interface Task {
   title: string;
   description: string;
   status: TaskStatus;
+  deadline: string | null;
+  deadlineReminderSent?: boolean;
+  overdueNotified?: boolean;
   assignedToId: string;
   assignedTo?: { id: string; fullName: string; email: string };
   createdById: string | null;

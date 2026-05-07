@@ -224,6 +224,35 @@ export class StudentsService {
     return student;
   }
 
+  /**
+   * История оплат конкретного студента (для CRM-карточки, ТЗ §3.3).
+   * Возвращает все INCOME-транзакции + payment-заявки (PENDING/CONFIRMED/...)
+   */
+  async paymentsHistory(studentId: string) {
+    const [transactions, paymentRequests] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: { studentId, type: 'INCOME' },
+        orderBy: { date: 'desc' },
+        select: {
+          id: true,
+          amount: true,
+          currency: true,
+          category: true,
+          date: true,
+          comment: true,
+          recordedBy: { select: { id: true, fullName: true } },
+        },
+      }),
+      this.prisma.payment.findMany({
+        where: { studentId },
+        orderBy: { createdAt: 'desc' },
+        include: { confirmedBy: { select: { id: true, fullName: true } } },
+      }),
+    ]);
+    const totalPaid = transactions.reduce((s, t) => s + t.amount, 0);
+    return { transactions, paymentRequests, totalPaid };
+  }
+
   async update(id: string, dto: UpdateStudentDto, user: CurrentUser) {
     const existing = await this.findOne(id);
     this.ensureCanEdit(existing, user);

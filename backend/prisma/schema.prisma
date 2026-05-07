@@ -220,6 +220,12 @@ model Task {
   title        String
   description  String
   status       TaskStatus @default(TODO)
+  // Дедлайн задачи (ТЗ §3.7). Null = без дедлайна.
+  deadline     DateTime?
+  // Cron уже отправил напоминание (за 24ч до дедлайна) — чтобы не спамить.
+  deadlineReminderSent Boolean @default(false)
+  // Cron уже отправил уведомление о просрочке.
+  overdueNotified      Boolean @default(false)
   assignedToId String
   assignedTo   User       @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: Cascade)
   createdById  String?
@@ -229,6 +235,7 @@ model Task {
 
   @@index([assignedToId])
   @@index([status])
+  @@index([deadline])
 }
 
 model Program {
