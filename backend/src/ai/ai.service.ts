@@ -96,15 +96,17 @@ Sentence: "${text}"`,
     if (/доход|оплат|приш|получ|поступ/.test(text)) type = 'INCOME';
     if (/расход|потрат|оплати[лт]|плат[еи]/.test(text)) type = 'EXPENSE';
 
-    // Категория по ключевым словам
+    // Категория по ключевым словам.
+    // Порядок имеет значение — более специфичные паттерны идут раньше общих.
     let category: TransactionCategory = type === 'INCOME' ? 'OTHER_INCOME' : 'OTHER_EXPENSE';
     if (/обучен|tuition|за курс|за програм/.test(text)) category = 'TUITION_PAYMENT';
     else if (/доплат/.test(text)) category = 'ADDITIONAL_FEE';
-    else if (/зарплат|salary|оклад|зп/.test(text)) category = 'SALARY';
-    else if (/аренд|rent|офис.*аренд/.test(text)) category = 'RENT';
-    else if (/коммунал|electric|вод|свет|интернет|wifi/.test(text)) category = 'UTILITIES';
-    else if (/реклам|маркетинг|таргет|инстагр|google ads/.test(text)) category = 'MARKETING';
-    else if (/офис|канцеляр|бумага|стол|стул|техник/.test(text)) category = 'OFFICE';
+    else if (/зарплат|salary|оклад|\bзп\b/.test(text)) category = 'SALARY';
+    // RENT идёт ДО OFFICE, потому что «аренда офиса» содержит оба слова
+    else if (/аренд|rent/.test(text)) category = 'RENT';
+    else if (/коммунал|electric|вод|свет|интернет|wifi|газ\b/.test(text)) category = 'UTILITIES';
+    else if (/реклам|маркетинг|таргет|инстагр|google\s*ads|tiktok/.test(text)) category = 'MARKETING';
+    else if (/канцеляр|бумаг|принтер|стол\b|стул\b|техник|компьютер|офис/.test(text)) category = 'OFFICE';
 
     // Комментарий — то, что осталось без цифр
     const comment = text.replace(amountMatch[0], '').replace(/[!?.]/g, '').trim();
