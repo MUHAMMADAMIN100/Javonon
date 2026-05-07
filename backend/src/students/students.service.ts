@@ -390,15 +390,10 @@ export class StudentsService {
       throw new ForbiddenException('Удалять студентов может только администратор');
     }
     await this.findOne(id); // проверяем существование (бросит NotFoundException если нет)
-    // QA-fix (cascade): Application.studentId не имеет onDelete-каскада в схеме,
-    // поэтому prisma.student.delete() падал с FK-ошибкой 500, если у студента
-    // была хотя бы одна связанная заявка (а через CRM она создаётся автоматически).
-    // Удаляем заявки в одной транзакции со студентом — Document/Enrollment/
-    // LessonProgress/Interaction/Payment каскадятся сами через схему.
-    await this.prisma.$transaction([
-      this.prisma.application.deleteMany({ where: { studentId: id } }),
-      this.prisma.student.delete({ where: { id } }),
-    ]);
+    // Заявки сохраняем как историю — Prisma автоматически делает SetNull для
+    // optional FK Application.studentId. Document/Enrollment/LessonProgress/
+    // Interaction/Payment каскадятся через onDelete: Cascade в схеме.
+    await this.prisma.student.delete({ where: { id } });
     this.realtime.emitStaff('student:deleted', { studentId: id });
     return { ok: true };
   }

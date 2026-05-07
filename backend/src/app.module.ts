@@ -35,6 +35,7 @@ import { InteractionsModule } from './interactions/interactions.module';
 import { PenaltiesModule } from './penalties/penalties.module';
 import { PaymentsModule } from './payments/payments.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
+import { DailyReportsModule } from './daily-reports/daily-reports.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { KnowledgeModule } from './knowledge/knowledge.module';
     PenaltiesModule,
     PaymentsModule,
     KnowledgeModule,
+    DailyReportsModule,
   ],
   controllers: [HealthController],
   providers: [

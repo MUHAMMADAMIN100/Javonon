@@ -108,8 +108,17 @@ Sentence: "${text}"`,
     else if (/реклам|маркетинг|таргет|инстагр|google\s*ads|tiktok/.test(text)) category = 'MARKETING';
     else if (/канцеляр|бумаг|принтер|стол\b|стул\b|техник|компьютер|офис/.test(text)) category = 'OFFICE';
 
-    // Комментарий — то, что осталось без цифр
-    const comment = text.replace(amountMatch[0], '').replace(/[!?.]/g, '').trim();
+    // Комментарий — то, что осталось без цифр + чистим служебные слова-команды
+    // QA-fix #13: раньше «добавь расход 75$ аренда офиса» давал comment
+    // «добавь расход  аренда офиса» (с командой). Теперь убираем команды,
+    // получаем чистый comment «аренда офиса».
+    const STOP_WORDS = /\b(добавь|запиши|сохрани|укажи|расход|доход|оплат[аиыей]|оплати[лт]|потрати[лт]|поступил[оа]?|пришл[аои]|получи[лт]|студент|клиент|на|за|в|со?|по|и|ещё|please)\b/gi;
+    const comment = text
+      .replace(amountMatch[0], ' ')
+      .replace(STOP_WORDS, ' ')
+      .replace(/[!?.,;]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
     return { type, category, amount, currency, comment };
   }
