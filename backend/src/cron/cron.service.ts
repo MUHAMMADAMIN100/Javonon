@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PenaltiesService } from '../penalties/penalties.service';
 
+const TASK_OVERDUE_PENALTY_USD = 10; // ТЗ §3.9: «Нарушение → штраф» за просроченную задачу
+
 @Injectable()
 export class CronService {
   private readonly logger = new Logger(CronService.name);
@@ -131,7 +133,7 @@ export class CronService {
       await this.notifications.notifyUser(t.assignedToId, {
         type: 'TASK_OVERDUE',
         title: '🔴 Задача просрочена',
-        message: `«${t.title}» — дедлайн прошёл.`,
+        message: `«${t.title}» — дедлайн прошёл. Применён штраф $${TASK_OVERDUE_PENALTY_USD}.`,
         payload: { taskId: t.id, deadline: t.deadline },
       });
       // Уведомляем и админов
@@ -140,6 +142,12 @@ export class CronService {
         title: '🔴 Задача просрочена сотрудником',
         message: `«${t.title}»`,
         payload: { taskId: t.id, assignedToId: t.assignedToId },
+      });
+      // ТЗ §3.9: «Нарушение → штраф». Создаём Penalty для нарушителя.
+      await this.penalties.createManual(t.assignedToId, {
+        reason: 'TASK_OVERDUE',
+        amount: TASK_OVERDUE_PENALTY_USD,
+        details: `Просроченная задача: «${t.title}»`,
       });
       await this.prisma.task.update({
         where: { id: t.id },

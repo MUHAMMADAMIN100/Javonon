@@ -439,7 +439,7 @@ export class StudentsService {
       user && user.role === 'EMPLOYEE'
         ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
         : undefined;
-    const [total, byCabinet, byDirection] = await Promise.all([
+    const [total, byCabinet, byDirection, byStatus] = await Promise.all([
       this.prisma.student.count({ where }),
       this.prisma.student.groupBy({
         by: ['cabinet'],
@@ -448,7 +448,9 @@ export class StudentsService {
         where,
       }),
       this.prisma.student.groupBy({ by: ['direction'], _count: true, where }),
+      // ТЗ §4 «Активные клиенты» — нужен срез по StudentStatus
+      this.prisma.student.groupBy({ by: ['status'], _count: true, where }),
     ]);
-    return { total, byCabinet, byDirection };
+    return { total, byCabinet, byDirection, byStatus };
   }
 }

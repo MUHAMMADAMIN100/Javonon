@@ -51,6 +51,11 @@ export default function Dashboard() {
     (appStats?.byStatus?.find((s: any) => s.status === 'AWAITING_PAYMENT')?._count || 0);
   const enrolled = appStats?.byStatus?.find((s: any) => s.status === 'ENROLLED')?._count || 0;
 
+  // ТЗ §4 «Активные клиенты» — берём ACTIVE студентов из stuStats.byStatus
+  const activeStudents = stuStats?.byStatus?.find((s: any) => s.status === 'ACTIVE')?._count
+    ?? stuStats?.total
+    ?? 0;
+
   // Bento KPI cards
   const kpis: Array<{
     eyebrow: string; label: string; value: any; em?: string;
@@ -60,8 +65,8 @@ export default function Dashboard() {
     { eyebrow: 'TOTAL · 01', label: 'Всего заявок', value: appStats?.total ?? '—', em: 'в работе.', accent: 'feature', span: 'span-4', row: 'row-2' },
     { eyebrow: 'NEW · 02', label: 'Новые', value: newCount, span: 'span-2' },
     { eyebrow: 'PIPELINE · 03', label: 'В воронке', value: inProgress, accent: 'accent', span: 'span-2' },
-    { eyebrow: 'WIN · 04', label: 'Зачислено', value: enrolled, span: 'span-3' },
-    { eyebrow: 'SCHOLARS · 05', label: 'Студентов всего', value: stuStats?.total ?? '—', span: 'span-3' },
+    { eyebrow: 'ACTIVE · 04', label: 'Активные клиенты', value: activeStudents, em: 'учатся.', span: 'span-3' },
+    { eyebrow: 'WIN · 05', label: 'Зачислено всего', value: enrolled, span: 'span-3' },
   ];
 
   return (

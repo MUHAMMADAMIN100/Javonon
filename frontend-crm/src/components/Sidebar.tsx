@@ -91,6 +91,45 @@ export default function Sidebar() {
             </NavLink>
           </motion.div>
         ))}
+
+        {/* База знаний — внешняя ссылка на лендинг (ТЗ §3.1
+            "сайт используется ... сотрудниками как база знаний") */}
+        <motion.div
+          variants={{
+            hidden: { opacity: 0, x: -15 },
+            show: { opacity: 1, x: 0, transition: { duration: 0.3 } },
+          }}
+          style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <a
+            href={(() => {
+              const base = (import.meta as any).env?.VITE_LANDING_URL || 'https://javonon.vercel.app';
+              return `${base}/knowledge`;
+            })()}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '11px 14px',
+              borderRadius: 8,
+              color: 'rgba(255,255,255,0.7)',
+              fontWeight: 500,
+              fontSize: 14,
+              textDecoration: 'none',
+              transition: 'all .15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-sidebar-hover)'; e.currentTarget.style.color = 'white'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
+          >
+            <span className="sidebar-nav-icon">
+              <Icon name="library_books" size={22} />
+            </span>
+            <span>База знаний</span>
+            <Icon name="open_in_new" size={14} style={{ marginLeft: 'auto', opacity: 0.5 }} />
+          </a>
+        </motion.div>
       </motion.nav>
       <motion.div
         className="sidebar-user"
