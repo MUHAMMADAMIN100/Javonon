@@ -95,6 +95,9 @@ export class TimeTrackingService {
     const totalLunch = active.totalLunchMinutes + extraLunch;
     const totalMs = now.getTime() - active.clockIn.getTime();
     const totalMin = Math.max(0, Math.round(totalMs / 60000) - totalLunch);
+    // Норма — 8 часов (480 мин). Всё что сверх — переработка.
+    const STANDARD_DAY_MIN = 480;
+    const overtimeMinutes = Math.max(0, totalMin - STANDARD_DAY_MIN);
 
     return this.prisma.timeEntry.update({
       where: { id: active.id },
@@ -103,6 +106,7 @@ export class TimeTrackingService {
         clockOut: now,
         totalMinutes: totalMin,
         totalLunchMinutes: totalLunch,
+        overtimeMinutes,
       },
     });
   }

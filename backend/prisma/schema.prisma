@@ -104,6 +104,9 @@ model User {
   chatMessages          ChatMessage[] @relation("ChatMessageAuthor")
   chatMemberships       ChatMember[]
   authoredCourses       Course[]      @relation("CourseAuthor")
+  interactionsAuthored  Interaction[] @relation("InteractionAuthor")
+  penalties             Penalty[]
+  paymentsConfirmed     Payment[]     @relation("PaymentConfirmedBy")
 }
 
 // Заявка на обучение: создаётся через лендинг (POST /applications/public),
@@ -183,6 +186,8 @@ model Student {
   transactions Transaction[]
   enrollments  Enrollment[]
   lessonProgress LessonProgress[]
+  interactions Interaction[]
+  payments     Payment[]
 
   @@index([direction])
   @@index([cabinet])
@@ -308,6 +313,8 @@ model TimeEntry {
   totalLunchMinutes Int  @default(0)
   // Опоздание относительно нормы (в минутах). Расчёт: clockIn - 09:00.
   lateMinutes       Int  @default(0)
+  // Переработка: всё что отработано сверх 8 часов (480 мин)
+  overtimeMinutes   Int  @default(0)
   date        DateTime @default(now()) @db.Date  // дата сессии для удобной группировки
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -404,6 +411,9 @@ model DailyReport {
   callsCount    Int      @default(0)
   meetingsCount Int      @default(0)
   applicationsContacted Int @default(0)
+  // ТЗ §3.6: сотрудник заполняет количество и сумму продаж
+  salesCount    Int      @default(0)
+  salesAmount   Float    @default(0)
   activitySummary String? // что сделал за день (свободный текст)
   challenges    String?  // блокеры/проблемы
   createdAt     DateTime @default(now())
@@ -523,5 +533,110 @@ model LessonProgress {
 
   @@unique([lessonId, studentId])
   @@index([studentId])
+}
+
+// ============================================================
+// INTERACTIONS — журнал общения с клиентом (ТЗ §3.2 «История взаимодействий», §3.3 «История общения»)
+// ============================================================
+enum InteractionType {
+  CALL       // звонок
+  EMAIL      // email-переписка
+  MEETING    // встреча
+  NOTE       // заметка менеджера
+  SMS        // sms
+  TELEGRAM   // переписка в TG
+  WHATSAPP   // переписка в WA
+}
+
+model Interaction {
+  id         String          @id @default(uuid())
+  studentId  String
+  student    Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?           @relation("InteractionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  type       InteractionType
+  summary    String          // краткое описание ("обсудили дедлайны", "клиент перезвонит во вторник")
+  details    String?         // длинная заметка
+  // Студент видит запись, если visibleToStudent=true (по умолчанию true,
+  // менеджер может пометить как "внутреннюю", не показывая клиенту).
+  visibleToStudent Boolean   @default(true)
+  occurredAt DateTime        @default(now())
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([studentId, occurredAt])
+  @@index([authorId])
+  @@index([type])
+}
+
+// ============================================================
+// PENALTIES — штрафы (ТЗ §3.9 «Нарушение → штраф»)
+// ============================================================
+enum PenaltyReason {
+  LATE_ARRIVAL    // опоздание
+  ABSENCE         // прогул
+  TASK_OVERDUE    // просроченная задача
+  CUSTOM          // ручной штраф админа
+}
+
+model Penalty {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason    PenaltyReason
+  amount    Float         // в USD
+  details   String        // human-readable: "Опоздание 25 мин"
+  date      DateTime      @default(now()) @db.Date
+  // Учтён ли штраф в зарплатном расчёте (SalaryRecord)
+  applied   Boolean       @default(false)
+  createdAt DateTime      @default(now())
+
+  @@index([userId, date])
+  @@index([applied])
+}
+
+// ============================================================
+// PAYMENTS — заявки на онлайн-оплату от клиента (ТЗ §2.1 «Оплата»)
+// ============================================================
+// Клиент в кабинете нажимает "Оплатить" → создаётся Payment(PENDING).
+// Бухгалтер видит pending в /admin/finance → подтверждает с
+// фактической суммой и методом → автоматически создаётся Transaction
+// (INCOME / TUITION_PAYMENT) и Payment переводится в CONFIRMED.
+enum PaymentStatus {
+  PENDING       // клиент инициировал, ждёт подтверждения бухгалтера
+  CONFIRMED     // бухгалтер подтвердил, транзакция создана
+  REJECTED      // бухгалтер отклонил
+  CANCELLED     // клиент отменил
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  CASH
+  CRYPTO
+  OTHER
+}
+
+model Payment {
+  id           String         @id @default(uuid())
+  studentId    String
+  student      Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  amount       Float
+  currency     String         @default("USD")
+  method       PaymentMethod  @default(BANK_TRANSFER)
+  status       PaymentStatus  @default(PENDING)
+  comment      String?
+  receiptUrl   String?
+  // Кто подтвердил
+  confirmedById String?
+  confirmedBy   User?         @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  confirmedAt   DateTime?
+  // Транзакция, созданная при подтверждении
+  transactionId String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([studentId, status])
+  @@index([status])
 }
 

@@ -31,6 +31,10 @@ import { AiModule } from './ai/ai.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CronModule } from './cron/cron.module';
 import { HealthController } from './common/health.controller';
+import { InteractionsModule } from './interactions/interactions.module';
+import { PenaltiesModule } from './penalties/penalties.module';
+import { PaymentsModule } from './payments/payments.module';
+import { KnowledgeModule } from './knowledge/knowledge.module';
 
 @Module({
   imports: [
@@ -70,6 +74,10 @@ import { HealthController } from './common/health.controller';
     AiModule,
     ScheduleModule.forRoot(),
     CronModule,
+    InteractionsModule,
+    PenaltiesModule,
+    PaymentsModule,
+    KnowledgeModule,
   ],
   controllers: [HealthController],
   providers: [

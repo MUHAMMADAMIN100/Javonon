@@ -4,11 +4,11 @@ import { Link } from 'react-router-dom';
 import Icon from '../Icon';
 
 const NAV_ITEMS = [
-  { href: '#services', label: 'Услуги' },
-  { href: '#countries', label: 'Страны' },
-  { href: '#how', label: 'Как это работает' },
-  { href: '#voices', label: 'Истории' },
-  { href: '#apply', label: 'Заявка' },
+  { href: '/#services', label: 'Услуги' },
+  { href: '/#countries', label: 'Страны' },
+  { href: '/#how', label: 'Как это работает' },
+  { href: '/knowledge', label: 'База знаний' },
+  { href: '/#apply', label: 'Заявка' },
 ];
 
 export default function Header() {

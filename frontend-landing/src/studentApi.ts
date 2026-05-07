@@ -76,6 +76,50 @@ export type StudentTransaction = {
   comment: string | null;
 };
 
+export type StudentPayment = {
+  id: string;
+  amount: number;
+  currency: string;
+  method: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'CRYPTO' | 'OTHER';
+  status: 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'CANCELLED';
+  comment: string | null;
+  createdAt: string;
+  confirmedAt: string | null;
+};
+
+export async function listStudentPayments(): Promise<StudentPayment[]> {
+  const { data } = await client.get<StudentPayment[]>('/student-payments');
+  return data;
+}
+
+export async function createStudentPayment(payload: {
+  amount: number;
+  currency?: string;
+  method?: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'CRYPTO' | 'OTHER';
+  comment?: string;
+}): Promise<StudentPayment> {
+  const { data } = await client.post<StudentPayment>('/student-payments', payload);
+  return data;
+}
+
+export async function cancelStudentPayment(id: string) {
+  return client.post(`/student-payments/${id}/cancel`).then((r) => r.data);
+}
+
+export type StudentInteraction = {
+  id: string;
+  type: 'CALL' | 'EMAIL' | 'MEETING' | 'NOTE' | 'SMS' | 'TELEGRAM' | 'WHATSAPP';
+  summary: string;
+  details: string | null;
+  occurredAt: string;
+  author: { id: string; fullName: string; role: string } | null;
+};
+
+export async function listStudentInteractions(): Promise<StudentInteraction[]> {
+  const { data } = await client.get<StudentInteraction[]>('/student-interactions');
+  return data;
+}
+
 export async function listStudentTransactions(): Promise<StudentTransaction[]> {
   const { data } = await client.get<StudentTransaction[]>('/student-auth/transactions');
   return data;
@@ -187,4 +231,36 @@ export async function listStudentPrograms(filters: {
 export async function getStudentProgramFilters() {
   const { data } = await client.get<{ cities: string[]; majors: string[] }>('/student-auth/programs/filters');
   return data;
+}
+
+export type KnowledgeCategory = {
+  slug: string;
+  title: string;
+  icon: string;
+  summary: string;
+  articleCount: number;
+};
+
+export type KnowledgeArticle = {
+  id: string;
+  title: string;
+  processSteps: string[];
+  documents: string[];
+  duration: string;
+  cost: string;
+  tips: string;
+};
+
+export type KnowledgeCategoryDetail = KnowledgeCategory & {
+  articles: KnowledgeArticle[];
+};
+
+export async function listKnowledge(): Promise<KnowledgeCategory[]> {
+  const res = await fetch(`${API_URL}/knowledge`);
+  return res.json();
+}
+
+export async function getKnowledgeCategory(slug: string): Promise<KnowledgeCategoryDetail | null> {
+  const res = await fetch(`${API_URL}/knowledge/${slug}`);
+  return res.json();
 }

@@ -53,6 +53,8 @@ export class ReportsController {
       callsCount?: number;
       meetingsCount?: number;
       applicationsContacted?: number;
+      salesCount?: number;
+      salesAmount?: number;
       activitySummary?: string;
       challenges?: string;
     },

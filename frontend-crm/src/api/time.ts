@@ -13,6 +13,7 @@ export interface TimeEntry {
   totalMinutes: number;
   totalLunchMinutes: number;
   lateMinutes: number;
+  overtimeMinutes: number;
   date: string;
   createdAt: string;
   updatedAt: string;

@@ -15,6 +15,8 @@ export default function Reports() {
   const [calls, setCalls] = useState('0');
   const [meetings, setMeetings] = useState('0');
   const [contacted, setContacted] = useState('0');
+  const [salesCount, setSalesCount] = useState('0');
+  const [salesAmount, setSalesAmount] = useState('0');
   const [activity, setActivity] = useState('');
   const [challenges, setChallenges] = useState('');
   const [saving, setSaving] = useState(false);
@@ -27,6 +29,8 @@ export default function Reports() {
         setCalls(String(t.callsCount));
         setMeetings(String(t.meetingsCount));
         setContacted(String(t.applicationsContacted));
+        setSalesCount(String(t.salesCount));
+        setSalesAmount(String(t.salesAmount));
         setActivity(t.activitySummary || '');
         setChallenges(t.challenges || '');
       }
@@ -43,6 +47,8 @@ export default function Reports() {
         callsCount: parseInt(calls, 10) || 0,
         meetingsCount: parseInt(meetings, 10) || 0,
         applicationsContacted: parseInt(contacted, 10) || 0,
+        salesCount: parseInt(salesCount, 10) || 0,
+        salesAmount: parseFloat(salesAmount) || 0,
         activitySummary: activity.trim() || undefined,
         challenges: challenges.trim() || undefined,
       });
@@ -58,6 +64,8 @@ export default function Reports() {
   const totalCalls = history.reduce((s, r) => s + r.callsCount, 0);
   const totalMeetings = history.reduce((s, r) => s + r.meetingsCount, 0);
   const totalContacted = history.reduce((s, r) => s + r.applicationsContacted, 0);
+  const totalSalesCount = history.reduce((s, r) => s + r.salesCount, 0);
+  const totalSalesAmount = history.reduce((s, r) => s + r.salesAmount, 0);
 
   return (
     <>
@@ -95,10 +103,12 @@ export default function Reports() {
           }}>сегодня?</em>
         </h3>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16 }}>
           <NumberField label="Звонков" value={calls} onChange={setCalls} />
           <NumberField label="Встреч" value={meetings} onChange={setMeetings} />
           <NumberField label="Заявок обработано" value={contacted} onChange={setContacted} />
+          <NumberField label="Продаж (шт.)" value={salesCount} onChange={setSalesCount} highlight />
+          <NumberField label="Сумма продаж ($)" value={salesAmount} onChange={setSalesAmount} highlight />
         </div>
 
         <div className="form-group" style={{ marginTop: 16 }}>
@@ -129,9 +139,11 @@ export default function Reports() {
 
       {/* Сводка за период */}
       <div className="bento" style={{ marginBottom: 24 }}>
-        <SmallStat eyebrow="CALLS · 30 DAYS" value={String(totalCalls)} label="Всего звонков" span="span-2" />
-        <SmallStat eyebrow="MEETINGS · 30 DAYS" value={String(totalMeetings)} label="Встреч" span="span-2" />
-        <SmallStat eyebrow="APPS · 30 DAYS" value={String(totalContacted)} label="Заявок обработано" span="span-2" />
+        <SmallStat eyebrow="SALES · 30 DAYS" value={`$${totalSalesAmount.toLocaleString('ru-RU')}`} label="Сумма продаж" span="span-3" accent />
+        <SmallStat eyebrow="DEALS · 30 DAYS" value={String(totalSalesCount)} label="Сделок закрыто" span="span-3" />
+        <SmallStat eyebrow="CALLS" value={String(totalCalls)} label="Звонков" span="span-2" />
+        <SmallStat eyebrow="MEETINGS" value={String(totalMeetings)} label="Встреч" span="span-2" />
+        <SmallStat eyebrow="APPS" value={String(totalContacted)} label="Заявок" span="span-2" />
       </div>
 
       {/* История */}
@@ -149,17 +161,21 @@ export default function Reports() {
               <th>Звонки</th>
               <th>Встречи</th>
               <th>Заявки</th>
+              <th>Сделок</th>
+              <th>Сумма $</th>
               <th>Активность</th>
             </tr>
           </thead>
           <tbody>
-            {history.length === 0 && <tr><td colSpan={5} className="empty">Пока нет отчётов</td></tr>}
+            {history.length === 0 && <tr><td colSpan={7} className="empty">Пока нет отчётов</td></tr>}
             {history.map((r) => (
               <tr key={r.id}>
                 <td style={{ fontWeight: 500 }}>{fmtDate(r.date)}</td>
                 <td style={{ fontFamily: 'var(--font-mono)' }}>{r.callsCount}</td>
                 <td style={{ fontFamily: 'var(--font-mono)' }}>{r.meetingsCount}</td>
                 <td style={{ fontFamily: 'var(--font-mono)' }}>{r.applicationsContacted}</td>
+                <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--primary-dark)' }}>{r.salesCount}</td>
+                <td style={{ fontFamily: 'var(--font-display)', fontWeight: 500, color: 'var(--primary-dark)' }}>${r.salesAmount.toLocaleString('ru-RU')}</td>
                 <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{r.activitySummary || '—'}</td>
               </tr>
             ))}
@@ -170,31 +186,35 @@ export default function Reports() {
   );
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function NumberField({ label, value, onChange, highlight }: {
+  label: string; value: string; onChange: (v: string) => void; highlight?: boolean;
+}) {
   return (
     <div className="form-group" style={{ marginBottom: 0 }}>
-      <label>{label}</label>
+      <label style={highlight ? { color: 'var(--primary-dark)' } : undefined}>{label}</label>
       <input
         type="number"
         min={0}
+        step={highlight ? '0.01' : 1}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         style={{
           fontFamily: 'var(--font-display)',
           fontSize: 22,
           fontWeight: 500,
+          borderColor: highlight ? 'var(--primary)' : undefined,
         }}
       />
     </div>
   );
 }
 
-function SmallStat({ eyebrow, value, label, span = 'span-2' }: {
-  eyebrow: string; value: string; label: string; span?: string;
+function SmallStat({ eyebrow, value, label, span = 'span-2', accent }: {
+  eyebrow: string; value: string; label: string; span?: string; accent?: boolean;
 }) {
   return (
     <motion.div
-      className={`bento-card ${span}`}
+      className={`bento-card ${accent ? 'accent' : ''} ${span}`}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
     >

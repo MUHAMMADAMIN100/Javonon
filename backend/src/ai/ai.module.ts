@@ -7,5 +7,6 @@ import { FinanceModule } from '../finance/finance.module';
   imports: [FinanceModule],
   controllers: [AiController],
   providers: [AiService],
+  exports: [AiService],
 })
 export class AiModule {}

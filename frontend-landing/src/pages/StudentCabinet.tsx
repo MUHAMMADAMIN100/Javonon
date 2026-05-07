@@ -16,6 +16,7 @@ import EnrollmentProgress from '../components/EnrollmentProgress';
 import ProgramsSection from '../components/ProgramsSection';
 import PaymentsSection from '../components/PaymentsSection';
 import CoursesSection from '../components/CoursesSection';
+import InteractionsHistory from '../components/InteractionsHistory';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import Icon from '../Icon';
 
@@ -59,7 +60,7 @@ export default function StudentCabinet() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [tab, setTab] = useState<'home' | 'programs' | 'payments' | 'courses'>('home');
+  const [tab, setTab] = useState<'home' | 'programs' | 'payments' | 'courses' | 'interactions'>('home');
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const otherRef = useRef<HTMLInputElement>(null);
 
@@ -194,6 +195,14 @@ export default function StudentCabinet() {
             <Icon name="school" size={18} />
             Курсы
           </button>
+          <button
+            type="button"
+            className={`stu-tab${tab === 'interactions' ? ' active' : ''}`}
+            onClick={() => setTab('interactions')}
+          >
+            <Icon name="forum" size={18} />
+            Общение
+          </button>
         </div>
         <AnimatePresence>
           {toast && (
@@ -234,6 +243,15 @@ export default function StudentCabinet() {
             transition={{ duration: 0.3 }}
           >
             <CoursesSection />
+          </motion.div>
+        )}
+        {tab === 'interactions' && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <InteractionsHistory />
           </motion.div>
         )}
         {tab === 'home' && (

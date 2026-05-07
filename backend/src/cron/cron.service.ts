@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PenaltiesService } from '../penalties/penalties.service';
 
 @Injectable()
 export class CronService {
@@ -10,7 +11,20 @@ export class CronService {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private penalties: PenaltiesService,
   ) {}
+
+  /**
+   * Каждый рабочий день в 22:00 — генерируем штрафы за опоздания
+   * за этот день. По ТЗ §3.9: «Нарушение → штраф».
+   */
+  @Cron('0 22 * * 1-5', { timeZone: 'Asia/Dushanbe' })
+  async autoLatePenalties() {
+    this.logger.log('Cron: autoLatePenalties');
+    const today = new Date();
+    const result = await this.penalties.generateLatePenaltiesForDate(today);
+    this.logger.log(`Created ${result.created} penalties from ${result.scanned} late entries`);
+  }
 
   /**
    * Каждый рабочий день в 09:30 — проверяем кто опоздал > 15 минут

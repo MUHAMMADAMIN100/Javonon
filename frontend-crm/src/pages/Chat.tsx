@@ -7,6 +7,7 @@ import {
   getChatRoom,
   sendChatMessage,
   createDirectRoom,
+  createTeamRoom,
 } from '../api/chat';
 import { listUsers } from '../api/users';
 import { useAuth } from '../store/auth';
@@ -31,6 +32,8 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [showNewDirect, setShowNewDirect] = useState(false);
+  const [showNewTeam, setShowNewTeam] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const refreshRooms = async () => {
@@ -121,13 +124,22 @@ export default function Chat() {
               color: 'var(--text-soft)',
               textTransform: 'uppercase',
             }}>Чаты</div>
-            <button
-              className="btn btn-sm btn-secondary"
-              onClick={() => setShowNewDirect((v) => !v)}
-              title="Новый личный чат"
-            >
-              <Icon name={showNewDirect ? 'close' : 'add'} size={14} />
-            </button>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => { setShowNewTeam(false); setShowNewDirect((v) => !v); }}
+                title="Новый личный чат"
+              >
+                <Icon name="person_add" size={14} />
+              </button>
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => { setShowNewDirect(false); setShowNewTeam((v) => !v); }}
+                title="Новая команда"
+              >
+                <Icon name="groups" size={14} />
+              </button>
+            </div>
           </div>
 
           <div style={{ overflowY: 'auto', flex: 1 }}>
@@ -170,6 +182,17 @@ export default function Chat() {
                   </button>
                 ))}
               </div>
+            ) : showNewTeam ? (
+              <NewTeamForm
+                users={users.filter((u) => u.id !== me?.id)}
+                onCreate={async (title, memberIds) => {
+                  const room = await createTeamRoom(title, memberIds);
+                  setShowNewTeam(false);
+                  await refreshRooms();
+                  setActiveId(room.id);
+                }}
+                onCancel={() => setShowNewTeam(false)}
+              />
             ) : (
               rooms.map((r) => {
                 const isActive = r.id === activeId;
@@ -276,6 +299,8 @@ export default function Chat() {
               const prev = messages[i - 1];
               const showHeader = !prev || prev.authorId !== m.authorId ||
                 new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60 * 1000;
+              const isBot = m.mentionsIds?.includes('__BOT__');
+              const isMentionedMe = me?.id && m.mentionsIds?.includes(me.id);
               return (
                 <motion.div
                   key={m.id}
@@ -283,46 +308,55 @@ export default function Chat() {
                   animate={{ opacity: 1, y: 0 }}
                   style={{
                     display: 'flex',
-                    flexDirection: isMine ? 'row-reverse' : 'row',
+                    flexDirection: isBot ? 'row' : (isMine ? 'row-reverse' : 'row'),
                     gap: 10,
                     marginBottom: showHeader ? 14 : 4,
                     alignItems: 'flex-end',
                   }}
                 >
-                  {showHeader ? (
+                  {showHeader || isBot ? (
                     <div style={{
                       width: 32, height: 32, borderRadius: '50%',
-                      background: isMine ? 'var(--primary)' : 'var(--text)',
-                      color: isMine ? 'var(--text)' : 'white',
+                      background: isBot ? 'linear-gradient(135deg, var(--primary), var(--text))' : (isMine ? 'var(--primary)' : 'var(--text)'),
+                      color: isMine && !isBot ? 'var(--text)' : 'white',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontFamily: 'var(--font-display)',
                       fontWeight: 600, fontSize: 11,
                       flexShrink: 0,
-                    }}>{initials(m.author?.fullName || '?')}</div>
+                    }}>{isBot ? '🤖' : initials(m.author?.fullName || '?')}</div>
                   ) : <div style={{ width: 32 }} />}
                   <div style={{ maxWidth: '70%' }}>
-                    {showHeader && (
+                    {(showHeader || isBot) && (
                       <div style={{
                         fontFamily: 'var(--font-mono)',
                         fontSize: 10,
                         letterSpacing: '0.08em',
                         color: 'var(--text-light)',
-                        textAlign: isMine ? 'right' : 'left',
+                        textAlign: isBot ? 'left' : (isMine ? 'right' : 'left'),
                         marginBottom: 4,
                         textTransform: 'uppercase',
                       }}>
-                        {isMine ? 'Вы' : m.author?.fullName} · {fmtTime(m.createdAt)}
+                        {isBot ? 'Javonon AI · BOT' : (isMine ? 'Вы' : m.author?.fullName)} · {fmtTime(m.createdAt)}
                       </div>
                     )}
                     <div style={{
-                      background: isMine ? 'var(--text)' : 'var(--bg-soft)',
-                      color: isMine ? 'white' : 'var(--text)',
+                      background: isBot
+                        ? 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(0,0,0,0.04))'
+                        : isMentionedMe && !isMine
+                          ? 'var(--primary-soft)'
+                          : isMine
+                            ? 'var(--text)'
+                            : 'var(--bg-soft)',
+                      color: isBot ? 'var(--text)' : (isMine ? 'white' : 'var(--text)'),
                       padding: '10px 14px',
                       borderRadius: 14,
                       fontSize: 14,
                       lineHeight: 1.5,
                       wordWrap: 'break-word',
-                    }}>{m.text}</div>
+                      border: isMentionedMe && !isMine ? '1px solid var(--primary)' : undefined,
+                    }}>
+                      {renderMessageWithMentions(m.text)}
+                    </div>
                   </div>
                 </motion.div>
               );
@@ -355,5 +389,125 @@ export default function Chat() {
         </div>
       </div>
     </>
+  );
+}
+
+/** Рендер текста сообщения с подсветкой @mentions */
+function renderMessageWithMentions(text: string) {
+  const parts = text.split(/(@[\wа-яА-ЯёЁ.\-]+)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith('@') ? (
+          <span
+            key={i}
+            style={{
+              fontWeight: 600,
+              color: 'var(--primary-dark)',
+              background: 'rgba(16,185,129,0.16)',
+              padding: '0 4px',
+              borderRadius: 4,
+            }}
+          >
+            {p}
+          </span>
+        ) : (
+          <span key={i}>{p}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+/** Форма создания команды (group chat) */
+function NewTeamForm({ users, onCreate, onCancel }: {
+  users: any[];
+  onCreate: (title: string, memberIds: string[]) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const toggle = (id: string) => {
+    setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
+  };
+
+  return (
+    <div style={{ padding: 14 }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.10em',
+        color: 'var(--text-soft)',
+        margin: '4px 4px 8px',
+        textTransform: 'uppercase',
+      }}>Новая команда</div>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Название команды"
+        style={{
+          width: '100%',
+          padding: '10px 12px',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          fontSize: 14,
+          marginBottom: 12,
+        }}
+      />
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.10em',
+        color: 'var(--text-soft)',
+        margin: '4px 4px 8px',
+        textTransform: 'uppercase',
+      }}>Участники · {selected.length}</div>
+      <div style={{ maxHeight: 280, overflowY: 'auto', marginBottom: 12 }}>
+        {users.map((u) => {
+          const isSel = selected.includes(u.id);
+          return (
+            <button
+              key={u.id}
+              type="button"
+              onClick={() => toggle(u.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: 8,
+                background: isSel ? 'var(--primary-soft)' : 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{
+                width: 18, height: 18, borderRadius: 4,
+                border: `1.5px solid ${isSel ? 'var(--primary)' : 'var(--border)'}`,
+                background: isSel ? 'var(--primary)' : 'transparent',
+                color: 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11,
+              }}>{isSel && '✓'}</div>
+              <div style={{ fontSize: 13 }}>{u.fullName}</div>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>Отмена</button>
+        <button
+          type="button"
+          className="btn btn-sm btn-primary"
+          disabled={!title.trim() || selected.length === 0}
+          onClick={() => onCreate(title.trim(), selected)}
+        >
+          Создать
+        </button>
+      </div>
+    </div>
   );
 }

@@ -249,13 +249,14 @@ export default function TimeTracker() {
               <th>Уход</th>
               <th>Опоздание</th>
               <th>Отработано</th>
+              <th>Переработка</th>
             </tr>
           </thead>
           <tbody>
             <AnimatePresence>
               {history.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="empty">Нет записей</td>
+                  <td colSpan={7} className="empty">Нет записей</td>
                 </tr>
               )}
               {history.map((h) => (
@@ -283,6 +284,13 @@ export default function TimeTracker() {
                     letterSpacing: '-0.01em',
                   }}>
                     {h.status === 'OFF' ? fmtMin(h.totalMinutes) : <span style={{ color: 'var(--primary-dark)' }}>в процессе…</span>}
+                  </td>
+                  <td>
+                    {h.overtimeMinutes > 0 ? (
+                      <span className="badge badge-success">+{fmtMin(h.overtimeMinutes)}</span>
+                    ) : (
+                      <span style={{ color: 'var(--text-light)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>—</span>
+                    )}
                   </td>
                 </motion.tr>
               ))}

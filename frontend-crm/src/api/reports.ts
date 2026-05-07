@@ -7,6 +7,8 @@ export interface DailyReport {
   callsCount: number;
   meetingsCount: number;
   applicationsContacted: number;
+  salesCount: number;
+  salesAmount: number;
   activitySummary: string | null;
   challenges: string | null;
   createdAt: string;
@@ -23,6 +25,8 @@ export const upsertReport = (data: {
   callsCount?: number;
   meetingsCount?: number;
   applicationsContacted?: number;
+  salesCount?: number;
+  salesAmount?: number;
   activitySummary?: string;
   challenges?: string;
 }) => api.post<DailyReport>('/reports', data).then((r) => r.data);

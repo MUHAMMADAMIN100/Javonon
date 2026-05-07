@@ -12,6 +12,8 @@ export class ReportsService {
       callsCount?: number;
       meetingsCount?: number;
       applicationsContacted?: number;
+      salesCount?: number;
+      salesAmount?: number;
       activitySummary?: string;
       challenges?: string;
     },
@@ -24,6 +26,8 @@ export class ReportsService {
         callsCount: data.callsCount ?? undefined,
         meetingsCount: data.meetingsCount ?? undefined,
         applicationsContacted: data.applicationsContacted ?? undefined,
+        salesCount: data.salesCount ?? undefined,
+        salesAmount: data.salesAmount ?? undefined,
         activitySummary: data.activitySummary ?? undefined,
         challenges: data.challenges ?? undefined,
       },
@@ -33,6 +37,8 @@ export class ReportsService {
         callsCount: data.callsCount ?? 0,
         meetingsCount: data.meetingsCount ?? 0,
         applicationsContacted: data.applicationsContacted ?? 0,
+        salesCount: data.salesCount ?? 0,
+        salesAmount: data.salesAmount ?? 0,
         activitySummary: data.activitySummary ?? null,
         challenges: data.challenges ?? null,
       },

@@ -38,6 +38,7 @@ export interface SalaryPreview {
   penalties: number;
   netAmount: number;
   currency: string;
+  overtimeMinutes?: number;
 }
 
 export const listSalaries = (params?: { userId?: string; from?: string; to?: string }) =>

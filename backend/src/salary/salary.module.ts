@@ -3,9 +3,10 @@ import { SalaryController } from './salary.controller';
 import { SalaryService } from './salary.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { TimeTrackingModule } from '../time-tracking/time-tracking.module';
+import { PenaltiesModule } from '../penalties/penalties.module';
 
 @Module({
-  imports: [PrismaModule, TimeTrackingModule],
+  imports: [PrismaModule, TimeTrackingModule, PenaltiesModule],
   controllers: [SalaryController],
   providers: [SalaryService],
   exports: [SalaryService],

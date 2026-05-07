@@ -5,6 +5,7 @@ import App from './App';
 import StudentLogin from './pages/StudentLogin';
 import StudentRegister from './pages/StudentRegister';
 import StudentCabinet from './pages/StudentCabinet';
+import Knowledge from './pages/Knowledge';
 import ErrorBoundary from './components/ErrorBoundary';
 import { initAnalytics, trackPageView } from './analytics';
 import './index.css';
@@ -29,6 +30,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/login" element={<StudentLogin />} />
           <Route path="/register" element={<StudentRegister />} />
           <Route path="/cabinet" element={<StudentCabinet />} />
+          <Route path="/knowledge" element={<Knowledge />} />
         </Routes>
       </BrowserRouter>
     </ErrorBoundary>

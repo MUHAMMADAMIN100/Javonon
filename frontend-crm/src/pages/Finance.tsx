@@ -21,6 +21,7 @@ import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { aiAddTransaction } from '../api/ai';
 import { financeTimeseries, type TimeseriesPoint } from '../api/finance';
+import { listPayments, confirmPayment, rejectPayment, type Payment, PAYMENT_METHOD_LABEL } from '../api/payments';
 
 function fmtMoney(n: number, currency = 'USD'): string {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -42,20 +43,56 @@ export default function Finance() {
   const [aiInput, setAiInput] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [series, setSeries] = useState<TimeseriesPoint[]>([]);
+  const [paymentRequests, setPaymentRequests] = useState<Payment[]>([]);
 
   const refresh = async () => {
     try {
-      const [txs, sum, pp, ts] = await Promise.all([
+      const [txs, sum, pp, ts, pyR] = await Promise.all([
         listTransactions(filterType ? { type: filterType, take: 200 } : { take: 200 }),
         financeSummary(),
         pendingPayments(),
         financeTimeseries({ bucket: 'week' }),
+        listPayments('PENDING'),
       ]);
       setTransactions(txs);
       setSummary(sum);
       setPending(pp);
       setSeries(ts);
+      setPaymentRequests(pyR);
     } catch {}
+  };
+
+  const onConfirmPayment = async (p: Payment) => {
+    const ok = await confirm({
+      title: 'Подтвердить оплату?',
+      message: `${p.student?.fullName}: ${fmtMoney(p.amount, p.currency)}. Будет создана транзакция-доход.`,
+      confirmText: 'Подтвердить',
+    });
+    if (!ok) return;
+    try {
+      await confirmPayment(p.id, {});
+      toast('Оплата подтверждена', 'success');
+      await refresh();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
+  };
+
+  const onRejectPayment = async (p: Payment) => {
+    const ok = await confirm({
+      title: 'Отклонить заявку?',
+      message: `${p.student?.fullName}: ${fmtMoney(p.amount, p.currency)}`,
+      danger: true,
+      confirmText: 'Отклонить',
+    });
+    if (!ok) return;
+    try {
+      await rejectPayment(p.id);
+      toast('Отклонено', 'success');
+      await refresh();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
   };
 
   const onAi = async (e: React.FormEvent) => {
@@ -252,6 +289,58 @@ export default function Finance() {
             color: 'var(--primary-dark)',
           }}>денежных потоков.</em></h3>
           <RevenueChart points={series} />
+        </div>
+      )}
+
+      {/* Заявки на оплату от клиентов (от студентов) — ждут подтверждения бухгалтера */}
+      {paymentRequests.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <div className="crm-section-head">
+            <span className="crm-section-eyebrow" style={{ color: 'var(--primary-dark)' }}>PAYMENT REQUESTS · WAITING FOR YOU</span>
+            <h2 className="crm-section-title">
+              Заявки <em>на оплату.</em>
+            </h2>
+          </div>
+          <div className="card" style={{ padding: 0 }}>
+            <table className="table" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  <th>Когда</th>
+                  <th>Студент</th>
+                  <th>Сумма</th>
+                  <th>Метод</th>
+                  <th>Комментарий</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentRequests.map((p) => (
+                  <tr key={p.id}>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtDate(p.createdAt)}</td>
+                    <td style={{ fontWeight: 500 }}>{p.student?.fullName}</td>
+                    <td style={{
+                      fontFamily: 'var(--font-display)',
+                      fontWeight: 500,
+                      fontSize: 18,
+                      color: 'var(--primary-dark)',
+                    }}>{fmtMoney(p.amount, p.currency)}</td>
+                    <td style={{ fontSize: 13 }}>{PAYMENT_METHOD_LABEL[p.method]}</td>
+                    <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{p.comment || '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn btn-sm btn-primary" onClick={() => onConfirmPayment(p)}>
+                          <Icon name="check" size={14} /> Подтвердить
+                        </button>
+                        <button className="btn btn-sm btn-danger" onClick={() => onRejectPayment(p)}>
+                          <Icon name="close" size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

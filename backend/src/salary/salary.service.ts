@@ -1,14 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeTrackingService } from '../time-tracking/time-tracking.service';
-
-const PENALTY_PER_LATE_MINUTE = 0.5; // $0.50 за каждую минуту опоздания
+import { PenaltiesService } from '../penalties/penalties.service';
 
 @Injectable()
 export class SalaryService {
   constructor(
     private prisma: PrismaService,
     private timeSvc: TimeTrackingService,
+    private penaltiesSvc: PenaltiesService,
   ) {}
 
   async list(filters: { userId?: string; from?: Date; to?: Date }) {
@@ -54,7 +54,8 @@ export class SalaryService {
     // Итоговая базовая ставка: либо фикс., либо почасовая.
     const hours = time.workedMinutes / 60;
     const baseAmount = baseSalary > 0 ? baseSalary : hourlyRate * hours;
-    const penalties = time.lateMinutes * PENALTY_PER_LATE_MINUTE;
+    // Штрафы берутся из таблицы Penalty (auto-cron) — fairness.
+    const penalties = await this.penaltiesSvc.pendingTotalForUser(userId, periodStart, periodEnd);
 
     const net = baseAmount + bonusAmount + kpiBonus - penalties;
 
@@ -89,7 +90,7 @@ export class SalaryService {
 
     const preview = await this.preview(dto.userId, start, end, dto.kpiBonus || 0);
 
-    return this.prisma.salaryRecord.create({
+    const record = await this.prisma.salaryRecord.create({
       data: {
         userId: dto.userId,
         periodStart: start,
@@ -107,6 +108,9 @@ export class SalaryService {
       },
       include: { user: { select: { id: true, fullName: true, role: true } } },
     });
+    // Помечаем штрафы как учтённые
+    await this.penaltiesSvc.markApplied(dto.userId, start, end);
+    return record;
   }
 
   async markPaid(id: string) {
