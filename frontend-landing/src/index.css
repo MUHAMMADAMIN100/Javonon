@@ -1,37 +1,37 @@
 /* ============================================================
-   Javonon — Editorial Premium · Emerald + Black
+   Javonon — Editorial Premium · Navy Blue (#01368B) + White
    Space Grotesk display · Inter body · JetBrains Mono accents
    ============================================================ */
 
 :root {
   /* Surfaces */
   --bg: #ffffff;
-  --bg-soft: #f7f8f7;
-  --bg-mute: #eef0ee;
+  --bg-soft: #f6f8fc;
+  --bg-mute: #ecf0f7;
   --surface: #ffffff;
-  --ink: #0a0f0d;
-  --ink-2: #1c211f;
-  --ink-3: #4a534f;
-  --ink-soft: #6b7470;
-  --ink-mute: #98a09c;
+  --ink: #0a0d1a;
+  --ink-2: #1a2030;
+  --ink-3: #4a5060;
+  --ink-soft: #6b7080;
+  --ink-mute: #98a0b0;
 
-  /* Dark surfaces */
-  --night: #050706;
-  --night-2: #0c100e;
-  --night-3: #161b18;
+  /* Dark surfaces — глубокий navy (под цвет лого) */
+  --night: #050a1a;
+  --night-2: #0a1124;
+  --night-3: #131b30;
   --night-line: rgba(255, 255, 255, 0.08);
   --night-line-strong: rgba(255, 255, 255, 0.16);
   --night-text: rgba(255, 255, 255, 0.88);
   --night-text-soft: rgba(255, 255, 255, 0.62);
   --night-text-mute: rgba(255, 255, 255, 0.4);
 
-  /* Brand */
-  --emerald: #10b981;
-  --emerald-2: #34d399;
-  --emerald-3: #6ee7b7;
-  --emerald-deep: #047857;
-  --emerald-glow: rgba(16, 185, 129, 0.42);
-  --emerald-soft: rgba(16, 185, 129, 0.10);
+  /* Brand — Javonon Group navy blue (#01368B из официального лого) */
+  --emerald: #01368B;          /* основной — primary */
+  --emerald-2: #1E5BB8;        /* light для hover/glow */
+  --emerald-3: #4A7FCC;        /* lighter accent */
+  --emerald-deep: #012457;     /* dark для текста на светлом */
+  --emerald-glow: rgba(1, 54, 139, 0.42);
+  --emerald-soft: rgba(1, 54, 139, 0.10);
 
   /* Status */
   --danger: #f87171;
@@ -280,7 +280,7 @@ input, textarea, select { font-family: inherit; }
   inset: 0;
   background:
     radial-gradient(ellipse 60% 40% at 50% 0%, var(--emerald-soft) 0%, transparent 60%),
-    radial-gradient(ellipse 40% 30% at 90% 100%, rgba(16, 185, 129, 0.06) 0%, transparent 60%);
+    radial-gradient(ellipse 40% 30% at 90% 100%, rgba(1, 54, 139, 0.06) 0%, transparent 60%);
   pointer-events: none;
 }
 .hero::after {
@@ -566,7 +566,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 }
 .bento-card:hover {
   border-color: var(--emerald);
-  box-shadow: 0 24px 48px -16px rgba(16, 185, 129, 0.15);
+  box-shadow: 0 24px 48px -16px rgba(1, 54, 139, 0.15);
   transform: translateY(-2px);
 }
 .bento-icon {
@@ -663,7 +663,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 .country-row:hover {
   padding-left: 16px;
   padding-right: 16px;
-  background: rgba(16, 185, 129, 0.04);
+  background: rgba(1, 54, 139, 0.04);
 }
 .country-row:hover .country-flag { transform: scale(1.15) rotate(-4deg); }
 .country-row:hover .country-arrow { color: var(--emerald-2); transform: translateX(8px); }
@@ -844,7 +844,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   inset: 0;
   background:
     radial-gradient(ellipse 60% 40% at 0% 0%, var(--emerald-soft), transparent 60%),
-    radial-gradient(ellipse 40% 60% at 100% 100%, rgba(16, 185, 129, 0.08), transparent 60%);
+    radial-gradient(ellipse 40% 60% at 100% 100%, rgba(1, 54, 139, 0.08), transparent 60%);
   pointer-events: none;
 }
 
@@ -961,7 +961,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 .form-row textarea:focus {
   outline: none;
   border-color: var(--emerald);
-  background: rgba(16, 185, 129, 0.03);
+  background: rgba(1, 54, 139, 0.03);
   box-shadow: 0 0 0 4px var(--emerald-soft);
 }
 .form-row select {
@@ -1045,7 +1045,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 .contact-card:hover {
   border-color: var(--emerald);
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px -8px rgba(16, 185, 129, 0.18);
+  box-shadow: 0 12px 24px -8px rgba(1, 54, 139, 0.18);
 }
 .contact-icon {
   width: 40px; height: 40px;

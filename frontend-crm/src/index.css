@@ -1,23 +1,24 @@
 :root {
-  --bg: #f6f7f6;
+  --bg: #f6f8fc;
   --bg-card: #ffffff;
-  --bg-soft: #f0f2f0;
-  --bg-mute: #e6e9e6;
-  --bg-sidebar: #050706;
+  --bg-soft: #ecf0f7;
+  --bg-mute: #e2e8f0;
+  --bg-sidebar: #050a1a;
   --bg-sidebar-hover: rgba(255,255,255,0.06);
-  --text: #0a0f0d;
-  --text-soft: #4a534f;
-  --text-light: #8b948f;
-  --primary: #10b981;
-  --primary-soft: #ecfdf5;
-  --primary-dark: #047857;
-  --primary-darker: #064e3b;
-  --primary-light: #34d399;
-  --primary-glow: rgba(16,185,129,0.32);
-  --border: #e2e6e2;
-  --border-soft: #eef0ee;
-  --success: #10b981;
-  --success-soft: #ecfdf5;
+  --text: #0a0d1a;
+  --text-soft: #4a5060;
+  --text-light: #8b94a0;
+  --primary: #01368B;
+  --primary-soft: #E8F0FB;
+  --primary-dark: #012457;
+  --primary-darker: #021A40;
+  --primary-light: #1E5BB8;
+  --primary-glow: rgba(1, 54, 139, 0.32);
+  --border: #e2e8f0;
+  --border-soft: #eef2f7;
+  /* SUCCESS остаётся зелёным — для статусов "оплачено / зачислено / готово" */
+  --success: #16a34a;
+  --success-soft: #f0fdf4;
   --warning: #f59e0b;
   --warning-soft: #fffbeb;
   --info: #3b82f6;
@@ -134,7 +135,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .sidebar-nav a:hover { background: var(--bg-sidebar-hover); color: white; }
 .sidebar-nav a.active {
-  background: rgba(16,185,129,0.10);
+  background: rgba(1, 54, 139,0.10);
   color: var(--primary-light);
 }
 .sidebar-nav a.active::before {
@@ -244,7 +245,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .bento-card:hover {
   border-color: var(--primary);
-  box-shadow: 0 24px 48px -16px rgba(16,185,129,0.12);
+  box-shadow: 0 24px 48px -16px rgba(1, 54, 139,0.12);
 }
 .bento-card.feature {
   background: var(--text);
@@ -485,7 +486,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .stat-card:hover {
   border-color: var(--primary);
-  box-shadow: 0 16px 32px -8px rgba(16,185,129,0.15);
+  box-shadow: 0 16px 32px -8px rgba(1, 54, 139,0.15);
   transform: translateY(-2px);
 }
 .stat-label {
@@ -641,7 +642,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   position: fixed;
   top: 0; left: 0; width: 55%; height: 100%;
   background:
-    radial-gradient(ellipse 60% 40% at 30% 100%, rgba(16,185,129,0.18), transparent 60%);
+    radial-gradient(ellipse 60% 40% at 30% 100%, rgba(1, 54, 139,0.18), transparent 60%);
   pointer-events: none;
   z-index: 1;
 }
@@ -845,7 +846,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .task-item:hover { box-shadow: var(--shadow); }
-.task-done { background: var(--success-soft); border-color: rgba(16, 185, 129, 0.2); }
+.task-done { background: var(--success-soft); border-color: rgba(1, 54, 139, 0.2); }
 .task-done .task-title { text-decoration: line-through; color: var(--text-soft); }
 .task-in_progress { background: var(--warning-soft); border-color: rgba(245, 158, 11, 0.3); }
 .task-check {
@@ -938,7 +939,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .manager-slot.mine {
   background: var(--success-soft);
-  border-color: rgba(16, 185, 129, 0.3);
+  border-color: rgba(1, 54, 139, 0.3);
 }
 .manager-slot.empty { background: var(--warning-soft); border-color: rgba(245, 158, 11, 0.3); }
 .manager-slot-head {
@@ -964,7 +965,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .manager-bar-mine {
   background: var(--success-soft);
-  border-color: rgba(16, 185, 129, 0.3);
+  border-color: rgba(1, 54, 139, 0.3);
 }
 .manager-bar-empty { background: var(--warning-soft); border-color: rgba(245, 158, 11, 0.3); }
 .manager-bar-label {
@@ -1054,7 +1055,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .doc-slot.uploaded {
   border-color: var(--success);
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1);
+  box-shadow: 0 0 0 1px rgba(1, 54, 139, 0.1);
 }
 .doc-slot-header {
   display: flex; gap: 10px; align-items: flex-start;
@@ -1853,7 +1854,7 @@ select.input-error {
   font-size: 12px; padding: 4px 8px; border-radius: 6px; font-weight: 500;
 }
 .af-save.saving { background: #eff6ff; color: #3b82f6; }
-.af-save.saved { background: #ecfdf5; color: #10b981; }
+.af-save.saved { background: #E8F0FB; color: #01368B; }
 .af-save.err { background: #fef2f2; color: #ef4444; }
 
 .af-progress { padding: 16px 24px; background: white; }
@@ -2218,7 +2219,7 @@ select.input-error {
 }
 .badge-info { color: #2563eb; border-color: rgba(37,99,235,0.25); background: #eff6ff; }
 .badge-warning { color: #b45309; border-color: rgba(245,158,11,0.3); background: #fffbeb; }
-.badge-success { color: var(--primary-dark); border-color: rgba(16,185,129,0.3); background: var(--primary-soft); }
+.badge-success { color: var(--primary-dark); border-color: rgba(1, 54, 139,0.3); background: var(--primary-soft); }
 .badge-danger { color: #b91c1c; border-color: rgba(239,68,68,0.3); background: #fef2f2; }
 .badge-gray { color: var(--text-soft); border-color: var(--border); background: var(--bg-soft); }
 

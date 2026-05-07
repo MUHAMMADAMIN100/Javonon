@@ -12,7 +12,7 @@ export default defineConfig({
         name: 'Javonon — международные гранты',
         short_name: 'Javonon',
         description: 'Получи грант на обучение в лучших университетах мира',
-        theme_color: '#10b981',
+        theme_color: '#01368B',
         background_color: '#ffffff',
         display: 'standalone',
         scope: '/',

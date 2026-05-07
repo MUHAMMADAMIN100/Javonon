@@ -66,13 +66,13 @@ export default function InteractionsHistory() {
                 border: '1px solid var(--border-soft, #e5e5e5)',
                 borderRadius: 12,
                 background: 'white',
-                borderLeft: '3px solid rgb(4,120,87)',
+                borderLeft: '3px solid rgb(1, 36, 87)',
               }}
             >
               <div style={{
                 width: 40, height: 40, borderRadius: 10,
-                background: 'rgba(16,185,129,0.10)',
-                color: 'rgb(4,120,87)',
+                background: 'rgba(1, 54, 139,0.10)',
+                color: 'rgb(1, 36, 87)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
               }}>
@@ -80,7 +80,7 @@ export default function InteractionsHistory() {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                  <span style={{ fontWeight: 600, fontSize: 12, color: 'rgb(4,120,87)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <span style={{ fontWeight: 600, fontSize: 12, color: 'rgb(1, 36, 87)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     {TYPE_LABEL[it.type]}
                   </span>
                   <span style={{ fontSize: 12, color: 'var(--text-soft)', marginLeft: 'auto' }}>

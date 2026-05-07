@@ -265,7 +265,7 @@ export default function StudentCabinet() {
               >
                 <div className="stu-confetti" aria-hidden="true">
                   {Array.from({ length: 24 }).map((_, i) => {
-                    const colors = ['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
+                    const colors = ['#f59e0b', '#ef4444', '#01368B', '#3b82f6', '#a855f7', '#ec4899'];
                     const left = Math.random() * 100;
                     const delay = Math.random() * 1.5;
                     const dur = 2 + Math.random() * 2;
@@ -448,7 +448,7 @@ export default function StudentCabinet() {
                     <Icon
                       name={hasAny ? 'check_circle' : 'radio_button_unchecked'}
                       size={20}
-                      style={{ color: hasAny ? '#10b981' : '#9ca3af' }}
+                      style={{ color: hasAny ? '#01368B' : '#9ca3af' }}
                     />
                     <div>
                       <div className="stu-doc-label">

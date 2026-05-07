@@ -187,7 +187,7 @@ export default function Knowledge() {
                         <div style={{
                           marginTop: 32,
                           padding: 24,
-                          background: 'rgba(16,185,129,0.06)',
+                          background: 'rgba(1, 54, 139,0.06)',
                           borderLeft: '3px solid var(--emerald)',
                           borderRadius: 12,
                         }}>

@@ -73,7 +73,7 @@ export default function CoursesSection() {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                 <div style={{
                   width: 32, height: 32, borderRadius: 8,
-                  background: l.completed ? 'rgb(16,185,129)' : 'var(--bg-soft, #f5f5f5)',
+                  background: l.completed ? 'rgb(1, 54, 139)' : 'var(--bg-soft, #f5f5f5)',
                   color: l.completed ? 'white' : 'var(--text)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 13, fontWeight: 600,
@@ -100,7 +100,7 @@ export default function CoursesSection() {
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 6,
-                        color: 'rgb(4,120,87)',
+                        color: 'rgb(1, 36, 87)',
                         fontWeight: 500,
                         fontSize: 13,
                       }}
@@ -164,13 +164,13 @@ export default function CoursesSection() {
                   <div style={{
                     height: '100%',
                     width: `${c.progress}%`,
-                    background: 'rgb(16,185,129)',
+                    background: 'rgb(1, 54, 139)',
                     transition: 'width 0.6s',
                   }} />
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-soft)', display: 'flex', justifyContent: 'space-between' }}>
                   <span>{c.completedLessons} / {c.totalLessons} уроков</span>
-                  <span style={{ fontWeight: 600, color: 'rgb(4,120,87)' }}>{c.progress}%</span>
+                  <span style={{ fontWeight: 600, color: 'rgb(1, 36, 87)' }}>{c.progress}%</span>
                 </div>
               </motion.button>
             ))}

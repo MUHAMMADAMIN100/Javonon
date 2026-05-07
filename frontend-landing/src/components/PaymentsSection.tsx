@@ -63,7 +63,7 @@ export default function PaymentsSection() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {pendingList.map((p) => {
               const statusColor =
-                p.status === 'CONFIRMED' ? 'rgb(4,120,87)' :
+                p.status === 'CONFIRMED' ? 'rgb(1, 36, 87)' :
                 p.status === 'PENDING' ? '#b45309' :
                 p.status === 'REJECTED' ? '#b91c1c' : 'var(--text-light)';
               return (
@@ -203,8 +203,8 @@ export default function PaymentsSection() {
                 >
                   <div style={{
                     width: 40, height: 40, borderRadius: 10,
-                    background: 'rgba(16,185,129,0.10)',
-                    color: 'rgb(4,120,87)',
+                    background: 'rgba(1, 54, 139,0.10)',
+                    color: 'rgb(1, 36, 87)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
                   }}>
@@ -222,7 +222,7 @@ export default function PaymentsSection() {
                   <div style={{
                     fontSize: 18,
                     fontWeight: 600,
-                    color: 'rgb(4,120,87)',
+                    color: 'rgb(1, 36, 87)',
                   }}>
                     + {fmt(t.amount, t.currency)}
                   </div>

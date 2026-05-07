@@ -341,7 +341,7 @@ export default function Chat() {
                     )}
                     <div style={{
                       background: isBot
-                        ? 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(0,0,0,0.04))'
+                        ? 'linear-gradient(135deg, rgba(1, 54, 139,0.10), rgba(0,0,0,0.04))'
                         : isMentionedMe && !isMine
                           ? 'var(--primary-soft)'
                           : isMine
@@ -404,7 +404,7 @@ function renderMessageWithMentions(text: string) {
             style={{
               fontWeight: 600,
               color: 'var(--primary-dark)',
-              background: 'rgba(16,185,129,0.16)',
+              background: 'rgba(1, 54, 139,0.16)',
               padding: '0 4px',
               borderRadius: 4,
             }}

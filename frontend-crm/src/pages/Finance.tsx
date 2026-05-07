@@ -760,7 +760,7 @@ function RevenueChart({ points }: { points: TimeseriesPoint[] }) {
         ))}
 
         {/* Profit area (emerald-soft) */}
-        <path d={profitArea} fill="rgba(16,185,129,0.12)" />
+        <path d={profitArea} fill="rgba(1, 54, 139,0.12)" />
 
         {/* Income line */}
         <path d={incomePath} stroke="var(--primary)" strokeWidth={2.5} fill="none" />
@@ -804,7 +804,7 @@ function RevenueChart({ points }: { points: TimeseriesPoint[] }) {
           РАСХОДЫ
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 10, height: 10, background: 'rgba(16,185,129,0.3)' }} />
+          <span style={{ width: 10, height: 10, background: 'rgba(1, 54, 139,0.3)' }} />
           ПРИБЫЛЬ
         </div>
       </div>
