@@ -11,17 +11,38 @@ export default function Sidebar() {
   const [pwdOpen, setPwdOpen] = useState(false);
   const initials = user?.fullName?.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '?';
 
-  const links = [
+  const isAdmin = user?.role === 'ADMIN';
+  const isAccountant = user?.role === 'ACCOUNTANT';
+  const isEmployee = user?.role === 'EMPLOYEE';
+
+  // CRM core — для всех (Dashboard, Заявки, Студенты, Программы, Задачи, Время, KPI)
+  const coreLinks = [
     { to: '/dashboard', icon: 'dashboard', label: 'Дашборд' },
-    { to: '/applications', icon: 'assignment', label: 'Заявки' },
-    { to: '/students', icon: 'school', label: 'Студенты' },
-    { to: '/programs', icon: 'menu_book', label: 'Программы' },
-    { to: '/tasks', icon: 'task_alt', label: 'Задачи' },
-    ...(user?.role === 'ADMIN' ? [
-      { to: '/activity', icon: 'history', label: 'Активность' },
-      { to: '/users', icon: 'group', label: 'Пользователи' },
+    ...(isAdmin || isEmployee ? [
+      { to: '/applications', icon: 'assignment', label: 'Заявки' },
+      { to: '/students', icon: 'school', label: 'Студенты' },
+      { to: '/programs', icon: 'menu_book', label: 'Программы' },
+      { to: '/tasks', icon: 'task_alt', label: 'Задачи' },
+    ] : []),
+    { to: '/time', icon: 'schedule', label: 'Время' },
+    ...(isAdmin || isEmployee ? [
+      { to: '/kpi', icon: 'leaderboard', label: 'KPI' },
     ] : []),
   ];
+
+  // Finance — для ADMIN и ACCOUNTANT
+  const financeLinks = (isAdmin || isAccountant) ? [
+    { to: '/finance', icon: 'payments', label: 'Финансы' },
+    { to: '/salary', icon: 'paid', label: 'Зарплата' },
+  ] : [];
+
+  // Admin-only
+  const adminLinks = isAdmin ? [
+    { to: '/activity', icon: 'history', label: 'Активность' },
+    { to: '/users', icon: 'group', label: 'Сотрудники' },
+  ] : [];
+
+  const links = [...coreLinks, ...financeLinks, ...adminLinks];
 
   return (
     <motion.aside

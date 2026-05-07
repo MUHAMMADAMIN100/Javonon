@@ -14,6 +14,10 @@ import Users from './pages/Users';
 import Tasks from './pages/Tasks';
 import Programs from './pages/Programs';
 import Activity from './pages/Activity';
+import TimeTracker from './pages/TimeTracker';
+import Finance from './pages/Finance';
+import Salary from './pages/Salary';
+import Kpi from './pages/Kpi';
 
 export default function App() {
   const init = useAuth((s) => s.init);
@@ -44,6 +48,10 @@ export default function App() {
         <Route path="/programs" element={<Programs />} />
         <Route path="/users" element={<Users />} />
         <Route path="/activity" element={<Activity />} />
+        <Route path="/time" element={<TimeTracker />} />
+        <Route path="/finance" element={<Finance />} />
+        <Route path="/salary" element={<Salary />} />
+        <Route path="/kpi" element={<Kpi />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

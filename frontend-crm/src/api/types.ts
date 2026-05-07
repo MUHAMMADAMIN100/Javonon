@@ -1,4 +1,9 @@
-export type Role = 'ADMIN' | 'EMPLOYEE';
+export type Role = 'ADMIN' | 'EMPLOYEE' | 'ACCOUNTANT';
+export const ROLE_LABEL: Record<Role, string> = {
+  ADMIN: 'Администратор',
+  EMPLOYEE: 'Сотрудник',
+  ACCOUNTANT: 'Бухгалтер',
+};
 export type Direction =
   | 'BACHELOR'
   | 'MASTER'

@@ -10,6 +10,35 @@ datasource db {
 enum Role {
   ADMIN
   EMPLOYEE
+  ACCOUNTANT
+}
+
+enum TimeEntryStatus {
+  WORKING       // clocked in, not on lunch
+  ON_LUNCH      // на обеде
+  OFF           // закончил день
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionCategory {
+  TUITION_PAYMENT   // оплата от студента (доход)
+  ADDITIONAL_FEE    // доплата (доход)
+  SALARY            // зарплата сотруднику (расход)
+  RENT              // аренда (расход)
+  UTILITIES         // коммуналка
+  MARKETING         // маркетинг
+  OFFICE            // офисные расходы
+  OTHER_INCOME
+  OTHER_EXPENSE
+}
+
+enum SalaryStatus {
+  DRAFT
+  PAID
 }
 
 enum Direction {
@@ -51,6 +80,11 @@ model User {
   password   String
   fullName   String
   role       Role     @default(EMPLOYEE)
+  // Для зарплатной логики: фиксированная ежемесячная ставка (или почасовая)
+  baseSalary Float?   @default(0)
+  hourlyRate Float?   @default(0)
+  // Процент от продажи клиента, привязанного к этому менеджеру (бонусный %).
+  bonusPercent Float? @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -61,6 +95,11 @@ model User {
   managedChinaStudents     Student[]     @relation("StudentChinaManager")
   assignedTasks            Task[]        @relation("TaskAssignee")
   createdTasks             Task[]        @relation("TaskCreator")
+
+  timeEntries        TimeEntry[]
+  transactionsAsManager Transaction[] @relation("TransactionManager")
+  recordedTransactions  Transaction[] @relation("TransactionRecorder")
+  salaryRecords         SalaryRecord[]
 }
 
 // Заявка на обучение: создаётся через лендинг (POST /applications/public),
@@ -123,6 +162,7 @@ model Student {
 
   documents    Document[]
   applications Application[]
+  transactions Transaction[]
 
   @@index([direction])
   @@index([cabinet])
@@ -224,4 +264,109 @@ model ActivityLog {
   @@index([createdAt])
   @@index([studentId])
   @@index([actorId])
+}
+
+// ============================================================
+// HR / Time tracking
+// ============================================================
+// Один TimeEntry — одна рабочая сессия (день).
+// При нажатии "Начал работу" создаётся новая запись со статусом WORKING.
+// "Ушёл на обед" → ON_LUNCH (lunchOut установлен).
+// "Вернулся" → WORKING (lunchIn установлен, totalLunchMinutes пересчитан).
+// "Закончил день" → OFF (clockOut установлен, totalMinutes пересчитан).
+model TimeEntry {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      TimeEntryStatus @default(WORKING)
+  clockIn     DateTime
+  lunchOut    DateTime?
+  lunchIn     DateTime?
+  clockOut    DateTime?
+  // Кэш отработанных минут — пересчитывается при clockOut
+  totalMinutes      Int  @default(0)
+  totalLunchMinutes Int  @default(0)
+  // Опоздание относительно нормы (в минутах). Расчёт: clockIn - 09:00.
+  lateMinutes       Int  @default(0)
+  date        DateTime @default(now()) @db.Date  // дата сессии для удобной группировки
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, date])
+  @@index([status])
+}
+
+// ============================================================
+// FINANCE — доходы и расходы
+// ============================================================
+// Каждая транзакция привязана:
+//  - INCOME (TUITION_PAYMENT/ADDITIONAL_FEE) → к Student (студент-плательщик)
+//                                            + опционально к manager (для бонуса)
+//  - EXPENSE (SALARY) → к recipient User (получатель зарплаты)
+//  - EXPENSE (RENT/UTILITIES/...) → без связи, только category
+//
+// recordedById — кто внёс транзакцию (бухгалтер или админ).
+model Transaction {
+  id          String   @id @default(uuid())
+  type        TransactionType
+  category    TransactionCategory
+  amount      Float
+  currency    String   @default("USD")
+  comment     String?
+  date        DateTime @default(now())
+
+  studentId   String?
+  student     Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  managerId   String?
+  manager     User?    @relation("TransactionManager", fields: [managerId], references: [id], onDelete: SetNull)
+  recordedById String?
+  recordedBy  User?    @relation("TransactionRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  // Метка для бонусной системы: уже учтена в SalaryRecord ?
+  bonusApplied Boolean @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type, category])
+  @@index([date])
+  @@index([studentId])
+  @@index([managerId])
+}
+
+// ============================================================
+// SALARY — расчёт зарплаты сотрудника за период
+// ============================================================
+// SalaryRecord = расчёт за конкретный месяц для конкретного сотрудника.
+// totalHours/totalMinutes собираются из TimeEntry за период.
+// salesAmount/bonusAmount — сумма продаж клиентов этого менеджера в периоде × bonusPercent.
+// kpiBonus — ручной бонус, который проставляет ADMIN.
+// netAmount = baseSalary + bonusAmount + kpiBonus.
+model SalaryRecord {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  workedMinutes Int      @default(0)   // отработано за период
+  lateMinutes   Int      @default(0)   // суммарное опоздание
+  baseAmount    Float    @default(0)   // базовая ставка за период
+  salesAmount   Float    @default(0)   // сумма продаж клиентов менеджера
+  bonusAmount   Float    @default(0)   // baseSalesAmount × bonusPercent
+  kpiBonus      Float    @default(0)   // ручной бонус
+  penalties     Float    @default(0)   // штрафы (за опоздания и т.п.)
+  netAmount     Float    @default(0)   // итог к выплате
+  currency      String   @default("USD")
+
+  status      SalaryStatus @default(DRAFT)
+  paidAt      DateTime?
+  comment     String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, periodStart])
+  @@index([status])
 }

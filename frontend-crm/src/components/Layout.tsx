@@ -13,6 +13,10 @@ const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
   '/tasks': { eyebrow: 'WORK · 05', pre: 'Задачи', em: 'команды.' },
   '/activity': { eyebrow: 'AUDIT · 06', pre: 'Хронология', em: 'действий.' },
   '/users': { eyebrow: 'TEAM · 07', pre: 'Сотрудники', em: 'Javonon.' },
+  '/time': { eyebrow: 'HR · 04', pre: 'Учёт', em: 'времени.' },
+  '/finance': { eyebrow: 'FINANCE · 08', pre: 'Деньги', em: 'компании.' },
+  '/salary': { eyebrow: 'PAYROLL · 09', pre: 'Зарплата', em: 'команды.' },
+  '/kpi': { eyebrow: 'KPI · 10', pre: 'Эффективность', em: 'каждого.' },
 };
 
 export default function Layout() {

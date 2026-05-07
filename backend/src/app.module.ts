@@ -20,6 +20,10 @@ import { StudentAuthModule } from './student-auth/student-auth.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ProgramsModule } from './programs/programs.module';
 import { ActivityModule } from './activity/activity.module';
+import { TimeTrackingModule } from './time-tracking/time-tracking.module';
+import { FinanceModule } from './finance/finance.module';
+import { SalaryModule } from './salary/salary.module';
+import { KpiModule } from './kpi/kpi.module';
 
 @Module({
   imports: [
@@ -49,6 +53,10 @@ import { ActivityModule } from './activity/activity.module';
     RealtimeModule,
     ProgramsModule,
     ActivityModule,
+    TimeTrackingModule,
+    FinanceModule,
+    SalaryModule,
+    KpiModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
