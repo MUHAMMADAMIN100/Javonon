@@ -65,6 +65,76 @@ export class StudentAuthService {
     return { ok: true };
   }
 
+  /**
+   * Регистрация клиента через лендинг.
+   * Создаёт Student с переданным email/паролем + автоматически связанную Application
+   * со статусом NEW. Менеджер заберёт её через CRM.
+   */
+  async register(dto: {
+    fullName: string;
+    email: string;
+    phone: string;
+    password: string;
+    direction?: string;
+    comment?: string;
+  }) {
+    const fullName = (dto.fullName || '').trim();
+    const email = (dto.email || '').trim().toLowerCase();
+    const phone = (dto.phone || '').trim();
+    const password = (dto.password || '').trim();
+    if (!fullName || fullName.length < 2) throw new BadRequestException('Введите ФИО');
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException('Некорректный email');
+    if (!phone) throw new BadRequestException('Введите телефон');
+    if (!password || password.length < 6) throw new BadRequestException('Пароль минимум 6 символов');
+
+    const existing = await this.prisma.student.findFirst({ where: { email } });
+    if (existing) throw new BadRequestException('Такой email уже зарегистрирован');
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const direction: any = dto.direction || 'BACHELOR';
+    // Cabinet auto-assigned by direction.
+    const CABINET: Record<string, number> = {
+      BACHELOR: 1, MASTER: 2, LANGUAGE: 3,
+      LANGUAGE_COLLEGE: 4, LANGUAGE_BACHELOR: 5, COLLEGE: 6,
+    };
+    const cabinet = CABINET[direction] || 1;
+
+    const student = await this.prisma.student.create({
+      data: {
+        fullName,
+        email,
+        phones: [phone],
+        password: passwordHash,
+        direction,
+        cabinet,
+        comment: dto.comment?.trim() || null,
+      },
+    });
+
+    // Auto-create application
+    await this.prisma.application.create({
+      data: {
+        fullName,
+        phone,
+        email,
+        direction,
+        comment: dto.comment?.trim() || null,
+        status: 'NEW',
+        studentId: student.id,
+      },
+    });
+
+    const token = await this.jwt.signAsync({
+      sub: student.id,
+      email: student.email,
+      role: 'STUDENT',
+    });
+    return {
+      token,
+      student: { id: student.id, email: student.email, fullName: student.fullName },
+    };
+  }
+
   async login(email: string, password: string) {
     if (!email || !password) {
       throw new BadRequestException('Укажите email и пароль');

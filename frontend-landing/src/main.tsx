@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import App from './App';
 import StudentLogin from './pages/StudentLogin';
+import StudentRegister from './pages/StudentRegister';
 import StudentCabinet from './pages/StudentCabinet';
 import ErrorBoundary from './components/ErrorBoundary';
 import { initAnalytics, trackPageView } from './analytics';
@@ -26,6 +27,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route path="/" element={<App />} />
           <Route path="/login" element={<StudentLogin />} />
+          <Route path="/register" element={<StudentRegister />} />
           <Route path="/cabinet" element={<StudentCabinet />} />
         </Routes>
       </BrowserRouter>

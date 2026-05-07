@@ -142,8 +142,7 @@ export default function StudentLogin() {
           </form>
 
           <p className="stu-login-hint">
-            Ещё нет аккаунта? <Link to="/#apply">Подай заявку</Link> — мы заведём
-            кабинет после первого звонка.
+            Ещё нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
           </p>
         </motion.div>
       </div>

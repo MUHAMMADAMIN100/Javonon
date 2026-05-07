@@ -51,6 +51,22 @@ export type StudentMe = {
   createdAt: string;
 };
 
+export async function studentRegister(payload: {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+  direction?: string;
+  comment?: string;
+}) {
+  const { data } = await client.post<{ token: string; student: { id: string; email: string; fullName: string } }>(
+    '/student-auth/register',
+    payload,
+  );
+  setToken(data.token);
+  return data;
+}
+
 export async function studentLogin(email: string, password: string) {
   const { data } = await client.post<{ token: string; student: { id: string; email: string; fullName: string } }>(
     '/student-auth/login',

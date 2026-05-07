@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { applicationStats } from '../api/applications';
 import { studentStats } from '../api/students';
+import { financeSummary, pendingPayments, type FinanceSummary } from '../api/finance';
+import { leaderboard, type KpiRow } from '../api/kpi';
 import { DIRECTION_LABEL, STATUS_LABEL } from '../api/types';
+import { useAuth } from '../store/auth';
+
+function fmtMoney(n: number, c = 'USD') {
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
+}
 
 const fadeUp = {
   hidden: { opacity: 0, y: 32 },
@@ -13,13 +20,28 @@ const fadeUp = {
 };
 
 export default function Dashboard() {
+  const me = useAuth((s) => s.user);
+  const isAdmin = me?.role === 'ADMIN';
+  const isAccountant = me?.role === 'ACCOUNTANT';
+  const showFinance = isAdmin || isAccountant;
+
   const [appStats, setAppStats] = useState<any>(null);
   const [stuStats, setStuStats] = useState<any>(null);
+  const [finance, setFinance] = useState<FinanceSummary | null>(null);
+  const [pending, setPending] = useState<any[]>([]);
+  const [topPerformers, setTopPerformers] = useState<KpiRow[]>([]);
 
   useEffect(() => {
     applicationStats().then(setAppStats).catch(() => {});
     studentStats().then(setStuStats).catch(() => {});
-  }, []);
+    if (showFinance) {
+      financeSummary().then(setFinance).catch(() => {});
+      pendingPayments().then(setPending).catch(() => {});
+    }
+    if (isAdmin) {
+      leaderboard().then((rs) => setTopPerformers(rs.slice(0, 3))).catch(() => {});
+    }
+  }, [showFinance, isAdmin]);
 
   const newCount = appStats?.byStatus?.find((s: any) => s.status === 'NEW')?._count || 0;
   const inProgress =
@@ -103,6 +125,138 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Financial bento — visible only for ADMIN / ACCOUNTANT */}
+      {showFinance && finance && (
+        <>
+          <div className="crm-section-head" style={{ marginTop: 8 }}>
+            <span className="crm-section-eyebrow">FINANCE · MONEY MAP</span>
+            <h2 className="crm-section-title">
+              Деньги <em>в моменте.</em>
+            </h2>
+          </div>
+          <div className="bento" style={{ marginBottom: 32 }}>
+            <motion.div
+              className="bento-card feature span-3 row-2"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <span className="bento-num">PROFIT · 06</span>
+              <div style={{ marginTop: 'auto' }}>
+                <div style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'clamp(56px, 7vw, 96px)',
+                  fontWeight: 500,
+                  letterSpacing: '-0.04em',
+                  lineHeight: 0.9,
+                  marginBottom: 12,
+                }}>{fmtMoney(finance.netProfit)}</div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  letterSpacing: '0.12em',
+                  color: 'rgba(255,255,255,0.55)',
+                  textTransform: 'uppercase',
+                }}>Чистая прибыль <span style={{
+                  fontFamily: 'Times New Roman, Georgia, serif',
+                  fontStyle: 'italic',
+                  fontSize: 18,
+                  color: 'var(--primary-light)',
+                  textTransform: 'none',
+                  marginLeft: 6,
+                }}>за всё время.</span></div>
+              </div>
+            </motion.div>
+
+            <SmallBento
+              eyebrow="INCOME · 07"
+              label="Доходы"
+              value={fmtMoney(finance.totalIncome)}
+              accent
+            />
+            <SmallBento
+              eyebrow="EXPENSE · 08"
+              label="Расходы"
+              value={fmtMoney(finance.totalExpense)}
+            />
+            <SmallBento
+              eyebrow="DEBT · 09"
+              label={pending.length === 1 ? '1 студент должен оплатить' : `${pending.length} студентов с задолженностью`}
+              value={String(pending.length)}
+              span="span-3"
+            />
+          </div>
+        </>
+      )}
+
+      {/* Top 3 performers — only ADMIN */}
+      {isAdmin && topPerformers.length > 0 && (
+        <>
+          <div className="crm-section-head" style={{ marginTop: 8 }}>
+            <span className="crm-section-eyebrow">TOP TEAM · LEADERBOARD</span>
+            <h2 className="crm-section-title">
+              Лучшие <em>сотрудники.</em>
+            </h2>
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 14,
+            marginBottom: 32,
+          }}>
+            {topPerformers.map((p, i) => (
+              <motion.div
+                key={p.id}
+                className="card"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06 }}
+                style={{ padding: 24, position: 'relative' }}
+              >
+                <div style={{
+                  position: 'absolute', top: 16, right: 20,
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 28,
+                  letterSpacing: '-0.02em',
+                  color: i === 0 ? 'var(--primary-dark)' : 'var(--text-light)',
+                }}>
+                  {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  color: 'var(--text-light)',
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                }}>RANK #{i + 1}</div>
+                <div style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 22,
+                  fontWeight: 500,
+                  letterSpacing: '-0.01em',
+                  marginBottom: 16,
+                }}>{p.fullName}</div>
+                <div style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 36,
+                  fontWeight: 500,
+                  letterSpacing: '-0.03em',
+                  color: 'var(--primary-dark)',
+                  marginBottom: 6,
+                }}>{fmtMoney(p.salesAmount)}</div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  letterSpacing: '0.10em',
+                  color: 'var(--text-soft)',
+                  textTransform: 'uppercase',
+                }}>{p.applicationsEnrolled} ENROLLED · {p.conversionRate}% CONV</div>
+              </motion.div>
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">ДЕТАЛИЗАЦИЯ</span>
         <h2 className="crm-section-title">
@@ -137,6 +291,38 @@ export default function Dashboard() {
         />
       </div>
     </>
+  );
+}
+
+function SmallBento({ eyebrow, label, value, accent, span = 'span-3' }: {
+  eyebrow: string; label: string; value: string; accent?: boolean; span?: string;
+}) {
+  return (
+    <motion.div
+      className={`bento-card ${accent ? 'accent' : ''} ${span}`}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3 }}
+    >
+      <span className="bento-num">{eyebrow}</span>
+      <div style={{ marginTop: 'auto' }}>
+        <div style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 'clamp(40px, 5vw, 56px)',
+          fontWeight: 500,
+          letterSpacing: '-0.04em',
+          lineHeight: 0.9,
+          marginBottom: 12,
+        }}>{value}</div>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: accent ? 'rgba(5,7,6,0.65)' : 'var(--text-soft)',
+        }}>{label}</div>
+      </div>
+    </motion.div>
   );
 }
 

@@ -68,6 +68,20 @@ export class StudentAuthController {
     return this.auth.login(body.email, body.password);
   }
 
+  // Self-registration через лендинг. Лимит: 5 в минуту c IP.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('register')
+  register(@Body() body: any) {
+    return this.auth.register({
+      fullName: body.fullName,
+      email: body.email,
+      phone: body.phone,
+      password: body.password,
+      direction: body.direction,
+      comment: body.comment,
+    });
+  }
+
   // Forgot password: студент вводит email — на него высылается новый
   // одноразовый пароль. Лимит: 3 запроса в минуту с IP (anti-spam).
   @Throttle({ default: { limit: 3, ttl: 60_000 } })

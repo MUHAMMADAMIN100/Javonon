@@ -55,12 +55,12 @@ export default function Header() {
         <div className="header-cta">
           <Link to="/login" className="btn-pill ghost">
             <Icon name="lock" size={14} />
-            Кабинет
+            Вход
           </Link>
-          <a href="#apply" className="btn-pill solid">
-            Подать заявку
+          <Link to="/register" className="btn-pill solid">
+            Регистрация
             <Icon name="arrow_outward" size={16} />
-          </a>
+          </Link>
           <button
             type="button"
             className="burger"
