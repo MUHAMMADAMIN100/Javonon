@@ -2,11 +2,14 @@ import { IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, Max, Ma
 import { Direction, StudentStatus } from '@prisma/client';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
+// QA-fix: запрет HTML/script-тегов в текстовых полях (XSS protection).
+const NO_HTML_RE = /^[^<>]*$/;
 
 export class CreateStudentDto {
   @IsString()
   @MinLength(2)
   @MaxLength(120)
+  @Matches(NO_HTML_RE, { message: 'ФИО содержит недопустимые символы' })
   fullName: string;
 
   @IsOptional()
@@ -40,5 +43,6 @@ export class CreateStudentDto {
   @IsOptional()
   @IsString()
   @MaxLength(2000)
+  @Matches(NO_HTML_RE, { message: 'Комментарий содержит недопустимые символы' })
   comment?: string;
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
 
 const KNOWLEDGE = {
   categories: [
@@ -229,6 +229,10 @@ export class KnowledgeController {
 
   @Get(':slug')
   byCategory(@Param('slug') slug: string) {
-    return KNOWLEDGE.categories.find((c) => c.slug === slug) || null;
+    // QA-fix: раньше возвращали null для несуществующего slug — фронт показывал пустой
+    // экран без понятной ошибки. Теперь честный 404.
+    const category = KNOWLEDGE.categories.find((c) => c.slug === slug);
+    if (!category) throw new NotFoundException('Раздел базы знаний не найден');
+    return category;
   }
 }

@@ -83,8 +83,12 @@ export class StudentAuthService {
     const phone = (dto.phone || '').trim();
     const password = (dto.password || '').trim();
     if (!fullName || fullName.length < 2) throw new BadRequestException('Введите ФИО');
+    // QA-fix: запрещаем HTML-теги в имени (XSS protection — имя попадает в email-шаблоны).
+    if (/[<>]/.test(fullName)) throw new BadRequestException('ФИО содержит недопустимые символы');
+    if (fullName.length > 120) throw new BadRequestException('ФИО слишком длинное');
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException('Некорректный email');
     if (!phone) throw new BadRequestException('Введите телефон');
+    if (/[<>]/.test(dto.comment || '')) throw new BadRequestException('Комментарий содержит недопустимые символы');
     if (!password || password.length < 6) throw new BadRequestException('Пароль минимум 6 символов');
 
     const existing = await this.prisma.student.findFirst({ where: { email } });

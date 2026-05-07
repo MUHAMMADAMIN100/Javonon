@@ -113,24 +113,37 @@ export class SalaryService {
     return record;
   }
 
+  /** QA-fix: атомарное claim PENDING → PAID, чтобы повторный вызов
+   *  не создавал вторую expense-транзакцию (раньше можно было дёрнуть
+   *  /salary/:id/pay дважды и получить дубль расхода). */
   async markPaid(id: string) {
     const rec = await this.prisma.salaryRecord.findUnique({ where: { id } });
     if (!rec) throw new NotFoundException('Запись не найдена');
-    // При выплате создаём расходную транзакцию.
-    await this.prisma.transaction.create({
-      data: {
-        type: 'EXPENSE',
-        category: 'SALARY',
-        amount: rec.netAmount,
-        currency: rec.currency,
-        managerId: rec.userId,
-        comment: `Зарплата за период ${rec.periodStart.toISOString().slice(0, 10)} — ${rec.periodEnd.toISOString().slice(0, 10)}`,
-        date: new Date(),
-      },
-    });
-    return this.prisma.salaryRecord.update({
-      where: { id },
-      data: { status: 'PAID', paidAt: new Date() },
+    if (rec.status === 'PAID') throw new BadRequestException('Зарплата уже выплачена');
+
+    return this.prisma.$transaction(async (tx) => {
+      const claim = await tx.salaryRecord.updateMany({
+        where: { id, status: { not: 'PAID' } },
+        data: { status: 'PAID', paidAt: new Date() },
+      });
+      if (claim.count === 0) {
+        throw new BadRequestException('Зарплата уже выплачена');
+      }
+      await tx.transaction.create({
+        data: {
+          type: 'EXPENSE',
+          category: 'SALARY',
+          amount: rec.netAmount,
+          currency: rec.currency,
+          managerId: rec.userId,
+          comment: `Зарплата за период ${rec.periodStart.toISOString().slice(0, 10)} — ${rec.periodEnd.toISOString().slice(0, 10)}`,
+          date: new Date(),
+        },
+      });
+      return tx.salaryRecord.findUnique({
+        where: { id },
+        include: { user: { select: { id: true, fullName: true, role: true } } },
+      });
     });
   }
 

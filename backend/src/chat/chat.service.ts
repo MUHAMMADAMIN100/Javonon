@@ -64,12 +64,16 @@ export class ChatService {
     });
     if (!member) throw new NotFoundException('Чат не найден или вы не участник');
 
-    const messages = await this.prisma.chatMessage.findMany({
+    // QA-fix: раньше брали 200 СТАРЕЙШИХ (orderBy asc + take 200),
+    // и в чатах с историей >200 сообщений пользователь видел древнюю переписку
+    // вместо последних. Теперь берём 200 ПОСЛЕДНИХ и переворачиваем для UI (asc).
+    const recent = await this.prisma.chatMessage.findMany({
       where: { roomId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
       include: { author: { select: { id: true, fullName: true, role: true } } },
       take: 200,
     });
+    const messages = recent.reverse();
     // Mark as read
     await this.prisma.chatMember.update({
       where: { roomId_userId: { roomId, userId } },
@@ -216,6 +220,14 @@ export class ChatService {
 
   async createTeamRoom(creatorId: string, title: string, memberIds: string[]) {
     const ids = Array.from(new Set([creatorId, ...memberIds]));
+    // QA-fix: валидируем все memberId, чтобы вместо FK-500 пользователь получал 400.
+    const existing = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    });
+    if (existing.length !== ids.length) {
+      throw new BadRequestException('Один или несколько участников не найдены');
+    }
     const room = await this.prisma.chatRoom.create({
       data: {
         type: ChatRoomType.TEAM,
@@ -231,7 +243,14 @@ export class ChatService {
   }
 
   async createDirectRoom(creatorId: string, otherUserId: string) {
+    if (!otherUserId) throw new BadRequestException('Не указан собеседник');
     if (creatorId === otherUserId) throw new BadRequestException('Нельзя создать чат с самим собой');
+    // QA-fix: проверяем, что собеседник существует (раньше падало FK-500).
+    const otherUser = await this.prisma.user.findUnique({
+      where: { id: otherUserId },
+      select: { id: true, fullName: true },
+    });
+    if (!otherUser) throw new NotFoundException('Пользователь не найден');
     // Найти существующий direct
     const existing = await this.prisma.chatRoom.findFirst({
       where: {
@@ -245,14 +264,10 @@ export class ChatService {
     });
     if (existing) return existing;
 
-    const otherUser = await this.prisma.user.findUnique({
-      where: { id: otherUserId },
-      select: { fullName: true },
-    });
     return this.prisma.chatRoom.create({
       data: {
         type: 'DIRECT',
-        title: otherUser?.fullName || 'Прямой чат',
+        title: otherUser.fullName || 'Прямой чат',
         members: { create: [{ userId: creatorId }, { userId: otherUserId }] },
       },
       include: { members: { include: { user: { select: { id: true, fullName: true, role: true } } } } },

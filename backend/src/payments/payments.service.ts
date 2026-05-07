@@ -52,7 +52,12 @@ export class PaymentsService {
     return payment;
   }
 
-  /** Бухгалтер подтверждает payment → создаётся транзакция. */
+  /** Бухгалтер подтверждает payment → создаётся транзакция.
+   *  QA-fix: атомарное update + create через $transaction.
+   *  Раньше параллельные confirm создавали несколько транзакций на одну оплату.
+   *  Теперь updateMany(...where: PENDING) гарантирует, что только один процесс
+   *  «возьмёт» оплату, остальные получат BadRequestException.
+   */
   async confirmByAccountant(id: string, accountantId: string, dto: { actualAmount?: number; method?: PaymentMethod }) {
     const payment = await this.prisma.payment.findUnique({
       where: { id },
@@ -63,37 +68,45 @@ export class PaymentsService {
 
     const amount = dto.actualAmount || payment.amount;
 
-    // Создаём транзакцию-доход
-    const transaction = await this.prisma.transaction.create({
-      data: {
-        type: 'INCOME',
-        category: 'TUITION_PAYMENT',
-        amount,
-        currency: payment.currency,
-        comment: `Подтверждённая оплата: ${payment.comment || 'без комментария'}`,
-        date: new Date(),
-        studentId: payment.studentId,
-        managerId: payment.student?.managerId || null,
-        recordedById: accountantId,
-      },
+    // Атомарно: пытаемся забрать payment из PENDING + создаём транзакцию.
+    // Если другой процесс успел первым — updateMany.count = 0, бросаем ошибку.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const claim = await tx.payment.updateMany({
+        where: { id, status: 'PENDING' },
+        data: {
+          status: 'CONFIRMED',
+          method: dto.method || payment.method,
+          confirmedById: accountantId,
+          confirmedAt: new Date(),
+        },
+      });
+      if (claim.count === 0) {
+        throw new BadRequestException('Уже обработан другим бухгалтером');
+      }
+      const transaction = await tx.transaction.create({
+        data: {
+          type: 'INCOME',
+          category: 'TUITION_PAYMENT',
+          amount,
+          currency: payment.currency,
+          comment: `Подтверждённая оплата: ${payment.comment || 'без комментария'}`,
+          date: new Date(),
+          studentId: payment.studentId,
+          managerId: payment.student?.managerId || null,
+          recordedById: accountantId,
+        },
+      });
+      const updated = await tx.payment.update({
+        where: { id },
+        data: { transactionId: transaction.id },
+        include: { student: { select: { id: true, fullName: true } } },
+      });
+      return { updated, transaction };
     });
 
-    const updated = await this.prisma.payment.update({
-      where: { id },
-      data: {
-        status: 'CONFIRMED',
-        method: dto.method || payment.method,
-        confirmedById: accountantId,
-        confirmedAt: new Date(),
-        transactionId: transaction.id,
-      },
-      include: { student: { select: { id: true, fullName: true } } },
-    });
-
-    // Уведомляем студента
-    this.realtime.emitStudent(payment.studentId, 'payment:confirmed', { payment: updated, transaction });
-    this.realtime.emitStaff('payment:confirmed', { payment: updated });
-    return updated;
+    this.realtime.emitStudent(payment.studentId, 'payment:confirmed', { payment: result.updated, transaction: result.transaction });
+    this.realtime.emitStaff('payment:confirmed', { payment: result.updated });
+    return result.updated;
   }
 
   async rejectByAccountant(id: string, accountantId: string, comment?: string) {

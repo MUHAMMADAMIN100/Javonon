@@ -3,11 +3,14 @@ import { Direction, ApplicationSource } from '@prisma/client';
 
 // E.164: '+' необязателен, 7–15 цифр всего, разрешаем пробелы/дефисы при вводе.
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
+// QA-fix: имя без HTML-тегов (XSS) — fullName попадает в email-шаблоны и Telegram.
+const NO_HTML_RE = /^[^<>]*$/;
 
 export class CreateApplicationDto {
   @IsString()
   @MinLength(2)
   @MaxLength(120)
+  @Matches(NO_HTML_RE, { message: 'ФИО содержит недопустимые символы' })
   fullName: string;
 
   @IsString()
@@ -27,6 +30,7 @@ export class CreateApplicationDto {
   @IsOptional()
   @IsString()
   @MaxLength(2000)
+  @Matches(NO_HTML_RE, { message: 'Комментарий содержит недопустимые символы' })
   comment?: string;
 
   @IsOptional()
