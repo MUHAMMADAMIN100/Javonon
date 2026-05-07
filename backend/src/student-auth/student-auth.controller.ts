@@ -97,6 +97,12 @@ export class StudentAuthController {
   }
 
   @UseGuards(StudentJwtGuard)
+  @Get('transactions')
+  myTransactions(@CurrentUser() user: any) {
+    return this.auth.myTransactions(user.id);
+  }
+
+  @UseGuards(StudentJwtGuard)
   @Get('form')
   async getForm(@CurrentUser() user: any) {
     const s = await this.prisma.student.findUnique({

@@ -14,6 +14,8 @@ import { connectStudentRealtime, useStudentRealtime, getSocket } from '../realti
 import ApplicationFormSection from '../components/ApplicationFormSection';
 import EnrollmentProgress from '../components/EnrollmentProgress';
 import ProgramsSection from '../components/ProgramsSection';
+import PaymentsSection from '../components/PaymentsSection';
+import CoursesSection from '../components/CoursesSection';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import Icon from '../Icon';
 
@@ -57,7 +59,7 @@ export default function StudentCabinet() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [tab, setTab] = useState<'home' | 'programs'>('home');
+  const [tab, setTab] = useState<'home' | 'programs' | 'payments' | 'courses'>('home');
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const otherRef = useRef<HTMLInputElement>(null);
 
@@ -176,6 +178,22 @@ export default function StudentCabinet() {
             <Icon name="menu_book" size={18} />
             Программы
           </button>
+          <button
+            type="button"
+            className={`stu-tab${tab === 'payments' ? ' active' : ''}`}
+            onClick={() => setTab('payments')}
+          >
+            <Icon name="payments" size={18} />
+            Оплаты
+          </button>
+          <button
+            type="button"
+            className={`stu-tab${tab === 'courses' ? ' active' : ''}`}
+            onClick={() => setTab('courses')}
+          >
+            <Icon name="school" size={18} />
+            Курсы
+          </button>
         </div>
         <AnimatePresence>
           {toast && (
@@ -191,7 +209,7 @@ export default function StudentCabinet() {
           )}
         </AnimatePresence>
 
-        {tab === 'programs' ? (
+        {tab === 'programs' && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -199,7 +217,26 @@ export default function StudentCabinet() {
           >
             <ProgramsSection />
           </motion.div>
-        ) : (
+        )}
+        {tab === 'payments' && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <PaymentsSection />
+          </motion.div>
+        )}
+        {tab === 'courses' && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <CoursesSection />
+          </motion.div>
+        )}
+        {tab === 'home' && (
           <>
             {/* Поздравление при зачислении */}
             {me.applications?.[0]?.status === 'ENROLLED' && (

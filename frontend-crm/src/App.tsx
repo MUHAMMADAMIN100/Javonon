@@ -18,6 +18,9 @@ import TimeTracker from './pages/TimeTracker';
 import Finance from './pages/Finance';
 import Salary from './pages/Salary';
 import Kpi from './pages/Kpi';
+import Reports from './pages/Reports';
+import Chat from './pages/Chat';
+import Lms from './pages/Lms';
 
 export default function App() {
   const init = useAuth((s) => s.init);
@@ -49,9 +52,12 @@ export default function App() {
         <Route path="/users" element={<Users />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/time" element={<TimeTracker />} />
+        <Route path="/reports" element={<Reports />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/salary" element={<Salary />} />
         <Route path="/kpi" element={<Kpi />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/lms" element={<Lms />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

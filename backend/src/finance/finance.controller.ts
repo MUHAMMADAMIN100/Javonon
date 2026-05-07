@@ -68,4 +68,17 @@ export class FinanceController {
   pendingPayments() {
     return this.svc.pendingPayments();
   }
+
+  @Get('timeseries')
+  timeseries(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('bucket') bucket?: 'day' | 'week' | 'month',
+  ) {
+    return this.svc.timeseries({
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+      bucket,
+    });
+  }
 }

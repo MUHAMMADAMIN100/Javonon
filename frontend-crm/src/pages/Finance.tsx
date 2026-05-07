@@ -19,6 +19,8 @@ import { listStudents } from '../api/students';
 import { listUsers } from '../api/users';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import { aiAddTransaction } from '../api/ai';
+import { financeTimeseries, type TimeseriesPoint } from '../api/finance';
 
 function fmtMoney(n: number, currency = 'USD'): string {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -37,18 +39,43 @@ export default function Finance() {
   const [users, setUsers] = useState<any[]>([]);
   const [filterType, setFilterType] = useState<TransactionType | ''>('');
   const [showForm, setShowForm] = useState(false);
+  const [aiInput, setAiInput] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [series, setSeries] = useState<TimeseriesPoint[]>([]);
 
   const refresh = async () => {
     try {
-      const [txs, sum, pp] = await Promise.all([
+      const [txs, sum, pp, ts] = await Promise.all([
         listTransactions(filterType ? { type: filterType, take: 200 } : { take: 200 }),
         financeSummary(),
         pendingPayments(),
+        financeTimeseries({ bucket: 'week' }),
       ]);
       setTransactions(txs);
       setSummary(sum);
       setPending(pp);
+      setSeries(ts);
     } catch {}
+  };
+
+  const onAi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiInput.trim() || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const res = await aiAddTransaction(aiInput);
+      if (res.ok) {
+        toast(`Добавлено: ${res.transaction?.type === 'INCOME' ? '+' : '−'}${res.transaction?.amount}${res.transaction?.currency}`, 'success');
+        setAiInput('');
+        await refresh();
+      } else {
+        toast(res.error || 'Не распознано', 'error');
+      }
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [filterType]);
@@ -125,6 +152,106 @@ export default function Finance() {
           <KpiBento eyebrow="INCOME · 02" label="Доходы всего" value={fmtMoney(summary.totalIncome)} accent />
           <KpiBento eyebrow="EXPENSE · 03" label="Расходы всего" value={fmtMoney(summary.totalExpense)} />
           <KpiBento eyebrow="COUNT · 04" label="Всего транзакций" value={String(summary.incomeCount + summary.expenseCount)} span="span-3" />
+        </div>
+      )}
+
+      {/* AI quick add */}
+      <motion.form
+        onSubmit={onAi}
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{
+          background: 'var(--text)',
+          color: 'white',
+          padding: 18,
+          borderRadius: 18,
+          marginBottom: 24,
+          display: 'flex',
+          gap: 10,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: 'var(--primary)',
+          color: 'var(--text)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <Icon name="auto_awesome" size={18} />
+        </div>
+        <div style={{ flexShrink: 0 }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.16em',
+            color: 'var(--primary-light)',
+            marginBottom: 4,
+            textTransform: 'uppercase',
+          }}>AI · QUICK ENTRY</div>
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 16,
+            fontWeight: 500,
+          }}>Добавь <em style={{
+            fontFamily: 'Times New Roman, Georgia, serif',
+            fontWeight: 400,
+            color: 'var(--primary-light)',
+          }}>командой.</em></div>
+        </div>
+        <input
+          value={aiInput}
+          onChange={(e) => setAiInput(e.target.value)}
+          placeholder='Например: "добавь расход 200$ аренда"'
+          style={{
+            flex: 1,
+            minWidth: 240,
+            padding: '12px 16px',
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.16)',
+            color: 'white',
+            borderRadius: 100,
+            fontSize: 14,
+            fontFamily: 'inherit',
+          }}
+        />
+        <button
+          type="submit"
+          className="btn"
+          style={{
+            background: 'var(--primary)',
+            color: 'var(--text)',
+            border: 'none',
+          }}
+          disabled={aiBusy || !aiInput.trim()}
+        >
+          {aiBusy ? 'Парсим...' : 'Добавить'} <Icon name="arrow_outward" size={14} />
+        </button>
+      </motion.form>
+
+      {/* Revenue chart (timeseries) */}
+      {series.length > 0 && (
+        <div className="card" style={{ padding: 28, marginBottom: 24 }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.16em',
+            color: 'var(--primary-dark)',
+            marginBottom: 6,
+          }}>REVENUE · WEEKLY</div>
+          <h3 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 22,
+            fontWeight: 500,
+            letterSpacing: '-0.02em',
+            marginBottom: 24,
+          }}>Динамика <em style={{
+            fontFamily: 'Times New Roman, Georgia, serif',
+            fontWeight: 400,
+            color: 'var(--primary-dark)',
+          }}>денежных потоков.</em></h3>
+          <RevenueChart points={series} />
         </div>
       )}
 
@@ -490,5 +617,108 @@ function TransactionForm({
         </div>
       </form>
     </motion.div>
+  );
+}
+
+// ============================================================
+// Revenue chart — pure SVG, dual line (income / expense) + profit area
+// ============================================================
+function RevenueChart({ points }: { points: TimeseriesPoint[] }) {
+  const width = 800;
+  const height = 220;
+  const padding = { top: 16, right: 16, bottom: 28, left: 50 };
+  const innerW = width - padding.left - padding.right;
+  const innerH = height - padding.top - padding.bottom;
+
+  const maxValue = Math.max(
+    ...points.map((p) => Math.max(p.income, p.expense)),
+    100,
+  );
+
+  const xStep = points.length > 1 ? innerW / (points.length - 1) : innerW;
+  const x = (i: number) => padding.left + i * xStep;
+  const y = (v: number) => padding.top + innerH - (v / maxValue) * innerH;
+
+  const incomePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(p.income)}`).join(' ');
+  const expensePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(p.expense)}`).join(' ');
+  const profitArea = `M ${x(0)} ${y(0)} ${points.map((p, i) => `L ${x(i)} ${y(Math.max(0, p.profit))}`).join(' ')} L ${x(points.length - 1)} ${y(0)} Z`;
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <svg width={width} height={height} style={{ minWidth: 600, display: 'block' }}>
+        {/* grid */}
+        {[0, 0.25, 0.5, 0.75, 1].map((p) => (
+          <g key={p}>
+            <line
+              x1={padding.left}
+              x2={padding.left + innerW}
+              y1={padding.top + innerH * (1 - p)}
+              y2={padding.top + innerH * (1 - p)}
+              stroke="var(--border-soft)"
+              strokeDasharray="2 4"
+            />
+            <text
+              x={padding.left - 8}
+              y={padding.top + innerH * (1 - p) + 4}
+              fontFamily="var(--font-mono)"
+              fontSize="10"
+              fill="var(--text-light)"
+              textAnchor="end"
+            >
+              {Math.round((maxValue * p) / 1000) || 0}K
+            </text>
+          </g>
+        ))}
+
+        {/* Profit area (emerald-soft) */}
+        <path d={profitArea} fill="rgba(16,185,129,0.12)" />
+
+        {/* Income line */}
+        <path d={incomePath} stroke="var(--primary)" strokeWidth={2.5} fill="none" />
+        {/* Expense line */}
+        <path d={expensePath} stroke="var(--danger)" strokeWidth={2} fill="none" strokeDasharray="4 4" />
+
+        {/* Points + x-axis labels */}
+        {points.map((p, i) => (
+          <g key={p.key}>
+            <circle cx={x(i)} cy={y(p.income)} r={3} fill="var(--primary)" />
+            <circle cx={x(i)} cy={y(p.expense)} r={2.5} fill="var(--danger)" />
+            {(i % Math.max(1, Math.ceil(points.length / 8)) === 0 || i === points.length - 1) && (
+              <text
+                x={x(i)}
+                y={padding.top + innerH + 16}
+                fontFamily="var(--font-mono)"
+                fontSize="9"
+                fill="var(--text-light)"
+                textAnchor="middle"
+              >
+                {p.key.slice(5)}
+              </text>
+            )}
+          </g>
+        ))}
+      </svg>
+      <div style={{
+        display: 'flex',
+        gap: 24,
+        marginTop: 12,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+        letterSpacing: '0.06em',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 10, height: 2, background: 'var(--primary)' }} />
+          ДОХОДЫ
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 10, height: 2, background: 'var(--danger)' }} />
+          РАСХОДЫ
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 10, height: 10, background: 'rgba(16,185,129,0.3)' }} />
+          ПРИБЫЛЬ
+        </div>
+      </div>
+    </div>
   );
 }

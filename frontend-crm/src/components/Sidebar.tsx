@@ -24,8 +24,10 @@ export default function Sidebar() {
       { to: '/programs', icon: 'menu_book', label: 'Программы' },
       { to: '/tasks', icon: 'task_alt', label: 'Задачи' },
     ] : []),
+    { to: '/chat', icon: 'forum', label: 'Чат' },
     { to: '/time', icon: 'schedule', label: 'Время' },
     ...(isAdmin || isEmployee ? [
+      { to: '/reports', icon: 'description', label: 'Мои отчёты' },
       { to: '/kpi', icon: 'leaderboard', label: 'KPI' },
     ] : []),
   ];
@@ -38,6 +40,7 @@ export default function Sidebar() {
 
   // Admin-only
   const adminLinks = isAdmin ? [
+    { to: '/lms', icon: 'menu_book', label: 'Обучение' },
     { to: '/activity', icon: 'history', label: 'Активность' },
     { to: '/users', icon: 'group', label: 'Сотрудники' },
   ] : [];

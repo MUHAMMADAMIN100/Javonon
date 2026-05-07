@@ -152,6 +152,38 @@ export class FinanceService {
     }));
   }
 
+  /**
+   * Временной ряд для графика — суммы доходов/расходов сгруппированные
+   * по дням / неделям / месяцам.
+   */
+  async timeseries(opts: { from?: Date; to?: Date; bucket?: 'day' | 'week' | 'month' }) {
+    const bucket = opts.bucket || 'week';
+    const where = {
+      ...(opts.from || opts.to
+        ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+        : {}),
+    };
+    const all = await this.prisma.transaction.findMany({
+      where,
+      orderBy: { date: 'asc' },
+      select: { type: true, amount: true, date: true },
+    });
+
+    const map = new Map<string, { income: number; expense: number; profit: number }>();
+    for (const t of all) {
+      const key = bucketKey(t.date, bucket);
+      const cur = map.get(key) || { income: 0, expense: 0, profit: 0 };
+      if (t.type === 'INCOME') cur.income += t.amount;
+      else cur.expense += t.amount;
+      cur.profit = cur.income - cur.expense;
+      map.set(key, cur);
+    }
+
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => ({ key, ...value }));
+  }
+
   /** Студенты с задолженностью — из status AWAITING_PAYMENT. */
   async pendingPayments() {
     const apps = await this.prisma.application.findMany({
@@ -166,3 +198,18 @@ export class FinanceService {
     return apps;
   }
 }
+
+function bucketKey(d: Date, bucket: 'day' | 'week' | 'month'): string {
+  const dt = new Date(d);
+  if (bucket === 'day') {
+    return dt.toISOString().slice(0, 10);
+  }
+  if (bucket === 'month') {
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+  // week — ISO week (понедельник как старт)
+  const day = dt.getUTCDay() || 7;
+  const monday = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate() - day + 1));
+  return monday.toISOString().slice(0, 10);
+}
+

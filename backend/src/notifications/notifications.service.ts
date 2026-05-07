@@ -34,6 +34,31 @@ export class NotificationsService {
     });
   }
 
+  async notifyAdmins(data: NotifyPayload) {
+    const admins = await this.prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      select: { id: true },
+    });
+    if (!admins.length) return;
+    await this.prisma.notification.createMany({
+      data: admins.map((u) => ({
+        userId: u.id,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        payload: data.payload ?? undefined,
+      })),
+    });
+    for (const u of admins) {
+      this.realtime.emitUser(u.id, 'notification:new', {
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        payload: data.payload,
+      });
+    }
+  }
+
   async notifyUser(userId: string, data: NotifyPayload) {
     const notif = await this.prisma.notification.create({
       data: {

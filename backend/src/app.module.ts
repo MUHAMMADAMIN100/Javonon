@@ -24,6 +24,13 @@ import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { FinanceModule } from './finance/finance.module';
 import { SalaryModule } from './salary/salary.module';
 import { KpiModule } from './kpi/kpi.module';
+import { ReportsModule } from './reports/reports.module';
+import { ChatModule } from './chat/chat.module';
+import { LmsModule } from './lms/lms.module';
+import { AiModule } from './ai/ai.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { CronModule } from './cron/cron.module';
+import { HealthController } from './common/health.controller';
 
 @Module({
   imports: [
@@ -57,7 +64,14 @@ import { KpiModule } from './kpi/kpi.module';
     FinanceModule,
     SalaryModule,
     KpiModule,
+    ReportsModule,
+    ChatModule,
+    LmsModule,
+    AiModule,
+    ScheduleModule.forRoot(),
+    CronModule,
   ],
+  controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],

@@ -120,6 +120,7 @@ export class StudentAuthService {
         direction,
         comment: dto.comment?.trim() || null,
         status: 'NEW',
+        source: 'SELF_REGISTRATION',
         studentId: student.id,
       },
     });
@@ -162,6 +163,22 @@ export class StudentAuthService {
         fullName: student.fullName,
       },
     };
+  }
+
+  /** История оплат студента (ТЗ §3.2 — «История оплат» в кабинете). */
+  async myTransactions(studentId: string) {
+    return this.prisma.transaction.findMany({
+      where: { studentId, type: 'INCOME' },
+      orderBy: { date: 'desc' },
+      select: {
+        id: true,
+        amount: true,
+        currency: true,
+        category: true,
+        date: true,
+        comment: true,
+      },
+    });
   }
 
   async me(studentId: string) {

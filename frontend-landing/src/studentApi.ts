@@ -67,6 +67,55 @@ export async function studentRegister(payload: {
   return data;
 }
 
+export type StudentTransaction = {
+  id: string;
+  amount: number;
+  currency: string;
+  category: string;
+  date: string;
+  comment: string | null;
+};
+
+export async function listStudentTransactions(): Promise<StudentTransaction[]> {
+  const { data } = await client.get<StudentTransaction[]>('/student-auth/transactions');
+  return data;
+}
+
+export type StudentCourse = {
+  enrollmentId: string;
+  course: { id: string; title: string; coverUrl: string | null; description: string | null };
+  totalLessons: number;
+  completedLessons: number;
+  progress: number;
+  enrolledAt: string;
+  completedAt: string | null;
+};
+
+export async function listStudentCourses(): Promise<StudentCourse[]> {
+  const { data } = await client.get<StudentCourse[]>('/student-lms/my-courses');
+  return data;
+}
+
+export async function listAvailableCourses(): Promise<any[]> {
+  const { data } = await client.get<any[]>('/student-lms/available');
+  return data;
+}
+
+export async function getStudentCourse(id: string): Promise<any> {
+  const { data } = await client.get<any>(`/student-lms/courses/${id}`);
+  return data;
+}
+
+export async function enrollInCourse(id: string): Promise<any> {
+  const { data } = await client.post<any>(`/student-lms/courses/${id}/enroll`);
+  return data;
+}
+
+export async function completeLesson(id: string): Promise<any> {
+  const { data } = await client.post<any>(`/student-lms/lessons/${id}/complete`);
+  return data;
+}
+
 export async function studentLogin(email: string, password: string) {
   const { data } = await client.post<{ token: string; student: { id: string; email: string; fullName: string } }>(
     '/student-auth/login',

@@ -17,6 +17,31 @@ export const DIRECTION_LABEL: Record<Direction, string> = {
   COLLEGE: 'Колледж',
 };
 
+export type ApplicationSource =
+  | 'LANDING_FORM'
+  | 'SELF_REGISTRATION'
+  | 'REFERRAL'
+  | 'INSTAGRAM'
+  | 'TELEGRAM'
+  | 'GOOGLE_ADS'
+  | 'TIKTOK'
+  | 'WORD_OF_MOUTH'
+  | 'EVENT'
+  | 'OTHER';
+
+export const SOURCE_LABEL: Record<ApplicationSource, string> = {
+  LANDING_FORM: 'Сайт',
+  SELF_REGISTRATION: 'Регистрация',
+  REFERRAL: 'По рекомендации',
+  INSTAGRAM: 'Instagram',
+  TELEGRAM: 'Telegram',
+  GOOGLE_ADS: 'Google реклама',
+  TIKTOK: 'TikTok',
+  WORD_OF_MOUTH: 'Сарафанное радио',
+  EVENT: 'Мероприятие',
+  OTHER: 'Другое',
+};
+
 export interface ApplicationPayload {
   fullName: string;
   phone: string;
@@ -24,6 +49,7 @@ export interface ApplicationPayload {
   direction: Direction;
   comment?: string;
   programId?: string;
+  source?: ApplicationSource;
 }
 
 export async function submitApplication(payload: ApplicationPayload) {

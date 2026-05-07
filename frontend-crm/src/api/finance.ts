@@ -107,3 +107,12 @@ export const financeByCategory = (params?: { from?: string; to?: string }) =>
 
 export const pendingPayments = () =>
   api.get<any[]>('/finance/pending-payments').then((r) => r.data);
+
+export interface TimeseriesPoint {
+  key: string;
+  income: number;
+  expense: number;
+  profit: number;
+}
+export const financeTimeseries = (params?: { from?: string; to?: string; bucket?: 'day' | 'week' | 'month' }) =>
+  api.get<TimeseriesPoint[]>('/finance/timeseries', { params }).then((r) => r.data);

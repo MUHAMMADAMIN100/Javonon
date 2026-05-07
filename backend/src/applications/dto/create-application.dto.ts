@@ -1,5 +1,5 @@
 import { IsEmail, IsEnum, IsOptional, IsString, Matches, MinLength, MaxLength } from 'class-validator';
-import { Direction } from '@prisma/client';
+import { Direction, ApplicationSource } from '@prisma/client';
 
 // E.164: '+' необязателен, 7–15 цифр всего, разрешаем пробелы/дефисы при вводе.
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
@@ -32,4 +32,8 @@ export class CreateApplicationDto {
   @IsOptional()
   @IsString()
   programId?: string;
+
+  @IsOptional()
+  @IsEnum(ApplicationSource)
+  source?: ApplicationSource;
 }

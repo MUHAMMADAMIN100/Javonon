@@ -100,6 +100,10 @@ model User {
   transactionsAsManager Transaction[] @relation("TransactionManager")
   recordedTransactions  Transaction[] @relation("TransactionRecorder")
   salaryRecords         SalaryRecord[]
+  dailyReports          DailyReport[]
+  chatMessages          ChatMessage[] @relation("ChatMessageAuthor")
+  chatMemberships       ChatMember[]
+  authoredCourses       Course[]      @relation("CourseAuthor")
 }
 
 // Заявка на обучение: создаётся через лендинг (POST /applications/public),
@@ -109,6 +113,19 @@ model User {
 // При удалении Student — Application НЕ удаляется автоматически
 // (нет onDelete: Cascade на student-связи), поэтому в applications.service.remove()
 // студент явно удаляется отдельно.
+enum ApplicationSource {
+  LANDING_FORM
+  SELF_REGISTRATION
+  REFERRAL
+  INSTAGRAM
+  TELEGRAM
+  GOOGLE_ADS
+  TIKTOK
+  WORD_OF_MOUTH
+  EVENT
+  OTHER
+}
+
 model Application {
   id         String            @id @default(uuid())
   fullName   String
@@ -116,6 +133,7 @@ model Application {
   email      String?
   direction  Direction
   comment    String?
+  source     ApplicationSource @default(LANDING_FORM)
   status     ApplicationStatus @default(NEW)
   studentId  String?
   // student → SetNull-семантика по сути не задана, потому что removed применяется в коде вручную.
@@ -163,6 +181,8 @@ model Student {
   documents    Document[]
   applications Application[]
   transactions Transaction[]
+  enrollments  Enrollment[]
+  lessonProgress LessonProgress[]
 
   @@index([direction])
   @@index([cabinet])
@@ -370,3 +390,138 @@ model SalaryRecord {
   @@index([userId, periodStart])
   @@index([status])
 }
+
+// ============================================================
+// DAILY REPORTS — ежедневные/недельные отчёты сотрудника (ТЗ §3.6)
+// ============================================================
+// Сотрудник раз в день записывает: количество звонков, число встреч, активность.
+// Эти данные дополняют автоматически собираемые KPI.
+model DailyReport {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date          DateTime @db.Date
+  callsCount    Int      @default(0)
+  meetingsCount Int      @default(0)
+  applicationsContacted Int @default(0)
+  activitySummary String? // что сделал за день (свободный текст)
+  challenges    String?  // блокеры/проблемы
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+// ============================================================
+// CHAT — внутренний чат компании (ТЗ §3.8)
+// ============================================================
+enum ChatRoomType {
+  GENERAL    // общий чат компании
+  TEAM       // командный чат (для группы сотрудников)
+  DIRECT     // личный 1-на-1
+}
+
+model ChatRoom {
+  id          String       @id @default(uuid())
+  type        ChatRoomType
+  title       String?      // для TEAM/DIRECT — имя комнаты
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  members     ChatMember[]
+  messages    ChatMessage[]
+
+  @@index([type])
+}
+
+model ChatMember {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime?
+  joinedAt  DateTime @default(now())
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id         String   @id @default(uuid())
+  roomId     String
+  room       ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation("ChatMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  text       String
+  // Список упомянутых userId (для @mentions)
+  mentionsIds String[] @default([])
+  createdAt  DateTime @default(now())
+  editedAt   DateTime?
+
+  @@index([roomId, createdAt])
+  @@index([authorId])
+}
+
+// ============================================================
+// LMS — обучение (ТЗ §3.12)
+// ============================================================
+model Course {
+  id          String       @id @default(uuid())
+  title       String
+  description String?
+  coverUrl    String?
+  published   Boolean      @default(false)
+  authorId    String?
+  author      User?        @relation("CourseAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  lessons     Lesson[]
+  enrollments Enrollment[]
+
+  @@index([published])
+}
+
+model Lesson {
+  id          String   @id @default(uuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  content     String?  // Markdown / rich text
+  videoUrl    String?
+  attachmentUrl String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  progress    LessonProgress[]
+
+  @@index([courseId, order])
+}
+
+model Enrollment {
+  id         String   @id @default(uuid())
+  courseId   String
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  enrolledAt DateTime @default(now())
+  completedAt DateTime?
+
+  @@unique([courseId, studentId])
+  @@index([studentId])
+}
+
+model LessonProgress {
+  id         String   @id @default(uuid())
+  lessonId   String
+  lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  completed  Boolean  @default(false)
+  completedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@unique([lessonId, studentId])
+  @@index([studentId])
+}
+

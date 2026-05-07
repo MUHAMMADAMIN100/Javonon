@@ -118,6 +118,7 @@ export class ApplicationsService {
         direction: dto.direction,
         comment: dto.comment?.trim() || null,
         programId: dto.programId || null,
+        source: dto.source || 'LANDING_FORM',
       },
     });
 
