@@ -184,14 +184,25 @@ export default function ProgramsSection() {
               whileHover={{ y: -4 }}
               onClick={() => setSelected(p)}
             >
-              {p.imageUrl && (
-                <div className="sp-item-img">
+              {/* QA-fix #3: image-fallback. На сломанной картинке прячем
+                  <img>, родитель .sp-item-img.fallback показывает gradient
+                  + первую букву названия. */}
+              <div className={`sp-item-img${!p.imageUrl ? ' fallback' : ''}`}>
+                {p.imageUrl && (
                   <img
                     src={p.imageUrl.startsWith('http') ? p.imageUrl : `${API_BASE}${p.imageUrl}`}
-                    alt=""
+                    alt={p.name}
+                    onError={(e) => {
+                      const img = e.currentTarget as HTMLImageElement;
+                      img.style.display = 'none';
+                      img.parentElement?.classList.add('fallback');
+                    }}
                   />
-                </div>
-              )}
+                )}
+                <span className="sp-item-img-fallback">
+                  {(p.name || '?').charAt(0).toUpperCase()}
+                </span>
+              </div>
               <div className="sp-item-body">
                 <div className="sp-item-head">
                   <div className="sp-badge">{DIRECTION_LABEL[p.direction]}</div>

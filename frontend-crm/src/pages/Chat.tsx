@@ -67,10 +67,34 @@ export default function Chat() {
   });
   const users = usersQuery.data ?? [];
 
-  // Realtime: новое сообщение → добавляем в кеш мгновенно (без перезагрузки).
+  // QA-fix #5: Realtime + optimistic дублировали сообщения.
+  // Поток ДО: 1) optimistic.append(tempMsg) 2) сервер вернул real msg
+  //          3) socket 'chat:message' тоже вернул real msg → доп.копия
+  //          4) invalidate refetch — finally чистит, но user видит дубль.
+  // Поток ПОСЛЕ:
+  //   - Если приходит чужое сообщение — append.
+  //   - Если приходит МОЁ — заменяем последний tmp-сообщение того же текста
+  //     на серверную версию (или просто игнорируем, если нет tmp-копии).
+  //   - Дополнительно фильтруем по id, чтобы не было точных дублей.
   useRealtimeEvent('chat:message', (data: any) => {
     if (data.roomId === activeId) {
-      qc.setQueryData<ChatMessage[]>(messagesKey, (cur) => optimistic.append(cur, data.message));
+      qc.setQueryData<ChatMessage[]>(messagesKey, (cur) => {
+        const list = cur ?? [];
+        // Не добавляем если такой id уже есть.
+        if (list.some((m) => m.id === data.message.id)) return list;
+        // Если это моё сообщение — попробуем заменить tmp-копию по тексту.
+        if (me?.id && data.message.authorId === me.id) {
+          const tmpIdx = list.findIndex(
+            (m) => m.id.startsWith('tmp-') && m.text === data.message.text,
+          );
+          if (tmpIdx >= 0) {
+            const next = list.slice();
+            next[tmpIdx] = data.message;
+            return next;
+          }
+        }
+        return [...list, data.message];
+      });
     }
     qc.invalidateQueries({ queryKey: keys.chat.unread() });
     qc.invalidateQueries({ queryKey: roomsKey });

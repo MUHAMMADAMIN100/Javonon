@@ -257,33 +257,65 @@ export class ChatService {
   async createDirectRoom(creatorId: string, otherUserId: string) {
     if (!otherUserId) throw new BadRequestException('Не указан собеседник');
     if (creatorId === otherUserId) throw new BadRequestException('Нельзя создать чат с самим собой');
-    // QA-fix: проверяем, что собеседник существует (раньше падало FK-500).
     const otherUser = await this.prisma.user.findUnique({
       where: { id: otherUserId },
       select: { id: true, fullName: true },
     });
     if (!otherUser) throw new NotFoundException('Пользователь не найден');
-    // Найти существующий direct
-    const existing = await this.prisma.chatRoom.findFirst({
-      where: {
-        type: 'DIRECT',
-        AND: [
-          { members: { some: { userId: creatorId } } },
-          { members: { some: { userId: otherUserId } } },
-        ],
-      },
-      include: { members: { include: { user: { select: { id: true, fullName: true, role: true } } } } },
-    });
-    if (existing) return existing;
 
-    return this.prisma.chatRoom.create({
-      data: {
-        type: 'DIRECT',
-        title: otherUser.fullName || 'Прямой чат',
-        members: { create: [{ userId: creatorId }, { userId: otherUserId }] },
-      },
-      include: { members: { include: { user: { select: { id: true, fullName: true, role: true } } } } },
+    const includeAll = {
+      members: { include: { user: { select: { id: true, fullName: true, role: true } } } },
+    };
+
+    // QA-fix #6: атомарный find-or-create в $transaction. Раньше при двух
+    // параллельных запросах (например клик дважды на "+ собеседник")
+    // findFirst возвращал null обоим, и создавались ДВА direct-room для
+    // одной пары — список чатов наполнялся дублями.
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.chatRoom.findFirst({
+        where: {
+          type: 'DIRECT',
+          AND: [
+            { members: { some: { userId: creatorId } } },
+            { members: { some: { userId: otherUserId } } },
+          ],
+        },
+        include: includeAll,
+      });
+      if (existing) return existing;
+      return tx.chatRoom.create({
+        data: {
+          type: 'DIRECT',
+          title: otherUser.fullName || 'Прямой чат',
+          members: { create: [{ userId: creatorId }, { userId: otherUserId }] },
+        },
+        include: includeAll,
+      });
     });
+  }
+
+  /** QA-fix #6: одноразовая зачистка существующих дублей direct-room.
+   * Группируем по {creatorId, otherUserId}, оставляем самый старый,
+   * остальные удаляем (cascade members + messages). */
+  async dedupeDirectRooms() {
+    const directs = await this.prisma.chatRoom.findMany({
+      where: { type: 'DIRECT' },
+      include: { members: { select: { userId: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    const seen = new Map<string, string>(); // pair-key → kept room id
+    let removed = 0;
+    for (const r of directs) {
+      const ids = r.members.map((m) => m.userId).sort();
+      const key = ids.join('|');
+      if (seen.has(key)) {
+        await this.prisma.chatRoom.delete({ where: { id: r.id } });
+        removed++;
+      } else {
+        seen.set(key, r.id);
+      }
+    }
+    return { removed, kept: seen.size };
   }
 
   async unreadCounts(userId: string) {

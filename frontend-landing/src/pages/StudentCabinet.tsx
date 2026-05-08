@@ -90,13 +90,18 @@ export default function StudentCabinet() {
   const me = meQuery.data ?? null;
   const loading = meQuery.isLoading;
 
-  // Если запрос /me провалился (401) — кикаем на /login.
+  // QA-fix #4: при ЛЮБОЙ ошибке /me раньше делали logout → при cold-start
+  // Railway пользователь без причины оказывался на /login. Теперь кикаем
+  // ТОЛЬКО на 401 (реальный auth-fail). Network/5xx — показываем retry.
   useEffect(() => {
     if (meQuery.isError) {
-      clearToken();
-      navigate('/login', { replace: true });
+      const status = (meQuery.error as any)?.response?.status;
+      if (status === 401 || status === 403) {
+        clearToken();
+        navigate('/login', { replace: true });
+      }
     }
-  }, [meQuery.isError, navigate]);
+  }, [meQuery.isError, meQuery.error, navigate]);
 
   useStudentRealtime({
     'student:updated': () => qc.invalidateQueries({ queryKey: meKey }),
@@ -144,6 +149,35 @@ export default function StudentCabinet() {
     setConfirmDelete(docId);
   };
 
+  // QA-fix #4: понятный fallback для network errors (cold-start Railway).
+  if (meQuery.isError && !me) {
+    const status = (meQuery.error as any)?.response?.status;
+    // 401/403 уже обработан useEffect выше — там идёт navigate('/login').
+    // Здесь — неauth-ошибки: показываем кнопку Retry.
+    if (status !== 401 && status !== 403) {
+      return (
+        <div style={{
+          minHeight: '100vh', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 16, padding: 20,
+        }}>
+          <div style={{ fontFamily: 'var(--display, Georgia, serif)', fontSize: 28, fontWeight: 500 }}>
+            Не удалось загрузить данные
+          </div>
+          <div style={{ color: 'var(--ink-soft, #64748b)', fontSize: 14, textAlign: 'center', maxWidth: 420 }}>
+            Сервер не ответил вовремя. Возможно, он только что проснулся —
+            попробуй обновить страницу через минуту.
+          </div>
+          <button
+            className="btn-pill solid"
+            onClick={() => meQuery.refetch()}
+            style={{ marginTop: 8 }}
+          >
+            Попробовать снова
+          </button>
+        </div>
+      );
+    }
+  }
   if (loading || !me) {
     return <Loading fullscreen />;
   }

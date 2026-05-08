@@ -1416,6 +1416,13 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   letter-spacing: -0.01em;
   margin-bottom: 20px;
 }
+/* QA-fix #1: вертикальный gap между документами + grid 2 колонки */
+.stu-docs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
 .stu-doc {
   background: var(--bg-soft);
   border: 1.5px dashed var(--bg-mute);
@@ -1836,12 +1843,23 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 
 .af-sections { display: flex; flex-direction: column; gap: 10px; padding: 0 24px 24px; }
 
+/* QA-fix #2: var(--border) не определена в landing — секции сливались.
+   Жёстко прописываем цвет границы и vertical-gap между секциями. */
 .af-section {
-  background: #fafafa; border: 1px solid var(--border); border-radius: 12px;
-  overflow: hidden; transition: all .2s;
+  background: #fafafa;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all .2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+.af-section + .af-section { margin-top: 12px; }
+.af-section.open {
+  box-shadow: 0 6px 18px rgba(1, 54, 139, 0.08);
+  border-color: rgba(1, 54, 139, 0.25);
 }
 
-.af-section.open { box-shadow: 0 4px 12px rgba(0,0,0,0.04); border-color: rgba(213,43,43,0.15); }
+/* старое правило заменено выше */
 
 .af-section-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -2181,7 +2199,9 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 }
 .sp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* QA-fix #3: 240px min — на ~700px ширине помещаются 2 карточки,
+     на ~960px — 3, на 1280px — 4. Раньше 280px → один столбец. */
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 20px;
 }
 .sp-item {
@@ -2203,15 +2223,20 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   position: relative;
   aspect-ratio: 16 / 10;
   overflow: hidden;
-  background: linear-gradient(135deg, var(--primary, #01368B) 0%, #2e5fc7 100%);
+  background: linear-gradient(135deg, #01368B 0%, #2e5fc7 100%);
 }
-.sp-item-img img {
-  width: 100%; height: 100%; object-fit: cover; display: block;
+.sp-item-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* QA-fix #3: красивый fallback вместо broken-image-icon */
+.sp-item-img-fallback {
+  position: absolute; inset: 0;
+  display: none;
+  align-items: center; justify-content: center;
+  font-family: var(--display, Georgia, serif);
+  font-size: 56px; font-weight: 500;
+  letter-spacing: -0.02em; color: white;
 }
-.sp-item-img::after {
-  /* Fallback letter on gradient when img is missing */
-  content: '';
-}
+.sp-item-img.fallback img { display: none; }
+.sp-item-img.fallback .sp-item-img-fallback { display: flex; }
 .sp-item-body {
   padding: 18px 20px 20px;
   display: flex;

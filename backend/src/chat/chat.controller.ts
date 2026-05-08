@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ChatService } from './chat.service';
 
@@ -7,6 +9,14 @@ import { ChatService } from './chat.service';
 @UseGuards(JwtAuthGuard)
 export class ChatController {
   constructor(private svc: ChatService) {}
+
+  /** QA-fix #6: одноразовая зачистка дублей direct-rooms. ADMIN-only. */
+  @Post('dedupe-direct')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  dedupe() {
+    return this.svc.dedupeDirectRooms();
+  }
 
   @Get('rooms')
   rooms(@CurrentUser() me: any) {
