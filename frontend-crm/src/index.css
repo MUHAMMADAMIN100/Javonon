@@ -1163,9 +1163,20 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .program-card-img {
   width: 100%; aspect-ratio: 16 / 9; overflow: hidden;
   background: #f1f5f9;
+  position: relative;
 }
 .program-card-img + .program-card-head { padding-top: 12px !important; }
 .program-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* QA-fix #4: красивый fallback когда нет картинки или image broken — */
+.program-card-img-fallback {
+  position: absolute; inset: 0;
+  display: none; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 56px; font-weight: 500;
+  letter-spacing: -0.02em; color: white;
+  background: linear-gradient(135deg, var(--primary, #01368B) 0%, #2e5fc7 100%);
+}
+.program-card-img.fallback img { display: none; }
+.program-card-img.fallback .program-card-img-fallback { display: flex; }
 .program-image-uploader {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 }
@@ -2179,7 +2190,13 @@ select.input-error {
 .btn-danger {
   background: white !important;
   color: var(--danger) !important;
-  border: 1px solid var(--border) !important;
+  border: 1px solid rgba(220, 38, 38, 0.35) !important;
+}
+/* QA-fix: иконка внутри delete-кнопки была белой (наследовала от
+   .btn-danger .material-symbols-rounded) на белом фоне — её было
+   видно только при hover. Делаем иконку красной по умолчанию. */
+.btn-danger .material-symbols-rounded {
+  color: var(--danger) !important;
 }
 .btn-danger:hover:not(:disabled),
 .btn-danger:focus:not(:disabled) {
@@ -2187,6 +2204,10 @@ select.input-error {
   border-color: var(--danger) !important;
   color: white !important;
   box-shadow: 0 10px 24px rgba(239, 68, 68, 0.25);
+}
+.btn-danger:hover:not(:disabled) .material-symbols-rounded,
+.btn-danger:focus:not(:disabled) .material-symbols-rounded {
+  color: white !important;
 }
 .btn-sm {
   padding: 7px 14px; font-size: 12.5px; border-radius: 100px;

@@ -334,31 +334,52 @@ export default function Finance() {
               Заявки <em>на оплату.</em>
             </h2>
           </div>
-          <div className="card" style={{ padding: 0 }}>
-            <table className="table" style={{ width: '100%' }}>
+          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+            <table className="table" style={{ width: '100%', tableLayout: 'fixed' }}>
+              {/* QA-fix #5: фиксируем ширины и no-wrap для заголовков
+                  (раньше «КОГДА / СТУДЕНТ» сжимались до 1 буквы), плюс
+                  truncate для длинного комментария чтобы не ломал layout. */}
+              <colgroup>
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '26%' }} />
+                <col style={{ width: '16%' }} />
+              </colgroup>
               <thead>
                 <tr>
-                  <th>Когда</th>
-                  <th>Студент</th>
-                  <th>Сумма</th>
-                  <th>Метод</th>
-                  <th>Комментарий</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Когда</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Студент</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Сумма</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Метод</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Комментарий</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {paymentRequests.map((p) => (
                   <tr key={p.id}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtDate(p.createdAt)}</td>
-                    <td style={{ fontWeight: 500 }}>{p.student?.fullName}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'nowrap' }}>{fmtDate(p.createdAt)}</td>
+                    <td style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.student?.fullName}</td>
                     <td style={{
                       fontFamily: 'var(--font-display)',
                       fontWeight: 500,
                       fontSize: 18,
                       color: 'var(--primary-dark)',
+                      whiteSpace: 'nowrap',
                     }}>{fmtMoney(p.amount, p.currency)}</td>
-                    <td style={{ fontSize: 13 }}>{PAYMENT_METHOD_LABEL[p.method]}</td>
-                    <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{p.comment || '—'}</td>
+                    <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{PAYMENT_METHOD_LABEL[p.method]}</td>
+                    <td
+                      style={{
+                        color: 'var(--text-soft)', fontSize: 13,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        maxWidth: 0,
+                      }}
+                      title={p.comment || ''}
+                    >
+                      {p.comment || '—'}
+                    </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button className="btn btn-sm btn-primary" onClick={() => onConfirmPayment(p)}>

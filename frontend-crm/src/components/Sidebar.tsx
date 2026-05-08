@@ -102,7 +102,10 @@ export default function Sidebar() {
         >
           <a
             href={(() => {
-              const base = (import.meta as any).env?.VITE_LANDING_URL || 'https://javonon.vercel.app';
+              // QA-fix #8: javonon.vercel.app/knowledge → 404 (старый Vercel
+              // project без SPA-rewrite). Актуальный landing — на
+              // javonon-landing.vercel.app, его /knowledge работает.
+              const base = (import.meta as any).env?.VITE_LANDING_URL || 'https://javonon-landing.vercel.app';
               return `${base}/knowledge`;
             })()}
             target="_blank"

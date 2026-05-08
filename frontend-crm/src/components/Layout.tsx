@@ -58,17 +58,18 @@ export default function Layout() {
           </div>
         </motion.div>
         <div className="content">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={loc.pathname}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          {/* QA-fix: убрал mode="wait" + exit-anim — раньше при переходе
+              старая страница уходила ДО монтирования новой, было видно
+              пустую белую область (~0.3s gap). Теперь только enter-anim
+              на ключе path, новая страница появляется поверх кеша. */}
+          <motion.div
+            key={loc.pathname}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Outlet />
+          </motion.div>
         </div>
       </div>
     </div>

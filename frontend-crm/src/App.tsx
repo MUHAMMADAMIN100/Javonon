@@ -21,6 +21,7 @@ import Kpi from './pages/Kpi';
 import Reports from './pages/Reports';
 import Chat from './pages/Chat';
 import Lms from './pages/Lms';
+import Loading from './components/Loading';
 
 export default function App() {
   const init = useAuth((s) => s.init);
@@ -29,11 +30,7 @@ export default function App() {
   useEffect(() => { init(); }, [init]);
 
   if (!initialized) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        Загрузка...
-      </div>
-    );
+    return <Loading fullscreen />;
   }
 
   return (

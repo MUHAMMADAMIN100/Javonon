@@ -14,6 +14,7 @@ import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
+import Loading from '../components/Loading';
 
 type Scope = 'all' | 'mine';
 
@@ -234,9 +235,7 @@ export default function Students() {
 
         <AnimatePresence mode="wait">
           {loading ? (
-            <motion.div key="loading" className="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              Загрузка...
-            </motion.div>
+            <Loading />
           ) : filteredItems.length === 0 ? (
             <motion.div key="empty" className="empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="empty-icon"><Icon name="school" size={48} /></div>
