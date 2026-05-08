@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChatRoom,
@@ -254,58 +254,10 @@ export default function Chat() {
           </div>
 
           <div style={{ overflowY: 'auto', flex: 1 }}>
-            {showNewDirect ? (
-              <div style={{ padding: 12 }}>
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  letterSpacing: '0.10em',
-                  color: 'var(--text-soft)',
-                  margin: '4px 8px 8px',
-                  textTransform: 'uppercase',
-                }}>Выбери собеседника</div>
-                {users.filter((u) => u.id !== me?.id).map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => startDirect(u.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      background: 'transparent',
-                      border: 'none',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                    }}
-                  >
-                    <div style={{
-                      width: 32, height: 32, borderRadius: '50%',
-                      background: 'var(--primary)',
-                      color: 'var(--text)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: 'var(--font-display)',
-                      fontWeight: 600, fontSize: 12,
-                    }}>{initials(u.fullName)}</div>
-                    <div style={{ fontSize: 14 }}>{u.fullName}</div>
-                  </button>
-                ))}
-              </div>
-            ) : showNewTeam ? (
-              <NewTeamForm
-                users={users.filter((u) => u.id !== me?.id)}
-                onCreate={async (title, memberIds) => {
-                  const room = await createTeamRoom(title, memberIds);
-                  setShowNewTeam(false);
-                  qc.invalidateQueries({ queryKey: roomsKey });
-                  setActiveId(room.id);
-                }}
-                onCancel={() => setShowNewTeam(false)}
-              />
-            ) : (
-              rooms.map((r) => {
+            {/* QA-fix #5: список чатов всегда виден; "+ собеседник" /
+                "+ команда" открываются в отдельной модалке поверх. */}
+            {(() => {
+              return rooms.map((r) => {
                 const isActive = r.id === activeId;
                 const lastMsg = r.messages?.[0];
                 const otherMember = r.type === 'DIRECT'
@@ -367,8 +319,8 @@ export default function Chat() {
                     </div>
                   </button>
                 );
-              })
-            )}
+              });
+            })()}
           </div>
         </div>
 
@@ -406,11 +358,13 @@ export default function Chat() {
               <div className="empty" style={{ marginTop: 80 }}>Сообщений пока нет — начни первым</div>
             )}
             {messages.map((m, i) => {
-              const isMine = m.authorId === me?.id;
+              // QA-fix #6: надёжное определение isMine. Bot (__BOT__ mention)
+              // — всегда слева. Иначе сравниваем authorId с me.id.
+              const isBot = m.mentionsIds?.includes('__BOT__');
+              const isMine = !isBot && !!me?.id && m.authorId === me.id;
               const prev = messages[i - 1];
               const showHeader = !prev || prev.authorId !== m.authorId ||
                 new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60 * 1000;
-              const isBot = m.mentionsIds?.includes('__BOT__');
               const isMentionedMe = me?.id && m.mentionsIds?.includes(me.id);
               return (
                 <motion.div
@@ -419,31 +373,35 @@ export default function Chat() {
                   animate={{ opacity: 1, y: 0 }}
                   style={{
                     display: 'flex',
-                    flexDirection: isBot ? 'row' : (isMine ? 'row-reverse' : 'row'),
+                    // Всегда row — alignment делаем через justify-content + max-width.
+                    // Так надёжнее чем row-reverse (rtl bugs c flex-end).
+                    justifyContent: isMine ? 'flex-end' : 'flex-start',
                     gap: 10,
                     marginBottom: showHeader ? 14 : 4,
                     alignItems: 'flex-end',
                   }}
                 >
-                  {showHeader || isBot ? (
-                    <div style={{
-                      width: 32, height: 32, borderRadius: '50%',
-                      background: isBot ? 'linear-gradient(135deg, var(--primary), var(--text))' : (isMine ? 'var(--primary)' : 'var(--text)'),
-                      color: isMine && !isBot ? 'var(--text)' : 'white',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: 'var(--font-display)',
-                      fontWeight: 600, fontSize: 11,
-                      flexShrink: 0,
-                    }}>{isBot ? '🤖' : initials(m.author?.fullName || '?')}</div>
-                  ) : <div style={{ width: 32 }} />}
-                  <div style={{ maxWidth: '70%' }}>
+                  {/* Аватар СОБЕСЕДНИКА — слева. Свой не показываем чтобы был ровный край справа. */}
+                  {!isMine && (
+                    showHeader || isBot ? (
+                      <div style={{
+                        width: 32, height: 32, borderRadius: '50%',
+                        background: isBot ? 'linear-gradient(135deg, var(--primary), var(--text))' : 'var(--text)',
+                        color: 'white',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: 'var(--font-display)',
+                        fontWeight: 600, fontSize: 11,
+                        flexShrink: 0,
+                      }}>{isBot ? '🤖' : initials(m.author?.fullName || '?')}</div>
+                    ) : <div style={{ width: 32, flexShrink: 0 }} />
+                  )}
+                  <div style={{ maxWidth: '70%', display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start' }}>
                     {(showHeader || isBot) && (
                       <div style={{
                         fontFamily: 'var(--font-mono)',
                         fontSize: 10,
                         letterSpacing: '0.08em',
                         color: 'var(--text-light)',
-                        textAlign: isBot ? 'left' : (isMine ? 'right' : 'left'),
                         marginBottom: 4,
                         textTransform: 'uppercase',
                       }}>
@@ -456,11 +414,11 @@ export default function Chat() {
                         : isMentionedMe && !isMine
                           ? 'var(--primary-soft)'
                           : isMine
-                            ? 'var(--text)'
-                            : 'var(--bg-soft)',
+                            ? 'var(--primary, #01368B)'
+                            : 'var(--bg-soft, #f1f5f9)',
                       color: isBot ? 'var(--text)' : (isMine ? 'white' : 'var(--text)'),
                       padding: '10px 14px',
-                      borderRadius: 14,
+                      borderRadius: isMine ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
                       fontSize: 14,
                       lineHeight: 1.5,
                       wordWrap: 'break-word',
@@ -565,6 +523,146 @@ export default function Chat() {
           </form>
         </div>
       </div>
+
+      {/* QA-fix #5: модалка выбора собеседника для нового direct-чата */}
+      <AnimatePresence>
+        {showNewDirect && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowNewDirect(false)}
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(8, 11, 24, 0.55)',
+              backdropFilter: 'blur(4px)', zIndex: 9999,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'white', borderRadius: 20, padding: 28, width: 'min(440px, 92vw)',
+                maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+                boxShadow: '0 24px 60px rgba(0, 0, 0, 0.25)',
+              }}
+            >
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                letterSpacing: '0.16em', color: 'var(--text-soft)',
+                textTransform: 'uppercase', marginBottom: 8,
+              }}>NEW DIRECT MESSAGE</div>
+              <h3 style={{
+                fontFamily: 'var(--font-display)', fontSize: 22,
+                fontWeight: 500, marginBottom: 18,
+              }}>
+                Выбери <em style={{
+                  fontFamily: 'Times New Roman, Georgia, serif',
+                  fontWeight: 400, color: 'var(--primary-dark)',
+                }}>собеседника.</em>
+              </h3>
+              <div style={{ flex: 1, overflowY: 'auto', margin: '-4px -4px 12px' }}>
+                {users.filter((u: any) => u.id !== me?.id).length === 0 ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-soft)' }}>
+                    Нет доступных пользователей
+                  </div>
+                ) : (
+                  users.filter((u: any) => u.id !== me?.id).map((u: any) => (
+                    <button
+                      key={u.id}
+                      onClick={() => { startDirect(u.id); setShowNewDirect(false); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        width: '100%', padding: '12px 14px',
+                        borderRadius: 12, background: 'transparent',
+                        border: 'none', cursor: 'pointer', textAlign: 'left',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-soft, #f8fafc)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <span style={{
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: 'var(--primary, #01368B)', color: 'white',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: 'var(--font-display)',
+                        fontWeight: 600, fontSize: 12, flexShrink: 0,
+                      }}>{initials(u.fullName)}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500, fontSize: 14 }}>{u.fullName}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
+                          {u.role === 'ADMIN' ? 'Администратор' : u.role === 'ACCOUNTANT' ? 'Бухгалтер' : 'Сотрудник'}
+                        </div>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowNewDirect(false)}
+                style={{ alignSelf: 'flex-end' }}
+              >
+                Отмена
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* QA-fix #5: модалка для team-chat */}
+      <AnimatePresence>
+        {showNewTeam && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowNewTeam(false)}
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(8, 11, 24, 0.55)',
+              backdropFilter: 'blur(4px)', zIndex: 9999,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'white', borderRadius: 20, padding: 28, width: 'min(480px, 92vw)',
+                maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+                boxShadow: '0 24px 60px rgba(0, 0, 0, 0.25)',
+              }}
+            >
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                letterSpacing: '0.16em', color: 'var(--text-soft)',
+                textTransform: 'uppercase', marginBottom: 8,
+              }}>NEW TEAM</div>
+              <h3 style={{
+                fontFamily: 'var(--font-display)', fontSize: 22,
+                fontWeight: 500, marginBottom: 18,
+              }}>
+                Создай <em style={{
+                  fontFamily: 'Times New Roman, Georgia, serif',
+                  fontWeight: 400, color: 'var(--primary-dark)',
+                }}>команду.</em>
+              </h3>
+              <NewTeamForm
+                users={users.filter((u: any) => u.id !== me?.id)}
+                onCreate={async (title, memberIds) => {
+                  const room = await createTeamRoom(title, memberIds);
+                  setShowNewTeam(false);
+                  qc.invalidateQueries({ queryKey: roomsKey });
+                  setActiveId(room.id);
+                }}
+                onCancel={() => setShowNewTeam(false)}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
