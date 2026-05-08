@@ -64,7 +64,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
       (client.data as any) = { userId: id, role };
 
-      if (role === 'ADMIN' || role === 'EMPLOYEE') {
+      // QA-fix: ACCOUNTANT тоже staff — раньше его не было в комнате,
+      // поэтому он не получал realtime-событий (chat:message, notifications).
+      if (role === 'ADMIN' || role === 'EMPLOYEE' || role === 'ACCOUNTANT') {
         client.join('staff');
         client.join(`user:${id}`);
       } else if (role === 'STUDENT') {

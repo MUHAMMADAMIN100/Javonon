@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -8,6 +8,7 @@ import { ChatRoomType } from '@prisma/client';
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
   constructor(
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
@@ -139,7 +140,21 @@ export class ChatService {
       select: { fullName: true },
     });
 
-    const msg = await this.prisma.chatMessage.create({
+    // QA-fix: ускоряем create — для свежесозданного сообщения reactions всегда
+    // пусто (массив [] добавим вручную), replyTo подгружаем только если есть
+    // replyToId. Меньше работы для Prisma → быстрее emit собеседнику.
+    const includeBlock: any = {
+      author: { select: { id: true, fullName: true, role: true } },
+    };
+    if (options.replyToId) {
+      includeBlock.replyTo = {
+        select: {
+          id: true, text: true, authorId: true, attachments: true, deletedAt: true,
+          author: { select: { id: true, fullName: true } },
+        },
+      };
+    }
+    const created = await this.prisma.chatMessage.create({
       data: {
         roomId,
         authorId,
@@ -148,68 +163,74 @@ export class ChatService {
         replyToId: options.replyToId || null,
         attachments: hasAttachments ? (options.attachments as any) : undefined,
       },
-      include: {
-        author: { select: { id: true, fullName: true, role: true } },
-        replyTo: {
-          select: {
-            id: true, text: true, authorId: true, attachments: true,
-            author: { select: { id: true, fullName: true } },
-          },
-        },
-        reactions: { select: { id: true, emoji: true, userId: true } },
-      },
+      include: includeBlock,
     });
+    const msg = { ...created, reactions: [] as any[] };
+
+    // КРИТИЧНО ДЛЯ СКОРОСТИ: сначала broadcast — собеседник видит сообщение
+    // мгновенно. Потом параллельно: room.updatedAt + уведомления.
+    this.realtime.emitStaff('chat:message', { roomId, message: msg });
+
+    // Всё остальное — fire-and-forget в фоне, без await чтобы не задерживать
+    // ответ автору и не мешать broadcast'у.
+    this.afterSendBackground(msg, roomId, authorId, trimmed, resolvedMentions, author?.fullName).catch(
+      (err) => this.logger.error(`afterSendBackground failed: ${err?.message}`),
+    );
+
+    return msg;
+  }
+
+  /** Фоновая работа после emit'а: room update + notifications + AI parse. */
+  private async afterSendBackground(
+    msg: { id: string },
+    roomId: string,
+    authorId: string,
+    trimmed: string,
+    resolvedMentions: string[],
+    authorName?: string,
+  ) {
+    // 1) bump room updatedAt — не блокирует доставку
     await this.prisma.chatRoom.update({
       where: { id: roomId },
       data: { updatedAt: new Date() },
     });
 
-    // Уведомляем упомянутых (с приоритетом, отдельный type CHAT_MENTION)
+    // 2) Notifications + AI — параллельно
     const mentionedSet = new Set(resolvedMentions);
-    for (const mid of resolvedMentions) {
-      await this.notifications.notifyUser(mid, {
-        type: 'CHAT_MENTION',
-        title: `💬 Вас упомянул ${author?.fullName || 'кто-то'}`,
-        message: trimmed.slice(0, 140),
-        payload: { roomId, messageId: msg.id, authorId },
-      });
-    }
-
-    // QA-fix: уведомления для всех остальных участников комнаты —
-    // type CHAT_MESSAGE (без приоритета). Не отправляем автору и тем,
-    // кто уже получил CHAT_MENTION (чтобы не дублировать).
-    const allMembers = await this.prisma.chatMember.findMany({
-      where: { roomId },
-      select: { userId: true },
-    });
-    const room = await this.prisma.chatRoom.findUnique({
-      where: { id: roomId },
-      select: { type: true, title: true },
-    });
+    const [allMembers, room] = await Promise.all([
+      this.prisma.chatMember.findMany({ where: { roomId }, select: { userId: true } }),
+      this.prisma.chatRoom.findUnique({ where: { id: roomId }, select: { type: true, title: true } }),
+    ]);
     const roomLabel = room?.type === 'GENERAL'
       ? 'Команда Javonon'
       : room?.type === 'TEAM'
         ? room.title || 'Команда'
-        : author?.fullName || 'Чат';
+        : authorName || 'Чат';
+
+    // Все notifications в параллель — Promise.all вместо for-await.
+    const tasks: Promise<unknown>[] = [];
+    for (const mid of resolvedMentions) {
+      tasks.push(this.notifications.notifyUser(mid, {
+        type: 'CHAT_MENTION',
+        title: `💬 Вас упомянул ${authorName || 'кто-то'}`,
+        message: trimmed.slice(0, 140),
+        payload: { roomId, messageId: msg.id, authorId },
+      }));
+    }
     for (const m of allMembers) {
       if (m.userId === authorId) continue;
       if (mentionedSet.has(m.userId)) continue;
-      await this.notifications.notifyUser(m.userId, {
+      tasks.push(this.notifications.notifyUser(m.userId, {
         type: 'CHAT_MESSAGE',
-        title: `${author?.fullName || 'Кто-то'} · ${roomLabel}`,
+        title: `${authorName || 'Кто-то'} · ${roomLabel}`,
         message: trimmed.slice(0, 140),
         payload: { roomId, messageId: msg.id, authorId },
-      });
+      }));
     }
+    await Promise.all(tasks);
 
-    // Realtime broadcast
-    this.realtime.emitStaff('chat:message', { roomId, message: msg });
-
-    // AI-обработка: если в сообщении есть команда «добавь расход / доход / потратил / оплатил»
-    // — парсим и сами создаём транзакцию + ответ от бота.
+    // AI-обработка: если в сообщении есть команда «добавь расход» — парсим.
     await this.tryAiAction(roomId, authorId, trimmed);
-
-    return msg;
   }
 
   /**

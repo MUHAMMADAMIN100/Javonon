@@ -136,27 +136,45 @@ export default function Chat() {
   //     на серверную версию (или просто игнорируем, если нет tmp-копии).
   //   - Дополнительно фильтруем по id, чтобы не было точных дублей.
   useRealtimeEvent('chat:message', (data: any) => {
-    if (data.roomId === activeId) {
-      qc.setQueryData<ChatMessage[]>(messagesKey, (cur) => {
-        const list = cur ?? [];
-        // Не добавляем если такой id уже есть.
-        if (list.some((m) => m.id === data.message.id)) return list;
-        // Если это моё сообщение — попробуем заменить tmp-копию по тексту.
-        if (me?.id && data.message.authorId === me.id) {
-          const tmpIdx = list.findIndex(
-            (m) => m.id.startsWith('tmp-') && m.text === data.message.text,
-          );
-          if (tmpIdx >= 0) {
-            const next = list.slice();
-            next[tmpIdx] = data.message;
-            return next;
-          }
+    // QA-fix: обновляем кеш для ЛЮБОЙ комнаты, не только активной — чтобы
+    // при переключении не было лишнего запроса к серверу. И через setQueryData
+    // вместо invalidate — мгновенно, без HTTP round-trip.
+    const targetKey = keys.chat.room(data.roomId);
+    qc.setQueryData<ChatMessage[]>(targetKey, (cur) => {
+      const list = cur ?? [];
+      if (list.some((m) => m.id === data.message.id)) return list;
+      // Если это моё сообщение — заменяем tmp-копию по тексту/времени.
+      if (me?.id && data.message.authorId === me.id) {
+        const tmpIdx = list.findIndex(
+          (m) => m.id.startsWith('tmp-') && m.text === data.message.text,
+        );
+        if (tmpIdx >= 0) {
+          const next = list.slice();
+          next[tmpIdx] = data.message;
+          return next;
         }
-        return [...list, data.message];
+      }
+      return [...list, data.message];
+    });
+    // Bump room в roomsKey локально (без refetch) — чтобы preview обновился.
+    qc.setQueryData<ChatRoom[]>(roomsKey, (cur) => {
+      if (!cur) return cur;
+      return cur.map((r) => r.id === data.roomId
+        ? { ...r, updatedAt: data.message.createdAt, messages: [data.message, ...(r.messages || []).slice(0, 0)] }
+        : r,
+      );
+    });
+    // Unread — bump только если не моё сообщение и комната не активная.
+    if (data.message.authorId !== me?.id && data.roomId !== activeId) {
+      qc.setQueryData<Array<{ roomId: string; unread: number }>>(['chat', 'unread'], (cur) => {
+        if (!cur) return cur;
+        const exists = cur.find((u) => u.roomId === data.roomId);
+        if (exists) {
+          return cur.map((u) => u.roomId === data.roomId ? { ...u, unread: u.unread + 1 } : u);
+        }
+        return [...cur, { roomId: data.roomId, unread: 1 }];
       });
     }
-    qc.invalidateQueries({ queryKey: keys.chat.unread() });
-    qc.invalidateQueries({ queryKey: roomsKey });
   });
 
   useEffect(() => {
