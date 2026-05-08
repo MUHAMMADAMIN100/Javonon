@@ -1,17 +1,17 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useRealtimeConnState } from '../realtime';
+import { useShouldShowOfflineBanner } from '../realtime';
 
 /**
- * Тонкий тостер-индикатор состояния realtime-соединения.
- * Не показывается при connected. На disconnected/reconnecting — мягкое
- * сообщение в правом нижнем углу.
+ * Тостер-индикатор состояния realtime-соединения.
+ * Показывается ТОЛЬКО при реальной потере связи (после 3-сек grace period
+ * на самовосстановление). idle/connecting/connected — баннер скрыт.
  */
 export default function RealtimeStatusBanner() {
-  const state = useRealtimeConnState();
+  const { show, state } = useShouldShowOfflineBanner();
 
   return (
     <AnimatePresence>
-      {state !== 'connected' && (
+      {show && (
         <motion.div
           className="rt-status"
           initial={{ opacity: 0, y: 16 }}

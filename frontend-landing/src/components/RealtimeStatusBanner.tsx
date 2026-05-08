@@ -1,18 +1,18 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useRealtimeConnState } from '../realtime';
+import { useShouldShowOfflineBanner } from '../realtime';
 
 export default function RealtimeStatusBanner() {
-  const state = useRealtimeConnState();
+  const { show, state } = useShouldShowOfflineBanner();
   return (
     <AnimatePresence>
-      {state !== 'connected' && (
+      {show && (
         <motion.div
-          className="rt-status"
+          className={`rt-status ${state}`}
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 16 }}
         >
-          <span className="rt-status-dot" />
+          <span className="dot" />
           {state === 'reconnecting'
             ? 'Соединение потеряно, переподключаемся…'
             : 'Нет соединения с сервером'}
