@@ -20,10 +20,13 @@ export class PaymentsService {
     if (dto.method && !VALID_METHODS.includes(dto.method)) {
       throw new BadRequestException('Неизвестный способ оплаты');
     }
-    // QA-fix: валидируем валюту (3 латинские буквы)
+    // QA-fix #14: проверяем валюту против белого списка реально поддерживаемых,
+    // не просто формат. Раньше /^[A-Z]{3}$/ пропускал «BAD», «ZZZ», «FOO» —
+    // студент мог создать платёж в несуществующей валюте.
+    const VALID_CURRENCIES = ['USD', 'EUR', 'RUB', 'CNY', 'TJS', 'KZT', 'UZS', 'GBP', 'JPY', 'KRW'];
     const cur = (dto.currency || 'USD').toUpperCase();
-    if (!/^[A-Z]{3}$/.test(cur)) {
-      throw new BadRequestException('Валюта должна быть 3-буквенным кодом (USD, EUR, и т.д.)');
+    if (!VALID_CURRENCIES.includes(cur)) {
+      throw new BadRequestException(`Неподдерживаемая валюта. Доступно: ${VALID_CURRENCIES.join(', ')}`);
     }
     const payment = await this.prisma.payment.create({
       data: {

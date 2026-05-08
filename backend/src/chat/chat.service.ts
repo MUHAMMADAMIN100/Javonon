@@ -160,7 +160,9 @@ export class ChatService {
    */
   private async tryAiAction(roomId: string, authorId: string, text: string) {
     const lower = text.toLowerCase();
-    const isFinancial = /добавь\s+(расход|доход)|потрат|оплат|приш(ло|ёл)|поступ/i.test(lower);
+    // QA-fix #15: триггер не ловил «запиши доход/расход», «сохрани доход».
+    // Расширяем глаголы — теперь любая команда добавления учитывается.
+    const isFinancial = /(добавь|запиши|сохрани|укажи)\s+(расход|доход)|потрат|оплат|приш(ло|ёл)|поступ/i.test(lower);
     if (!isFinancial) return;
 
     const author = await this.prisma.user.findUnique({
