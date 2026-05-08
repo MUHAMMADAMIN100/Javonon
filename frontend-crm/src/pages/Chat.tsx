@@ -34,7 +34,11 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [showNewDirect, setShowNewDirect] = useState(false);
   const [showNewTeam, setShowNewTeam] = useState(false);
-  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  // Состояние mention-picker'а: query — текст после '@' (или '' если только '@'),
+  // start — позиция в input где начинается '@'. null = picker скрыт.
+  const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const roomsKey = keys.chat.rooms();
@@ -91,6 +95,7 @@ export default function Chat() {
 
   const send = (e: React.FormEvent) => {
     e.preventDefault();
+    if (mention) return; // если открыт picker — Enter выбирает, а не отправляет
     if (!activeId || !input.trim()) return;
     const text = input;
     // 1) optimistic add
@@ -106,8 +111,80 @@ export default function Chat() {
     };
     qc.setQueryData<ChatMessage[]>(messagesKey, (cur) => optimistic.append(cur, optimisticMsg));
     setInput('');
+    setMention(null);
     // 2) actually send
     sendMut.mutate({ roomId: activeId, text });
+  };
+
+  // ============ MENTION PICKER ============
+  // Отслеживаем '@' в input, открываем dropdown с участниками комнаты.
+  // Кандидаты — members активной комнаты (без меня), либо все users если их нет.
+  const activeRoom = rooms.find((r) => r.id === activeId);
+  const mentionCandidates = (() => {
+    if (!mention) return [];
+    const memberUsers = activeRoom?.members
+      ?.map((m) => m.user)
+      .filter((u): u is NonNullable<typeof u> => !!u && u.id !== me?.id) ?? [];
+    const pool = memberUsers.length ? memberUsers : users.filter((u: any) => u.id !== me?.id);
+    const q = mention.query.toLowerCase();
+    if (!q) return pool.slice(0, 8);
+    return pool
+      .filter((u: any) => u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().startsWith(q))
+      .slice(0, 8);
+  })();
+
+  // При изменении input ищем '@' непосредственно перед курсором.
+  const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setInput(v);
+    const pos = e.target.selectionStart ?? v.length;
+    // Ищем последний '@' до курсора, который начинает «слово».
+    const before = v.slice(0, pos);
+    const m = before.match(/(?:^|\s)@([\wа-яА-ЯёЁ.\-]*)$/);
+    if (m) {
+      setMention({ query: m[1], start: pos - m[1].length - 1 }); // позиция '@'
+      setMentionIdx(0);
+    } else {
+      setMention(null);
+    }
+  };
+
+  const insertMention = (user: { id: string; fullName: string }) => {
+    if (!mention || !inputRef.current) return;
+    // Заменяем '@<query>' на '@firstname-lastname '
+    const handle = '@' + user.fullName.toLowerCase().replace(/\s+/g, '-');
+    const before = input.slice(0, mention.start);
+    const afterStart = mention.start + 1 + mention.query.length;
+    const after = input.slice(afterStart);
+    const newVal = before + handle + ' ' + after;
+    setInput(newVal);
+    setMention(null);
+    // Возвращаем фокус и курсор после вставленного handle.
+    queueMicrotask(() => {
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        const caret = before.length + handle.length + 1;
+        el.setSelectionRange(caret, caret);
+      }
+    });
+  };
+
+  const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!mention || mentionCandidates.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setMentionIdx((i) => (i + 1) % mentionCandidates.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setMentionIdx((i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      insertMention(mentionCandidates[mentionIdx] as any);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setMention(null);
+    }
   };
 
   const directMut = useInvalidatingMutation({
@@ -119,8 +196,6 @@ export default function Chat() {
     },
   });
   const startDirect = (userId: string) => directMut.mutate(userId);
-
-  const activeRoom = rooms.find((r) => r.id === activeId);
 
   return (
     <>
@@ -404,11 +479,77 @@ export default function Chat() {
             borderTop: '1px solid var(--border-soft)',
             display: 'flex',
             gap: 8,
+            position: 'relative',
           }}>
+            {/* Mention picker dropdown */}
+            {mention && mentionCandidates.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: 20,
+                right: 80,
+                marginBottom: 4,
+                background: 'white',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                boxShadow: '0 12px 32px rgba(0,0,0,0.12)',
+                overflow: 'hidden',
+                zIndex: 50,
+                maxHeight: 280,
+                overflowY: 'auto',
+              }}>
+                <div style={{
+                  padding: '8px 12px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  color: 'var(--text-soft)',
+                  textTransform: 'uppercase',
+                  borderBottom: '1px solid var(--border-soft)',
+                }}>
+                  Упомянуть · ↑↓ выбрать · Enter / Tab вставить · Esc закрыть
+                </div>
+                {mentionCandidates.map((u: any, i: number) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => insertMention(u)}
+                    onMouseEnter={() => setMentionIdx(i)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: 'none',
+                      background: i === mentionIdx ? 'var(--bg-soft, #f5f5f5)' : 'white',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontSize: 14,
+                    }}
+                  >
+                    <span style={{
+                      width: 28, height: 28, borderRadius: '50%',
+                      background: 'var(--primary, #01368B)', color: 'white',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, fontWeight: 600,
+                    }}>{initials(u.fullName)}</span>
+                    <span style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>{u.fullName}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>
+                        {u.role === 'ADMIN' ? 'Администратор' : u.role === 'ACCOUNTANT' ? 'Бухгалтер' : 'Сотрудник'}
+                      </div>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             <input
+              ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Напиши сообщение..."
+              onChange={onInputChange}
+              onKeyDown={onInputKeyDown}
+              placeholder="Напиши сообщение... (@ — упомянуть)"
               style={{
                 flex: 1,
                 padding: '12px 16px',
