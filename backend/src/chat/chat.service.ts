@@ -143,28 +143,33 @@ export class ChatService {
     // QA-fix: ускоряем create — для свежесозданного сообщения reactions всегда
     // пусто (массив [] добавим вручную), replyTo подгружаем только если есть
     // replyToId. Меньше работы для Prisma → быстрее emit собеседнику.
-    const includeBlock: any = {
-      author: { select: { id: true, fullName: true, role: true } },
+    const data = {
+      roomId,
+      authorId,
+      text: trimmed,
+      mentionsIds: resolvedMentions,
+      replyToId: options.replyToId || null,
+      attachments: hasAttachments ? (options.attachments as any) : undefined,
     };
-    if (options.replyToId) {
-      includeBlock.replyTo = {
-        select: {
-          id: true, text: true, authorId: true, attachments: true, deletedAt: true,
-          author: { select: { id: true, fullName: true } },
-        },
-      };
-    }
-    const created = await this.prisma.chatMessage.create({
-      data: {
-        roomId,
-        authorId,
-        text: trimmed,
-        mentionsIds: resolvedMentions,
-        replyToId: options.replyToId || null,
-        attachments: hasAttachments ? (options.attachments as any) : undefined,
-      },
-      include: includeBlock,
-    });
+    const created = options.replyToId
+      ? await this.prisma.chatMessage.create({
+          data,
+          include: {
+            author: { select: { id: true, fullName: true, role: true } },
+            replyTo: {
+              select: {
+                id: true, text: true, authorId: true, attachments: true, deletedAt: true,
+                author: { select: { id: true, fullName: true } },
+              },
+            },
+          },
+        })
+      : await this.prisma.chatMessage.create({
+          data,
+          include: {
+            author: { select: { id: true, fullName: true, role: true } },
+          },
+        });
     const msg = { ...created, reactions: [] as any[] };
 
     // КРИТИЧНО ДЛЯ СКОРОСТИ: сначала broadcast — собеседник видит сообщение

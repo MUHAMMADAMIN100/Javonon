@@ -53,10 +53,7 @@ export default function Chat() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: ChatMessage } | null>(null);
-  // emojiPickerFor зарезервирован для будущего полного picker'а; quick-react
-  // через context-menu пока достаточно. Подавляем lint через void-присвоение.
-  const [, ] = useState<string | null>(null);
-  void 0;
+  // (emojiPickerFor зарезервирован для будущего полного picker'а — пока quick-react через context-menu достаточно)
   const [forwardSource, setForwardSource] = useState<ChatMessage | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
