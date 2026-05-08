@@ -578,12 +578,20 @@ function renderMessageWithMentions(text: string) {
         p.startsWith('@') ? (
           <span
             key={i}
+            // Контраст работает и на белом (свои/чужие пузыри), и на тёмно-синем
+            // (свои сообщения): color: inherit наследуется от пузыря, фон —
+            // полупрозрачный белый (на тёмном фоне он становится viтрин-glass,
+            // на светлом — мягкий голубой акцент благодаря mix-blend).
             style={{
-              fontWeight: 600,
-              color: 'var(--primary-dark)',
-              background: 'rgba(1, 54, 139,0.16)',
-              padding: '0 4px',
-              borderRadius: 4,
+              fontWeight: 700,
+              color: 'inherit',
+              background: 'rgba(127, 169, 248, 0.32)',
+              padding: '1px 6px',
+              borderRadius: 6,
+              textDecoration: 'underline',
+              textDecorationColor: 'currentColor',
+              textDecorationThickness: '1px',
+              textUnderlineOffset: '2px',
             }}
           >
             {p}
