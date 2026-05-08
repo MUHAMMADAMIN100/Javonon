@@ -140,37 +140,29 @@ export class ChatService {
       select: { fullName: true },
     });
 
-    // QA-fix: ускоряем create — для свежесозданного сообщения reactions всегда
-    // пусто (массив [] добавим вручную), replyTo подгружаем только если есть
-    // replyToId. Меньше работы для Prisma → быстрее emit собеседнику.
-    const data = {
-      roomId,
-      authorId,
-      text: trimmed,
-      mentionsIds: resolvedMentions,
-      replyToId: options.replyToId || null,
-      attachments: hasAttachments ? (options.attachments as any) : undefined,
-    };
-    const created = options.replyToId
-      ? await this.prisma.chatMessage.create({
-          data,
-          include: {
-            author: { select: { id: true, fullName: true, role: true } },
-            replyTo: {
-              select: {
-                id: true, text: true, authorId: true, attachments: true, deletedAt: true,
-                author: { select: { id: true, fullName: true } },
-              },
-            },
+    // Создаём сообщение с минимальным include — author + replyTo + reactions.
+    // reactions всегда пустой для нового сообщения, но Prisma требует include
+    // если фронт ожидает поле в результате (для типизации).
+    const msg = await this.prisma.chatMessage.create({
+      data: {
+        roomId,
+        authorId,
+        text: trimmed,
+        mentionsIds: resolvedMentions,
+        replyToId: options.replyToId || null,
+        attachments: hasAttachments ? (options.attachments as any) : undefined,
+      },
+      include: {
+        author: { select: { id: true, fullName: true, role: true } },
+        replyTo: {
+          select: {
+            id: true, text: true, authorId: true, attachments: true,
+            author: { select: { id: true, fullName: true } },
           },
-        })
-      : await this.prisma.chatMessage.create({
-          data,
-          include: {
-            author: { select: { id: true, fullName: true, role: true } },
-          },
-        });
-    const msg = { ...created, reactions: [] as any[] };
+        },
+        reactions: { select: { id: true, emoji: true, userId: true } },
+      },
+    });
 
     // КРИТИЧНО ДЛЯ СКОРОСТИ: сначала broadcast — собеседник видит сообщение
     // мгновенно. Потом параллельно: room.updatedAt + уведомления.

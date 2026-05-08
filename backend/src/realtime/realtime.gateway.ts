@@ -9,7 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
-type JwtPayload = { sub: string; email: string; role: 'ADMIN' | 'EMPLOYEE' | 'STUDENT' };
+type JwtPayload = { sub: string; email: string; role: 'ADMIN' | 'EMPLOYEE' | 'ACCOUNTANT' | 'STUDENT' };
 
 @Injectable()
 @WebSocketGateway({
