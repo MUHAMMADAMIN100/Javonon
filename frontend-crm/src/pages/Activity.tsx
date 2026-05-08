@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listActivity, ACTIVITY_LABEL, type ActivityAction, type ActivityEntry } from '../api/activity';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
+import Loading from '../components/Loading';
 
 const ACTION_BADGE: Record<ActivityAction, string> = {
   STATUS_CHANGE: 'badge-info',
@@ -79,7 +80,7 @@ export default function Activity() {
         </div>
 
         {loading ? (
-          <div className="empty">Загрузка...</div>
+          <Loading />
         ) : items.length === 0 ? (
           <div className="empty">
             <div className="empty-icon"><Icon name="history" size={48} /></div>

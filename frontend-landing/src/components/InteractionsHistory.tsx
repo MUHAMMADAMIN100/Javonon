@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { listStudentInteractions, type StudentInteraction } from '../studentApi';
 import Icon from '../Icon';
+import Loading from './Loading';
 
 const TYPE_LABEL: Record<string, string> = {
   CALL: 'Звонок',
@@ -43,7 +44,7 @@ export default function InteractionsHistory() {
     <div className="stu-card">
       <h2>История общения с менеджером</h2>
       {loading ? (
-        <div style={{ color: 'var(--text-soft)' }}>Загрузка...</div>
+        <Loading />
       ) : items.length === 0 ? (
         <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
           <Icon name="forum" size={48} style={{ opacity: 0.25, marginBottom: 12 }} />

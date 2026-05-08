@@ -8,6 +8,7 @@ import {
   type KnowledgeCategoryDetail,
   type KnowledgeArticle,
 } from '../studentApi';
+import Loading from '../components/Loading';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import Icon from '../Icon';
@@ -52,7 +53,7 @@ export default function Knowledge() {
               </p>
             </div>
 
-            {loading && <div style={{ color: 'rgba(255,255,255,0.5)', textAlign: 'center', padding: 40 }}>Загрузка...</div>}
+            {loading && <Loading />}
 
             {!selected ? (
               <div style={{

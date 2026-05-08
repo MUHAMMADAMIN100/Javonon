@@ -35,8 +35,8 @@ const uploadStorage = diskStorage({
 });
 
 const ALLOWED_DOC_MIME_RE =
-  /^(image\/(jpeg|jpg|png|webp|heic|heif|gif)|application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|vnd\.ms-excel|vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|zip|x-zip-compressed|x-rar-compressed|vnd\.rar)|text\/plain)$/i;
-const ALLOWED_DOC_EXT_RE = /\.(jpe?g|png|webp|heic|heif|gif|pdf|docx?|xlsx?|zip|rar|txt)$/i;
+  /^(image\/(jpeg|jpg|png|webp|heic|heif|gif)|video\/(mp4|quicktime|x-msvideo|webm|x-matroska|mpeg|3gpp|3gpp2)|audio\/(mpeg|mp3|mp4|wav|ogg|webm|aac)|application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|vnd\.ms-excel|vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.presentationml\.presentation|zip|x-zip-compressed|x-rar-compressed|vnd\.rar|x-7z-compressed)|text\/plain)$/i;
+const ALLOWED_DOC_EXT_RE = /\.(jpe?g|png|webp|heic|heif|gif|pdf|docx?|xlsx?|pptx?|zip|rar|7z|txt|mp4|mov|avi|webm|mkv|mpe?g|m4a|3gp|3g2|mp3|wav|ogg|aac)$/i;
 
 const docFileFilter = (
   _req: any,
@@ -48,7 +48,7 @@ const docFileFilter = (
   }
   cb(
     new BadRequestException(
-      'Недопустимый тип файла. Разрешены: PDF, изображения, Word, Excel, ZIP/RAR, TXT.',
+      'Недопустимый тип файла. Разрешены: PDF, изображения, видео (MP4/MOV/AVI/WEBM/MKV), аудио (MP3/WAV), Word, Excel, PowerPoint, ZIP/RAR/7Z, TXT.',
     ),
     false,
   );

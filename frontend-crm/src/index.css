@@ -2813,13 +2813,17 @@ select.input-error {
   position: absolute;
   top: -4px; right: -4px;
   min-width: 18px; height: 18px; padding: 0 5px;
-  background: var(--text);
-  color: var(--primary);
+  /* Раньше: bg=var(--text) + color=var(--primary) — оба тёмные, число
+     не было видно на чёрном кружке. Меняем на красный фон + белый текст
+     (стандартный паттерн badge — contrastнo на любом фоне). */
+  background: #dc2626;
+  color: white;
   border-radius: 9px;
   font-family: var(--font-mono);
-  font-size: 10px; font-weight: 500;
+  font-size: 10px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
   border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
 }
 .notif-panel {
   position: absolute; top: 56px; right: 24px;

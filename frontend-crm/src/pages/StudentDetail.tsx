@@ -9,6 +9,7 @@ import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
 import { keys } from '../lib/queryKeys';
+import Loading from '../components/Loading';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import DocumentsChecklist from '../components/DocumentsChecklist';
 import InteractionsLog from '../components/InteractionsLog';
@@ -231,7 +232,7 @@ export default function StudentDetail() {
     deleteMut.mutate(undefined as any);
   };
 
-  if (!student || !form) return <div className="empty">Загрузка...</div>;
+  if (!student || !form) return <Loading />;
 
   const isAdmin = me?.role === 'ADMIN';
   const assigned = !!student.managerId || !!student.chinaManagerId;

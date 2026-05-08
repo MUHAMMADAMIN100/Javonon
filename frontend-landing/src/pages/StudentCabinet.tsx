@@ -20,6 +20,7 @@ import CoursesSection from '../components/CoursesSection';
 import InteractionsHistory from '../components/InteractionsHistory';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import Icon from '../Icon';
+import Loading from '../components/Loading';
 import { lkeys, optimistic, useOptimisticMutation } from '../queryClient';
 
 const DIRECTION_LABEL: Record<string, string> = {
@@ -62,6 +63,8 @@ export default function StudentCabinet() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [tab, setTab] = useState<'home' | 'programs' | 'payments' | 'courses' | 'interactions'>('home');
+  // QA-fix: красивая модалка вместо нативного confirm('Удалить документ?')
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const otherRef = useRef<HTMLInputElement>(null);
 
@@ -138,12 +141,11 @@ export default function StudentCabinet() {
   };
 
   const onDelete = (docId: string) => {
-    if (!confirm('Удалить документ?')) return;
-    deleteDocMut.mutate(docId);
+    setConfirmDelete(docId);
   };
 
   if (loading || !me) {
-    return <div className="stu-loading">Загрузка...</div>;
+    return <Loading fullscreen />;
   }
 
   const typed = (me.documents || []).filter((d) => d.type && d.type !== 'OTHER');
@@ -559,6 +561,66 @@ export default function StudentCabinet() {
         </motion.div>
         </>)}
       </main>
+
+      {/* Красивая модалка подтверждения удаления документа */}
+      <AnimatePresence>
+        {confirmDelete && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setConfirmDelete(null)}
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(8, 11, 24, 0.65)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: 9999, backdropFilter: 'blur(4px)',
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 16 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'white', borderRadius: 18, padding: 28, width: 'min(420px, 90vw)',
+                boxShadow: '0 24px 60px rgba(0, 0, 0, 0.25)',
+              }}
+            >
+              <div style={{
+                width: 48, height: 48, borderRadius: '50%',
+                background: 'rgba(220, 38, 38, 0.12)', color: '#dc2626',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 16,
+              }}>
+                <Icon name="delete" size={24} />
+              </div>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 8 }}>
+                Удалить документ?
+              </h3>
+              <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 22 }}>
+                Файл будет удалён безвозвратно. Это действие нельзя отменить.
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  className="btn-pill ghost"
+                  onClick={() => setConfirmDelete(null)}
+                >
+                  Отмена
+                </button>
+                <button
+                  className="btn-pill"
+                  style={{ background: '#dc2626', color: 'white' }}
+                  onClick={() => {
+                    deleteDocMut.mutate(confirmDelete);
+                    setConfirmDelete(null);
+                  }}
+                >
+                  Удалить
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

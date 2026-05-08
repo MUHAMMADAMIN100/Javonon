@@ -9,6 +9,7 @@ import {
   type StudentPayment,
 } from '../studentApi';
 import Icon from '../Icon';
+import Loading from './Loading';
 
 const CATEGORY_LABEL: Record<string, string> = {
   TUITION_PAYMENT: 'Оплата обучения',
@@ -154,7 +155,7 @@ export default function PaymentsSection() {
       <div className="stu-card">
         <h2>История платежей</h2>
         {loading ? (
-          <div style={{ color: 'var(--text-soft)' }}>Загрузка...</div>
+          <Loading />
         ) : items.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
             <Icon name="receipt_long" size={48} style={{ opacity: 0.25, marginBottom: 12 }} />

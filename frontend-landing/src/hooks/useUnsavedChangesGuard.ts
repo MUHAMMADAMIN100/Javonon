@@ -36,10 +36,11 @@ export function useUnsavedChangesGuard(
   useEffect(() => {
     if (!when) return;
 
-    const beforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
+    // Раньше тут был window.addEventListener('beforeunload') —
+    // но он показывает страшный native-диалог браузера ("Закрыть сайт?
+    // Изменения могут не сохраниться"), который НЕЛЬЗЯ стилизовать
+    // (security restriction). Кастомная модалка перехватывает
+    // внутреннюю навигацию (клики по <a> и popstate) — этого достаточно.
 
     const onClick = (e: MouseEvent) => {
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -70,12 +71,10 @@ export function useUnsavedChangesGuard(
       setPendingHref(goingTo);
     };
 
-    window.addEventListener('beforeunload', beforeUnload);
     document.addEventListener('click', onClick, true);
     window.addEventListener('popstate', onPopState);
 
     return () => {
-      window.removeEventListener('beforeunload', beforeUnload);
       document.removeEventListener('click', onClick, true);
       window.removeEventListener('popstate', onPopState);
     };

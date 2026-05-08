@@ -9,6 +9,7 @@ import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
 import { keys } from '../lib/queryKeys';
+import Loading from '../components/Loading';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import DocumentsChecklist, { REQUIRED_DOCUMENTS } from '../components/DocumentsChecklist';
 import DirectionOptions from '../components/DirectionOptions';
@@ -213,7 +214,7 @@ export default function ApplicationDetail() {
   };
 
   if (error) return <div className="error-banner">{error}</div>;
-  if (!app) return <div className="empty">Загрузка...</div>;
+  if (!app) return <Loading />;
 
   const isNew = app.status === 'NEW';
   const isEnrolled = app.status === 'ENROLLED';

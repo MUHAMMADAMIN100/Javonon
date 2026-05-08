@@ -8,6 +8,7 @@ import {
 } from '../studentApi';
 import { useStudentRealtime } from '../realtime';
 import Icon from '../Icon';
+import Loading from './Loading';
 
 const DIRECTION_LABEL: Record<string, string> = {
   BACHELOR: 'Бакалавриат',
@@ -162,7 +163,7 @@ export default function ProgramsSection() {
       </AnimatePresence>
 
       {loading ? (
-        <div className="sp-empty">Загрузка...</div>
+        <Loading />
       ) : items.length === 0 ? (
         <div className="sp-empty">
           <Icon name="school" size={40} />

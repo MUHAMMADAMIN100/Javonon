@@ -8,6 +8,7 @@ import {
   completeLesson,
   type StudentCourse,
 } from '../studentApi';
+import Loading from './Loading';
 import Icon from '../Icon';
 
 export default function CoursesSection() {
@@ -127,7 +128,7 @@ export default function CoursesSection() {
 
   return (
     <div>
-      {loading && <div style={{ padding: 32, color: 'var(--text-soft)' }}>Загрузка...</div>}
+      {loading && <Loading />}
 
       {/* Мои курсы */}
       {my.length > 0 && (

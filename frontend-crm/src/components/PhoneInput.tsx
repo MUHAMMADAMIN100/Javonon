@@ -201,8 +201,20 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
           className="phone-country-flag"
           loading="lazy"
         />
-        <span className="phone-country-code">{country.code}</span>
-        <span className="phone-country-caret">▾</span>
+        {/* inline color/font — родительский контейнер мог быть тёмная тема
+            (color:white), из-за этого var(--text) терялся. Жёсткая фиксация. */}
+        <span
+          className="phone-country-code"
+          style={{ color: '#0f172a', fontSize: 13, fontWeight: 600 }}
+        >
+          {country.code}
+        </span>
+        <span
+          className="phone-country-caret"
+          style={{ color: '#64748b', fontSize: 10, marginLeft: 4 }}
+        >
+          ▾
+        </span>
       </button>
 
       <input
