@@ -102,6 +102,7 @@ model User {
   salaryRecords         SalaryRecord[]
   dailyReports          DailyReport[]
   chatMessages          ChatMessage[] @relation("ChatMessageAuthor")
+  chatReactions         ChatReaction[] @relation("ChatReactionUser")
   chatMemberships       ChatMember[]
   authoredCourses       Course[]      @relation("CourseAuthor")
   interactionsAuthored  Interaction[] @relation("InteractionAuthor")
@@ -476,11 +477,44 @@ model ChatMessage {
   text       String
   // Список упомянутых userId (для @mentions)
   mentionsIds String[] @default([])
+  // ТЗ §3.8 + Telegram-style features:
+  // attachments — массив объектов { url, filename, originalName, mimeType, size }.
+  // replyToId — id сообщения, на которое отвечает (для quote-блока).
+  // isPinned — закреплено в шапке чата.
+  // deletedAt — soft-delete: text="" + deletedAt set, чтобы UI показал "сообщение удалено".
+  // forwardedFromId — id оригинала (если переслано).
+  attachments     Json?
+  replyToId       String?
+  replyTo         ChatMessage?  @relation("ChatMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies         ChatMessage[] @relation("ChatMessageReply")
+  forwardedFromId String?
+  forwardedFrom   ChatMessage?  @relation("ChatMessageForward", fields: [forwardedFromId], references: [id], onDelete: SetNull)
+  forwards        ChatMessage[] @relation("ChatMessageForward")
+  isPinned        Boolean       @default(false)
+  deletedAt       DateTime?
+  reactions       ChatReaction[]
   createdAt  DateTime @default(now())
   editedAt   DateTime?
 
   @@index([roomId, createdAt])
   @@index([authorId])
+  @@index([roomId, isPinned])
+}
+
+// ============================================================
+// ChatReaction — реакции на сообщения (Telegram-style ❤️ 👍 etc.)
+// ============================================================
+model ChatReaction {
+  id        String      @id @default(uuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation("ChatReactionUser", fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String      // например "❤️", "👍" — стандартные unicode emojis
+  createdAt DateTime    @default(now())
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
 }
 
 // ============================================================

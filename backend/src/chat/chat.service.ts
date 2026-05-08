@@ -70,7 +70,16 @@ export class ChatService {
     const recent = await this.prisma.chatMessage.findMany({
       where: { roomId },
       orderBy: { createdAt: 'desc' },
-      include: { author: { select: { id: true, fullName: true, role: true } } },
+      include: {
+        author: { select: { id: true, fullName: true, role: true } },
+        replyTo: {
+          select: {
+            id: true, text: true, authorId: true, attachments: true, deletedAt: true,
+            author: { select: { id: true, fullName: true } },
+          },
+        },
+        reactions: { select: { id: true, emoji: true, userId: true } },
+      },
       take: 200,
     });
     const messages = recent.reverse();
@@ -82,15 +91,34 @@ export class ChatService {
     return { messages };
   }
 
-  async sendMessage(roomId: string, authorId: string, text: string, mentionsIds: string[] = []) {
+  async sendMessage(
+    roomId: string,
+    authorId: string,
+    text: string,
+    mentionsIds: string[] = [],
+    options: { replyToId?: string; attachments?: any[] } = {},
+  ) {
     const trimmed = (text || '').trim();
-    if (!trimmed) throw new BadRequestException('Пустое сообщение');
+    const hasAttachments = Array.isArray(options.attachments) && options.attachments.length > 0;
+    // Сообщение может быть только из вложений (без текста) или только текст.
+    if (!trimmed && !hasAttachments) throw new BadRequestException('Пустое сообщение');
     if (trimmed.length > 4000) throw new BadRequestException('Слишком длинное сообщение');
 
     const member = await this.prisma.chatMember.findUnique({
       where: { roomId_userId: { roomId, userId: authorId } },
     });
     if (!member) throw new NotFoundException('Чат не найден');
+
+    // Validate replyToId — должен быть из этой же комнаты.
+    if (options.replyToId) {
+      const orig = await this.prisma.chatMessage.findUnique({
+        where: { id: options.replyToId },
+        select: { roomId: true },
+      });
+      if (!orig || orig.roomId !== roomId) {
+        throw new BadRequestException('Невозможно ответить: исходное сообщение не найдено');
+      }
+    }
 
     // Парсим @mentions (форматы: @full-name, @ID, @firstname.lastname)
     let resolvedMentions = mentionsIds.length ? mentionsIds : await this.resolveMentionsFromText(trimmed);
@@ -112,8 +140,24 @@ export class ChatService {
     });
 
     const msg = await this.prisma.chatMessage.create({
-      data: { roomId, authorId, text: trimmed, mentionsIds: resolvedMentions },
-      include: { author: { select: { id: true, fullName: true, role: true } } },
+      data: {
+        roomId,
+        authorId,
+        text: trimmed,
+        mentionsIds: resolvedMentions,
+        replyToId: options.replyToId || null,
+        attachments: hasAttachments ? (options.attachments as any) : undefined,
+      },
+      include: {
+        author: { select: { id: true, fullName: true, role: true } },
+        replyTo: {
+          select: {
+            id: true, text: true, authorId: true, attachments: true,
+            author: { select: { id: true, fullName: true } },
+          },
+        },
+        reactions: { select: { id: true, emoji: true, userId: true } },
+      },
     });
     await this.prisma.chatRoom.update({
       where: { id: roomId },
@@ -366,6 +410,129 @@ export class ChatService {
       const unread = last && last.authorId !== userId &&
         (!m.lastReadAt || last.createdAt > m.lastReadAt) ? 1 : 0;
       return { roomId: m.roomId, unread };
+    });
+  }
+
+  // ============ TELEGRAM-STYLE ACTIONS ============
+
+  /** Toggle реакции: если есть — удаляем, иначе создаём. */
+  async toggleReaction(messageId: string, userId: string, emoji: string) {
+    if (!emoji || emoji.length > 16) throw new BadRequestException('Некорректный эмоджи');
+    const msg = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      select: { roomId: true },
+    });
+    if (!msg) throw new NotFoundException('Сообщение не найдено');
+    // Проверяем что юзер — участник комнаты.
+    const member = await this.prisma.chatMember.findUnique({
+      where: { roomId_userId: { roomId: msg.roomId, userId } },
+    });
+    if (!member) throw new NotFoundException('Чат не найден');
+
+    const existing = await this.prisma.chatReaction.findUnique({
+      where: { messageId_userId_emoji: { messageId, userId, emoji } },
+    });
+    let action: 'added' | 'removed';
+    if (existing) {
+      await this.prisma.chatReaction.delete({ where: { id: existing.id } });
+      action = 'removed';
+    } else {
+      await this.prisma.chatReaction.create({ data: { messageId, userId, emoji } });
+      action = 'added';
+    }
+    this.realtime.emitStaff('chat:reaction', { roomId: msg.roomId, messageId, userId, emoji, action });
+    return { ok: true, action };
+  }
+
+  /** Soft-delete: text="", deletedAt=now. Можно автору ИЛИ ADMIN. */
+  async deleteMessage(messageId: string, userId: string) {
+    const msg = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      select: { authorId: true, roomId: true, deletedAt: true },
+    });
+    if (!msg) throw new NotFoundException('Сообщение не найдено');
+    if (msg.deletedAt) return { ok: true };
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    if (msg.authorId !== userId && user?.role !== 'ADMIN') {
+      throw new BadRequestException('Можно удалять только свои сообщения');
+    }
+    await this.prisma.chatMessage.update({
+      where: { id: messageId },
+      data: { text: '', attachments: undefined, deletedAt: new Date() },
+    });
+    this.realtime.emitStaff('chat:message:deleted', { roomId: msg.roomId, messageId });
+    return { ok: true };
+  }
+
+  /** Pin/unpin сообщение в комнате. ADMIN-only. */
+  async togglePin(messageId: string, userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    if (user?.role !== 'ADMIN') throw new BadRequestException('Только администратор может закреплять');
+    const msg = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      select: { roomId: true, isPinned: true },
+    });
+    if (!msg) throw new NotFoundException('Сообщение не найдено');
+    const updated = await this.prisma.chatMessage.update({
+      where: { id: messageId },
+      data: { isPinned: !msg.isPinned },
+      select: { isPinned: true },
+    });
+    this.realtime.emitStaff('chat:message:pin', { roomId: msg.roomId, messageId, isPinned: updated.isPinned });
+    return { ok: true, isPinned: updated.isPinned };
+  }
+
+  /** Forward — копируем текст + attachments в другую комнату с forwardedFromId. */
+  async forwardMessage(messageId: string, authorId: string, targetRoomId: string) {
+    const orig = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      include: { author: { select: { fullName: true } } },
+    });
+    if (!orig || orig.deletedAt) throw new NotFoundException('Сообщение не найдено');
+    const member = await this.prisma.chatMember.findUnique({
+      where: { roomId_userId: { roomId: targetRoomId, userId: authorId } },
+    });
+    if (!member) throw new NotFoundException('Целевая комната не найдена');
+    const fwd = await this.prisma.chatMessage.create({
+      data: {
+        roomId: targetRoomId,
+        authorId,
+        text: orig.text,
+        attachments: orig.attachments as any,
+        forwardedFromId: orig.id,
+      },
+      include: {
+        author: { select: { id: true, fullName: true, role: true } },
+        forwardedFrom: {
+          select: {
+            id: true, text: true, authorId: true,
+            author: { select: { id: true, fullName: true } },
+          },
+        },
+        reactions: { select: { id: true, emoji: true, userId: true } },
+      },
+    });
+    await this.prisma.chatRoom.update({
+      where: { id: targetRoomId },
+      data: { updatedAt: new Date() },
+    });
+    this.realtime.emitStaff('chat:message', { roomId: targetRoomId, message: fwd });
+    return fwd;
+  }
+
+  /** Список закреплённых сообщений в комнате. */
+  async listPinned(roomId: string, userId: string) {
+    const member = await this.prisma.chatMember.findUnique({
+      where: { roomId_userId: { roomId, userId } },
+    });
+    if (!member) throw new NotFoundException('Чат не найден');
+    return this.prisma.chatMessage.findMany({
+      where: { roomId, isPinned: true, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        author: { select: { id: true, fullName: true, role: true } },
+        reactions: { select: { id: true, emoji: true, userId: true } },
+      },
     });
   }
 }
