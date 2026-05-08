@@ -103,17 +103,26 @@ export class StudentAuthService {
     };
     const cabinet = CABINET[direction] || 1;
 
-    const student = await this.prisma.student.create({
-      data: {
-        fullName,
-        email,
-        phones: [phone],
-        password: passwordHash,
-        direction,
-        cabinet,
-        comment: dto.comment?.trim() || null,
-      },
-    });
+    // QA-fix #43: ловим race-condition через P2002 от unique constraint.
+    let student;
+    try {
+      student = await this.prisma.student.create({
+        data: {
+          fullName,
+          email,
+          phones: [phone],
+          password: passwordHash,
+          direction,
+          cabinet,
+          comment: dto.comment?.trim() || null,
+        },
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        throw new BadRequestException('Такой email уже зарегистрирован');
+      }
+      throw e;
+    }
 
     // Auto-create application
     await this.prisma.application.create({

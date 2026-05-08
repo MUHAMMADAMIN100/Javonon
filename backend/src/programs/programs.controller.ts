@@ -127,8 +127,35 @@ export class ProgramsController {
     if (!dto.name || !dto.university || !dto.city || !dto.major || !dto.direction) {
       throw new BadRequestException('Заполните обязательные поля программы');
     }
+    // QA-fix #37/#38: cost > 0
     if (!Number.isFinite(dto.cost)) {
       throw new BadRequestException('Стоимость должна быть числом');
+    }
+    if (dto.cost <= 0) {
+      throw new BadRequestException('Стоимость должна быть > 0');
+    }
+    if (dto.cost > 10_000_000) {
+      throw new BadRequestException('Стоимость слишком большая');
+    }
+    // QA-fix #39: валидируем direction enum (раньше падало в 500 при FOO).
+    const VALID_DIRECTIONS = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
+    if (!VALID_DIRECTIONS.includes(dto.direction as string)) {
+      throw new BadRequestException(`Неизвестное направление. Доступно: ${VALID_DIRECTIONS.join(', ')}`);
+    }
+    // QA-fix #40: HTML/script-теги в name запрещены.
+    for (const f of ['name', 'university', 'city', 'major'] as const) {
+      if (/[<>]/.test(String(dto[f] ?? ''))) {
+        throw new BadRequestException(`Поле ${f} содержит недопустимые символы`);
+      }
+    }
+    // QA-fix #41: валюту — против белого списка.
+    if (dto.currency) {
+      const VALID_CURRENCIES = ['USD', 'EUR', 'RUB', 'CNY', 'TJS', 'KZT', 'UZS', 'GBP', 'JPY', 'KRW'];
+      const cur = dto.currency.toUpperCase();
+      if (!VALID_CURRENCIES.includes(cur)) {
+        throw new BadRequestException(`Неподдерживаемая валюта. Доступно: ${VALID_CURRENCIES.join(', ')}`);
+      }
+      dto.currency = cur;
     }
     return this.programs.create(dto, user);
   }

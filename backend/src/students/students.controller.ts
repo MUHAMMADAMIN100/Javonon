@@ -63,17 +63,34 @@ export class StudentsController {
   @Get()
   list(
     @CurrentUser() user: any,
-    @Query('direction') direction?: Direction,
-    @Query('status') status?: StudentStatus,
+    @Query('direction') direction?: string,
+    @Query('status') status?: string,
     @Query('cabinet') cabinet?: string,
     @Query('search') search?: string,
     @Query('mine') mine?: string,
     @Query('manager') manager?: string,
   ) {
+    // QA-fix #45/#48: безопасная валидация enum-фильтров и cabinet.
+    const VALID_DIR = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
+    const VALID_STATUS = ['ACTIVE', 'PAUSED', 'GRADUATED', 'ARCHIVED'];
+    if (direction && !VALID_DIR.includes(direction)) {
+      throw new BadRequestException('Неизвестное направление');
+    }
+    if (status && !VALID_STATUS.includes(status)) {
+      throw new BadRequestException('Неизвестный статус');
+    }
+    let cabinetN: number | undefined;
+    if (cabinet !== undefined && cabinet !== '') {
+      const n = parseInt(cabinet, 10);
+      if (!Number.isFinite(n) || n < 1 || n > 99) {
+        throw new BadRequestException('Кабинет должен быть числом от 1 до 99');
+      }
+      cabinetN = n;
+    }
     return this.students.findAll({
-      direction,
-      status,
-      cabinet: cabinet ? parseInt(cabinet, 10) : undefined,
+      direction: direction as Direction | undefined,
+      status: status as StudentStatus | undefined,
+      cabinet: cabinetN,
       search,
       mine: mine === 'true',
       managerUserId: manager || undefined,

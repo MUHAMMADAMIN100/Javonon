@@ -14,19 +14,35 @@ export class PaymentsService {
 
   /** Студент создаёт payment-запрос. */
   async createByStudent(studentId: string, dto: { amount: number; currency?: string; method?: PaymentMethod; comment?: string }) {
-    if (!dto.amount || dto.amount <= 0) throw new BadRequestException('Сумма должна быть > 0');
+    // QA-fix #16/#19/#20/#21: жёсткая type-проверка amount.
+    // Раньше "abc"/NaN падали в 500, true→1, [100]→100 (JS coercion).
+    if (typeof dto.amount !== 'number' || !isFinite(dto.amount) || isNaN(dto.amount)) {
+      throw new BadRequestException('Сумма должна быть числом');
+    }
+    // QA-fix #18: 0.001 → Math.round(0.1)/100 = 0, проходило проверку >0.
+    // Минимум 1 цент эквивалент (0.01).
+    if (dto.amount < 0.01) {
+      throw new BadRequestException('Сумма должна быть не меньше 0.01');
+    }
+    // QA-fix #17: ограничение сверху, чтобы 1e20 не пробил UI/финансы.
+    if (dto.amount > 1_000_000) {
+      throw new BadRequestException('Сумма не может превышать 1 000 000');
+    }
     // QA-fix: валидируем method (был 500 при FOOBAR)
     const VALID_METHODS: PaymentMethod[] = ['CARD', 'BANK_TRANSFER', 'CASH', 'CRYPTO', 'OTHER'];
     if (dto.method && !VALID_METHODS.includes(dto.method)) {
       throw new BadRequestException('Неизвестный способ оплаты');
     }
-    // QA-fix #14: проверяем валюту против белого списка реально поддерживаемых,
-    // не просто формат. Раньше /^[A-Z]{3}$/ пропускал «BAD», «ZZZ», «FOO» —
-    // студент мог создать платёж в несуществующей валюте.
+    // QA-fix #14: проверяем валюту против белого списка реально поддерживаемых.
     const VALID_CURRENCIES = ['USD', 'EUR', 'RUB', 'CNY', 'TJS', 'KZT', 'UZS', 'GBP', 'JPY', 'KRW'];
     const cur = (dto.currency || 'USD').toUpperCase();
     if (!VALID_CURRENCIES.includes(cur)) {
       throw new BadRequestException(`Неподдерживаемая валюта. Доступно: ${VALID_CURRENCIES.join(', ')}`);
+    }
+    // QA-fix #22: ограничение длины комментария.
+    const comment = dto.comment?.trim() || null;
+    if (comment && comment.length > 1000) {
+      throw new BadRequestException('Комментарий слишком длинный (макс. 1000 символов)');
     }
     const payment = await this.prisma.payment.create({
       data: {
@@ -34,7 +50,7 @@ export class PaymentsService {
         amount: Math.round(dto.amount * 100) / 100, // округляем до копеек
         currency: cur,
         method: dto.method || 'BANK_TRANSFER',
-        comment: dto.comment?.trim() || null,
+        comment,
       },
       include: { student: { select: { id: true, fullName: true, email: true } } },
     });

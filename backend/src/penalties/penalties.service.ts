@@ -1,6 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PenaltyReason } from '@prisma/client';
+
+const VALID_REASONS: PenaltyReason[] = ['LATE_ARRIVAL', 'ABSENCE', 'TASK_OVERDUE', 'CUSTOM'];
 
 const RATE_PER_LATE_MINUTE = 0.5; // $0.50 за минуту опоздания
 const LATE_THRESHOLD_MIN = 15;    // штраф начисляется при опоздании > 15 мин
@@ -23,16 +25,39 @@ export class PenaltiesService {
     });
   }
 
-  async createManual(userId: string, dto: { reason: PenaltyReason; amount: number; details: string; date?: string }) {
-    if (!dto.amount || dto.amount <= 0) throw new BadRequestException('Сумма должна быть > 0');
+  async createManual(userId: string, dto: { reason?: PenaltyReason; amount: number; details: string; date?: string }) {
+    // QA-fix #25-28: типы, диапазоны, валидация enum, проверка существования.
+    if (typeof dto.amount !== 'number' || !isFinite(dto.amount) || isNaN(dto.amount)) {
+      throw new BadRequestException('Сумма должна быть числом');
+    }
+    if (dto.amount <= 0) throw new BadRequestException('Сумма должна быть > 0');
+    if (dto.amount > 100_000) throw new BadRequestException('Сумма штрафа не может превышать 100 000');
+
+    const reason = dto.reason || 'CUSTOM';
+    if (!VALID_REASONS.includes(reason)) {
+      throw new BadRequestException(`Неизвестная причина. Доступно: ${VALID_REASONS.join(', ')}`);
+    }
+
+    const details = (dto.details || '').trim();
+    if (!details) throw new BadRequestException('Опишите причину штрафа');
+    if (details.length > 500) throw new BadRequestException('Описание слишком длинное (макс. 500 символов)');
+    if (/[<>]/.test(details)) throw new BadRequestException('Описание содержит недопустимые символы');
+
+    let date: Date;
+    if (dto.date) {
+      const d = new Date(dto.date);
+      if (isNaN(d.getTime())) throw new BadRequestException('Некорректная дата');
+      date = d;
+    } else {
+      date = new Date();
+    }
+
+    // Проверяем существование пользователя — иначе FK даёт 500.
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new NotFoundException('Пользователь не найден');
+
     return this.prisma.penalty.create({
-      data: {
-        userId,
-        reason: dto.reason || 'CUSTOM',
-        amount: dto.amount,
-        details: dto.details.trim(),
-        date: dto.date ? new Date(dto.date) : new Date(),
-      },
+      data: { userId, reason, amount: dto.amount, details, date },
     });
   }
 

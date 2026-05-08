@@ -95,6 +95,16 @@ export class ChatService {
     // Парсим @mentions (форматы: @full-name, @ID, @firstname.lastname)
     let resolvedMentions = mentionsIds.length ? mentionsIds : await this.resolveMentionsFromText(trimmed);
     resolvedMentions = Array.from(new Set(resolvedMentions)).filter((id) => id !== authorId);
+    // QA-fix #36: фильтруем mentionsIds по реально существующим юзерам —
+    // раньше fake-id давал FK-500 при notifications.notifyUser.
+    if (resolvedMentions.length) {
+      const realUsers = await this.prisma.user.findMany({
+        where: { id: { in: resolvedMentions } },
+        select: { id: true },
+      });
+      const realIds = new Set(realUsers.map((u) => u.id));
+      resolvedMentions = resolvedMentions.filter((id) => realIds.has(id));
+    }
 
     const author = await this.prisma.user.findUnique({
       where: { id: authorId },

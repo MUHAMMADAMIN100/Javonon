@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -32,15 +33,20 @@ export class ApplicationsController {
   @Get()
   list(
     @CurrentUser() user: any,
-    @Query('status') status?: ApplicationStatus,
-    @Query('direction') direction?: Direction,
+    @Query('status') status?: string,
+    @Query('direction') direction?: string,
     @Query('search') search?: string,
     @Query('mine') mine?: string,
     @Query('manager') manager?: string,
   ) {
+    // QA-fix #45: validate enum query params (раньше bad value → 500).
+    const VALID_STATUS = ['NEW', 'IN_PROGRESS', 'COMPLETED', 'DOCS_REVIEW', 'DOCS_SUBMITTED', 'PRE_ADMISSION', 'AWAITING_PAYMENT', 'ENROLLED'];
+    const VALID_DIR = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
+    if (status && !VALID_STATUS.includes(status)) throw new BadRequestException('Неизвестный статус');
+    if (direction && !VALID_DIR.includes(direction)) throw new BadRequestException('Неизвестное направление');
     return this.apps.findAll({
-      status,
-      direction,
+      status: status as ApplicationStatus | undefined,
+      direction: direction as Direction | undefined,
       search,
       mine: mine === 'true',
       managerUserId: manager || undefined,

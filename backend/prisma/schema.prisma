@@ -164,7 +164,10 @@ model Student {
   id           String        @id @default(uuid())
   fullName     String
   phones       String[]      @default([])
-  email           String?
+  // QA-fix #43: уникальный email — параллельные регистрации создавали N дублей,
+  // forgot-password/login находили только первого через findFirst.
+  // Multiple null-email'ов разрешены (Prisma allows multiple NULLs).
+  email           String?    @unique
   password        String?
   applicationForm Json?
   photoUrl        String?

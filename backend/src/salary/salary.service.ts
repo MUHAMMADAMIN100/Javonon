@@ -84,8 +84,11 @@ export class SalaryService {
     kpiBonus?: number;
     comment?: string;
   }) {
+    // QA-fix #29: безопасный парсинг дат — раньше "not-a-date" падало в 500.
     const start = new Date(dto.periodStart);
     const end = new Date(dto.periodEnd);
+    if (isNaN(start.getTime())) throw new BadRequestException('Некорректная дата начала периода');
+    if (isNaN(end.getTime())) throw new BadRequestException('Некорректная дата конца периода');
     if (end < start) throw new BadRequestException('Конец периода раньше начала');
 
     const preview = await this.preview(dto.userId, start, end, dto.kpiBonus || 0);

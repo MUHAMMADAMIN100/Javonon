@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -18,10 +18,17 @@ export class PenaltiesController {
     @Query('to') to?: string,
     @Query('applied') applied?: string,
   ) {
+    // QA-fix #47: безопасный парсинг дат.
+    const parseDate = (v: string | undefined, name: string): Date | undefined => {
+      if (!v) return undefined;
+      const d = new Date(v);
+      if (isNaN(d.getTime())) throw new BadRequestException(`${name}: некорректная дата`);
+      return d;
+    };
     return this.svc.list({
       userId,
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to'),
       applied: applied === undefined ? undefined : applied === 'true',
     });
   }
