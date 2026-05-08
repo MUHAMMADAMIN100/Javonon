@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -11,6 +12,7 @@ import {
   createTeamRoom,
 } from '../api/chat';
 import { listUsers } from '../api/users';
+import { listNotifications, markRead } from '../api/notifications';
 import { useAuth } from '../store/auth';
 import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
@@ -30,7 +32,8 @@ function initials(name: string) {
 export default function Chat() {
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeId, setActiveId] = useState<string | null>(searchParams.get('room'));
   const [input, setInput] = useState('');
   const [showNewDirect, setShowNewDirect] = useState(false);
   const [showNewTeam, setShowNewTeam] = useState(false);
@@ -52,6 +55,36 @@ export default function Chat() {
   useEffect(() => {
     if (!activeId && rooms.length) setActiveId(rooms[0].id);
   }, [rooms, activeId]);
+
+  // QA-fix: при открытии комнаты помечаем chat-уведомления для этой комнаты
+  // как прочитанные, чтобы badge сбросился сразу.
+  useEffect(() => {
+    if (!activeId) return;
+    (async () => {
+      try {
+        const all = await listNotifications();
+        const unreadForRoom = all.filter(
+          (n) => !n.read && n.payload && (n.payload as any).roomId === activeId,
+        );
+        if (unreadForRoom.length) {
+          await Promise.all(unreadForRoom.map((n) => markRead(n.id).catch(() => undefined)));
+          qc.invalidateQueries({ queryKey: keys.notifications.all });
+        }
+      } catch { /* ignore */ }
+    })();
+    // Синхронизируем URL: ?room=<id> — чтобы при F5 был тот же чат + чтобы
+    // ссылки из notifications вели туда же.
+    const cur = searchParams.get('room');
+    if (cur !== activeId) {
+      setSearchParams({ room: activeId }, { replace: true });
+    }
+  }, [activeId]);
+
+  // Если URL изменился (открыли через notification) — переключаем room.
+  useEffect(() => {
+    const fromUrl = searchParams.get('room');
+    if (fromUrl && fromUrl !== activeId) setActiveId(fromUrl);
+  }, [searchParams]);
 
   const messagesKey = activeId ? keys.chat.room(activeId) : ['chat', 'room', null];
   const messagesQuery = useQuery({

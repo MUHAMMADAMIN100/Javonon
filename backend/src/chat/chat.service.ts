@@ -120,11 +120,39 @@ export class ChatService {
       data: { updatedAt: new Date() },
     });
 
-    // Уведомляем упомянутых
+    // Уведомляем упомянутых (с приоритетом, отдельный type CHAT_MENTION)
+    const mentionedSet = new Set(resolvedMentions);
     for (const mid of resolvedMentions) {
       await this.notifications.notifyUser(mid, {
         type: 'CHAT_MENTION',
         title: `💬 Вас упомянул ${author?.fullName || 'кто-то'}`,
+        message: trimmed.slice(0, 140),
+        payload: { roomId, messageId: msg.id, authorId },
+      });
+    }
+
+    // QA-fix: уведомления для всех остальных участников комнаты —
+    // type CHAT_MESSAGE (без приоритета). Не отправляем автору и тем,
+    // кто уже получил CHAT_MENTION (чтобы не дублировать).
+    const allMembers = await this.prisma.chatMember.findMany({
+      where: { roomId },
+      select: { userId: true },
+    });
+    const room = await this.prisma.chatRoom.findUnique({
+      where: { id: roomId },
+      select: { type: true, title: true },
+    });
+    const roomLabel = room?.type === 'GENERAL'
+      ? 'Команда Javonon'
+      : room?.type === 'TEAM'
+        ? room.title || 'Команда'
+        : author?.fullName || 'Чат';
+    for (const m of allMembers) {
+      if (m.userId === authorId) continue;
+      if (mentionedSet.has(m.userId)) continue;
+      await this.notifications.notifyUser(m.userId, {
+        type: 'CHAT_MESSAGE',
+        title: `${author?.fullName || 'Кто-то'} · ${roomLabel}`,
         message: trimmed.slice(0, 140),
         payload: { roomId, messageId: msg.id, authorId },
       });

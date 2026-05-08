@@ -11,12 +11,36 @@ import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 
 function notificationHref(n: Notification): string | null {
   const p = n.payload || {};
+  // QA-fix: chat-уведомления → /chat?room=<id> (Chat.tsx прочитает query)
+  if (n.type === 'CHAT_MESSAGE' || n.type === 'CHAT_MENTION') {
+    return p.roomId ? `/chat?room=${p.roomId}` : '/chat';
+  }
   if (p.applicationId) return `/applications/${p.applicationId}`;
   if (p.studentId) return `/students/${p.studentId}`;
   if (p.taskId) return '/tasks';
   if (n.type === 'TASK_ASSIGNED') return '/tasks';
   if (n.type === 'APPLICATION_NEW') return '/applications';
   return null;
+}
+
+/** Запрашиваем разрешение на desktop-нотификации один раз. */
+function ensureNotifPermission() {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().catch(() => {});
+  }
+}
+
+/** Показываем браузерную нотификацию (если разрешено). */
+function showBrowserNotif(title: string, body: string, onClick?: () => void) {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  // Не показываем если вкладка активна — пользователь и так увидит.
+  if (typeof document !== 'undefined' && !document.hidden) return;
+  try {
+    const n = new Notification(title, { body, icon: '/javonon-logo.svg', tag: 'javonon-chat' });
+    if (onClick) n.onclick = () => { window.focus(); onClick(); n.close(); };
+  } catch { /* ignore */ }
 }
 
 export default function NotificationBell() {
@@ -58,9 +82,19 @@ export default function NotificationBell() {
     return true;
   });
 
+  // Разрешение на desktop-уведомления — спрашиваем один раз при монтировании.
+  useEffect(() => { ensureNotifPermission(); }, []);
+
   useRealtime({
-    'notification:new': () => {
+    'notification:new': (data: any) => {
       qc.invalidateQueries({ queryKey: keys.notifications.all });
+      // QA-fix: показываем browser-notification (только если вкладка не активна).
+      if (data?.title) {
+        showBrowserNotif(data.title, data.message || '', () => {
+          const href = notificationHref({ ...data, payload: data?.payload || {} } as any);
+          if (href) navigate(href);
+        });
+      }
     },
   });
 
