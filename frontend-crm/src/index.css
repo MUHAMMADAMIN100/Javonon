@@ -2140,20 +2140,19 @@ select.input-error {
 .password-toggle:hover { color: var(--primary, #d52b2b); background: rgba(0,0,0,0.04); }
 .password-toggle:focus-visible { outline: 2px solid var(--primary, #d52b2b); outline-offset: 1px; }
 
-/* Javonon Group brand SVG logo */
+/* Javonon Group brand SVG logo — везде в оригинальных цветах,
+   без brightness(0) invert(100%) который убивал детализацию. */
 .sidebar-brand-img {
-  height: 36px;
+  height: 44px;
   width: auto;
   display: block;
-  /* Логотип в тёмном sidebar — белый */
-  filter: brightness(0) saturate(100%) invert(100%);
+  filter: none;
 }
 .login-aside-logo {
-  height: 48px;
+  height: 52px;
   width: auto;
   display: block;
-  /* Тёмный левый блок — белый лого */
-  filter: brightness(0) saturate(100%) invert(100%);
+  filter: none;
 }
 .login-form-logo {
   height: 44px;

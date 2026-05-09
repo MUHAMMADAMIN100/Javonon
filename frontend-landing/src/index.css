@@ -172,28 +172,26 @@ input, textarea, select { font-family: inherit; }
   font-size: 0;
 }
 .brand-img img {
-  height: 36px;
+  height: 44px;
   width: auto;
   display: block;
 }
-/* По умолчанию header светится на тёмном hero — лого белый */
+/* QA-fix: раньше на header/footer/cta/login лого красили в монохромный
+   белый через brightness(0) invert(100%) — терялась детализация
+   (синий щит с буквами JN, цветной текст "Javonon Group"). Убираем
+   фильтр везде — лого всегда в оригинальных фирменных цветах. */
 .header .brand-img img,
 .footer .brand-img img,
 .cta .brand-img img,
 .stu-login-aside .brand-img img,
-.brand-img-light img {
-  filter: brightness(0) saturate(100%) invert(100%);
-}
-/* Когда хедер scrolled (белый фон) — лого тёмный */
-.header.scrolled .brand-img img {
-  filter: none;
-}
-/* В кабинете студента (белый stu-header) — тёмный лого */
-.stu-header .brand-img img {
-  filter: none;
+.brand-img-light img,
+.header.scrolled .brand-img img,
+.stu-header .brand-img img,
+.land-drawer-head .brand-img img {
+  filter: none !important;
 }
 @media (max-width: 720px) {
-  .brand-img img { height: 28px; }
+  .brand-img img { height: 40px; }
 }
 .brand-dot {
   width: 28px; height: 28px;
@@ -1413,6 +1411,13 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   color: var(--ink-soft);
   cursor: pointer;
   transition: all var(--t-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px; /* расстояние между иконкой и подписью */
+}
+.stu-tab .material-symbols-rounded {
+  font-size: 20px;
+  flex-shrink: 0;
 }
 .stu-tab.active {
   background: var(--ink);
@@ -2376,7 +2381,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 
 @media (max-width: 480px) {
   .stu-card { padding: 18px 14px; }
-  .stu-header .brand-img img { height: 24px; }
+  .stu-header .brand-img img { height: 36px; }
   .stu-tab { padding: 8px 12px; font-size: 13px; }
 }
 
@@ -2426,8 +2431,8 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 .land-drawer-head .brand-img img {
-  height: 32px;
-  filter: none;
+  height: 42px;
+  filter: none !important;
 }
 .land-drawer-close {
   width: 44px; height: 44px;
@@ -2935,9 +2940,9 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   }
   .ep-percent > * { display: inline; white-space: nowrap; }
 
-  /* --- Cabinet header — компактнее --- */
+  /* --- Cabinet header — компактнее, но лого читаемый --- */
   .stu-header-inner { padding: 10px 14px !important; gap: 8px !important; }
-  .stu-header .brand-img img { height: 22px !important; }
+  .stu-header .brand-img img { height: 38px !important; filter: none !important; }
   .stu-header-user .btn-pill { padding: 8px 12px !important; font-size: 12px !important; }
 
   /* --- Cabinet card --- */
