@@ -3667,8 +3667,213 @@ textarea:focus {
 /* Stepper current dot — perfectly circular даже когда родитель flex
    и пытается сжать. aspect-ratio + min/max + flex-shrink: 0 */
 .app-stepper-step.current .app-stepper-dot,
-.ep-step.current .ep-dot {
+.ep-step.current .ep-dot,
+.stage-step .stage-dot {
   aspect-ratio: 1 / 1 !important;
   flex-shrink: 0 !important;
   border-radius: 50% !important;
+}
+
+/* ================================================================
+   COMPREHENSIVE CRM MOBILE FIX (≤600px) — параллель к лендингу.
+   Никаких горизонтальных скроллов, всё чётко, padding'и одинаковые.
+   ================================================================ */
+@media (max-width: 600px) {
+  /* --- Detail-row (профиль студента) — стек в колонку --- */
+  .detail-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 4px !important;
+    padding: 10px 0 !important;
+  }
+  .detail-label {
+    width: auto !important;
+    font-size: 10px !important;
+    flex-shrink: 0 !important;
+  }
+  .detail-value {
+    font-size: 14px !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    min-width: 0 !important;
+  }
+
+  /* --- Detail-photo — центрируем, ужимаем --- */
+  .detail-photo {
+    aspect-ratio: 1 !important;
+    max-width: 180px !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+  }
+
+  /* --- Stage-bar (CRM stepper) — горизонтальный скролл вместо
+         сжатия 6 шагов в 60px-узкие колонки с обрезанными labels --- */
+  .stage-bar {
+    padding: 18px 14px !important;
+    overflow: hidden;
+  }
+  .stage-bar-track {
+    overflow-x: auto;
+    overflow-y: visible;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 8px 0 12px !important;
+    gap: 16px;
+  }
+  .stage-bar-track::-webkit-scrollbar { display: none; }
+  .stage-step {
+    flex: 0 0 auto !important;
+    min-width: 76px !important;
+    max-width: 90px !important;
+  }
+  .stage-step .stage-dot {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    aspect-ratio: 1 / 1 !important;
+    flex-shrink: 0 !important;
+  }
+  .stage-label {
+    font-size: 9px !important;
+    max-width: 100% !important;
+    word-break: break-word;
+    line-height: 1.25 !important;
+  }
+  .stage-connector { display: none !important; }
+  .stage-actions {
+    flex-direction: column-reverse !important;
+    margin-top: 16px !important;
+    padding-top: 16px !important;
+    gap: 8px !important;
+  }
+  .stage-actions .btn {
+    width: 100% !important;
+    justify-content: center;
+    min-height: 42px;
+  }
+
+  /* --- App-stepper (другой stepper) тоже в горизонтальный скролл --- */
+  .app-stepper { overflow: hidden; padding: 14px !important; }
+  .app-stepper-track {
+    display: flex !important;
+    grid-template-columns: none !important;
+    overflow-x: auto;
+    overflow-y: visible !important;
+    flex-wrap: nowrap !important;
+    gap: 12px !important;
+    padding: 8px 0 12px !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .app-stepper-track::-webkit-scrollbar { display: none; }
+  .app-stepper-track::before { display: none !important; }
+  .app-stepper-step {
+    flex: 0 0 auto !important;
+    min-width: 70px !important;
+    max-width: 88px !important;
+  }
+  .app-stepper-label {
+    font-size: 10px !important;
+    max-width: 100% !important;
+    line-height: 1.2 !important;
+    word-break: break-word;
+  }
+
+  /* --- Manager bar (двойная карточка менеджеров) --- */
+  .manager-bar-two {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* --- Edit/icon кнопки — touch-friendly 40x40 минимум --- */
+  .icon-btn,
+  .edit-btn,
+  .btn-icon,
+  button[class*="edit"]:not(.btn) {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    padding: 8px !important;
+  }
+
+  /* --- Bento-num на маленьких карточках не вылезает --- */
+  .bento-num {
+    position: static !important;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  /* --- Tables в виде карточек — content тоже сжимается --- */
+  .table tr {
+    padding: 12px 14px !important;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .table td {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+  .table td[data-label] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+  }
+
+  /* --- Activity (история действий) --- */
+  .activity-item {
+    padding: 12px 14px !important;
+    word-break: break-word;
+  }
+  .activity-item-head { gap: 6px !important; }
+
+  /* --- Финансы карточки --- */
+  .fin-card,
+  .salary-card {
+    padding: 14px !important;
+  }
+  .fin-amount,
+  .salary-amount {
+    font-size: clamp(20px, 6vw, 26px) !important;
+    word-break: keep-all;
+    white-space: nowrap;
+  }
+
+  /* --- Login / Auth страница --- */
+  .login-card { padding: 24px 18px !important; }
+  .login-form input { font-size: 16px !important; }
+
+  /* --- Crm-section-head — уменьшаем гигантские заголовки --- */
+  .crm-section-head { gap: 8px !important; margin-bottom: 16px !important; }
+  .crm-section-eyebrow { font-size: 9px !important; }
+
+  /* --- Topbar-burger чуть меньше --- */
+  .topbar-burger { width: 38px; height: 38px; }
+
+  /* --- Все секции/контейнеры точно НЕ выпирают --- */
+  .crm-section-head,
+  .crm-section-head > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    word-break: break-word;
+  }
+
+  /* --- NotificationBell панель не вылезает --- */
+  .notif-panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    left: 0 !important;
+    right: 0 !important;
+    border-radius: 0 !important;
+  }
+}
+
+/* --- Совсем узкие (≤375px) --- */
+@media (max-width: 375px) {
+  .stage-step { min-width: 68px !important; max-width: 80px !important; }
+  .app-stepper-step { min-width: 64px !important; max-width: 78px !important; }
+  .stage-label, .app-stepper-label { font-size: 9px !important; }
+  .detail-label { font-size: 9px !important; }
+  .detail-value { font-size: 13px !important; }
 }
