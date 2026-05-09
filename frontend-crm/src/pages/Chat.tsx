@@ -781,7 +781,7 @@ export default function Chat() {
                       }}>{isBot ? '🤖' : initials(m.author?.fullName || '?')}</div>
                     ) : <div style={{ width: 32, flexShrink: 0 }} />
                   )}
-                  <div className="chat-bubble-wrap" style={{ maxWidth: '70%', display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', position: 'relative', minWidth: 0 }}>
+                  <div style={{ maxWidth: '70%', display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', position: 'relative' }}>
                     {(showHeader || isBot) && (
                       <div style={{
                         fontFamily: 'var(--font-mono)',

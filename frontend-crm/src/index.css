@@ -4047,23 +4047,4 @@ textarea:focus {
     min-height: 44px;
   }
 
-  /* Chat: bubble на мобиле шире (85% вместо 70%) — чтобы attachments
-     помещались. И file-card внутри bubble никогда не вылезает. */
-  .chat-bubble-wrap {
-    max-width: 85% !important;
-    min-width: 0 !important;
-  }
-  .chat-bubble-wrap a[href*="/uploads"] {
-    max-width: 100% !important;
-    min-width: 0 !important;
-    box-sizing: border-box;
-  }
-  .chat-bubble-wrap img,
-  .chat-bubble-wrap video {
-    max-width: 100% !important;
-    height: auto !important;
-  }
-
-  /* Chat reply card / forwarded card — wrap text */
-  .chat-bubble-wrap > div { word-break: break-word; overflow-wrap: anywhere; }
 }
