@@ -3956,51 +3956,14 @@ textarea:focus {
 }
 
 /* ================================================================
-   NUCLEAR FINAL RULE — последнее слово по padding'ам на мобиле.
-   Высокая specificity + !important + последнее место в файле.
-   Гарантия симметричных padding'ов даже если что-то выше пытается
-   переопределить только одну сторону.
+   FINAL APPROACH — padding ставим на сами VISIBLE блоки (bento,
+   crm-section-head, card). Это гарантирует симметрию даже если
+   .content padding не применяется по какой-то причине (inline-style,
+   transform контекст, любая другая магия).
+   .content получает padding 0 по бокам — рамка теперь у блоков.
    ================================================================ */
 @media (max-width: 600px) {
-  html body .app-layout .main .content,
-  html body .app-layout .main > .content {
-    padding-top: 16px !important;
-    padding-bottom: 16px !important;
-    padding-left: 18px !important;
-    padding-right: 18px !important;
-    padding-inline-start: 18px !important;
-    padding-inline-end: 18px !important;
-    margin: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
-  html body .app-layout .main .topbar,
-  html body .app-layout .main > .topbar {
-    padding-left: 18px !important;
-    padding-right: 18px !important;
-    padding-inline-start: 18px !important;
-    padding-inline-end: 18px !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
-  /* Bento + bento-card НИКОГДА не выходят за content's content-box.
-     margin 0 + max-width 100% + box-sizing border-box. */
-  html body .app-layout .main .content .bento,
-  html body .app-layout .main .content > .bento,
-  html body .app-layout .main .content .bento-card {
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    width: auto !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-    box-sizing: border-box !important;
-  }
-  /* Body/html — никаких overflow, padding, margin которые могли бы
-     сместить визуальную систему координат. */
+  /* Body/html — без overflow и shift'ов */
   html, body {
     margin: 0 !important;
     padding: 0 !important;
@@ -4009,7 +3972,6 @@ textarea:focus {
     max-width: 100vw !important;
     box-sizing: border-box !important;
   }
-  /* App-layout — занимает viewport ровно. */
   html body .app-layout {
     margin: 0 !important;
     padding: 0 !important;
@@ -4018,16 +3980,81 @@ textarea:focus {
     overflow-x: hidden !important;
     box-sizing: border-box !important;
   }
+  /* Main — full-width, padding 0 */
+  html body .app-layout .main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
+  /* .content — только vertical padding, horizontal — 0!
+     Padding по бокам теперь на самих children. */
+  html body .app-layout .main .content {
+    padding-top: 16px !important;
+    padding-bottom: 16px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-inline-start: 0 !important;
+    padding-inline-end: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  /* Topbar — padding на нём напрямую */
+  html body .app-layout .main .topbar {
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  /* КАЖДЫЙ visible block внутри .content получает свой margin
+     = рамка 18px по бокам. Это работает даже если .content padding
+     не применяется. */
+  html body .content > *,
+  html body .content .crm-section-head,
+  html body .content .bento,
+  html body .content .card,
+  html body .content > .stage-bar,
+  html body .content > .app-stepper,
+  html body .content > .manager-bar,
+  html body .content > .manager-bar-two,
+  html body .content > .filters,
+  html body .content > h1,
+  html body .content > h2,
+  html body .content > h3,
+  html body .content > p,
+  html body .content > div {
+    margin-left: 18px !important;
+    margin-right: 18px !important;
+    max-width: calc(100% - 36px) !important;
+    box-sizing: border-box !important;
+  }
+  /* Bento-card внутри bento — без своих margin'ов, наследует от bento */
+  html body .content .bento .bento-card,
+  html body .content .bento > * {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
 }
 
 @media (max-width: 360px) {
-  /* На очень узких — оставляем 14px рамку (но симметрично!). */
-  html body .app-layout .main .content {
-    padding-left: 14px !important;
-    padding-right: 14px !important;
-  }
+  /* На совсем узких — рамка 14px */
   html body .app-layout .main .topbar {
     padding-left: 14px !important;
     padding-right: 14px !important;
+  }
+  html body .content > *,
+  html body .content .crm-section-head,
+  html body .content .bento,
+  html body .content .card {
+    margin-left: 14px !important;
+    margin-right: 14px !important;
+    max-width: calc(100% - 28px) !important;
   }
 }
