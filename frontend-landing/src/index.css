@@ -2381,7 +2381,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 
 @media (max-width: 480px) {
   .stu-card { padding: 18px 14px; }
-  .stu-header .brand-img img { height: 36px; }
+  .stu-header .brand-img img { height: 30px; }
   .stu-tab { padding: 8px 12px; font-size: 13px; }
 }
 
@@ -2568,12 +2568,13 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
     overflow-x: auto;
     overflow-y: visible !important; /* НЕ hidden — иначе обрезает
        box-shadow ring у current-dot и круг выглядит овальным */
-    padding-top: 8px !important;    /* место для ring сверху */
+    padding-top: 8px !important;
     padding-bottom: 12px !important;
-    margin-left: -16px;
-    margin-right: -16px;
-    padding-left: 16px;
-    padding-right: 16px;
+    /* Без negative-margin — выравниваем с другими элементами карточки. */
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     justify-content: flex-start;
@@ -2613,13 +2614,18 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   }
 }
 
-/* Stu-tabs — нормальный горизонтальный скролл с индикатором что есть ещё */
+/* Stu-tabs — горизонтальный скролл, но ВЫРОВНЕНЫ с карточками
+   (никаких negative-margin). Раньше выезжали за края контента. */
 @media (max-width: 600px) {
   .stu-tabs {
-    margin-left: -16px;
-    margin-right: -16px;
-    padding-left: 16px;
-    padding-right: 16px;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    margin-top: 16px !important;
+    margin-bottom: 16px !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
   .stu-tab { font-size: 13px !important; padding: 8px 14px !important; }
 }
@@ -2941,9 +2947,14 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   .ep-percent > * { display: inline; white-space: nowrap; }
 
   /* --- Cabinet header — компактнее, но лого читаемый --- */
-  .stu-header-inner { padding: 10px 14px !important; gap: 8px !important; }
-  .stu-header .brand-img img { height: 38px !important; filter: none !important; }
-  .stu-header-user .btn-pill { padding: 8px 12px !important; font-size: 12px !important; }
+  .stu-header { padding: 6px 0 !important; }
+  .stu-header-inner { padding: 6px 14px !important; gap: 8px !important; }
+  .stu-header .brand-img img { height: 30px !important; filter: none !important; }
+  .stu-header-user .btn-pill {
+    padding: 7px 12px !important;
+    font-size: 12px !important;
+    min-height: 36px !important;
+  }
 
   /* --- Cabinet card --- */
   .stu-card { padding: 18px 14px !important; border-radius: 16px !important; }
