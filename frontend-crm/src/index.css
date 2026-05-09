@@ -1859,8 +1859,9 @@ select.input-error {
 /* ===== SMALL PHONES (до 380) ===== */
 @media (max-width: 380px) {
   .sidebar-nav a span:not(.sidebar-nav-icon) { font-size: 9px; }
-  .content { padding: 10px; }
-  .card-body { padding: 12px; }
+  /* Рамочный padding сохранён, чтобы карточки не упирались в края */
+  .content { padding: 14px; }
+  .card-body { padding: 14px; }
   .btn.btn-large { padding: 10px 16px; }
 }
 
@@ -3423,10 +3424,11 @@ textarea:focus {
 
 /* ===== Очень узкие экраны (≤ 380px) — компактная типографика ===== */
 @media (max-width: 380px) {
-  .topbar { padding: 0 10px; height: 56px; }
+  .topbar { padding: 0 14px; height: 56px; }
   .topbar-title { font-size: 16px; }
-  .content { padding: 10px 8px; }
-  .card-body { padding: 12px; }
+  /* Рамочный padding — карточки не прилипают к краям */
+  .content { padding: 14px; }
+  .card-body { padding: 14px; }
   .dialog-card { padding: 18px 14px !important; }
   .dialog-title { font-size: 17px !important; }
   .dialog-message { font-size: 14px !important; margin-bottom: 22px !important; }
@@ -3479,15 +3481,17 @@ textarea:focus {
 @media (max-width: 600px) {
   *, *::before, *::after { box-sizing: border-box; }
 
-  /* --- Topbar — компактный --- */
-  .topbar { height: 56px !important; padding: 0 12px !important; }
+  /* --- Topbar — компактный, padding выровнен с .content (18px) --- */
+  .topbar { height: 56px !important; padding: 0 18px !important; }
   .topbar-burger { width: 40px; height: 40px; margin-right: 4px; }
   .topbar-title { font-size: 15px !important; line-height: 1.15 !important; }
   .topbar-eyebrow { font-size: 8px !important; }
   .topbar-actions { gap: 4px; }
 
   /* --- Content — без выходов --- */
-  .content { padding: 12px !important; min-width: 0; max-width: 100%; }
+  /* Рамочный padding — карточки не прилипают к краям экрана.
+     18px по бокам = заметная "рамка" вокруг bento/cards. */
+  .content { padding: 16px 18px !important; min-width: 0; max-width: 100%; }
 
   /* --- Cards — единый формат --- */
   .card { border-radius: 14px !important; min-width: 0; max-width: 100%; }
@@ -3592,9 +3596,9 @@ textarea:focus {
 
 /* --- Очень узкие экраны (≤360px) — точечная подгонка для CRM --- */
 @media (max-width: 360px) {
-  .content { padding: 10px !important; }
-  .card-body { padding: 12px !important; }
-  .card-header { padding: 12px 12px 8px !important; }
+  .content { padding: 14px !important; }
+  .card-body { padding: 14px !important; }
+  .card-header { padding: 14px 14px 10px !important; }
   .topbar-title { font-size: 14px !important; }
   .crm-section-title { font-size: 20px !important; }
   .btn-sm { font-size: 11px !important; padding: 6px 10px !important; }

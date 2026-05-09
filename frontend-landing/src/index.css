@@ -2387,7 +2387,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 
 /* Совсем маленькие телефоны */
 @media (max-width: 380px) {
-  :root { --gutter: 16px; }
+  :root { --gutter: 16px; } /* чуть меньше но всё ещё рамка */
   .hero h1, .section-head h2 { font-size: clamp(28px, 9vw, 36px) !important; }
   .form-card { padding: 22px 16px !important; }
 }
@@ -2799,8 +2799,8 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
    Используем 0–600px чтобы покрыть и узкие планшеты в portrait.
    ================================================================ */
 @media (max-width: 600px) {
-  /* --- Base: уменьшаем gutter, гарантируем box-sizing везде --- */
-  :root { --gutter: 14px; }
+  /* --- Base: рамочный gutter, чтобы карточки не прилипали к краям. */
+  :root { --gutter: 18px; }
   *, *::before, *::after { box-sizing: border-box; }
 
   /* --- Hero (на всю ширину viewport, без выходов за края) --- */
@@ -2966,7 +2966,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 
 /* --- Очень узкие телефоны (≤360px) — точечная подгонка --- */
 @media (max-width: 360px) {
-  :root { --gutter: 12px; }
+  :root { --gutter: 14px; } /* минимально, но не прилипает */
   .hero h1 { font-size: clamp(28px, 9vw, 36px) !important; }
   .form-card { padding: 18px 12px !important; }
   .form-row input,
