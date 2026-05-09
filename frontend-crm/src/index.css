@@ -3926,79 +3926,47 @@ textarea:focus {
     box-sizing: border-box !important;
   }
 
-  /* Layout chain — viewport-tight, БЕЗ scrollbar.
-     ВАЖНО: 100% (не 100vw), потому что 100vw в браузерах включает
-     ширину vertical scrollbar'а (~12-15px). На desktop DevTools mobile
-     preview из-за этого .content получался шире видимого viewport'а
-     и правая граница карточек клипилась за правый край. */
-  html {
+  /* НОВЫЙ ПОДХОД: ставим margin: 0 auto + width: calc(100% - 36px)
+     на КАЖДЫЙ visible block. margin auto центрирует элемент по
+     горизонтали независимо от ширины родителя. Если parent шире
+     viewport (из-за scrollbar или чего-то ещё), элемент всё равно
+     будет центрирован визуально. */
+  html, body {
     margin: 0 !important;
     padding: 0 !important;
-    width: 100% !important;
     overflow-x: hidden !important;
   }
-  html body {
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    overflow-x: hidden !important;
-  }
-  html body .app-layout {
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    overflow-x: hidden !important;
-  }
+  html body .app-layout,
   html body .app-layout .main {
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
-    max-width: 100% !important;
+    overflow-x: hidden !important;
   }
 
-  /* ЕДИНЫЙ источник рамочного padding'а — на .content.
-     Каждое значение !important + индивидуальные long-form свойства
-     чтобы никакой shorthand или RTL-логическое свойство не съело
-     одну сторону. */
+  /* .content — без horizontal padding (рамка теперь на самих блоках) */
   html body .app-layout .main .content {
     padding-top: 16px !important;
     padding-bottom: 16px !important;
-    padding-left: 18px !important;
-    padding-right: 18px !important;
-    padding-inline-start: 18px !important;
-    padding-inline-end: 18px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
     margin: 0 !important;
     width: 100% !important;
-    max-width: 100% !important;
   }
 
-  /* Topbar тот же отступ что и .content для визуального выравнивания */
+  /* Topbar — padding на нём напрямую */
   html body .app-layout .main .topbar {
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
     padding-left: 18px !important;
     padding-right: 18px !important;
-    padding-inline-start: 18px !important;
-    padding-inline-end: 18px !important;
     margin: 0 !important;
     width: 100% !important;
-    max-width: 100% !important;
   }
 
-  /* ВСЕ потомки .content — НИ одного horizontal margin/padding.
-     Они наследуют размеры от родителя и фильтрационно прижаты к
-     content-box .content. Никакая карточка не может вылезти. */
+  /* КАЖДЫЙ потомок .content — margin: auto + явная width.
+     Это ГАРАНТИРУЕТ симметричное центрирование даже если родитель
+     шире viewport. Никакие padding'и или margin'ы не помогут так
+     надёжно как explicit width + margin auto. */
   html body .content > *,
-  html body .content > * > *,
-  html body .content > * > * > * {
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-  }
-  /* Конкретные блоки — явно сбрасываем horizontal margin */
   html body .content .crm-section-head,
   html body .content .bento,
   html body .content .card,
@@ -4010,25 +3978,35 @@ textarea:focus {
   html body .content .stu-card,
   html body .content .ep-card,
   html body .content .af-card {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    width: calc(100% - 36px) !important;
+    max-width: calc(100% - 36px) !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  /* Bento-card внутри bento — без своих margin'ов, full-width в bento */
+  html body .content .bento .bento-card,
+  html body .content .bento > * {
     margin-left: 0 !important;
     margin-right: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
+    min-width: 0 !important;
   }
 }
 
 @media (max-width: 360px) {
   /* На совсем узких — рамка 14px (всё равно симметрично) */
-  html body .app-layout .main .content {
-    padding-left: 14px !important;
-    padding-right: 14px !important;
-    padding-inline-start: 14px !important;
-    padding-inline-end: 14px !important;
-  }
   html body .app-layout .main .topbar {
     padding-left: 14px !important;
     padding-right: 14px !important;
-    padding-inline-start: 14px !important;
-    padding-inline-end: 14px !important;
+  }
+  html body .content > *,
+  html body .content .crm-section-head,
+  html body .content .bento,
+  html body .content .card {
+    width: calc(100% - 28px) !important;
+    max-width: calc(100% - 28px) !important;
   }
 }
