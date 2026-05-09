@@ -240,7 +240,7 @@ export default function Salary() {
                   color: 'var(--primary-dark)',
                 }}>{fmtMoney(preview.netAmount, preview.currency)}</div>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="salary-confirm-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <input
                   type="text"
                   value={comment}
@@ -251,10 +251,11 @@ export default function Salary() {
                     border: '1px solid var(--border)',
                     borderRadius: 10,
                     fontSize: 14,
-                    minWidth: 220,
+                    flex: '1 1 200px',
+                    minWidth: 0,
                   }}
                 />
-                <button className="btn btn-primary" onClick={onCreate}>
+                <button className="btn btn-primary" onClick={onCreate} style={{ flex: '0 1 auto', minWidth: 0 }}>
                   <Icon name="bookmark_add" size={18} /> Зафиксировать
                 </button>
               </div>

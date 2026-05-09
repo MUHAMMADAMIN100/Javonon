@@ -781,7 +781,7 @@ export default function Chat() {
                       }}>{isBot ? '🤖' : initials(m.author?.fullName || '?')}</div>
                     ) : <div style={{ width: 32, flexShrink: 0 }} />
                   )}
-                  <div style={{ maxWidth: '70%', display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', position: 'relative' }}>
+                  <div className="chat-bubble-wrap" style={{ maxWidth: '70%', display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', position: 'relative', minWidth: 0 }}>
                     {(showHeader || isBot) && (
                       <div style={{
                         fontFamily: 'var(--font-mono)',
@@ -918,11 +918,14 @@ export default function Chat() {
                                   border: '1px solid rgba(0,0,0,0.06)',
                                   borderRadius: 10,
                                   textDecoration: 'none',
-                                  minWidth: 220,
+                                  minWidth: 0,
+                                  maxWidth: '100%',
+                                  width: '100%',
+                                  boxSizing: 'border-box',
                                 }}
                               >
                                 <Icon name="description" size={20} />
-                                <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                                   <div style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {a.originalName}
                                   </div>
@@ -930,7 +933,7 @@ export default function Chat() {
                                     {(a.size / 1024).toFixed(1)} KB
                                   </div>
                                 </span>
-                                <Icon name="download" size={18} />
+                                <Icon name="download" size={18} style={{ flexShrink: 0 }} />
                               </a>
                             );
                           })}

@@ -3289,11 +3289,13 @@ textarea:focus {
   .app-layout { flex-direction: row; }
 
   /* Sidebar становится фиксированным drawer'ом, скрытым по умолчанию.
-     !important на transform чтобы перебить инлайн от framer-motion. */
+     !important на transform чтобы перебить инлайн от framer-motion.
+     Ширина: 65vw (хватает для длинных пунктов "База знаний", "Сотрудники"
+     но оставляет ~35vw backdrop'а справа для удобного закрытия). */
   .sidebar {
     position: fixed !important;
     top: 0; left: 0; bottom: 0;
-    width: min(85vw, 320px) !important;
+    width: min(65vw, 260px) !important;
     height: 100vh !important;
     transform: translateX(-100%) !important;
     transition: transform .28s cubic-bezier(0.22, 1, 0.36, 1) !important;
@@ -3969,18 +3971,16 @@ textarea:focus {
     width: 100% !important;
   }
 
-  /* Topbar — padding на нём напрямую */
+  /* Topbar — padding на нём напрямую (выровнен с margin блоков 12px) */
   html body .app-layout .main .topbar {
-    padding-left: 18px !important;
-    padding-right: 18px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
     margin: 0 !important;
     width: 100% !important;
   }
 
   /* КАЖДЫЙ потомок .content — margin: auto + явная width.
-     Это ГАРАНТИРУЕТ симметричное центрирование даже если родитель
-     шире viewport. Никакие padding'и или margin'ы не помогут так
-     надёжно как explicit width + margin auto. */
+     Рамка 12px (была 18px — слишком далеко от рамок телефона). */
   html body .content > *,
   html body .content .crm-section-head,
   html body .content .bento,
@@ -3995,8 +3995,8 @@ textarea:focus {
   html body .content .af-card {
     margin-left: auto !important;
     margin-right: auto !important;
-    width: calc(100% - 36px) !important;
-    max-width: calc(100% - 36px) !important;
+    width: calc(100% - 24px) !important;
+    max-width: calc(100% - 24px) !important;
     min-width: 0 !important;
     box-sizing: border-box !important;
   }
@@ -4012,16 +4012,58 @@ textarea:focus {
 }
 
 @media (max-width: 360px) {
-  /* На совсем узких — рамка 14px (всё равно симметрично) */
+  /* На совсем узких — рамка 10px */
   html body .app-layout .main .topbar {
-    padding-left: 14px !important;
-    padding-right: 14px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
   }
   html body .content > *,
   html body .content .crm-section-head,
   html body .content .bento,
   html body .content .card {
-    width: calc(100% - 28px) !important;
-    max-width: calc(100% - 28px) !important;
+    width: calc(100% - 20px) !important;
+    max-width: calc(100% - 20px) !important;
   }
+}
+
+/* ================================================================
+   MOBILE FIXES: программы / зарплата / чат attachments
+   ================================================================ */
+@media (max-width: 600px) {
+  /* Programs image — на мобиле уменьшаем высоту (16:9 → 21:9) */
+  .program-card-img {
+    aspect-ratio: 21 / 9 !important;
+    max-height: 140px !important;
+  }
+  .program-card-img-fallback { font-size: 40px !important; }
+
+  /* Salary "Зафиксировать" — кнопка с input в одной строке.
+     Мобиле: оба full-width, в столбик. */
+  .salary-confirm-row { flex-direction: column !important; align-items: stretch !important; }
+  .salary-confirm-row input { width: 100% !important; min-width: 0 !important; }
+  .salary-confirm-row .btn {
+    width: 100% !important;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* Chat: bubble на мобиле шире (85% вместо 70%) — чтобы attachments
+     помещались. И file-card внутри bubble никогда не вылезает. */
+  .chat-bubble-wrap {
+    max-width: 85% !important;
+    min-width: 0 !important;
+  }
+  .chat-bubble-wrap a[href*="/uploads"] {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+  }
+  .chat-bubble-wrap img,
+  .chat-bubble-wrap video {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Chat reply card / forwarded card — wrap text */
+  .chat-bubble-wrap > div { word-break: break-word; overflow-wrap: anywhere; }
 }
