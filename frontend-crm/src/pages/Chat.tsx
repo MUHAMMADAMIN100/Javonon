@@ -22,7 +22,7 @@ import { useAuth } from '../store/auth';
 import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
-import { optimistic, useInvalidatingMutation, tempId } from '../lib/optimistic';
+import { optimistic, useInvalidatingMutation, useOptimisticMutation, tempId } from '../lib/optimistic';
 
 // Базовый URL для статических attachments (chat-uploads).
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
@@ -118,10 +118,48 @@ export default function Chat() {
   });
   const users = usersQuery.data ?? [];
 
-  // Telegram-style: realtime для реакций, удаления, закрепления.
-  useRealtimeEvent('chat:reaction', () => qc.invalidateQueries({ queryKey: keys.chat.all }));
-  useRealtimeEvent('chat:message:deleted', () => qc.invalidateQueries({ queryKey: keys.chat.all }));
-  useRealtimeEvent('chat:message:pin', () => qc.invalidateQueries({ queryKey: keys.chat.all }));
+  // Telegram-style realtime — все через setQueryData (ноль HTTP round-trip).
+  useRealtimeEvent('chat:reaction', (data: any) => {
+    // data: { roomId, messageId, userId, emoji, action: 'added'|'removed' }
+    qc.setQueryData<ChatMessage[]>(keys.chat.room(data.roomId), (cur) => {
+      if (!cur) return cur;
+      return cur.map((m) => {
+        if (m.id !== data.messageId) return m;
+        const reactions = m.reactions || [];
+        if (data.action === 'added') {
+          // Не добавлять дубль, если уже есть (мы могли локально добавить в optimistic).
+          if (reactions.some((r) => r.userId === data.userId && r.emoji === data.emoji)) return m;
+          return {
+            ...m,
+            reactions: [...reactions, {
+              id: `tmp-react-${data.userId}-${data.emoji}`,
+              userId: data.userId,
+              emoji: data.emoji,
+            }],
+          };
+        }
+        // removed
+        return {
+          ...m,
+          reactions: reactions.filter((r) => !(r.userId === data.userId && r.emoji === data.emoji)),
+        };
+      });
+    });
+  });
+  useRealtimeEvent('chat:message:deleted', (data: any) => {
+    qc.setQueryData<ChatMessage[]>(keys.chat.room(data.roomId), (cur) => {
+      if (!cur) return cur;
+      return cur.map((m) => m.id === data.messageId
+        ? { ...m, deletedAt: new Date().toISOString(), text: '', attachments: null }
+        : m);
+    });
+  });
+  useRealtimeEvent('chat:message:pin', (data: any) => {
+    qc.setQueryData<ChatMessage[]>(keys.chat.room(data.roomId), (cur) => {
+      if (!cur) return cur;
+      return cur.map((m) => m.id === data.messageId ? { ...m, isPinned: data.isPinned } : m);
+    });
+  });
 
   // QA-fix #5: Realtime + optimistic дублировали сообщения.
   // Поток ДО: 1) optimistic.append(tempMsg) 2) сервер вернул real msg
@@ -192,19 +230,57 @@ export default function Chat() {
     },
   });
 
-  const reactMut = useInvalidatingMutation({
-    mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
-      reactToMessage(messageId, emoji),
-    invalidate: [keys.chat.all],
+  // QA-fix: реакции — полностью оптимистичные. При клике сразу меняем
+  // m.reactions в кеше (toggle по userId+emoji), сервер вызываем в фоне.
+  // При ошибке — откатываем (server emit chat:reaction исправит state).
+  const reactMut = useOptimisticMutation<unknown, { messageId: string; emoji: string }, ChatMessage[]>({
+    mutationFn: ({ messageId, emoji }) => reactToMessage(messageId, emoji),
+    queryKey: messagesKey,
+    applyOptimistic: (cur, { messageId, emoji }) => {
+      if (!cur || !me?.id) return cur;
+      return cur.map((m) => {
+        if (m.id !== messageId) return m;
+        const reactions = m.reactions || [];
+        const myExisting = reactions.find((r) => r.userId === me.id && r.emoji === emoji);
+        if (myExisting) {
+          // toggle off — убираем мою реакцию
+          return { ...m, reactions: reactions.filter((r) => !(r.userId === me.id && r.emoji === emoji)) };
+        }
+        // toggle on
+        return {
+          ...m,
+          reactions: [...reactions, { id: `tmp-react-${me.id}-${emoji}`, userId: me.id, emoji }],
+        };
+      });
+    },
+    // Не invalidate — socket-event chat:reaction уже обновит state
+    // у всех остальных, а у нас локально уже применено.
   });
-  const deleteMut = useInvalidatingMutation({
-    mutationFn: ({ messageId }: { messageId: string }) => deleteChatMessage(messageId),
-    invalidate: [keys.chat.all],
+
+  // QA-fix: удаление — оптимистично помечаем deletedAt сразу.
+  const deleteMut = useOptimisticMutation<unknown, { messageId: string }, ChatMessage[]>({
+    mutationFn: ({ messageId }) => deleteChatMessage(messageId),
+    queryKey: messagesKey,
+    applyOptimistic: (cur, { messageId }) => {
+      if (!cur) return cur;
+      return cur.map((m) => m.id === messageId
+        ? { ...m, deletedAt: new Date().toISOString(), text: '', attachments: null }
+        : m);
+    },
   });
-  const pinMut = useInvalidatingMutation({
-    mutationFn: ({ messageId }: { messageId: string }) => pinChatMessage(messageId),
-    invalidate: [keys.chat.all],
+
+  // QA-fix: pin/unpin — оптимистично переключаем флаг сразу.
+  const pinMut = useOptimisticMutation<unknown, { messageId: string }, ChatMessage[]>({
+    mutationFn: ({ messageId }) => pinChatMessage(messageId),
+    queryKey: messagesKey,
+    applyOptimistic: (cur, { messageId }) => {
+      if (!cur) return cur;
+      return cur.map((m) => m.id === messageId ? { ...m, isPinned: !m.isPinned } : m);
+    },
   });
+
+  // Forward — без оптимистики (сообщение появляется в ДРУГОЙ комнате,
+  // которую обработает socket chat:message event). Просто шлём на сервер.
   const forwardMut = useInvalidatingMutation({
     mutationFn: ({ messageId, targetRoomId }: { messageId: string; targetRoomId: string }) =>
       forwardChatMessage(messageId, targetRoomId),
