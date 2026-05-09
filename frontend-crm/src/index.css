@@ -48,7 +48,7 @@ a { color: inherit; text-decoration: none; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 
 .material-symbols-rounded {
-  font-family: 'Material Symbols Rounded';
+  font-family: 'Material Symbols Rounded' !important;
   font-weight: 500;
   font-style: normal;
   font-size: 24px;
@@ -59,9 +59,14 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   white-space: nowrap;
   word-wrap: normal;
   direction: ltr;
+  font-feature-settings: 'liga';
   -webkit-font-feature-settings: 'liga';
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  /* Сохраняем ligature-имена ("location_on", "arrow_outward") целыми
+     даже когда parent имеет overflow-wrap: anywhere. */
+  overflow-wrap: normal;
+  word-break: keep-all;
   vertical-align: middle;
 }
 
@@ -3424,6 +3429,134 @@ textarea:focus {
   .bento-card { padding: 18px !important; min-width: 0; }
   .bento-card.feature h3 { font-size: 22px !important; }
   .bento-num { top: 14px !important; right: 14px !important; }
+}
+
+/* ================================================================
+   CRM PHONE BREAKPOINT (≤600px): унифицированный layout, никаких
+   горизонтальных скроллов, всё чётко от 320 до 425+ px.
+   ================================================================ */
+@media (max-width: 600px) {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  /* --- Topbar — компактный --- */
+  .topbar { height: 56px !important; padding: 0 12px !important; }
+  .topbar-burger { width: 40px; height: 40px; margin-right: 4px; }
+  .topbar-title { font-size: 15px !important; line-height: 1.15 !important; }
+  .topbar-eyebrow { font-size: 8px !important; }
+  .topbar-actions { gap: 4px; }
+
+  /* --- Content — без выходов --- */
+  .content { padding: 12px !important; min-width: 0; max-width: 100%; }
+
+  /* --- Cards — единый формат --- */
+  .card { border-radius: 14px !important; min-width: 0; max-width: 100%; }
+  .card-header { padding: 14px 14px 10px !important; }
+  .card-body { padding: 14px !important; }
+  .card-title { font-size: 16px !important; }
+
+  /* --- Inputs/selects/textareas — никогда шире контейнера --- */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select, textarea {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    font-size: 16px !important; /* iOS no-zoom */
+    box-sizing: border-box;
+  }
+
+  /* --- Phone input на узком экране --- */
+  .phone-input-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  .phone-input-wrap input[type="tel"] {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: auto !important;
+    font-size: 16px !important;
+  }
+  .phone-country-btn {
+    padding: 0 8px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* --- Form-grid — всё в 1 колонку с компактным gap --- */
+  .form-grid-2,
+  .form-grid-3,
+  .form-row,
+  .detail-grid,
+  .manager-bar-two {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* --- Form-actions кнопки — full-width column --- */
+  .form-actions {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+  }
+  .form-actions .btn {
+    width: 100% !important;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* --- AF-card (форма заявки) --- */
+  .af-card { padding: 0 !important; }
+  .af-section { border-radius: 12px !important; }
+  .af-section-head { padding: 12px !important; }
+  .af-section-body { padding: 4px 10px 14px !important; }
+  .af-sections { padding: 0 10px 14px !important; }
+  .af-section-title { font-size: 14px !important; word-break: break-word; }
+  .af-section-title-en { font-size: 11px !important; }
+  .af-field input,
+  .af-field textarea,
+  .af-field select {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* --- Section-head в CRM --- */
+  .crm-section-title { font-size: clamp(22px, 7vw, 30px) !important; }
+
+  /* --- Bento-card padding — ещё ужать --- */
+  .bento-card { padding: 16px !important; }
+  .bento-card h3 { font-size: 16px !important; }
+  .bento-card.feature h3 { font-size: 20px !important; }
+
+  /* --- Стрипы фильтров — тонкие --- */
+  .filters > * { width: 100% !important; min-width: 0 !important; max-width: 100%; }
+  .filters input, .filters select { font-size: 16px !important; }
+
+  /* --- Длинные слова (email, ID) ломаются в карточках --- */
+  .card *, .bento-card *, .stu-card *, .ep-card * {
+    overflow-wrap: anywhere;
+    word-wrap: break-word;
+    min-width: 0;
+  }
+  /* …но НЕ иконки (.material-symbols-rounded уже выше с keep-all) */
+  .material-symbols-rounded {
+    overflow-wrap: normal !important;
+    word-break: keep-all !important;
+  }
+
+  /* --- Чат на узком — header компактный --- */
+  .chat-thread-header { padding: 12px 14px !important; gap: 8px !important; }
+  .chat-back-btn { width: 36px !important; height: 36px !important; }
+  .chat-thread-header > div:nth-child(2) > div:last-child { font-size: 16px !important; }
+}
+
+/* --- Очень узкие экраны (≤360px) — точечная подгонка для CRM --- */
+@media (max-width: 360px) {
+  .content { padding: 10px !important; }
+  .card-body { padding: 12px !important; }
+  .card-header { padding: 12px 12px 8px !important; }
+  .topbar-title { font-size: 14px !important; }
+  .crm-section-title { font-size: 20px !important; }
+  .btn-sm { font-size: 11px !important; padding: 6px 10px !important; }
 }
 
 /* ===== Chat — на мобиле либо список, либо тред (single-pane) ===== */
