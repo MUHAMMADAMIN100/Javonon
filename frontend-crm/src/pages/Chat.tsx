@@ -15,6 +15,7 @@ import {
   deleteChatMessage,
   pinChatMessage,
   forwardChatMessage,
+  setTyping,
 } from '../api/chat';
 import { listUsers } from '../api/users';
 import { listNotifications, markRead } from '../api/notifications';
@@ -56,9 +57,16 @@ export default function Chat() {
   // (emojiPickerFor зарезервирован для будущего полного picker'а — пока quick-react через context-menu достаточно)
   const [forwardSource, setForwardSource] = useState<ChatMessage | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  // Typing indicator: roomId → Map<userId, { name, expiresAt }>.
+  // Auto-expire: если событие не приходило 5 сек — убираем из списка.
+  const [typingByRoom, setTypingByRoom] = useState<Record<string, Record<string, { name: string; expiresAt: number }>>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Debounce-state для отправки typing-pings: помним когда последний раз
+  // отправили ping (чтобы не спамить — раз в 3 сек) и когда было последнее
+  // нажатие (чтобы через 3 сек тишины послать typing:false).
+  const typingPingRef = useRef<{ lastPingAt: number; idleTimer: number | null }>({ lastPingAt: 0, idleTimer: null });
 
   const QUICK_REACTIONS = ['❤️', '👍', '👎', '😂', '😮', '🔥', '🎉', '😢'];
 
@@ -159,6 +167,50 @@ export default function Chat() {
       if (!cur) return cur;
       return cur.map((m) => m.id === data.messageId ? { ...m, isPinned: data.isPinned } : m);
     });
+  });
+  useRealtimeEvent('chat:typing', (data: any) => {
+    // Игнорируем своё собственное событие.
+    if (data.userId === me?.id) return;
+    setTypingByRoom((cur) => {
+      const room = { ...(cur[data.roomId] || {}) };
+      if (data.typing) {
+        room[data.userId] = { name: data.userName || 'Кто-то', expiresAt: Date.now() + 5000 };
+      } else {
+        delete room[data.userId];
+      }
+      return { ...cur, [data.roomId]: room };
+    });
+  });
+
+  // Auto-expire: каждые 1.5 сек выкидываем устаревшие записи.
+  useEffect(() => {
+    const tid = window.setInterval(() => {
+      setTypingByRoom((cur) => {
+        const now = Date.now();
+        let changed = false;
+        const next: typeof cur = {};
+        for (const [rid, users] of Object.entries(cur)) {
+          const filteredEntries = Object.entries(users).filter(([, u]) => u.expiresAt > now);
+          if (filteredEntries.length !== Object.keys(users).length) changed = true;
+          if (filteredEntries.length) next[rid] = Object.fromEntries(filteredEntries);
+        }
+        return changed ? next : cur;
+      });
+    }, 1500);
+    return () => window.clearInterval(tid);
+  }, []);
+
+  // Когда от собеседника пришло сообщение — он точно перестал печатать.
+  useRealtimeEvent('chat:message', (data: any) => {
+    if (data?.message?.authorId) {
+      setTypingByRoom((cur) => {
+        const room = cur[data.roomId];
+        if (!room || !room[data.message.authorId]) return cur;
+        const next = { ...room };
+        delete next[data.message.authorId];
+        return { ...cur, [data.roomId]: next };
+      });
+    }
   });
 
   // QA-fix #5: Realtime + optimistic дублировали сообщения.
@@ -326,6 +378,13 @@ export default function Chat() {
     setReplyTo(null);
     // 2) actually send
     sendMut.mutate({ roomId: activeId, text, files: filesCopy, replyToId: replyId });
+    // 3) сразу шлём typing:false чтобы у собеседника убрался индикатор
+    if (typingPingRef.current.idleTimer) {
+      window.clearTimeout(typingPingRef.current.idleTimer);
+      typingPingRef.current.idleTimer = null;
+    }
+    typingPingRef.current.lastPingAt = 0;
+    setTyping(activeId, false).catch(() => undefined);
   };
 
   const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -375,10 +434,35 @@ export default function Chat() {
       .slice(0, 8);
   })();
 
+  // Throttled typing-ping: при каждом нажатии шлём не чаще раза в 3 сек.
+  // При паузе > 3 сек — отправляем typing:false.
+  const triggerTyping = (text: string) => {
+    if (!activeId) return;
+    const now = Date.now();
+    if (text && now - typingPingRef.current.lastPingAt > 3000) {
+      typingPingRef.current.lastPingAt = now;
+      setTyping(activeId, true).catch(() => undefined);
+    }
+    if (typingPingRef.current.idleTimer) {
+      window.clearTimeout(typingPingRef.current.idleTimer);
+    }
+    if (!text) {
+      // input пустой — сразу шлём false
+      typingPingRef.current.lastPingAt = 0;
+      setTyping(activeId, false).catch(() => undefined);
+      return;
+    }
+    typingPingRef.current.idleTimer = window.setTimeout(() => {
+      if (activeId) setTyping(activeId, false).catch(() => undefined);
+      typingPingRef.current.lastPingAt = 0;
+    }, 3500);
+  };
+
   // При изменении input ищем '@' непосредственно перед курсором.
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     setInput(v);
+    triggerTyping(v);
     const pos = e.target.selectionStart ?? v.length;
     // Ищем последний '@' до курсора, который начинает «слово».
     const before = v.slice(0, pos);
@@ -805,6 +889,29 @@ export default function Chat() {
                 </motion.div>
               );
             })}
+            {/* Typing indicator (Telegram-style) */}
+            {activeId && typingByRoom[activeId] && Object.keys(typingByRoom[activeId]).length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 14px', marginTop: 4,
+                  fontSize: 12, color: 'var(--text-soft)',
+                  fontStyle: 'italic',
+                }}
+              >
+                <span className="typing-dots" aria-hidden="true">
+                  <span /><span /><span />
+                </span>
+                {(() => {
+                  const names = Object.values(typingByRoom[activeId]).map((u) => u.name);
+                  if (names.length === 1) return `${names[0]} печатает…`;
+                  if (names.length === 2) return `${names[0]} и ${names[1]} печатают…`;
+                  return `${names.length} человек печатают…`;
+                })()}
+              </motion.div>
+            )}
           </div>
 
           <form onSubmit={send} style={{

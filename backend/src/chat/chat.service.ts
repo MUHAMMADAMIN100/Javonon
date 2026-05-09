@@ -538,6 +538,23 @@ export class ChatService {
     return fwd;
   }
 
+  /** Typing-indicator: эфемерное состояние, не сохраняется в БД.
+   *  Просто транслируется в комнату staff. Auto-expire — на стороне клиента. */
+  async setTyping(roomId: string, userId: string, typing: boolean) {
+    const member = await this.prisma.chatMember.findUnique({
+      where: { roomId_userId: { roomId, userId } },
+      select: { user: { select: { fullName: true } } },
+    });
+    if (!member) throw new NotFoundException('Чат не найден');
+    this.realtime.emitStaff('chat:typing', {
+      roomId,
+      userId,
+      userName: member.user?.fullName || '',
+      typing,
+    });
+    return { ok: true };
+  }
+
   /** Список закреплённых сообщений в комнате. */
   async listPinned(roomId: string, userId: string) {
     const member = await this.prisma.chatMember.findUnique({

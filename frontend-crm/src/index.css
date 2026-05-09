@@ -3185,3 +3185,24 @@ textarea:focus {
 
 /* Override the ancient red gradient sidebar mark */
 .sidebar-logo-mark { display: none !important; }
+
+/* Telegram-style typing indicator: 3 точки которые "дышат" по очереди */
+.typing-dots {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding-bottom: 2px;
+}
+.typing-dots > span {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+  animation: typing-bounce 1.4s infinite ease-in-out;
+}
+.typing-dots > span:nth-child(2) { animation-delay: 0.16s; }
+.typing-dots > span:nth-child(3) { animation-delay: 0.32s; }
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}

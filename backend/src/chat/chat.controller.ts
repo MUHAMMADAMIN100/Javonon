@@ -132,6 +132,16 @@ export class ChatController {
     return this.svc.forwardMessage(id, me.id, body.targetRoomId);
   }
 
+  /** Telegram-style: typing indicator (ephemeral, broadcast only). */
+  @Post('rooms/:id/typing')
+  typing(
+    @Param('id') id: string,
+    @CurrentUser() me: any,
+    @Body() body: { typing: boolean },
+  ) {
+    return this.svc.setTyping(id, me.id, !!body.typing);
+  }
+
   @Post('rooms/team')
   createTeam(
     @CurrentUser() me: any,

@@ -99,3 +99,7 @@ export const forwardChatMessage = (messageId: string, targetRoomId: string) =>
   api.post<ChatMessage>(`/chat/messages/${messageId}/forward`, { targetRoomId }).then((r) => r.data);
 export const listPinnedMessages = (roomId: string) =>
   api.get<ChatMessage[]>(`/chat/rooms/${roomId}/pinned`).then((r) => r.data);
+
+/** Уведомить других участников что я печатаю (или прекратил). Эфемерно — не сохраняется. */
+export const setTyping = (roomId: string, typing: boolean) =>
+  api.post(`/chat/rooms/${roomId}/typing`, { typing }).then((r) => r.data);
