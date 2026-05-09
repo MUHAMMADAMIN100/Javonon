@@ -5,7 +5,12 @@ import { useAuth } from '../store/auth';
 import Icon from '../Icon';
 import ChangePasswordModal from './ChangePasswordModal';
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = {}) {
   const user = useAuth((s) => s.user);
   const logout = useAuth((s) => s.logout);
   const [pwdOpen, setPwdOpen] = useState(false);
@@ -49,7 +54,7 @@ export default function Sidebar() {
 
   return (
     <motion.aside
-      className="sidebar"
+      className={`sidebar${mobileOpen ? ' mobile-open' : ''}`}
       initial={{ x: -80, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -78,7 +83,7 @@ export default function Sidebar() {
               show: { opacity: 1, x: 0, transition: { duration: 0.3 } },
             }}
           >
-            <NavLink to={l.to}>
+            <NavLink to={l.to} onClick={() => onClose?.()}>
               <motion.span
                 className="sidebar-nav-icon"
                 whileHover={{ scale: 1.2, rotate: 8 }}

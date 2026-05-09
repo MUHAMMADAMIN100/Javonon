@@ -44,6 +44,9 @@ export default function Chat() {
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeId, setActiveId] = useState<string | null>(searchParams.get('room'));
+  // Mobile: показываем либо список комнат, либо тред. На десктопе — оба сразу
+  // (CSS-grid). По умолчанию список — пользователь сам выбирает.
+  const [mobileShowList, setMobileShowList] = useState(true);
   const [input, setInput] = useState('');
   const [showNewDirect, setShowNewDirect] = useState(false);
   const [showNewTeam, setShowNewTeam] = useState(false);
@@ -572,7 +575,7 @@ export default function Chat() {
         </h2>
       </div>
 
-      <div className="card" style={{
+      <div className={`card chat-card${mobileShowList ? ' show-list' : ' show-thread'}`} style={{
         padding: 0,
         height: 'calc(100vh - 280px)',
         minHeight: 520,
@@ -581,7 +584,7 @@ export default function Chat() {
         overflow: 'hidden',
       }}>
         {/* Sidebar — список чатов */}
-        <div style={{
+        <div className="chat-rooms-pane" style={{
           borderRight: '1px solid var(--border-soft)',
           display: 'flex',
           flexDirection: 'column',
@@ -637,7 +640,7 @@ export default function Chat() {
                 return (
                   <button
                     key={r.id}
-                    onClick={() => setActiveId(r.id)}
+                    onClick={() => { setActiveId(r.id); setMobileShowList(false); }}
                     style={{
                       display: 'flex',
                       alignItems: 'flex-start',
@@ -691,30 +694,47 @@ export default function Chat() {
         </div>
 
         {/* Messages */}
-        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="chat-thread-pane" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {activeRoom && (
-            <div style={{
+            <div className="chat-thread-header" style={{
               padding: '20px 24px',
               borderBottom: '1px solid var(--border-soft)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
             }}>
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                letterSpacing: '0.12em',
-                color: 'var(--text-soft)',
-                textTransform: 'uppercase',
-                marginBottom: 4,
-              }}>{activeRoom.type === 'GENERAL' ? 'GENERAL' : activeRoom.type === 'DIRECT' ? 'DIRECT' : 'TEAM'} · {activeRoom.members.length} members</div>
-              <div style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 22,
-                fontWeight: 500,
-                letterSpacing: '-0.01em',
-              }}>
-                {activeRoom.type === 'GENERAL' ? 'Команда Javonon' :
-                  activeRoom.type === 'DIRECT'
-                    ? activeRoom.members.find((m) => m.userId !== me?.id)?.user.fullName || activeRoom.title
-                    : activeRoom.title}
+              {/* Mobile: back-кнопка чтобы вернуться к списку чатов */}
+              <button
+                type="button"
+                className="chat-back-btn"
+                onClick={() => setMobileShowList(true)}
+                aria-label="Назад к списку чатов"
+              >
+                <Icon name="arrow_back" size={22} />
+              </button>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  color: 'var(--text-soft)',
+                  textTransform: 'uppercase',
+                  marginBottom: 4,
+                }}>{activeRoom.type === 'GENERAL' ? 'GENERAL' : activeRoom.type === 'DIRECT' ? 'DIRECT' : 'TEAM'} · {activeRoom.members.length} members</div>
+                <div style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 22,
+                  fontWeight: 500,
+                  letterSpacing: '-0.01em',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}>
+                  {activeRoom.type === 'GENERAL' ? 'Команда Javonon' :
+                    activeRoom.type === 'DIRECT'
+                      ? activeRoom.members.find((m) => m.userId !== me?.id)?.user.fullName || activeRoom.title
+                      : activeRoom.title}
+                </div>
               </div>
             </div>
           )}

@@ -1,10 +1,11 @@
+import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
 import RealtimeStatusBanner from './RealtimeStatusBanner';
+import Icon from '../Icon';
 
-// Каждая запись: текст до <em>, italic-акцент, и слаг для mono-эйбра.
 const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
   '/dashboard': { eyebrow: 'OVERVIEW · 01', pre: 'Картина', em: 'дня.' },
   '/applications': { eyebrow: 'INBOUND · 02', pre: 'Заявки', em: 'студентов.' },
@@ -24,13 +25,40 @@ const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
 
 export default function Layout() {
   const loc = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const meta = Object.entries(TITLES).find(([k]) => loc.pathname.startsWith(k))?.[1]
     || { eyebrow: 'JAVONON · CRM', pre: 'Панель', em: 'управления.' };
 
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [loc.pathname]);
+
+  // Lock body scroll when drawer open
+  useEffect(() => {
+    if (mobileNavOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [mobileNavOpen]);
+
   return (
-    <div className="app-layout">
+    <div className={`app-layout${mobileNavOpen ? ' nav-open' : ''}`}>
       <RealtimeStatusBanner />
-      <Sidebar />
+      <Sidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+      <AnimatePresence>
+        {mobileNavOpen && (
+          <motion.div
+            className="sidebar-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setMobileNavOpen(false)}
+          />
+        )}
+      </AnimatePresence>
       <div className="main">
         <motion.div
           className="topbar"
@@ -38,6 +66,14 @@ export default function Layout() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
+          <button
+            type="button"
+            className="topbar-burger"
+            onClick={() => setMobileNavOpen((v) => !v)}
+            aria-label="Меню"
+          >
+            <Icon name={mobileNavOpen ? 'close' : 'menu'} size={24} />
+          </button>
           <AnimatePresence mode="wait">
             <motion.div
               key={meta.eyebrow}
@@ -58,10 +94,6 @@ export default function Layout() {
           </div>
         </motion.div>
         <div className="content">
-          {/* QA-fix: убрал mode="wait" + exit-anim — раньше при переходе
-              старая страница уходила ДО монтирования новой, было видно
-              пустую белую область (~0.3s gap). Теперь только enter-anim
-              на ключе path, новая страница появляется поверх кеша. */}
           <motion.div
             key={loc.pathname}
             initial={{ opacity: 0, y: 12 }}
