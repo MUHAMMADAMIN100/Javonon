@@ -43,6 +43,14 @@ export default function Layout() {
     }
   }, [mobileNavOpen]);
 
+  // Escape key closes drawer (для планшетов с клавиатурой)
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileNavOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileNavOpen]);
+
   return (
     <div className={`app-layout${mobileNavOpen ? ' nav-open' : ''}`}>
       <RealtimeStatusBanner />

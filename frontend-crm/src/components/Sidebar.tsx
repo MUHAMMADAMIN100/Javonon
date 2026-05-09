@@ -65,6 +65,15 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
         transition={{ type: 'spring', stiffness: 300 }}
       >
         <img src="/javonon-logo.svg" alt="Javonon" className="sidebar-brand-img" />
+        {/* Close button — виден только на мобильных, когда drawer открыт */}
+        <button
+          type="button"
+          className="sidebar-close-btn"
+          onClick={() => onClose?.()}
+          aria-label="Закрыть меню"
+        >
+          <Icon name="close" size={22} />
+        </button>
       </motion.div>
       <motion.nav
         className="sidebar-nav"
