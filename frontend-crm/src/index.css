@@ -3265,26 +3265,8 @@ textarea:focus {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Close-кнопка внутри sidebar — видна только на мобильных */
-.sidebar-close-btn {
-  display: none;
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: white;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background .15s, transform .15s;
-  z-index: 5;
-}
-.sidebar-close-btn:hover { background: rgba(255, 255, 255, 0.10); }
-.sidebar-close-btn:active { transform: scale(0.94); }
+/* (.sidebar-close-btn удалена — пользователь закрывает drawer
+   тапом по backdrop'у, по nav-ссылке или Escape-клавишей) */
 
 /* ===== TABLET / MOBILE (<= 900) — drawer-style sidebar ===== */
 @media (max-width: 900px) {
@@ -3323,10 +3305,8 @@ textarea:focus {
      (старые мобильные правила ломали layout, превращая в ряд) */
   .sidebar-logo, .sidebar-user { display: flex !important; }
   .sidebar-logo {
-    padding: 18px 64px 18px 18px !important; /* справа место под X */
-    position: relative !important;
+    padding: 18px !important;
   }
-  .sidebar-close-btn { display: inline-flex !important; }
   .sidebar-nav {
     flex-direction: column !important;
     padding: 16px 12px !important;
