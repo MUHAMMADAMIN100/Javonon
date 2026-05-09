@@ -3444,9 +3444,24 @@ textarea:focus {
   .sidebar-nav a { padding: 8px 12px !important; }
 }
 
-/* ===== Очень большие экраны (4K+) — ограничиваем max-width контента ===== */
+/* ===== Большие экраны (>1920px) — контент занимает ВСЁ свободное
+   пространство после sidebar (без искусственных ограничений). Дополнительно
+   увеличиваем bento padding и базовый контентный padding для комфортного
+   восприятия на 2K/4K мониторах. ===== */
 @media (min-width: 1920px) {
-  .content { max-width: 1600px; margin-left: auto; margin-right: auto; }
+  .content {
+    max-width: none;
+    padding: 40px 48px;
+  }
+  .bento { gap: 18px; }
+  .bento-card { padding: 32px; }
+  .crm-section-title { font-size: 36px; }
+}
+@media (min-width: 2400px) {
+  .content { padding: 48px 64px; }
+  .bento { gap: 22px; }
+  .bento-card { padding: 40px; }
+  .crm-section-title { font-size: 42px; }
 }
 
 /* ===== Mobile — глобально предотвращаем горизонтальный скролл ===== */
