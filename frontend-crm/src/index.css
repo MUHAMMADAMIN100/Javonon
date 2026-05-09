@@ -4029,6 +4029,13 @@ textarea:focus {
   }
   .program-card-img-fallback { font-size: 40px !important; }
 
+  /* LMS — 2-колоночный grid (320px + 1fr) → 1 колонка на мобиле,
+     иначе вторая часть выходит за viewport. */
+  .lms-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
   /* Salary "Зафиксировать" — кнопка с input в одной строке.
      Мобиле: оба full-width, в столбик. */
   .salary-confirm-row { flex-direction: column !important; align-items: stretch !important; }

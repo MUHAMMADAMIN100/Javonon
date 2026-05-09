@@ -20,7 +20,7 @@ import Salary from './pages/Salary';
 import Kpi from './pages/Kpi';
 import Reports from './pages/Reports';
 import Chat from './pages/Chat';
-import Lms from './pages/Lms';
+import Lms from './pages/LMS';
 import Loading from './components/Loading';
 
 export default function App() {
