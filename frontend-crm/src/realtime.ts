@@ -93,17 +93,40 @@ export function getSocket() {
   return socket;
 }
 
-/** Хук: подписывается на событие и автоматически отписывается при размонтировании. */
+/**
+ * Хук: подписывается на событие и автоматически отписывается при размонтировании.
+ *
+ * QA-fix: РАНЬШЕ мы делали `getSocket()` ОДИН РАЗ в useEffect — если сокет
+ * ещё не успел подключиться (auth.init async, connectRealtime в процессе) —
+ * handler не привязывался, и события терялись. Теперь подписываемся
+ * на изменения connState и re-attach handler при каждом connect/reconnect.
+ */
 export function useRealtimeEvent(event: string, handler: (...args: any[]) => void) {
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
   useEffect(() => {
-    const s = getSocket();
-    if (!s) return;
     const cb = (...args: any[]) => handlerRef.current(...args);
-    s.on(event, cb);
+    let attached: Socket | null = null;
+
+    const attach = () => {
+      const s = getSocket();
+      if (s && s !== attached) {
+        if (attached) attached.off(event, cb);
+        s.on(event, cb);
+        attached = s;
+      }
+    };
+
+    attach();
+    const stateCb = (st: ConnState) => {
+      if (st === 'connected') attach();
+    };
+    stateListeners.push(stateCb);
+
     return () => {
-      s.off(event, cb);
+      const i = stateListeners.indexOf(stateCb);
+      if (i >= 0) stateListeners.splice(i, 1);
+      if (attached) attached.off(event, cb);
     };
   }, [event]);
 }
@@ -113,16 +136,36 @@ export function useRealtime(handlers: Record<string, (...args: any[]) => void>) 
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
   useEffect(() => {
-    const s = getSocket();
-    if (!s) return;
     const events = Object.keys(handlersRef.current);
-    const wrapped = events.map((ev) => {
-      const cb = (...args: any[]) => handlersRef.current[ev]?.(...args);
-      s.on(ev, cb);
-      return [ev, cb] as const;
-    });
+    let attached: Socket | null = null;
+    const wrappers: Record<string, (...args: any[]) => void> = {};
+    for (const ev of events) {
+      wrappers[ev] = (...args: any[]) => handlersRef.current[ev]?.(...args);
+    }
+
+    const attach = () => {
+      const s = getSocket();
+      if (s && s !== attached) {
+        if (attached) {
+          for (const ev of events) attached.off(ev, wrappers[ev]);
+        }
+        for (const ev of events) s.on(ev, wrappers[ev]);
+        attached = s;
+      }
+    };
+
+    attach();
+    const stateCb = (st: ConnState) => {
+      if (st === 'connected') attach();
+    };
+    stateListeners.push(stateCb);
+
     return () => {
-      wrapped.forEach(([ev, cb]) => s.off(ev, cb));
+      const i = stateListeners.indexOf(stateCb);
+      if (i >= 0) stateListeners.splice(i, 1);
+      if (attached) {
+        for (const ev of events) attached.off(ev, wrappers[ev]);
+      }
     };
   }, []);
 }

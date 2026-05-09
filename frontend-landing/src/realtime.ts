@@ -108,22 +108,37 @@ export function getSocket() {
 }
 
 export function useStudentRealtime(handlers: Record<string, (...args: any[]) => void>) {
-  // handlers держим в ref чтобы не пересоздавать подписки при каждом рендере,
-  // но всегда вызывать актуальные коллбэки.
+  // QA-fix: re-attach при каждом connect/reconnect. Раньше getSocket()
+  // возвращал null если useEffect отработал до коннекта — события терялись.
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
   useEffect(() => {
-    const s = getSocket();
-    if (!s) return;
     const events = Object.keys(handlersRef.current);
-    const wrapped = events.map((ev) => {
-      const cb = (...args: any[]) => handlersRef.current[ev]?.(...args);
-      s.on(ev, cb);
-      return [ev, cb] as const;
-    });
+    let attached: Socket | null = null;
+    const wrappers: Record<string, (...args: any[]) => void> = {};
+    for (const ev of events) {
+      wrappers[ev] = (...args: any[]) => handlersRef.current[ev]?.(...args);
+    }
+    const attach = () => {
+      const s = getSocket();
+      if (s && s !== attached) {
+        if (attached) {
+          for (const ev of events) attached.off(ev, wrappers[ev]);
+        }
+        for (const ev of events) s.on(ev, wrappers[ev]);
+        attached = s;
+      }
+    };
+    attach();
+    const stateCb = (st: ConnState) => { if (st === 'connected') attach(); };
+    stateListeners.push(stateCb);
     return () => {
-      wrapped.forEach(([ev, cb]) => s.off(ev, cb));
+      const i = stateListeners.indexOf(stateCb);
+      if (i >= 0) stateListeners.splice(i, 1);
+      if (attached) {
+        for (const ev of events) attached.off(ev, wrappers[ev]);
+      }
     };
   }, []);
 }
