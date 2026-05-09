@@ -205,7 +205,7 @@ input, textarea, select { font-family: inherit; }
   font-family: var(--display);
   font-weight: 600;
   font-size: 16px;
-  color: var(--night);
+  color: white;
 }
 
 .nav {
@@ -253,7 +253,7 @@ input, textarea, select { font-family: inherit; }
   color: var(--ink);
   border: 1px solid white;
 }
-.btn-pill.solid:hover { background: var(--emerald); border-color: var(--emerald); }
+.btn-pill.solid:hover { background: var(--emerald); border-color: var(--emerald); color: white; }
 .btn-pill.solid .material-symbols-rounded { font-size: 16px; }
 
 .burger {
@@ -325,7 +325,7 @@ input, textarea, select { font-family: inherit; }
   padding: 4px 10px;
   border-radius: 100px;
   background: var(--emerald);
-  color: var(--night);
+  color: white;
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -401,14 +401,21 @@ input, textarea, select { font-family: inherit; }
 }
 .btn-primary {
   background: var(--emerald);
-  color: var(--night);
+  color: white;
   border-color: var(--emerald);
 }
 .btn-primary:hover {
   background: var(--emerald-2);
   border-color: var(--emerald-2);
+  color: white;
   transform: translateY(-2px);
   box-shadow: 0 12px 32px var(--emerald-glow);
+}
+/* Все children внутри primary (включая иконки) — белые */
+.btn-primary,
+.btn-primary *,
+.btn-primary .material-symbols-rounded {
+  color: white !important;
 }
 .btn-ghost-dark {
   background: transparent;
@@ -626,7 +633,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 }
 .bento-card.feature h3 { color: white; font-size: 36px; line-height: 1.05; }
 .bento-card.feature p { color: var(--night-text-soft); font-size: 16px; max-width: 440px; }
-.bento-card.feature .bento-icon { background: var(--emerald); color: var(--night); }
+.bento-card.feature .bento-icon { background: var(--emerald); color: white; }
 .bento-card.feature .bento-num { color: var(--night-text-mute); }
 .bento-card.feature::after {
   content: '';
@@ -640,13 +647,13 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 
 .bento-card.accent {
   background: var(--emerald);
-  color: var(--night);
+  color: white;
   border-color: var(--emerald);
 }
-.bento-card.accent h3 { color: var(--night); font-size: 30px; }
-.bento-card.accent p { color: rgba(5, 7, 6, 0.72); }
-.bento-card.accent .bento-icon { background: var(--night); color: var(--emerald); }
-.bento-card.accent .bento-num { color: rgba(5, 7, 6, 0.5); }
+.bento-card.accent h3 { color: white; font-size: 30px; }
+.bento-card.accent p { color: rgba(255, 255, 255, 0.78); }
+.bento-card.accent .bento-icon { background: white; color: var(--emerald); }
+.bento-card.accent .bento-num { color: rgba(255, 255, 255, 0.55); }
 
 /* ============================================================
    COUNTRIES — editorial list
@@ -1003,7 +1010,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   width: 56px; height: 56px;
   border-radius: 50%;
   background: var(--emerald);
-  color: var(--night);
+  color: white;
   align-items: center; justify-content: center;
   margin-bottom: 12px;
 }
@@ -1133,7 +1140,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 }
 .footer-socials a:hover {
   background: var(--emerald);
-  color: var(--night);
+  color: white;
   border-color: var(--emerald);
 }
 
@@ -1376,7 +1383,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 .stu-header .brand {
   color: var(--ink);
 }
-.stu-header .brand-dot { background: var(--emerald); color: var(--night); }
+.stu-header .brand-dot { background: var(--emerald); color: white; }
 .stu-header-user {
   display: flex; align-items: center; gap: 12px;
 }
@@ -1526,7 +1533,13 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   z-index: 2;
 }
 .ep-dot {
-  width: 36px; height: 36px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  flex-shrink: 0;
+  flex-grow: 0;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   background: var(--bg-mute, #f1f5f9);
   color: var(--ink-soft, #64748b);
@@ -1538,6 +1551,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   transition: all 0.2s;
   position: relative;
   z-index: 2;
+  box-sizing: border-box;
 }
 .ep-step.done .ep-dot {
   background: var(--ink, #0f172a);
@@ -2541,14 +2555,16 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 
 /* Stepper EnrollmentProgress — на мобиле горизонтально скроллим */
 @media (max-width: 600px) {
-  .ep-card { padding: 20px 16px !important; }
+  .ep-card { padding: 20px 16px !important; overflow: hidden; }
   .ep-head { gap: 12px !important; margin-bottom: 24px !important; }
   .ep-percent { font-size: 32px !important; }
   .ep-current { font-size: 17px !important; }
   .ep-track {
     overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 8px;
+    overflow-y: visible !important; /* НЕ hidden — иначе обрезает
+       box-shadow ring у current-dot и круг выглядит овальным */
+    padding-top: 8px !important;    /* место для ring сверху */
+    padding-bottom: 12px !important;
     margin-left: -16px;
     margin-right: -16px;
     padding-left: 16px;
@@ -2576,7 +2592,20 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
     right: calc(-50% + 16px) !important;
     top: 13px !important;
   }
-  .ep-dot { width: 28px !important; height: 28px !important; font-size: 11px !important; }
+  .ep-dot {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    max-width: 28px !important;
+    max-height: 28px !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    aspect-ratio: 1 / 1 !important;
+    border-radius: 50% !important;
+    font-size: 11px !important;
+    box-sizing: border-box !important;
+  }
 }
 
 /* Stu-tabs — нормальный горизонтальный скролл с индикатором что есть ещё */
@@ -3130,4 +3159,33 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   .form-row textarea { padding: 10px 11px !important; }
   .af-section-head { padding: 10px !important; }
   .af-section-body { padding: 4px 8px 12px !important; }
+}
+
+/* ================================================================
+   GLOBAL: на любом синем (--emerald / --primary / #01368B) фоне
+   текст и иконки — БЕЛЫЕ. Safety net.
+   ================================================================ */
+.btn-primary,
+.btn-primary *,
+.bento-card.accent,
+.bento-card.accent *,
+.brand-dot,
+.brand-dot *,
+.hero-tag-pill,
+.form-success .ok-icon,
+.form-success .ok-icon * {
+  color: white !important;
+}
+.btn-primary .material-symbols-rounded,
+.bento-card.accent .material-symbols-rounded,
+.form-success .ok-icon .material-symbols-rounded {
+  color: white !important;
+}
+
+/* Stepper current dot — perfectly circular */
+.ep-step.current .ep-dot,
+.ep-step .ep-dot {
+  aspect-ratio: 1 / 1 !important;
+  flex-shrink: 0 !important;
+  border-radius: 50% !important;
 }

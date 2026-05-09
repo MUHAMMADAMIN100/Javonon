@@ -90,7 +90,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   width: 32px; height: 32px;
   border-radius: 9px;
   background: var(--primary);
-  color: var(--bg-sidebar);
+  color: white;
   display: flex; align-items: center; justify-content: center;
   font-family: var(--font-display);
   font-weight: 600;
@@ -164,7 +164,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .user-avatar {
   width: 36px; height: 36px; border-radius: 50%;
   background: var(--primary);
-  color: var(--bg-sidebar);
+  color: white;
   display: flex; align-items: center; justify-content: center;
   font-family: var(--font-display);
   font-weight: 600;
@@ -269,8 +269,13 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .bento-card.accent {
   background: var(--primary);
-  color: var(--text);
+  color: white;
   border-color: var(--primary);
+}
+.bento-card.accent h3,
+.bento-card.accent p,
+.bento-card.accent * {
+  color: white;
 }
 .bento-num {
   position: absolute;
@@ -282,7 +287,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   text-transform: uppercase;
 }
 .bento-card.feature .bento-num { color: rgba(255,255,255,0.4); }
-.bento-card.accent .bento-num { color: rgba(5,7,6,0.55); }
+.bento-card.accent .bento-num { color: rgba(255,255,255,0.6); }
 
 .span-2 { grid-column: span 2; }
 .span-3 { grid-column: span 3; }
@@ -684,7 +689,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .login-logo .logo-mark {
   width: 36px; height: 36px;
   background: var(--primary);
-  color: var(--bg-sidebar);
+  color: white;
   font-size: 18px;
   box-shadow: none;
 }
@@ -1791,11 +1796,16 @@ select.input-error {
 }
 .app-stepper-step:disabled { cursor: default; }
 .app-stepper-dot {
-  width: 30px; height: 30px; border-radius: 50%;
+  width: 30px; height: 30px;
+  min-width: 30px; min-height: 30px;
+  flex-shrink: 0; flex-grow: 0;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
   background: white; border: 2px solid var(--border);
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 700; color: var(--text-soft);
   transition: all .2s;
+  box-sizing: border-box;
 }
 .app-stepper-step.reached .app-stepper-dot {
   background: var(--success); border-color: var(--success); color: white;
@@ -3629,4 +3639,37 @@ textarea:focus {
   .chat-thread-header > div:nth-child(2) > div:last-child {
     font-size: 17px !important;
   }
+}
+
+/* ================================================================
+   GLOBAL: на любом синем (--primary / #01368B / .bg-primary) фоне
+   текст и иконки — белые. Safety net чтобы не отлавливать каждое
+   место по отдельности.
+   ================================================================ */
+.btn-primary,
+.btn-primary *,
+.bento-card.accent,
+.bento-card.accent *,
+.user-avatar,
+.user-avatar *,
+.logo-mark,
+.logo-mark *,
+[data-blue-bg],
+[data-blue-bg] * {
+  color: white !important;
+}
+.btn-primary .material-symbols-rounded,
+.bento-card.accent .material-symbols-rounded,
+.user-avatar .material-symbols-rounded,
+.logo-mark .material-symbols-rounded {
+  color: white !important;
+}
+
+/* Stepper current dot — perfectly circular даже когда родитель flex
+   и пытается сжать. aspect-ratio + min/max + flex-shrink: 0 */
+.app-stepper-step.current .app-stepper-dot,
+.ep-step.current .ep-dot {
+  aspect-ratio: 1 / 1 !important;
+  flex-shrink: 0 !important;
+  border-radius: 50% !important;
 }
