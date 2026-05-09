@@ -170,11 +170,12 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
     flex: '1 1 0',
     minWidth: 0,
     width: 'auto',
+    maxWidth: '100%',
     border: 'none',
     background: 'transparent',
     outline: 'none',
     padding: '10px 12px',
-    fontSize: 14,
+    fontSize: 16, /* >=16 чтобы iOS не зумил при focus */
     color: 'var(--text, #0f172a)',
     boxShadow: 'none',
   };

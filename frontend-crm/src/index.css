@@ -3559,6 +3559,49 @@ textarea:focus {
   .btn-sm { font-size: 11px !important; padding: 6px 10px !important; }
 }
 
+/* ================================================================
+   CRITICAL flex/grid shrink fix для CRM. Без min-width: 0 на
+   flex/grid items они не сжимаются ниже content-size — отсюда
+   формы вылезают за viewport на 320px несмотря на overflow:hidden.
+   ================================================================ */
+@media (max-width: 600px) {
+  .af-card, .af-section, .af-section-body, .af-sections, .af-field,
+  .form-grid-2, .form-grid-3, .form-row, .detail-grid, .manager-bar,
+  .filters, .card-header, .card-header-actions, .card, .card-body,
+  .stu-card {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .af-section-head { gap: 8px !important; min-width: 0 !important; }
+  .af-section-head-left { min-width: 0 !important; flex: 1 1 0 !important; }
+  .af-section-title, .af-section-title-en {
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    max-width: 100% !important;
+  }
+  /* Все дети флекс/grid должны уметь сжиматься */
+  .af-card > *, .af-section > *, .form-row > *, .card > *, .card-body > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  /* Phone input как nuclear option */
+  .phone-input-wrap {
+    width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .phone-input-wrap > * { min-width: 0 !important; }
+  .phone-input-wrap input[type="tel"],
+  .form-row .phone-input-wrap input[type="tel"],
+  .af-field .phone-input-wrap input[type="tel"],
+  .form-group .phone-input-wrap input[type="tel"] {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: auto !important;
+    max-width: 100% !important;
+    font-size: 16px !important;
+  }
+}
+
 /* ===== Chat — на мобиле либо список, либо тред (single-pane) ===== */
 .chat-back-btn {
   display: none;

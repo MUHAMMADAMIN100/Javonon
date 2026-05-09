@@ -185,11 +185,12 @@ export default function PhoneInput({ value, onChange, error, placeholder }: Prop
     flex: '1 1 0',
     minWidth: 0,
     width: 'auto',
+    maxWidth: '100%',
     border: 'none',
     background: 'transparent',
     outline: 'none',
     padding: '12px 14px',
-    fontSize: 15,
+    fontSize: 16, /* >=16 чтобы iOS не зумил при focus */
     color: 'var(--text, #0f172a)',
     boxShadow: 'none',
   };

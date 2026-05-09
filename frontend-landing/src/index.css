@@ -2961,3 +2961,173 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
     max-width: 100%;
   }
 }
+
+/* ================================================================
+   CRITICAL: flex/grid items не сжимаются ниже content-size без
+   min-width: 0. Это причина почему на 320px форма вылезает за края
+   несмотря на overflow-x: hidden.
+   Применяем "shrink-to-fit" на ВСЕ потенциально длинные дочерние
+   элементы flex/grid контейнеров.
+   ================================================================ */
+@media (max-width: 600px) {
+  /* Apply CTA section — самый проблемный блок */
+  .cta { overflow: hidden; max-width: 100vw; }
+  .cta-grid {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    min-height: auto !important;
+  }
+  .cta-grid > *,
+  .cta-left, .cta-right {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .cta-left > *, .cta-right > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Hero CTA-LEFT заголовок — "Расскажи о себе. Остальное — наша
+     работа." на 320px не помещался при clamp(40px,5vw,80px)→40px. */
+  .cta-left h2 {
+    font-size: clamp(24px, 7.5vw, 30px) !important;
+    line-height: 1.15 !important;
+    letter-spacing: -0.02em !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+  .cta-left h2 em {
+    font-size: inherit !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .cta-left p {
+    font-size: 14px !important;
+    line-height: 1.5;
+    max-width: 100% !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .cta-left .cta-list { gap: 10px !important; margin-top: 4px !important; }
+  .cta-left .cta-list-item {
+    font-size: 13px !important;
+    word-break: break-word;
+    max-width: 100%;
+  }
+  .cta-left { gap: 18px !important; }
+
+  /* Form внутри CTA */
+  .cta-right .form-card,
+  .form-card {
+    padding: 20px 14px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .form-card * { min-width: 0; max-width: 100%; }
+  .form-card .form-eyebrow,
+  .form-card h3 { word-break: break-word; }
+  .form-row { width: 100%; min-width: 0; max-width: 100%; }
+  .form-row label { font-size: 10px !important; }
+  .form-row input,
+  .form-row select,
+  .form-row textarea {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    padding: 11px 13px !important;
+    font-size: 16px !important;
+  }
+  .form-row textarea { min-height: 80px !important; }
+  .form-card .btn-primary {
+    width: 100% !important;
+    padding: 14px 20px !important;
+    font-size: 14px !important;
+  }
+  .form-hint { font-size: 10px !important; word-break: break-word; }
+
+  /* Phone input — гарантируем shrink */
+  .phone-input-wrap,
+  .form-row .phone-input-wrap,
+  .af-field .phone-input-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .phone-input-wrap > * { min-width: 0; }
+  .phone-input-wrap input[type="tel"],
+  .form-row .phone-input-wrap input[type="tel"],
+  .af-field .phone-input-wrap input[type="tel"] {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: auto !important;
+    max-width: 100% !important;
+    font-size: 16px !important;
+    padding: 10px 12px !important;
+  }
+  .phone-country-btn {
+    flex: 0 0 auto !important;
+    padding: 0 8px !important;
+  }
+  .phone-country-code { font-size: 12px !important; }
+
+  /* AF-section — все дети с min-width: 0 */
+  .af-card, .af-section, .af-section-body, .af-sections, .af-field {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .af-section-head { gap: 8px !important; min-width: 0 !important; }
+  .af-section-head-left { min-width: 0 !important; flex: 1 1 0 !important; }
+  .af-section-title, .af-section-title-en {
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    max-width: 100% !important;
+  }
+
+  /* Stu-tabs — горизонтальный скролл со всеми элементами */
+  .stu-tabs {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none;
+    width: 100%;
+    max-width: 100%;
+  }
+  .stu-tabs::-webkit-scrollbar { display: none; }
+  .stu-tab {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+  }
+  .stu-main, .stu-header-inner {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Section-head внутри секций — тоже сжимаемый */
+  .section-head, .section-head > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  /* На случай если кто-то flex-row выложил */
+  .section-head { flex-wrap: wrap; }
+}
+
+/* Дополнительный safety net на ≤375px (iPhone SE и меньше) */
+@media (max-width: 375px) {
+  .cta-left h2 { font-size: clamp(22px, 7vw, 26px) !important; }
+  .form-card { padding: 16px 12px !important; }
+  .form-card h3 { font-size: 18px !important; }
+  .form-row input,
+  .form-row select,
+  .form-row textarea { padding: 10px 11px !important; }
+  .af-section-head { padding: 10px !important; }
+  .af-section-body { padding: 4px 8px 12px !important; }
+}
