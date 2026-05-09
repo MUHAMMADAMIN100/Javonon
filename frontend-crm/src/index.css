@@ -3954,3 +3954,80 @@ textarea:focus {
   .detail-label { font-size: 9px !important; }
   .detail-value { font-size: 13px !important; }
 }
+
+/* ================================================================
+   NUCLEAR FINAL RULE — последнее слово по padding'ам на мобиле.
+   Высокая specificity + !important + последнее место в файле.
+   Гарантия симметричных padding'ов даже если что-то выше пытается
+   переопределить только одну сторону.
+   ================================================================ */
+@media (max-width: 600px) {
+  html body .app-layout .main .content,
+  html body .app-layout .main > .content {
+    padding-top: 16px !important;
+    padding-bottom: 16px !important;
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    padding-inline-start: 18px !important;
+    padding-inline-end: 18px !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  html body .app-layout .main .topbar,
+  html body .app-layout .main > .topbar {
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    padding-inline-start: 18px !important;
+    padding-inline-end: 18px !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  /* Bento + bento-card НИКОГДА не выходят за content's content-box.
+     margin 0 + max-width 100% + box-sizing border-box. */
+  html body .app-layout .main .content .bento,
+  html body .app-layout .main .content > .bento,
+  html body .app-layout .main .content .bento-card {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: auto !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  /* Body/html — никаких overflow, padding, margin которые могли бы
+     сместить визуальную систему координат. */
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: hidden !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
+  /* App-layout — занимает viewport ровно. */
+  html body .app-layout {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (max-width: 360px) {
+  /* На очень узких — оставляем 14px рамку (но симметрично!). */
+  html body .app-layout .main .content {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+  html body .app-layout .main .topbar {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+}
