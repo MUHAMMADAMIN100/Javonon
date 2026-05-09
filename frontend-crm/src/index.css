@@ -1498,13 +1498,14 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .card-header-actions { gap: 4px !important; }
 }
 
-/* ===== MOBILE (до 720) — sidebar становится верхней горизонтальной навигацией ===== */
+/* ===== MOBILE (до 720) — DEPRECATED стилизация sidebar-as-toprow.
+   Отключена в пользу drawer-pattern (см. @media 900px ниже).
+   Оставляем body/sidebar-nav стили для обратной совместимости. */
 @media (max-width: 720px) {
   body { background: #f5f7fb; }
-  .app-layout { flex-direction: column; min-height: 100vh; }
+  .app-layout { /* flex-direction теперь row из @media 900px правила */ }
   .sidebar {
-    width: 100%; height: auto; position: sticky;
-    top: 0; left: 0; right: 0; z-index: 50;
+    /* position/width перебито в @media 900px на fixed drawer */
     flex-direction: row; align-items: center;
     border-bottom: 1px solid rgba(255,255,255,0.08);
     overflow-x: auto;
@@ -3482,7 +3483,14 @@ textarea:focus {
   *, *::before, *::after { box-sizing: border-box; }
 
   /* --- Topbar — компактный, padding выровнен с .content (18px) --- */
-  .topbar { height: 56px !important; padding: 0 18px !important; }
+  .topbar {
+    height: 56px !important;
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
   .topbar-burger { width: 40px; height: 40px; margin-right: 4px; }
   .topbar-title { font-size: 15px !important; line-height: 1.15 !important; }
   .topbar-eyebrow { font-size: 8px !important; }
@@ -3490,8 +3498,41 @@ textarea:focus {
 
   /* --- Content — без выходов --- */
   /* Рамочный padding — карточки не прилипают к краям экрана.
-     18px по бокам = заметная "рамка" вокруг bento/cards. */
-  .content { padding: 16px 18px !important; min-width: 0; max-width: 100%; }
+     18px по бокам = заметная "рамка" вокруг bento/cards.
+     padding-left/right ОТДЕЛЬНО + box-sizing border-box чтобы
+     никакое более специфичное правило не съело только одну сторону. */
+  .content {
+    padding-top: 16px !important;
+    padding-bottom: 16px !important;
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  /* Bento/cards никогда шире контейнера и без negative-margin */
+  .bento, .card, .bento-card, .crm-section-head {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: auto !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  /* Main также строго ограничен viewport */
+  .main {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
 
   /* --- Cards — единый формат --- */
   .card { border-radius: 14px !important; min-width: 0; max-width: 100%; }
