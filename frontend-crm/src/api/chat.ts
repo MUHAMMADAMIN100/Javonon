@@ -103,3 +103,7 @@ export const listPinnedMessages = (roomId: string) =>
 /** Уведомить других участников что я печатаю (или прекратил). Эфемерно — не сохраняется. */
 export const setTyping = (roomId: string, typing: boolean) =>
   api.post(`/chat/rooms/${roomId}/typing`, { typing }).then((r) => r.data);
+
+/** Telegram-style: пометить комнату прочитанной (для read-receipts ✓✓). */
+export const markRoomRead = (roomId: string) =>
+  api.post<{ ok: boolean; lastReadAt: string }>(`/chat/rooms/${roomId}/read`).then((r) => r.data);

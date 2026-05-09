@@ -142,6 +142,12 @@ export class ChatController {
     return this.svc.setTyping(id, me.id, !!body.typing);
   }
 
+  /** Telegram-style: read receipt — пометить комнату прочитанной. */
+  @Post('rooms/:id/read')
+  read(@Param('id') id: string, @CurrentUser() me: any) {
+    return this.svc.markRoomRead(id, me.id);
+  }
+
   @Post('rooms/team')
   createTeam(
     @CurrentUser() me: any,

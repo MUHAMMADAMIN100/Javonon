@@ -16,6 +16,7 @@ import {
   pinChatMessage,
   forwardChatMessage,
   setTyping,
+  markRoomRead,
 } from '../api/chat';
 import { listUsers } from '../api/users';
 import { listNotifications, markRead } from '../api/notifications';
@@ -168,6 +169,21 @@ export default function Chat() {
       return cur.map((m) => m.id === data.messageId ? { ...m, isPinned: data.isPinned } : m);
     });
   });
+  useRealtimeEvent('chat:read', (data: any) => {
+    // data: { roomId, userId, lastReadAt } — обновляем member в roomsKey
+    qc.setQueryData<ChatRoom[]>(roomsKey, (cur) => {
+      if (!cur) return cur;
+      return cur.map((r) => {
+        if (r.id !== data.roomId) return r;
+        return {
+          ...r,
+          members: (r.members || []).map((m) =>
+            m.userId === data.userId ? { ...m, lastReadAt: data.lastReadAt } : m,
+          ),
+        };
+      });
+    });
+  });
   useRealtimeEvent('chat:typing', (data: any) => {
     // Игнорируем своё собственное событие.
     if (data.userId === me?.id) return;
@@ -181,6 +197,21 @@ export default function Chat() {
       return { ...cur, [data.roomId]: room };
     });
   });
+
+  // При возврате tab'а в фокус — помечаем активную комнату прочитанной.
+  useEffect(() => {
+    const onFocus = () => {
+      if (activeId && typeof document !== 'undefined' && !document.hidden) {
+        markRoomRead(activeId).catch(() => undefined);
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [activeId]);
 
   // Auto-expire: каждые 1.5 сек выкидываем устаревшие записи.
   useEffect(() => {
@@ -201,6 +232,7 @@ export default function Chat() {
   }, []);
 
   // Когда от собеседника пришло сообщение — он точно перестал печатать.
+  // И если этот чат сейчас активен — сразу шлём read-ack (для ✓✓).
   useRealtimeEvent('chat:message', (data: any) => {
     if (data?.message?.authorId) {
       setTypingByRoom((cur) => {
@@ -210,6 +242,14 @@ export default function Chat() {
         delete next[data.message.authorId];
         return { ...cur, [data.roomId]: next };
       });
+    }
+    if (
+      activeId &&
+      data?.roomId === activeId &&
+      data?.message?.authorId !== me?.id &&
+      typeof document !== 'undefined' && !document.hidden
+    ) {
+      markRoomRead(activeId).catch(() => undefined);
     }
   });
 
@@ -730,9 +770,30 @@ export default function Chat() {
                         color: 'var(--text-light)',
                         marginBottom: 4,
                         textTransform: 'uppercase',
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
                       }}>
-                        {isBot ? 'Javonon AI · BOT' : (isMine ? 'Вы' : m.author?.fullName)} · {fmtTime(m.createdAt)}
-                        {m.isPinned && <span title="Закреплено" style={{ marginLeft: 6 }}>📌</span>}
+                        <span>{isBot ? 'Javonon AI · BOT' : (isMine ? 'Вы' : m.author?.fullName)} · {fmtTime(m.createdAt)}</span>
+                        {m.isPinned && <span title="Закреплено">📌</span>}
+                        {/* Telegram-style read receipts: только для своих сообщений */}
+                        {isMine && !isBot && (() => {
+                          // tmp- = ещё не доставлено серверу → часы
+                          if (m.id.startsWith('tmp-')) {
+                            return <span title="Отправляется"><Icon name="schedule" size={12} /></span>;
+                          }
+                          // Прочитано если хоть один другой участник
+                          // имеет lastReadAt >= createdAt сообщения
+                          const others = (activeRoom?.members || []).filter((mm) => mm.userId !== me?.id);
+                          const created = new Date(m.createdAt).getTime();
+                          const isRead = others.some((mm) => mm.lastReadAt && new Date(mm.lastReadAt).getTime() >= created);
+                          return (
+                            <span
+                              title={isRead ? 'Прочитано' : 'Доставлено'}
+                              style={{ color: isRead ? 'var(--primary, #01368B)' : 'var(--text-light)', display: 'inline-flex' }}
+                            >
+                              <Icon name={isRead ? 'done_all' : 'done'} size={14} />
+                            </span>
+                          );
+                        })()}
                       </div>
                     )}
                     <div

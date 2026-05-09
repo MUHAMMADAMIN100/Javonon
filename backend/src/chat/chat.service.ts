@@ -84,12 +84,29 @@ export class ChatService {
       take: 200,
     });
     const messages = recent.reverse();
-    // Mark as read
+    // Mark as read + emit для собеседника чтобы у него галочки стали ✓✓ сразу.
+    const lastReadAt = new Date();
     await this.prisma.chatMember.update({
       where: { roomId_userId: { roomId, userId } },
-      data: { lastReadAt: new Date() },
+      data: { lastReadAt },
     });
+    this.realtime.emitStaff('chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
     return { messages };
+  }
+
+  /** Telegram-style: пометить как прочитано (повторно, при scroll/focus). */
+  async markRoomRead(roomId: string, userId: string) {
+    const member = await this.prisma.chatMember.findUnique({
+      where: { roomId_userId: { roomId, userId } },
+    });
+    if (!member) throw new NotFoundException('Чат не найден');
+    const lastReadAt = new Date();
+    await this.prisma.chatMember.update({
+      where: { roomId_userId: { roomId, userId } },
+      data: { lastReadAt },
+    });
+    this.realtime.emitStaff('chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
+    return { ok: true, lastReadAt: lastReadAt.toISOString() };
   }
 
   async sendMessage(
