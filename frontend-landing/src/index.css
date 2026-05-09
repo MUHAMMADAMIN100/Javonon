@@ -2378,6 +2378,229 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 }
 
 /* ============================================================
+   LANDING DRAWER (mobile burger menu) — Portal'ом в body чтобы
+   не страдать от transform-context'а у motion.header.
+   ============================================================ */
+.land-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--night, #050706);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px 32px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.land-drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.land-drawer-head .brand-img img {
+  height: 32px;
+  filter: none;
+}
+.land-drawer-close {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .15s;
+}
+.land-drawer-close:hover { background: rgba(255, 255, 255, 0.06); }
+.land-drawer-nav {
+  display: flex;
+  flex-direction: column;
+  margin-top: 32px;
+  gap: 0;
+  flex: 1;
+}
+.land-drawer-nav a {
+  display: block;
+  padding: 18px 0;
+  font-family: var(--display);
+  font-size: clamp(28px, 7vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: white;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  line-height: 1.1;
+  transition: color .15s;
+}
+.land-drawer-nav a:hover,
+.land-drawer-nav a:active { color: var(--emerald-2, #34d399); }
+.land-drawer-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.land-drawer-cta .btn-pill {
+  width: 100%;
+  justify-content: center;
+  min-height: 50px;
+  font-size: 15px;
+  padding: 12px 20px;
+}
+.land-drawer-cta .btn-pill.ghost {
+  color: white;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.land-drawer-cta .btn-pill.solid {
+  background: var(--emerald, #10b981);
+  color: var(--night, #050706);
+  border-color: var(--emerald, #10b981);
+}
+@media (min-width: 821px) {
+  /* На десктопе drawer'а вообще не должно быть видно даже если стейт
+     случайно остался open после resize. */
+  .land-drawer { display: none !important; }
+}
+
+/* ============================================================
+   BENTO mobile fix — на узких экранах все карточки в 1 колонку.
+   Раньше bento давал 1 col на 820px, но при ~600-820px было
+   2-колоночное состояние которое тоже ломалось.
+   ============================================================ */
+@media (max-width: 600px) {
+  .bento {
+    grid-template-columns: 1fr !important;
+    grid-auto-rows: auto !important;
+    gap: 12px !important;
+  }
+  .bento-card {
+    padding: 24px 22px !important;
+    min-height: 180px;
+  }
+  .bento-card.feature h3 { font-size: 26px !important; }
+  .bento-card.accent h3 { font-size: 22px !important; }
+  .bento-card h3 { font-size: 20px !important; }
+  .bento-num { top: 18px !important; right: 18px !important; }
+  .bento-icon { width: 38px !important; height: 38px !important; margin-bottom: 16px !important; }
+  .bento-icon .material-symbols-rounded { font-size: 20px !important; }
+}
+
+/* ============================================================
+   STUDENT CABINET — фиксы overflow на 375px и меньше.
+   ============================================================ */
+@media (max-width: 480px) {
+  /* Имя студента может быть длинным — переносим */
+  .stu-profile-name {
+    font-size: 19px !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+  }
+  /* Бэйджи — компактные, переносятся */
+  .stu-badge {
+    font-size: 11px !important;
+    padding: 4px 10px !important;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Email/телефоны не должны вылезать */
+  .stu-profile-grid {
+    font-size: 13px !important;
+  }
+  .stu-profile-grid > div {
+    flex-direction: column;
+    gap: 2px !important;
+    align-items: flex-start;
+  }
+  .stu-profile-grid b {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+  }
+}
+
+/* Stepper EnrollmentProgress — на мобиле горизонтально скроллим */
+@media (max-width: 600px) {
+  .ep-card { padding: 20px 16px !important; }
+  .ep-head { gap: 12px !important; margin-bottom: 24px !important; }
+  .ep-percent { font-size: 32px !important; }
+  .ep-current { font-size: 17px !important; }
+  .ep-track {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 8px;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    justify-content: flex-start;
+    gap: 4px;
+  }
+  .ep-step {
+    flex: 0 0 auto;
+    min-width: 72px;
+    max-width: 84px;
+  }
+  .ep-label {
+    white-space: normal;
+    font-size: 10px;
+    line-height: 1.2;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+  }
+  .ep-connector {
+    left: calc(50% + 16px) !important;
+    right: calc(-50% + 16px) !important;
+    top: 13px !important;
+  }
+  .ep-dot { width: 28px !important; height: 28px !important; font-size: 11px !important; }
+}
+
+/* Stu-tabs — нормальный горизонтальный скролл с индикатором что есть ещё */
+@media (max-width: 600px) {
+  .stu-tabs {
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .stu-tab { font-size: 13px !important; padding: 8px 14px !important; }
+}
+
+/* ============================================================
+   GLOBAL — на мобиле блокируем горизонтальный скролл от
+   случайных переполнений (длинные ссылки, виджеты, hero-overlay).
+   ============================================================ */
+@media (max-width: 900px) {
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+  /* Длинные слова/URL ломаются вместо растягивания layout */
+  .stu-card *, .bento-card *, .ep-card * {
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+  }
+  /* Контейнер не выпирает за пределы экрана */
+  .container, .stu-main, .stu-header-inner {
+    max-width: 100%;
+    min-width: 0;
+  }
+}
+
+/* ============================================================
    STUDENT CABINET — Layout стилизация (профиль, менеджеры,
    прогресс). Раньше эти классы были в JSX но без CSS — рендерилось
    default-flow'ом. Добавляем grid-layout + responsive collapse.
