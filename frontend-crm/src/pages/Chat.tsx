@@ -188,8 +188,12 @@ export default function Chat() {
     });
   });
   useRealtimeEvent('chat:typing', (data: any) => {
-    // Игнорируем своё собственное событие.
+    // Игнорируем своё собственное событие. Двойная защита:
+    // 1) по userId (основной фильтр)
+    // 2) по userName (если userId mismatch из-за token-refresh, всё ещё
+    //    не покажем "Я печатаю" в собственном окне)
     if (data.userId === me?.id) return;
+    if (me?.fullName && data.userName === me.fullName) return;
     setTypingByRoom((cur) => {
       const room = { ...(cur[data.roomId] || {}) };
       if (data.typing) {
@@ -630,7 +634,10 @@ export default function Chat() {
                 const isActive = r.id === activeId;
                 const lastMsg = r.messages?.[0];
                 const otherMember = r.type === 'DIRECT'
-                  ? r.members.find((m) => m.userId !== me?.id)
+                  ? r.members.find((m) =>
+                      (me?.id ? m.userId !== me.id : true)
+                      && (me?.fullName ? m.user.fullName !== me.fullName : true),
+                    )
                   : null;
                 const title = r.type === 'GENERAL'
                   ? 'Команда Javonon'
@@ -732,7 +739,16 @@ export default function Chat() {
                 }}>
                   {activeRoom.type === 'GENERAL' ? 'Команда Javonon' :
                     activeRoom.type === 'DIRECT'
-                      ? activeRoom.members.find((m) => m.userId !== me?.id)?.user.fullName || activeRoom.title
+                      ? (() => {
+                          // Берём member'а который НЕ текущий пользователь.
+                          // Защита: если me?.id неизвестен — фильтруем по
+                          // fullName тоже, чтобы не показать собственное имя.
+                          const other = activeRoom.members.find((m) =>
+                            (me?.id ? m.userId !== me.id : true)
+                            && (me?.fullName ? m.user.fullName !== me.fullName : true),
+                          );
+                          return other?.user.fullName || activeRoom.title || 'Чат';
+                        })()
                       : activeRoom.title}
                 </div>
               </div>
@@ -1294,7 +1310,10 @@ export default function Chat() {
                   const title = r.type === 'GENERAL'
                     ? 'Команда Javonon'
                     : r.type === 'DIRECT'
-                      ? r.members.find((mm) => mm.userId !== me?.id)?.user.fullName || r.title || 'Чат'
+                      ? r.members.find((mm) =>
+                          (me?.id ? mm.userId !== me.id : true)
+                          && (me?.fullName ? mm.user.fullName !== me.fullName : true),
+                        )?.user.fullName || r.title || 'Чат'
                       : r.title || 'Команда';
                   return (
                     <button
