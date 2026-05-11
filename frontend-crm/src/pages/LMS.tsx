@@ -302,9 +302,9 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
   };
 
   return (
-    <div className="card" style={{ padding: 32 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 24 }}>
-        <div style={{ flex: 1 }}>
+    <div className="card lms-course-card" style={{ padding: 32 }}>
+      <div className="lms-course-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 24 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           {editingMeta ? (
             <>
               <div className="form-group">
@@ -330,19 +330,21 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
                 marginBottom: 8,
                 textTransform: 'uppercase',
               }}>COURSE · {course.published ? 'PUBLISHED' : 'DRAFT'}</div>
-              <h2 style={{
+              <h2 className="lms-course-title" style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 36,
                 fontWeight: 500,
                 letterSpacing: '-0.02em',
                 marginBottom: 8,
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere',
               }}>{course.title}</h2>
               {course.description && <p style={{ color: 'var(--text-soft)', fontSize: 15 }}>{course.description}</p>}
             </>
           )}
         </div>
         {isAdmin && !editingMeta && (
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <div className="lms-course-actions" style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
             <button className="btn btn-sm btn-secondary" onClick={() => setEditingMeta(true)}>
               <Icon name="edit" size={14} /> Изменить
             </button>

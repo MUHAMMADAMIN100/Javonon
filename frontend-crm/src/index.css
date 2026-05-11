@@ -4034,7 +4034,33 @@ textarea:focus {
   .lms-grid {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
+    min-width: 0;
   }
+  .lms-grid > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .lms-course-card {
+    padding: 18px !important;
+  }
+  /* Header курса: title + actions в столбик */
+  .lms-course-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .lms-course-title {
+    font-size: clamp(20px, 6vw, 26px) !important;
+    line-height: 1.15 !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .lms-course-actions {
+    width: 100%;
+    gap: 6px !important;
+  }
+  .lms-course-actions .btn { flex: 1 1 auto; min-width: 0; }
 
   /* Salary "Зафиксировать" — кнопка с input в одной строке.
      Мобиле: оба full-width, в столбик. */

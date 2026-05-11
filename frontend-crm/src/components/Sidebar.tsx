@@ -4,6 +4,57 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import Icon from '../Icon';
 import ChangePasswordModal from './ChangePasswordModal';
+import { queryClient } from '../lib/queryClient';
+import { keys } from '../lib/queryKeys';
+import { listChatRooms, chatUnread } from '../api/chat';
+import { listApplications } from '../api/applications';
+import { listStudents, studentStats } from '../api/students';
+import { listPrograms } from '../api/programs';
+import { listTasks } from '../api/tasks';
+import { listUsers } from '../api/users';
+import { listCourses } from '../api/lms';
+import { financeSummary, listTransactions } from '../api/finance';
+import { listSalaries } from '../api/salary';
+
+// Map route → prefetch fn. Срабатывает по hover/touchstart на nav-link
+// и грузит данные ДО клика — экран открывается мгновенно с готовым кешем.
+const PREFETCH_MAP: Record<string, () => Promise<void> | void> = {
+  '/chat': () => {
+    queryClient.prefetchQuery({ queryKey: keys.chat.rooms(), queryFn: () => listChatRooms() });
+    queryClient.prefetchQuery({ queryKey: keys.chat.unread(), queryFn: () => chatUnread() });
+  },
+  '/applications': () => {
+    queryClient.prefetchQuery({ queryKey: keys.applications.list({}), queryFn: () => listApplications() });
+  },
+  '/students': () => {
+    queryClient.prefetchQuery({ queryKey: keys.students.list({}), queryFn: () => listStudents() });
+    queryClient.prefetchQuery({ queryKey: keys.students.stats(), queryFn: () => studentStats() });
+  },
+  '/programs': () => {
+    queryClient.prefetchQuery({ queryKey: keys.programs.list(), queryFn: () => listPrograms() });
+  },
+  '/tasks': () => {
+    queryClient.prefetchQuery({ queryKey: keys.tasks.list({}), queryFn: () => listTasks() });
+  },
+  '/users': () => {
+    queryClient.prefetchQuery({ queryKey: keys.users.list(), queryFn: () => listUsers() });
+  },
+  '/lms': () => {
+    queryClient.prefetchQuery({ queryKey: keys.lms.courses(), queryFn: () => listCourses() });
+  },
+  '/finance': () => {
+    queryClient.prefetchQuery({ queryKey: keys.finance.summary({}), queryFn: () => financeSummary() });
+    queryClient.prefetchQuery({ queryKey: keys.finance.transactions({}), queryFn: () => listTransactions() });
+  },
+  '/salary': () => {
+    queryClient.prefetchQuery({ queryKey: keys.salary.list({}), queryFn: () => listSalaries() });
+  },
+};
+
+const prefetchRoute = (route: string) => {
+  const fn = PREFETCH_MAP[route];
+  if (fn) try { fn(); } catch { /* silent */ }
+};
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -83,7 +134,13 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
               show: { opacity: 1, x: 0, transition: { duration: 0.3 } },
             }}
           >
-            <NavLink to={l.to} onClick={() => onClose?.()}>
+            <NavLink
+              to={l.to}
+              onClick={() => onClose?.()}
+              onMouseEnter={() => prefetchRoute(l.to)}
+              onTouchStart={() => prefetchRoute(l.to)}
+              onFocus={() => prefetchRoute(l.to)}
+            >
               <motion.span
                 className="sidebar-nav-icon"
                 whileHover={{ scale: 1.2, rotate: 8 }}
