@@ -104,7 +104,7 @@ export default function Lms() {
         </h2>
       </div>
 
-      <div style={{
+      <div className="lms-grid" style={{
         display: 'grid',
         gridTemplateColumns: '320px 1fr',
         gap: 16,
