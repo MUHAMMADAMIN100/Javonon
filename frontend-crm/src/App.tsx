@@ -21,6 +21,7 @@ import Kpi from './pages/Kpi';
 import Reports from './pages/Reports';
 import Chat from './pages/Chat';
 import Lms from './pages/LMS';
+import Partners from './pages/Partners';
 import Loading from './components/Loading';
 
 export default function App() {
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/kpi" element={<Kpi />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/lms" element={<Lms />} />
+        <Route path="/partners" element={<Partners />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

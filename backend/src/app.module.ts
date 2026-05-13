@@ -36,6 +36,7 @@ import { PenaltiesModule } from './penalties/penalties.module';
 import { PaymentsModule } from './payments/payments.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { DailyReportsModule } from './daily-reports/daily-reports.module';
+import { PartnersModule } from './partners/partners.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { DailyReportsModule } from './daily-reports/daily-reports.module';
     PaymentsModule,
     KnowledgeModule,
     DailyReportsModule,
+    PartnersModule,
   ],
   controllers: [HealthController],
   providers: [

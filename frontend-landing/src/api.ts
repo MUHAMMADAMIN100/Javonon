@@ -50,13 +50,26 @@ export interface ApplicationPayload {
   comment?: string;
   programId?: string;
   source?: ApplicationSource;
+  /** Реферальный код партнёра — пробрасывается автоматически если есть в localStorage */
+  ref?: string;
 }
 
 export async function submitApplication(payload: ApplicationPayload) {
+  // Автоматически добавляем ref из localStorage если его не передали явно
+  let body: any = { ...payload };
+  if (!body.ref) {
+    try {
+      const stored = localStorage.getItem('javonon_ref');
+      if (stored) {
+        const r = JSON.parse(stored);
+        if (r?.code) body.ref = r.code;
+      }
+    } catch {}
+  }
   const res = await fetch(`${API_URL}/applications/public`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

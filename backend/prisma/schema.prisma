@@ -684,3 +684,190 @@ model Payment {
   @@index([status])
 }
 
+// ==========================================================
+// PARTNER / REFERRAL SYSTEM
+// Партнёрская программа: партнёр получает уникальную ref-ссылку,
+// приводит клиентов, при оплате получает комиссию.
+// ==========================================================
+
+enum PartnerStatus {
+  ACTIVE
+  SUSPENDED   // временно отключён админом
+  BANNED      // окончательно
+}
+
+enum CommissionStatus {
+  PENDING     // начислено, но ещё не выплачено
+  APPROVED    // одобрено к выплате
+  PAID        // выплачено
+  REVERSED    // отменено (если был refund)
+}
+
+enum PartnerPayoutStatus {
+  REQUESTED
+  PAID
+  REJECTED
+}
+
+model Partner {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  password        String   // bcrypt hash
+  fullName        String
+  phone           String?
+
+  // Уникальный реферальный код (для URL ?ref=CODE и t.me/bot?start=CODE).
+  // Генерируется при регистрации. Должен быть коротким и URL-safe.
+  referralCode    String   @unique
+
+  // Связка с Telegram аккаунтом (когда партнёр сам подключил бот).
+  telegramId      String?  @unique
+  telegramHandle  String?
+
+  // Финансы — балансы хранятся в копейках/центах (Int) для точности.
+  // Размер комиссии — % от суммы платежа клиента, привязанного к этому
+  // партнёру. По умолчанию 30%, админ может поднять/опустить индивидуально.
+  commissionPct   Int      @default(30)    // % (0-100)
+  balanceCents    Int      @default(0)     // доступно к выплате
+  totalEarnedCents Int     @default(0)     // всего заработал (lifetime)
+  totalPaidCents  Int      @default(0)     // всего выплачено
+
+  status          PartnerStatus @default(ACTIVE)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clicks          ReferralClick[]
+  attributions    ReferralAttribution[]
+  commissions     Commission[]
+  payouts         PartnerPayout[]
+
+  @@index([status])
+  @@index([referralCode])
+}
+
+// Лог кликов по реферальной ссылке. Источник статистики "переходов".
+model ReferralClick {
+  id          String   @id @default(uuid())
+  partnerId   String
+  partner     Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  // Куда привёл клик: SITE | BOT. Бот = ?start=CODE в Telegram.
+  source      String   @default("SITE")
+  // Track referer/UA/IP (для антифрода и аналитики)
+  ip          String?
+  userAgent   String?
+  referer     String?
+  // Простой fingerprint для дедупликации (ip+ua hash) — чтобы один и тот же
+  // пользователь не накручивал клики по F5.
+  fingerprint String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([partnerId, createdAt])
+  @@index([fingerprint])
+}
+
+// Привязка клиента к партнёру. Создаётся при ПЕРВОМ значимом действии
+// (регистрация студента/заявка с лендинга/Telegram /start).
+// При оплате читается чтобы определить кого премировать.
+model ReferralAttribution {
+  id          String   @id @default(uuid())
+  partnerId   String
+  partner     Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  // Один из этих идентификаторов клиента:
+  studentId   String?
+  applicationId String?
+  telegramUserId String?  // для оплат через бот
+  emailHint   String?     // fallback
+
+  source      String   @default("SITE")  // SITE | BOT
+  createdAt   DateTime @default(now())
+  // TTL — атрибуция действительна 90 дней по умолчанию.
+  expiresAt   DateTime?
+
+  @@index([partnerId, createdAt])
+  @@index([studentId])
+  @@index([applicationId])
+  @@index([telegramUserId])
+}
+
+// Начисление партнёру по факту успешной оплаты клиента.
+model Commission {
+  id            String   @id @default(uuid())
+  partnerId     String
+  partner       Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  // Источник: одна из этих связок
+  paymentId     String?   // студенческий Payment
+  transactionId String?   // финансовая Transaction
+
+  amountCents   Int       // итоговое начисление (в копейках/центах)
+  baseAmountCents Int     // сумма платежа, с которой считалось
+  percent       Int       // % на момент начисления (фриз)
+  currency      String    @default("USD")
+  note          String?
+
+  status        CommissionStatus @default(PENDING)
+  approvedAt    DateTime?
+  paidAt        DateTime?
+  reversedAt    DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([partnerId, status])
+  @@index([paymentId])
+  @@index([transactionId])
+  @@index([createdAt])
+}
+
+// Запрос/выплата средств партнёру.
+model PartnerPayout {
+  id          String   @id @default(uuid())
+  partnerId   String
+  partner     Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  amountCents Int
+  currency    String   @default("USD")
+  method      String?  // CARD/CRYPTO/CASH/OTHER
+  details     String?  // реквизиты которые партнёр прислал
+  note        String?
+
+  status      PartnerPayoutStatus @default(REQUESTED)
+  requestedAt DateTime @default(now())
+  paidAt      DateTime?
+  rejectedAt  DateTime?
+
+  @@index([partnerId, status])
+  @@index([status])
+}
+
+// Сессия пользователя Telegram-бота — храним привязку telegramUserId к
+// реферальному коду (для атрибуции) + текущее состояние воронки.
+model BotSession {
+  id           String   @id @default(uuid())
+  telegramUserId String @unique
+  telegramUsername String?
+  firstName    String?
+  lastName     String?
+
+  // К какому партнёру привязан этот пользователь (по /start=CODE)
+  partnerCode  String?
+  // Состояние воронки (для прогрева): 0..N — текущий шаг
+  funnelStep   Int      @default(0)
+  // Купил ли уже доступ
+  hasPurchased Boolean  @default(false)
+  purchasedAt  DateTime?
+
+  // Когда последний раз отправляли follow-up
+  lastNudgeAt  DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([partnerCode])
+  @@index([hasPurchased])
+}
+

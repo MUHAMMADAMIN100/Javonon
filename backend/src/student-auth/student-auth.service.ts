@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { ReferralsService } from '../partners/referrals.service';
 
 function generatePassword(length = 8): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -24,6 +25,7 @@ export class StudentAuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private mail: MailService,
+    @Optional() private referrals?: ReferralsService,
   ) {}
 
   /**
@@ -77,6 +79,8 @@ export class StudentAuthService {
     password: string;
     direction?: string;
     comment?: string;
+    /** Реферальный код партнёра — если регистрация по ссылке. */
+    ref?: string;
   }) {
     const fullName = (dto.fullName || '').trim();
     const email = (dto.email || '').trim().toLowerCase();
@@ -137,6 +141,17 @@ export class StudentAuthService {
         studentId: student.id,
       },
     });
+
+    // Партнёрская атрибуция — fire-and-forget. Если ref-код невалидный
+    // или партнёр заблокирован, просто пропускаем.
+    if (dto.ref && this.referrals) {
+      this.referrals.attribute({
+        code: dto.ref,
+        source: 'SITE',
+        studentId: student.id,
+        emailHint: email,
+      }).catch(() => undefined);
+    }
 
     const token = await this.jwt.signAsync({
       sub: student.id,

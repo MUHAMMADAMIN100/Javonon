@@ -6,11 +6,13 @@ import { StudentAuthController } from './student-auth.controller';
 import { StudentAuthService } from './student-auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailModule } from '../mail/mail.module';
+import { PartnersModule } from '../partners/partners.module';
 
 @Module({
   imports: [
     PassportModule,
     MailModule,
+    PartnersModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

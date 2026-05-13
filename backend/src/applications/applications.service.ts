@@ -109,7 +109,7 @@ export class ApplicationsService {
     ENROLLED: 'Зачислен',
   };
 
-  async create(dto: CreateApplicationDto) {
+  async create(dto: CreateApplicationDto & { ref?: string }) {
     const app = await this.prisma.application.create({
       data: {
         fullName: dto.fullName.trim(),
@@ -121,6 +121,19 @@ export class ApplicationsService {
         source: dto.source || 'LANDING_FORM',
       },
     });
+
+    // Реферальная атрибуция: если в заявке пришёл ref-код партнёра,
+    // привязываем заявку к нему через ReferralsService (если доступен).
+    // Импорт сервиса опциональный — не ломаем сборку если модуль ещё не
+    // подключён в конкретной конфигурации.
+    if (dto.ref && (this as any).referrals?.attribute) {
+      (this as any).referrals.attribute({
+        code: dto.ref,
+        source: 'SITE',
+        applicationId: app.id,
+        emailHint: app.email || undefined,
+      }).catch(() => undefined);
+    }
 
     await this.notifications.notifyAllStaff({
       type: 'APPLICATION_NEW',

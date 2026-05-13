@@ -10,9 +10,15 @@ import Knowledge from './pages/Knowledge';
 import ErrorBoundary from './components/ErrorBoundary';
 import { initAnalytics, trackPageView } from './analytics';
 import { queryClient } from './queryClient';
+import { captureReferralFromUrl } from './referral';
+import PartnerRegister from './pages/PartnerRegister';
+import PartnerLogin from './pages/PartnerLogin';
+import PartnerCabinet from './pages/PartnerCabinet';
 import './index.css';
 
 initAnalytics();
+// Захватываем ?ref= из URL до того как React его потеряет.
+captureReferralFromUrl();
 
 function RouteTracker() {
   const location = useLocation();
@@ -34,6 +40,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/register" element={<StudentRegister />} />
             <Route path="/cabinet" element={<StudentCabinet />} />
             <Route path="/knowledge" element={<Knowledge />} />
+            <Route path="/partner/register" element={<PartnerRegister />} />
+            <Route path="/partner/login" element={<PartnerLogin />} />
+            <Route path="/partner/cabinet" element={<PartnerCabinet />} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

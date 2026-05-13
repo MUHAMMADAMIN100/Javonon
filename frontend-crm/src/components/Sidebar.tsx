@@ -97,6 +97,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   // Admin-only
   const adminLinks = isAdmin ? [
     { to: '/lms', icon: 'menu_book', label: 'Обучение' },
+    { to: '/partners', icon: 'handshake', label: 'Партнёры' },
     { to: '/activity', icon: 'history', label: 'Активность' },
     { to: '/users', icon: 'group', label: 'Сотрудники' },
   ] : [];

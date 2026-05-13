@@ -58,10 +58,23 @@ export async function studentRegister(payload: {
   password: string;
   direction?: string;
   comment?: string;
+  /** Реферальный код партнёра — авто-подставляется из localStorage если есть */
+  ref?: string;
 }) {
+  // Авто-добавление ref из localStorage если не передали
+  let body: any = { ...payload };
+  if (!body.ref) {
+    try {
+      const stored = localStorage.getItem('javonon_ref');
+      if (stored) {
+        const r = JSON.parse(stored);
+        if (r?.code) body.ref = r.code;
+      }
+    } catch {}
+  }
   const { data } = await client.post<{ token: string; student: { id: string; email: string; fullName: string } }>(
     '/student-auth/register',
-    payload,
+    body,
   );
   setToken(data.token);
   return data;

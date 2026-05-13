@@ -6,11 +6,13 @@ import { PaymentsService } from './payments.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StudentJwtGuard } from '../student-auth/student-jwt.guard';
+import { PartnersModule } from '../partners/partners.module';
 
 @Module({
   imports: [
     PrismaModule,
     NotificationsModule,
+    PartnersModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

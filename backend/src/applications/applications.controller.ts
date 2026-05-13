@@ -25,7 +25,7 @@ export class ApplicationsController {
   // Лимит: 5 заявок в минуту с одного IP — защита от спама из формы лендинга.
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('public')
-  createFromLanding(@Body() dto: CreateApplicationDto) {
+  createFromLanding(@Body() dto: CreateApplicationDto & { ref?: string }) {
     return this.apps.create(dto);
   }
 

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PaymentMethod, PaymentStatus } from '@prisma/client';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ReferralsService } from '../partners/referrals.service';
 
 @Injectable()
 export class PaymentsService {
@@ -10,6 +11,7 @@ export class PaymentsService {
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
     private notifications: NotificationsService,
+    private referrals: ReferralsService,
   ) {}
 
   /** Студент создаёт payment-запрос. */
@@ -125,6 +127,31 @@ export class PaymentsService {
 
     this.realtime.emitStudent(payment.studentId, 'payment:confirmed', { payment: result.updated, transaction: result.transaction });
     this.realtime.emitStaff('payment:confirmed', { payment: result.updated });
+
+    // Реферальная комиссия (fire-and-forget — не блокирует ответ).
+    // Если студент пришёл от партнёра → создаём Commission и пополняем баланс.
+    (async () => {
+      try {
+        const partner = await this.referrals.resolvePartner({
+          studentId: payment.studentId,
+        });
+        if (partner) {
+          await this.referrals.creditCommission({
+            partnerId: partner.id,
+            amountCents: Math.round(amount * 100),
+            currency: payment.currency,
+            paymentId: payment.id,
+            transactionId: result.transaction.id,
+            note: `Студент: ${payment.student?.fullName || ''}`,
+          });
+        }
+      } catch (e) {
+        // Не валим основной flow — комиссия может быть восстановлена админом.
+        // eslint-disable-next-line no-console
+        console.error('[partner] commission credit failed', e);
+      }
+    })();
+
     return result.updated;
   }
 
