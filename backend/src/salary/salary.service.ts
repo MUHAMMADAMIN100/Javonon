@@ -32,6 +32,20 @@ export class SalaryService {
    *   - net = base + bonus + kpi - penalty
    */
   async preview(userId: string, periodStart: Date, periodEnd: Date, kpiBonus = 0) {
+    // Валидация дат: невалидные / неверный порядок / слишком далёкое будущее
+    if (!(periodStart instanceof Date) || !(periodEnd instanceof Date) ||
+        isNaN(periodStart.getTime()) || isNaN(periodEnd.getTime())) {
+      throw new BadRequestException('Неверный формат даты периода');
+    }
+    if (periodStart > periodEnd) {
+      throw new BadRequestException('Начало периода позже конца');
+    }
+    // Не даём считать зарплату за будущее (защита от опечаток + бесполезное).
+    // Допускаем "до конца текущего месяца" — лимит +1 день в будущее.
+    const tomorrow = new Date(Date.now() + 24 * 3600 * 1000);
+    if (periodStart > tomorrow) {
+      throw new BadRequestException('Период начинается в будущем');
+    }
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('Сотрудник не найден');
 

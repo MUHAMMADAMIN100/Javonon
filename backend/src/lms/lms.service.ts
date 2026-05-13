@@ -47,7 +47,23 @@ export class LmsService {
   }
 
   async deleteCourse(id: string) {
-    return this.prisma.course.delete({ where: { id } });
+    // Cascade cleanup: курс может иметь lessons + enrollments + lessonProgress
+    // Schema не имеет onDelete: Cascade, поэтому удаляем вручную в транзакции,
+    // иначе Prisma бросит P2003 (foreign key violation) или оставит orphan rows.
+    return this.prisma.$transaction(async (tx) => {
+      // Все уроки этого курса
+      const lessons = await tx.lesson.findMany({
+        where: { courseId: id },
+        select: { id: true },
+      });
+      const lessonIds = lessons.map((l) => l.id);
+      if (lessonIds.length) {
+        await tx.lessonProgress.deleteMany({ where: { lessonId: { in: lessonIds } } });
+        await tx.lesson.deleteMany({ where: { courseId: id } });
+      }
+      await tx.enrollment.deleteMany({ where: { courseId: id } });
+      return tx.course.delete({ where: { id } });
+    });
   }
 
   // ==================== LESSONS ====================

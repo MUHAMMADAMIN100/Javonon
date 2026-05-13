@@ -87,7 +87,31 @@ export class PaymentsService {
     if (!payment) throw new NotFoundException('Payment не найден');
     if (payment.status !== 'PENDING') throw new BadRequestException('Уже обработан');
 
-    const amount = dto.actualAmount || payment.amount;
+    // Валидация actualAmount: дефолт = заявленная сумма, иначе число > 0
+    // и не больше 10x от оригинала (защита от опечатки $100 → $100000).
+    let amount = payment.amount;
+    if (dto.actualAmount !== undefined && dto.actualAmount !== null) {
+      const a = Number(dto.actualAmount);
+      if (!isFinite(a) || isNaN(a)) {
+        throw new BadRequestException('actualAmount должен быть числом');
+      }
+      if (a < 0.01) {
+        throw new BadRequestException('actualAmount должен быть > 0');
+      }
+      if (a > payment.amount * 10) {
+        throw new BadRequestException(
+          'actualAmount слишком сильно отличается от заявленной суммы',
+        );
+      }
+      amount = Math.round(a * 100) / 100;
+    }
+    // Method validation
+    if (dto.method) {
+      const VALID: PaymentMethod[] = ['CARD', 'BANK_TRANSFER', 'CASH', 'CRYPTO', 'OTHER'];
+      if (!VALID.includes(dto.method)) {
+        throw new BadRequestException('Неизвестный способ оплаты');
+      }
+    }
 
     // Атомарно: пытаемся забрать payment из PENDING + создаём транзакцию.
     // Если другой процесс успел первым — updateMany.count = 0, бросаем ошибку.

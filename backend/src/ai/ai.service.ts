@@ -28,9 +28,15 @@ export class AiService {
       return null;
     }
 
+    // Timeout 8 секунд — защита от висящих запросов когда Claude/сеть
+    // тормозит. Без этого fetch висел до Node default (30+ сек),
+    // блокируя event-loop на других обработчиках.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
@@ -67,8 +73,14 @@ Sentence: "${text}"`,
       if (!match) return null;
       return JSON.parse(match[0]);
     } catch (e: any) {
-      this.logger.warn(`AI parse error: ${e?.message}`);
+      if (e?.name === 'AbortError') {
+        this.logger.warn('AI parse timeout (8s)');
+      } else {
+        this.logger.warn(`AI parse error: ${e?.message}`);
+      }
       return null;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

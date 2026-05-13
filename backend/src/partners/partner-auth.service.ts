@@ -62,30 +62,50 @@ export class PartnerAuthService {
     phone?: string;
   }) {
     const email = (input.email || '').trim().toLowerCase();
-    if (!email || !email.includes('@')) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new BadRequestException('Некорректный email');
     }
-    if (!input.password || input.password.length < 6) {
+    // Триммируем пароль ОДИН раз — далее везде используем normalized.
+    // Без этого "  abc123  " проходило валидацию (len=9), сохранялось
+    // через bcrypt с пробелами, а login(abc123) падал т.к. compare false.
+    const password = (input.password || '').trim();
+    if (!password || password.length < 6) {
       throw new BadRequestException('Пароль минимум 6 символов');
     }
-    if (!input.fullName || input.fullName.trim().length < 2) {
+    if (password.length > 100) {
+      throw new BadRequestException('Пароль слишком длинный');
+    }
+    const fullName = (input.fullName || '').trim();
+    if (!fullName || fullName.length < 2) {
       throw new BadRequestException('Укажи имя');
+    }
+    if (fullName.length > 120) {
+      throw new BadRequestException('Имя слишком длинное');
     }
     const exists = await this.prisma.partner.findUnique({ where: { email } });
     if (exists) throw new ConflictException('Email уже зарегистрирован');
 
-    const password = await bcrypt.hash(input.password, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
     const referralCode = await this.uniqueCode();
 
-    const partner = await this.prisma.partner.create({
-      data: {
-        email,
-        password,
-        fullName: input.fullName.trim(),
-        phone: input.phone?.trim() || null,
-        referralCode,
-      },
-    });
+    let partner;
+    try {
+      partner = await this.prisma.partner.create({
+        data: {
+          email,
+          password: passwordHash,
+          fullName,
+          phone: input.phone?.trim() || null,
+          referralCode,
+        },
+      });
+    } catch (e: any) {
+      // Race: два параллельных register с одним email
+      if (e?.code === 'P2002') {
+        throw new ConflictException('Email уже зарегистрирован');
+      }
+      throw e;
+    }
 
     const token = await this.signFor(partner);
     return { token, partner: this.toPublic(partner) };
@@ -93,9 +113,14 @@ export class PartnerAuthService {
 
   async login(email: string, password: string) {
     const e = (email || '').trim().toLowerCase();
+    // Триммируем пароль — симметрично с register.
+    const p = (password || '').trim();
+    if (!e || !p) {
+      throw new UnauthorizedException('Неверный email или пароль');
+    }
     const partner = await this.prisma.partner.findUnique({ where: { email: e } });
     if (!partner) throw new UnauthorizedException('Неверный email или пароль');
-    const ok = await bcrypt.compare(password, partner.password);
+    const ok = await bcrypt.compare(p, partner.password);
     if (!ok) throw new UnauthorizedException('Неверный email или пароль');
     if (partner.status !== 'ACTIVE') {
       throw new UnauthorizedException('Аккаунт заблокирован');

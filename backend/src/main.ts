@@ -39,8 +39,13 @@ async function bootstrap() {
       if (host.endsWith('.javonon.com') || host.endsWith('.vercel.app')) {
         return cb(null, true);
       }
-      // Если CORS_ORIGINS не задан — разрешаем всё (как раньше)
-      if (corsOrigins.length === 0) return cb(null, true);
+      // Security fix: НЕ разрешаем все origins если CORS_ORIGINS пуст.
+      // Раньше return cb(null, true) — это позволяло любому стороннему
+      // сайту делать запросы с credentials, что открыло бы CSRF.
+      // Теперь fallback: разрешать только если localhost (dev режим).
+      if (host.startsWith('localhost') || host.startsWith('127.0.0.1')) {
+        return cb(null, true);
+      }
       return cb(new Error(`CORS blocked for origin: ${origin}`), false);
     } catch {
       return cb(new Error('Bad Origin'), false);

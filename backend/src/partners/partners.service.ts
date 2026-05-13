@@ -65,18 +65,29 @@ export class PartnersService {
     method?: string;
     details?: string;
   }) {
-    const partner = await this.prisma.partner.findUnique({
-      where: { id: partnerId },
-    });
-    if (!partner) throw new NotFoundException('Партнёр не найден');
-
     const amount = Math.floor(body.amountCents || 0);
     if (amount <= 0) throw new BadRequestException('Сумма должна быть > 0');
-    if (amount > partner.balanceCents) {
-      throw new BadRequestException('Недостаточно средств на балансе');
+    if (amount > 100_000_000) {
+      throw new BadRequestException('Сумма слишком большая');
     }
 
+    // АТОМАРНО: проверка баланса + decrement + создание payout в одной
+    // транзакции. Раньше check был ПЕРЕД tx → две параллельные requestPayout
+    // могли пройти проверку до tx и обе списать → отрицательный баланс.
+    // Теперь используем updateMany с where: balanceCents >= amount —
+    // если другая параллельная транзакция успела первой, count=0 и мы
+    // выбрасываем ошибку.
     return this.prisma.$transaction(async (tx) => {
+      const claim = await tx.partner.updateMany({
+        where: { id: partnerId, balanceCents: { gte: amount } },
+        data: { balanceCents: { decrement: amount } },
+      });
+      if (claim.count === 0) {
+        // Либо партнёр не найден, либо недостаточно средств
+        const exists = await tx.partner.findUnique({ where: { id: partnerId } });
+        if (!exists) throw new NotFoundException('Партнёр не найден');
+        throw new BadRequestException('Недостаточно средств на балансе');
+      }
       const payout = await tx.partnerPayout.create({
         data: {
           partnerId,
@@ -84,12 +95,6 @@ export class PartnersService {
           method: body.method,
           details: body.details,
         },
-      });
-      // Сразу резервируем — снимаем с balanceCents (если админ отклонит,
-      // вернём обратно). Это безопаснее чем держать запрос без резерва.
-      await tx.partner.update({
-        where: { id: partnerId },
-        data: { balanceCents: { decrement: amount } },
       });
       return payout;
     });

@@ -101,8 +101,15 @@ export class FinanceService {
     return this.prisma.transaction.delete({ where: { id } });
   }
 
+  private validateRange(opts: { from?: Date; to?: Date }) {
+    if (opts.from && opts.to && opts.from > opts.to) {
+      throw new BadRequestException('Начало периода позже конца');
+    }
+  }
+
   /** Сводка: общий доход / расход / прибыль за период. */
   async summary(opts: { from?: Date; to?: Date }) {
+    this.validateRange(opts);
     const where = {
       ...(opts.from || opts.to
         ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
@@ -133,6 +140,7 @@ export class FinanceService {
 
   /** Группировка по категориям — для дашборда руководителя. */
   async byCategory(opts: { from?: Date; to?: Date }) {
+    this.validateRange(opts);
     const where = {
       ...(opts.from || opts.to
         ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
@@ -157,6 +165,7 @@ export class FinanceService {
    * по дням / неделям / месяцам.
    */
   async timeseries(opts: { from?: Date; to?: Date; bucket?: 'day' | 'week' | 'month' }) {
+    this.validateRange(opts);
     const bucket = opts.bucket || 'week';
     const where = {
       ...(opts.from || opts.to

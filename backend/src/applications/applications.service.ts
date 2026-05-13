@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { ApplicationStatus, Direction, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -10,6 +10,7 @@ import { SmsService } from '../sms/sms.service';
 import { ActivityService } from '../activity/activity.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
+import { ReferralsService } from '../partners/referrals.service';
 
 const CABINET_BY_DIRECTION: Record<Direction, number> = {
   BACHELOR: 1,
@@ -54,6 +55,7 @@ export class ApplicationsService {
     private sms: SmsService,
     private activity: ActivityService,
     private realtime: RealtimeGateway,
+    @Optional() private referrals?: ReferralsService,
   ) {}
 
   // Порядок этапов воронки — для определения, "понизили" или "продвинули" заявку
@@ -123,11 +125,9 @@ export class ApplicationsService {
     });
 
     // Реферальная атрибуция: если в заявке пришёл ref-код партнёра,
-    // привязываем заявку к нему через ReferralsService (если доступен).
-    // Импорт сервиса опциональный — не ломаем сборку если модуль ещё не
-    // подключён в конкретной конфигурации.
-    if (dto.ref && (this as any).referrals?.attribute) {
-      (this as any).referrals.attribute({
+    // привязываем заявку к нему через ReferralsService.
+    if (dto.ref && this.referrals) {
+      this.referrals.attribute({
         code: dto.ref,
         source: 'SITE',
         applicationId: app.id,
