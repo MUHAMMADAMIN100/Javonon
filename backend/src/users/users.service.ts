@@ -1,5 +1,6 @@
 import {
   Injectable,
+  BadRequestException,
   NotFoundException,
   ConflictException,
   InternalServerErrorException,
@@ -59,13 +60,24 @@ export class UsersService {
   }
 
   async update(id: string, dto: UpdateUserDto) {
-    await this.findOne(id);
+    const target = await this.findOne(id);
     const data: any = {};
     // DTO уже tримит/лоуэркейсит через @Transform — здесь повторно
     // нормализуем только как страховка (на случай если кто-то когда-то
     // вызовет сервис не через HTTP-pipeline, например из тестов или сидера).
     if (dto.email) data.email = dto.email.trim().toLowerCase();
     if (dto.fullName) data.fullName = dto.fullName.trim();
+
+    // Защита: если меняем роль с ADMIN на не-ADMIN — убедимся что это
+    // не последний ADMIN. Иначе систему некому будет администрировать.
+    if (dto.role && dto.role !== 'ADMIN' && target.role === 'ADMIN') {
+      const adminCount = await this.prisma.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount <= 1) {
+        throw new BadRequestException(
+          'Нельзя понизить роль последнего администратора. Сначала создай другого ADMIN.',
+        );
+      }
+    }
     if (dto.role) data.role = dto.role;
 
     let passwordToVerify: string | null = null;
@@ -115,7 +127,16 @@ export class UsersService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const target = await this.findOne(id);
+    // Защита: нельзя удалить последнего ADMIN
+    if (target.role === 'ADMIN') {
+      const adminCount = await this.prisma.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount <= 1) {
+        throw new BadRequestException(
+          'Нельзя удалить последнего администратора',
+        );
+      }
+    }
     await this.prisma.user.delete({ where: { id } });
     return { ok: true };
   }

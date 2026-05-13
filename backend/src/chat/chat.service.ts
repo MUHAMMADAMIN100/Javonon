@@ -524,10 +524,23 @@ export class ChatService {
       include: { author: { select: { fullName: true } } },
     });
     if (!orig || orig.deletedAt) throw new NotFoundException('Сообщение не найдено');
-    const member = await this.prisma.chatMember.findUnique({
-      where: { roomId_userId: { roomId: targetRoomId, userId: authorId } },
-    });
-    if (!member) throw new NotFoundException('Целевая комната не найдена');
+    // Security: user must be a member of BOTH rooms (source AND target).
+    // Без проверки source комнаты можно было forward'ить сообщение из
+    // приватного чата куда у нас нет доступа (если знаем messageId).
+    const [sourceMember, targetMember] = await Promise.all([
+      this.prisma.chatMember.findUnique({
+        where: { roomId_userId: { roomId: orig.roomId, userId: authorId } },
+      }),
+      this.prisma.chatMember.findUnique({
+        where: { roomId_userId: { roomId: targetRoomId, userId: authorId } },
+      }),
+    ]);
+    if (!sourceMember) {
+      throw new NotFoundException('Нет доступа к исходному сообщению');
+    }
+    if (!targetMember) {
+      throw new NotFoundException('Целевая комната не найдена');
+    }
     const fwd = await this.prisma.chatMessage.create({
       data: {
         roomId: targetRoomId,

@@ -212,4 +212,40 @@ export class CronService {
       });
     }
   }
+
+  /**
+   * Cleanup retention: раз в неделю удаляем старые записи которые иначе
+   * растут безлимитно. ActivityLog — основной источник раздувания БД
+   * (записи каждый PATCH/DELETE студента), Notification — старые прочитанные
+   * можно тоже почистить.
+   */
+  @Cron(CronExpression.EVERY_WEEK)
+  async cleanupOldLogs() {
+    this.logger.log('Cron: cleanupOldLogs');
+    const SIX_MONTHS_MS = 6 * 30 * 24 * 3600 * 1000;
+    const THREE_MONTHS_MS = 3 * 30 * 24 * 3600 * 1000;
+    const cutoff6 = new Date(Date.now() - SIX_MONTHS_MS);
+    const cutoff3 = new Date(Date.now() - THREE_MONTHS_MS);
+
+    // ActivityLog старше 6 месяцев → удалить (это аудит-лог, после полугода
+    // обычно не нужен для оперативной работы; legal-обязательств у нас нет).
+    const activity = await this.prisma.activityLog.deleteMany({
+      where: { createdAt: { lt: cutoff6 } },
+    });
+
+    // Прочитанные Notification старше 3 месяцев → удалить.
+    // Непрочитанные оставляем — это live-задачи пользователя.
+    const notifications = await this.prisma.notification.deleteMany({
+      where: { read: true, createdAt: { lt: cutoff3 } },
+    });
+
+    // ReferralClick старше 6 месяцев — для аналитики хватит.
+    const clicks = await this.prisma.referralClick.deleteMany({
+      where: { createdAt: { lt: cutoff6 } },
+    });
+
+    this.logger.log(
+      `Cleanup: ${activity.count} activity, ${notifications.count} notifications, ${clicks.count} clicks`,
+    );
+  }
 }

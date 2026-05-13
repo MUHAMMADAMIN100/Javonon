@@ -51,9 +51,20 @@ const PREFETCH_MAP: Record<string, () => Promise<void> | void> = {
   },
 };
 
+// Дедупликация: если этот роут уже префетчили в текущем mount-цикле,
+// игнорируем. Защита от spam-hover (mouseenter/mouseleave/mouseenter
+// быстро подряд на одном линке создавал десятки запросов до React Query
+// дедупа).
+const prefetchedRoutes = new Set<string>();
 const prefetchRoute = (route: string) => {
+  if (prefetchedRoutes.has(route)) return;
   const fn = PREFETCH_MAP[route];
-  if (fn) try { fn(); } catch { /* silent */ }
+  if (!fn) return;
+  prefetchedRoutes.add(route);
+  try { fn(); } catch { /* silent */ }
+  // Через 60 секунд разрешаем повторный prefetch (на случай если данные
+  // могли устареть в кеше).
+  setTimeout(() => { prefetchedRoutes.delete(route); }, 60_000);
 };
 
 interface SidebarProps {
