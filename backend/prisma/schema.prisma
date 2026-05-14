@@ -356,6 +356,19 @@ model TimeEntry {
   lateMinutes       Int  @default(0)
   // Переработка: всё что отработано сверх 8 часов (480 мин)
   overtimeMinutes   Int  @default(0)
+  // Подтверждение присутствия на работе (геолокация / видео-кружок).
+  // Хотя бы одно должно быть заполнено при clock-in.
+  clockInLat        Float?
+  clockInLon        Float?
+  clockInProofUrl   String?  // video/photo URL
+  // Объяснение опоздания (если lateMinutes > порог). Если пусто
+  // и опоздание сверх порога — Cron начислит штраф.
+  lateExcuseUrl     String?
+  lateExcuseReason  String?
+  lateExcuseAt      DateTime?
+  // Помечается true когда Cron уже создал штраф за это опоздание
+  // (защита от дублей при перезапуске Cron).
+  latePenaltyApplied Boolean @default(false)
   date        DateTime @default(now()) @db.Date  // дата сессии для удобной группировки
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

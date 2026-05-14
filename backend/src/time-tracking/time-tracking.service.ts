@@ -31,11 +31,25 @@ export class TimeTrackingService {
     });
   }
 
-  async clockIn(userId: string) {
+  async clockIn(userId: string, opts?: {
+    lat?: number;
+    lon?: number;
+    proofUrl?: string;
+  }) {
     const active = await this.getActive(userId);
     if (active) {
       throw new BadRequestException('Сначала закройте текущую сессию (Закончить день)');
     }
+    // ТРЕБОВАНИЕ: хотя бы одно подтверждение — геолокация ИЛИ
+    // фото/видео рабочего места. Без этого clock-in невозможен.
+    const hasGeo = typeof opts?.lat === 'number' && typeof opts?.lon === 'number';
+    const hasProof = !!opts?.proofUrl;
+    if (!hasGeo && !hasProof) {
+      throw new BadRequestException(
+        'Для начала рабочего дня нужно подтверждение: геолокация или фото/видео рабочего места',
+      );
+    }
+
     const now = new Date();
     const expected = new Date(now);
     expected.setHours(OFFICE_START_HOUR, OFFICE_START_MIN, 0, 0);
@@ -48,6 +62,42 @@ export class TimeTrackingService {
         date: now,
         status: TimeEntryStatus.WORKING,
         lateMinutes,
+        clockInLat: hasGeo ? opts!.lat : null,
+        clockInLon: hasGeo ? opts!.lon : null,
+        clockInProofUrl: hasProof ? opts!.proofUrl : null,
+      },
+    });
+  }
+
+  /**
+   * Сотрудник присылает оправдание опоздания (видео/фото + текст).
+   * Если уже есть оправдание — обновляем. Если опоздания не было —
+   * возвращаем ошибку.
+   */
+  async submitLateExcuse(userId: string, entryId: string, body: {
+    excuseUrl?: string;
+    excuseReason?: string;
+  }) {
+    const entry = await this.prisma.timeEntry.findUnique({ where: { id: entryId } });
+    if (!entry) throw new NotFoundException('Запись не найдена');
+    if (entry.userId !== userId) {
+      throw new BadRequestException('Это не ваша запись');
+    }
+    if (entry.lateMinutes <= 0) {
+      throw new BadRequestException('Опоздания не было');
+    }
+    if (entry.latePenaltyApplied) {
+      throw new BadRequestException('Штраф уже начислен, оправдание поздно');
+    }
+    if (!body.excuseUrl && (!body.excuseReason || body.excuseReason.trim().length < 5)) {
+      throw new BadRequestException('Укажи причину (мин. 5 символов) или приложи фото/видео');
+    }
+    return this.prisma.timeEntry.update({
+      where: { id: entryId },
+      data: {
+        lateExcuseUrl: body.excuseUrl || null,
+        lateExcuseReason: body.excuseReason?.trim() || null,
+        lateExcuseAt: new Date(),
       },
     });
   }

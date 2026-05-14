@@ -4,8 +4,21 @@ import { PenaltyReason } from '@prisma/client';
 
 const VALID_REASONS: PenaltyReason[] = ['LATE_ARRIVAL', 'ABSENCE', 'TASK_OVERDUE', 'CUSTOM'];
 
-const RATE_PER_LATE_MINUTE = 0.5; // $0.50 за минуту опоздания
+const RATE_PER_LATE_MINUTE = 0.5; // $0.50 за минуту опоздания (legacy формула, для fallback)
 const LATE_THRESHOLD_MIN = 15;    // штраф начисляется при опоздании > 15 мин
+
+/**
+ * Прогрессивная шкала штрафов за повторные опоздания в течение месяца:
+ *  1-е опоздание → 200 TJS (сомони)
+ *  2-е → 250 TJS
+ *  3-е → 300 TJS
+ *  каждое следующее +50 TJS
+ *
+ * Эти суммы можно настраивать через env или БД позже, пока зашиты.
+ */
+const LATE_BASE_AMOUNT_TJS = 200;
+const LATE_INCREMENT_TJS = 50;
+const LATE_CURRENCY = 'TJS';
 
 @Injectable()
 export class PenaltiesService {
@@ -68,7 +81,15 @@ export class PenaltiesService {
   /**
    * Cron-задача: для каждого TimeEntry за указанную дату
    * с lateMinutes > 15 — создаём Penalty (LATE_ARRIVAL).
-   * Идемпотентно: если штраф за эту дату по этому юзеру уже есть — пропускаем.
+   *
+   * Новая логика:
+   *  - Если сотрудник предоставил оправдание (lateExcuseAt не null) —
+   *    штраф НЕ начисляется (записываем latePenaltyApplied=true чтобы
+   *    больше не проверять).
+   *  - Если оправдания нет — начисляем штраф ПРОГРЕССИВНО:
+   *    считаем сколько раз в текущем месяце сотрудник уже получал
+   *    LATE_ARRIVAL штраф, и берём BASE + N × INCREMENT TJS.
+   *  - Помечаем TimeEntry.latePenaltyApplied=true для идемпотентности.
    */
   async generateLatePenaltiesForDate(targetDate: Date) {
     const from = new Date(targetDate);
@@ -80,34 +101,57 @@ export class PenaltiesService {
       where: {
         clockIn: { gte: from, lt: to },
         lateMinutes: { gt: LATE_THRESHOLD_MIN },
+        latePenaltyApplied: false,
       },
       include: { user: { select: { id: true, fullName: true } } },
     });
 
     let created = 0;
+    let excused = 0;
     for (const e of entries) {
-      // Проверка идемпотентности: уже есть штраф за этот день?
-      const existing = await this.prisma.penalty.findFirst({
+      // Если есть оправдание — не штрафуем (но помечаем applied, чтобы
+      // повторный запуск Cron не штрафовал).
+      if (e.lateExcuseAt) {
+        await this.prisma.timeEntry.update({
+          where: { id: e.id },
+          data: { latePenaltyApplied: true },
+        });
+        excused++;
+        continue;
+      }
+
+      // Считаем сколько LATE_ARRIVAL штрафов уже было в этом месяце
+      const monthStart = new Date(from.getFullYear(), from.getMonth(), 1);
+      const monthEnd = new Date(from.getFullYear(), from.getMonth() + 1, 1);
+      const priorLateCount = await this.prisma.penalty.count({
         where: {
           userId: e.userId,
           reason: 'LATE_ARRIVAL',
-          date: from,
+          date: { gte: monthStart, lt: monthEnd },
         },
       });
-      if (existing) continue;
 
-      await this.prisma.penalty.create({
-        data: {
-          userId: e.userId,
-          reason: 'LATE_ARRIVAL',
-          amount: Math.round(e.lateMinutes * RATE_PER_LATE_MINUTE * 100) / 100,
-          details: `Опоздание ${e.lateMinutes} мин × $${RATE_PER_LATE_MINUTE}/мин`,
-          date: from,
-        },
-      });
+      const amount = LATE_BASE_AMOUNT_TJS + priorLateCount * LATE_INCREMENT_TJS;
+
+      // Создаём штраф + помечаем entry в одной транзакции
+      await this.prisma.$transaction([
+        this.prisma.penalty.create({
+          data: {
+            userId: e.userId,
+            reason: 'LATE_ARRIVAL',
+            amount,
+            details: `Опоздание ${e.lateMinutes} мин · ${priorLateCount + 1}-е в этом месяце · без оправдания`,
+            date: from,
+          },
+        }),
+        this.prisma.timeEntry.update({
+          where: { id: e.id },
+          data: { latePenaltyApplied: true },
+        }),
+      ]);
       created++;
     }
-    return { created, scanned: entries.length };
+    return { created, excused, scanned: entries.length };
   }
 
   /** Сумма неучтённых штрафов за период (для зарплатного расчёта). */

@@ -9,6 +9,8 @@ import {
   getToday,
   lunchIn as apiLunchIn,
   lunchOut as apiLunchOut,
+  uploadTimeProof,
+  submitLateExcuse,
 } from '../api/time';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
@@ -46,6 +48,9 @@ export default function TimeTracker() {
     const t = setInterval(() => setTick((x) => x + 1), 30000); // every 30s
     return () => clearInterval(t);
   }, []);
+
+  const [showClockInModal, setShowClockInModal] = useState(false);
+  const [showExcuseModal, setShowExcuseModal] = useState(false);
 
   const todayKey = keys.time.today();
   const historyKey = keys.time.history({ take: 30 });
@@ -96,7 +101,31 @@ export default function TimeTracker() {
       onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
     });
 
-  const clockInMut = buildMut(apiClockIn, { status: 'WORKING', clockIn: new Date().toISOString() }, 'Рабочий день начат');
+  // clockIn — отдельный с TVars=ClockInArgs (lat/lon/proofUrl)
+  const clockInMut = useOptimisticMutation<TimeEntry, { lat?: number; lon?: number; proofUrl?: string }, TimeEntry | null>({
+    mutationFn: (vars) => apiClockIn(vars),
+    queryKey: todayKey,
+    applyOptimistic: (cur) => {
+      const patch: Partial<TimeEntry> = { status: 'WORKING', clockIn: new Date().toISOString() };
+      if (!cur) {
+        return {
+          id: 'tmp',
+          userId: '',
+          ...patch,
+          lunchOut: null,
+          lunchIn: null,
+          clockOut: null,
+          totalMinutes: 0,
+          totalLunchMinutes: 0,
+          lateMinutes: 0,
+        } as TimeEntry;
+      }
+      return { ...cur, ...patch } as TimeEntry;
+    },
+    invalidateAlso: [historyKey, keys.time.team()],
+    onSuccess: () => toast('Рабочий день начат', 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
   const lunchOutMut = buildMut(apiLunchOut, { status: 'ON_LUNCH', lunchOut: new Date().toISOString() }, 'Ушли на обед');
   const lunchInMut = buildMut(apiLunchIn, { status: 'WORKING', lunchIn: new Date().toISOString() }, 'Вернулись с обеда');
   const clockOutMut = buildMut(apiClockOut, { status: 'OFF', clockOut: new Date().toISOString() }, 'Рабочий день завершён');
@@ -195,12 +224,53 @@ export default function TimeTracker() {
           </div>
         </div>
 
+        {/* Алерт об опоздании — если есть опоздание без оправдания и штраф ещё не начислен */}
+        {today && today.lateMinutes > 15 && !today.lateExcuseAt && !today.latePenaltyApplied && (
+          <div style={{
+            marginTop: 20,
+            padding: '14px 18px',
+            background: '#fef3c7',
+            border: '1px solid #fbbf24',
+            borderRadius: 12,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}>
+            <div>
+              <div style={{ fontWeight: 600, color: '#b45309' }}>
+                ⚠️ Опоздание {today.lateMinutes} минут
+              </div>
+              <div style={{ fontSize: 13, color: '#92400e', marginTop: 4 }}>
+                Объясни причину — иначе сегодня вечером будет начислен штраф (прогрессивный, +50 TJS за каждое следующее опоздание).
+              </div>
+            </div>
+            <button className="btn btn-primary" onClick={() => setShowExcuseModal(true)}>
+              Объяснить причину
+            </button>
+          </div>
+        )}
+        {today && today.lateMinutes > 15 && today.lateExcuseAt && (
+          <div style={{
+            marginTop: 20,
+            padding: '12px 16px',
+            background: '#dcfce7',
+            border: '1px solid #86efac',
+            borderRadius: 12,
+            fontSize: 13,
+            color: '#15803d',
+          }}>
+            ✓ Оправдание отправлено — штраф не будет начислен
+          </div>
+        )}
+
         {/* Кнопки действий */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {isClockedOut && (
             <motion.button
               className="btn btn-primary"
-              onClick={() => clockInMut.mutate()}
+              onClick={() => setShowClockInModal(true)}
               disabled={loading}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -328,7 +398,241 @@ export default function TimeTracker() {
           </tbody>
         </table>
       </div>
+
+      <AnimatePresence>
+        {showClockInModal && (
+          <ClockInModal
+            onCancel={() => setShowClockInModal(false)}
+            onConfirm={(vars) => {
+              setShowClockInModal(false);
+              clockInMut.mutate(vars);
+            }}
+          />
+        )}
+        {showExcuseModal && today && (
+          <ExcuseModal
+            entry={today}
+            onCancel={() => setShowExcuseModal(false)}
+            onDone={() => {
+              setShowExcuseModal(false);
+              qc.invalidateQueries({ queryKey: todayKey });
+              toast('Оправдание отправлено', 'success');
+            }}
+            onError={(e) => toast(e, 'error')}
+          />
+        )}
+      </AnimatePresence>
     </>
+  );
+}
+
+function ClockInModal({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: (vars: { lat?: number; lon?: number; proofUrl?: string }) => void;
+}) {
+  const { toast } = useUI();
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) {
+      toast('Геолокация недоступна в этом браузере', 'error');
+      return;
+    }
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        setGeoLoading(false);
+      },
+      (err) => {
+        setGeoLoading(false);
+        toast(`Геолокация: ${err.message}`, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
+  };
+
+  const submit = async () => {
+    if (!coords && !proofFile) {
+      toast('Нужно подтверждение: геолокация или фото/видео', 'error');
+      return;
+    }
+    let proofUrl: string | undefined;
+    if (proofFile) {
+      setUploading(true);
+      try {
+        const r = await uploadTimeProof(proofFile);
+        proofUrl = r.url;
+      } catch (e: any) {
+        toast(e?.response?.data?.message || 'Ошибка загрузки', 'error');
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+    onConfirm({ lat: coords?.lat, lon: coords?.lon, proofUrl });
+  };
+
+  return (
+    <motion.div
+      className="dialog-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onCancel}
+    >
+      <motion.div
+        className="dialog-card"
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 480 }}
+      >
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 8 }}>
+          Подтверди присутствие
+        </h3>
+        <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 20 }}>
+          Чтобы начать рабочий день нужно либо разрешить геолокацию, либо приложить фото/видео рабочего места.
+        </p>
+
+        <div style={{ marginBottom: 16 }}>
+          <button
+            className={coords ? 'btn btn-secondary' : 'btn btn-primary'}
+            onClick={detectLocation}
+            disabled={geoLoading}
+            style={{ width: '100%' }}
+          >
+            <Icon name={coords ? 'check_circle' : 'location_on'} size={18} />
+            {geoLoading ? 'Определяем...' : coords ? `📍 ${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}` : 'Использовать геолокацию'}
+          </button>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>ИЛИ ФОТО/ВИДЕО РАБОЧЕГО МЕСТА</div>
+          <input
+            type="file"
+            accept="image/*,video/*"
+            capture="environment"
+            onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+            style={{ width: '100%' }}
+          />
+          {proofFile && (
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
+              ✓ {proofFile.name} ({(proofFile.size / 1024).toFixed(0)} КБ)
+            </div>
+          )}
+        </div>
+
+        <div className="dialog-actions">
+          <button className="btn btn-secondary" onClick={onCancel} disabled={uploading}>Отмена</button>
+          <button className="btn btn-primary" onClick={submit} disabled={uploading || (!coords && !proofFile)}>
+            {uploading ? 'Загружаем...' : 'Начать работу'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function ExcuseModal({
+  entry,
+  onCancel,
+  onDone,
+  onError,
+}: {
+  entry: TimeEntry;
+  onCancel: () => void;
+  onDone: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    if (!reason.trim() && !file) {
+      onError('Укажи причину или приложи фото/видео');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      let excuseUrl: string | undefined;
+      if (file) {
+        const r = await uploadTimeProof(file);
+        excuseUrl = r.url;
+      }
+      await submitLateExcuse(entry.id, {
+        excuseUrl,
+        excuseReason: reason.trim() || undefined,
+      });
+      onDone();
+    } catch (e: any) {
+      onError(e?.response?.data?.message || 'Ошибка');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      className="dialog-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onCancel}
+    >
+      <motion.div
+        className="dialog-card"
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 480 }}
+      >
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 8 }}>
+          Объяснение опоздания
+        </h3>
+        <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 20 }}>
+          Опоздал на {entry.lateMinutes} мин. Если объяснишь причину — штраф не начислится.
+        </p>
+
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Причина (минимум 5 символов)"
+          rows={3}
+          style={{ width: '100%', padding: 12, border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12, fontSize: 14, resize: 'vertical' }}
+        />
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>ФОТО / ВИДЕО (опционально)</div>
+          <input
+            type="file"
+            accept="image/*,video/*"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            style={{ width: '100%' }}
+          />
+          {file && (
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
+              ✓ {file.name}
+            </div>
+          )}
+        </div>
+
+        <div className="dialog-actions">
+          <button className="btn btn-secondary" onClick={onCancel} disabled={submitting}>Отмена</button>
+          <button className="btn btn-primary" onClick={submit} disabled={submitting}>
+            {submitting ? 'Отправляем...' : 'Отправить'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

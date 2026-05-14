@@ -1,9 +1,32 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { randomUUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { TimeTrackingService } from './time-tracking.service';
+
+const timeProofStorage = diskStorage({
+  destination: process.env.UPLOADS_DIR || './uploads',
+  filename: (_req, file, cb) => {
+    const ext = extname(file.originalname || '') || '';
+    cb(null, `time-${randomUUID()}${ext}`);
+  },
+});
 
 @Controller('time')
 @UseGuards(JwtAuthGuard)
@@ -30,8 +53,18 @@ export class TimeTrackingController {
   }
 
   @Post('clock-in')
-  clockIn(@CurrentUser() me: any) {
-    return this.svc.clockIn(me.id);
+  clockIn(
+    @CurrentUser() me: any,
+    @Body() body: { lat?: number; lon?: number; proofUrl?: string },
+  ) {
+    // Парсим числа на случай если фронт прислал строкой
+    const lat = body.lat !== undefined ? Number(body.lat) : undefined;
+    const lon = body.lon !== undefined ? Number(body.lon) : undefined;
+    return this.svc.clockIn(me.id, {
+      lat: typeof lat === 'number' && isFinite(lat) ? lat : undefined,
+      lon: typeof lon === 'number' && isFinite(lon) ? lon : undefined,
+      proofUrl: body.proofUrl,
+    });
   }
 
   @Post('lunch-out')
@@ -47,6 +80,33 @@ export class TimeTrackingController {
   @Post('clock-out')
   clockOut(@CurrentUser() me: any) {
     return this.svc.clockOut(me.id);
+  }
+
+  /** Сотрудник прикладывает доказательство присутствия (видео/фото). */
+  @Post('proofs')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: timeProofStorage,
+      limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800', 10) }, // 50MB
+    }),
+  )
+  uploadProof(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Файл не загружен');
+    return {
+      url: `/uploads/${file.filename}`,
+      originalName: file.originalname,
+      size: file.size,
+    };
+  }
+
+  /** Сотрудник присылает оправдание опоздания. */
+  @Post(':id/excuse')
+  submitExcuse(
+    @CurrentUser() me: any,
+    @Param('id') id: string,
+    @Body() body: { excuseUrl?: string; excuseReason?: string },
+  ) {
+    return this.svc.submitLateExcuse(me.id, id, body);
   }
 
   @Get('team')
