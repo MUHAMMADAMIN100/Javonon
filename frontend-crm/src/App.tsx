@@ -22,6 +22,7 @@ import Reports from './pages/Reports';
 import Chat from './pages/Chat';
 import Lms from './pages/LMS';
 import Partners from './pages/Partners';
+import UserDetail, { MyProfile } from './pages/UserDetail';
 import Loading from './components/Loading';
 
 export default function App() {
@@ -48,6 +49,8 @@ export default function App() {
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/programs" element={<Programs />} />
         <Route path="/users" element={<Users />} />
+        <Route path="/users/:id" element={<UserDetail />} />
+        <Route path="/me" element={<MyProfile />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/time" element={<TimeTracker />} />
         <Route path="/reports" element={<Reports />} />

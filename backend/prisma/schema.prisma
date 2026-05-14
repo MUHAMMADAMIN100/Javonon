@@ -85,6 +85,12 @@ model User {
   hourlyRate Float?   @default(0)
   // Процент от продажи клиента, привязанного к этому менеджеру (бонусный %).
   bonusPercent Float? @default(0)
+  // Доп. поля для HR-профиля (паспорт, телефон, дата приёма на работу)
+  phone         String?
+  passportNo    String?
+  hiredAt       DateTime?
+  // Цель по плану продаж в % от общего количества лидов (например 1.0 = 1%)
+  kpiTargetPct  Float?  @default(1)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -108,6 +114,30 @@ model User {
   interactionsAuthored  Interaction[] @relation("InteractionAuthor")
   penalties             Penalty[]
   paymentsConfirmed     Payment[]     @relation("PaymentConfirmedBy")
+  documents             UserDocument[]
+}
+
+// Документы сотрудника (паспорт, контракт, дипломы и т.п.). По
+// аналогии со студенческими Document. Cascade-delete при удалении User.
+enum UserDocumentType {
+  PASSPORT
+  CONTRACT
+  DIPLOMA
+  OTHER
+}
+
+model UserDocument {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      UserDocumentType
+  url       String
+  originalName String?
+  size      Int?
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, type])
 }
 
 // Заявка на обучение: создаётся через лендинг (POST /applications/public),

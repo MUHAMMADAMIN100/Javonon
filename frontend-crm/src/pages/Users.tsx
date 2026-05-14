@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { createUser, deleteUser, listUsers, updateUser } from '../api/users';
 import type { Role, User } from '../api/types';
@@ -181,7 +182,12 @@ export default function Users() {
             <tbody>
               {items.map((u) => (
                 <tr key={u.id} style={{ cursor: 'default' }}>
-                  <td><strong>{u.fullName}</strong>{u.id === me?.id && <span style={{ color: '#5b6478', fontSize: 12 }}> (вы)</span>}</td>
+                  <td>
+                    <Link to={`/users/${u.id}`} style={{ fontWeight: 600, color: 'inherit' }}>
+                      {u.fullName}
+                    </Link>
+                    {u.id === me?.id && <span style={{ color: '#5b6478', fontSize: 12 }}> (вы)</span>}
+                  </td>
                   <td data-label="Email">{u.email}</td>
                   <td data-label="Роль">
                     <select value={u.role} onChange={(e) => onChangeRole(u, e.target.value as Role)} disabled={u.id === me?.id}>

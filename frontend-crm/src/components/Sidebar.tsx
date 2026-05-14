@@ -97,6 +97,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
       { to: '/reports', icon: 'description', label: 'Мои отчёты' },
       { to: '/kpi', icon: 'leaderboard', label: 'KPI' },
     ] : []),
+    { to: '/me', icon: 'person', label: 'Мой профиль' },
   ];
 
   // Finance — для ADMIN и ACCOUNTANT

@@ -8,8 +8,14 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { randomUUID } from 'crypto';
 import { Role } from '@prisma/client';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -18,6 +24,29 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
+
+const userDocStorage = diskStorage({
+  destination: process.env.UPLOADS_DIR || './uploads',
+  filename: (_req, file, cb) => {
+    const ext = extname(file.originalname || '') || '';
+    cb(null, `userdoc-${randomUUID()}${ext}`);
+  },
+});
+
+/**
+ * Self-эндпоинты для сотрудника — он видит/редактирует СВОИ данные.
+ * Отдельный контроллер чтобы не использовать ADMIN-only guard.
+ */
+@UseGuards(JwtAuthGuard)
+@Controller('me')
+export class MeController {
+  constructor(private users: UsersService) {}
+
+  @Get('full')
+  myFullProfile(@CurrentUser() me: any) {
+    return this.users.fullProfile(me.id);
+  }
+}
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
@@ -33,6 +62,12 @@ export class UsersController {
   @Post()
   create(@Body() dto: CreateUserDto) {
     return this.users.create(dto);
+  }
+
+  /** Полный профиль сотрудника (HR + зарплата + KPI + посещаемость + штрафы). */
+  @Get(':id/full')
+  fullProfile(@Param('id') id: string) {
+    return this.users.fullProfile(id);
   }
 
   @Patch(':id')
@@ -52,5 +87,33 @@ export class UsersController {
       throw new BadRequestException('Нельзя удалить собственный аккаунт');
     }
     return this.users.remove(id);
+  }
+
+  /** Загрузить документ сотрудника (паспорт/контракт/диплом). */
+  @Post(':id/documents')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: userDocStorage,
+      limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '209715200', 10) },
+    }),
+  )
+  uploadDocument(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { type?: string; comment?: string },
+  ) {
+    if (!file) throw new BadRequestException('Файл не загружен');
+    return this.users.addDocument(id, {
+      type: body.type || 'OTHER',
+      url: `/uploads/${file.filename}`,
+      originalName: file.originalname,
+      size: file.size,
+      comment: body.comment,
+    });
+  }
+
+  @Delete(':id/documents/:docId')
+  deleteDocument(@Param('id') id: string, @Param('docId') docId: string) {
+    return this.users.deleteDocument(id, docId);
   }
 }

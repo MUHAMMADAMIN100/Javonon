@@ -44,6 +44,197 @@ export class UsersService {
     return user;
   }
 
+  /**
+   * Полный профиль сотрудника: HR-данные, документы, история зарплат,
+   * штрафов, KPI-цифры, посещаемость. Используется в админ-кабинете
+   * сотрудника и в /me/full (self-view).
+   *
+   * Параметр `selfOnly` режет финансовую инфу для self-view? Нет, сотрудник
+   * имеет право видеть свою зарплату и штрафы. Скрываем только ROLE-permissions.
+   */
+  async fullProfile(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        phone: true,
+        passportNo: true,
+        hiredAt: true,
+        baseSalary: true,
+        hourlyRate: true,
+        bonusPercent: true,
+        kpiTargetPct: true,
+        createdAt: true,
+      },
+    });
+    if (!user) throw new NotFoundException('Пользователь не найден');
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+
+    const [
+      documents,
+      salaryRecords,
+      penalties,
+      pendingPenaltiesAmount,
+      salesMonthAgg,
+      salesYearAgg,
+      timeMonth,
+      enrolledMonth,
+      dailyReportsThisMonth,
+      totalLeadsMonth,
+      ownClientsMonth,
+    ] = await Promise.all([
+      this.prisma.userDocument.findMany({
+        where: { userId: id },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.salaryRecord.findMany({
+        where: { userId: id },
+        orderBy: { periodStart: 'desc' },
+        take: 12,
+      }),
+      this.prisma.penalty.findMany({
+        where: { userId: id },
+        orderBy: { date: 'desc' },
+        take: 50,
+      }),
+      this.prisma.penalty.aggregate({
+        where: { userId: id, applied: false },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          managerId: id,
+          type: 'INCOME',
+          date: { gte: monthStart, lte: monthEnd },
+        },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          managerId: id,
+          type: 'INCOME',
+          date: { gte: yearStart },
+        },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.timeEntry.aggregate({
+        where: {
+          userId: id,
+          date: { gte: monthStart, lte: monthEnd },
+        },
+        _sum: { totalMinutes: true, lateMinutes: true, overtimeMinutes: true },
+        _count: true,
+      }),
+      this.prisma.application.count({
+        where: {
+          managerId: id,
+          status: 'ENROLLED',
+          updatedAt: { gte: monthStart, lte: monthEnd },
+        },
+      }),
+      this.prisma.dailyReport.findMany({
+        where: { userId: id, date: { gte: monthStart, lte: monthEnd } },
+        orderBy: { date: 'desc' },
+      }),
+      this.prisma.application.count({
+        where: { createdAt: { gte: monthStart, lte: monthEnd } },
+      }),
+      this.prisma.application.count({
+        where: {
+          managerId: id,
+          createdAt: { gte: monthStart, lte: monthEnd },
+        },
+      }),
+    ]);
+
+    const target = user.kpiTargetPct ?? 1;
+    const requiredClosed = Math.ceil((totalLeadsMonth * target) / 100);
+    const kpiAchievedPct =
+      totalLeadsMonth > 0
+        ? Math.round((enrolledMonth / totalLeadsMonth) * 1000) / 10
+        : 0;
+
+    return {
+      user,
+      documents,
+      salary: {
+        records: salaryRecords,
+        baseSalary: user.baseSalary || 0,
+        hourlyRate: user.hourlyRate || 0,
+        bonusPercent: user.bonusPercent || 0,
+      },
+      penalties: {
+        list: penalties,
+        pendingTotal: pendingPenaltiesAmount._sum.amount || 0,
+      },
+      sales: {
+        monthAmount: salesMonthAgg._sum.amount || 0,
+        monthCount: salesMonthAgg._count,
+        yearAmount: salesYearAgg._sum.amount || 0,
+        yearCount: salesYearAgg._count,
+      },
+      attendance: {
+        workedMinutes: timeMonth._sum.totalMinutes || 0,
+        lateMinutes: timeMonth._sum.lateMinutes || 0,
+        overtimeMinutes: timeMonth._sum.overtimeMinutes || 0,
+        daysWorked: timeMonth._count,
+      },
+      kpi: {
+        targetPct: target,
+        totalLeadsMonth,
+        ownClientsMonth,
+        enrolledMonth,
+        requiredClosed,
+        achievedPct: kpiAchievedPct,
+        onTrack: enrolledMonth >= requiredClosed,
+      },
+      dailyReports: dailyReportsThisMonth,
+    };
+  }
+
+  async addDocument(userId: string, doc: {
+    type: string;
+    url: string;
+    originalName?: string;
+    size?: number;
+    comment?: string;
+  }) {
+    await this.findOne(userId);
+    const VALID = ['PASSPORT', 'CONTRACT', 'DIPLOMA', 'OTHER'];
+    const t = (doc.type || 'OTHER').toUpperCase();
+    if (!VALID.includes(t)) throw new BadRequestException('Неверный тип документа');
+    return this.prisma.userDocument.create({
+      data: {
+        userId,
+        type: t as any,
+        url: doc.url,
+        originalName: doc.originalName,
+        size: doc.size,
+        comment: doc.comment?.trim() || null,
+      },
+    });
+  }
+
+  async deleteDocument(userId: string, documentId: string) {
+    const doc = await this.prisma.userDocument.findUnique({
+      where: { id: documentId },
+    });
+    if (!doc) throw new NotFoundException('Документ не найден');
+    if (doc.userId !== userId) {
+      throw new BadRequestException('Этот документ не принадлежит указанному сотруднику');
+    }
+    return this.prisma.userDocument.delete({ where: { id: documentId } });
+  }
+
   async create(dto: CreateUserDto) {
     const email = (dto.email || '').trim().toLowerCase();
     const rawPassword = (dto.password || '').trim();
@@ -67,6 +258,13 @@ export class UsersService {
     // вызовет сервис не через HTTP-pipeline, например из тестов или сидера).
     if (dto.email) data.email = dto.email.trim().toLowerCase();
     if (dto.fullName) data.fullName = dto.fullName.trim();
+    if (dto.phone !== undefined) data.phone = dto.phone?.trim() || null;
+    if (dto.passportNo !== undefined) data.passportNo = dto.passportNo?.trim() || null;
+    if (dto.hiredAt !== undefined) data.hiredAt = dto.hiredAt ? new Date(dto.hiredAt) : null;
+    if (dto.baseSalary !== undefined) data.baseSalary = dto.baseSalary;
+    if (dto.hourlyRate !== undefined) data.hourlyRate = dto.hourlyRate;
+    if (dto.bonusPercent !== undefined) data.bonusPercent = dto.bonusPercent;
+    if (dto.kpiTargetPct !== undefined) data.kpiTargetPct = dto.kpiTargetPct;
 
     // Защита: если меняем роль с ADMIN на не-ADMIN — убедимся что это
     // не последний ADMIN. Иначе систему некому будет администрировать.
@@ -97,6 +295,13 @@ export class UsersService {
         email: true,
         fullName: true,
         role: true,
+        phone: true,
+        passportNo: true,
+        hiredAt: true,
+        baseSalary: true,
+        hourlyRate: true,
+        bonusPercent: true,
+        kpiTargetPct: true,
         createdAt: true,
         password: passwordToVerify ? true : false,
       } as any,

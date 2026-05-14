@@ -22,6 +22,7 @@ const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
   '/chat': { eyebrow: 'CHAT · 12', pre: 'Внутренний', em: 'чат.' },
   '/lms': { eyebrow: 'LMS · 13', pre: 'Курсы', em: 'и материалы.' },
   '/partners': { eyebrow: 'PARTNERS · 14', pre: 'Партнёрская', em: 'программа.' },
+  '/me': { eyebrow: 'PROFILE · 15', pre: 'Мой', em: 'кабинет.' },
 };
 
 export default function Layout() {
