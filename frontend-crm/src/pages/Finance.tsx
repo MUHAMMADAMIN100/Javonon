@@ -66,6 +66,26 @@ export default function Finance() {
   });
   const series = seriesQuery.data ?? [];
 
+  // Распределение 70/20/10 за текущий месяц + топ менеджеров
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const distributionQuery = useQuery({
+    queryKey: ['finance', 'distribution', monthStart],
+    queryFn: async () => {
+      const m = await import('../api/finance');
+      return m.financeDistribution({ from: monthStart });
+    },
+  });
+  const distribution = distributionQuery.data;
+
+  const topManagersQuery = useQuery({
+    queryKey: ['finance', 'top-managers', monthStart],
+    queryFn: async () => {
+      const m = await import('../api/finance');
+      return m.financeTopManagers({ from: monthStart, limit: 10 });
+    },
+  });
+  const topManagers = topManagersQuery.data ?? [];
+
   const paymentsKey = keys.payments.list({ status: 'PENDING' });
   const paymentsQuery = useQuery({
     queryKey: paymentsKey,
@@ -322,6 +342,69 @@ export default function Finance() {
             color: 'var(--primary-dark)',
           }}>денежных потоков.</em></h3>
           <RevenueChart points={series} />
+        </div>
+      )}
+
+      {/* Распределение 70/20/10 + Топ менеджеров */}
+      {distribution && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 32 }}>
+          <div className="card" style={{ padding: 24 }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+              color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
+            }}>DISTRIBUTION · 70/20/10</div>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
+              Чистая прибыль <em style={{ fontFamily: 'Times New Roman, Georgia, serif' }}>распределение.</em>
+            </h3>
+            <div style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12 }}>
+              За текущий месяц · чистая: <b style={{ color: distribution.net >= 0 ? '#15803d' : '#b91c1c' }}>
+                {distribution.net.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+              </b>
+            </div>
+            <DistRow label="Бизнес-расходы (зарплаты/аренда/опер.)" pct={70} amount={distribution.distribution.business} color="#3b82f6" />
+            <DistRow label="Долги / аутсорс / подрядчики" pct={20} amount={distribution.distribution.debts} color="#f59e0b" />
+            <DistRow label="Резерв (отложить)" pct={10} amount={distribution.distribution.reserve} color="#10b981" />
+          </div>
+
+          <div className="card" style={{ padding: 24 }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+              color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
+            }}>TOP MANAGERS · MONTH</div>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
+              Кто <em style={{ fontFamily: 'Times New Roman, Georgia, serif' }}>принёс.</em>
+            </h3>
+            {topManagers.length === 0 ? (
+              <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 24 }}>
+                Продаж в этом месяце ещё нет
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {topManagers.map((tm, i) => {
+                  const total = topManagers.reduce((s, x) => s + x.amount, 0);
+                  const pct = total > 0 ? (tm.amount / total) * 100 : 0;
+                  return (
+                    <div key={tm.manager.id}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 13 }}>
+                          <b>#{i + 1}</b> {tm.manager.fullName} · {tm.count} сделок
+                        </span>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>
+                          {tm.amount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
+                          <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11 }}>
+                            ({pct.toFixed(0)}%)
+                          </span>
+                        </span>
+                      </div>
+                      <div style={{ height: 6, background: 'var(--bg-soft)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: 'var(--primary)' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -615,12 +698,21 @@ function TransactionForm({
   const [type, setType] = useState<TransactionType>('INCOME');
   const [category, setCategory] = useState<TransactionCategory>('TUITION_PAYMENT');
   const [amount, setAmount] = useState<string>(preselect?.amount ? String(preselect.amount) : '');
-  const [currency, setCurrency] = useState(preselect?.currency || 'USD');
+  const [currency, setCurrency] = useState(preselect?.currency || 'TJS');
   const [studentId, setStudentId] = useState<string>(preselect?.studentId || '');
   const [managerId, setManagerId] = useState<string>(preselect?.managerId || '');
   const [comment, setComment] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [submitting, setSubmitting] = useState(false);
+
+  // Расширенные поля для финансового модуля
+  const [paymentChannel, setPaymentChannel] = useState<string>('CASH');
+  const [paymentKind, setPaymentKind] = useState<string>('FULL');
+  const [payerName, setPayerName] = useState('');
+  const [receiptKind, setReceiptKind] = useState<string>('RECEIPT');
+  const [noReceiptReason, setNoReceiptReason] = useState('');
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
 
   const cats = type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
@@ -631,8 +723,30 @@ function TransactionForm({
       toast('Введите корректную сумму', 'error');
       return;
     }
+    // EXPENSE — обязательное подтверждение
+    if (type === 'EXPENSE') {
+      if (receiptKind === 'REASON_ONLY') {
+        if (!noReceiptReason.trim() || noReceiptReason.trim().length < 5) {
+          toast('Укажи причину отсутствия чека (мин. 5 символов)', 'error');
+          return;
+        }
+      } else if (!receiptFile) {
+        toast(receiptKind === 'CASH_PHOTO' ? 'Загрузи фото наличных' : 'Загрузи чек', 'error');
+        return;
+      }
+    }
     setSubmitting(true);
     try {
+      // Сначала загружаем чек (если есть)
+      let receiptUrl: string | undefined;
+      if (receiptFile) {
+        setUploadingReceipt(true);
+        const m = await import('../api/finance');
+        const uploaded = await m.uploadReceipt(receiptFile);
+        receiptUrl = uploaded.url;
+        setUploadingReceipt(false);
+      }
+
       const dto: CreateTransactionDto = {
         type,
         category,
@@ -642,6 +756,14 @@ function TransactionForm({
         date,
         studentId: studentId || null,
         managerId: managerId || null,
+        paymentChannel: paymentChannel as any,
+        ...(type === 'INCOME' && { paymentKind: paymentKind as any }),
+        ...(payerName.trim() && { payerName: payerName.trim() }),
+        ...(type === 'EXPENSE' && {
+          receiptKind: receiptKind as any,
+          receiptUrl,
+          ...(receiptKind === 'REASON_ONLY' && { noReceiptReason: noReceiptReason.trim() }),
+        }),
       };
       await createTransaction(dto);
       toast('Транзакция создана', 'success');
@@ -650,6 +772,7 @@ function TransactionForm({
       toast(e?.response?.data?.message || 'Ошибка', 'error');
     } finally {
       setSubmitting(false);
+      setUploadingReceipt(false);
     }
   };
 
@@ -746,20 +869,115 @@ function TransactionForm({
               </select>
             </div>
           )}
+          {type === 'INCOME' && (
+            <div className="form-group">
+              <label>Менеджер (бонус)</label>
+              <select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+                <option value="">— авто из студента —</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.fullName}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="form-group">
+            <label>Способ оплаты</label>
+            <select value={paymentChannel} onChange={(e) => setPaymentChannel(e.target.value)}>
+              <option value="CASH">Наличные</option>
+              <option value="ALIF_MOBILE">АлифМобайл</option>
+              <option value="BANK_TRANSFER">Банк. перевод</option>
+              <option value="CARD">Карта</option>
+              <option value="CRYPTO">Crypto</option>
+              <option value="OTHER">Другое</option>
+            </select>
+          </div>
+          {type === 'INCOME' && (
+            <div className="form-group">
+              <label>Тип оплаты</label>
+              <select value={paymentKind} onChange={(e) => setPaymentKind(e.target.value)}>
+                <option value="FULL">Полная</option>
+                <option value="PREPAYMENT">Предоплата</option>
+                <option value="ADDITIONAL">Доплата</option>
+              </select>
+            </div>
+          )}
+          {type === 'INCOME' && (
+            <div className="form-group">
+              <label>ФИО плательщика</label>
+              <input type="text" value={payerName} onChange={(e) => setPayerName(e.target.value)} placeholder="если отличается от студента" />
+            </div>
+          )}
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
             <label>Комментарий</label>
             <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="(опционально)" />
           </div>
+
+          {type === 'EXPENSE' && (
+            <div className="form-group" style={{ gridColumn: '1 / -1', padding: 14, background: 'var(--bg-soft)', borderRadius: 12 }}>
+              <label style={{ fontWeight: 600, marginBottom: 8 }}>
+                Подтверждение расхода (обязательно)
+              </label>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                <RadioBtn label="📄 Чек" active={receiptKind === 'RECEIPT'} onClick={() => setReceiptKind('RECEIPT')} />
+                <RadioBtn label="💵 Фото наличных" active={receiptKind === 'CASH_PHOTO'} onClick={() => setReceiptKind('CASH_PHOTO')} />
+                <RadioBtn label="📝 Только причина" active={receiptKind === 'REASON_ONLY'} onClick={() => setReceiptKind('REASON_ONLY')} />
+              </div>
+              {receiptKind === 'REASON_ONLY' ? (
+                <input
+                  type="text"
+                  value={noReceiptReason}
+                  onChange={(e) => setNoReceiptReason(e.target.value)}
+                  placeholder="Почему нет чека (мин. 5 символов)"
+                  required
+                />
+              ) : (
+                <div>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                    required
+                  />
+                  {receiptFile && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
+                      {receiptFile.name} · {(receiptFile.size / 1024).toFixed(0)} КБ
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
           <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Сохранение...' : 'Сохранить'}
+          <button type="submit" className="btn btn-primary" disabled={submitting || uploadingReceipt}>
+            {uploadingReceipt ? 'Загружаем чек...' : submitting ? 'Сохраняем...' : 'Сохранить'}
           </button>
         </div>
       </form>
     </motion.div>
+  );
+}
+
+function RadioBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '6px 12px',
+        border: `1.5px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+        borderRadius: 999,
+        background: active ? 'var(--primary-soft)' : 'white',
+        color: active ? 'var(--primary-dark)' : 'var(--text)',
+        fontSize: 13,
+        fontWeight: 500,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -861,6 +1079,24 @@ function RevenueChart({ points }: { points: TimeseriesPoint[] }) {
           <span style={{ width: 10, height: 10, background: 'rgba(1, 54, 139,0.3)' }} />
           ПРИБЫЛЬ
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DistRow({ label, pct, amount, color }: { label: string; pct: number; amount: number; color: string }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+        <span style={{ fontSize: 13 }}>
+          <b style={{ color }}>{pct}%</b> · {label}
+        </span>
+        <span style={{ fontWeight: 600, fontSize: 14 }}>
+          {amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+        </span>
+      </div>
+      <div style={{ height: 8, background: 'var(--bg-soft)', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color }} />
       </div>
     </div>
   );

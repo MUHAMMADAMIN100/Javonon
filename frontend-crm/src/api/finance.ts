@@ -38,6 +38,24 @@ export const EXPENSE_CATEGORIES: TransactionCategory[] = [
   'OTHER_EXPENSE',
 ];
 
+export type PaymentChannel = 'ALIF_MOBILE' | 'CASH' | 'BANK_TRANSFER' | 'CARD' | 'CRYPTO' | 'OTHER';
+export type PaymentKind = 'FULL' | 'PREPAYMENT' | 'ADDITIONAL';
+export type ReceiptKind = 'RECEIPT' | 'CASH_PHOTO' | 'REASON_ONLY';
+
+export const PAYMENT_CHANNEL_LABEL: Record<PaymentChannel, string> = {
+  ALIF_MOBILE: 'АлифМобайл',
+  CASH: 'Наличные',
+  BANK_TRANSFER: 'Банк. перевод',
+  CARD: 'Карта',
+  CRYPTO: 'Crypto',
+  OTHER: 'Другое',
+};
+export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = {
+  FULL: 'Полная',
+  PREPAYMENT: 'Предоплата',
+  ADDITIONAL: 'Доплата',
+};
+
 export interface Transaction {
   id: string;
   type: TransactionType;
@@ -51,6 +69,12 @@ export interface Transaction {
   recordedById: string | null;
   bonusApplied: boolean;
   createdAt: string;
+  paymentChannel?: PaymentChannel | null;
+  paymentKind?: PaymentKind | null;
+  payerName?: string | null;
+  receiptUrl?: string | null;
+  receiptKind?: ReceiptKind | null;
+  noReceiptReason?: string | null;
   student?: { id: string; fullName: string } | null;
   manager?: { id: string; fullName: string; role?: string } | null;
   recordedBy?: { id: string; fullName: string; role?: string } | null;
@@ -73,6 +97,12 @@ export interface CreateTransactionDto {
   date?: string;
   studentId?: string | null;
   managerId?: string | null;
+  paymentChannel?: PaymentChannel | null;
+  paymentKind?: PaymentKind | null;
+  payerName?: string | null;
+  receiptUrl?: string | null;
+  receiptKind?: ReceiptKind | null;
+  noReceiptReason?: string | null;
 }
 
 export const listTransactions = (params?: {
@@ -116,3 +146,31 @@ export interface TimeseriesPoint {
 }
 export const financeTimeseries = (params?: { from?: string; to?: string; bucket?: 'day' | 'week' | 'month' }) =>
   api.get<TimeseriesPoint[]>('/finance/timeseries', { params }).then((r) => r.data);
+
+export interface FinanceDistribution {
+  income: number;
+  expense: number;
+  net: number;
+  distribution: { business: number; debts: number; reserve: number };
+}
+export const financeDistribution = (params?: { from?: string; to?: string }) =>
+  api.get<FinanceDistribution>('/finance/distribution', { params }).then((r) => r.data);
+
+export interface TopManager {
+  manager: { id: string; fullName: string; email?: string };
+  amount: number;
+  count: number;
+}
+export const financeTopManagers = (params?: { from?: string; to?: string; limit?: number }) =>
+  api.get<TopManager[]>('/finance/top-managers', { params }).then((r) => r.data);
+
+/** Загрузка фото чека или наличных. Возвращает URL для прикрепления к транзакции. */
+export const uploadReceipt = (file: File) => {
+  const fd = new FormData();
+  fd.append('file', file);
+  return api.post<{ url: string; originalName: string; size: number }>(
+    '/finance/receipts',
+    fd,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  ).then((r) => r.data);
+};

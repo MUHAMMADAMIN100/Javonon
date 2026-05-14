@@ -374,6 +374,30 @@ model TimeEntry {
 //  - EXPENSE (RENT/UTILITIES/...) → без связи, только category
 //
 // recordedById — кто внёс транзакцию (бухгалтер или админ).
+// Способ оплаты (для расширенной финансовой записи)
+enum PaymentChannel {
+  ALIF_MOBILE    // АлифМобайл
+  CASH           // наличные
+  BANK_TRANSFER  // банковский перевод
+  CARD           // картой
+  CRYPTO         // криптовалюта
+  OTHER
+}
+
+// Тип оплаты: полная или предоплата (для входящих доходов)
+enum PaymentKind {
+  FULL
+  PREPAYMENT
+  ADDITIONAL    // доплата по старому клиенту
+}
+
+// Подтверждение расхода (для исходящих)
+enum ReceiptKind {
+  RECEIPT       // обычный чек/счёт-фактура
+  CASH_PHOTO    // фотография наличных (вместо чека)
+  REASON_ONLY   // только причина (без фото) — допустимо в редких случаях
+}
+
 model Transaction {
   id          String   @id @default(uuid())
   type        TransactionType
@@ -389,6 +413,19 @@ model Transaction {
   manager     User?    @relation("TransactionManager", fields: [managerId], references: [id], onDelete: SetNull)
   recordedById String?
   recordedBy  User?    @relation("TransactionRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  // === Расширения для финансового модуля ===
+  // Способ оплаты — Алиф / наличные / банк / карта / крипто
+  paymentChannel  PaymentChannel?
+  // Полная / предоплата / доплата (только для INCOME)
+  paymentKind     PaymentKind?
+  // ФИО плательщика (если отличается от студента — например, родитель)
+  payerName       String?
+  // Чек / подтверждение (URL загруженной фотки)
+  receiptUrl      String?
+  receiptKind     ReceiptKind?
+  // Причина отсутствия чека (если receiptKind = REASON_ONLY)
+  noReceiptReason String?
 
   // Метка для бонусной системы: уже учтена в SalaryRecord ?
   bonusApplied Boolean @default(false)

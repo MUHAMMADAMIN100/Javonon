@@ -1,6 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TransactionCategory, TransactionType } from '@prisma/client';
+import {
+  PaymentChannel,
+  PaymentKind,
+  ReceiptKind,
+  TransactionCategory,
+  TransactionType,
+} from '@prisma/client';
 
 export interface CreateTransactionDto {
   type: TransactionType;
@@ -11,6 +17,13 @@ export interface CreateTransactionDto {
   date?: string; // ISO
   studentId?: string | null;
   managerId?: string | null;
+  // расширения
+  paymentChannel?: PaymentChannel | null;
+  paymentKind?: PaymentKind | null;
+  payerName?: string | null;
+  receiptUrl?: string | null;
+  receiptKind?: ReceiptKind | null;
+  noReceiptReason?: string | null;
 }
 
 @Injectable()
@@ -50,6 +63,32 @@ export class FinanceService {
     if (!dto.amount || dto.amount <= 0) {
       throw new BadRequestException('Сумма должна быть больше 0');
     }
+    if (dto.amount > 1_000_000) {
+      throw new BadRequestException('Сумма слишком большая');
+    }
+
+    // ВАЛИДАЦИЯ ЧЕКА ДЛЯ РАСХОДОВ. По требованию: бухгалтер обязан
+    // приложить чек, либо фото наличных, либо явно указать причину.
+    if (dto.type === 'EXPENSE') {
+      if (!dto.receiptKind) {
+        throw new BadRequestException(
+          'Для расхода обязательно подтверждение: чек, фото наличных или причина',
+        );
+      }
+      if (dto.receiptKind === 'REASON_ONLY') {
+        if (!dto.noReceiptReason || dto.noReceiptReason.trim().length < 5) {
+          throw new BadRequestException(
+            'Укажи причину отсутствия чека (мин. 5 символов)',
+          );
+        }
+      } else {
+        // RECEIPT или CASH_PHOTO — нужен url прикреплённой фотки
+        if (!dto.receiptUrl) {
+          throw new BadRequestException('Загрузи фото чека или наличных');
+        }
+      }
+    }
+
     // Авто-привязка менеджера: если транзакция-доход и привязана к студенту,
     // — берём его managerId, чтобы потом зарплата считалась автоматически.
     let managerId = dto.managerId ?? null;
@@ -72,6 +111,12 @@ export class FinanceService {
         studentId: dto.studentId || null,
         managerId,
         recordedById,
+        paymentChannel: dto.paymentChannel || null,
+        paymentKind: dto.paymentKind || null,
+        payerName: dto.payerName?.trim() || null,
+        receiptUrl: dto.receiptUrl || null,
+        receiptKind: dto.receiptKind || null,
+        noReceiptReason: dto.noReceiptReason?.trim() || null,
       },
       include: {
         student: { select: { id: true, fullName: true } },
@@ -93,8 +138,85 @@ export class FinanceService {
         ...(patch.date && { date: new Date(patch.date) }),
         ...(patch.studentId !== undefined && { studentId: patch.studentId || null }),
         ...(patch.managerId !== undefined && { managerId: patch.managerId || null }),
+        ...(patch.paymentChannel !== undefined && { paymentChannel: patch.paymentChannel }),
+        ...(patch.paymentKind !== undefined && { paymentKind: patch.paymentKind }),
+        ...(patch.payerName !== undefined && { payerName: patch.payerName?.trim() || null }),
+        ...(patch.receiptUrl !== undefined && { receiptUrl: patch.receiptUrl }),
+        ...(patch.receiptKind !== undefined && { receiptKind: patch.receiptKind }),
+        ...(patch.noReceiptReason !== undefined && { noReceiptReason: patch.noReceiptReason?.trim() || null }),
       },
     });
+  }
+
+  /**
+   * Модель распределения 70/20/10:
+   *  70% — бизнес-расходы (зарплаты + аренда + операционные)
+   *  20% — долги/аутсорс (выплаты подрядчикам, посредникам)
+   *  10% — резерв
+   *
+   * Берём ЧИСТУЮ ПРИБЫЛЬ за период (доход − расход), и показываем как
+   * она должна быть распределена. Реальное распределение делает админ
+   * вручную через создание EXPENSE-транзакций.
+   */
+  async distribution(opts: { from?: Date; to?: Date }) {
+    this.validateRange(opts);
+    const where = {
+      ...(opts.from || opts.to
+        ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+        : {}),
+    };
+    const grouped = await this.prisma.transaction.groupBy({
+      by: ['type'],
+      where,
+      _sum: { amount: true },
+    });
+    const income = grouped.find((g) => g.type === 'INCOME')?._sum.amount || 0;
+    const expense = grouped.find((g) => g.type === 'EXPENSE')?._sum.amount || 0;
+    const net = income - expense;
+    const positive = Math.max(0, net);
+    return {
+      income,
+      expense,
+      net,
+      distribution: {
+        business: Math.round(positive * 0.7 * 100) / 100,
+        debts: Math.round(positive * 0.2 * 100) / 100,
+        reserve: Math.round(positive * 0.1 * 100) / 100,
+      },
+    };
+  }
+
+  /**
+   * Топ менеджеров по продажам за период (для диаграммы "кто сколько принёс").
+   */
+  async topManagers(opts: { from?: Date; to?: Date; limit?: number }) {
+    this.validateRange(opts);
+    const limit = Math.min(opts.limit || 10, 50);
+    const grouped = await this.prisma.transaction.groupBy({
+      by: ['managerId'],
+      where: {
+        type: 'INCOME',
+        managerId: { not: null },
+        ...(opts.from || opts.to
+          ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+          : {}),
+      },
+      _sum: { amount: true },
+      _count: true,
+      orderBy: { _sum: { amount: 'desc' } },
+      take: limit,
+    });
+    const managerIds = grouped.map((g) => g.managerId!).filter(Boolean);
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: managerIds } },
+      select: { id: true, fullName: true, email: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    return grouped.map((g) => ({
+      manager: userMap.get(g.managerId!) || { id: g.managerId, fullName: 'Без менеджера' },
+      amount: g._sum.amount || 0,
+      count: g._count,
+    }));
   }
 
   async remove(id: string) {

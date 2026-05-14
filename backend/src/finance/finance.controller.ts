@@ -1,10 +1,22 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { randomUUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { FinanceService, CreateTransactionDto } from './finance.service';
 import { TransactionCategory, TransactionType } from '@prisma/client';
+
+const receiptStorage = diskStorage({
+  destination: process.env.UPLOADS_DIR || './uploads',
+  filename: (_req, file, cb) => {
+    const ext = extname(file.originalname || '') || '';
+    cb(null, `receipt-${randomUUID()}${ext}`);
+  },
+});
 
 // QA-fix #45/#46/#47: безопасный парсинг query-параметров для фильтров.
 const VALID_TX_TYPES: TransactionType[] = ['INCOME', 'EXPENSE'];
@@ -110,5 +122,48 @@ export class FinanceController {
       to: parseDate(to, 'to'),
       bucket,
     });
+  }
+
+  /** Распределение 70/20/10 — рекомендация куда направить чистую прибыль. */
+  @Get('distribution')
+  distribution(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.svc.distribution({
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to'),
+    });
+  }
+
+  /** Топ менеджеров по продажам — кто сколько принёс. */
+  @Get('top-managers')
+  topManagers(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.svc.topManagers({
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to'),
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  /**
+   * Загрузка чека/фото наличных. Возвращает URL для прикрепления
+   * к транзакции при последующем POST /transactions.
+   */
+  @Post('receipts')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: receiptStorage,
+      limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '20971520', 10) }, // 20MB
+    }),
+  )
+  uploadReceipt(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Файл не загружен');
+    return {
+      url: `/uploads/${file.filename}`,
+      originalName: file.originalname,
+      size: file.size,
+    };
   }
 }
