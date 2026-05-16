@@ -218,7 +218,17 @@ export default function ProgramsSection() {
                   <span><Icon name="location_on" size={13} /> {p.city}</span>
                   <span><Icon name="school" size={13} /> {p.major}</span>
                   {p.duration && <span><Icon name="schedule" size={13} /> {p.duration}</span>}
+                  {p.englishLevel && <span><Icon name="record_voice_over" size={13} /> {p.englishLevel}</span>}
                 </div>
+                {p.hasGrant && (
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    background: '#dcfce7', color: '#15803d', borderRadius: 999,
+                    padding: '3px 10px', fontSize: 12, fontWeight: 600, marginTop: 6,
+                  }}>
+                    🎓 Грант
+                  </div>
+                )}
               </div>
             </motion.div>
           ))}
@@ -262,7 +272,25 @@ export default function ProgramsSection() {
                   <div><Icon name="school" size={16} /> {selected.major}</div>
                   {selected.duration && <div><Icon name="schedule" size={16} /> {selected.duration}</div>}
                   {selected.language && <div><Icon name="translate" size={16} /> {selected.language}</div>}
+                  {selected.englishLevel && <div><Icon name="record_voice_over" size={16} /> Английский: {selected.englishLevel}</div>}
+                  {selected.avgAdmissionScore && <div><Icon name="grade" size={16} /> Проходной балл: {selected.avgAdmissionScore}</div>}
+                  {selected.applicationDeadline && <div><Icon name="event" size={16} /> Дедлайн: {selected.applicationDeadline}</div>}
+                  {typeof selected.intakesPerYear === 'number' && <div><Icon name="repeat" size={16} /> Наборов в год: {selected.intakesPerYear}</div>}
                 </div>
+                {selected.hasGrant && (
+                  <div style={{
+                    background: '#dcfce7', color: '#15803d', borderRadius: 12,
+                    padding: '12px 16px', fontSize: 14, marginTop: 12,
+                  }}>
+                    <b>🎓 Доступен грант</b>
+                    {selected.grantDetails && <div style={{ marginTop: 4 }}>{selected.grantDetails}</div>}
+                    {selected.grantEnglishLevel && (
+                      <div style={{ marginTop: 4, fontSize: 13 }}>
+                        Уровень английского для гранта: <b>{selected.grantEnglishLevel}</b>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="sp-modal-cost">
                   {selected.cost.toLocaleString('ru-RU')} {selected.currency} <span>/ год</span>
                 </div>

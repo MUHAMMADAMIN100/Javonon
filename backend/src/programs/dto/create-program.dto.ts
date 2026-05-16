@@ -58,4 +58,40 @@ export class CreateProgramDto {
   @IsOptional()
   @IsBoolean()
   published?: boolean;
+
+  // === Расширенные поля каталога ===
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  englishLevel?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  hasGrant?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  grantDetails?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  grantEnglishLevel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  avgAdmissionScore?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  applicationDeadline?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(12)
+  intakesPerYear?: number;
 }

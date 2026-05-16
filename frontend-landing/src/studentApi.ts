@@ -226,6 +226,13 @@ export interface StudentProgram {
   description: string | null;
   imageUrl: string | null;
   published: boolean;
+  englishLevel?: string | null;
+  hasGrant?: boolean;
+  grantDetails?: string | null;
+  grantEnglishLevel?: string | null;
+  avgAdmissionScore?: string | null;
+  applicationDeadline?: string | null;
+  intakesPerYear?: number | null;
   createdAt: string;
 }
 

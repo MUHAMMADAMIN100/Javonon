@@ -84,6 +84,13 @@ export class ProgramsService {
         description: dto.description || null,
         imageUrl: dto.imageUrl || null,
         published: dto.published ?? true,
+        englishLevel: dto.englishLevel?.trim() || null,
+        hasGrant: dto.hasGrant ?? false,
+        grantDetails: dto.grantDetails?.trim() || null,
+        grantEnglishLevel: dto.grantEnglishLevel?.trim() || null,
+        avgAdmissionScore: dto.avgAdmissionScore?.trim() || null,
+        applicationDeadline: dto.applicationDeadline?.trim() || null,
+        intakesPerYear: dto.intakesPerYear ?? null,
       },
     });
 

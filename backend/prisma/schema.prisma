@@ -288,6 +288,23 @@ model Program {
   published          Boolean   @default(true)
   telegramMessageId  Int?
   telegramHasPhoto   Boolean   @default(false)
+
+  // === Расширенные поля для каталога (требование доработок) ===
+  // Требуемый уровень английского (IELTS 6.0 / HSK 4 / без требований и т.п.)
+  englishLevel       String?
+  // Есть ли грант/стипендия
+  hasGrant           Boolean   @default(false)
+  // Что покрывает грант (обучение / проживание / стипендия) — свободный текст
+  grantDetails       String?
+  // Уровень английского для получения гранта (если отличается)
+  grantEnglishLevel  String?
+  // Средний проходной балл (текст — может быть GPA, % или баллы)
+  avgAdmissionScore  String?
+  // Окно подачи документов / дедлайны
+  applicationDeadline String?
+  // Сколько раз в год можно подавать (intakes)
+  intakesPerYear     Int?
+
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

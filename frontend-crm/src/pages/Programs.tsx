@@ -48,6 +48,13 @@ const emptyForm: Partial<Program> = {
   language: '',
   description: '',
   published: true,
+  englishLevel: '',
+  hasGrant: false,
+  grantDetails: '',
+  grantEnglishLevel: '',
+  avgAdmissionScore: '',
+  applicationDeadline: '',
+  intakesPerYear: undefined,
 };
 
 export default function Programs() {
@@ -293,7 +300,20 @@ export default function Programs() {
                     <span><Icon name="school" size={14} /> {p.major}</span>
                     {p.duration && <span><Icon name="schedule" size={14} /> {p.duration}</span>}
                     {p.language && <span><Icon name="translate" size={14} /> {p.language}</span>}
+                    {p.englishLevel && <span><Icon name="record_voice_over" size={14} /> {p.englishLevel}</span>}
+                    {p.avgAdmissionScore && <span><Icon name="grade" size={14} /> {p.avgAdmissionScore}</span>}
+                    {p.applicationDeadline && <span><Icon name="event" size={14} /> {p.applicationDeadline}</span>}
+                    {typeof p.intakesPerYear === 'number' && <span><Icon name="repeat" size={14} /> {p.intakesPerYear}× в год</span>}
                   </div>
+                  {p.hasGrant && (
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      background: '#dcfce7', color: '#15803d', borderRadius: 999,
+                      padding: '3px 10px', fontSize: 12, fontWeight: 600, marginTop: 6,
+                    }}>
+                      🎓 Грант{p.grantDetails ? ` · ${p.grantDetails}` : ''}
+                    </div>
+                  )}
                   <div className="program-card-cost">
                     {p.cost.toLocaleString('ru-RU')} {p.currency} <span>/ год</span>
                   </div>
@@ -415,6 +435,76 @@ export default function Programs() {
                   </select>
                 </div>
               </div>
+
+              {/* Расширенные поля каталога */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                <div className="form-group">
+                  <label>Уровень английского</label>
+                  <input
+                    value={editing.englishLevel || ''}
+                    placeholder="IELTS 6.0 / HSK 4 / —"
+                    onChange={(e) => setEditing({ ...editing, englishLevel: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Средний проходной балл</label>
+                  <input
+                    value={editing.avgAdmissionScore || ''}
+                    placeholder="GPA 3.0 / 80%"
+                    onChange={(e) => setEditing({ ...editing, avgAdmissionScore: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Дедлайн подачи</label>
+                  <input
+                    value={editing.applicationDeadline || ''}
+                    placeholder="1 марта / круглый год"
+                    onChange={(e) => setEditing({ ...editing, applicationDeadline: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Наборов в год</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={12}
+                    value={editing.intakesPerYear ?? ''}
+                    placeholder="2"
+                    onChange={(e) => setEditing({ ...editing, intakesPerYear: e.target.value ? Number(e.target.value) : undefined })}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'row' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!editing.hasGrant}
+                    onChange={(e) => setEditing({ ...editing, hasGrant: e.target.checked })}
+                  />
+                  Есть грант / стипендия
+                </label>
+              </div>
+              {editing.hasGrant && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div className="form-group">
+                    <label>Что покрывает грант</label>
+                    <input
+                      value={editing.grantDetails || ''}
+                      placeholder="Обучение + проживание + стипендия"
+                      onChange={(e) => setEditing({ ...editing, grantDetails: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Уровень англ. для гранта</label>
+                    <input
+                      value={editing.grantEnglishLevel || ''}
+                      placeholder="IELTS 6.5"
+                      onChange={(e) => setEditing({ ...editing, grantEnglishLevel: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
                 <label>Описание</label>
                 <textarea rows={4} value={editing.description || ''} onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
