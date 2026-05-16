@@ -47,6 +47,8 @@ export default function Chat() {
   // Mobile: показываем либо список комнат, либо тред. На десктопе — оба сразу
   // (CSS-grid). По умолчанию список — пользователь сам выбирает.
   const [mobileShowList, setMobileShowList] = useState(true);
+  // Telegram-style папки чатов — какие свёрнуты (по типу комнаты).
+  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [input, setInput] = useState('');
   const [showNewDirect, setShowNewDirect] = useState(false);
   const [showNewTeam, setShowNewTeam] = useState(false);
@@ -627,23 +629,27 @@ export default function Chat() {
           </div>
 
           <div style={{ overflowY: 'auto', flex: 1 }}>
-            {/* QA-fix #5: список чатов всегда виден; "+ собеседник" /
-                "+ команда" открываются в отдельной модалке поверх. */}
+            {/* Telegram-style: чаты сгруппированы по папкам — Общий,
+                Команды, Личные. Каждая папка сворачивается. */}
             {(() => {
-              return rooms.map((r) => {
-                const isActive = r.id === activeId;
-                const lastMsg = r.messages?.[0];
+              const roomTitle = (r: typeof rooms[number]) => {
                 const otherMember = r.type === 'DIRECT'
                   ? r.members.find((m) =>
                       (me?.id ? m.userId !== me.id : true)
                       && (me?.fullName ? m.user.fullName !== me.fullName : true),
                     )
                   : null;
-                const title = r.type === 'GENERAL'
+                return r.type === 'GENERAL'
                   ? 'Команда Javonon'
                   : r.type === 'DIRECT'
                     ? otherMember?.user.fullName || r.title || 'Чат'
                     : r.title || 'Команда';
+              };
+
+              const renderRoom = (r: typeof rooms[number]) => {
+                const isActive = r.id === activeId;
+                const lastMsg = r.messages?.[0];
+                const title = roomTitle(r);
                 return (
                   <button
                     key={r.id}
@@ -653,11 +659,10 @@ export default function Chat() {
                       alignItems: 'flex-start',
                       gap: 10,
                       width: '100%',
-                      padding: '14px 18px',
+                      padding: '12px 18px',
                       background: isActive ? 'var(--primary-soft)' : 'transparent',
                       borderLeft: isActive ? '3px solid var(--primary)' : '3px solid transparent',
                       border: 'none',
-                      borderBottom: '1px solid var(--border-soft)',
                       cursor: 'pointer',
                       textAlign: 'left',
                     }}
@@ -694,6 +699,44 @@ export default function Chat() {
                       )}
                     </div>
                   </button>
+                );
+              };
+
+              const general = rooms.filter((r) => r.type === 'GENERAL');
+              const teams = rooms.filter((r) => r.type === 'TEAM');
+              const directs = rooms.filter((r) => r.type === 'DIRECT');
+
+              const folders: Array<{ key: string; icon: string; label: string; list: typeof rooms }> = [
+                { key: 'GENERAL', icon: 'campaign', label: 'Общий', list: general },
+                { key: 'TEAM', icon: 'groups', label: 'Команды', list: teams },
+                { key: 'DIRECT', icon: 'person', label: 'Личные', list: directs },
+              ];
+
+              return folders.map((f) => {
+                if (f.list.length === 0) return null;
+                const collapsed = collapsedFolders[f.key];
+                return (
+                  <div key={f.key}>
+                    <button
+                      onClick={() => setCollapsedFolders((c) => ({ ...c, [f.key]: !c[f.key] }))}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        width: '100%', padding: '10px 18px',
+                        background: 'var(--bg-soft)', border: 'none',
+                        borderBottom: '1px solid var(--border-soft)',
+                        cursor: 'pointer', textAlign: 'left',
+                        fontFamily: 'var(--font-mono)', fontSize: 10,
+                        letterSpacing: '0.12em', textTransform: 'uppercase',
+                        color: 'var(--text-soft)',
+                      }}
+                    >
+                      <Icon name={f.icon} size={14} />
+                      <span style={{ flex: 1 }}>{f.label}</span>
+                      <span style={{ fontWeight: 700 }}>{f.list.length}</span>
+                      <Icon name={collapsed ? 'expand_more' : 'expand_less'} size={16} />
+                    </button>
+                    {!collapsed && f.list.map(renderRoom)}
+                  </div>
                 );
               });
             })()}
