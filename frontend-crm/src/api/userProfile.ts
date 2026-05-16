@@ -94,8 +94,10 @@ export interface FullProfile {
 export const getMyFullProfile = () =>
   api.get<FullProfile>('/me/full').then((r) => r.data);
 
+// /me/profile/:id — доступ-чек внутри (ADMIN / self / DataAccessGrant).
+// Работает и для админа, и для сотрудника которому выдали доступ.
 export const getUserFullProfile = (id: string) =>
-  api.get<FullProfile>(`/users/${id}/full`).then((r) => r.data);
+  api.get<FullProfile>(`/me/profile/${id}`).then((r) => r.data);
 
 export const updateUserHR = (id: string, patch: Partial<{
   phone: string;
@@ -120,6 +122,19 @@ export const uploadUserDocument = (id: string, file: File, type: string, comment
 
 export const deleteUserDocument = (id: string, docId: string) =>
   api.delete(`/users/${id}/documents/${docId}`).then((r) => r.data);
+
+// Точечный доступ к данным сотрудника
+export interface AccessGrant {
+  id: string;
+  grantedTo: { id: string; fullName: string; email: string; role: string };
+  createdAt: string;
+}
+export const listUserAccess = (id: string) =>
+  api.get<AccessGrant[]>(`/users/${id}/access`).then((r) => r.data);
+export const grantUserAccess = (id: string, grantedToId: string) =>
+  api.post(`/users/${id}/access`, { grantedToId }).then((r) => r.data);
+export const revokeUserAccess = (id: string, granteeId: string) =>
+  api.delete(`/users/${id}/access/${granteeId}`).then((r) => r.data);
 
 export function fmtMinutes(m: number) {
   const h = Math.floor(m / 60);

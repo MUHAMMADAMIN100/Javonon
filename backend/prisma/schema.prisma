@@ -115,6 +115,9 @@ model User {
   penalties             Penalty[]
   paymentsConfirmed     Payment[]     @relation("PaymentConfirmedBy")
   documents             UserDocument[]
+  accessGrantsReceived  DataAccessGrant[] @relation("AccessGrantee")
+  accessGrantsToMe      DataAccessGrant[] @relation("AccessTarget")
+  callLogs              CallLog[]     @relation("CallLogUser")
 }
 
 // Документы сотрудника (паспорт, контракт, дипломы и т.п.). По
@@ -222,6 +225,7 @@ model Student {
   lessonProgress LessonProgress[]
   interactions Interaction[]
   payments     Payment[]
+  callLogs     CallLog[]     @relation("CallLogStudent")
 
   @@index([direction])
   @@index([cabinet])
@@ -418,7 +422,8 @@ enum PaymentChannel {
 enum PaymentKind {
   FULL
   PREPAYMENT
-  ADDITIONAL    // доплата по старому клиенту
+  ADDITIONAL       // доплата по старому клиенту
+  OWNER_INVESTMENT // вложение собственника в компанию (не от клиента)
 }
 
 // Подтверждение расхода (для исходящих)
@@ -447,8 +452,11 @@ model Transaction {
   // === Расширения для финансового модуля ===
   // Способ оплаты — Алиф / наличные / банк / карта / крипто
   paymentChannel  PaymentChannel?
-  // Полная / предоплата / доплата (только для INCOME)
+  // Полная / предоплата / доплата / вложение (только для INCOME)
   paymentKind     PaymentKind?
+  // Продуктовая категория дохода — Академия / Канада / США / Языковые
+  // и т.п. Свободный текст т.к. список продуктов меняется.
+  productCategory String?
   // ФИО плательщика (если отличается от студента — например, родитель)
   payerName       String?
   // Чек / подтверждение (URL загруженной фотки)
@@ -522,6 +530,9 @@ model DailyReport {
   // ТЗ §3.6: сотрудник заполняет количество и сумму продаж
   salesCount    Int      @default(0)
   salesAmount   Float    @default(0)
+  // Консультации отдела продаж — оффлайн (в офисе) и онлайн
+  offlineConsultations Int @default(0)
+  onlineConsultations  Int @default(0)
   activitySummary String? // что сделал за день (свободный текст)
   challenges    String?  // блокеры/проблемы
   createdAt     DateTime @default(now())
@@ -529,6 +540,68 @@ model DailyReport {
 
   @@unique([userId, date])
   @@index([date])
+}
+
+// ==========================================================
+// DATA ACCESS GRANT — точечная выдача доступа к данным
+// конкретного сотрудника другому пользователю. Админ может
+// разрешить кому-то видеть досье конкретного сотрудника.
+// ==========================================================
+model DataAccessGrant {
+  id            String   @id @default(uuid())
+  // Кому выдан доступ
+  grantedToId   String
+  grantedTo     User     @relation("AccessGrantee", fields: [grantedToId], references: [id], onDelete: Cascade)
+  // Чьи данные можно смотреть
+  targetUserId  String
+  targetUser    User     @relation("AccessTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  // Кто выдал (для аудита)
+  grantedById   String?
+  createdAt     DateTime @default(now())
+
+  @@unique([grantedToId, targetUserId])
+  @@index([grantedToId])
+  @@index([targetUserId])
+}
+
+// ==========================================================
+// CALL LOG — журнал звонков менеджеров. Пока ручное логирование
+// (полная интеграция через программу требует SIP/WebRTC провайдера).
+// ==========================================================
+enum CallDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum CallOutcome {
+  ANSWERED       // дозвонился, поговорили
+  NO_ANSWER      // не ответили
+  BUSY           // занято
+  CALLBACK       // договорились перезвонить
+  CONVERTED      // привело к продаже/заявке
+}
+
+model CallLog {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation("CallLogUser", fields: [userId], references: [id], onDelete: Cascade)
+  // Кому звонили
+  clientName     String
+  clientPhone    String?
+  studentId      String?
+  student        Student? @relation("CallLogStudent", fields: [studentId], references: [id], onDelete: SetNull)
+  direction      CallDirection @default(OUTGOING)
+  outcome        CallOutcome   @default(ANSWERED)
+  // Длительность разговора в секундах (время на линии)
+  durationSeconds Int     @default(0)
+  notes          String?
+  // URL записи разговора (если есть)
+  recordingUrl   String?
+  occurredAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@index([userId, occurredAt])
+  @@index([studentId])
 }
 
 // ============================================================

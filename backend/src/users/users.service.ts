@@ -235,6 +235,63 @@ export class UsersService {
     return this.prisma.userDocument.delete({ where: { id: documentId } });
   }
 
+  // ===== Точечный доступ к данным сотрудника =====
+
+  /**
+   * Может ли viewer смотреть полный профиль targetId:
+   *  - ADMIN — всегда
+   *  - сам сотрудник — свой профиль
+   *  - есть активный DataAccessGrant
+   */
+  async canViewProfile(viewerId: string, viewerRole: string, targetId: string) {
+    if (viewerRole === 'ADMIN') return true;
+    if (viewerId === targetId) return true;
+    const grant = await this.prisma.dataAccessGrant.findUnique({
+      where: { grantedToId_targetUserId: { grantedToId: viewerId, targetUserId: targetId } },
+    });
+    return !!grant;
+  }
+
+  /** Выдать доступ к данным targetUserId пользователю grantedToId. */
+  async grantAccess(grantedToId: string, targetUserId: string, grantedById: string) {
+    if (grantedToId === targetUserId) {
+      throw new BadRequestException('Сотрудник и так видит свои данные');
+    }
+    const [grantee, target] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: grantedToId } }),
+      this.prisma.user.findUnique({ where: { id: targetUserId } }),
+    ]);
+    if (!grantee || !target) throw new NotFoundException('Пользователь не найден');
+    return this.prisma.dataAccessGrant.upsert({
+      where: { grantedToId_targetUserId: { grantedToId, targetUserId } },
+      create: { grantedToId, targetUserId, grantedById },
+      update: {},
+    });
+  }
+
+  async revokeAccess(grantedToId: string, targetUserId: string) {
+    await this.prisma.dataAccessGrant.deleteMany({
+      where: { grantedToId, targetUserId },
+    });
+    return { ok: true };
+  }
+
+  /** Список тех, кому выдан доступ к данным targetUserId. */
+  async listGrantsForTarget(targetUserId: string) {
+    const grants = await this.prisma.dataAccessGrant.findMany({
+      where: { targetUserId },
+      include: {
+        grantedTo: { select: { id: true, fullName: true, email: true, role: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return grants.map((g) => ({
+      id: g.id,
+      grantedTo: g.grantedTo,
+      createdAt: g.createdAt,
+    }));
+  }
+
   async create(dto: CreateUserDto) {
     const email = (dto.email || '').trim().toLowerCase();
     const rawPassword = (dto.password || '').trim();

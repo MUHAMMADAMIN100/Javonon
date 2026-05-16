@@ -18,6 +18,8 @@ export default function Reports() {
   const [contacted, setContacted] = useState('0');
   const [salesCount, setSalesCount] = useState('0');
   const [salesAmount, setSalesAmount] = useState('0');
+  const [offlineConsult, setOfflineConsult] = useState('0');
+  const [onlineConsult, setOnlineConsult] = useState('0');
   const [activity, setActivity] = useState('');
   const [challenges, setChallenges] = useState('');
 
@@ -43,10 +45,12 @@ export default function Reports() {
       setContacted(String(today.applicationsContacted));
       setSalesCount(String(today.salesCount));
       setSalesAmount(String(today.salesAmount));
+      setOfflineConsult(String(today.offlineConsultations ?? 0));
+      setOnlineConsult(String(today.onlineConsultations ?? 0));
       setActivity(today.activitySummary || '');
       setChallenges(today.challenges || '');
     }
-  }, [today?.id, today?.callsCount, today?.meetingsCount, today?.applicationsContacted, today?.salesCount, today?.salesAmount, today?.activitySummary, today?.challenges]);
+  }, [today?.id, today?.callsCount, today?.meetingsCount, today?.applicationsContacted, today?.salesCount, today?.salesAmount, today?.offlineConsultations, today?.onlineConsultations, today?.activitySummary, today?.challenges]);
 
   // Оптимистично патчим today + invalidate history.
   const upsertMut = useOptimisticMutation<DailyReport, Parameters<typeof upsertReport>[0], DailyReport | null>({
@@ -66,6 +70,8 @@ export default function Reports() {
       applicationsContacted: parseInt(contacted, 10) || 0,
       salesCount: parseInt(salesCount, 10) || 0,
       salesAmount: parseFloat(salesAmount) || 0,
+      offlineConsultations: parseInt(offlineConsult, 10) || 0,
+      onlineConsultations: parseInt(onlineConsult, 10) || 0,
       activitySummary: activity.trim() || undefined,
       challenges: challenges.trim() || undefined,
     });
@@ -117,6 +123,8 @@ export default function Reports() {
           <NumberField label="Звонков" value={calls} onChange={setCalls} />
           <NumberField label="Встреч" value={meetings} onChange={setMeetings} />
           <NumberField label="Заявок обработано" value={contacted} onChange={setContacted} />
+          <NumberField label="Оффлайн консультаций" value={offlineConsult} onChange={setOfflineConsult} />
+          <NumberField label="Онлайн консультаций" value={onlineConsult} onChange={setOnlineConsult} />
           <NumberField label="Продаж (шт.)" value={salesCount} onChange={setSalesCount} highlight />
           <NumberField label="Сумма продаж ($)" value={salesAmount} onChange={setSalesAmount} highlight />
         </div>

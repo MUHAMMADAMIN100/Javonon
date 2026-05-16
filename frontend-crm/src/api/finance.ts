@@ -39,7 +39,7 @@ export const EXPENSE_CATEGORIES: TransactionCategory[] = [
 ];
 
 export type PaymentChannel = 'ALIF_MOBILE' | 'CASH' | 'BANK_TRANSFER' | 'CARD' | 'CRYPTO' | 'OTHER';
-export type PaymentKind = 'FULL' | 'PREPAYMENT' | 'ADDITIONAL';
+export type PaymentKind = 'FULL' | 'PREPAYMENT' | 'ADDITIONAL' | 'OWNER_INVESTMENT';
 export type ReceiptKind = 'RECEIPT' | 'CASH_PHOTO' | 'REASON_ONLY';
 
 export const PAYMENT_CHANNEL_LABEL: Record<PaymentChannel, string> = {
@@ -54,7 +54,19 @@ export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = {
   FULL: 'Полная',
   PREPAYMENT: 'Предоплата',
   ADDITIONAL: 'Доплата',
+  OWNER_INVESTMENT: 'Вложение собственника',
 };
+
+// Продуктовые категории дохода (можно расширять)
+export const PRODUCT_CATEGORIES = [
+  'Академия',
+  'Канада',
+  'США',
+  'Китай',
+  'Языковые курсы',
+  'Колледж',
+  'Другое',
+];
 
 export interface Transaction {
   id: string;
@@ -71,6 +83,7 @@ export interface Transaction {
   createdAt: string;
   paymentChannel?: PaymentChannel | null;
   paymentKind?: PaymentKind | null;
+  productCategory?: string | null;
   payerName?: string | null;
   receiptUrl?: string | null;
   receiptKind?: ReceiptKind | null;
@@ -99,6 +112,7 @@ export interface CreateTransactionDto {
   managerId?: string | null;
   paymentChannel?: PaymentChannel | null;
   paymentKind?: PaymentKind | null;
+  productCategory?: string | null;
   payerName?: string | null;
   receiptUrl?: string | null;
   receiptKind?: ReceiptKind | null;
@@ -163,6 +177,23 @@ export interface TopManager {
 }
 export const financeTopManagers = (params?: { from?: string; to?: string; limit?: number }) =>
   api.get<TopManager[]>('/finance/top-managers', { params }).then((r) => r.data);
+
+export interface IncomeSource {
+  kind: string;
+  label: string;
+  amount: number;
+  count: number;
+}
+export const financeIncomeSources = (params?: { from?: string; to?: string }) =>
+  api.get<IncomeSource[]>('/finance/income-sources', { params }).then((r) => r.data);
+
+export interface IncomeByProduct {
+  product: string;
+  amount: number;
+  count: number;
+}
+export const financeIncomeByProduct = (params?: { from?: string; to?: string }) =>
+  api.get<IncomeByProduct[]>('/finance/income-by-product', { params }).then((r) => r.data);
 
 /** Загрузка фото чека или наличных. Возвращает URL для прикрепления к транзакции. */
 export const uploadReceipt = (file: File) => {

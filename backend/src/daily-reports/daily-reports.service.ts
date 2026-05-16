@@ -9,6 +9,8 @@ export interface DailyReportInput {
   applicationsContacted?: number;
   salesCount?: number;
   salesAmount?: number;
+  offlineConsultations?: number;
+  onlineConsultations?: number;
   activitySummary?: string;
   challenges?: string;
 }
@@ -64,6 +66,8 @@ export class DailyReportsService {
       applicationsContacted: checkInt(dto.applicationsContacted, 'applicationsContacted'),
       salesCount: checkInt(dto.salesCount, 'salesCount'),
       salesAmount: checkFloat(dto.salesAmount, 'salesAmount'),
+      offlineConsultations: checkInt(dto.offlineConsultations, 'offlineConsultations'),
+      onlineConsultations: checkInt(dto.onlineConsultations, 'onlineConsultations'),
       activitySummary: checkText(dto.activitySummary, 'activitySummary'),
       challenges: checkText(dto.challenges, 'challenges'),
     };

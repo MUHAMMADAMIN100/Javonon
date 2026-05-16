@@ -147,6 +147,24 @@ export class FinanceController {
     });
   }
 
+  /** Источники дохода — новые клиенты / доплаты / вложения. */
+  @Get('income-sources')
+  incomeSources(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.svc.incomeSources({
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to'),
+    });
+  }
+
+  /** Доход по продуктовым категориям. */
+  @Get('income-by-product')
+  incomeByProduct(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.svc.incomeByProduct({
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to'),
+    });
+  }
+
   /**
    * Загрузка чека/фото наличных. Возвращает URL для прикрепления
    * к транзакции при последующем POST /transactions.

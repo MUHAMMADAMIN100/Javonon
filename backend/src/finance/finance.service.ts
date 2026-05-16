@@ -20,6 +20,7 @@ export interface CreateTransactionDto {
   // расширения
   paymentChannel?: PaymentChannel | null;
   paymentKind?: PaymentKind | null;
+  productCategory?: string | null;
   payerName?: string | null;
   receiptUrl?: string | null;
   receiptKind?: ReceiptKind | null;
@@ -113,6 +114,7 @@ export class FinanceService {
         recordedById,
         paymentChannel: dto.paymentChannel || null,
         paymentKind: dto.paymentKind || null,
+        productCategory: dto.productCategory?.trim() || null,
         payerName: dto.payerName?.trim() || null,
         receiptUrl: dto.receiptUrl || null,
         receiptKind: dto.receiptKind || null,
@@ -140,6 +142,7 @@ export class FinanceService {
         ...(patch.managerId !== undefined && { managerId: patch.managerId || null }),
         ...(patch.paymentChannel !== undefined && { paymentChannel: patch.paymentChannel }),
         ...(patch.paymentKind !== undefined && { paymentKind: patch.paymentKind }),
+        ...(patch.productCategory !== undefined && { productCategory: patch.productCategory?.trim() || null }),
         ...(patch.payerName !== undefined && { payerName: patch.payerName?.trim() || null }),
         ...(patch.receiptUrl !== undefined && { receiptUrl: patch.receiptUrl }),
         ...(patch.receiptKind !== undefined && { receiptKind: patch.receiptKind }),
@@ -217,6 +220,61 @@ export class FinanceService {
       amount: g._sum.amount || 0,
       count: g._count,
     }));
+  }
+
+  /**
+   * Источники дохода (для диаграммы): новые клиенты / доплаты /
+   * вложения собственника. Группируем INCOME по paymentKind.
+   */
+  async incomeSources(opts: { from?: Date; to?: Date }) {
+    this.validateRange(opts);
+    const grouped = await this.prisma.transaction.groupBy({
+      by: ['paymentKind'],
+      where: {
+        type: 'INCOME',
+        ...(opts.from || opts.to
+          ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+          : {}),
+      },
+      _sum: { amount: true },
+      _count: true,
+    });
+    const LABEL: Record<string, string> = {
+      FULL: 'Новые клиенты (полная)',
+      PREPAYMENT: 'Новые клиенты (предоплата)',
+      ADDITIONAL: 'Доплаты',
+      OWNER_INVESTMENT: 'Вложения собственника',
+      _none: 'Без указания',
+    };
+    return grouped.map((g) => ({
+      kind: g.paymentKind || '_none',
+      label: LABEL[g.paymentKind || '_none'] || g.paymentKind,
+      amount: g._sum.amount || 0,
+      count: g._count,
+    }));
+  }
+
+  /** Продуктовые категории дохода (Академия / Канада / США / ...). */
+  async incomeByProduct(opts: { from?: Date; to?: Date }) {
+    this.validateRange(opts);
+    const grouped = await this.prisma.transaction.groupBy({
+      by: ['productCategory'],
+      where: {
+        type: 'INCOME',
+        ...(opts.from || opts.to
+          ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+          : {}),
+      },
+      _sum: { amount: true },
+      _count: true,
+    });
+    return grouped
+      .map((g) => ({
+        product: g.productCategory || 'Без категории',
+        amount: g._sum.amount || 0,
+        count: g._count,
+      }))
+      .sort((a, b) => b.amount - a.amount);
   }
 
   async remove(id: string) {

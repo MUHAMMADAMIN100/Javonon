@@ -95,6 +95,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     { to: '/time', icon: 'schedule', label: 'Время' },
     ...(isAdmin || isEmployee ? [
       { to: '/reports', icon: 'description', label: 'Мои отчёты' },
+      { to: '/calls', icon: 'call', label: 'Звонки' },
       { to: '/kpi', icon: 'leaderboard', label: 'KPI' },
     ] : []),
     { to: '/me', icon: 'person', label: 'Мой профиль' },

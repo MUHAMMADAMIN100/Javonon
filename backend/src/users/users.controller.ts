@@ -34,8 +34,9 @@ const userDocStorage = diskStorage({
 });
 
 /**
- * Self-эндпоинты для сотрудника — он видит/редактирует СВОИ данные.
- * Отдельный контроллер чтобы не использовать ADMIN-only guard.
+ * Self-эндпоинты + просмотр чужих профилей с проверкой доступа.
+ * Не использует ADMIN-guard — доступ решается внутри (ADMIN / self /
+ * DataAccessGrant).
  */
 @UseGuards(JwtAuthGuard)
 @Controller('me')
@@ -45,6 +46,16 @@ export class MeController {
   @Get('full')
   myFullProfile(@CurrentUser() me: any) {
     return this.users.fullProfile(me.id);
+  }
+
+  /** Профиль другого сотрудника — доступ через canViewProfile. */
+  @Get('profile/:id')
+  async viewProfile(@Param('id') id: string, @CurrentUser() me: any) {
+    const ok = await this.users.canViewProfile(me.id, me.role, id);
+    if (!ok) {
+      throw new BadRequestException('Нет доступа к данным этого сотрудника');
+    }
+    return this.users.fullProfile(id);
   }
 }
 
@@ -115,5 +126,27 @@ export class UsersController {
   @Delete(':id/documents/:docId')
   deleteDocument(@Param('id') id: string, @Param('docId') docId: string) {
     return this.users.deleteDocument(id, docId);
+  }
+
+  /** Список тех, кому выдан доступ к данным этого сотрудника. */
+  @Get(':id/access')
+  listAccess(@Param('id') id: string) {
+    return this.users.listGrantsForTarget(id);
+  }
+
+  /** Выдать доступ к данным сотрудника :id пользователю grantedToId. */
+  @Post(':id/access')
+  grantAccess(
+    @Param('id') id: string,
+    @Body() body: { grantedToId: string },
+    @CurrentUser() me: any,
+  ) {
+    if (!body.grantedToId) throw new BadRequestException('grantedToId обязателен');
+    return this.users.grantAccess(body.grantedToId, id, me.id);
+  }
+
+  @Delete(':id/access/:granteeId')
+  revokeAccess(@Param('id') id: string, @Param('granteeId') granteeId: string) {
+    return this.users.revokeAccess(granteeId, id);
   }
 }

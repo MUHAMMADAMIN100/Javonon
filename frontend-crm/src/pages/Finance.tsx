@@ -9,11 +9,14 @@ import {
   INCOME_CATEGORIES,
   EXPENSE_CATEGORIES,
   CreateTransactionDto,
+  PRODUCT_CATEGORIES,
   listTransactions,
   createTransaction,
   deleteTransaction,
   financeSummary,
   pendingPayments,
+  financeIncomeSources,
+  financeIncomeByProduct,
   FinanceSummary,
 } from '../api/finance';
 import { listStudents } from '../api/students';
@@ -85,6 +88,18 @@ export default function Finance() {
     },
   });
   const topManagers = topManagersQuery.data ?? [];
+
+  const incomeSourcesQuery = useQuery({
+    queryKey: ['finance', 'income-sources', monthStart],
+    queryFn: () => financeIncomeSources({ from: monthStart }),
+  });
+  const incomeSources = incomeSourcesQuery.data ?? [];
+
+  const incomeByProductQuery = useQuery({
+    queryKey: ['finance', 'income-by-product', monthStart],
+    queryFn: () => financeIncomeByProduct({ from: monthStart }),
+  });
+  const incomeByProduct = incomeByProductQuery.data ?? [];
 
   const paymentsKey = keys.payments.list({ status: 'PENDING' });
   const paymentsQuery = useQuery({
@@ -408,6 +423,42 @@ export default function Finance() {
         </div>
       )}
 
+      {/* Диаграммы: источники дохода + доход по продуктам */}
+      {(incomeSources.length > 0 || incomeByProduct.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 32 }}>
+          {incomeSources.length > 0 && (
+            <div className="card" style={{ padding: 24 }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+                color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
+              }}>INCOME SOURCES · MONTH</div>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
+                Источники <em style={{ fontFamily: 'Times New Roman, Georgia, serif' }}>дохода.</em>
+              </h3>
+              <BarList
+                items={incomeSources.map((s) => ({ label: s.label, value: s.amount, sub: `${s.count} шт` }))}
+                colors={['#3b82f6', '#06b6d4', '#f59e0b', '#10b981', '#94a3b8']}
+              />
+            </div>
+          )}
+          {incomeByProduct.length > 0 && (
+            <div className="card" style={{ padding: 24 }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+                color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
+              }}>BY PRODUCT · MONTH</div>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
+                Доход <em style={{ fontFamily: 'Times New Roman, Georgia, serif' }}>по продуктам.</em>
+              </h3>
+              <BarList
+                items={incomeByProduct.map((p) => ({ label: p.product, value: p.amount, sub: `${p.count} шт` }))}
+                colors={['#7c3aed', '#db2777', '#0891b2', '#16a34a', '#ea580c', '#64748b']}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Заявки на оплату от клиентов (от студентов) — ждут подтверждения бухгалтера */}
       {paymentRequests.length > 0 && (
         <div style={{ marginBottom: 32 }}>
@@ -708,6 +759,7 @@ function TransactionForm({
   // Расширенные поля для финансового модуля
   const [paymentChannel, setPaymentChannel] = useState<string>('CASH');
   const [paymentKind, setPaymentKind] = useState<string>('FULL');
+  const [productCategory, setProductCategory] = useState<string>('');
   const [payerName, setPayerName] = useState('');
   const [receiptKind, setReceiptKind] = useState<string>('RECEIPT');
   const [noReceiptReason, setNoReceiptReason] = useState('');
@@ -758,6 +810,7 @@ function TransactionForm({
         managerId: managerId || null,
         paymentChannel: paymentChannel as any,
         ...(type === 'INCOME' && { paymentKind: paymentKind as any }),
+        ...(type === 'INCOME' && productCategory && { productCategory }),
         ...(payerName.trim() && { payerName: payerName.trim() }),
         ...(type === 'EXPENSE' && {
           receiptKind: receiptKind as any,
@@ -898,6 +951,18 @@ function TransactionForm({
                 <option value="FULL">Полная</option>
                 <option value="PREPAYMENT">Предоплата</option>
                 <option value="ADDITIONAL">Доплата</option>
+                <option value="OWNER_INVESTMENT">Вложение собственника</option>
+              </select>
+            </div>
+          )}
+          {type === 'INCOME' && (
+            <div className="form-group">
+              <label>Продукт</label>
+              <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)}>
+                <option value="">— не указан —</option>
+                {PRODUCT_CATEGORIES.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
               </select>
             </div>
           )}
@@ -1080,6 +1145,41 @@ function RevenueChart({ points }: { points: TimeseriesPoint[] }) {
           ПРИБЫЛЬ
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Универсальный список с прогресс-барами (для диаграмм). */
+function BarList({ items, colors }: {
+  items: Array<{ label: string; value: number; sub?: string }>;
+  colors: string[];
+}) {
+  const total = items.reduce((s, x) => s + x.value, 0);
+  if (total === 0) {
+    return <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 16 }}>Нет данных</div>;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {items.map((it, i) => {
+        const pct = (it.value / total) * 100;
+        const color = colors[i % colors.length];
+        return (
+          <div key={it.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+              <span style={{ fontSize: 13 }}>
+                {it.label}{it.sub && <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11 }}>{it.sub}</span>}
+              </span>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>
+                {it.value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
+                <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11 }}>({pct.toFixed(0)}%)</span>
+              </span>
+            </div>
+            <div style={{ height: 8, background: 'var(--bg-soft)', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: color }} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

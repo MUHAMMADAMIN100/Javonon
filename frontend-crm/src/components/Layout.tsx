@@ -19,10 +19,11 @@ const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
   '/salary': { eyebrow: 'PAYROLL · 09', pre: 'Зарплата', em: 'команды.' },
   '/kpi': { eyebrow: 'KPI · 10', pre: 'Эффективность', em: 'каждого.' },
   '/reports': { eyebrow: 'DAILY · 11', pre: 'Мой', em: 'отчёт.' },
-  '/chat': { eyebrow: 'CHAT · 12', pre: 'Внутренний', em: 'чат.' },
-  '/lms': { eyebrow: 'LMS · 13', pre: 'Курсы', em: 'и материалы.' },
-  '/partners': { eyebrow: 'PARTNERS · 14', pre: 'Партнёрская', em: 'программа.' },
-  '/me': { eyebrow: 'PROFILE · 15', pre: 'Мой', em: 'кабинет.' },
+  '/calls': { eyebrow: 'CALLS · 12', pre: 'Журнал', em: 'звонков.' },
+  '/chat': { eyebrow: 'CHAT · 13', pre: 'Внутренний', em: 'чат.' },
+  '/lms': { eyebrow: 'LMS · 14', pre: 'Курсы', em: 'и материалы.' },
+  '/partners': { eyebrow: 'PARTNERS · 15', pre: 'Партнёрская', em: 'программа.' },
+  '/me': { eyebrow: 'PROFILE · 16', pre: 'Мой', em: 'кабинет.' },
 };
 
 export default function Layout() {

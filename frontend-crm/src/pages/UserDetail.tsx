@@ -11,11 +11,15 @@ import {
   uploadUserDocument,
 } from '../api/userProfile';
 import { useUI } from '../ui/Dialogs';
+import { useAuth } from '../store/auth';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
+  const role = useAuth((s) => s.user?.role);
   if (!id) return null;
-  return <ProfileView userId={id} isAdmin />;
+  // isAdmin определяет показывать ли HR-редактор / загрузку документов /
+  // выдачу доступа. Сотрудник с grant'ом видит профиль read-only.
+  return <ProfileView userId={id} isAdmin={role === 'ADMIN'} />;
 }
 
 export function MyProfile() {
@@ -227,6 +231,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         )}
       </section>
 
+      {/* Доступ к данным — только для админа */}
+      {isAdmin && <AccessSection userId={realId} userName={user.fullName} />}
+
       {/* Ежедневные отчёты текущего месяца */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>Отчёты этого месяца</h3>
@@ -395,5 +402,111 @@ function DocUploader({ userId, onUploaded }: { userId: string; onUploaded: () =>
         <input type="file" hidden onChange={upload} disabled={uploading} />
       </label>
     </div>
+  );
+}
+
+function AccessSection({ userId, userName }: { userId: string; userName: string }) {
+  const { toast, confirm } = useUI();
+  const qc = useQueryClient();
+  const [pickUserId, setPickUserId] = useState('');
+
+  const grantsQuery = useQuery({
+    queryKey: ['user', userId, 'access'],
+    queryFn: async () => {
+      const m = await import('../api/userProfile');
+      return m.listUserAccess(userId);
+    },
+  });
+  const usersQuery = useQuery({
+    queryKey: ['users', 'list'],
+    queryFn: async () => {
+      const m = await import('../api/users');
+      return m.listUsers();
+    },
+  });
+  const grants = grantsQuery.data ?? [];
+  const users = (usersQuery.data ?? []).filter(
+    (u: any) => u.id !== userId && !grants.some((g) => g.grantedTo.id === u.id),
+  );
+
+  const grant = async () => {
+    if (!pickUserId) return;
+    try {
+      const m = await import('../api/userProfile');
+      await m.grantUserAccess(userId, pickUserId);
+      setPickUserId('');
+      qc.invalidateQueries({ queryKey: ['user', userId, 'access'] });
+      toast('Доступ выдан', 'success');
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
+  };
+
+  const revoke = async (granteeId: string) => {
+    const ok = await confirm({
+      title: 'Отозвать доступ?',
+      message: 'Пользователь больше не сможет видеть данные этого сотрудника.',
+      danger: true,
+      confirmText: 'Отозвать',
+    });
+    if (!ok) return;
+    try {
+      const m = await import('../api/userProfile');
+      await m.revokeUserAccess(userId, granteeId);
+      qc.invalidateQueries({ queryKey: ['user', userId, 'access'] });
+      toast('Доступ отозван', 'success');
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
+  };
+
+  return (
+    <section className="card" style={{ padding: 22, marginBottom: 14 }}>
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 6 }}>
+        Доступ к данным
+      </h3>
+      <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 14 }}>
+        Кто (кроме администраторов) может видеть полное досье «{userName}».
+      </p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <select
+          value={pickUserId}
+          onChange={(e) => setPickUserId(e.target.value)}
+          style={{ flex: '1 1 220px', padding: 9, border: '1px solid var(--border)', borderRadius: 8 }}
+        >
+          <option value="">— выбери сотрудника —</option>
+          {users.map((u: any) => (
+            <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>
+          ))}
+        </select>
+        <button className="btn btn-sm btn-primary" onClick={grant} disabled={!pickUserId}>
+          Выдать доступ
+        </button>
+      </div>
+      {grants.length === 0 ? (
+        <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>
+          Доступ выдан только администраторам
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {grants.map((g) => (
+            <div key={g.id} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8,
+            }}>
+              <span style={{ fontSize: 14 }}>
+                {g.grantedTo.fullName}
+                <span style={{ color: 'var(--text-soft)', fontSize: 12, marginLeft: 6 }}>
+                  ({g.grantedTo.role})
+                </span>
+              </span>
+              <button className="btn btn-sm btn-danger" onClick={() => revoke(g.grantedTo.id)}>
+                Отозвать
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

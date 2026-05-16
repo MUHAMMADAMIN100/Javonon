@@ -19,6 +19,7 @@ import Finance from './pages/Finance';
 import Salary from './pages/Salary';
 import Kpi from './pages/Kpi';
 import Reports from './pages/Reports';
+import Calls from './pages/Calls';
 import Chat from './pages/Chat';
 import Lms from './pages/LMS';
 import Partners from './pages/Partners';
@@ -50,10 +51,13 @@ export default function App() {
         <Route path="/programs" element={<Programs />} />
         <Route path="/users" element={<Users />} />
         <Route path="/users/:id" element={<UserDetail />} />
+        {/* /profile/:id — для сотрудников с выданным доступом к чужому досье */}
+        <Route path="/profile/:id" element={<UserDetail />} />
         <Route path="/me" element={<MyProfile />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/time" element={<TimeTracker />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/calls" element={<Calls />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/salary" element={<Salary />} />
         <Route path="/kpi" element={<Kpi />} />

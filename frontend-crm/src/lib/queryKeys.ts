@@ -85,4 +85,9 @@ export const keys = {
     mine: (p: Record<string, unknown> = {}) => ['reports', 'mine', p] as const,
     admin: (p: Record<string, unknown> = {}) => ['reports', 'admin', p] as const,
   },
+  calls: {
+    all: ['calls'] as const,
+    list: (p: Record<string, unknown> = {}) => ['calls', 'list', p] as const,
+    stats: (p: Record<string, unknown> = {}) => ['calls', 'stats', p] as const,
+  },
 } as const;
