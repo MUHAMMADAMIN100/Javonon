@@ -82,4 +82,18 @@ export class UpdateUserDto {
   @Min(0)
   @Max(100)
   kpiTargetPct?: number;
+
+  // Шаг авто-повышения KPI каждый месяц (% пунктов). 0 = выключено.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(10)
+  kpiAutoStepPct?: number;
+
+  // Потолок авто-повышения — KPI не вырастет выше этого значения.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  kpiMaxPct?: number;
 }

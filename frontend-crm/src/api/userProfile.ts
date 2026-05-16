@@ -23,6 +23,8 @@ export interface FullProfile {
     hourlyRate?: number | null;
     bonusPercent?: number | null;
     kpiTargetPct?: number | null;
+    kpiAutoStepPct?: number | null;
+    kpiMaxPct?: number | null;
     createdAt: string;
   };
   documents: UserDocument[];
@@ -107,6 +109,8 @@ export const updateUserHR = (id: string, patch: Partial<{
   hourlyRate: number;
   bonusPercent: number;
   kpiTargetPct: number;
+  kpiAutoStepPct: number;
+  kpiMaxPct: number;
   role: string;
 }>) => api.patch(`/users/${id}`, patch).then((r) => r.data);
 

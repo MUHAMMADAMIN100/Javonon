@@ -67,6 +67,8 @@ export class UsersService {
         hourlyRate: true,
         bonusPercent: true,
         kpiTargetPct: true,
+        kpiAutoStepPct: true,
+        kpiMaxPct: true,
         createdAt: true,
       },
     });
@@ -322,6 +324,8 @@ export class UsersService {
     if (dto.hourlyRate !== undefined) data.hourlyRate = dto.hourlyRate;
     if (dto.bonusPercent !== undefined) data.bonusPercent = dto.bonusPercent;
     if (dto.kpiTargetPct !== undefined) data.kpiTargetPct = dto.kpiTargetPct;
+    if (dto.kpiAutoStepPct !== undefined) data.kpiAutoStepPct = dto.kpiAutoStepPct;
+    if (dto.kpiMaxPct !== undefined) data.kpiMaxPct = dto.kpiMaxPct;
 
     // Защита: если меняем роль с ADMIN на не-ADMIN — убедимся что это
     // не последний ADMIN. Иначе систему некому будет администрировать.
@@ -359,6 +363,8 @@ export class UsersService {
         hourlyRate: true,
         bonusPercent: true,
         kpiTargetPct: true,
+        kpiAutoStepPct: true,
+        kpiMaxPct: true,
         createdAt: true,
         password: passwordToVerify ? true : false,
       } as any,

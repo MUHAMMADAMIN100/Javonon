@@ -91,6 +91,10 @@ model User {
   hiredAt       DateTime?
   // Цель по плану продаж в % от общего количества лидов (например 1.0 = 1%)
   kpiTargetPct  Float?  @default(1)
+  // Авто-повышение KPI: каждый месяц kpiTargetPct растёт на этот шаг (% пунктов).
+  // 0 = выключено. Ограничено сверху kpiMaxPct.
+  kpiAutoStepPct Float? @default(0)
+  kpiMaxPct      Float? @default(3)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

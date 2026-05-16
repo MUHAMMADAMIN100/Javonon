@@ -80,7 +80,15 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <Field label="Фикс/мес" value={fmtMoney(salary.baseSalary)} />
           <Field label="Почасовая" value={fmtMoney(salary.hourlyRate)} />
           <Field label="Бонус %" value={`${salary.bonusPercent}%`} />
-          <Field label="KPI цель" value={`${kpi.targetPct}% от лидов`} />
+          <Field
+            label="KPI цель"
+            value={
+              `${kpi.targetPct}% от лидов` +
+              ((user.kpiAutoStepPct ?? 0) > 0
+                ? ` · авто +${user.kpiAutoStepPct}%/мес до ${user.kpiMaxPct ?? 3}%`
+                : '')
+            }
+          />
         </div>
         <p style={{ marginTop: 12, fontSize: 13, color: 'var(--text-soft)' }}>
           <b>Формула:</b> Зарплата = фикс + почасовая × часы + ({salary.bonusPercent}% × продажи) + KPI-бонус − штрафы
@@ -307,6 +315,8 @@ function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId
   const [hourlyRate, setHourlyRate] = useState(String(user.hourlyRate ?? 0));
   const [bonusPercent, setBonusPercent] = useState(String(user.bonusPercent ?? 0));
   const [kpiTargetPct, setKpiTargetPct] = useState(String(user.kpiTargetPct ?? 1));
+  const [kpiAutoStepPct, setKpiAutoStepPct] = useState(String(user.kpiAutoStepPct ?? 0));
+  const [kpiMaxPct, setKpiMaxPct] = useState(String(user.kpiMaxPct ?? 3));
 
   const save = async () => {
     try {
@@ -318,6 +328,8 @@ function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId
         hourlyRate: Number(hourlyRate) || 0,
         bonusPercent: Number(bonusPercent) || 0,
         kpiTargetPct: Number(kpiTargetPct) || 0,
+        kpiAutoStepPct: Number(kpiAutoStepPct) || 0,
+        kpiMaxPct: Number(kpiMaxPct) || 0,
       });
       toast('Сохранено', 'success');
       setOpen(false);
@@ -345,6 +357,11 @@ function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId
         <LabelInput label="Почасовая" value={hourlyRate} onChange={setHourlyRate} type="number" />
         <LabelInput label="Бонус %" value={bonusPercent} onChange={setBonusPercent} type="number" />
         <LabelInput label="KPI цель %" value={kpiTargetPct} onChange={setKpiTargetPct} type="number" />
+        <LabelInput label="Авто-рост KPI / мес (0 = выкл)" value={kpiAutoStepPct} onChange={setKpiAutoStepPct} type="number" />
+        <LabelInput label="Потолок KPI %" value={kpiMaxPct} onChange={setKpiMaxPct} type="number" />
+      </div>
+      <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-soft)' }}>
+        Авто-рост: 1-го числа каждого месяца KPI-цель повышается на указанный шаг, пока не достигнет потолка.
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
         <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)}>Отмена</button>

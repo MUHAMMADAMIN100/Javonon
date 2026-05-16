@@ -214,6 +214,53 @@ export class CronService {
   }
 
   /**
+   * 1-го числа каждого месяца в 06:00 — авто-повышение KPI.
+   * Для сотрудников с включённым шагом (kpiAutoStepPct > 0) поднимаем
+   * план продаж на этот шаг, но не выше kpiMaxPct. По ТЗ: «со временем
+   * повышать KPI — у нас уже большой поток лидов».
+   */
+  @Cron('0 6 1 * *', { timeZone: 'Asia/Dushanbe' })
+  async kpiMonthlyIncrease() {
+    this.logger.log('Cron: kpiMonthlyIncrease');
+    const users = await this.prisma.user.findMany({
+      where: {
+        role: { in: ['ADMIN', 'EMPLOYEE'] },
+        kpiAutoStepPct: { gt: 0 },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        kpiTargetPct: true,
+        kpiAutoStepPct: true,
+        kpiMaxPct: true,
+      },
+    });
+
+    let raised = 0;
+    for (const u of users) {
+      const current = u.kpiTargetPct ?? 1;
+      const step = u.kpiAutoStepPct ?? 0;
+      const cap = u.kpiMaxPct ?? current;
+      // Округляем до 0.1 — KPI вида 1.0 / 1.1 / 1.2 %.
+      const next = Math.round(Math.min(current + step, cap) * 10) / 10;
+      if (next <= current) continue;
+
+      await this.prisma.user.update({
+        where: { id: u.id },
+        data: { kpiTargetPct: next },
+      });
+      await this.notifications.notifyUser(u.id, {
+        type: 'KPI_RAISED',
+        title: '📈 План продаж повышен',
+        message: `Твой KPI вырос с ${current}% до ${next}% от потока лидов.`,
+        payload: { from: current, to: next },
+      });
+      raised++;
+    }
+    this.logger.log(`KPI raised for ${raised}/${users.length} employees`);
+  }
+
+  /**
    * Cleanup retention: раз в неделю удаляем старые записи которые иначе
    * растут безлимитно. ActivityLog — основной источник раздувания БД
    * (записи каждый PATCH/DELETE студента), Notification — старые прочитанные
