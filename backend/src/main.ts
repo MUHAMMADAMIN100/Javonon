@@ -7,6 +7,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
 
+  // SIGTERM от Railway/Docker → onModuleDestroy → prisma.$disconnect().
+  // Без этого каждый редеплой оставляет в Postgres «висящие» TCP-соединения,
+  // которые попадают в логи как «SSL error: unexpected eof while reading» /
+  // «Connection reset by peer» и постепенно съедают max_connections.
+  app.enableShutdownHooks();
+
   const corsOrigins = (config.get<string>('CORS_ORIGINS') || '')
     .split(',')
     .map((o) => o.trim())
