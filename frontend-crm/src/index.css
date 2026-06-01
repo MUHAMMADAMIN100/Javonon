@@ -122,7 +122,22 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sidebar-nav {
   flex: 1; padding: 20px 12px;
   display: flex; flex-direction: column; gap: 2px;
+  /* min-height: 0 + overflow-y: auto — без этого 17 пунктов меню не
+     помещаются на коротких экранах: контейнер расползался и нижние
+     пункты + блок пользователя вылезали ниже видимой области. Теперь
+     сама навигация скроллится внутри себя, логотип и user-блок
+     остаются на месте. */
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
 }
+.sidebar-nav::-webkit-scrollbar { width: 6px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12); border-radius: 3px;
+}
+.sidebar-nav::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
 .sidebar-nav::before {
   content: 'НАВИГАЦИЯ';
   font-family: var(--font-mono);
