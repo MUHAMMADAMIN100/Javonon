@@ -1,20 +1,25 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'framer-motion';
 import { createUser, deleteUser, listUsers, updateUser } from '../api/users';
 import type { Role, User } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, passwordRule, required, validateAll } from '../utils/validators';
 import ChangePasswordModal from '../components/ChangePasswordModal';
+import PasswordInput from '../components/PasswordInput';
+import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
+
+const EMPTY_FORM = { email: '', fullName: '', password: '', role: 'EMPLOYEE' as Role };
 
 export default function Users() {
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ email: '', fullName: '', password: '', role: 'EMPLOYEE' as Role });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -49,7 +54,7 @@ export default function Users() {
     invalidate: [keys.users.all],
     onSuccess: () => {
       setCreating(false);
-      setForm({ email: '', fullName: '', password: '', role: 'EMPLOYEE' });
+      setForm(EMPTY_FORM);
       setTouched({});
       setError(null);
     },
@@ -79,6 +84,23 @@ export default function Users() {
     createMut.mutate(form);
   };
 
+  const openCreate = () => {
+    // Сбрасываем форму ДО открытия — иначе при повторном открытии
+    // в полях останутся данные с прошлой попытки.
+    setForm(EMPTY_FORM);
+    setTouched({});
+    setError(null);
+    setCreating(true);
+  };
+
+  const closeCreate = () => {
+    if (createMut.isPending) return;
+    setCreating(false);
+    setForm(EMPTY_FORM);
+    setTouched({});
+    setError(null);
+  };
+
   const onChangeRole = (u: User, role: Role) => {
     updateMut.mutate({ id: u.id, patch: { role } });
   };
@@ -102,7 +124,7 @@ export default function Users() {
     <div className="card">
       <div className="card-header">
         <h2 className="card-title">Пользователи системы</h2>
-        {!creating && <button className="btn btn-primary" onClick={() => setCreating(true)}>+ Добавить</button>}
+        <button className="btn btn-primary" onClick={openCreate}>+ Добавить</button>
       </div>
       <div className="card-body">
         <div className="filters">
@@ -112,68 +134,6 @@ export default function Users() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        {creating && (
-          <form onSubmit={onCreate} style={{ marginBottom: 22, padding: 24, background: 'var(--bg-soft)', border: '1px solid var(--border-soft)', borderRadius: 18 }}>
-            {error && <div className="error-banner">{error}</div>}
-            <div className="form-grid-2">
-              <div className="form-group">
-                <label>ФИО *</label>
-                <input
-                  value={form.fullName}
-                  onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                  onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
-                  className={showErr('fullName') ? 'input-error' : ''}
-                  maxLength={100}
-                  required
-                />
-                {showErr('fullName') && <div className="form-error-text">{formErrors.fullName}</div>}
-              </div>
-              <div className="form-group">
-                <label>Email *</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-                  className={showErr('email') ? 'input-error' : ''}
-                  required
-                />
-                {showErr('email') && <div className="form-error-text">{formErrors.email}</div>}
-              </div>
-              <div className="form-group">
-                <label>Пароль * <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— мин. 8 симв., буквы и цифры</span></label>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-                  className={showErr('password') ? 'input-error' : ''}
-                  minLength={8}
-                  required
-                />
-                {showErr('password') && <div className="form-error-text">{formErrors.password}</div>}
-              </div>
-              <div className="form-group">
-                <label>Роль</label>
-                <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-                  <option value="EMPLOYEE">Сотрудник</option>
-                  <option value="ADMIN">Администратор</option>
-                  <option value="ACCOUNTANT">Бухгалтер</option>
-                </select>
-              </div>
-            </div>
-            <div className="form-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setCreating(false)}>Отмена</button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={formInvalid}
-                title={formInvalid ? 'Исправьте ошибки в форме' : ''}
-              >Создать</button>
-            </div>
-          </form>
-        )}
-
         <div className="table-wrap">
           <table className="table">
             <thead>
@@ -216,6 +176,124 @@ export default function Users() {
           </table>
         </div>
       </div>
+      <AnimatePresence>
+        {creating && (
+          <motion.div
+            className="dialog-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeCreate}
+          >
+            <motion.form
+              className="dialog-card"
+              style={{ maxWidth: 520 }}
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              onSubmit={onCreate}
+              // autoComplete="off" на форме + нестандартные name на полях ниже —
+              // чтобы браузер не подставлял сохранённый логин/пароль админа
+              // в форму создания НОВОГО сотрудника.
+              autoComplete="off"
+            >
+              <div className="dialog-icon">
+                <Icon name="person_add" size={28} />
+              </div>
+              <div className="dialog-title">Новый сотрудник</div>
+              <div className="dialog-message" style={{ marginBottom: 16 }}>
+                Заполни данные нового пользователя системы.
+              </div>
+
+              {error && (
+                <div className="error-banner" style={{ marginBottom: 12, textAlign: 'left' }}>
+                  {error}
+                </div>
+              )}
+
+              {/* Скрытые декойные поля — Chrome/Safari пытаются автозаполнить
+                  ПЕРВЫЕ найденные email/password. Подставляем им фейковые,
+                  чтобы реальные поля ниже остались пустыми. */}
+              <input type="text" name="fake-username" autoComplete="username" style={{ display: 'none' }} />
+              <input type="password" name="fake-password" autoComplete="current-password" style={{ display: 'none' }} />
+
+              <div className="form-group" style={{ textAlign: 'left', marginBottom: 12 }}>
+                <label>ФИО *</label>
+                <input
+                  name="newUserFullName"
+                  value={form.fullName}
+                  onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                  onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
+                  className={showErr('fullName') ? 'input-error' : ''}
+                  maxLength={100}
+                  autoComplete="off"
+                  autoFocus
+                  required
+                />
+                {showErr('fullName') && <div className="form-error-text">{formErrors.fullName}</div>}
+              </div>
+
+              <div className="form-group" style={{ textAlign: 'left', marginBottom: 12 }}>
+                <label>Email *</label>
+                <input
+                  type="email"
+                  name="newUserEmail"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                  className={showErr('email') ? 'input-error' : ''}
+                  autoComplete="off"
+                  required
+                />
+                {showErr('email') && <div className="form-error-text">{formErrors.email}</div>}
+              </div>
+
+              <div className="form-group" style={{ textAlign: 'left', marginBottom: 12 }}>
+                <label>
+                  Пароль * <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— мин. 8 симв., буквы и цифры</span>
+                </label>
+                <PasswordInput
+                  name="newUserPassword"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+                  className={showErr('password') ? 'input-error' : ''}
+                  minLength={8}
+                  autoComplete="new-password"
+                  required
+                />
+                {showErr('password') && <div className="form-error-text">{formErrors.password}</div>}
+              </div>
+
+              <div className="form-group" style={{ textAlign: 'left', marginBottom: 16 }}>
+                <label>Роль</label>
+                <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
+                  <option value="EMPLOYEE">Сотрудник</option>
+                  <option value="ADMIN">Администратор</option>
+                  <option value="ACCOUNTANT">Бухгалтер</option>
+                </select>
+              </div>
+
+              <div className="dialog-actions">
+                <button type="button" className="btn btn-secondary" onClick={closeCreate} disabled={createMut.isPending}>
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={formInvalid || createMut.isPending}
+                  title={formInvalid ? 'Исправьте ошибки в форме' : ''}
+                >
+                  {createMut.isPending ? 'Создаём…' : 'Создать'}
+                </button>
+              </div>
+            </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <ChangePasswordModal
         open={!!pwdTarget}
         mode={
