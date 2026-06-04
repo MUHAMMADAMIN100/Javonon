@@ -114,6 +114,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
 
   // Elevated-only (управление)
   const adminLinks = elevated ? [
+    { to: '/pipelines', icon: 'route', label: 'Воронки' },
     { to: '/lms', icon: 'menu_book', label: 'Обучение' },
     { to: '/partners', icon: 'handshake', label: 'Партнёры' },
     { to: '/activity', icon: 'history', label: 'Активность' },

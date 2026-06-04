@@ -21,6 +21,7 @@ import Kpi from './pages/Kpi';
 import Reports from './pages/Reports';
 import Calls from './pages/Calls';
 import Settings from './pages/Settings';
+import Pipelines from './pages/Pipelines';
 import Chat from './pages/Chat';
 import Lms from './pages/LMS';
 import Partners from './pages/Partners';
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/calls" element={<Calls />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/pipelines" element={<Pipelines />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/salary" element={<Salary />} />
         <Route path="/kpi" element={<Kpi />} />
