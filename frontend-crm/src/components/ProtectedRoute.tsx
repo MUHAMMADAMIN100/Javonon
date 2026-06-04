@@ -14,6 +14,11 @@ const ROUTE_ROLES: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: '/activity', roles: ['ADMIN', 'ACCOUNTANT'] },
   { prefix: '/lms', roles: ['ADMIN', 'ACCOUNTANT'] },
   { prefix: '/partners', roles: ['ADMIN', 'ACCOUNTANT'] },
+  // Новые admin/founder-страницы — раньше component-level guard был
+  // только в Settings.tsx; остальные могли отображать UI до 403 от API.
+  { prefix: '/settings', roles: ['FOUNDER'] },
+  { prefix: '/pipelines', roles: ['ADMIN', 'ACCOUNTANT'] },
+  { prefix: '/massmail', roles: ['ADMIN', 'ACCOUNTANT'] },
 ];
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
