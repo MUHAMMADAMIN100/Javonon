@@ -1197,6 +1197,86 @@ model WorkLocation {
   @@index([isActive])
 }
 
+// --- Sprint F: Внешние интеграции (WhatsApp / Instagram / Telegram) ---
+
+enum ExternalMessageChannel {
+  WHATSAPP
+  INSTAGRAM
+  TELEGRAM
+  SMS
+}
+
+enum ExternalMessageDirection {
+  IN
+  OUT
+}
+
+enum ExternalMessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+// Универсальное хранилище сообщений из внешних каналов. Сюда падает
+// inbox от WhatsApp/Instagram webhooks; и outbox для отправленных
+// сообщений из CRM. Может быть привязано к клиенту (Application или
+// Student) — для построения единой ленты переписки в карточке клиента.
+model ExternalMessage {
+  id              String                    @id @default(uuid())
+  externalId      String?                   // id у внешнего провайдера
+  channel         ExternalMessageChannel
+  direction       ExternalMessageDirection
+  status          ExternalMessageStatus     @default(PENDING)
+  fromHandle      String?                   // e.g. +992...., @insta_user
+  toHandle        String?
+  content         String?                   // текст
+  mediaUrl        String?
+  applicationId   String?
+  studentId       String?
+  sentAt          DateTime?
+  receivedAt      DateTime?
+  rawPayload      Json?                     // полный payload от webhook'а
+  createdAt       DateTime                  @default(now())
+
+  @@index([channel, direction])
+  @@index([applicationId])
+  @@index([studentId])
+  @@index([externalId])
+}
+
+// Кампания массовой рассылки. По ТЗ §10 — рассылка по всем лидам
+// (акции, новые программы).
+enum MassMailStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELED
+  FAILED
+}
+
+model MassMailCampaign {
+  id          String                  @id @default(uuid())
+  name        String
+  channel     ExternalMessageChannel
+  subject     String?
+  body        String                  // markdown / plain
+  audience    Json                    // {filter: 'all-leads' | 'paid-students' | ...}
+  status      MassMailStatus          @default(DRAFT)
+  sentCount   Int                     @default(0)
+  failedCount Int                     @default(0)
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdById String?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([status])
+}
+
 // --- Sprint E: Воронки продаж ---
 
 // Воронка продаж. Может быть несколько — например, отдельная для

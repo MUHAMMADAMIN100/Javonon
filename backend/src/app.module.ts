@@ -41,6 +41,10 @@ import { CallsModule } from './calls/calls.module';
 import { OffersModule } from './offers/offers.module';
 import { SettingsModule } from './settings/settings.module';
 import { SalesModule } from './sales/sales.module';
+import { WhatsappModule } from './integrations/whatsapp/whatsapp.module';
+import { InstagramModule } from './integrations/instagram/instagram.module';
+import { TelephonyModule } from './integrations/telephony/telephony.module';
+import { MassmailModule } from './integrations/massmail/massmail.module';
 
 @Module({
   imports: [
@@ -90,6 +94,10 @@ import { SalesModule } from './sales/sales.module';
     OffersModule,
     SettingsModule,
     SalesModule,
+    WhatsappModule,
+    InstagramModule,
+    TelephonyModule,
+    MassmailModule,
   ],
   controllers: [HealthController],
   providers: [
