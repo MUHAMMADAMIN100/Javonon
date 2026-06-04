@@ -97,6 +97,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
       { to: '/tasks', icon: 'task_alt', label: 'Задачи' },
     ] : []),
     { to: '/chat', icon: 'forum', label: 'Чат' },
+    ...(isWorkforce ? [{ to: '/inbox', icon: 'inbox', label: 'Входящие' }] : []),
     { to: '/time', icon: 'schedule', label: 'Время' },
     ...(isWorkforce ? [
       { to: '/reports', icon: 'description', label: 'Мои отчёты' },
@@ -115,6 +116,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   // Elevated-only (управление)
   const adminLinks = elevated ? [
     { to: '/pipelines', icon: 'route', label: 'Воронки' },
+    { to: '/massmail', icon: 'campaign', label: 'Рассылки' },
     { to: '/lms', icon: 'menu_book', label: 'Обучение' },
     { to: '/partners', icon: 'handshake', label: 'Партнёры' },
     { to: '/activity', icon: 'history', label: 'Активность' },
