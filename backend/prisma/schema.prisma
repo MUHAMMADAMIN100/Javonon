@@ -133,15 +133,54 @@ model User {
   accessGrantsReceived  DataAccessGrant[] @relation("AccessGrantee")
   accessGrantsToMe      DataAccessGrant[] @relation("AccessTarget")
   callLogs              CallLog[]     @relation("CallLogUser")
+  offerSignatures       OfferSignature[]
 }
 
 // Документы сотрудника (паспорт, контракт, дипломы и т.п.). По
 // аналогии со студенческими Document. Cascade-delete при удалении User.
 enum UserDocumentType {
   PASSPORT
+  PHOTO        // фото для профиля/HR
   CONTRACT
   DIPLOMA
+  OFFER        // подписанная копия оферты (если сохраняем PDF)
   OTHER
+}
+
+// Оферта — текст соглашения, который сотрудник должен прочитать и
+// подписать онлайн при первом входе. Хранится отдельной моделью, чтобы
+// админ мог редактировать и versionировать. В системе допустима только
+// ОДНА isActive=true оферта; новая запись со сменой текста создаёт
+// новую версию и автоматически делает старую неактивной.
+model OfferTemplate {
+  id        String   @id @default(uuid())
+  title     String   @default("Оферта сотрудника")
+  content   String   // markdown / plain text
+  version   Int      @default(1)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  signatures OfferSignature[]
+
+  @@index([isActive])
+}
+
+// Подпись оферты конкретным сотрудником. После создания запись не
+// меняется — это аудит-лог согласия. Уникальная пара (userId, offerId)
+// — повторно подписать ту же версию нельзя.
+model OfferSignature {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offerId   String
+  offer     OfferTemplate @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  signedAt  DateTime @default(now())
+  ip        String?
+  userAgent String?
+
+  @@unique([userId, offerId])
+  @@index([userId])
 }
 
 model UserDocument {

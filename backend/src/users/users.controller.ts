@@ -58,6 +58,38 @@ export class MeController {
     }
     return this.users.fullProfile(id);
   }
+
+  /**
+   * Сотрудник сам загружает свой документ (паспорт, фото, диплом).
+   * type — UserDocumentType. По ТЗ при добавлении сотрудника он сам
+   * должен заполнять портал.
+   */
+  @Post('documents')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: userDocStorage,
+      limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '209715200', 10) },
+    }),
+  )
+  uploadMyDocument(
+    @CurrentUser() me: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { type?: string; comment?: string },
+  ) {
+    if (!file) throw new BadRequestException('Файл не загружен');
+    return this.users.addDocument(me.id, {
+      type: body.type || 'OTHER',
+      url: `/uploads/${file.filename}`,
+      originalName: file.originalname,
+      size: file.size,
+      comment: body.comment,
+    });
+  }
+
+  @Delete('documents/:docId')
+  deleteMyDocument(@CurrentUser() me: any, @Param('docId') docId: string) {
+    return this.users.deleteDocument(me.id, docId);
+  }
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)

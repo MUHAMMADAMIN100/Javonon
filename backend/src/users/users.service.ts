@@ -211,7 +211,7 @@ export class UsersService {
     comment?: string;
   }) {
     await this.findOne(userId);
-    const VALID = ['PASSPORT', 'CONTRACT', 'DIPLOMA', 'OTHER'];
+    const VALID = ['PASSPORT', 'PHOTO', 'CONTRACT', 'DIPLOMA', 'OFFER', 'OTHER'];
     const t = (doc.type || 'OTHER').toUpperCase();
     if (!VALID.includes(t)) throw new BadRequestException('Неверный тип документа');
     return this.prisma.userDocument.create({

@@ -38,6 +38,7 @@ import { KnowledgeModule } from './knowledge/knowledge.module';
 import { DailyReportsModule } from './daily-reports/daily-reports.module';
 import { PartnersModule } from './partners/partners.module';
 import { CallsModule } from './calls/calls.module';
+import { OffersModule } from './offers/offers.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { CallsModule } from './calls/calls.module';
     DailyReportsModule,
     PartnersModule,
     CallsModule,
+    OffersModule,
   ],
   controllers: [HealthController],
   providers: [

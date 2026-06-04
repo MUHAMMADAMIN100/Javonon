@@ -4,12 +4,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FullProfile,
   deleteUserDocument,
+  deleteMyDocument,
   fmtMinutes,
   fmtMoney,
   getUserFullProfile,
   updateUserHR,
   uploadUserDocument,
+  uploadMyDocument,
+  USER_DOCUMENT_LABEL,
+  type UserDocumentType,
 } from '../api/userProfile';
+import { offerCurrent, offerSign, type CurrentOfferState } from '../api/offers';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
@@ -32,6 +37,7 @@ export function MyProfile() {
 function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
   const qc = useQueryClient();
   const { toast, confirm } = useUI();
+  const meStore = useAuth((s) => s.user);
   const queryKey = isAdmin ? ['user', userId, 'full'] : ['me', 'full'];
 
   const { data, isLoading, error } = useQuery<FullProfile>({
@@ -49,6 +55,11 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
   const { user, salary, penalties, sales, attendance, kpi, documents, dailyReports } = data;
   const realId = user.id;
+  // Self-view: пользователь смотрит свой профиль (/me или /users/:id своего id).
+  // Тогда даём ему те же возможности — загрузить/удалить свой документ,
+  // подписать оферту.
+  const isSelf = !isAdmin || meStore?.id === user.id;
+  const canManageDocs = isAdmin || isSelf;
 
   return (
     <>
@@ -192,10 +203,19 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         )}
       </section>
 
+      {/* Оферта — только в self-view (сотрудник подписывает свою). */}
+      {!isAdmin && <OfferSection />}
+
       {/* Документы */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>Документы</h3>
-        {isAdmin && <DocUploader userId={realId} onUploaded={() => qc.invalidateQueries({ queryKey })} />}
+        {canManageDocs && (
+          <DocUploader
+            userId={realId}
+            useSelfApi={!isAdmin}
+            onUploaded={() => qc.invalidateQueries({ queryKey })}
+          />
+        )}
         {documents.length === 0 ? (
           <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center', marginTop: 8 }}>Документов нет</div>
         ) : (
@@ -214,7 +234,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                   </div>
                 </div>
                 <a href={d.url} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">Открыть</a>
-                {isAdmin && (
+                {canManageDocs && (
                   <button
                     className="btn btn-sm btn-danger"
                     onClick={async () => {
@@ -226,7 +246,11 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                       });
                       if (!ok) return;
                       try {
-                        await deleteUserDocument(realId, d.id);
+                        if (isAdmin) {
+                          await deleteUserDocument(realId, d.id);
+                        } else {
+                          await deleteMyDocument(d.id);
+                        }
                         qc.invalidateQueries({ queryKey });
                         toast('Документ удалён', 'success');
                       } catch (e: any) {
@@ -280,12 +304,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   );
 }
 
-const LABEL: Record<string, string> = {
-  PASSPORT: 'Паспорт',
-  CONTRACT: 'Контракт',
-  DIPLOMA: 'Диплом',
-  OTHER: 'Другое',
-};
+// Используем общий словарь из api/userProfile.
+const LABEL = USER_DOCUMENT_LABEL;
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -387,9 +407,17 @@ function LabelInput({ label, value, onChange, type = 'text' }: any) {
   );
 }
 
-function DocUploader({ userId, onUploaded }: { userId: string; onUploaded: () => void }) {
+function DocUploader({
+  userId,
+  useSelfApi = false,
+  onUploaded,
+}: {
+  userId: string;
+  useSelfApi?: boolean;
+  onUploaded: () => void;
+}) {
   const { toast } = useUI();
-  const [type, setType] = useState('PASSPORT');
+  const [type, setType] = useState<UserDocumentType>('PASSPORT');
   const [uploading, setUploading] = useState(false);
 
   const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -397,7 +425,11 @@ function DocUploader({ userId, onUploaded }: { userId: string; onUploaded: () =>
     if (!file) return;
     setUploading(true);
     try {
-      await uploadUserDocument(userId, file, type);
+      if (useSelfApi) {
+        await uploadMyDocument(file, type);
+      } else {
+        await uploadUserDocument(userId, file, type);
+      }
       toast('Документ загружен', 'success');
       onUploaded();
     } catch (e: any) {
@@ -410,8 +442,9 @@ function DocUploader({ userId, onUploaded }: { userId: string; onUploaded: () =>
 
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <select value={type} onChange={(e) => setType(e.target.value)} style={{ padding: 8, border: '1px solid var(--border)', borderRadius: 8 }}>
+      <select value={type} onChange={(e) => setType(e.target.value as UserDocumentType)} style={{ padding: 8, border: '1px solid var(--border)', borderRadius: 8 }}>
         <option value="PASSPORT">Паспорт</option>
+        <option value="PHOTO">Фотография</option>
         <option value="CONTRACT">Контракт</option>
         <option value="DIPLOMA">Диплом</option>
         <option value="OTHER">Другое</option>
@@ -524,6 +557,90 @@ function AccessSection({ userId, userName }: { userId: string; userName: string 
               </button>
             </div>
           ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Секция «Оферта» в self-кабинете. Сотрудник видит текст оферты, ставит
+ * галку «согласен» и нажимает «Подписать». После подписи — read-only с
+ * датой и фразой о согласии. Состояние тянется одним запросом
+ * `/offers/current` (там же и сам текст, и signed/signedAt).
+ */
+function OfferSection() {
+  const qc = useQueryClient();
+  const { toast } = useUI();
+  const [agreed, setAgreed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const query = useQuery<CurrentOfferState>({
+    queryKey: ['offers', 'current'],
+    queryFn: () => offerCurrent(),
+  });
+  const data = query.data;
+
+  if (query.isLoading) {
+    return <section className="card" style={{ padding: 22, marginBottom: 14 }}>Загружаем оферту…</section>;
+  }
+  if (!data) return null;
+
+  const onSign = async () => {
+    setBusy(true);
+    try {
+      await offerSign(data.offer.id);
+      toast('Оферта подписана', 'success');
+      qc.invalidateQueries({ queryKey: ['offers', 'current'] });
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Не удалось подписать', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card" style={{ padding: 22, marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, margin: 0 }}>
+          Оферта · v{data.offer.version}
+        </h3>
+        {data.signed && (
+          <span style={{
+            fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 999,
+            background: '#dcfce7', color: '#15803d',
+          }}>
+            ПОДПИСАНА {data.signedAt ? new Date(data.signedAt).toLocaleDateString('ru-RU') : ''}
+          </span>
+        )}
+      </div>
+      <div style={{
+        maxHeight: 280,
+        overflowY: 'auto',
+        padding: 14,
+        background: 'var(--bg-soft)',
+        border: '1px solid var(--border-soft)',
+        borderRadius: 10,
+        whiteSpace: 'pre-wrap',
+        fontSize: 13,
+        lineHeight: 1.55,
+        color: 'var(--text)',
+      }}>
+        {data.offer.content}
+      </div>
+      {!data.signed && (
+        <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+            Я прочитал(а) оферту и согласен(на) с условиями.
+          </label>
+          <button
+            className="btn btn-sm btn-primary"
+            onClick={onSign}
+            disabled={!agreed || busy}
+            style={{ marginLeft: 'auto' }}
+          >
+            {busy ? 'Подписываем…' : 'Подписать'}
+          </button>
         </div>
       )}
     </section>

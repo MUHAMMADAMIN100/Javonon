@@ -1,8 +1,25 @@
 import { api } from './client';
 
+export type UserDocumentType =
+  | 'PASSPORT'
+  | 'PHOTO'
+  | 'CONTRACT'
+  | 'DIPLOMA'
+  | 'OFFER'
+  | 'OTHER';
+
+export const USER_DOCUMENT_LABEL: Record<UserDocumentType, string> = {
+  PASSPORT: 'Паспорт',
+  PHOTO: 'Фотография',
+  CONTRACT: 'Контракт',
+  DIPLOMA: 'Диплом',
+  OFFER: 'Оферта',
+  OTHER: 'Прочее',
+};
+
 export interface UserDocument {
   id: string;
-  type: 'PASSPORT' | 'CONTRACT' | 'DIPLOMA' | 'OTHER';
+  type: UserDocumentType;
   url: string;
   originalName?: string | null;
   size?: number | null;
@@ -127,6 +144,20 @@ export const uploadUserDocument = (id: string, file: File, type: string, comment
 
 export const deleteUserDocument = (id: string, docId: string) =>
   api.delete(`/users/${id}/documents/${docId}`).then((r) => r.data);
+
+// Self-загрузка: сотрудник сам грузит свой документ через /me/documents.
+export const uploadMyDocument = (file: File, type: UserDocumentType, comment?: string) => {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('type', type);
+  if (comment) fd.append('comment', comment);
+  return api.post<UserDocument>('/me/documents', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data);
+};
+
+export const deleteMyDocument = (docId: string) =>
+  api.delete(`/me/documents/${docId}`).then((r) => r.data);
 
 // Точечный доступ к данным сотрудника
 export interface AccessGrant {
