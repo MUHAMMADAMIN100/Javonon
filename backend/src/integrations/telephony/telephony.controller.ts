@@ -22,18 +22,34 @@ export class TelephonyController {
 
   /**
    * TwiML endpoint — Twilio дёргает при исходящем звонке через Device.
-   * Возвращает XML «куда дозваниваться».
+   * Возвращает XML «куда дозваниваться». ?u=<userId> прокидывается
+   * во вложенный recordingStatusCallback URL, чтобы мы знали кому
+   * писать в CallLog.
    */
   @Post('voice')
   @Header('Content-Type', 'application/xml')
-  voice(@Body() body: any, @Query('To') toQuery?: string) {
+  voice(
+    @Body() body: any,
+    @Query('To') toQuery?: string,
+    @Query('u') userId?: string,
+  ) {
     const to = body?.To || toQuery || '';
-    return this.tel.buildOutboundTwiML(to);
+    return this.tel.buildOutboundTwiML(to, userId);
   }
 
   /** Webhook от Twilio со статусом звонка. Auth — query-token (?u=<userId>). */
   @Post('call-status')
   callStatus(@Body() body: any, @Query('u') userId?: string) {
     return this.tel.handleCallStatus(body, userId);
+  }
+
+  /**
+   * Webhook RecordingStatusCallback — приходит после завершения записи.
+   * URL сюда передаём в TwiML через recordingStatusCallback. Заполняет
+   * CallLog.recordingUrl (по ТЗ §6f).
+   */
+  @Post('recording-status')
+  recordingStatus(@Body() body: any) {
+    return this.tel.handleRecordingStatus(body);
   }
 }

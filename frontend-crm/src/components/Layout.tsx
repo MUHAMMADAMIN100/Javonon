@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
 import RealtimeStatusBanner from './RealtimeStatusBanner';
+import Dialpad from './Dialpad';
 import Icon from '../Icon';
 
 const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
@@ -57,6 +58,7 @@ export default function Layout() {
   return (
     <div className={`app-layout${mobileNavOpen ? ' nav-open' : ''}`}>
       <RealtimeStatusBanner />
+      <Dialpad />
       <Sidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <AnimatePresence>
         {mobileNavOpen && (

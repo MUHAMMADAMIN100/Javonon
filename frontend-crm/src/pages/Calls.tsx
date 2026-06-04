@@ -328,7 +328,14 @@ export default function Calls() {
                   {CALL_OUTCOME_LABEL[c.outcome]}
                 </td>
                 <td style={{ fontFamily: 'var(--font-mono)' }}>{fmtDuration(c.durationSeconds)}</td>
-                <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{c.notes || '—'}</td>
+                <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>
+                  {c.notes || '—'}
+                  {c.recordingUrl && (
+                    <div style={{ marginTop: 4 }}>
+                      <audio src={c.recordingUrl} controls preload="none" style={{ height: 28, width: '100%', maxWidth: 220 }} />
+                    </div>
+                  )}
+                </td>
                 <td>
                   <button
                     className="icon-btn"

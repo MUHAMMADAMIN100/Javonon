@@ -59,15 +59,72 @@ export class TelephonyService {
    * Webhook Voice URL — Twilio вызывает, чтобы получить TwiML инструкцию
    * "куда дальше дозваниваться". Возвращаем XML <Response><Dial>+...</Dial>
    * </Response>.
+   *
+   * 6f: запись разговора. Атрибут record="record-from-answer" просит
+   * Twilio начать запись с момента ответа (что соответствует ТЗ §6g —
+   * длительность тоже с момента ответа). Webhook recordingStatusCallback
+   * вызывается, когда запись завершена — туда приходит RecordingUrl,
+   * и мы сохраняем его в CallLog.recordingUrl.
+   *
+   * publicBase — публичный URL бэкенда (из env PUBLIC_API_BASE),
+   * нужен чтобы Twilio мог дотянуться до /recording-status.
    */
-  buildOutboundTwiML(to: string): string {
+  buildOutboundTwiML(to: string, userId?: string): string {
     const callerId = this.config.get<string>('TWILIO_CALLER_ID') || '';
+    const publicBase = this.config.get<string>('PUBLIC_API_BASE') || '';
     const safeTo = to.replace(/[^\d+]/g, '');
+    const recordingCallback = publicBase
+      ? `${publicBase}/api/integrations/telephony/recording-status${userId ? `?u=${userId}` : ''}`
+      : '';
+    // record="record-from-answer-dual" — пишем оба канала разговора
+    // отдельно, начиная с момента ответа. trim="trim-silence" чтобы
+    // не пилить тишину в начале/конце.
+    const recordAttr = `record="record-from-answer-dual"`;
+    const callbackAttr = recordingCallback
+      ? ` recordingStatusCallback="${recordingCallback}" recordingStatusCallbackEvent="completed"`
+      : '';
     return `<?xml version="1.0" encoding="UTF-8"?><Response>
-      <Dial callerId="${callerId}" answerOnBridge="true">
+      <Dial callerId="${callerId}" answerOnBridge="true" ${recordAttr}${callbackAttr}>
         <Number>${safeTo}</Number>
       </Dial>
     </Response>`;
+  }
+
+  /**
+   * Webhook RecordingStatusCallback — Twilio шлёт когда запись готова.
+   * Payload содержит RecordingSid, RecordingUrl, CallSid, RecordingDuration.
+   * Ищем CallLog по notes (CallSid) и проставляем recordingUrl + дополняем
+   * длительность из RecordingDuration если ранее была 0.
+   */
+  async handleRecordingStatus(payload: any) {
+    try {
+      const callSid = payload?.CallSid as string | undefined;
+      const recordingUrl = payload?.RecordingUrl as string | undefined;
+      const recordingDuration = parseInt(payload?.RecordingDuration || '0', 10);
+      if (!callSid || !recordingUrl) return { ok: false };
+
+      // Twilio возвращает URL без расширения; mp3 — самый совместимый.
+      const url = recordingUrl.endsWith('.mp3') ? recordingUrl : `${recordingUrl}.mp3`;
+
+      const log = await this.prisma.callLog.findFirst({
+        where: { notes: { contains: callSid } },
+      });
+      if (log) {
+        await this.prisma.callLog.update({
+          where: { id: log.id },
+          data: {
+            recordingUrl: url,
+            // Если длительность не была заполнена в /call-status — берём
+            // recordingDuration как ближайшее доступное.
+            ...(log.durationSeconds === 0 && recordingDuration > 0 ? { durationSeconds: recordingDuration } : {}),
+          },
+        });
+      }
+      return { ok: true };
+    } catch (e: any) {
+      this.logger.error(`Twilio recording-status error: ${e.message}`);
+      return { ok: false };
+    }
   }
 
   /**
