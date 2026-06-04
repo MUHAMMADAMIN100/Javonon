@@ -64,6 +64,41 @@ async function main() {
     }
   }
 
+  // 3. КРИТИЧНО: меняем DEFAULT колонки User.role с EMPLOYEE на SALES_MANAGER.
+  // Без этого Postgres не даёт дропнуть значение EMPLOYEE из enum, потому
+  // что оно используется как default. Prisma db push не делает этот ALTER
+  // в правильном порядке и падает с «column ... default ... references ...».
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "User" ALTER COLUMN "role" SET DEFAULT 'SALES_MANAGER'`,
+    );
+    console.log(`  ✓ User.role default → SALES_MANAGER`);
+  } catch (e: any) {
+    if (/does not exist/i.test(e.message || '')) {
+      console.log(`  · User table not yet exists — skip default change`);
+    } else {
+      console.warn(`  ! Failed to set default: ${e.message}`);
+    }
+  }
+
+  // 4. Создаём колонку User.roles ЗАРАНЕЕ. Когда Prisma db push видит
+  // одновременное изменение enum + добавление новой колонки того же
+  // enum-типа, у него ломается порядок миграции и он жалуется на
+  // «column roles does not exist» во время AlterEnum. Если колонка уже
+  // существует — он просто пропустит её создание.
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "roles" "Role"[] NOT NULL DEFAULT '{}'::"Role"[]`,
+    );
+    console.log(`  ✓ User.roles column ensured`);
+  } catch (e: any) {
+    if (/does not exist/i.test(e.message || '')) {
+      console.log(`  · User table or Role type not yet exists — skip roles column`);
+    } else {
+      console.warn(`  ! Failed to add roles column: ${e.message}`);
+    }
+  }
+
   console.log('✅ Role migration complete.');
 }
 
