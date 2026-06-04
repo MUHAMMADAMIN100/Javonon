@@ -27,6 +27,9 @@ export class UpdateStudentDto {
   preferredChannel?: ContactChannel;
 
   @IsOptional()
+  birthday?: string;
+
+  @IsOptional()
   @IsEmail()
   @MaxLength(120)
   email?: string;

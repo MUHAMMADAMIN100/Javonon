@@ -263,6 +263,42 @@ export class CronService {
   }
 
   /**
+   * Каждый день в 09:00 — авто-поздравление клиентов с днём рождения.
+   * По ТЗ §10: автоматические уведомления и поздравления.
+   * Сейчас: создаёт NOTIFICATION для всех staff (чтобы менеджер мог
+   * позвонить лично). Если задана WhatsApp интеграция — можно расширить
+   * и отправлять прямое сообщение клиенту (закомментировано в коде).
+   */
+  @Cron('0 9 * * *', { timeZone: 'Asia/Dushanbe' })
+  async birthdayGreetings() {
+    this.logger.log('Cron: birthdayGreetings');
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    const day = today.getDate();
+
+    // Postgres extract: where extract(month from birthday)=$1 AND day=$2
+    const students = await this.prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, "fullName", phones FROM "Student"
+       WHERE birthday IS NOT NULL
+         AND EXTRACT(MONTH FROM birthday) = $1
+         AND EXTRACT(DAY FROM birthday) = $2`,
+      month, day,
+    );
+
+    if (!students.length) return;
+
+    for (const s of students) {
+      await this.notifications.notifyAllStaff({
+        type: 'STUDENT_BIRTHDAY',
+        title: '🎂 День рождения у студента',
+        message: `Сегодня день рождения у ${s.fullName}. Позвоните поздравить!`,
+        payload: { studentId: s.id, phone: s.phones?.[0] },
+      });
+    }
+    this.logger.log(`Birthday: notified about ${students.length} student(s)`);
+  }
+
+  /**
    * Cleanup retention: раз в неделю удаляем старые записи которые иначе
    * растут безлимитно. ActivityLog — основной источник раздувания БД
    * (записи каждый PATCH/DELETE студента), Notification — старые прочитанные

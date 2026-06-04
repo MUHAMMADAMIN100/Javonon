@@ -115,6 +115,8 @@ export const CONTACT_CHANNEL_LABEL: Record<ContactChannel, string> = {
 export interface Student {
   id: string;
   fullName: string;
+  /** ISO дата рождения (для авто-поздравления cron'ом). */
+  birthday?: string | null;
   phones: string[];
   /** Подписи к phones, синхронные по индексу. */
   phoneLabels?: string[];

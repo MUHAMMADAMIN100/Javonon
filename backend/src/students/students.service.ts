@@ -285,6 +285,10 @@ export class StudentsService {
     if (dto.phones !== undefined) data.phones = dto.phones;
     if (dto.phoneLabels !== undefined) data.phoneLabels = dto.phoneLabels;
     if (dto.preferredChannel !== undefined) data.preferredChannel = dto.preferredChannel;
+    if ((dto as any).birthday !== undefined) {
+      const b = (dto as any).birthday;
+      data.birthday = b ? new Date(b) : null;
+    }
     if (dto.email !== undefined) data.email = dto.email;
     if (dto.photoUrl !== undefined) data.photoUrl = dto.photoUrl;
     if (dto.comment !== undefined) data.comment = dto.comment;
