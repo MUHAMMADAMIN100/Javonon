@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignStudentManager, deleteStudent, ensureStudentApplication, getStudent, regenerateStudentPassword, updateStudent, uploadPhoto } from '../api/students';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Direction, Student, StudentStatus } from '../api/types';
-import { DIRECTION_LABEL, STUDENT_STATUS_LABEL } from '../api/types';
+import { DIRECTION_LABEL, ONBOARDING_STAGE_LABEL, STUDENT_STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
@@ -83,6 +83,7 @@ export default function StudentDetail() {
         direction: student.direction,
         cabinet: student.cabinet,
         status: student.status,
+        onboardingStage: student.onboardingStage || 'WELCOME',
         comment: student.comment || '',
       });
     }
@@ -194,6 +195,7 @@ export default function StudentDetail() {
       direction: form.direction,
       cabinet: parseInt(form.cabinet, 10),
       status: form.status,
+      onboardingStage: form.onboardingStage || undefined,
       comment: form.comment?.trim() || undefined,
     } as any);
   };
@@ -410,6 +412,12 @@ export default function StudentDetail() {
                 <div className="detail-row"><div className="detail-label">Направление</div><div className="detail-value">{DIRECTION_LABEL[student.direction]}</div></div>
                 <div className="detail-row"><div className="detail-label">Кабинет</div><div className="detail-value">№{student.cabinet}</div></div>
                 <div className="detail-row"><div className="detail-label">Статус</div><div className="detail-value">{STUDENT_STATUS_LABEL[student.status]}</div></div>
+                {student.onboardingStage && (
+                  <div className="detail-row">
+                    <div className="detail-label">Онбординг</div>
+                    <div className="detail-value">{ONBOARDING_STAGE_LABEL[student.onboardingStage]}</div>
+                  </div>
+                )}
                 <div className="detail-row"><div className="detail-label">Комментарий</div><div className="detail-value" style={{ whiteSpace: 'pre-wrap' }}>{student.comment || '—'}</div></div>
                 <div className="detail-row"><div className="detail-label">Создан</div><div className="detail-value">{new Date(student.createdAt).toLocaleString('ru-RU')}</div></div>
               </>
@@ -501,14 +509,26 @@ export default function StudentDetail() {
                     {showErr('cabinet') && <div className="form-error-text">{(formErrors as any).cabinet}</div>}
                   </div>
                 </div>
-                <div className="form-group">
-                  <label>Статус</label>
-                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
-                    <option value="ACTIVE">Активный</option>
-                    <option value="PAUSED">Приостановлен</option>
-                    <option value="GRADUATED">Выпустился</option>
-                    <option value="ARCHIVED">В архиве</option>
-                  </select>
+                <div className="form-grid-2">
+                  <div className="form-group">
+                    <label>Статус</label>
+                    <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
+                      <option value="ACTIVE">Активный</option>
+                      <option value="PAUSED">Приостановлен</option>
+                      <option value="GRADUATED">Выпустился</option>
+                      <option value="ARCHIVED">В архиве</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Этап онбординга</label>
+                    <select value={form.onboardingStage || 'WELCOME'} onChange={(e) => setForm({ ...form, onboardingStage: e.target.value })}>
+                      <option value="WELCOME">Приветствие</option>
+                      <option value="DOCS_COLLECTED">Документы собраны</option>
+                      <option value="CABINET_OPENED">Кабинет открыт</option>
+                      <option value="ACADEMY_INTRO">Ознакомление с программой</option>
+                      <option value="ACTIVE">В активной работе</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Комментарий</label>

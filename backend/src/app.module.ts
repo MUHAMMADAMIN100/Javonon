@@ -46,6 +46,7 @@ import { InstagramModule } from './integrations/instagram/instagram.module';
 import { TelephonyModule } from './integrations/telephony/telephony.module';
 import { MassmailModule } from './integrations/massmail/massmail.module';
 import { InboxModule } from './integrations/inbox/inbox.module';
+import { SmsIntegrationModule } from './integrations/sms/sms-integration.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { InboxModule } from './integrations/inbox/inbox.module';
     TelephonyModule,
     MassmailModule,
     InboxModule,
+    SmsIntegrationModule,
   ],
   controllers: [HealthController],
   providers: [

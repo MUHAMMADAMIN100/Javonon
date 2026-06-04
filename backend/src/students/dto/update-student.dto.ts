@@ -1,5 +1,5 @@
 import { IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { ContactChannel, Direction, StudentStatus } from '@prisma/client';
+import { ContactChannel, Direction, OnboardingStage, StudentStatus } from '@prisma/client';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 
@@ -52,6 +52,10 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsEnum(StudentStatus)
   status?: StudentStatus;
+
+  @IsOptional()
+  @IsEnum(OnboardingStage)
+  onboardingStage?: OnboardingStage;
 
   @IsOptional()
   @IsString()

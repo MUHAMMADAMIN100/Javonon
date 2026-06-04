@@ -285,6 +285,7 @@ export class StudentsService {
     if (dto.phones !== undefined) data.phones = dto.phones;
     if (dto.phoneLabels !== undefined) data.phoneLabels = dto.phoneLabels;
     if (dto.preferredChannel !== undefined) data.preferredChannel = dto.preferredChannel;
+    if (dto.onboardingStage !== undefined) data.onboardingStage = dto.onboardingStage;
     if ((dto as any).birthday !== undefined) {
       const b = (dto as any).birthday;
       data.birthday = b ? new Date(b) : null;

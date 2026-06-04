@@ -159,6 +159,10 @@ export const uploadMyDocument = (file: File, type: UserDocumentType, comment?: s
 export const deleteMyDocument = (docId: string) =>
   api.delete(`/me/documents/${docId}`).then((r) => r.data);
 
+/** FOUNDER-only: задать список ролей сотрудника. Первая в массиве станет primary. */
+export const setUserRoles = (userId: string, roles: string[]) =>
+  api.put(`/users/${userId}/roles`, { roles }).then((r) => r.data);
+
 // Точечный доступ к данным сотрудника
 export interface AccessGrant {
   id: string;

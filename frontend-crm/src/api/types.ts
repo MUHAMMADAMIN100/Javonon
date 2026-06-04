@@ -112,6 +112,21 @@ export const CONTACT_CHANNEL_LABEL: Record<ContactChannel, string> = {
   EMAIL: 'Email',
 };
 
+export type OnboardingStage =
+  | 'WELCOME'
+  | 'DOCS_COLLECTED'
+  | 'CABINET_OPENED'
+  | 'ACADEMY_INTRO'
+  | 'ACTIVE';
+
+export const ONBOARDING_STAGE_LABEL: Record<OnboardingStage, string> = {
+  WELCOME: 'Приветствие',
+  DOCS_COLLECTED: 'Документы собраны',
+  CABINET_OPENED: 'Кабинет открыт',
+  ACADEMY_INTRO: 'Ознакомление с программой',
+  ACTIVE: 'В активной работе',
+};
+
 export interface Student {
   id: string;
   fullName: string;
@@ -121,6 +136,8 @@ export interface Student {
   /** Подписи к phones, синхронные по индексу. */
   phoneLabels?: string[];
   preferredChannel?: ContactChannel | null;
+  /** Этап онбординга после оплаты — ведёт клиентский менеджер. */
+  onboardingStage?: OnboardingStage;
   email: string | null;
   photoUrl: string | null;
   direction: Direction;

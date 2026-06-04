@@ -352,10 +352,7 @@ export default function ApplicationDetail() {
 
         {isNew && (
           <>
-            <div className="detail-row"><div className="detail-label">Телефон</div><div className="detail-value">{app.phone}</div></div>
-            <div className="detail-row"><div className="detail-label">Email</div><div className="detail-value">{app.email || '—'}</div></div>
-            <div className="detail-row"><div className="detail-label">Направление</div><div className="detail-value">{DIRECTION_LABEL[app.direction]}</div></div>
-            <div className="detail-row"><div className="detail-label">Комментарий</div><div className="detail-value">{app.comment || '—'}</div></div>
+            <NewApplicationEditor app={app} onSaved={reload} />
             <div className="detail-row"><div className="detail-label">Создана</div><div className="detail-value">{new Date(app.createdAt).toLocaleString('ru-RU')}</div></div>
           </>
         )}
@@ -569,6 +566,123 @@ export default function ApplicationDetail() {
           </>
         )}
       </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Редактор полей самой заявки (до перехода в статус с созданным студентом).
+ * Покрывает phone, secondaryPhone + label, preferredChannel, email,
+ * direction, comment — поля Application'а из ТЗ §8b.
+ */
+function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () => void }) {
+  const { toast } = useUI();
+  const [edit, setEdit] = useState(false);
+  const [phone, setPhone] = useState(app.phone || '');
+  const [secondaryPhone, setSecondaryPhone] = useState(app.secondaryPhone || '');
+  const [secondaryContactLabel, setSecondaryContactLabel] = useState(app.secondaryContactLabel || '');
+  const [preferredChannel, setPreferredChannel] = useState<string>(app.preferredChannel || '');
+  const [email, setEmail] = useState(app.email || '');
+  const [comment, setComment] = useState(app.comment || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await updateApplication(app.id, {
+        phone: phone.trim() || undefined,
+        secondaryPhone: secondaryPhone.trim() || undefined,
+        secondaryContactLabel: secondaryContactLabel.trim() || undefined,
+        preferredChannel: (preferredChannel || undefined) as any,
+        email: email.trim() || undefined,
+        comment: comment.trim() || undefined,
+      } as any);
+      toast('Сохранено', 'success');
+      setEdit(false);
+      onSaved();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!edit) {
+    return (
+      <>
+        <div className="detail-row"><div className="detail-label">Телефон</div><div className="detail-value">{app.phone}</div></div>
+        {app.secondaryPhone && (
+          <div className="detail-row">
+            <div className="detail-label">Доп. телефон</div>
+            <div className="detail-value">
+              {app.secondaryPhone}
+              {app.secondaryContactLabel && (
+                <span style={{ color: 'var(--text-soft)', fontSize: 12, marginLeft: 6 }}>
+                  · {app.secondaryContactLabel}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+        {app.preferredChannel && (
+          <div className="detail-row">
+            <div className="detail-label">Канал связи</div>
+            <div className="detail-value">{app.preferredChannel}</div>
+          </div>
+        )}
+        <div className="detail-row"><div className="detail-label">Email</div><div className="detail-value">{app.email || '—'}</div></div>
+        <div className="detail-row"><div className="detail-label">Направление</div><div className="detail-value">{DIRECTION_LABEL[app.direction]}</div></div>
+        <div className="detail-row"><div className="detail-label">Комментарий</div><div className="detail-value">{app.comment || '—'}</div></div>
+        <div style={{ marginTop: 10 }}>
+          <button className="btn btn-sm btn-secondary" onClick={() => setEdit(true)}>
+            Изменить заявку
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div style={{ padding: 14, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg-soft)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label>Основной телефон</label>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </div>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label>Доп. телефон (мать/отец/др.)</label>
+          <input value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="+992 ..." />
+        </div>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label>Подпись доп. контакта</label>
+          <input value={secondaryContactLabel} onChange={(e) => setSecondaryContactLabel(e.target.value)} placeholder="Отец, Мать..." />
+        </div>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label>Предпочтительный канал</label>
+          <select value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
+            <option value="">—</option>
+            <option value="WHATSAPP">WhatsApp</option>
+            <option value="PHONE">Телефон</option>
+            <option value="INSTAGRAM">Instagram</option>
+            <option value="TELEGRAM">Telegram</option>
+            <option value="EMAIL">Email</option>
+          </select>
+        </div>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label>Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+      </div>
+      <div className="form-group" style={{ marginTop: 12 }}>
+        <label>Комментарий</label>
+        <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+        <button className="btn btn-sm btn-secondary" onClick={() => setEdit(false)} disabled={saving}>Отмена</button>
+        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+          {saving ? 'Сохраняем…' : 'Сохранить'}
+        </button>
       </div>
     </div>
   );

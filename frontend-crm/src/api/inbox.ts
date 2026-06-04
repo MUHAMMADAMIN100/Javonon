@@ -47,3 +47,6 @@ export const sendWhatsapp = (to: string, message: string, ctx?: { applicationId?
 
 export const sendInstagram = (igUserId: string, message: string, ctx?: { applicationId?: string; studentId?: string }) =>
   api.post('/integrations/instagram/send', { igUserId, message, ...ctx }).then((r) => r.data);
+
+export const sendSms = (to: string, message: string, ctx?: { applicationId?: string; studentId?: string }) =>
+  api.post('/integrations/sms/send', { to, message, ...ctx }).then((r) => r.data);

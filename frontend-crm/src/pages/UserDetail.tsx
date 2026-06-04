@@ -11,13 +11,14 @@ import {
   updateUserHR,
   uploadUserDocument,
   uploadMyDocument,
+  setUserRoles,
   USER_DOCUMENT_LABEL,
   type UserDocumentType,
 } from '../api/userProfile';
 import { offerCurrent, offerSign, type CurrentOfferState } from '../api/offers';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
-import { isElevated } from '../lib/roles';
+import { isElevated, isFounder } from '../lib/roles';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -77,13 +78,19 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>Личные данные</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <Field label="Email" value={user.email} />
-          <Field label="Роль" value={user.role} />
+          <Field
+            label="Роли"
+            value={[user.role, ...(user.roles || [])].filter((r, i, a) => r && a.indexOf(r) === i).join(', ')}
+          />
           <Field label="Телефон" value={user.phone || '—'} />
           <Field label="Паспорт №" value={user.passportNo || '—'} />
           <Field label="Принят на работу" value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
           <Field label="Аккаунт создан" value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
         </div>
         {isAdmin && <HREditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />}
+        {isFounder(meStore) && (
+          <RolesEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
+        )}
       </section>
 
       {/* Зарплата — параметры расчёта */}
@@ -644,5 +651,160 @@ function OfferSection() {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * RolesEditor — FOUNDER задаёт МНОЖЕСТВЕННЫЕ роли сотрудника.
+ * Один человек может быть, например, и ADMIN, и ACCOUNTANT. Первая в
+ * массиве становится primary (user.role) — она используется для display
+ * и legacy-проверок. FOUNDER не редактируется через этот UI (его роль
+ * меняется только в seed/CLI).
+ */
+const ASSIGNABLE_ROLES: Array<{ value: string; label: string }> = [
+  { value: 'ADMIN', label: 'Администратор' },
+  { value: 'ACCOUNTANT', label: 'Бухгалтер' },
+  { value: 'SALES_MANAGER', label: 'Менеджер по продажам' },
+  { value: 'CLIENT_MANAGER', label: 'Клиентский менеджер' },
+];
+
+function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; userId: string; onSaved: () => void }) {
+  const { toast } = useUI();
+  const [open, setOpen] = useState(false);
+  const initialRoles = (() => {
+    const set = new Set<string>();
+    if (user.role && user.role !== 'FOUNDER') set.add(user.role);
+    for (const r of user.roles || []) if (r !== 'FOUNDER') set.add(r);
+    return Array.from(set);
+  })();
+  const [primary, setPrimary] = useState(initialRoles[0] || 'SALES_MANAGER');
+  const [extra, setExtra] = useState<Set<string>>(new Set(initialRoles.slice(1)));
+  const [saving, setSaving] = useState(false);
+
+  const isFounderTarget = user.role === 'FOUNDER';
+
+  const toggleExtra = (role: string) => {
+    if (role === primary) return; // primary не может быть в extra
+    setExtra((cur) => {
+      const next = new Set(cur);
+      if (next.has(role)) next.delete(role);
+      else next.add(role);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      // primary первая в массиве, потом extras
+      const roles = [primary, ...Array.from(extra).filter((r) => r !== primary)];
+      await setUserRoles(userId, roles);
+      toast('Роли обновлены', 'success');
+      setOpen(false);
+      onSaved();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isFounderTarget) {
+    return (
+      <div style={{
+        marginTop: 12,
+        padding: 10,
+        background: '#fef3c7',
+        border: '1px solid #fde68a',
+        borderRadius: 8,
+        fontSize: 12,
+        color: '#92400e',
+      }}>
+        Это аккаунт основателя — его роль меняется только через сидер/CLI.
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        className="btn btn-sm btn-secondary"
+        style={{ marginTop: 12, marginLeft: 8 }}
+        onClick={() => setOpen(true)}
+      >
+        Изменить роли (FOUNDER)
+      </button>
+    );
+  }
+
+  return (
+    <div style={{
+      marginTop: 16,
+      padding: 14,
+      border: '1px solid var(--primary)',
+      borderRadius: 10,
+      background: 'var(--bg-soft)',
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.12em',
+        color: 'var(--primary-dark)',
+        marginBottom: 8,
+      }}>
+        FOUNDER · ROLES
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
+          Основная роль (отображается в UI):
+        </label>
+        <select value={primary} onChange={(e) => setPrimary(e.target.value)}>
+          {ASSIGNABLE_ROLES.map((r) => (
+            <option key={r.value} value={r.value}>{r.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>
+          Дополнительные роли (один человек может быть, например, и админ, и бухгалтер):
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {ASSIGNABLE_ROLES
+            .filter((r) => r.value !== primary)
+            .map((r) => {
+              const on = extra.has(r.value);
+              return (
+                <button
+                  key={r.value}
+                  type="button"
+                  onClick={() => toggleExtra(r.value)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 999,
+                    border: '1.5px solid',
+                    borderColor: on ? 'var(--primary)' : 'var(--border)',
+                    background: on ? 'var(--primary-light)' : 'white',
+                    color: on ? 'var(--primary-dark)' : 'var(--text-soft)',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  {on ? '✓ ' : '+ '}{r.label}
+                </button>
+              );
+            })}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>
+          Отмена
+        </button>
+        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+          {saving ? 'Сохраняем…' : 'Сохранить роли'}
+        </button>
+      </div>
+    </div>
   );
 }
