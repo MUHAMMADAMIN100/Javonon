@@ -100,6 +100,17 @@ enum ContactChannel {
   EMAIL
 }
 
+// Onboarding-этапы для уже зачисленного студента (после оплаты).
+// Используются клиентским менеджером для отслеживания прогресса
+// введения студента в курс.
+enum OnboardingStage {
+  WELCOME           // приветствие
+  DOCS_COLLECTED    // собраны документы
+  CABINET_OPENED    // открыт личный кабинет
+  ACADEMY_INTRO     // ознакомление с программой
+  ACTIVE            // в активной работе
+}
+
 model User {
   id         String   @id @default(uuid())
   email      String   @unique
@@ -295,6 +306,7 @@ model Student {
   direction    Direction
   cabinet      Int
   status       StudentStatus @default(ACTIVE)
+  onboardingStage OnboardingStage @default(WELCOME)
   comment      String?
   managerId         String?
   manager           User?         @relation("StudentManager", fields: [managerId], references: [id], onDelete: SetNull)
@@ -1183,5 +1195,40 @@ model WorkLocation {
   updatedAt     DateTime @updatedAt
 
   @@index([isActive])
+}
+
+// --- Sprint E: Воронки продаж ---
+
+// Воронка продаж. Может быть несколько — например, отдельная для
+// бакалавриата, магистратуры, языковых курсов. isDefault указывает
+// воронку, в которую попадают новые лиды без явного выбора.
+model Pipeline {
+  id          String          @id @default(uuid())
+  name        String
+  description String?
+  isDefault   Boolean         @default(false)
+  isActive    Boolean         @default(true)
+  stages      PipelineStage[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([isActive])
+}
+
+// Этап воронки. Порядок задаётся числом order. isClosingStage =
+// true означает «финальный успешный этап» (зачислен).
+model PipelineStage {
+  id              String   @id @default(uuid())
+  pipelineId      String
+  pipeline        Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name            String
+  order           Int
+  color           String?  // hex для UI карточки
+  isClosingStage  Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([pipelineId, order])
+  @@index([pipelineId])
 }
 

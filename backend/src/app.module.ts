@@ -40,6 +40,7 @@ import { PartnersModule } from './partners/partners.module';
 import { CallsModule } from './calls/calls.module';
 import { OffersModule } from './offers/offers.module';
 import { SettingsModule } from './settings/settings.module';
+import { SalesModule } from './sales/sales.module';
 
 @Module({
   imports: [
@@ -88,6 +89,7 @@ import { SettingsModule } from './settings/settings.module';
     CallsModule,
     OffersModule,
     SettingsModule,
+    SalesModule,
   ],
   controllers: [HealthController],
   providers: [

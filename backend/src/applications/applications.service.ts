@@ -12,6 +12,7 @@ import { isElevated } from '../auth/role-utils';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
+import { SalesService } from '../sales/sales.service';
 
 const CABINET_BY_DIRECTION: Record<Direction, number> = {
   BACHELOR: 1,
@@ -57,6 +58,7 @@ export class ApplicationsService {
     private activity: ActivityService,
     private realtime: RealtimeGateway,
     @Optional() private referrals?: ReferralsService,
+    @Optional() private sales?: SalesService,
   ) {}
 
   // Порядок этапов воронки — для определения, "понизили" или "продвинули" заявку
@@ -113,6 +115,13 @@ export class ApplicationsService {
   };
 
   async create(dto: CreateApplicationDto & { ref?: string }) {
+    // Sprint E: авто-распределение лидов. Если managerId не задан явно —
+    // round-robin среди SALES_MANAGER (наименее загруженный).
+    let assignedManagerId: string | null = null;
+    if (this.sales) {
+      try { assignedManagerId = await this.sales.pickManagerForLead(); }
+      catch { /* fallback: оставляем без менеджера */ }
+    }
     const app = await this.prisma.application.create({
       data: {
         fullName: dto.fullName.trim(),
@@ -122,6 +131,7 @@ export class ApplicationsService {
         comment: dto.comment?.trim() || null,
         programId: dto.programId || null,
         source: dto.source || 'LANDING_FORM',
+        managerId: assignedManagerId,
       },
     });
 
