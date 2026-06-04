@@ -18,6 +18,7 @@ import { keys } from '../lib/queryKeys';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import { isElevated } from '../lib/roles';
 
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString('ru-RU', {
@@ -36,7 +37,8 @@ const OUTCOME_COLOR: Record<CallOutcome, string> = {
 export default function Calls() {
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
-  const isAdmin = useAuth((s) => s.user?.role) === 'ADMIN';
+  const me = useAuth((s) => s.user);
+  const isAdmin = isElevated(me);
 
   const listKey = keys.calls.list({ mine: !isAdmin });
   const listQuery = useQuery<CallLog[]>({

@@ -7,8 +7,9 @@ import { leaderboard, type KpiRow } from '../api/kpi';
 import { DIRECTION_LABEL, STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { keys } from '../lib/queryKeys';
+import { isElevated } from '../lib/roles';
 
-function fmtMoney(n: number, c = 'USD') {
+function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 
@@ -22,7 +23,7 @@ const fadeUp = {
 
 export default function Dashboard() {
   const me = useAuth((s) => s.user);
-  const isAdmin = me?.role === 'ADMIN';
+  const isAdmin = isElevated(me);
   const isAccountant = me?.role === 'ACCOUNTANT';
   const showFinance = isAdmin || isAccountant;
 

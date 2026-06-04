@@ -25,49 +25,49 @@ export class LmsController {
 
   @Post('courses')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   create(@CurrentUser() me: any, @Body() body: any) {
     return this.svc.createCourse(me.id, body);
   }
 
   @Patch('courses/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   update(@Param('id') id: string, @Body() body: any) {
     return this.svc.updateCourse(id, body);
   }
 
   @Delete('courses/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   remove(@Param('id') id: string) {
     return this.svc.deleteCourse(id);
   }
 
   @Post('courses/:id/lessons')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   addLesson(@Param('id') courseId: string, @Body() body: any) {
     return this.svc.createLesson(courseId, body);
   }
 
   @Patch('lessons/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   updateLesson(@Param('id') id: string, @Body() body: any) {
     return this.svc.updateLesson(id, body);
   }
 
   @Delete('lessons/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   removeLesson(@Param('id') id: string) {
     return this.svc.deleteLesson(id);
   }
 
   @Post('courses/:id/enroll')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   enrollStudent(@Param('id') courseId: string, @Body() body: { studentId: string }) {
     return this.svc.enroll(body.studentId, courseId, true);
   }

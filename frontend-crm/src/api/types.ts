@@ -1,8 +1,20 @@
-export type Role = 'ADMIN' | 'EMPLOYEE' | 'ACCOUNTANT';
+export type Role =
+  | 'FOUNDER'
+  | 'ADMIN'
+  | 'ACCOUNTANT'
+  | 'SALES_MANAGER'
+  | 'CLIENT_MANAGER'
+  // Legacy: бэкенд нормализует EMPLOYEE → SALES_MANAGER при разборе JWT,
+  // но старые токены/кэш могут вернуть это значение до релогина.
+  | 'EMPLOYEE';
+
 export const ROLE_LABEL: Record<Role, string> = {
+  FOUNDER: 'Основатель',
   ADMIN: 'Администратор',
-  EMPLOYEE: 'Сотрудник',
   ACCOUNTANT: 'Бухгалтер',
+  SALES_MANAGER: 'Менеджер по продажам',
+  CLIENT_MANAGER: 'Клиентский менеджер',
+  EMPLOYEE: 'Менеджер по продажам',
 };
 export type Direction =
   | 'BACHELOR'
@@ -48,6 +60,8 @@ export interface User {
   email: string;
   fullName: string;
   role: Role;
+  /** Дополнительные роли (один человек может быть, например, ADMIN+ACCOUNTANT). */
+  roles?: Role[];
   createdAt?: string;
 }
 

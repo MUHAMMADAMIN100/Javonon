@@ -23,7 +23,12 @@ export class AuthService {
     const ok = await bcrypt.compare(normPassword, user.password);
     if (!ok) throw new UnauthorizedException('Неверный логин или пароль');
 
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      roles: user.roles || [],
+    };
     const token = await this.jwt.signAsync(payload);
 
     return {
@@ -33,6 +38,7 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        roles: user.roles || [],
       },
     };
   }
@@ -45,6 +51,7 @@ export class AuthService {
       email: user.email,
       fullName: user.fullName,
       role: user.role,
+      roles: user.roles || [],
     };
   }
 

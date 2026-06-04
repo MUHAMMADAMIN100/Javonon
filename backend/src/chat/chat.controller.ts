@@ -41,7 +41,7 @@ export class ChatController {
   /** QA-fix #6: одноразовая зачистка дублей direct-rooms. ADMIN-only. */
   @Post('dedupe-direct')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   dedupe() {
     return this.svc.dedupeDirectRooms();
   }

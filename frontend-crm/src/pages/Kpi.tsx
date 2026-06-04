@@ -4,8 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { KpiRow, leaderboard } from '../api/kpi';
 import { ROLE_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
+import { isElevated } from '../lib/roles';
 
-function fmtMoney(n: number, c = 'USD') {
+function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 
@@ -56,7 +57,7 @@ export default function Kpi() {
       </div>
 
       {/* My row highlight if employee */}
-      {me?.role === 'EMPLOYEE' && myRow && (
+      {!isElevated(me) && myRow && (
         <motion.div
           className="bento"
           initial={{ opacity: 0, y: 20 }}
@@ -97,7 +98,7 @@ export default function Kpi() {
       )}
 
       {/* Top performer banner for ADMIN */}
-      {me?.role === 'ADMIN' && top && (
+      {isElevated(me) && top && (
         <motion.div
           className="card"
           initial={{ opacity: 0, y: 20 }}

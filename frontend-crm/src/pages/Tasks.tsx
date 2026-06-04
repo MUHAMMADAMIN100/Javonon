@@ -13,6 +13,7 @@ import { compose, hasErrors, maxLen, minLen, required, validateAll } from '../ut
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
+import { isElevated } from '../lib/roles';
 
 type Scope = 'all' | 'mine';
 
@@ -20,7 +21,7 @@ export default function Tasks() {
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
-  const isAdmin = me?.role === 'ADMIN';
+  const isAdmin = isElevated(me);
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');

@@ -31,7 +31,7 @@ export class ReportsController {
 
   @Get('all')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   allList(
     @Query('userId') userId?: string,
     @Query('from') from?: string,

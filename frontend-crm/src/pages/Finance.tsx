@@ -29,7 +29,7 @@ import { listPayments, confirmPayment, rejectPayment, type Payment, PAYMENT_METH
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
-function fmtMoney(n: number, currency = 'USD'): string {
+function fmtMoney(n: number, currency = 'TJS'): string {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
 }
 
@@ -552,7 +552,7 @@ export default function Finance() {
                     <td style={{ fontWeight: 500 }}>{app.fullName}</td>
                     <td>{app.program?.name || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
                     <td style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 16 }}>
-                      {app.program ? fmtMoney(app.program.cost, app.program.currency || 'USD') : '—'}
+                      {app.program ? fmtMoney(app.program.cost, app.program.currency || 'TJS') : '—'}
                     </td>
                     <td>{app.manager?.fullName || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
                     <td>

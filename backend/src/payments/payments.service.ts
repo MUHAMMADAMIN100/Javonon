@@ -37,7 +37,7 @@ export class PaymentsService {
     }
     // QA-fix #14: проверяем валюту против белого списка реально поддерживаемых.
     const VALID_CURRENCIES = ['USD', 'EUR', 'RUB', 'CNY', 'TJS', 'KZT', 'UZS', 'GBP', 'JPY', 'KRW'];
-    const cur = (dto.currency || 'USD').toUpperCase();
+    const cur = (dto.currency || 'TJS').toUpperCase();
     if (!VALID_CURRENCIES.includes(cur)) {
       throw new BadRequestException(`Неподдерживаемая валюта. Доступно: ${VALID_CURRENCIES.join(', ')}`);
     }

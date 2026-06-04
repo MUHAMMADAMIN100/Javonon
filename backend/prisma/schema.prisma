@@ -8,9 +8,15 @@ datasource db {
 }
 
 enum Role {
+  // FOUNDER — основатель, единственный кто раздаёт роли,
+  // имеет неявный доступ ко всему (см. RolesGuard).
+  FOUNDER
   ADMIN
-  EMPLOYEE
   ACCOUNTANT
+  // Отдел продаж — работают с лидами/заявками
+  SALES_MANAGER
+  // Клиентский менеджер — ведут уже зачисленных студентов
+  CLIENT_MANAGER
 }
 
 enum TimeEntryStatus {
@@ -79,7 +85,12 @@ model User {
   email      String   @unique
   password   String
   fullName   String
-  role       Role     @default(EMPLOYEE)
+  // Основная роль — для UI/исторических проверок.
+  role       Role     @default(SALES_MANAGER)
+  // Дополнительные роли (один человек может быть, например, и ADMIN, и ACCOUNTANT
+  // одновременно). Основатель раздаёт через POST /users/:id/roles. Проверка
+  // в RolesGuard учитывает оба поля.
+  roles      Role[]   @default([])
   // Для зарплатной логики: фиксированная ежемесячная ставка (или почасовая)
   baseSalary Float?   @default(0)
   hourlyRate Float?   @default(0)
@@ -442,7 +453,7 @@ model Transaction {
   type        TransactionType
   category    TransactionCategory
   amount      Float
-  currency    String   @default("USD")
+  currency    String   @default("TJS")
   comment     String?
   date        DateTime @default(now())
 
@@ -505,7 +516,7 @@ model SalaryRecord {
   kpiBonus      Float    @default(0)   // ручной бонус
   penalties     Float    @default(0)   // штрафы (за опоздания и т.п.)
   netAmount     Float    @default(0)   // итог к выплате
-  currency      String   @default("USD")
+  currency      String   @default("TJS")
 
   status      SalaryStatus @default(DRAFT)
   paidAt      DateTime?
@@ -840,7 +851,7 @@ model Payment {
   studentId    String
   student      Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
   amount       Float
-  currency     String         @default("USD")
+  currency     String         @default("TJS")
   method       PaymentMethod  @default(BANK_TRANSFER)
   status       PaymentStatus  @default(PENDING)
   comment      String?
@@ -980,7 +991,7 @@ model Commission {
   amountCents   Int       // итоговое начисление (в копейках/центах)
   baseAmountCents Int     // сумма платежа, с которой считалось
   percent       Int       // % на момент начисления (фриз)
-  currency      String    @default("USD")
+  currency      String    @default("TJS")
   note          String?
 
   status        CommissionStatus @default(PENDING)
@@ -1004,7 +1015,7 @@ model PartnerPayout {
   partner     Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   amountCents Int
-  currency    String   @default("USD")
+  currency    String   @default("TJS")
   method      String?  // CARD/CRYPTO/CASH/OTHER
   details     String?  // реквизиты которые партнёр прислал
   note        String?

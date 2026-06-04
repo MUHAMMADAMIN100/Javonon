@@ -46,7 +46,7 @@ export class DailyReportsController {
   /** ADMIN: список всех отчётов с фильтрами. */
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   adminList(
     @Query('userId') userId?: string,
     @Query('from') from?: string,

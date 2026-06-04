@@ -13,6 +13,7 @@ import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
+import { isElevated } from '../lib/roles';
 
 type Scope = 'all' | 'mine';
 
@@ -27,7 +28,7 @@ export default function Applications() {
   const [status, setStatus] = useState<ApplicationStatus | ''>('');
   const [direction, setDirection] = useState<Direction | ''>('');
   const [manager, setManager] = useState<string>('');
-  const isAdmin = me?.role === 'ADMIN';
+  const isAdmin = isElevated(me);
   // Менеджер видит только свои заявки; админ может переключать.
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
   const [page, setPage] = useState(1);

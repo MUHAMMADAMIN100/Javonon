@@ -15,7 +15,8 @@ export interface FullProfile {
     id: string;
     email: string;
     fullName: string;
-    role: 'ADMIN' | 'EMPLOYEE' | 'ACCOUNTANT';
+    role: 'FOUNDER' | 'ADMIN' | 'ACCOUNTANT' | 'SALES_MANAGER' | 'CLIENT_MANAGER' | 'EMPLOYEE';
+    roles?: string[];
     phone?: string | null;
     passportNo?: string | null;
     hiredAt?: string | null;
@@ -147,6 +148,6 @@ export function fmtMinutes(m: number) {
   return min ? `${h}ч ${min}м` : `${h}ч`;
 }
 
-export function fmtMoney(amount: number, currency = 'USD') {
+export function fmtMoney(amount: number, currency = 'TJS') {
   return `${amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ${currency}`;
 }

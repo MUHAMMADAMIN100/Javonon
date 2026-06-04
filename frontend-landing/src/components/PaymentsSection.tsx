@@ -242,7 +242,7 @@ function NewPaymentForm({ onSubmit, onCancel }: {
   onCancel: () => void;
 }) {
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('TJS');
   const [method, setMethod] = useState<'CARD' | 'BANK_TRANSFER' | 'CASH' | 'CRYPTO' | 'OTHER'>('BANK_TRANSFER');
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);

@@ -20,8 +20,10 @@ export class KpiService {
         ? { ...(filters.from && { gte: filters.from }), ...(filters.to && { lte: filters.to }) }
         : undefined;
 
+    // KPI leaderboard включает всех, кто работает с заявками: ADMIN
+    // (исторически вёл свои), и оба типа менеджеров.
     const users = await this.prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'EMPLOYEE'] } },
+      where: { role: { in: ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] } },
       select: { id: true, fullName: true, role: true, email: true, bonusPercent: true },
     });
 

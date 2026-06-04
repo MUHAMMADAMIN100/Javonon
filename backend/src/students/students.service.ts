@@ -7,6 +7,7 @@ import { UpdateStudentDto } from './dto/update-student.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { isElevated } from '../auth/role-utils';
 
 function generatePassword(length = 8): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -171,16 +172,22 @@ export class StudentsService {
     managerUserId?: string;
     currentUserId?: string;
     currentUserRole?: Role;
+    currentUserRoles?: Role[];
   }) {
     const where: Prisma.StudentWhereInput = {};
     if (filters.direction) where.direction = filters.direction;
     if (filters.status) where.status = filters.status;
     if (filters.cabinet) where.cabinet = filters.cabinet;
     const and: Prisma.StudentWhereInput[] = [];
-    // Менеджеры (EMPLOYEE) всегда видят только своих, независимо от mine.
+    // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только своих,
+    // независимо от mine. Elevated (FOUNDER/ADMIN/ACCOUNTANT) — всех.
+    const elevated = isElevated({
+      role: filters.currentUserRole,
+      roles: filters.currentUserRoles,
+    });
     const restrictToMine =
       (filters.mine && filters.currentUserId) ||
-      (filters.currentUserRole === 'EMPLOYEE' && filters.currentUserId);
+      (!elevated && filters.currentUserId);
     if (restrictToMine) {
       and.push({
         OR: [
@@ -441,10 +448,10 @@ export class StudentsService {
     return { ok: true };
   }
 
-  async stats(user?: { id: string; role: Role }) {
-    // EMPLOYEE видит только своих студентов (где он либо локальный, либо китайский менеджер).
+  async stats(user?: { id: string; role: Role; roles?: Role[] }) {
+    // Менеджеры видят только своих. Elevated (FOUNDER/ADMIN/ACCOUNTANT) — всех.
     const where: Prisma.StudentWhereInput | undefined =
-      user && user.role === 'EMPLOYEE'
+      user && !isElevated(user)
         ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
         : undefined;
     const [total, byCabinet, byDirection, byStatus] = await Promise.all([

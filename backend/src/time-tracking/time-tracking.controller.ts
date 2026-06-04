@@ -111,7 +111,7 @@ export class TimeTrackingController {
 
   @Get('team')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   teamStatus() {
     return this.svc.teamStatus();
   }

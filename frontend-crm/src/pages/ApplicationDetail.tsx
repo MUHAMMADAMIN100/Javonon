@@ -19,6 +19,7 @@ import BackButton from '../components/BackButton';
 import Icon from '../Icon';
 import { motion } from 'framer-motion';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
+import { isElevated } from '../lib/roles';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 
@@ -218,7 +219,7 @@ export default function ApplicationDetail() {
 
   const isNew = app.status === 'NEW';
   const isEnrolled = app.status === 'ENROLLED';
-  const isAdmin = me?.role === 'ADMIN';
+  const isAdmin = isElevated(me);
   const assigned = !!app.managerId || !!app.chinaManagerId;
   const isMine = !assigned || app.managerId === me?.id || app.chinaManagerId === me?.id;
   const canAct = isAdmin || isMine;

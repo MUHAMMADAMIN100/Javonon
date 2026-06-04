@@ -9,7 +9,14 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
-type JwtPayload = { sub: string; email: string; role: 'ADMIN' | 'EMPLOYEE' | 'ACCOUNTANT' | 'STUDENT' };
+type JwtPayload = {
+  sub: string;
+  email: string;
+  role: 'FOUNDER' | 'ADMIN' | 'ACCOUNTANT' | 'SALES_MANAGER' | 'CLIENT_MANAGER' | 'STUDENT' | 'PARTNER';
+  roles?: string[];
+};
+
+const STAFF_ROLES = new Set(['FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER']);
 
 @Injectable()
 @WebSocketGateway({
@@ -80,9 +87,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
       (client.data as any) = { userId: id, role };
 
-      // QA-fix: ACCOUNTANT тоже staff — раньше его не было в комнате,
-      // поэтому он не получал realtime-событий (chat:message, notifications).
-      if (role === 'ADMIN' || role === 'EMPLOYEE' || role === 'ACCOUNTANT') {
+      // Все роли сотрудников (ADMIN/ACCOUNTANT/SALES_MANAGER/CLIENT_MANAGER/
+      // FOUNDER) попадают в комнату 'staff'. Раньше тут была проверка на
+      // EMPLOYEE — теперь её заменяет более явный STAFF_ROLES set.
+      if (STAFF_ROLES.has(role)) {
         client.join('staff');
         client.join(`user:${id}`);
       } else if (role === 'STUDENT') {

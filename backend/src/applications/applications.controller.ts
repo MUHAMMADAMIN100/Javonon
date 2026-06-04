@@ -52,6 +52,7 @@ export class ApplicationsController {
       managerUserId: manager || undefined,
       currentUserId: user?.id,
       currentUserRole: user?.role,
+      currentUserRoles: user?.roles,
     });
   }
 

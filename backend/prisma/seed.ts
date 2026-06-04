@@ -6,12 +6,28 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
+  // FOUNDER — единственный, кто раздаёт роли. Если пароль не задан через env,
+  // используем дефолтный (нужно сменить через /me).
+  const founderEmail = 'founder@javonon.local';
+  const founderPassword = await bcrypt.hash(
+    process.env.FOUNDER_PASSWORD || 'founder123',
+    10,
+  );
+  await prisma.user.upsert({
+    where: { email: founderEmail },
+    update: { role: Role.FOUNDER },
+    create: {
+      email: founderEmail,
+      password: founderPassword,
+      fullName: 'Основатель Javonon',
+      role: Role.FOUNDER,
+      roles: [Role.FOUNDER],
+    },
+  });
+
+  // ADMIN — legacy seed для совместимости со старыми инструкциями.
   const adminEmail = 'admin@javonon.local';
-  const employeeEmail = 'employee@javonon.local';
-
   const adminPassword = await bcrypt.hash('admin123', 10);
-  const employeePassword = await bcrypt.hash('employee123', 10);
-
   await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
@@ -20,17 +36,7 @@ async function main() {
       password: adminPassword,
       fullName: 'Главный администратор',
       role: Role.ADMIN,
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { email: employeeEmail },
-    update: {},
-    create: {
-      email: employeeEmail,
-      password: employeePassword,
-      fullName: 'Айгуль Сотрудник',
-      role: Role.EMPLOYEE,
+      roles: [Role.ADMIN],
     },
   });
 
@@ -69,8 +75,8 @@ async function main() {
   }
 
   console.log('✅ Seed complete.');
-  console.log('   Admin:    admin@javonon.local / admin123');
-  console.log('   Employee: employee@javonon.local / employee123');
+  console.log(`   Founder: ${founderEmail} / ${process.env.FOUNDER_PASSWORD || 'founder123'} (change in /me)`);
+  console.log(`   Admin:   ${adminEmail} / admin123`);
 }
 
 main()

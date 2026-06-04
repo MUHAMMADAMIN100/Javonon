@@ -337,6 +337,13 @@ export class UsersService {
         );
       }
     }
+    // То же для FOUNDER — он один в системе.
+    if (dto.role && dto.role !== 'FOUNDER' && target.role === 'FOUNDER') {
+      const founderCount = await this.prisma.user.count({ where: { role: 'FOUNDER' } });
+      if (founderCount <= 1) {
+        throw new BadRequestException('Нельзя снять роль с единственного FOUNDER.');
+      }
+    }
     if (dto.role) data.role = dto.role;
 
     let passwordToVerify: string | null = null;
@@ -405,7 +412,46 @@ export class UsersService {
         );
       }
     }
+    // То же для FOUNDER
+    if (target.role === 'FOUNDER') {
+      const founderCount = await this.prisma.user.count({ where: { role: 'FOUNDER' } });
+      if (founderCount <= 1) {
+        throw new BadRequestException('Нельзя удалить единственного FOUNDER');
+      }
+    }
     await this.prisma.user.delete({ where: { id } });
     return { ok: true };
+  }
+
+  /**
+   * FOUNDER задаёт список дополнительных ролей сотрудника (User.roles[]).
+   * Первая роль в массиве становится primary (User.role) для UI/историч.
+   * проверок. Если массив пустой — выставляется default SALES_MANAGER.
+   * FOUNDER нельзя добавить через этот endpoint (он единственный, только сидер).
+   */
+  async setRoles(targetId: string, requestedRoles: any[], byFounderId: string) {
+    const VALID: any[] = ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'];
+    const cleaned: any[] = Array.from(
+      new Set(requestedRoles.filter((r) => VALID.includes(r))),
+    );
+    if (cleaned.length === 0) cleaned.push('SALES_MANAGER');
+
+    const target = await this.findOne(targetId);
+    // FOUNDER не разжаловать. Чтобы передать FOUNDER, сначала нужно вручную
+    // создать ещё одного FOUNDER через seed/cli — endpoint не позволяет.
+    if (target.role === 'FOUNDER' && targetId !== byFounderId) {
+      throw new BadRequestException('Нельзя изменить роли другого FOUNDER через этот endpoint');
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: targetId },
+      data: {
+        role: cleaned[0],
+        roles: cleaned,
+      },
+      select: {
+        id: true, email: true, fullName: true, role: true, roles: true,
+      },
+    });
+    return updated;
   }
 }

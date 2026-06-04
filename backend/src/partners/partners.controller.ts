@@ -50,7 +50,7 @@ export class PartnersController {
 /** Админская часть — управление партнёрами. */
 @Controller('admin/partners')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles('ADMIN', 'ACCOUNTANT')
 export class AdminPartnersController {
   constructor(private svc: PartnersService) {}
 

@@ -28,7 +28,7 @@ export class KpiController {
   /** KPI любого сотрудника — только админ. */
   @Get(':userId')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   byUser(@Param('userId') userId: string) {
     return this.svc.forUser(userId);
   }

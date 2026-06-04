@@ -15,6 +15,8 @@ import { listUsers } from '../api/users';
 import { listCourses } from '../api/lms';
 import { financeSummary, listTransactions } from '../api/finance';
 import { listSalaries } from '../api/salary';
+import { hasRole } from '../lib/roles';
+import { ROLE_LABEL, type Role } from '../api/types';
 
 // Map route → prefetch fn. Срабатывает по hover/touchstart на nav-link
 // и грузит данные ДО клика — экран открывается мгновенно с готовым кешем.
@@ -78,14 +80,17 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   const [pwdOpen, setPwdOpen] = useState(false);
   const initials = user?.fullName?.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '?';
 
-  const isAdmin = user?.role === 'ADMIN';
-  const isAccountant = user?.role === 'ACCOUNTANT';
-  const isEmployee = user?.role === 'EMPLOYEE';
+  // FOUNDER неявно везде. ADMIN/ACCOUNTANT — равные «elevated» по ТЗ.
+  // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) видят рабочие зоны (заявки,
+  // студенты, KPI, отчёты), но не финансы/обучение/партнёров/активность.
+  const elevated = hasRole(user, 'FOUNDER', 'ADMIN', 'ACCOUNTANT');
+  const isFounder = hasRole(user, 'FOUNDER');
+  const isWorkforce = hasRole(user, 'FOUNDER', 'ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER');
 
   // CRM core — для всех (Dashboard, Заявки, Студенты, Программы, Задачи, Время, KPI)
   const coreLinks = [
     { to: '/dashboard', icon: 'dashboard', label: 'Дашборд' },
-    ...(isAdmin || isEmployee ? [
+    ...(isWorkforce ? [
       { to: '/applications', icon: 'assignment', label: 'Заявки' },
       { to: '/students', icon: 'school', label: 'Студенты' },
       { to: '/programs', icon: 'menu_book', label: 'Программы' },
@@ -93,7 +98,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     ] : []),
     { to: '/chat', icon: 'forum', label: 'Чат' },
     { to: '/time', icon: 'schedule', label: 'Время' },
-    ...(isAdmin || isEmployee ? [
+    ...(isWorkforce ? [
       { to: '/reports', icon: 'description', label: 'Мои отчёты' },
       { to: '/calls', icon: 'call', label: 'Звонки' },
       { to: '/kpi', icon: 'leaderboard', label: 'KPI' },
@@ -101,18 +106,21 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     { to: '/me', icon: 'person', label: 'Мой профиль' },
   ];
 
-  // Finance — для ADMIN и ACCOUNTANT
-  const financeLinks = (isAdmin || isAccountant) ? [
+  // Finance — для FOUNDER/ADMIN/ACCOUNTANT
+  const financeLinks = elevated ? [
     { to: '/finance', icon: 'payments', label: 'Финансы' },
     { to: '/salary', icon: 'paid', label: 'Зарплата' },
   ] : [];
 
-  // Admin-only
-  const adminLinks = isAdmin ? [
+  // Elevated-only (управление)
+  const adminLinks = elevated ? [
     { to: '/lms', icon: 'menu_book', label: 'Обучение' },
     { to: '/partners', icon: 'handshake', label: 'Партнёры' },
     { to: '/activity', icon: 'history', label: 'Активность' },
     { to: '/users', icon: 'group', label: 'Сотрудники' },
+    ...(isFounder ? [
+      { to: '/settings', icon: 'settings', label: 'Настройки системы' },
+    ] : []),
   ] : [];
 
   const links = [...coreLinks, ...financeLinks, ...adminLinks];
@@ -224,7 +232,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
         </motion.div>
         <div className="user-info">
           <div className="user-name">{user?.fullName}</div>
-          <div className="user-role">{user?.role === 'ADMIN' ? 'Администратор' : 'Сотрудник'}</div>
+          <div className="user-role">{ROLE_LABEL[(user?.role as Role) || 'SALES_MANAGER'] || '—'}</div>
         </div>
         <motion.button
           className="logout-btn"

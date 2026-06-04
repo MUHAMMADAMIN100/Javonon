@@ -87,7 +87,7 @@ export class SalaryService {
       kpiBonus: round(kpiBonus),
       penalties: round(penalties),
       netAmount: round(net),
-      currency: 'USD',
+      currency: 'TJS',
     };
   }
 

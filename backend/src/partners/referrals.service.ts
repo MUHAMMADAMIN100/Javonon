@@ -176,7 +176,7 @@ export class ReferralsService {
           amountCents: commissionCents,
           baseAmountCents: opts.amountCents,
           percent: pct,
-          currency: opts.currency || 'USD',
+          currency: opts.currency || 'TJS',
           note: opts.note,
           status: 'PENDING',
         },

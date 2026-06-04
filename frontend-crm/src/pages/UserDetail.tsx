@@ -12,14 +12,16 @@ import {
 } from '../api/userProfile';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
+import { isElevated } from '../lib/roles';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
-  const role = useAuth((s) => s.user?.role);
+  const me = useAuth((s) => s.user);
   if (!id) return null;
   // isAdmin определяет показывать ли HR-редактор / загрузку документов /
-  // выдачу доступа. Сотрудник с grant'ом видит профиль read-only.
-  return <ProfileView userId={id} isAdmin={role === 'ADMIN'} />;
+  // выдачу доступа. Elevated (FOUNDER/ADMIN/ACCOUNTANT) видит всё.
+  // Сотрудник с grant'ом видит профиль read-only.
+  return <ProfileView userId={id} isAdmin={isElevated(me)} />;
 }
 
 export function MyProfile() {

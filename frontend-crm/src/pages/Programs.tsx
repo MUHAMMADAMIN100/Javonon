@@ -13,6 +13,7 @@ import { compose, hasErrors, maxLen, minLen, positive, required, validateAll } f
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
+import { isElevated } from '../lib/roles';
 
 // QA-fix #3: латиница-only для name/university/city/major.
 // Разрешаем латиницу + пробелы + знаки препинания типичные для названий
@@ -61,7 +62,7 @@ export default function Programs() {
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
-  const isAdmin = me?.role === 'ADMIN';
+  const isAdmin = isElevated(me);
   const [city, setCity] = useState('');
   const [major, setMajor] = useState('');
   const [direction, setDirection] = useState<Direction | ''>('');

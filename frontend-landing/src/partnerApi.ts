@@ -83,7 +83,7 @@ export const partnerRequestPayout = (body: {
   details?: string;
 }) => client.post('/partner/payouts', body).then((r) => r.data);
 
-export function fmtMoney(cents: number, currency = 'USD') {
+export function fmtMoney(cents: number, currency = 'TJS') {
   const v = (cents / 100).toLocaleString('ru-RU', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,

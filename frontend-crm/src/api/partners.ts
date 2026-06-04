@@ -75,7 +75,7 @@ export const adminPayoutPay = (id: string) =>
 export const adminPayoutReject = (id: string) =>
   api.post<AdminPayout>(`/admin/partners/payouts/${id}/reject`).then((r) => r.data);
 
-export function fmtMoneyCents(cents: number, currency = 'USD') {
+export function fmtMoneyCents(cents: number, currency = 'TJS') {
   const v = (cents / 100).toLocaleString('ru-RU', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,

@@ -13,12 +13,25 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; email: string; role: string }) {
+  async validate(payload: {
+    sub: string;
+    email: string;
+    role: string;
+    roles?: string[];
+  }) {
+    // Legacy normalization: токены, выпущенные ДО переезда на новые роли,
+    // содержат 'EMPLOYEE'. После миграции БД эти юзеры уже SALES_MANAGER,
+    // но их старые токены валидны до истечения (7д). Мапим на лету, чтобы
+    // им не пришлось разлогиниваться.
+    const normalize = (r?: string) => (r === 'EMPLOYEE' ? 'SALES_MANAGER' : r);
     return {
       id: payload.sub,
       sub: payload.sub, // для обратной совместимости со старым кодом
       email: payload.email,
-      role: payload.role,
+      role: normalize(payload.role),
+      // Множественные роли — основатель раздаёт через /users/:id/roles.
+      // FOUNDER неявно имеет доступ ко всему (см. RolesGuard).
+      roles: (payload.roles || []).map(normalize),
     };
   }
 }

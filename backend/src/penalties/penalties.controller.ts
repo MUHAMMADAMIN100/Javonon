@@ -34,7 +34,7 @@ export class PenaltiesController {
   }
 
   @Post()
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   create(
     @Body() body: { userId: string; reason?: PenaltyReason; amount: number; details: string; date?: string },
   ) {
@@ -47,14 +47,14 @@ export class PenaltiesController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   remove(@Param('id') id: string) {
     return this.svc.remove(id);
   }
 
   /** Ручной запуск авто-генерации штрафов за вчера — чтобы можно было тыкнуть из CRM. */
   @Post('generate-yesterday')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ACCOUNTANT')
   async runYesterday() {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);

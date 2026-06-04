@@ -106,7 +106,7 @@ export class FinanceService {
         type: dto.type,
         category: dto.category,
         amount: dto.amount,
-        currency: dto.currency || 'USD',
+        currency: dto.currency || 'TJS',
         comment: dto.comment?.trim() || null,
         date: dto.date ? new Date(dto.date) : new Date(),
         studentId: dto.studentId || null,

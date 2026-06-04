@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseGuards,
@@ -60,7 +61,7 @@ export class MeController {
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
+@Roles(Role.ADMIN, Role.ACCOUNTANT)
 @Controller('users')
 export class UsersController {
   constructor(private users: UsersService) {}
@@ -148,5 +149,23 @@ export class UsersController {
   @Delete(':id/access/:granteeId')
   revokeAccess(@Param('id') id: string, @Param('granteeId') granteeId: string) {
     return this.users.revokeAccess(granteeId, id);
+  }
+
+  /**
+   * FOUNDER-only: задать список ролей сотрудника.
+   * roles — массив значений Role. Например ['ADMIN','ACCOUNTANT'].
+   * Только основатель раздаёт роли — гарантия в RolesGuard ниже.
+   */
+  @Put(':id/roles')
+  @Roles(Role.FOUNDER)
+  setRoles(
+    @Param('id') id: string,
+    @Body() body: { roles: Role[] },
+    @CurrentUser() me: any,
+  ) {
+    if (!Array.isArray(body.roles)) {
+      throw new BadRequestException('roles должно быть массивом');
+    }
+    return this.users.setRoles(id, body.roles, me.id);
   }
 }

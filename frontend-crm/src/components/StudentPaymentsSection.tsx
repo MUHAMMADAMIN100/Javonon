@@ -117,7 +117,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
             letterSpacing: '-0.03em',
             color: 'var(--primary-dark)',
           }}>
-            {fmt(totalPaid, transactions[0]?.currency || 'USD')}
+            {fmt(totalPaid, transactions[0]?.currency || 'TJS')}
           </div>
         </div>
       </div>

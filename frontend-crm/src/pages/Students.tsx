@@ -15,6 +15,7 @@ import Pagination from '../components/Pagination';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
+import { isElevated } from '../lib/roles';
 
 type Scope = 'all' | 'mine';
 
@@ -31,7 +32,7 @@ export default function Students() {
   const [stageFilter, setStageFilter] = useState<string>('');
   const [cabinet, setCabinet] = useState('');
   const [manager, setManager] = useState<string>('');
-  const isAdmin = me?.role === 'ADMIN';
+  const isAdmin = isElevated(me);
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
   const [reportOpen, setReportOpen] = useState(false);
   const [reportFrom, setReportFrom] = useState('');

@@ -16,7 +16,7 @@ interface AuthState {
  * не успел отвечть (cold-start Railway). Без этого `me?.id` был null,
  * и в чате все свои сообщения попадали в ветку `isMine=false` → слева.
  */
-function decodeJwt(token: string): { sub?: string; email?: string; role?: string } | null {
+function decodeJwt(token: string): { sub?: string; email?: string; role?: string; roles?: string[] } | null {
   try {
     const payload = token.split('.')[1];
     const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
@@ -56,7 +56,8 @@ export const useAuth = create<AuthState>((set) => ({
           id: claims.sub,
           email: claims.email || '',
           fullName: '',
-          role: (claims.role as any) || 'EMPLOYEE',
+          role: (claims.role as any) || 'SALES_MANAGER',
+          roles: (claims.roles as any) || [],
         } as User,
         initialized: true,
       });

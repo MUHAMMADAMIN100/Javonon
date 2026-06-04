@@ -53,8 +53,8 @@ export class AiService {
 Schema: {"type":"INCOME"|"EXPENSE","category":"TUITION_PAYMENT"|"ADDITIONAL_FEE"|"SALARY"|"RENT"|"UTILITIES"|"MARKETING"|"OFFICE"|"OTHER_INCOME"|"OTHER_EXPENSE","amount":number,"currency":"USD"|"EUR"|"CNY"|"RUB"|"TJS","comment":"string"}
 
 Examples:
-"добавь расход 200$ аренда" → {"type":"EXPENSE","category":"RENT","amount":200,"currency":"USD","comment":"аренда"}
-"студент оплатил 1500$ обучение" → {"type":"INCOME","category":"TUITION_PAYMENT","amount":1500,"currency":"USD","comment":"оплата обучения"}
+"добавь расход 200 сомони аренда" → {"type":"EXPENSE","category":"RENT","amount":200,"currency":"TJS","comment":"аренда"}
+"студент оплатил 1500 сомони обучение" → {"type":"INCOME","category":"TUITION_PAYMENT","amount":1500,"currency":"TJS","comment":"оплата обучения"}
 
 Sentence: "${text}"`,
             },
@@ -97,7 +97,7 @@ Sentence: "${text}"`,
     if (!amountMatch) return null;
     const amount = parseFloat(amountMatch[1].replace(',', '.'));
     const curRaw = (amountMatch[2] || '$').toLowerCase();
-    let currency = 'USD';
+    let currency = 'TJS';
     if (/€|eur|евро/.test(curRaw)) currency = 'EUR';
     else if (/¥|cny|юан/.test(curRaw)) currency = 'CNY';
     else if (/руб|rub/.test(curRaw)) currency = 'RUB';

@@ -40,8 +40,10 @@ export class CronService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    // Все, кто отмечается по графику: ADMIN/ACCOUNTANT/SALES_MANAGER/
+    // CLIENT_MANAGER. FOUNDER не пингуем — он не в общем графике.
     const employees = await this.prisma.user.findMany({
-      where: { role: { in: ['EMPLOYEE', 'ACCOUNTANT'] } },
+      where: { role: { in: ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'] } },
       select: { id: true, fullName: true },
     });
     const todayEntries = await this.prisma.timeEntry.findMany({
@@ -224,7 +226,7 @@ export class CronService {
     this.logger.log('Cron: kpiMonthlyIncrease');
     const users = await this.prisma.user.findMany({
       where: {
-        role: { in: ['ADMIN', 'EMPLOYEE'] },
+        role: { in: ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] },
         kpiAutoStepPct: { gt: 0 },
       },
       select: {

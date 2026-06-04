@@ -19,6 +19,7 @@ import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
+import { isElevated } from '../lib/roles';
 
 export default function Lms() {
   const me = useAuth((s) => s.user);
@@ -26,7 +27,7 @@ export default function Lms() {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
-  const isAdmin = me?.role === 'ADMIN';
+  const isAdmin = isElevated(me);
 
   const coursesKey = keys.lms.courses();
   const coursesQuery = useQuery({

@@ -25,6 +25,7 @@ import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation, tempId } from '../lib/optimistic';
+import { isElevated } from '../lib/roles';
 
 // Базовый URL для статических attachments (chat-uploads).
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
@@ -1289,10 +1290,10 @@ export default function Chat() {
             {/* Actions */}
             {[
               { icon: 'reply', label: 'Ответить', show: !contextMenu.msg.deletedAt, onClick: () => setReplyTo(contextMenu.msg) },
-              { icon: 'push_pin', label: contextMenu.msg.isPinned ? 'Открепить' : 'Закрепить', show: me?.role === 'ADMIN' && !contextMenu.msg.deletedAt, onClick: () => pinMut.mutate({ messageId: contextMenu.msg.id }) },
+              { icon: 'push_pin', label: contextMenu.msg.isPinned ? 'Открепить' : 'Закрепить', show: isElevated(me) && !contextMenu.msg.deletedAt, onClick: () => pinMut.mutate({ messageId: contextMenu.msg.id }) },
               { icon: 'content_copy', label: 'Копировать текст', show: !!contextMenu.msg.text && !contextMenu.msg.deletedAt, onClick: () => copyText(contextMenu.msg.text) },
               { icon: 'forward', label: 'Переслать', show: !contextMenu.msg.deletedAt, onClick: () => setForwardSource(contextMenu.msg) },
-              { icon: 'delete', label: 'Удалить', show: !contextMenu.msg.deletedAt && (contextMenu.msg.authorId === me?.id || me?.role === 'ADMIN'), onClick: () => deleteMut.mutate({ messageId: contextMenu.msg.id }), danger: true },
+              { icon: 'delete', label: 'Удалить', show: !contextMenu.msg.deletedAt && (contextMenu.msg.authorId === me?.id || isElevated(me)), onClick: () => deleteMut.mutate({ messageId: contextMenu.msg.id }), danger: true },
             ].filter((a) => a.show).map((a) => (
               <button
                 key={a.label}

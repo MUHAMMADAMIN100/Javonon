@@ -8,6 +8,7 @@ import { TelegramService } from '../telegram/telegram.service';
 import { MailService } from '../mail/mail.service';
 import { SmsService } from '../sms/sms.service';
 import { ActivityService } from '../activity/activity.service';
+import { isElevated } from '../auth/role-utils';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
@@ -183,15 +184,21 @@ export class ApplicationsService {
     managerUserId?: string;
     currentUserId?: string;
     currentUserRole?: Role;
+    currentUserRoles?: Role[];
   }) {
     const where: Prisma.ApplicationWhereInput = {};
     const and: Prisma.ApplicationWhereInput[] = [];
     if (filters.status) where.status = filters.status;
     if (filters.direction) where.direction = filters.direction;
-    // EMPLOYEE всегда видит только свои заявки (даже если mine=false на фронте).
+    // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только свои
+    // заявки. FOUNDER/ADMIN/ACCOUNTANT — все, если только не запросили mine.
+    const elevated = isElevated({
+      role: filters.currentUserRole,
+      roles: filters.currentUserRoles,
+    });
     const restrictToMine =
       (filters.mine && filters.currentUserId) ||
-      (filters.currentUserRole === 'EMPLOYEE' && filters.currentUserId);
+      (!elevated && filters.currentUserId);
     if (restrictToMine) {
       and.push({
         OR: [
@@ -456,11 +463,10 @@ export class ApplicationsService {
     return { ok: true };
   }
 
-  async stats(user?: { id: string; role: Role }) {
-    // EMPLOYEE видит только свои заявки (где он либо локальный, либо китайский менеджер).
-    // ADMIN — все заявки.
+  async stats(user?: { id: string; role: Role; roles?: Role[] }) {
+    // Менеджеры видят только свои заявки. Elevated (FOUNDER/ADMIN/ACCOUNTANT) — все.
     const where: Prisma.ApplicationWhereInput | undefined =
-      user && user.role === 'EMPLOYEE'
+      user && !isElevated(user)
         ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
         : undefined;
     const [total, byStatus, byDirection] = await Promise.all([

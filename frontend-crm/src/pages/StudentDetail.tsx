@@ -21,6 +21,7 @@ import DirectionOptions from '../components/DirectionOptions';
 import BackButton from '../components/BackButton';
 import Icon from '../Icon';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
+import { isElevated } from '../lib/roles';
 
 function CredRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -234,7 +235,7 @@ export default function StudentDetail() {
 
   if (!student || !form) return <Loading />;
 
-  const isAdmin = me?.role === 'ADMIN';
+  const isAdmin = isElevated(me);
   const assigned = !!student.managerId || !!student.chinaManagerId;
   const isMine = !assigned || student.managerId === me?.id || student.chinaManagerId === me?.id;
   const canEdit = isAdmin || isMine;

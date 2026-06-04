@@ -148,10 +148,18 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .sidebar-nav a {
   display: flex; align-items: center; gap: 12px;
+  /* По ТЗ: текст в сайдбаре выровнен по левому краю. justify-content
+     намеренно НЕ center — текст идёт от иконки слева направо. */
+  justify-content: flex-start;
+  text-align: left;
   padding: 10px 14px; border-radius: 9px;
   color: rgba(255,255,255,0.62); font-weight: 500; font-size: 14px;
   transition: all .15s; margin-bottom: 1px;
   position: relative;
+}
+.sidebar-nav a > span:not(.sidebar-nav-icon) {
+  text-align: left;
+  flex: 1;
 }
 .sidebar-nav a:hover { background: var(--bg-sidebar-hover); color: white; }
 .sidebar-nav a.active {

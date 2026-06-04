@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
 import { ROLES_KEY } from './roles.decorator';
+import { hasRole, isFounder } from './role-utils';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -15,9 +16,14 @@ export class RolesGuard implements CanActivate {
     if (!required || required.length === 0) return true;
 
     const { user } = context.switchToHttp().getRequest();
-    if (!user || !required.includes(user.role)) {
-      throw new ForbiddenException('Недостаточно прав');
-    }
-    return true;
+    if (!user) throw new ForbiddenException('Недостаточно прав');
+
+    // FOUNDER — неявный супер-доступ: не нужно перечислять во всех @Roles(...).
+    if (isFounder(user)) return true;
+
+    // Проверяем и основную роль (user.role), и дополнительные (user.roles[]).
+    if (hasRole(user, ...required)) return true;
+
+    throw new ForbiddenException('Недостаточно прав');
   }
 }
