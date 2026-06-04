@@ -58,6 +58,9 @@ export default function ApplicationDetail() {
       setForm({
         fullName: student.fullName,
         phones: student.phones.join(', '),
+        phoneLabels: (student.phoneLabels || []).join(', '),
+        preferredChannel: student.preferredChannel || '',
+        birthday: student.birthday ? student.birthday.slice(0, 10) : '',
         email: student.email || '',
         direction: student.direction,
         cabinet: student.cabinet,
@@ -197,15 +200,21 @@ export default function ApplicationDetail() {
       return;
     }
     const phones = form.phones.split(',').map((p: string) => p.trim()).filter(Boolean);
+    const phoneLabels = (form.phoneLabels || '').split(',').map((s: string) => s.trim());
+    while (phoneLabels.length < phones.length) phoneLabels.push('');
+    phoneLabels.length = phones.length;
     updateStudentMut.mutate({
       fullName: form.fullName.trim(),
       phones,
+      phoneLabels,
+      preferredChannel: form.preferredChannel || undefined,
+      birthday: form.birthday || undefined,
       email: form.email?.trim() || undefined,
       direction: form.direction,
       cabinet: parseInt(form.cabinet, 10),
       status: form.status,
       comment: form.comment?.trim() || undefined,
-    });
+    } as any);
   };
 
   const onPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -391,7 +400,35 @@ export default function ApplicationDetail() {
                 {!edit ? (
                   <>
                     <div className="detail-row"><div className="detail-label">ФИО</div><div className="detail-value">{student.fullName}</div></div>
-                    <div className="detail-row"><div className="detail-label">Телефоны</div><div className="detail-value">{student.phones.join(', ') || '—'}</div></div>
+                    <div className="detail-row">
+                      <div className="detail-label">Телефоны</div>
+                      <div className="detail-value">
+                        {student.phones.length === 0
+                          ? '—'
+                          : student.phones.map((p, i) => (
+                              <div key={i}>
+                                {p}
+                                {student.phoneLabels?.[i] && (
+                                  <span style={{ color: 'var(--text-soft)', fontSize: 12, marginLeft: 6 }}>
+                                    · {student.phoneLabels[i]}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                      </div>
+                    </div>
+                    {student.preferredChannel && (
+                      <div className="detail-row">
+                        <div className="detail-label">Канал связи</div>
+                        <div className="detail-value">{student.preferredChannel}</div>
+                      </div>
+                    )}
+                    {student.birthday && (
+                      <div className="detail-row">
+                        <div className="detail-label">День рождения</div>
+                        <div className="detail-value">{new Date(student.birthday).toLocaleDateString('ru-RU')}</div>
+                      </div>
+                    )}
                     <div className="detail-row"><div className="detail-label">Email</div><div className="detail-value">{student.email || '—'}</div></div>
                     <div className="detail-row"><div className="detail-label">Направление</div><div className="detail-value">{DIRECTION_LABEL[student.direction]}</div></div>
                     <div className="detail-row"><div className="detail-label">Кабинет</div><div className="detail-value">№{student.cabinet}</div></div>
@@ -413,7 +450,7 @@ export default function ApplicationDetail() {
                       {showErr('fullName') && <div className="form-error-text">{(formErrors as any).fullName}</div>}
                     </div>
                     <div className="form-group">
-                      <label>Телефоны (через запятую)</label>
+                      <label>Телефоны (через запятую — первый основной)</label>
                       <input
                         value={form.phones}
                         onChange={(e) => setForm({ ...form, phones: e.target.value.replace(/[^\d ,+\-()]/g, '') })}
@@ -422,6 +459,38 @@ export default function ApplicationDetail() {
                         placeholder="+992123456789, +992111222333"
                       />
                       {showErr('phones') && <div className="form-error-text">{(formErrors as any).phones}</div>}
+                    </div>
+                    <div className="form-group">
+                      <label>Подписи к телефонам (через запятую)</label>
+                      <input
+                        value={form.phoneLabels || ''}
+                        onChange={(e) => setForm({ ...form, phoneLabels: e.target.value })}
+                        placeholder="сам, Отец, Мать"
+                      />
+                    </div>
+                    <div className="form-grid-2">
+                      <div className="form-group">
+                        <label>Предпочтительный канал связи</label>
+                        <select
+                          value={form.preferredChannel || ''}
+                          onChange={(e) => setForm({ ...form, preferredChannel: e.target.value })}
+                        >
+                          <option value="">—</option>
+                          <option value="WHATSAPP">WhatsApp</option>
+                          <option value="PHONE">Телефон</option>
+                          <option value="INSTAGRAM">Instagram</option>
+                          <option value="TELEGRAM">Telegram</option>
+                          <option value="EMAIL">Email</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Дата рождения</label>
+                        <input
+                          type="date"
+                          value={form.birthday || ''}
+                          onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                        />
+                      </div>
                     </div>
                     <div className="form-group">
                       <label>Email</label>
