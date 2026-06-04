@@ -1619,6 +1619,13 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .task-status-btn { flex: 1; justify-content: center; }
   .task-status-btn span { font-size: 11px; }
   .task-delete-btn { align-self: flex-end; }
+}
+
+/* --- 6h fix: всё ниже до второго `@media (max-width: 720px)` блока на
+   line ~1857 — это TOP-LEVEL правила (rt-status, input-error,
+   phone-input, enrolled-badge, app-stepper, ...). Раньше всё это было
+   ошибочно заперто в @media (max-width: 720px) из-за пропущенной }
+   выше; правила не применялись на десктопе. --- */
 
   /* Диалог */
   .rt-status {
@@ -1854,7 +1861,11 @@ select.input-error {
   .app-stepper-select { width: 100%; min-width: 0; }
 }
 
-.dialog-card { padding: 22px; border-radius: 14px; }
+/* 6h fix: эти правила настоящие мобильные — оборачиваем обратно в
+   @media (max-width: 720px). Внутри dialog/toast/notif/manager/form
+   стили подгоняются под мелкие экраны. */
+@media (max-width: 720px) {
+  .dialog-card { padding: 22px; border-radius: 14px; }
   .dialog-title { font-size: 17px; }
   .dialog-actions { flex-direction: column-reverse; }
   .dialog-actions .btn { width: 100%; }
