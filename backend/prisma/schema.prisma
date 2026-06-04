@@ -80,6 +80,16 @@ enum TaskStatus {
   DONE
 }
 
+enum Weekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
 model User {
   id         String   @id @default(uuid())
   email      String   @unique
@@ -134,6 +144,7 @@ model User {
   accessGrantsToMe      DataAccessGrant[] @relation("AccessTarget")
   callLogs              CallLog[]     @relation("CallLogUser")
   offerSignatures       OfferSignature[]
+  workSchedules         WorkSchedule[]
 }
 
 // Документы сотрудника (паспорт, контракт, дипломы и т.п.). По
@@ -1093,5 +1104,62 @@ model BotSession {
 
   @@index([partnerCode])
   @@index([hasPurchased])
+}
+
+// --- Sprint C: рабочий график, штрафы, гео-зона ---
+
+// Рабочий график. Одна строка = (день недели × сотрудник | глобальный default).
+// userId=null означает дефолт компании. Любой сотрудник может иметь личное
+// переопределение для каждого дня. Время в минутах от полуночи (0-1439).
+// FOUNDER редактирует свой и чужие графики (по ТЗ).
+model WorkSchedule {
+  id                String   @id @default(uuid())
+  userId            String?
+  user              User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekday           Weekday
+  isWorkday         Boolean  @default(true)
+  startMinute       Int      @default(540)   // 09:00
+  endMinute         Int      @default(1080)  // 18:00
+  lunchStartMinute  Int?     @default(720)   // 12:00
+  lunchEndMinute    Int?     @default(780)   // 13:00
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, weekday])
+  @@index([userId])
+}
+
+// Ступенчатая шкала штрафов за опоздание. Несколько правил образуют
+// прогрессию: 10-30мин → 50 TJS, 30-60мин → 150, 60+ → 300. Опоздание
+// в минутах попадает в первое правило, где minLateMinutes <= late <
+// maxLateMinutes (или maxLateMinutes = null = бесконечность).
+model PenaltyRule {
+  id              String   @id @default(uuid())
+  minLateMinutes  Int      // нижняя граница (включительно)
+  maxLateMinutes  Int?     // верхняя граница (исключительно). null = ∞.
+  amount          Float
+  currency        String   @default("TJS")
+  isActive        Boolean  @default(true)
+  comment         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive, minLateMinutes])
+}
+
+// Рабочая локация (геозона). Сотрудник может нажать «Начать работу»
+// ТОЛЬКО внутри радиуса. Допускается несколько локаций (офис ТЖ, офис
+// в Душанбе и т.п.), но активная в момент времени только одна (isActive).
+model WorkLocation {
+  id            String   @id @default(uuid())
+  name          String   @default("Главный офис")
+  latitude      Float
+  longitude     Float
+  radiusMeters  Int      @default(150)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive])
 }
 

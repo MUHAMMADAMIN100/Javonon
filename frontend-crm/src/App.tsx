@@ -20,6 +20,7 @@ import Salary from './pages/Salary';
 import Kpi from './pages/Kpi';
 import Reports from './pages/Reports';
 import Calls from './pages/Calls';
+import Settings from './pages/Settings';
 import Chat from './pages/Chat';
 import Lms from './pages/LMS';
 import Partners from './pages/Partners';
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/time" element={<TimeTracker />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/calls" element={<Calls />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/salary" element={<Salary />} />
         <Route path="/kpi" element={<Kpi />} />

@@ -1,0 +1,282 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Weekday } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+
+const WEEKDAYS: Weekday[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+function clampMinute(v: any): number {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n)) throw new BadRequestException('Минуты некорректны');
+  if (n < 0 || n > 1439) throw new BadRequestException('Минуты должны быть 0..1439');
+  return n;
+}
+
+/**
+ * SettingsService — общий сервис для FOUNDER-настраиваемых вещей:
+ * рабочих графиков, штрафных правил, гео-зоны рабочего места.
+ * По ТЗ всё это управляется только основателем (RolesGuard
+ * на контроллере), сотрудники только читают.
+ */
+@Injectable()
+export class SettingsService {
+  constructor(private prisma: PrismaService) {}
+
+  // ===== Work Schedule =====
+
+  /**
+   * Расписание для конкретного сотрудника (или дефолт компании, если
+   * userId=null). Возвращает массив из 7 записей (по одной на день
+   * недели). Отсутствующие дни возвращаются как «нерабочие» с дефолтным
+   * 09:00-18:00, 12:00-13:00 обед (не сохраняются в БД до явного
+   * редактирования).
+   */
+  async getSchedule(userId: string | null) {
+    const rows = await this.prisma.workSchedule.findMany({
+      where: { userId },
+    });
+    const byDay = new Map(rows.map((r) => [r.weekday, r]));
+    return WEEKDAYS.map((wd) => byDay.get(wd) || {
+      id: null,
+      userId,
+      weekday: wd,
+      isWorkday: wd !== 'SAT' && wd !== 'SUN',
+      startMinute: 540,
+      endMinute: 1080,
+      lunchStartMinute: 720,
+      lunchEndMinute: 780,
+    });
+  }
+
+  /**
+   * Сохранить полный набор графика (7 дней) для пользователя или
+   * дефолта. Upsert по (userId, weekday). Используется как "массовое
+   * сохранение" с UI вместо 7 отдельных PATCH.
+   */
+  async upsertSchedule(
+    userId: string | null,
+    days: Array<{
+      weekday: Weekday;
+      isWorkday?: boolean;
+      startMinute?: number;
+      endMinute?: number;
+      lunchStartMinute?: number | null;
+      lunchEndMinute?: number | null;
+    }>,
+  ) {
+    if (!Array.isArray(days)) throw new BadRequestException('days должно быть массивом');
+    const results: any[] = [];
+    for (const d of days) {
+      if (!WEEKDAYS.includes(d.weekday)) {
+        throw new BadRequestException(`Неизвестный день недели: ${d.weekday}`);
+      }
+      const start = d.startMinute !== undefined ? clampMinute(d.startMinute) : 540;
+      const end = d.endMinute !== undefined ? clampMinute(d.endMinute) : 1080;
+      if (start >= end) throw new BadRequestException(`Конец дня должен быть позже начала (${d.weekday})`);
+      const lunchStart =
+        d.lunchStartMinute !== undefined && d.lunchStartMinute !== null
+          ? clampMinute(d.lunchStartMinute)
+          : null;
+      const lunchEnd =
+        d.lunchEndMinute !== undefined && d.lunchEndMinute !== null
+          ? clampMinute(d.lunchEndMinute)
+          : null;
+      if (lunchStart !== null && lunchEnd !== null && lunchStart >= lunchEnd) {
+        throw new BadRequestException(`Обед некорректен (${d.weekday})`);
+      }
+      const r = await this.prisma.workSchedule.upsert({
+        where: { userId_weekday: { userId: userId as any, weekday: d.weekday } },
+        update: {
+          isWorkday: d.isWorkday ?? true,
+          startMinute: start,
+          endMinute: end,
+          lunchStartMinute: lunchStart,
+          lunchEndMinute: lunchEnd,
+        },
+        create: {
+          userId,
+          weekday: d.weekday,
+          isWorkday: d.isWorkday ?? true,
+          startMinute: start,
+          endMinute: end,
+          lunchStartMinute: lunchStart,
+          lunchEndMinute: lunchEnd,
+        },
+      });
+      results.push(r);
+    }
+    return results;
+  }
+
+  // ===== Penalty Rules =====
+
+  async listPenaltyRules() {
+    return this.prisma.penaltyRule.findMany({
+      orderBy: { minLateMinutes: 'asc' },
+    });
+  }
+
+  async createPenaltyRule(data: {
+    minLateMinutes: number;
+    maxLateMinutes?: number | null;
+    amount: number;
+    currency?: string;
+    comment?: string;
+  }) {
+    const min = Math.floor(Number(data.minLateMinutes));
+    if (!Number.isFinite(min) || min < 0) throw new BadRequestException('minLateMinutes ≥ 0');
+    let max: number | null = null;
+    if (data.maxLateMinutes !== undefined && data.maxLateMinutes !== null) {
+      max = Math.floor(Number(data.maxLateMinutes));
+      if (!Number.isFinite(max) || max <= min) {
+        throw new BadRequestException('maxLateMinutes должен быть > minLateMinutes');
+      }
+    }
+    const amount = Number(data.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('amount > 0');
+    return this.prisma.penaltyRule.create({
+      data: {
+        minLateMinutes: min,
+        maxLateMinutes: max,
+        amount,
+        currency: data.currency || 'TJS',
+        comment: data.comment?.trim() || null,
+      },
+    });
+  }
+
+  async updatePenaltyRule(
+    id: string,
+    patch: {
+      minLateMinutes?: number;
+      maxLateMinutes?: number | null;
+      amount?: number;
+      currency?: string;
+      isActive?: boolean;
+      comment?: string;
+    },
+  ) {
+    const exists = await this.prisma.penaltyRule.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException('Правило не найдено');
+    return this.prisma.penaltyRule.update({
+      where: { id },
+      data: {
+        ...(patch.minLateMinutes !== undefined && { minLateMinutes: Math.floor(patch.minLateMinutes) }),
+        ...(patch.maxLateMinutes !== undefined && {
+          maxLateMinutes: patch.maxLateMinutes === null ? null : Math.floor(patch.maxLateMinutes),
+        }),
+        ...(patch.amount !== undefined && { amount: Number(patch.amount) }),
+        ...(patch.currency !== undefined && { currency: patch.currency }),
+        ...(patch.isActive !== undefined && { isActive: patch.isActive }),
+        ...(patch.comment !== undefined && { comment: patch.comment?.trim() || null }),
+      },
+    });
+  }
+
+  async deletePenaltyRule(id: string) {
+    await this.prisma.penaltyRule.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  /**
+   * Подобрать активное правило для конкретного опоздания (в минутах).
+   * Используется PenaltiesService вместо хардкода. Возвращает null если
+   * правил нет (тогда штраф не начисляется).
+   */
+  async findPenaltyForLate(lateMinutes: number) {
+    const rules = await this.prisma.penaltyRule.findMany({
+      where: { isActive: true },
+      orderBy: { minLateMinutes: 'desc' },
+    });
+    // Берём первое (по убыванию) правило, у которого minLateMinutes <= late
+    // и (maxLateMinutes IS NULL OR late < maxLateMinutes).
+    return rules.find((r) =>
+      lateMinutes >= r.minLateMinutes &&
+      (r.maxLateMinutes === null || lateMinutes < r.maxLateMinutes),
+    ) || null;
+  }
+
+  // ===== Work Location =====
+
+  async getActiveLocation() {
+    return this.prisma.workLocation.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async listLocations() {
+    return this.prisma.workLocation.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
+  async createLocation(data: {
+    name?: string;
+    latitude: number;
+    longitude: number;
+    radiusMeters?: number;
+  }) {
+    const lat = Number(data.latitude);
+    const lng = Number(data.longitude);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) throw new BadRequestException('Широта некорректна');
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) throw new BadRequestException('Долгота некорректна');
+    const radius = Math.max(20, Math.floor(Number(data.radiusMeters) || 150));
+    // Деактивируем предыдущие активные — активная только одна.
+    await this.prisma.workLocation.updateMany({
+      where: { isActive: true },
+      data: { isActive: false },
+    });
+    return this.prisma.workLocation.create({
+      data: {
+        name: data.name?.trim() || 'Главный офис',
+        latitude: lat,
+        longitude: lng,
+        radiusMeters: radius,
+        isActive: true,
+      },
+    });
+  }
+
+  async updateLocation(
+    id: string,
+    patch: { name?: string; latitude?: number; longitude?: number; radiusMeters?: number; isActive?: boolean },
+  ) {
+    const exists = await this.prisma.workLocation.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException('Локация не найдена');
+    if (patch.isActive === true) {
+      await this.prisma.workLocation.updateMany({
+        where: { isActive: true, id: { not: id } },
+        data: { isActive: false },
+      });
+    }
+    return this.prisma.workLocation.update({
+      where: { id },
+      data: {
+        ...(patch.name !== undefined && { name: patch.name.trim() }),
+        ...(patch.latitude !== undefined && { latitude: Number(patch.latitude) }),
+        ...(patch.longitude !== undefined && { longitude: Number(patch.longitude) }),
+        ...(patch.radiusMeters !== undefined && { radiusMeters: Math.max(20, Math.floor(patch.radiusMeters)) }),
+        ...(patch.isActive !== undefined && { isActive: patch.isActive }),
+      },
+    });
+  }
+
+  async deleteLocation(id: string) {
+    await this.prisma.workLocation.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  /**
+   * Дистанция в метрах между двумя точками (haversine). Используется
+   * time-tracking для проверки радиуса при clock-in.
+   */
+  static distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = 6371000;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+}

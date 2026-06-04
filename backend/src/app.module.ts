@@ -39,6 +39,7 @@ import { DailyReportsModule } from './daily-reports/daily-reports.module';
 import { PartnersModule } from './partners/partners.module';
 import { CallsModule } from './calls/calls.module';
 import { OffersModule } from './offers/offers.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { OffersModule } from './offers/offers.module';
     PartnersModule,
     CallsModule,
     OffersModule,
+    SettingsModule,
   ],
   controllers: [HealthController],
   providers: [

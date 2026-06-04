@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeEntryStatus } from '@prisma/client';
+import { SettingsService } from '../settings/settings.service';
 
 // Норма прихода в офис — 09:00 локального времени.
 const OFFICE_START_HOUR = 9;
@@ -8,7 +9,10 @@ const OFFICE_START_MIN = 0;
 
 @Injectable()
 export class TimeTrackingService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private settings: SettingsService,
+  ) {}
 
   /** Возвращает активную запись (WORKING или ON_LUNCH) либо null. */
   async getActive(userId: string) {
@@ -48,6 +52,24 @@ export class TimeTrackingService {
       throw new BadRequestException(
         'Для начала рабочего дня нужно подтверждение: геолокация или фото/видео рабочего места',
       );
+    }
+
+    // Гео-зона: если задана активная WorkLocation И сотрудник прислал
+    // координаты — проверяем, что он внутри радиуса. Если ушёл по проверке
+    // через фото/видео (proofUrl) — гео-проверка не обязательна.
+    if (hasGeo) {
+      const loc = await this.settings.getActiveLocation();
+      if (loc) {
+        const distance = SettingsService.distanceMeters(
+          opts!.lat!, opts!.lon!, loc.latitude, loc.longitude,
+        );
+        if (distance > loc.radiusMeters) {
+          throw new BadRequestException(
+            `Ты за пределами рабочей зоны (${Math.round(distance)}м от «${loc.name}», ` +
+            `допустимо до ${loc.radiusMeters}м). Подойди ближе или приложи фото/видео.`,
+          );
+        }
+      }
     }
 
     const now = new Date();

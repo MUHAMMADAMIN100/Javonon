@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PenaltyReason } from '@prisma/client';
+import { SettingsService } from '../settings/settings.service';
 
 const VALID_REASONS: PenaltyReason[] = ['LATE_ARRIVAL', 'ABSENCE', 'TASK_OVERDUE', 'CUSTOM'];
 
@@ -22,7 +23,10 @@ const LATE_CURRENCY = 'TJS';
 
 @Injectable()
 export class PenaltiesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private settings: SettingsService,
+  ) {}
 
   async list(filters: { userId?: string; from?: Date; to?: Date; applied?: boolean }) {
     return this.prisma.penalty.findMany({
@@ -131,7 +135,21 @@ export class PenaltiesService {
         },
       });
 
-      const amount = LATE_BASE_AMOUNT_TJS + priorLateCount * LATE_INCREMENT_TJS;
+      // Сумма штрафа: сначала пробуем правило из SettingsService
+      // (FOUNDER задаёт через /settings/penalty-rules). Если ни одно
+      // не подходит — fallback на старую прогрессивную шкалу.
+      let amount: number;
+      let detailsRule: string;
+      const rule = await this.settings.findPenaltyForLate(e.lateMinutes);
+      if (rule) {
+        amount = rule.amount;
+        detailsRule = rule.comment
+          ? ` · правило «${rule.comment}»`
+          : ` · по правилу ${rule.minLateMinutes}-${rule.maxLateMinutes ?? '∞'} мин`;
+      } else {
+        amount = LATE_BASE_AMOUNT_TJS + priorLateCount * LATE_INCREMENT_TJS;
+        detailsRule = ` · ${priorLateCount + 1}-е в этом месяце`;
+      }
 
       // Создаём штраф + помечаем entry в одной транзакции
       await this.prisma.$transaction([
@@ -140,7 +158,7 @@ export class PenaltiesService {
             userId: e.userId,
             reason: 'LATE_ARRIVAL',
             amount,
-            details: `Опоздание ${e.lateMinutes} мин · ${priorLateCount + 1}-е в этом месяце · без оправдания`,
+            details: `Опоздание ${e.lateMinutes} мин${detailsRule} · без оправдания`,
             date: from,
           },
         }),
