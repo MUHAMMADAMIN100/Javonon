@@ -69,6 +69,7 @@ export class StudentsController {
     @Query('search') search?: string,
     @Query('mine') mine?: string,
     @Query('manager') manager?: string,
+    @Query('paid') paid?: string,
   ) {
     // QA-fix #45/#48: безопасная валидация enum-фильтров и cabinet.
     const VALID_DIR = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
@@ -97,6 +98,7 @@ export class StudentsController {
       currentUserId: user?.id,
       currentUserRole: user?.role,
       currentUserRoles: user?.roles,
+      paid: paid === 'true' ? true : paid === 'false' ? false : undefined,
     });
   }
 

@@ -90,6 +90,16 @@ enum Weekday {
   SUN
 }
 
+// Предпочтительный канал связи с клиентом (по ТЗ — WhatsApp / Телефон,
+// плюс на будущее Instagram/Telegram/Email).
+enum ContactChannel {
+  WHATSAPP
+  PHONE
+  INSTAGRAM
+  TELEGRAM
+  EMAIL
+}
+
 model User {
   id         String   @id @default(uuid())
   email      String   @unique
@@ -232,7 +242,13 @@ model Application {
   id         String            @id @default(uuid())
   fullName   String
   phone      String
+  // Доп. телефон (мать/отец/контактное лицо) — по ТЗ.
+  secondaryPhone String?
+  // Подпись доп. контакта: "Отец", "Мать" и т.п.
+  secondaryContactLabel String?
   email      String?
+  // Предпочтительный канал связи с клиентом.
+  preferredChannel ContactChannel?
   direction  Direction
   comment    String?
   source     ApplicationSource @default(LANDING_FORM)
@@ -262,7 +278,13 @@ model Application {
 model Student {
   id           String        @id @default(uuid())
   fullName     String
+  // Все телефоны: phones[0] — основной, phones[1+] — дополнительные.
   phones       String[]      @default([])
+  // Подписи к phones: ["сам", "Отец", "Мать"]. Длина может отличаться
+  // от phones — недостающие позиции считаются пустыми.
+  phoneLabels  String[]      @default([])
+  // Предпочтительный канал связи (ТЗ: WhatsApp / Телефон).
+  preferredChannel ContactChannel?
   // QA-fix #43: уникальный email — параллельные регистрации создавали N дублей,
   // forgot-password/login находили только первого через findFirst.
   // Multiple null-email'ов разрешены (Prisma allows multiple NULLs).

@@ -79,6 +79,8 @@ export class StudentsService {
       data: {
         fullName: dto.fullName.trim(),
         phones: dto.phones?.length ? dto.phones : [],
+        phoneLabels: dto.phoneLabels?.length ? dto.phoneLabels : [],
+        preferredChannel: dto.preferredChannel ?? null,
         email: emailNormalized,
         password: passwordHash,
         photoUrl: dto.photoUrl || null,
@@ -173,11 +175,25 @@ export class StudentsService {
     currentUserId?: string;
     currentUserRole?: Role;
     currentUserRoles?: Role[];
+    // По ТЗ: «база студентов — только оплатившие». Фильтр включается
+    // как ?paid=true с фронтенда (отдельная вкладка/режим).
+    paid?: boolean;
   }) {
     const where: Prisma.StudentWhereInput = {};
     if (filters.direction) where.direction = filters.direction;
     if (filters.status) where.status = filters.status;
     if (filters.cabinet) where.cabinet = filters.cabinet;
+    // «Оплатил» = есть хотя бы одна INCOME-транзакция категории TUITION_PAYMENT,
+    // привязанная к этому студенту.
+    if (filters.paid === true) {
+      where.transactions = {
+        some: { type: 'INCOME', category: 'TUITION_PAYMENT' },
+      };
+    } else if (filters.paid === false) {
+      where.transactions = {
+        none: { type: 'INCOME', category: 'TUITION_PAYMENT' },
+      };
+    }
     const and: Prisma.StudentWhereInput[] = [];
     // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только своих,
     // независимо от mine. Elevated (FOUNDER/ADMIN/ACCOUNTANT) — всех.
@@ -267,6 +283,8 @@ export class StudentsService {
     const data: Prisma.StudentUpdateInput = {};
     if (dto.fullName !== undefined) data.fullName = dto.fullName;
     if (dto.phones !== undefined) data.phones = dto.phones;
+    if (dto.phoneLabels !== undefined) data.phoneLabels = dto.phoneLabels;
+    if (dto.preferredChannel !== undefined) data.preferredChannel = dto.preferredChannel;
     if (dto.email !== undefined) data.email = dto.email;
     if (dto.photoUrl !== undefined) data.photoUrl = dto.photoUrl;
     if (dto.comment !== undefined) data.comment = dto.comment;

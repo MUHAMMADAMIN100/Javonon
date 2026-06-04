@@ -1,5 +1,5 @@
 import { IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { Direction, StudentStatus } from '@prisma/client';
+import { ContactChannel, Direction, StudentStatus } from '@prisma/client';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 
@@ -15,6 +15,16 @@ export class UpdateStudentDto {
   @IsString({ each: true })
   @Matches(PHONE_RE, { each: true, message: 'каждый phone должен содержать только цифры' })
   phones?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  phoneLabels?: string[];
+
+  @IsOptional()
+  @IsEnum(ContactChannel)
+  preferredChannel?: ContactChannel;
 
   @IsOptional()
   @IsEmail()

@@ -34,6 +34,9 @@ export default function Students() {
   const [manager, setManager] = useState<string>('');
   const isAdmin = isElevated(me);
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
+  // Отдельная вкладка «база студентов» по ТЗ — отображаются только
+  // оплатившие (есть хотя бы одна TUITION_PAYMENT транзакция).
+  const [paidOnly, setPaidOnly] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportFrom, setReportFrom] = useState('');
   const [reportTo, setReportTo] = useState('');
@@ -51,6 +54,7 @@ export default function Students() {
     cabinet: cabinet ? parseInt(cabinet, 10) : undefined,
     mine: scope === 'mine',
     manager: manager || undefined,
+    paid: paidOnly ? true : undefined,
   };
 
   const studentsQuery = useQuery({
@@ -63,7 +67,7 @@ export default function Students() {
   // Сброс страницы при смене любого фильтра.
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, direction, cabinet, scope, manager, stageFilter]);
+  }, [debouncedSearch, direction, cabinet, scope, manager, stageFilter, paidOnly]);
 
   // Клиентский фильтр по этапу/специальному статусу.
   const SPECIAL_STUDENT_STATUSES = ['PAUSED', 'GRADUATED', 'ARCHIVED'];
@@ -232,6 +236,24 @@ export default function Students() {
               ))}
             </select>
           )}
+          {/* По ТЗ: «база студентов — только оплатившие». Отдельная вкладка. */}
+          <label style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '6px 12px',
+            border: '1px solid var(--border)',
+            borderRadius: 999,
+            background: paidOnly ? 'var(--primary-light)' : 'transparent',
+            color: paidOnly ? 'var(--primary-dark)' : 'var(--text-soft)',
+            fontWeight: 500, fontSize: 13, cursor: 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={paidOnly}
+              onChange={(e) => setPaidOnly(e.target.checked)}
+              style={{ margin: 0 }}
+            />
+            Только оплатившие
+          </label>
         </div>
 
         <AnimatePresence mode="wait">

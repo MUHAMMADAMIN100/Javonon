@@ -9,6 +9,8 @@ export interface StudentFilters {
   mine?: boolean;
   /** Фильтр по менеджеру (TJ или CN) — userId */
   manager?: string;
+  /** true = только с TUITION_PAYMENT, false = только без, undefined = все. */
+  paid?: boolean;
 }
 
 export async function listStudents(filters: StudentFilters = {}) {

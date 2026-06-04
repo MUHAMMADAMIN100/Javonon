@@ -75,6 +75,9 @@ export interface Application {
   id: string;
   fullName: string;
   phone: string;
+  secondaryPhone?: string | null;
+  secondaryContactLabel?: string | null;
+  preferredChannel?: ContactChannel | null;
   email: string | null;
   direction: Direction;
   comment: string | null;
@@ -99,10 +102,23 @@ export interface Document {
   createdAt: string;
 }
 
+export type ContactChannel = 'WHATSAPP' | 'PHONE' | 'INSTAGRAM' | 'TELEGRAM' | 'EMAIL';
+
+export const CONTACT_CHANNEL_LABEL: Record<ContactChannel, string> = {
+  WHATSAPP: 'WhatsApp',
+  PHONE: 'Телефон',
+  INSTAGRAM: 'Instagram',
+  TELEGRAM: 'Telegram',
+  EMAIL: 'Email',
+};
+
 export interface Student {
   id: string;
   fullName: string;
   phones: string[];
+  /** Подписи к phones, синхронные по индексу. */
+  phoneLabels?: string[];
+  preferredChannel?: ContactChannel | null;
   email: string | null;
   photoUrl: string | null;
   direction: Direction;
