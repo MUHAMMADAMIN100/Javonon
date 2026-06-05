@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PenaltiesService } from '../penalties/penalties.service';
+import { SmsService } from '../sms/sms.service';
 
 const TASK_OVERDUE_PENALTY_USD = 10; // ТЗ §3.9: «Нарушение → штраф» за просроченную задачу
 
@@ -14,6 +15,7 @@ export class CronService {
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private penalties: PenaltiesService,
+    private sms: SmsService,
   ) {}
 
   /**
@@ -287,15 +289,43 @@ export class CronService {
 
     if (!students.length) return;
 
+    const smsConfigured = !!process.env.SMS_PROVIDER && process.env.SMS_PROVIDER !== 'none';
+    let smsSent = 0;
+    let smsFailed = 0;
+
     for (const s of students) {
+      // 1) Уведомление сотрудникам — менеджер может позвонить лично.
       await this.notifications.notifyAllStaff({
         type: 'STUDENT_BIRTHDAY',
         title: '🎂 День рождения у студента',
         message: `Сегодня день рождения у ${s.fullName}. Позвоните поздравить!`,
         payload: { studentId: s.id, phone: s.phones?.[0] },
       });
+
+      // 2) ПРЯМОЕ поздравление клиенту (по ТЗ §10 — «поздравления клиентов»).
+      // Идёт через SMS если SMS_PROVIDER настроен в env. Иначе только п.1.
+      // WhatsApp/Telegram-каналы — отдельные интеграции; для них cron
+      // можно расширить когда credentials добавят.
+      const phone = s.phones?.[0];
+      if (smsConfigured && phone) {
+        const firstName = (s.fullName || '').split(/\s+/)[0] || s.fullName;
+        const message =
+          `🎂 ${firstName}, с днём рождения от команды Javonon! ` +
+          `Желаем успехов в учёбе и исполнения всех целей. С нами вы на верном пути!`;
+        try {
+          const ok = await this.sms.send(phone, message);
+          if (ok) smsSent++;
+          else smsFailed++;
+        } catch (e: any) {
+          this.logger.warn(`Birthday SMS to ${phone} failed: ${e?.message}`);
+          smsFailed++;
+        }
+      }
     }
-    this.logger.log(`Birthday: notified about ${students.length} student(s)`);
+    this.logger.log(
+      `Birthday: staff notified for ${students.length}; SMS sent=${smsSent} failed=${smsFailed} ` +
+      `(SMS_PROVIDER=${process.env.SMS_PROVIDER || 'none'})`
+    );
   }
 
   /**

@@ -16,6 +16,7 @@ import {
   type UserDocumentType,
 } from '../api/userProfile';
 import { offerCurrent, offerSign, type CurrentOfferState } from '../api/offers';
+import ScheduleEditor from '../components/ScheduleEditor';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { isElevated, isFounder } from '../lib/roles';
@@ -114,6 +115,20 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <b>Формула:</b> Зарплата = фикс + почасовая × часы + ({salary.bonusPercent}% × продажи) + KPI-бонус − штрафы
         </p>
       </section>
+
+      {/* Индивидуальный график работы — FOUNDER задаёт лично для этого сотрудника
+          (по ТЗ §3 «изменять график работы менеджеров»). */}
+      {isFounder(meStore) && (
+        <section className="card" style={{ padding: 22, marginBottom: 14 }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
+            Личный график работы
+          </h3>
+          <ScheduleEditor
+            userId={realId}
+            hint={`Этот график перекрывает дефолтный для «${user.fullName}». Если день не задан — используется компанийский дефолт из «Настройки → График работы».`}
+          />
+        </section>
+      )}
 
       {/* Текущий месяц — фактика */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
