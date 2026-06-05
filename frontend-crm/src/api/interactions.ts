@@ -38,6 +38,34 @@ export interface Interaction {
 export const listInteractions = (studentId: string) =>
   api.get<Interaction[]>('/interactions', { params: { studentId } }).then((r) => r.data);
 
+/**
+ * Полная история взаимодействий по клиенту (Interaction + CallLog +
+ * ExternalMessage). Каждая запись имеет дискриминатор `source`:
+ * 'interaction' | 'call' | 'message'. Используется для рендера единой
+ * ленты в карточке студента по ТЗ §8.
+ */
+export interface TimelineItem {
+  source: 'interaction' | 'call' | 'message';
+  id: string;
+  summary: string;
+  details: string | null;
+  occurredAt: string;
+  // interaction-only
+  type?: InteractionType;
+  author?: { id: string; fullName: string; role: string } | null;
+  // call-only
+  direction?: 'INCOMING' | 'OUTGOING' | 'IN' | 'OUT';
+  outcome?: string;
+  durationSeconds?: number;
+  recordingUrl?: string | null;
+  // message-only
+  channel?: 'WHATSAPP' | 'INSTAGRAM' | 'TELEGRAM' | 'SMS';
+  mediaUrl?: string | null;
+}
+
+export const fullTimeline = (studentId: string) =>
+  api.get<TimelineItem[]>('/interactions/timeline', { params: { studentId } }).then((r) => r.data);
+
 export const createInteraction = (data: {
   studentId: string;
   type: InteractionType;

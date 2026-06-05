@@ -73,9 +73,21 @@ export class TimeTrackingService {
     }
 
     const now = new Date();
+    // Per-user schedule lookup (ТЗ §3). FOUNDER задаёт график → clockIn
+    // считает опоздание ОТ ЭТОГО графика, не от хардкодных 09:00.
+    const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
+    const weekday = WEEKDAYS[now.getDay()] === 'SUN' ? 'SUN' : WEEKDAYS[now.getDay()];
+    // JS day(): 0=Sun..6=Sat. Маппинг в Weekday enum.
+    const JS_TO_ENUM: Record<number, any> = { 0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT' };
+    const sched = await this.settings.getEffectiveScheduleForUser(userId, JS_TO_ENUM[now.getDay()]);
+
     const expected = new Date(now);
-    expected.setHours(OFFICE_START_HOUR, OFFICE_START_MIN, 0, 0);
-    const lateMinutes = Math.max(0, Math.round((now.getTime() - expected.getTime()) / 60000));
+    expected.setHours(0, 0, 0, 0);
+    expected.setMinutes(sched.startMinute);
+    // Если день нерабочий — lateMinutes=0 (выход в субботу на переработку OK).
+    const lateMinutes = sched.isWorkday
+      ? Math.max(0, Math.round((now.getTime() - expected.getTime()) / 60000))
+      : 0;
 
     return this.prisma.timeEntry.create({
       data: {

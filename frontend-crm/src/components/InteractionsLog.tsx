@@ -7,6 +7,8 @@ import {
   INTERACTION_LABEL,
   INTERACTION_ICON,
   listInteractions,
+  fullTimeline,
+  type TimelineItem,
   createInteraction,
   deleteInteraction,
 } from '../api/interactions';
@@ -35,16 +37,29 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  // По ТЗ §8 «вся связанная информация» — переключатель показывает либо
+  // только ручные записи (старое поведение), либо полную ленту (звонки
+  // через dialpad + WhatsApp/IG/SMS переписка + ручные записи).
+  const [showFullTimeline, setShowFullTimeline] = useState(true);
 
   const listKey = keys.interactions.list(studentId);
   const interactionsQuery = useQuery<Interaction[]>({
     queryKey: listKey,
     queryFn: () => listInteractions(studentId),
-    enabled: !!studentId,
+    enabled: !!studentId && !showFullTimeline,
   });
-  const items = interactionsQuery.data ?? [];
+  const timelineKey = ['interactions', 'timeline', studentId] as const;
+  const timelineQuery = useQuery<TimelineItem[]>({
+    queryKey: timelineKey,
+    queryFn: () => fullTimeline(studentId),
+    enabled: !!studentId && showFullTimeline,
+  });
+  const items = showFullTimeline ? (timelineQuery.data ?? []) : (interactionsQuery.data ?? []);
 
-  useRealtimeEvent('interaction:new', () => qc.invalidateQueries({ queryKey: listKey }));
+  useRealtimeEvent('interaction:new', () => {
+    qc.invalidateQueries({ queryKey: listKey });
+    qc.invalidateQueries({ queryKey: timelineKey });
+  });
 
   const createMut = useInvalidatingMutation({
     mutationFn: createInteraction,
@@ -68,7 +83,11 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
     createMut.mutate({ ...data, studentId });
   };
 
-  const onDelete = async (it: Interaction) => {
+  const onDelete = async (it: Interaction | TimelineItem) => {
+    // Удаляем только записи типа Interaction. CallLog/ExternalMessage —
+    // источники внешних данных, удалять их с этой ленты бессмысленно.
+    const source = (it as any).source;
+    if (source && source !== 'interaction') return;
     const ok = await confirm({
       title: 'Удалить запись?',
       message: it.summary,
@@ -77,6 +96,44 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
     });
     if (!ok) return;
     deleteMut.mutate(it.id);
+  };
+
+  /** Преобразует TimelineItem в визуальные параметры (label, icon, type). */
+  const resolveVisuals = (it: Interaction | TimelineItem): { label: string; icon: string; bg: string } => {
+    // Старая модель Interaction всегда имеет type.
+    if ('type' in it && it.type && !(it as any).source) {
+      return {
+        label: INTERACTION_LABEL[it.type as InteractionType] || it.type,
+        icon: INTERACTION_ICON[it.type as InteractionType] || 'chat',
+        bg: 'var(--primary-soft)',
+      };
+    }
+    const t = it as TimelineItem;
+    if (t.source === 'call') {
+      return {
+        label: t.direction === 'INCOMING' ? 'Звонок входящий' : 'Звонок исходящий',
+        icon: 'call',
+        bg: '#dbeafe',
+      };
+    }
+    if (t.source === 'message') {
+      const labels: Record<string, string> = {
+        WHATSAPP: 'WhatsApp',
+        INSTAGRAM: 'Instagram',
+        TELEGRAM: 'Telegram',
+        SMS: 'SMS',
+      };
+      return {
+        label: `${labels[t.channel || ''] || t.channel} ${t.direction === 'IN' ? 'от клиента' : 'клиенту'}`,
+        icon: t.channel === 'INSTAGRAM' ? 'photo_camera' : t.channel === 'SMS' ? 'sms' : 'chat_bubble',
+        bg: '#fce7f3',
+      };
+    }
+    return {
+      label: t.type ? INTERACTION_LABEL[t.type] : 'Запись',
+      icon: t.type ? INTERACTION_ICON[t.type] : 'chat',
+      bg: 'var(--primary-soft)',
+    };
   };
 
   return (
@@ -104,11 +161,28 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
             }}>общения.</em>
           </h3>
         </div>
-        {canEdit && !showForm && (
-          <button className="btn btn-sm btn-primary" onClick={() => setShowForm(true)}>
-            <Icon name="add" size={14} /> Добавить
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setShowFullTimeline((v) => !v)}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 999,
+              border: '1.5px solid var(--border)',
+              background: showFullTimeline ? 'var(--primary-light)' : 'transparent',
+              color: showFullTimeline ? 'var(--primary-dark)' : 'var(--text-soft)',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}
+            title="Включает звонки и переписку из WhatsApp/IG/SMS"
+          >
+            {showFullTimeline ? '◉ Полная история' : '○ Полная история'}
           </button>
-        )}
+          {canEdit && !showForm && (
+            <button className="btn btn-sm btn-primary" onClick={() => setShowForm(true)}>
+              <Icon name="add" size={14} /> Добавить
+            </button>
+          )}
+        </div>
       </div>
 
       <AnimatePresence>
@@ -128,9 +202,14 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
         {items.length === 0 && (
           <div className="empty" style={{ padding: 32 }}>Записей пока нет</div>
         )}
-        {items.map((it) => (
+        {items.map((it) => {
+          const vis = resolveVisuals(it);
+          const source = (it as any).source;
+          const isInteraction = !source || source === 'interaction';
+          const visibleToStudent = (it as any).visibleToStudent ?? true;
+          return (
           <motion.div
-            key={it.id}
+            key={`${source || 'interaction'}-${it.id}`}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             style={{
@@ -139,18 +218,18 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
               padding: 16,
               border: '1px solid var(--border-soft)',
               borderRadius: 14,
-              background: it.visibleToStudent ? 'white' : 'var(--bg-soft)',
-              borderLeft: `3px solid ${it.visibleToStudent ? 'var(--primary)' : 'var(--text-light)'}`,
+              background: isInteraction && !visibleToStudent ? 'var(--bg-soft)' : 'white',
+              borderLeft: `3px solid ${isInteraction && visibleToStudent ? 'var(--primary)' : 'var(--text-light)'}`,
             }}
           >
             <div style={{
               width: 36, height: 36, borderRadius: 10,
-              background: 'var(--primary-soft)',
+              background: vis.bg,
               color: 'var(--primary-dark)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
             }}>
-              <Icon name={INTERACTION_ICON[it.type]} size={18} />
+              <Icon name={vis.icon} size={18} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -160,8 +239,8 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
                   letterSpacing: '0.10em',
                   textTransform: 'uppercase',
                   color: 'var(--primary-dark)',
-                }}>{INTERACTION_LABEL[it.type]}</span>
-                {!it.visibleToStudent && (
+                }}>{vis.label}</span>
+                {isInteraction && !visibleToStudent && (
                   <span style={{
                     fontFamily: 'var(--font-mono)',
                     fontSize: 9,
@@ -170,6 +249,11 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
                     letterSpacing: '0.10em',
                   }}>· внутреннее</span>
                 )}
+                {(it as TimelineItem).durationSeconds !== undefined && (
+                  <span style={{ fontSize: 11, color: 'var(--text-soft)', fontFamily: 'var(--font-mono)' }}>
+                    · {Math.floor((it as TimelineItem).durationSeconds! / 60)}м {(it as TimelineItem).durationSeconds! % 60}с
+                  </span>
+                )}
                 <span style={{ fontSize: 11, color: 'var(--text-light)', marginLeft: 'auto' }}>
                   {fmtRelative(it.occurredAt)}
                 </span>
@@ -177,6 +261,9 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
               <div style={{ fontWeight: 500, fontSize: 14, marginBottom: it.details ? 4 : 0 }}>{it.summary}</div>
               {it.details && (
                 <div style={{ fontSize: 13, color: 'var(--text-soft)', whiteSpace: 'pre-wrap', marginTop: 4 }}>{it.details}</div>
+              )}
+              {(it as TimelineItem).recordingUrl && (
+                <audio src={(it as TimelineItem).recordingUrl!} controls preload="none" style={{ height: 32, marginTop: 6, width: '100%', maxWidth: 280 }} />
               )}
               {it.author && (
                 <div style={{
@@ -190,13 +277,14 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
                 </div>
               )}
             </div>
-            {canEdit && (
+            {canEdit && isInteraction && (
               <button className="btn btn-sm btn-danger" onClick={() => onDelete(it)} style={{ alignSelf: 'flex-start' }}>
                 <Icon name="delete" size={14} />
               </button>
             )}
           </motion.div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

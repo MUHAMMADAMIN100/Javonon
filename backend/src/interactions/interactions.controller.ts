@@ -16,6 +16,12 @@ export class InteractionsController {
     return this.svc.listForStudent(studentId);
   }
 
+  /** Полная история взаимодействий (Interaction + CallLog + ExternalMessage). */
+  @Get('timeline')
+  timeline(@Query('studentId') studentId: string) {
+    return this.svc.fullTimeline(studentId);
+  }
+
   @Post()
   create(
     @CurrentUser() me: any,

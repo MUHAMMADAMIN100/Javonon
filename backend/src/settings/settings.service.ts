@@ -265,6 +265,58 @@ export class SettingsService {
   }
 
   /**
+   * Эффективный график на конкретный день для конкретного сотрудника.
+   * Логика: личный (userId=userId) → если не задан, компанийский default
+   * (userId=null) → если и того нет, хардкодный fallback (09:00-18:00,
+   * обед 12:00-13:00, будний день).
+   *
+   * Это сердце привязки графиков из ТЗ §3 к реальной фиксации lateMinutes
+   * в time-tracking — без этого графики хранятся в БД но никак не влияют
+   * на clockIn.
+   */
+  async getEffectiveScheduleForUser(userId: string, weekday: Weekday): Promise<{
+    isWorkday: boolean;
+    startMinute: number;
+    endMinute: number;
+    lunchStartMinute: number | null;
+    lunchEndMinute: number | null;
+  }> {
+    const personal = await this.prisma.workSchedule.findUnique({
+      where: { userId_weekday: { userId, weekday } },
+    });
+    if (personal) {
+      return {
+        isWorkday: personal.isWorkday,
+        startMinute: personal.startMinute,
+        endMinute: personal.endMinute,
+        lunchStartMinute: personal.lunchStartMinute,
+        lunchEndMinute: personal.lunchEndMinute,
+      };
+    }
+    const companyDefault = await this.prisma.workSchedule.findUnique({
+      where: { userId_weekday: { userId: null as any, weekday } },
+    });
+    if (companyDefault) {
+      return {
+        isWorkday: companyDefault.isWorkday,
+        startMinute: companyDefault.startMinute,
+        endMinute: companyDefault.endMinute,
+        lunchStartMinute: companyDefault.lunchStartMinute,
+        lunchEndMinute: companyDefault.lunchEndMinute,
+      };
+    }
+    // Hardcoded fallback — стандартная 5-дневная неделя 09:00-18:00,
+    // обед 12:00-13:00. Применяется если никаких графиков ещё не задано.
+    return {
+      isWorkday: weekday !== 'SAT' && weekday !== 'SUN',
+      startMinute: 540,
+      endMinute: 1080,
+      lunchStartMinute: 720,
+      lunchEndMinute: 780,
+    };
+  }
+
+  /**
    * Дистанция в метрах между двумя точками (haversine). Используется
    * time-tracking для проверки радиуса при clock-in.
    */
