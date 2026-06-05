@@ -109,7 +109,10 @@ export class PenaltiesService {
     const entries = await this.prisma.timeEntry.findMany({
       where: {
         clockIn: { gte: from, lt: to },
-        lateMinutes: { gt: LATE_THRESHOLD_MIN },
+        // ТЗ §3: «10-15 минут» — 10 ВКЛЮЧИТЕЛЬНО. gte, не gt.
+        // Раньше было gt: 15, потом gt: 10 — и то и то пропускало
+        // граничные значения, противореча примеру ТЗ.
+        lateMinutes: { gte: LATE_THRESHOLD_MIN },
         latePenaltyApplied: false,
       },
       include: { user: { select: { id: true, fullName: true } } },
