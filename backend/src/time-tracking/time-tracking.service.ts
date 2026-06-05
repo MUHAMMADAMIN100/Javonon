@@ -212,7 +212,10 @@ export class TimeTrackingService {
     // Если расписания нет — fallback на 8 часов (480 мин).
     const { weekday: clockInWeekday } = localDayAndMinutes(active.clockIn);
     const sched = await this.settings.getEffectiveScheduleForUser(userId, clockInWeekday);
-    let standardDayMin = 480;
+    // Если рабочий день — норма = длина окна минус запланированный обед.
+    // Если выходной — норма = 0, ВСЕ часы засчитываются как переработка
+    // (по ТЗ §3 «учет переработок»: работа вне графика = overtime).
+    let standardDayMin = 0;
     if (sched.isWorkday) {
       const lunch = (sched.lunchStartMinute !== null && sched.lunchEndMinute !== null)
         ? Math.max(0, sched.lunchEndMinute - sched.lunchStartMinute)

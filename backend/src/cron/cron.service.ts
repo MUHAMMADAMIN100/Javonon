@@ -55,7 +55,9 @@ export class CronService {
 
     for (const emp of employees) {
       const entry = todayEntries.find((e) => e.userId === emp.id);
-      if (entry && entry.lateMinutes > 15) {
+      // ТЗ §3 «10-15 минут» — 10 включительно, такая же граница как
+      // у penalty cron (penalties.service.ts LATE_THRESHOLD_MIN).
+      if (entry && entry.lateMinutes >= 10) {
         await this.notifications.notifyAdmins({
           type: 'EMPLOYEE_LATE',
           title: '⏰ Опоздание',
