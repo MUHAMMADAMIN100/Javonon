@@ -134,6 +134,9 @@ export class ApplicationsService {
       data: {
         fullName: dto.fullName.trim(),
         phone: dto.phone.trim(),
+        secondaryPhone: (dto as any).secondaryPhone?.trim() || null,
+        secondaryContactLabel: (dto as any).secondaryContactLabel?.trim() || null,
+        preferredChannel: (dto as any).preferredChannel || null,
         email: dto.email?.trim() || null,
         direction: dto.direction,
         comment: dto.comment?.trim() || null,
