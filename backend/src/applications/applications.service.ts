@@ -381,10 +381,17 @@ export class ApplicationsService {
     patch: { managerId?: string | null; chinaManagerId?: string | null },
     user: CurrentUser,
   ) {
-    if (user.role !== 'ADMIN') {
-      throw new ForbiddenException('Только администратор может переназначать менеджеров');
-    }
     const existing = await this.findOne(id);
+    // По ТЗ §7: «ручное распределение лидов — Менеджером по продажам».
+    // Elevated (FOUNDER/ADMIN/ACCOUNTANT) переназначают любые заявки;
+    // не-elevated (SALES_MANAGER/CLIENT_MANAGER) — только если они сами
+    // сейчас являются managerId или chinaManagerId этой заявки.
+    if (!isElevated(user as any)) {
+      const isOwner = existing.managerId === user.id || existing.chinaManagerId === user.id;
+      if (!isOwner) {
+        throw new ForbiddenException('Переназначать можно только свои заявки');
+      }
+    }
 
     const data: any = {};
     if (patch.managerId !== undefined) {
