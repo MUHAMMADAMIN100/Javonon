@@ -83,8 +83,28 @@ export class SettingsService {
       if (lunchStart !== null && lunchEnd !== null && lunchStart >= lunchEnd) {
         throw new BadRequestException(`Обед некорректен (${d.weekday})`);
       }
-      const r = await this.prisma.workSchedule.upsert({
-        where: { userId_weekday: { userId: userId as any, weekday: d.weekday } },
+      // КРИТИЧНО: для userId=null (компанийского дефолта) Prisma upsert
+      // через compound unique НЕ РАБОТАЕТ — findUnique возвращает null,
+      // и каждый вызов плодит дубликаты (Postgres разрешает множественные
+      // null в UNIQUE). Поэтому для null делаем ручной find+update/create.
+      let r: any;
+      if (userId === null) {
+        const existing = await this.prisma.workSchedule.findFirst({
+          where: { userId: null, weekday: d.weekday },
+        });
+        const data = {
+          isWorkday: d.isWorkday ?? true,
+          startMinute: start,
+          endMinute: end,
+          lunchStartMinute: lunchStart,
+          lunchEndMinute: lunchEnd,
+        };
+        r = existing
+          ? await this.prisma.workSchedule.update({ where: { id: existing.id }, data })
+          : await this.prisma.workSchedule.create({ data: { userId: null, weekday: d.weekday, ...data } });
+      } else {
+        r = await this.prisma.workSchedule.upsert({
+        where: { userId_weekday: { userId, weekday: d.weekday } },
         update: {
           isWorkday: d.isWorkday ?? true,
           startMinute: start,
@@ -101,7 +121,8 @@ export class SettingsService {
           lunchStartMinute: lunchStart,
           lunchEndMinute: lunchEnd,
         },
-      });
+        });
+      }
       results.push(r);
     }
     return results;
@@ -281,8 +302,9 @@ export class SettingsService {
     lunchStartMinute: number | null;
     lunchEndMinute: number | null;
   }> {
-    const personal = await this.prisma.workSchedule.findUnique({
-      where: { userId_weekday: { userId, weekday } },
+    // findUnique с compound (userId, weekday) работает для не-null userId.
+    const personal = await this.prisma.workSchedule.findFirst({
+      where: { userId, weekday },
     });
     if (personal) {
       return {
@@ -293,8 +315,12 @@ export class SettingsService {
         lunchEndMinute: personal.lunchEndMinute,
       };
     }
-    const companyDefault = await this.prisma.workSchedule.findUnique({
-      where: { userId_weekday: { userId: null as any, weekday } },
+    // КРИТИЧНО: для null userId (компанийского дефолта) Prisma findUnique
+    // с null в compound unique возвращает null даже если запись есть.
+    // Поэтому ОБЯЗАТЕЛЬНО findFirst({userId: null}) — иначе компанийский
+    // график из БД не находится и clockIn проваливается в hardcode 09:00.
+    const companyDefault = await this.prisma.workSchedule.findFirst({
+      where: { userId: null, weekday },
     });
     if (companyDefault) {
       return {
