@@ -44,8 +44,15 @@ export class CronService {
 
     // Все, кто отмечается по графику: ADMIN/ACCOUNTANT/SALES_MANAGER/
     // CLIENT_MANAGER. FOUNDER не пингуем — он не в общем графике.
+    // Мульти-роли (ТЗ §2) учитываются через OR на roles[].
+    const FILTER_ROLES = ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'] as const;
     const employees = await this.prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'] } },
+      where: {
+        OR: [
+          { role: { in: FILTER_ROLES as any } },
+          { roles: { hasSome: FILTER_ROLES as any } },
+        ],
+      },
       select: { id: true, fullName: true },
     });
     const todayEntries = await this.prisma.timeEntry.findMany({
@@ -230,7 +237,10 @@ export class CronService {
     this.logger.log('Cron: kpiMonthlyIncrease');
     const users = await this.prisma.user.findMany({
       where: {
-        role: { in: ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] },
+        OR: [
+          { role: { in: ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] } },
+          { roles: { hasSome: ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] } },
+        ],
         kpiAutoStepPct: { gt: 0 },
       },
       select: {

@@ -21,9 +21,16 @@ export class KpiService {
         : undefined;
 
     // KPI leaderboard включает всех, кто работает с заявками: ADMIN
-    // (исторически вёл свои), и оба типа менеджеров.
+    // (исторически вёл свои), и оба типа менеджеров. Мульти-роли (ТЗ §2)
+    // учитываются через OR на roles[].
+    const KPI_ROLES = ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] as const;
     const users = await this.prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] } },
+      where: {
+        OR: [
+          { role: { in: KPI_ROLES as any } },
+          { roles: { hasSome: KPI_ROLES as any } },
+        ],
+      },
       select: { id: true, fullName: true, role: true, email: true, bonusPercent: true },
     });
 

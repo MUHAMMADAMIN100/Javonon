@@ -56,9 +56,15 @@ export class PaymentsService {
       },
       include: { student: { select: { id: true, fullName: true, email: true } } },
     });
-    // Уведомляем бухгалтеров и админа
+    // Уведомляем бухгалтеров и админа. Поддержка мульти-ролей (ТЗ §2):
+    // юзер с ACCOUNTANT в roles[] но другой primary тоже попадает.
     const accountants = await this.prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'ACCOUNTANT'] } },
+      where: {
+        OR: [
+          { role: { in: ['ADMIN', 'ACCOUNTANT'] } },
+          { roles: { hasSome: ['ADMIN', 'ACCOUNTANT'] } },
+        ],
+      },
       select: { id: true },
     });
     for (const u of accountants) {
