@@ -52,6 +52,18 @@ export class SettingsController {
     return this.svc.upsertSchedule(body.userId ?? null, body.days);
   }
 
+  /**
+   * Удалить весь график (все 7 дней) для указанного userId — он
+   * вернётся к компанийскому дефолту, или (если userId=null) — к
+   * hardcoded fallback. Закрывает «D» в CRUD по ТЗ §3.
+   */
+  @Delete('schedule')
+  @UseGuards(RolesGuard)
+  @Roles(Role.FOUNDER)
+  deleteSchedule(@Query('userId') userId: string | undefined) {
+    return this.svc.deleteSchedule(userId || null);
+  }
+
   // ----- Penalty Rules -----
 
   @Get('penalty-rules')

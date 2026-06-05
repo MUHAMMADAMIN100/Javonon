@@ -57,6 +57,15 @@ export const upsertSchedule = (userId: string | null, days: Partial<ScheduleDay>
     .put<ScheduleDay[]>('/settings/schedule', { userId, days })
     .then((r) => r.data);
 
+// Удалить весь график для userId (или null = компанийский дефолт).
+// После удаления личного графика сотрудник вернётся к компанийскому
+// дефолту. После удаления компанийского — clockIn упадёт на hardcoded
+// 09:00-18:00 fallback. По ТЗ §3 «полный CRUD».
+export const deleteSchedule = (userId?: string | null) =>
+  api
+    .delete<{ deleted: number }>('/settings/schedule', { params: userId ? { userId } : {} })
+    .then((r) => r.data);
+
 // --- Penalty Rules ---
 export const listPenaltyRules = () =>
   api.get<PenaltyRule[]>('/settings/penalty-rules').then((r) => r.data);

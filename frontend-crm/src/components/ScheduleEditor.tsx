@@ -7,6 +7,7 @@ import {
   type ScheduleDay,
   getSchedule,
   upsertSchedule,
+  deleteSchedule,
   hhmmToMinutes,
   minutesToHHMM,
 } from '../api/settings';
@@ -26,7 +27,7 @@ export default function ScheduleEditor({
   title?: string;
   hint?: string;
 }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: ['settings', 'schedule', userId],
@@ -75,7 +76,32 @@ export default function ScheduleEditor({
           <DayRow key={d.weekday} day={d} onChange={(patch) => update(idx, patch)} />
         ))}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 12, flexWrap: 'wrap' }}>
+        <button
+          className="btn btn-sm btn-secondary"
+          onClick={async () => {
+            const msg = userId
+              ? 'Все 7 дней личного графика будут удалены. Сотрудник вернётся к компанийскому дефолту.'
+              : 'Все 7 дней компанийского графика будут удалены. clockIn будет использовать hardcoded 09:00-18:00 fallback пока не задашь новый.';
+            const ok = await confirm({
+              title: 'Сбросить график?',
+              message: msg,
+              danger: true,
+              confirmText: 'Сбросить',
+            });
+            if (!ok) return;
+            try {
+              await deleteSchedule(userId);
+              qc.invalidateQueries({ queryKey: ['settings', 'schedule', userId] });
+              toast('График сброшен', 'success');
+            } catch (e: any) {
+              toast(e?.response?.data?.message || 'Ошибка', 'error');
+            }
+          }}
+          title="Удалить все 7 дней (CRUD-Delete)"
+        >
+          Сбросить
+        </button>
         <button className="btn btn-primary" onClick={save}>Сохранить график</button>
       </div>
     </div>

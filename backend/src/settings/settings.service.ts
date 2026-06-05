@@ -48,6 +48,21 @@ export class SettingsService {
   }
 
   /**
+   * Полностью удалить график (все 7 дней) для указанного userId.
+   * Если userId=null — удаляется компанийский дефолт (clockIn упадёт
+   * на hardcoded fallback). Если userId=кого-то — этот сотрудник
+   * перестаёт иметь личный график и возвращается к компанийскому
+   * дефолту. Закрывает «D» в CRUD по ТЗ §3.
+   */
+  async deleteSchedule(userId: string | null) {
+    // Prisma deleteMany с null в фильтре работает (в отличие от findUnique).
+    const r = await this.prisma.workSchedule.deleteMany({
+      where: { userId },
+    });
+    return { deleted: r.count };
+  }
+
+  /**
    * Сохранить полный набор графика (7 дней) для пользователя или
    * дефолта. Upsert по (userId, weekday). Используется как "массовое
    * сохранение" с UI вместо 7 отдельных PATCH.
