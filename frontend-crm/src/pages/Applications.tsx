@@ -17,7 +17,15 @@ import { isElevated } from '../lib/roles';
 
 type Scope = 'all' | 'mine';
 
-const PAGE_SIZE = 5;
+// 5 — было удобно для скриншотов/демо, но на реальном CRM с сотнями
+// заявок это значит постоянное «следующая страница». 20 даёт нормальный
+// объём для обзора и помещается на одном экране ноутбука.
+const PAGE_SIZE = 20;
+
+// Роли, которые реально являются менеджерами заявок (по ТЗ §7). FOUNDER/
+// ADMIN/ACCOUNTANT тоже могут быть назначены, но фильтр должен по
+// умолчанию показывать только реальных продажников/клиент-менеджеров.
+const MANAGER_ROLES = new Set(['SALES_MANAGER', 'CLIENT_MANAGER']);
 
 export default function Applications() {
   const navigate = useNavigate();
@@ -63,7 +71,12 @@ export default function Applications() {
     queryFn: () => listUsers(),
     enabled: isAdmin,
   });
-  const users = usersQuery.data ?? [];
+  // Фильтр дропдауна «менеджер»: только SALES_MANAGER/CLIENT_MANAGER.
+  // По мульти-ролям (ТЗ §2) — попадает если хотя бы одна из ролей в наборе.
+  const users = (usersQuery.data ?? []).filter((u) => {
+    const all = [u.role, ...((u as any).roles || [])].filter(Boolean);
+    return all.some((r) => MANAGER_ROLES.has(r as string));
+  });
 
   // При изменении набора заявок извне — корректируем текущую страницу.
   useEffect(() => {
@@ -168,7 +181,7 @@ export default function Applications() {
                       <td><strong>{a.fullName}</strong></td>
                       <td data-label="Телефон">{a.phone}</td>
                       <td data-label="Направление">{DIRECTION_LABEL[a.direction]}</td>
-                      <td data-label="Менеджеры">
+                      <td data-label="Менеджер">
                         <div className="mgr-cell">
                           <div className="mgr-row">
                             <span className="mgr-tag tj">TJ</span>
