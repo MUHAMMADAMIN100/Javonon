@@ -11,6 +11,7 @@ import {
   offerList,
   offerCreate,
   offerPatch,
+  offerDelete,
   offerSignatures,
 } from '../api/offers';
 
@@ -159,13 +160,14 @@ function OfferCard({
   onChanged: () => void;
   onShowSignatures: () => void;
 }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(offer.title);
   const [content, setContent] = useState(offer.content);
   const [busy, setBusy] = useState(false);
   const signCount = offer._count?.signatures ?? 0;
   const canEdit = signCount === 0 && offer.isActive;
+  const canDelete = signCount === 0;
 
   const save = async () => {
     setBusy(true);
@@ -218,6 +220,34 @@ function OfferCard({
           {canEdit && !editing && (
             <button className="btn btn-sm btn-secondary" onClick={() => setEditing(true)}>
               <Icon name="edit" size={14} /> Изменить
+            </button>
+          )}
+          {canDelete && !editing && (
+            <button
+              className="btn btn-sm btn-danger"
+              disabled={busy}
+              onClick={async () => {
+                const ok = await confirm({
+                  title: 'Удалить версию?',
+                  message: `«${offer.title}» v${offer.version} будет полностью удалена. Подписей нет, отменить нельзя.`,
+                  danger: true,
+                  confirmText: 'Удалить',
+                });
+                if (!ok) return;
+                setBusy(true);
+                try {
+                  await offerDelete(offer.id);
+                  toast('Версия удалена', 'success');
+                  onChanged();
+                } catch (e: any) {
+                  toast(e?.response?.data?.message || 'Ошибка', 'error');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              title="Удалить версию (только если нет подписей)"
+            >
+              <Icon name="delete" size={14} />
             </button>
           )}
         </div>

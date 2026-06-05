@@ -45,3 +45,6 @@ export const offerPatch = (id: string, data: { title?: string; content?: string 
 
 export const offerSignatures = (id: string) =>
   api.get<OfferSignature[]>(`/offers/${id}/signatures`).then((r) => r.data);
+
+export const offerDelete = (id: string) =>
+  api.delete<{ ok: true }>(`/offers/${id}`).then((r) => r.data);

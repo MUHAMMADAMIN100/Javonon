@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -68,5 +69,17 @@ export class OffersController {
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
   signatures(@Param('id') id: string) {
     return this.offers.signatures(id);
+  }
+
+  /**
+   * Удалить версию (D в CRUD по ТЗ §1). Запрещено если есть подписи —
+   * это audit trail который трогать нельзя. Service автоматически
+   * поднимает предыдущую версию активной, если удалили активную.
+   */
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  remove(@Param('id') id: string) {
+    return this.offers.remove(id);
   }
 }

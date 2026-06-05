@@ -137,4 +137,36 @@ export class OffersService {
       orderBy: { signedAt: 'desc' },
     });
   }
+
+  /**
+   * Удалить версию оферты (ТЗ §1 «полный CRUD»). Запрещено для версий с
+   * подписями — там идёт audit trail. Если оферта была isActive=true —
+   * автоматически активируем предыдущую по version.
+   */
+  async remove(id: string) {
+    const offer = await this.prisma.offerTemplate.findUnique({
+      where: { id },
+      include: { _count: { select: { signatures: true } } },
+    });
+    if (!offer) throw new NotFoundException('Оферта не найдена');
+    if (offer._count.signatures > 0) {
+      throw new BadRequestException(
+        'Нельзя удалить версию с подписями. Деактивируй её (она останется в архиве).',
+      );
+    }
+    await this.prisma.offerTemplate.delete({ where: { id } });
+    // Если удалили активную — поднимаем предыдущую активной.
+    if (offer.isActive) {
+      const prev = await this.prisma.offerTemplate.findFirst({
+        orderBy: { version: 'desc' },
+      });
+      if (prev) {
+        await this.prisma.offerTemplate.update({
+          where: { id: prev.id },
+          data: { isActive: true },
+        });
+      }
+    }
+    return { ok: true };
+  }
 }
