@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { submitApplication, type Direction, DIRECTION_LABEL } from '../api';
+import { submitApplication, type Direction, DIRECTION_LABEL, type ContactChannel } from '../api';
 import Icon from '../Icon';
 import PhoneInput, { COUNTRIES } from './PhoneInput';
 
@@ -23,6 +23,12 @@ export default function ApplicationForm() {
   const [email, setEmail] = useState('');
   const [direction, setDirection] = useState<Direction>('BACHELOR');
   const [comment, setComment] = useState('');
+  // По ТЗ §8 — доп. контакт (родитель/опекун) + предпочтительный канал
+  // связи. Свёрнуто по умолчанию, чтобы не перегружать форму.
+  const [showExtra, setShowExtra] = useState(false);
+  const [secondaryPhone, setSecondaryPhone] = useState('');
+  const [secondaryLabel, setSecondaryLabel] = useState('');
+  const [preferredChannel, setPreferredChannel] = useState<ContactChannel | ''>('');
   const [errors, setErrors] = useState<Errors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -115,6 +121,9 @@ export default function ApplicationForm() {
       await submitApplication({
         fullName: fullName.trim(),
         phone: phone.trim(),
+        secondaryPhone: secondaryPhone.trim() || undefined,
+        secondaryContactLabel: secondaryLabel.trim() || undefined,
+        preferredChannel: preferredChannel || undefined,
         email: email.trim() || undefined,
         direction,
         comment: comment.trim() || undefined,
@@ -125,6 +134,8 @@ export default function ApplicationForm() {
         (window as any).ym?.((window as any).__YM_ID__, 'reachGoal', 'APPLICATION_SUBMIT');
       } catch {}
       setFullName(''); setPhone(''); setEmail(''); setComment('');
+      setSecondaryPhone(''); setSecondaryLabel(''); setPreferredChannel('');
+      setShowExtra(false);
       setDirection('BACHELOR');
       setErrors({});
       setTouched({});
@@ -263,6 +274,65 @@ export default function ApplicationForm() {
                   />
                   {invalid('comment') && <div className="form-error">{errors.comment}</div>}
                 </div>
+
+                {/* Доп. поля по ТЗ §8 — свёрнуты по умолчанию.
+                    Кликабельная подсказка "Добавить ещё контакт" → разворачивает.
+                    Не блокирует UX простой формы, но даёт возможность сразу указать
+                    родителя/опекуна и канал связи. */}
+                {!showExtra && (
+                  <button
+                    type="button"
+                    onClick={() => setShowExtra(true)}
+                    style={{
+                      background: 'transparent',
+                      border: '1px dashed rgba(255,255,255,0.3)',
+                      color: 'rgba(255,255,255,0.7)',
+                      padding: '10px 14px',
+                      borderRadius: 10,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      width: '100%',
+                      textAlign: 'left',
+                    }}
+                  >
+                    + Добавить ещё контакт или указать предпочтительный канал
+                  </button>
+                )}
+                {showExtra && (
+                  <>
+                    <div className="form-row">
+                      <label>Доп. телефон (родитель / опекун)</label>
+                      <PhoneInput
+                        value={secondaryPhone}
+                        onChange={setSecondaryPhone}
+                      />
+                    </div>
+                    <div className="form-row">
+                      <label>Кем приходится</label>
+                      <input
+                        type="text"
+                        value={secondaryLabel}
+                        onChange={(e) => setSecondaryLabel(e.target.value)}
+                        placeholder="Например: отец, мать, брат, опекун"
+                        maxLength={40}
+                      />
+                    </div>
+                    <div className="form-row">
+                      <label>Предпочтительный способ связи</label>
+                      <select
+                        value={preferredChannel}
+                        onChange={(e) => setPreferredChannel(e.target.value as ContactChannel | '')}
+                      >
+                        <option value="">— не важно —</option>
+                        <option value="PHONE">Звонок</option>
+                        <option value="WHATSAPP">WhatsApp</option>
+                        <option value="TELEGRAM">Telegram</option>
+                        <option value="INSTAGRAM">Instagram</option>
+                        <option value="EMAIL">Email</option>
+                      </select>
+                    </div>
+                  </>
+                )}
 
                 <motion.button
                   type="submit"

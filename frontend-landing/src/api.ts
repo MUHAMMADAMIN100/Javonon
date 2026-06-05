@@ -42,9 +42,17 @@ export const SOURCE_LABEL: Record<ApplicationSource, string> = {
   OTHER: 'Другое',
 };
 
+// По ТЗ §8: предпочтительный канал связи с клиентом.
+export type ContactChannel = 'WHATSAPP' | 'PHONE' | 'INSTAGRAM' | 'TELEGRAM' | 'EMAIL';
+
 export interface ApplicationPayload {
   fullName: string;
   phone: string;
+  // Доп. контакт (отец/мать/другое лицо) — по ТЗ §8.
+  secondaryPhone?: string;
+  secondaryContactLabel?: string;
+  // Предпочтительный канал связи с клиентом.
+  preferredChannel?: ContactChannel;
   email?: string;
   direction: Direction;
   comment?: string;
