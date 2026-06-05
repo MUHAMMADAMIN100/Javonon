@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createTask, deleteTask, listTasks, updateTask } from '../api/tasks';
 import { listUsers } from '../api/users';
-import type { Task, TaskStatus } from '../api/types';
-import { TASK_STATUS_BADGE, TASK_STATUS_LABEL } from '../api/types';
+import type { Role, Task, TaskStatus } from '../api/types';
+import { ROLE_LABEL, TASK_STATUS_BADGE, TASK_STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
@@ -227,7 +227,7 @@ export default function Tasks() {
                   <option value="">— Выберите сотрудника —</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.fullName} {u.role === 'ADMIN' ? '(Админ)' : '(Сотрудник)'}
+                      {u.fullName} · {ROLE_LABEL[u.role as Role] || u.role}
                     </option>
                   ))}
                 </select>
