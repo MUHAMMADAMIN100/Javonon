@@ -318,9 +318,18 @@ export class ChatService {
 
   /** Создаёт сообщение от системного бота (без author, помечается особым образом). */
   private async systemBotMessage(roomId: string, text: string) {
-    // Bot-сообщения пишутся от первого ADMIN-юзера (или любого админа), чтобы Foreign Key не падал
+    // Bot-сообщения пишутся от первого elevated-юзера (FOUNDER/ADMIN/
+    // ACCOUNTANT), чтобы Foreign Key не падал. Учитываем мульти-роли —
+    // юзер с ADMIN в roles[] тоже подходит. Раньше требовался строго
+    // primary=ADMIN, и в компании где только FOUNDER + accountants
+    // системный бот не мог писать.
     const admin = await this.prisma.user.findFirst({
-      where: { role: 'ADMIN' },
+      where: {
+        OR: [
+          { role: { in: ['FOUNDER', 'ADMIN', 'ACCOUNTANT'] } },
+          { roles: { hasSome: ['FOUNDER', 'ADMIN', 'ACCOUNTANT'] } },
+        ],
+      },
       select: { id: true },
     });
     if (!admin) return;

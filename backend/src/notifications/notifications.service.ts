@@ -35,8 +35,16 @@ export class NotificationsService {
   }
 
   async notifyAdmins(data: NotifyPayload) {
+    // Мульти-роли (ТЗ §2): включает юзеров с ADMIN в roles[]. По ТЗ
+    // ADMIN и ACCOUNTANT эквивалентны, поэтому уведомления админам
+    // расширяем и на ACCOUNTANT — иначе мульти-роль не симметрична.
     const admins = await this.prisma.user.findMany({
-      where: { role: 'ADMIN' },
+      where: {
+        OR: [
+          { role: { in: ['ADMIN', 'ACCOUNTANT'] } },
+          { roles: { hasSome: ['ADMIN', 'ACCOUNTANT'] } },
+        ],
+      },
       select: { id: true },
     });
     if (!admins.length) return;

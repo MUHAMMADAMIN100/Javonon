@@ -82,8 +82,15 @@ export class SalesService {
    *      ранним createdAt (равномерно распределяет в пустой системе).
    */
   async pickManagerForLead(): Promise<string | null> {
+    // Мульти-роли (ТЗ §2): юзер с SALES_MANAGER в roles[] тоже считается
+    // менеджером — раньше auto-distribute их пропускал.
     const managers = await this.prisma.user.findMany({
-      where: { role: 'SALES_MANAGER' },
+      where: {
+        OR: [
+          { role: 'SALES_MANAGER' },
+          { roles: { has: 'SALES_MANAGER' } },
+        ],
+      },
       select: { id: true, createdAt: true },
     });
     if (managers.length === 0) return null;
