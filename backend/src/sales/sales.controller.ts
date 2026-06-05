@@ -12,6 +12,7 @@ import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { SalesService } from './sales.service';
 
 @Controller('sales')
@@ -24,9 +25,15 @@ export class SalesController {
   // ограничиваем, реальный контроль остаётся на UI и фильтрах.
   @Post('applications/:id/assign')
   @UseGuards(RolesGuard)
-  @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER)
-  reassign(@Param('id') id: string, @Body() body: { managerId: string | null }) {
-    return this.svc.reassign(id, body.managerId ?? null);
+  @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  reassign(
+    @Param('id') id: string,
+    @Body() body: { managerId: string | null },
+    @CurrentUser() me: any,
+  ) {
+    // Реальный scope-check в SalesService.reassign: SALES_MANAGER/
+    // CLIENT_MANAGER пропускается только если owner. Elevated — всегда.
+    return this.svc.reassign(id, body.managerId ?? null, me);
   }
 
   // Pipelines — все авторизованные читают; пишут elevated + sales manager

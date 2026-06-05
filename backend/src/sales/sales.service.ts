@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { isElevated } from '../auth/role-utils';
 
 /**
  * SalesService — авто-распределение лидов и управление воронками.
@@ -48,12 +49,27 @@ export class SalesService {
   }
 
   /**
-   * Ручное переназначение лида менеджеру. Доступно SALES_MANAGER (своих
-   * на других) и elevated. Контроль доступа — на уровне контроллера.
+   * Ручное переназначение лида менеджеру.
+   * - Elevated (FOUNDER/ADMIN/ACCOUNTANT) — может переназначить любую заявку.
+   * - SALES_MANAGER — только если он сам сейчас является managerId этой
+   *   заявки (передаёт свою на другого).
+   * - Все остальные — 403.
    */
-  async reassign(applicationId: string, newManagerId: string | null) {
+  async reassign(
+    applicationId: string,
+    newManagerId: string | null,
+    requester: { id: string; role?: string; roles?: string[] },
+  ) {
     const app = await this.prisma.application.findUnique({ where: { id: applicationId } });
     if (!app) throw new NotFoundException('Заявка не найдена');
+
+    // Без elevated можно переназначать ТОЛЬКО заявки, где ты сейчас менеджер.
+    // Это закрывает дыру: до этого SALES_MANAGER мог через /sales endpoint
+    // забрать себе любую чужую заявку.
+    if (!isElevated(requester) && app.managerId !== requester.id) {
+      throw new ForbiddenException('Переназначать можно только свои заявки');
+    }
+
     if (newManagerId) {
       const u = await this.prisma.user.findUnique({ where: { id: newManagerId } });
       if (!u) throw new BadRequestException('Менеджер не найден');

@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
@@ -309,8 +310,20 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, dto: UpdateUserDto) {
+  async update(id: string, dto: UpdateUserDto, requester?: { id: string; role?: string; roles?: string[] }) {
     const target = await this.findOne(id);
+
+    // КРИТИЧНАЯ ЗАЩИТА: аккаунт FOUNDER может править ТОЛЬКО сам FOUNDER.
+    // Без этой проверки любой ADMIN/ACCOUNTANT мог бы сменить пароль
+    // основателю и захватить контроль над системой через PATCH /users/<founder_id>.
+    if (target.role === 'FOUNDER' && requester) {
+      const isRequesterFounder = requester.role === 'FOUNDER' || (requester.roles || []).includes('FOUNDER');
+      const isSelf = requester.id === target.id;
+      if (!isRequesterFounder && !isSelf) {
+        throw new ForbiddenException('Аккаунт FOUNDER может править только сам FOUNDER');
+      }
+    }
+
     const data: any = {};
     // DTO уже tримит/лоуэркейсит через @Transform — здесь повторно
     // нормализуем только как страховка (на случай если кто-то когда-то
@@ -401,8 +414,17 @@ export class UsersService {
     return safe;
   }
 
-  async remove(id: string) {
+  async remove(id: string, requester?: { id: string; role?: string; roles?: string[] }) {
     const target = await this.findOne(id);
+
+    // FOUNDER аккаунт может удалить только сам FOUNDER (через CLI/сидер).
+    if (target.role === 'FOUNDER' && requester) {
+      const isRequesterFounder = requester.role === 'FOUNDER' || (requester.roles || []).includes('FOUNDER');
+      if (!isRequesterFounder) {
+        throw new ForbiddenException('Удалить FOUNDER может только FOUNDER');
+      }
+    }
+
     // Защита: нельзя удалить последнего ADMIN
     if (target.role === 'ADMIN') {
       const adminCount = await this.prisma.user.count({ where: { role: 'ADMIN' } });

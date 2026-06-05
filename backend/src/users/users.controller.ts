@@ -121,7 +121,7 @@ export class UsersController {
     if (id === me.id && dto.role && dto.role !== 'ADMIN') {
       throw new BadRequestException('Нельзя понизить собственную роль');
     }
-    return this.users.update(id, dto);
+    return this.users.update(id, dto, me);
   }
 
   @Delete(':id')
@@ -130,7 +130,7 @@ export class UsersController {
     if (id === me.id) {
       throw new BadRequestException('Нельзя удалить собственный аккаунт');
     }
-    return this.users.remove(id);
+    return this.users.remove(id, me);
   }
 
   /** Загрузить документ сотрудника (паспорт/контракт/диплом). */

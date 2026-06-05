@@ -285,7 +285,20 @@ export class StudentsService {
     if (dto.phones !== undefined) data.phones = dto.phones;
     if (dto.phoneLabels !== undefined) data.phoneLabels = dto.phoneLabels;
     if (dto.preferredChannel !== undefined) data.preferredChannel = dto.preferredChannel;
-    if (dto.onboardingStage !== undefined) data.onboardingStage = dto.onboardingStage;
+    // Онбординг: по ТЗ ведёт CLIENT_MANAGER + elevated (FOUNDER/ADMIN/
+    // ACCOUNTANT). SALES_MANAGER, даже будучи назначенным managerId, не
+    // должен менять этап онбординга — это зона клиентского менеджера.
+    if (dto.onboardingStage !== undefined) {
+      const userAny = user as any;
+      const canEditOnboarding =
+        isElevated(userAny) ||
+        userAny?.role === 'CLIENT_MANAGER' ||
+        (userAny?.roles || []).includes('CLIENT_MANAGER');
+      if (!canEditOnboarding) {
+        throw new ForbiddenException('Онбординг ведёт клиентский менеджер');
+      }
+      data.onboardingStage = dto.onboardingStage;
+    }
     if ((dto as any).birthday !== undefined) {
       const b = (dto as any).birthday;
       data.birthday = b ? new Date(b) : null;
