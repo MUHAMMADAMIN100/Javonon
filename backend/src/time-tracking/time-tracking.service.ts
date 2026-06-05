@@ -7,6 +7,39 @@ import { SettingsService } from '../settings/settings.service';
 const OFFICE_START_HOUR = 9;
 const OFFICE_START_MIN = 0;
 
+// КРИТИЧНО: timezone бизнеса. Railway/Docker контейнеры обычно в UTC,
+// а Душанбе на UTC+5. Без явного учёта зоны getDay()/setHours() работают
+// с UTC временем → штрафы за опоздание считаются неправильно (в пределах
+// типичного рабочего дня в Душанбе UTC-час всегда меньше графического,
+// поэтому lateMinutes выходит 0 даже для реальных опозданий).
+const BUSINESS_TZ = 'Asia/Dushanbe';
+
+const WEEKDAY_MAP: Record<string, 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN'> = {
+  Sun: 'SUN', Mon: 'MON', Tue: 'TUE', Wed: 'WED', Thu: 'THU', Fri: 'FRI', Sat: 'SAT',
+};
+
+/**
+ * Возвращает день недели и минуты с полуночи в Asia/Dushanbe для
+ * переданной даты. Использует Intl.DateTimeFormat — единственный
+ * надёжный способ работать с timezone в Node без внешних пакетов.
+ */
+function localDayAndMinutes(date: Date): { weekday: any; minutesFromMidnight: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: BUSINESS_TZ,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const wkRaw = parts.find((p) => p.type === 'weekday')?.value || 'Mon';
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
+  return {
+    weekday: WEEKDAY_MAP[wkRaw] || 'MON',
+    minutesFromMidnight: hour * 60 + minute,
+  };
+}
+
 @Injectable()
 export class TimeTrackingService {
   constructor(
@@ -73,20 +106,15 @@ export class TimeTrackingService {
     }
 
     const now = new Date();
-    // Per-user schedule lookup (ТЗ §3). FOUNDER задаёт график → clockIn
-    // считает опоздание ОТ ЭТОГО графика, не от хардкодных 09:00.
-    const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
-    const weekday = WEEKDAYS[now.getDay()] === 'SUN' ? 'SUN' : WEEKDAYS[now.getDay()];
-    // JS day(): 0=Sun..6=Sat. Маппинг в Weekday enum.
-    const JS_TO_ENUM: Record<number, any> = { 0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT' };
-    const sched = await this.settings.getEffectiveScheduleForUser(userId, JS_TO_ENUM[now.getDay()]);
-
-    const expected = new Date(now);
-    expected.setHours(0, 0, 0, 0);
-    expected.setMinutes(sched.startMinute);
-    // Если день нерабочий — lateMinutes=0 (выход в субботу на переработку OK).
+    // Считаем день недели и минуты с полуночи в БИЗНЕС-таймзоне (Душанбе),
+    // не в UTC. Без этого штрафы за опоздание на UTC сервере выходят 0 для
+    // типичного рабочего дня — см. BUSINESS_TZ комментарий выше.
+    const { weekday, minutesFromMidnight } = localDayAndMinutes(now);
+    const sched = await this.settings.getEffectiveScheduleForUser(userId, weekday);
+    // Если день нерабочий по графику — lateMinutes=0 (выход в субботу
+    // на переработку не штрафуется).
     const lateMinutes = sched.isWorkday
-      ? Math.max(0, Math.round((now.getTime() - expected.getTime()) / 60000))
+      ? Math.max(0, minutesFromMidnight - sched.startMinute)
       : 0;
 
     return this.prisma.timeEntry.create({
