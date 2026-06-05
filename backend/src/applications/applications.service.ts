@@ -293,9 +293,20 @@ export class ApplicationsService {
       // Старый флоу (без email) — пропускаем, студент создастся при отдельном действии
       let studentId = existing.studentId;
       try {
+        // По ТЗ §8 — все доп. поля из Application переносим в Student
+        // (раньше терялись secondaryPhone, preferredChannel — менеджеру
+        // пришлось бы заполнять заново).
+        const phones: string[] = [existing.phone];
+        const phoneLabels: string[] = ['сам'];
+        if ((existing as any).secondaryPhone) {
+          phones.push((existing as any).secondaryPhone);
+          phoneLabels.push((existing as any).secondaryContactLabel || '');
+        }
         const studentData: any = {
           fullName: existing.fullName,
-          phones: [existing.phone],
+          phones,
+          phoneLabels,
+          preferredChannel: (existing as any).preferredChannel ?? null,
           email: existing.email,
           direction: existing.direction,
           cabinet: CABINET_BY_DIRECTION[existing.direction],
