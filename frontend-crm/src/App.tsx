@@ -24,6 +24,7 @@ import Settings from './pages/Settings';
 import Pipelines from './pages/Pipelines';
 import MassMail from './pages/MassMail';
 import Inbox from './pages/Inbox';
+import Offers from './pages/Offers';
 import Chat from './pages/Chat';
 import Lms from './pages/LMS';
 import Partners from './pages/Partners';
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/pipelines" element={<Pipelines />} />
         <Route path="/massmail" element={<MassMail />} />
         <Route path="/inbox" element={<Inbox />} />
+        <Route path="/offers" element={<Offers />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/salary" element={<Salary />} />
         <Route path="/kpi" element={<Kpi />} />

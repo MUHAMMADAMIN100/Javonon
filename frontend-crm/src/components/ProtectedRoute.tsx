@@ -19,6 +19,7 @@ const ROUTE_ROLES: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: '/settings', roles: ['FOUNDER'] },
   { prefix: '/pipelines', roles: ['ADMIN', 'ACCOUNTANT'] },
   { prefix: '/massmail', roles: ['ADMIN', 'ACCOUNTANT'] },
+  { prefix: '/offers', roles: ['ADMIN', 'ACCOUNTANT'] },
 ];
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
