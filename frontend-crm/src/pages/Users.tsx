@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createUser, deleteUser, listUsers, updateUser } from '../api/users';
-import type { Role, User } from '../api/types';
+import { ROLE_LABEL, type Role, type User } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, passwordRule, required, validateAll } from '../utils/validators';
@@ -13,7 +13,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
-const EMPTY_FORM = { email: '', fullName: '', password: '', role: 'EMPLOYEE' as Role };
+const EMPTY_FORM = { email: '', fullName: '', password: '', role: 'SALES_MANAGER' as Role };
 
 export default function Users() {
   const me = useAuth((s) => s.user);
@@ -101,10 +101,6 @@ export default function Users() {
     setError(null);
   };
 
-  const onChangeRole = (u: User, role: Role) => {
-    updateMut.mutate({ id: u.id, patch: { role } });
-  };
-
   const onDelete = async (u: User) => {
     if (u.id === me?.id) {
       toast('Нельзя удалить самого себя', 'error');
@@ -150,10 +146,33 @@ export default function Users() {
                   </td>
                   <td data-label="Email">{u.email}</td>
                   <td data-label="Роль">
-                    <select value={u.role} onChange={(e) => onChangeRole(u, e.target.value as Role)} disabled={u.id === me?.id}>
-                      <option value="EMPLOYEE">Сотрудник</option>
-                      <option value="ADMIN">Администратор</option>
-                    </select>
+                    {/* Мульти-роли по ТЗ §2. Раньше тут был inline-select с
+                        опциями EMPLOYEE/ADMIN — обе устарели (EMPLOYEE
+                        удалён, выбора из 5 ролей не было). Управление
+                        ролями теперь в карточке /users/:id через RolesEditor
+                        (FOUNDER-only). Здесь — только просмотр всех ролей. */}
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {(() => {
+                        const allRoles = Array.from(
+                          new Set([u.role, ...((u as any).roles || [])])
+                        ).filter(Boolean);
+                        return allRoles.map((r) => (
+                          <span
+                            key={r}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: 999,
+                              background: r === 'FOUNDER' ? '#fef3c7' : 'var(--bg-soft)',
+                              border: '1px solid var(--border)',
+                              fontSize: 11,
+                              fontWeight: 500,
+                            }}
+                          >
+                            {ROLE_LABEL[r as Role] || r}
+                          </span>
+                        ));
+                      })()}
+                    </div>
                   </td>
                   <td data-label="Создан">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('ru-RU') : '—'}</td>
                   <td>
@@ -269,11 +288,17 @@ export default function Users() {
 
               <div className="form-group" style={{ textAlign: 'left', marginBottom: 16 }}>
                 <label>Роль</label>
+                {/* ТЗ §2: 5 ролей. FOUNDER не доступен в обычном create —
+                    его раздаёт только FOUNDER в RolesEditor. */}
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-                  <option value="EMPLOYEE">Сотрудник</option>
                   <option value="ADMIN">Администратор</option>
                   <option value="ACCOUNTANT">Бухгалтер</option>
+                  <option value="SALES_MANAGER">Менеджер по продажам</option>
+                  <option value="CLIENT_MANAGER">Клиентский менеджер</option>
                 </select>
+                <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
+                  Дополнительные роли (мульти-доступ) назначаются после создания в карточке сотрудника.
+                </div>
               </div>
 
               <div className="dialog-actions">
