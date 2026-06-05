@@ -1,10 +1,13 @@
 import { api } from './client';
+import type { Role } from './types';
 
 export interface KpiRow {
   id: string;
   fullName: string;
   email: string;
-  role: 'ADMIN' | 'EMPLOYEE' | 'ACCOUNTANT';
+  // По ТЗ §2: 5 ролей + legacy EMPLOYEE. Раньше тут был узкий
+  // 3-ролевой union — новые роли проваливались мимо type-safety.
+  role: Role;
   bonusPercent: number | null;
   applicationsAssigned: number;
   applicationsEnrolled: number;
