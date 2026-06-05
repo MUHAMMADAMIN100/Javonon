@@ -19,7 +19,14 @@ import { isElevated } from '../lib/roles';
 
 type Scope = 'all' | 'mine';
 
-const PAGE_SIZE = 5;
+// Согласовано с Applications.tsx — 20 на страницу (демо-значение 5
+// было удобно для скриншотов, но реальный CRM с базой студентов
+// постоянно листал страницы).
+const PAGE_SIZE = 20;
+
+// Те же роли что и в Applications.tsx — менеджеры студентов это
+// SALES_MANAGER (вёл лид) и CLIENT_MANAGER (ведёт зачисленного).
+const MANAGER_ROLES = new Set(['SALES_MANAGER', 'CLIENT_MANAGER']);
 
 export default function Students() {
   const navigate = useNavigate();
@@ -93,7 +100,12 @@ export default function Students() {
     queryFn: () => listUsers(),
     enabled: isAdmin,
   });
-  const users = usersQuery.data ?? [];
+  // Дропдаун «менеджер» — только SALES_MANAGER/CLIENT_MANAGER, с учётом
+  // мульти-ролей по ТЗ §2 (юзер с roles=[SALES_MANAGER, ADMIN] попадает).
+  const users = (usersQuery.data ?? []).filter((u) => {
+    const all = [u.role, ...((u as any).roles || [])].filter(Boolean);
+    return all.some((r) => MANAGER_ROLES.has(r as string));
+  });
 
   useRealtime({
     'student:updated': () => qc.invalidateQueries({ queryKey: keys.students.all }),
