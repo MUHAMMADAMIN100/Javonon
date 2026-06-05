@@ -207,9 +207,19 @@ export class TimeTrackingService {
     const totalLunch = active.totalLunchMinutes + extraLunch;
     const totalMs = now.getTime() - active.clockIn.getTime();
     const totalMin = Math.max(0, Math.round(totalMs / 60000) - totalLunch);
-    // Норма — 8 часов (480 мин). Всё что сверх — переработка.
-    const STANDARD_DAY_MIN = 480;
-    const overtimeMinutes = Math.max(0, totalMin - STANDARD_DAY_MIN);
+    // Норма рабочего дня берётся из ГРАФИКА сотрудника (по ТЗ §3).
+    // workingDay = end - start - запланированный обед.
+    // Если расписания нет — fallback на 8 часов (480 мин).
+    const { weekday: clockInWeekday } = localDayAndMinutes(active.clockIn);
+    const sched = await this.settings.getEffectiveScheduleForUser(userId, clockInWeekday);
+    let standardDayMin = 480;
+    if (sched.isWorkday) {
+      const lunch = (sched.lunchStartMinute !== null && sched.lunchEndMinute !== null)
+        ? Math.max(0, sched.lunchEndMinute - sched.lunchStartMinute)
+        : 0;
+      standardDayMin = Math.max(60, sched.endMinute - sched.startMinute - lunch);
+    }
+    const overtimeMinutes = Math.max(0, totalMin - standardDayMin);
 
     return this.prisma.timeEntry.update({
       where: { id: active.id },
