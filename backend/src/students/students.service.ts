@@ -81,6 +81,7 @@ export class StudentsService {
         phones: dto.phones?.length ? dto.phones : [],
         phoneLabels: dto.phoneLabels?.length ? dto.phoneLabels : [],
         preferredChannel: dto.preferredChannel ?? null,
+        birthday: (dto as any).birthday ? new Date((dto as any).birthday) : null,
         email: emailNormalized,
         password: passwordHash,
         photoUrl: dto.photoUrl || null,

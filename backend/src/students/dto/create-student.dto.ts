@@ -30,6 +30,10 @@ export class CreateStudentDto {
   @IsEnum(ContactChannel)
   preferredChannel?: ContactChannel;
 
+  // ISO дата рождения — для cron birthdayGreetings.
+  @IsOptional()
+  birthday?: string;
+
   @IsEmail()
   @MaxLength(120)
   email: string;

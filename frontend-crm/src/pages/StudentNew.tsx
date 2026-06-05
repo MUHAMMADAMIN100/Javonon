@@ -44,6 +44,11 @@ export default function StudentNew() {
   const { toast } = useUI();
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [phoneLabel, setPhoneLabel] = useState('сам');
+  const [secondaryPhone, setSecondaryPhone] = useState('');
+  const [secondaryLabel, setSecondaryLabel] = useState('');
+  const [preferredChannel, setPreferredChannel] = useState('');
+  const [birthday, setBirthday] = useState('');
   const [email, setEmail] = useState('');
   const [direction, setDirection] = useState<Direction>('BACHELOR');
   const [comment, setComment] = useState('');
@@ -86,13 +91,29 @@ export default function StudentNew() {
     setTouched({ fullName: true, phone: true, email: true, comment: true });
     if (isInvalid) return;
     setError(null);
+    // Собираем телефоны и подписи синхронно по индексу — backend ожидает
+    // одинаковую длину массивов.
+    const phones: string[] = [];
+    const phoneLabels: string[] = [];
+    if (phone) {
+      phones.push(phone);
+      phoneLabels.push(phoneLabel.trim() || 'сам');
+    }
+    if (secondaryPhone) {
+      phones.push(secondaryPhone);
+      phoneLabels.push(secondaryLabel.trim());
+    }
+
     createMut.mutate({
       fullName,
-      phones: phone ? [phone] : [],
+      phones,
+      phoneLabels,
+      preferredChannel: (preferredChannel || undefined) as any,
+      birthday: birthday || undefined,
       email,
       direction,
       comment: comment || undefined,
-    });
+    } as any);
   };
 
   const copyBoth = async () => {
@@ -128,7 +149,7 @@ export default function StudentNew() {
           </div>
           <div className="form-grid-2">
             <div className="form-group">
-              <label>Телефон</label>
+              <label>Основной телефон</label>
               <PhoneInput
                 value={phone}
                 onChange={(v) => setPhone(v)}
@@ -137,17 +158,65 @@ export default function StudentNew() {
               {showErr('phone') && <div className="form-error-text">{errors.phone}</div>}
             </div>
             <div className="form-group">
-              <label>Email * <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— станет логином студента</span></label>
+              <label>Подпись основного <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— чей номер</span></label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-                className={showErr('email') ? 'input-error' : ''}
-                required
+                value={phoneLabel}
+                onChange={(e) => setPhoneLabel(e.target.value)}
+                placeholder="сам"
+                maxLength={40}
               />
-              {showErr('email') && <div className="form-error-text">{errors.email}</div>}
             </div>
+          </div>
+          <div className="form-grid-2">
+            <div className="form-group">
+              <label>Доп. телефон <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— мать/отец/др.</span></label>
+              <PhoneInput
+                value={secondaryPhone}
+                onChange={(v) => setSecondaryPhone(v)}
+              />
+            </div>
+            <div className="form-group">
+              <label>Подпись доп. контакта</label>
+              <input
+                value={secondaryLabel}
+                onChange={(e) => setSecondaryLabel(e.target.value)}
+                placeholder="Отец, Мать..."
+                maxLength={40}
+              />
+            </div>
+          </div>
+          <div className="form-grid-2">
+            <div className="form-group">
+              <label>Предпочтительный канал связи</label>
+              <select value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
+                <option value="">—</option>
+                <option value="WHATSAPP">WhatsApp</option>
+                <option value="PHONE">Телефон</option>
+                <option value="INSTAGRAM">Instagram</option>
+                <option value="TELEGRAM">Telegram</option>
+                <option value="EMAIL">Email</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Дата рождения <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— для авто-поздравлений</span></label>
+              <input
+                type="date"
+                value={birthday}
+                onChange={(e) => setBirthday(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Email * <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— станет логином студента</span></label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+              className={showErr('email') ? 'input-error' : ''}
+              required
+            />
+            {showErr('email') && <div className="form-error-text">{errors.email}</div>}
           </div>
           <div className="form-group">
             <label>Направление *</label>
