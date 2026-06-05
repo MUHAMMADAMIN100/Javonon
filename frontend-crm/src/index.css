@@ -1453,7 +1453,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .user-info { display: none; }
   .sidebar-logo { padding: 12px 8px; }
   .sidebar-logo-image { height: 40px; }
-  .sidebar-nav a { justify-content: center; padding: 12px 10px; }
+  /* ТЗ §12 — текст слева, не центрирован. */
+  .sidebar-nav a { justify-content: flex-start; text-align: left; padding: 12px 10px; }
   .form-grid-2 { grid-template-columns: 1fr; }
   .detail-grid { grid-template-columns: 1fr; }
   .content { padding: 18px; }
@@ -1544,7 +1545,9 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .sidebar-nav a {
     flex: 1; flex-direction: column; gap: 2px;
     padding: 8px 4px; font-size: 10px; border-radius: 6px;
-    text-align: center; margin-bottom: 0; min-width: 60px;
+    /* По ТЗ §12: «весь текст выровнен с левой стороны» — на мобиле тоже. */
+    text-align: left; margin-bottom: 0; min-width: 60px;
+    justify-content: flex-start;
   }
   .sidebar-nav a span:not(.sidebar-nav-icon) {
     display: block !important; font-size: 10px; line-height: 1.1;
@@ -4122,4 +4125,12 @@ textarea:focus {
   padding: 8px 14px; font-size: 13px; font-weight: 500;
   display: inline-flex; align-items: center; gap: 8px;
   box-shadow: 0 8px 22px rgba(0,0,0,0.08);
+}
+
+/* Inbox 2-колоночный layout — на мобиле в одну колонку. ТЗ §6
+   «мобильная версия для работы с телефона». */
+@media (max-width: 720px) {
+  .inbox-grid {
+    grid-template-columns: 1fr !important;
+  }
 }

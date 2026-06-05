@@ -43,7 +43,7 @@ export default function Inbox() {
         </h2>
       </div>
 
-      <div style={{
+      <div className="inbox-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(280px, 360px) 1fr',
         gap: 16,
