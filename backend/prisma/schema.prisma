@@ -276,6 +276,14 @@ model Application {
   programId       String?
   // Удалили программу → у заявки programId становится null.
   program         Program?          @relation(fields: [programId], references: [id], onDelete: SetNull)
+  // Воронка продаж (Pipeline) + текущий этап воронки. Это «параллельное»
+  // отслеживание поверх ApplicationStatus enum — статус остаётся
+  // высокоуровневым бакетом (NEW/DOCS_REVIEW/...), а pipelineStageId —
+  // тонкий настраиваемый шаг внутри выбранной воронки.
+  pipelineId       String?
+  pipeline         Pipeline?         @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
+  pipelineStageId  String?
+  pipelineStage    PipelineStage?    @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
@@ -1291,6 +1299,7 @@ model Pipeline {
   isDefault   Boolean         @default(false)
   isActive    Boolean         @default(true)
   stages      PipelineStage[]
+  applications Application[]
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -1303,6 +1312,7 @@ model PipelineStage {
   id              String   @id @default(uuid())
   pipelineId      String
   pipeline        Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  applications    Application[]
   name            String
   order           Int
   color           String?  // hex для UI карточки

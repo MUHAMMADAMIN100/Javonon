@@ -18,6 +18,7 @@ import ApplicationFormSection from '../components/ApplicationFormSection';
 import BackButton from '../components/BackButton';
 import Icon from '../Icon';
 import { motion } from 'framer-motion';
+import { listPipelines, moveApplicationStage } from '../api/sales';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
 import { isElevated } from '../lib/roles';
 
@@ -349,6 +350,14 @@ export default function ApplicationDetail() {
             onReassign={onReassign}
           />
         )}
+
+        <PipelineStageSelector
+          applicationId={app.id}
+          currentStageId={app.pipelineStageId || null}
+          currentPipelineId={app.pipelineId || null}
+          onChanged={reload}
+        />
+
 
         {isNew && (
           <>
@@ -684,6 +693,101 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
           {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Селектор этапа воронки для заявки. Подгружает список pipelines с их
+ * этапами, показывает текущий этап в виде цветной плашки и dropdown
+ * для перехода на другой этап. Если воронок нет в системе — секция
+ * скрывается (не мешает).
+ */
+function PipelineStageSelector({
+  applicationId,
+  currentStageId,
+  currentPipelineId,
+  onChanged,
+}: {
+  applicationId: string;
+  currentStageId: string | null;
+  currentPipelineId: string | null;
+  onChanged: () => void;
+}) {
+  const { toast } = useUI();
+  const query = useQuery({ queryKey: ['sales', 'pipelines'], queryFn: listPipelines });
+  const pipelines = query.data ?? [];
+  const [busy, setBusy] = useState(false);
+
+  if (pipelines.length === 0) return null;
+
+  const currentPipeline = pipelines.find((p) => p.id === currentPipelineId) ||
+    pipelines.find((p) => p.isDefault) ||
+    pipelines[0];
+
+  const currentStage = currentPipeline.stages.find((s) => s.id === currentStageId);
+
+  const onPick = async (stageId: string) => {
+    setBusy(true);
+    try {
+      await moveApplicationStage(applicationId, stageId);
+      toast('Этап обновлён', 'success');
+      onChanged();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{
+      marginTop: 12,
+      padding: '10px 14px',
+      background: 'var(--bg-soft)',
+      border: '1px solid var(--border-soft)',
+      borderRadius: 10,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      flexWrap: 'wrap',
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.12em',
+        color: 'var(--text-soft)',
+        textTransform: 'uppercase',
+      }}>
+        Воронка · {currentPipeline.name}
+      </div>
+      <select
+        value={currentStageId || ''}
+        onChange={(e) => onPick(e.target.value)}
+        disabled={busy}
+        style={{
+          padding: '6px 12px',
+          borderRadius: 999,
+          border: '1.5px solid',
+          borderColor: currentStage?.color || 'var(--border)',
+          background: currentStage?.color ? `${currentStage.color}20` : 'white',
+          fontSize: 13,
+          fontWeight: 600,
+          color: currentStage?.color || 'var(--text)',
+        }}
+      >
+        <option value="">— этап не задан —</option>
+        {currentPipeline.stages.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}{s.isClosingStage ? ' ✓' : ''}
+          </option>
+        ))}
+      </select>
+      {pipelines.length > 1 && currentPipeline.id !== currentPipelineId && (
+        <span style={{ fontSize: 11, color: 'var(--text-soft)' }}>
+          (показана default воронка — заявка не привязана ни к одной)
+        </span>
+      )}
     </div>
   );
 }

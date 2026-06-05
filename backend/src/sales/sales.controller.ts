@@ -36,6 +36,18 @@ export class SalesController {
     return this.svc.reassign(id, body.managerId ?? null, me);
   }
 
+  /** Сдвинуть заявку на новый этап воронки. */
+  @Post('applications/:id/move-stage')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  moveStage(
+    @Param('id') id: string,
+    @Body() body: { pipelineStageId: string | null },
+    @CurrentUser() me: any,
+  ) {
+    return this.svc.moveStage(id, body.pipelineStageId ?? null, me);
+  }
+
   // Pipelines — все авторизованные читают; пишут elevated + sales manager
   @Get('pipelines')
   listPipelines() {

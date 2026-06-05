@@ -90,6 +90,16 @@ export class MeController {
   deleteMyDocument(@CurrentUser() me: any, @Param('docId') docId: string) {
     return this.users.deleteDocument(me.id, docId);
   }
+
+  /** Изменить тип / комментарий своего документа. Файл не меняется. */
+  @Patch('documents/:docId')
+  updateMyDocument(
+    @CurrentUser() me: any,
+    @Param('docId') docId: string,
+    @Body() body: { type?: string; comment?: string },
+  ) {
+    return this.users.updateDocument(me.id, docId, body);
+  }
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -159,6 +169,16 @@ export class UsersController {
   @Delete(':id/documents/:docId')
   deleteDocument(@Param('id') id: string, @Param('docId') docId: string) {
     return this.users.deleteDocument(id, docId);
+  }
+
+  /** Изменить тип/комментарий документа сотрудника (admin/accountant). */
+  @Patch(':id/documents/:docId')
+  updateDocument(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Body() body: { type?: string; comment?: string },
+  ) {
+    return this.users.updateDocument(id, docId, body);
   }
 
   /** Список тех, кому выдан доступ к данным этого сотрудника. */

@@ -159,6 +159,15 @@ export const uploadMyDocument = (file: File, type: UserDocumentType, comment?: s
 export const deleteMyDocument = (docId: string) =>
   api.delete(`/me/documents/${docId}`).then((r) => r.data);
 
+export const updateMyDocument = (docId: string, patch: { type?: string; comment?: string }) =>
+  api.patch<UserDocument>(`/me/documents/${docId}`, patch).then((r) => r.data);
+
+export const updateUserDocument = (
+  userId: string,
+  docId: string,
+  patch: { type?: string; comment?: string },
+) => api.patch<UserDocument>(`/users/${userId}/documents/${docId}`, patch).then((r) => r.data);
+
 /** FOUNDER-only: задать список ролей сотрудника. Первая в массиве станет primary. */
 export const setUserRoles = (userId: string, roles: string[]) =>
   api.put(`/users/${userId}/roles`, { roles }).then((r) => r.data);

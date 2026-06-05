@@ -118,9 +118,17 @@ export class ApplicationsService {
     // Sprint E: авто-распределение лидов. Если managerId не задан явно —
     // round-robin среди SALES_MANAGER (наименее загруженный).
     let assignedManagerId: string | null = null;
+    let pipelineId: string | null = null;
+    let pipelineStageId: string | null = null;
     if (this.sales) {
       try { assignedManagerId = await this.sales.pickManagerForLead(); }
       catch { /* fallback: оставляем без менеджера */ }
+      // Авто-проставление дефолтной воронки и её первого этапа.
+      try {
+        const def = await this.sales.pickDefaultPipelineStage();
+        pipelineId = def.pipelineId;
+        pipelineStageId = def.pipelineStageId;
+      } catch { /* без воронки — норм */ }
     }
     const app = await this.prisma.application.create({
       data: {
@@ -132,6 +140,8 @@ export class ApplicationsService {
         programId: dto.programId || null,
         source: dto.source || 'LANDING_FORM',
         managerId: assignedManagerId,
+        pipelineId,
+        pipelineStageId,
       },
     });
 

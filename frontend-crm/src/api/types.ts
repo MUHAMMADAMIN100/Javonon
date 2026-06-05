@@ -88,6 +88,10 @@ export interface Application {
   manager?: ManagerInfo | null;
   chinaManagerId: string | null;
   chinaManager?: ManagerInfo | null;
+  /** Воронка продаж, в которой сейчас заявка (опционально). */
+  pipelineId?: string | null;
+  /** Текущий этап воронки. Меняется через POST /sales/applications/:id/move-stage. */
+  pipelineStageId?: string | null;
   createdAt: string;
 }
 

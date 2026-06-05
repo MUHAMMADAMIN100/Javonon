@@ -16,6 +16,64 @@ export class SalesService {
   constructor(private prisma: PrismaService) {}
 
   /**
+   * Найти default-воронку и её первый этап. Используется при создании
+   * Application для авто-проставления pipelineId/pipelineStageId.
+   * Если default-воронка не настроена — возвращает null'ы (заявка
+   * создаётся без воронки, можно проставить позже вручную).
+   */
+  async pickDefaultPipelineStage(): Promise<{ pipelineId: string | null; pipelineStageId: string | null }> {
+    const pipeline = await this.prisma.pipeline.findFirst({
+      where: { isDefault: true, isActive: true },
+      include: { stages: { orderBy: { order: 'asc' }, take: 1 } },
+    });
+    if (!pipeline) return { pipelineId: null, pipelineStageId: null };
+    return {
+      pipelineId: pipeline.id,
+      pipelineStageId: pipeline.stages[0]?.id ?? null,
+    };
+  }
+
+  /**
+   * Передвинуть Application на новый этап воронки.
+   * - Если новый этап принадлежит другой воронке — переносим заявку
+   *   в эту воронку (обновляем оба поля).
+   * - Доступ — те же роли что и reassign: elevated всем, manager — своим.
+   */
+  async moveStage(
+    applicationId: string,
+    pipelineStageId: string | null,
+    requester: { id: string; role?: string; roles?: string[] },
+  ) {
+    const app = await this.prisma.application.findUnique({ where: { id: applicationId } });
+    if (!app) throw new NotFoundException('Заявка не найдена');
+    if (!isElevated(requester) && app.managerId !== requester.id) {
+      throw new ForbiddenException('Можно двигать только свои заявки');
+    }
+    if (!pipelineStageId) {
+      return this.prisma.application.update({
+        where: { id: applicationId },
+        data: { pipelineStageId: null },
+      });
+    }
+    const stage = await this.prisma.pipelineStage.findUnique({
+      where: { id: pipelineStageId },
+      include: { pipeline: true },
+    });
+    if (!stage) throw new BadRequestException('Этап не найден');
+    return this.prisma.application.update({
+      where: { id: applicationId },
+      data: {
+        pipelineStageId: stage.id,
+        pipelineId: stage.pipelineId,
+      },
+      include: {
+        pipeline: true,
+        pipelineStage: true,
+      },
+    });
+  }
+
+  /**
    * Подобрать менеджера для нового лида. Возвращает userId или null
    * если нет SALES_MANAGER в системе. Логика:
    *   1. Берём всех SALES_MANAGER.

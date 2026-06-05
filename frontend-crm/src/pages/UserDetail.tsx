@@ -11,6 +11,8 @@ import {
   updateUserHR,
   uploadUserDocument,
   uploadMyDocument,
+  updateMyDocument,
+  updateUserDocument,
   setUserRoles,
   USER_DOCUMENT_LABEL,
   type UserDocumentType,
@@ -256,6 +258,14 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                   </div>
                 </div>
                 <a href={d.url} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">Открыть</a>
+                {canManageDocs && (
+                  <DocEditButton
+                    doc={d}
+                    useSelfApi={!isAdmin}
+                    userId={realId}
+                    onSaved={() => qc.invalidateQueries({ queryKey })}
+                  />
+                )}
                 {canManageDocs && (
                   <button
                     className="btn btn-sm btn-danger"
@@ -818,6 +828,91 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
         </button>
         <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
           {saving ? 'Сохраняем…' : 'Сохранить роли'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Кнопка-карандашик у документа → разворачивает inline-редактор типа и
+ * комментария. Закрывает «U» в CRUD по ТЗ §1.
+ */
+function DocEditButton({
+  doc,
+  userId,
+  useSelfApi,
+  onSaved,
+}: {
+  doc: { id: string; type: UserDocumentType; comment?: string | null };
+  userId: string;
+  useSelfApi: boolean;
+  onSaved: () => void;
+}) {
+  const { toast } = useUI();
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState<UserDocumentType>(doc.type);
+  const [comment, setComment] = useState(doc.comment || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      if (useSelfApi) {
+        await updateMyDocument(doc.id, { type, comment });
+      } else {
+        await updateUserDocument(userId, doc.id, { type, comment });
+      }
+      toast('Документ обновлён', 'success');
+      setOpen(false);
+      onSaved();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button className="btn btn-sm btn-secondary" onClick={() => setOpen(true)} title="Изменить тип / комментарий">
+        Изменить
+      </button>
+    );
+  }
+
+  return (
+    <div style={{
+      position: 'absolute',
+      right: 24,
+      marginTop: 8,
+      background: 'white',
+      padding: 12,
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      boxShadow: '0 8px 22px rgba(0,0,0,0.1)',
+      zIndex: 100,
+      minWidth: 280,
+    }}>
+      <div className="form-group" style={{ marginBottom: 8 }}>
+        <label>Тип</label>
+        <select value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
+          <option value="PASSPORT">Паспорт</option>
+          <option value="PHOTO">Фотография</option>
+          <option value="CONTRACT">Контракт</option>
+          <option value="DIPLOMA">Диплом</option>
+          <option value="OFFER">Оферта</option>
+          <option value="OTHER">Прочее</option>
+        </select>
+      </div>
+      <div className="form-group" style={{ marginBottom: 8 }}>
+        <label>Комментарий</label>
+        <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="—" />
+      </div>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>Отмена</button>
+        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+          {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
       </div>
     </div>

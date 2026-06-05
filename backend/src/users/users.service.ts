@@ -238,6 +238,36 @@ export class UsersService {
     return this.prisma.userDocument.delete({ where: { id: documentId } });
   }
 
+  /**
+   * Обновить мета-данные документа (тип, комментарий). Сам файл не
+   * меняется — для замены файла нужен delete + upload. Закрывает
+   * "U" в CRUD по ТЗ §1.
+   */
+  async updateDocument(
+    userId: string,
+    documentId: string,
+    patch: { type?: string; comment?: string },
+  ) {
+    const doc = await this.prisma.userDocument.findUnique({
+      where: { id: documentId },
+    });
+    if (!doc) throw new NotFoundException('Документ не найден');
+    if (doc.userId !== userId) {
+      throw new BadRequestException('Этот документ не принадлежит указанному сотруднику');
+    }
+    const VALID = ['PASSPORT', 'PHOTO', 'CONTRACT', 'DIPLOMA', 'OFFER', 'OTHER'];
+    const data: any = {};
+    if (patch.type !== undefined) {
+      const t = patch.type.toUpperCase();
+      if (!VALID.includes(t)) throw new BadRequestException('Неверный тип документа');
+      data.type = t;
+    }
+    if (patch.comment !== undefined) {
+      data.comment = patch.comment?.trim() || null;
+    }
+    return this.prisma.userDocument.update({ where: { id: documentId }, data });
+  }
+
   // ===== Точечный доступ к данным сотрудника =====
 
   /**

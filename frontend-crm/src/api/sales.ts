@@ -52,3 +52,7 @@ export const deleteStage = (id: string) =>
 // --- Lead manual reassignment ---
 export const reassignLead = (applicationId: string, managerId: string | null) =>
   api.post(`/sales/applications/${applicationId}/assign`, { managerId }).then((r) => r.data);
+
+// --- Pipeline stage transition ---
+export const moveApplicationStage = (applicationId: string, pipelineStageId: string | null) =>
+  api.post(`/sales/applications/${applicationId}/move-stage`, { pipelineStageId }).then((r) => r.data);
