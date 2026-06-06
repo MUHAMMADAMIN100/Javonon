@@ -102,16 +102,16 @@ export class InteractionsService {
     occurredAt?: string;
   }) {
     if (!dto.studentId) throw new BadRequestException('studentId обязателен');
-    if (!dto.summary?.trim()) throw new BadRequestException('Краткое описание обязательно');
+    const clean = this.validateInteractionFields({ ...dto, summary: dto.summary }, false);
     const created = await this.prisma.interaction.create({
       data: {
         studentId: dto.studentId,
         authorId,
-        type: dto.type,
-        summary: dto.summary.trim(),
-        details: dto.details?.trim() || null,
+        type: clean.type as InteractionType,
+        summary: clean.summary as string,
+        details: clean.details ?? null,
         visibleToStudent: dto.visibleToStudent ?? true,
-        occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(),
+        occurredAt: clean.occurredAt ?? new Date(),
       },
       include: { author: { select: { id: true, fullName: true, role: true } } },
     });
@@ -128,16 +128,59 @@ export class InteractionsService {
     visibleToStudent: boolean;
     occurredAt: string;
   }>) {
+    const clean = this.validateInteractionFields(patch, true);
     return this.prisma.interaction.update({
       where: { id },
       data: {
-        ...(patch.type && { type: patch.type }),
-        ...(patch.summary !== undefined && { summary: patch.summary.trim() }),
-        ...(patch.details !== undefined && { details: patch.details?.trim() || null }),
+        ...(clean.type !== undefined && { type: clean.type as InteractionType }),
+        ...(clean.summary !== undefined && { summary: clean.summary }),
+        ...(clean.details !== undefined && { details: clean.details }),
         ...(patch.visibleToStudent !== undefined && { visibleToStudent: patch.visibleToStudent }),
-        ...(patch.occurredAt && { occurredAt: new Date(patch.occurredAt) }),
+        ...(clean.occurredAt !== undefined && { occurredAt: clean.occurredAt }),
       },
     });
+  }
+
+  /**
+   * Валидация полей записи взаимодействия. Раньше service делал только
+   * trim+«summary не пуст» — пропускало:
+   *   - 10MB summary/details → DB bloat + UI разваливался
+   *   - <script> в summary → попадал на студентский portal через
+   *     visibleToStudent=true (default!) → stored XSS на клиенте
+   *   - type = любая строка → ломал downstream фильтры/иконки
+   *   - occurredAt = invalid date → Prisma бросал 500
+   */
+  private validateInteractionFields(
+    data: { type?: any; summary?: string; details?: string; occurredAt?: string },
+    partial: boolean,
+  ): { type?: any; summary?: string; details?: string | null; occurredAt?: Date } {
+    const VALID_TYPES: InteractionType[] = ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'SMS', 'TELEGRAM', 'WHATSAPP'];
+    const result: any = {};
+    if (data.type !== undefined || !partial) {
+      if (!VALID_TYPES.includes(data.type)) {
+        throw new BadRequestException(`type должен быть один из: ${VALID_TYPES.join(', ')}`);
+      }
+      result.type = data.type;
+    }
+    if (data.summary !== undefined || !partial) {
+      const s = (data.summary || '').trim();
+      if (!s) throw new BadRequestException('Краткое описание обязательно');
+      if (s.length > 500) throw new BadRequestException('Описание слишком длинное (макс. 500)');
+      if (/[<>]/.test(s)) throw new BadRequestException('Описание не должно содержать HTML-теги');
+      result.summary = s;
+    }
+    if (data.details !== undefined) {
+      const d = (data.details || '').trim();
+      if (d.length > 5000) throw new BadRequestException('Детали слишком длинные (макс. 5000)');
+      if (/[<>]/.test(d)) throw new BadRequestException('Детали не должны содержать HTML-теги');
+      result.details = d || null;
+    }
+    if (data.occurredAt !== undefined) {
+      const dt = new Date(data.occurredAt);
+      if (Number.isNaN(dt.getTime())) throw new BadRequestException('occurredAt — некорректная дата');
+      result.occurredAt = dt;
+    }
+    return result;
   }
 
   async remove(id: string) {
