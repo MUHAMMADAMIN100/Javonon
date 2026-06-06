@@ -104,6 +104,31 @@ export class SalaryService {
     if (isNaN(start.getTime())) throw new BadRequestException('Некорректная дата начала периода');
     if (isNaN(end.getTime())) throw new BadRequestException('Некорректная дата конца периода');
     if (end < start) throw new BadRequestException('Конец периода раньше начала');
+    // Период разумного размера. Раньше FOUNDER мог запросить salary за
+    // 100 лет → SQL запрос с гигантской range на TimeEntries.
+    const periodDays = (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000);
+    if (periodDays > 366) throw new BadRequestException('Период не должен превышать 1 год');
+
+    // kpiBonus — частая причина typo (1000000 вместо 1000). Cap'ой
+    // защищаем от случайной зарплаты в миллион.
+    if (dto.kpiBonus !== undefined && dto.kpiBonus !== null) {
+      const kb = Number(dto.kpiBonus);
+      if (!Number.isFinite(kb) || kb < 0) {
+        throw new BadRequestException('kpiBonus должен быть числом ≥ 0');
+      }
+      if (kb > 100_000) {
+        throw new BadRequestException('kpiBonus слишком велик (макс. 100 000)');
+      }
+    }
+    // comment попадает в salary dashboard у админов. Length cap +
+    // HTML guard — раньше принимался любой строкой.
+    let commentClean: string | null = null;
+    if (dto.comment !== undefined && dto.comment !== null) {
+      const c = dto.comment.trim();
+      if (c.length > 500) throw new BadRequestException('comment слишком длинный (макс. 500)');
+      if (/[<>]/.test(c)) throw new BadRequestException('comment не должен содержать HTML-теги');
+      commentClean = c || null;
+    }
 
     const preview = await this.preview(dto.userId, start, end, dto.kpiBonus || 0);
 
@@ -121,7 +146,7 @@ export class SalaryService {
         penalties: preview.penalties,
         netAmount: preview.netAmount,
         currency: preview.currency,
-        comment: dto.comment?.trim() || null,
+        comment: commentClean,
       },
       include: { user: { select: { id: true, fullName: true, role: true } } },
     });
