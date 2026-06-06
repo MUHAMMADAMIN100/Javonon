@@ -28,8 +28,10 @@ export class PartnerAuthController {
     return this.svc.register(body);
   }
 
+  // OWASP login throttle 10/15min — раньше 10/min было слишком слабо
+  // против перебора паролей коротких партнёров.
   @Post('login')
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 10, ttl: 15 * 60_000 } })
   login(@Body() body: { email: string; password: string }) {
     return this.svc.login(body.email, body.password);
   }

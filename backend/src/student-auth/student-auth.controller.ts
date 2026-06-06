@@ -62,8 +62,9 @@ export class StudentAuthController {
     private realtime: RealtimeGateway,
   ) {}
 
-  // Лимит: 10 попыток входа в минуту с одного IP — защита от брутфорса.
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  // OWASP-стандарт login throttle: 10 попыток за 15 минут. Раньше было
+  // 10/min — 14k/день, недостаточно против перебора коротких паролей.
+  @Throttle({ default: { limit: 10, ttl: 15 * 60_000 } })
   @Post('login')
   login(@Body() body: StudentLoginDto) {
     return this.auth.login(body.email, body.password);
