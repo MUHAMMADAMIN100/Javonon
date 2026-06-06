@@ -67,6 +67,45 @@ export class FinanceService {
     if (dto.amount > 1_000_000) {
       throw new BadRequestException('Сумма слишком большая');
     }
+    // Currency whitelist. Раньше принимали любую строку — а Salary engine
+    // потом суммирует разные валюты как одну: «TJS_OLD»/«tjs»/typo
+    // ломают финансовые отчёты молча.
+    const VALID_CURRENCIES = new Set(['TJS', 'USD', 'EUR', 'CNY', 'RUB']);
+    if (dto.currency) {
+      const c = dto.currency.toUpperCase();
+      if (!VALID_CURRENCIES.has(c)) {
+        throw new BadRequestException(`currency должен быть один из: ${[...VALID_CURRENCIES].join(', ')}`);
+      }
+      dto.currency = c;
+    }
+    // Date NaN check. Раньше new Date("garbage") давал Invalid Date,
+    // Prisma бросал 500 на write.
+    if (dto.date) {
+      const d = new Date(dto.date);
+      if (Number.isNaN(d.getTime())) throw new BadRequestException('Некорректная дата');
+    }
+    // Text fields — length caps + HTML guard. Все попадают на админскую
+    // финансовую страницу, рендерятся в строках таблицы. Раньше
+    // принимались raw, что давало stored XSS surface (React JSX
+    // эскейпит, но Telegram html-mode уведомления нет).
+    const checkText = (val: string | undefined | null, field: string, maxLen: number) => {
+      if (val === undefined || val === null) return;
+      if (val.length > maxLen) throw new BadRequestException(`${field}: макс. ${maxLen} символов`);
+      if (/[<>]/.test(val)) throw new BadRequestException(`${field}: HTML-теги запрещены`);
+    };
+    checkText(dto.comment, 'comment', 1000);
+    checkText(dto.productCategory, 'productCategory', 100);
+    checkText(dto.payerName, 'payerName', 200);
+    checkText(dto.noReceiptReason, 'noReceiptReason', 500);
+    // receiptUrl — http(s) / относительная ссылка. `javascript:alert(1)`
+    // бы попал в <a href> на admin UI и сработал при клике.
+    if (dto.receiptUrl) {
+      const u = dto.receiptUrl.trim();
+      if (!/^(https?:\/\/|\/\/|\/)\S{0,2000}$/i.test(u)) {
+        throw new BadRequestException('receiptUrl должен быть http(s) или относительной ссылкой');
+      }
+      dto.receiptUrl = u;
+    }
 
     // ВАЛИДАЦИЯ ЧЕКА ДЛЯ РАСХОДОВ. По требованию: бухгалтер обязан
     // приложить чек, либо фото наличных, либо явно указать причину.
