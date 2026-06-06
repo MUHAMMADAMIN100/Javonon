@@ -152,11 +152,26 @@ export class ProgramsController {
     if (!VALID_DIRECTIONS.includes(dto.direction as string)) {
       throw new BadRequestException(`Неизвестное направление. Доступно: ${VALID_DIRECTIONS.join(', ')}`);
     }
-    // QA-fix #40: HTML/script-теги в name запрещены.
-    for (const f of ['name', 'university', 'city', 'major'] as const) {
-      if (/[<>]/.test(String(dto[f] ?? ''))) {
+    // HTML/script-теги в текстовых полях запрещены. Раньше только 4
+    // обязательных проверялись — description/duration/language/grant*
+    // обходили проверку и попадали на публичный лендинг как раз там,
+    // где у landing.tsx есть dangerouslySetInnerHTML на description.
+    for (const f of [
+      'name', 'university', 'city', 'major',
+      'description', 'duration', 'language',
+      'englishLevel', 'grantDetails', 'grantEnglishLevel',
+      'avgAdmissionScore', 'applicationDeadline',
+    ] as const) {
+      const val = (dto as any)[f];
+      if (val !== undefined && val !== null && /[<>]/.test(String(val))) {
         throw new BadRequestException(`Поле ${f} содержит недопустимые символы`);
       }
+    }
+    // imageUrl: scheme regex чтобы `javascript:` не сохранилось как
+    // src=… (раньше принимали как-есть, поскольку multipart-форма
+    // обходит ValidationPipe).
+    if (dto.imageUrl && !/^(https?:\/\/|\/\/|\/)\S{0,2000}$/i.test(dto.imageUrl)) {
+      throw new BadRequestException('imageUrl должен быть http(s) или относительной ссылкой');
     }
     // QA-fix #41: валюту — против белого списка.
     if (dto.currency) {
