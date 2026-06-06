@@ -11,12 +11,16 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private realtime: RealtimeGateway,
+  ) {}
 
   async findAll(filters: { search?: string } = {}) {
     const search = (filters.search || '').trim();
@@ -542,6 +546,20 @@ export class UsersService {
         id: true, email: true, fullName: true, role: true, roles: true,
       },
     });
+
+    // По ТЗ §2 «права передаются основателем» — после смены ролей юзер
+    // должен сразу получить новые права. JWT уже подписан старыми ролями,
+    // backend RolesGuard читает из JWT, поэтому **до релогина** обновление
+    // не применится. Шлём realtime-уведомление в комнату пользователя,
+    // фронт показывает toast «права обновлены, перелогиньтесь» и форсит
+    // logout через несколько секунд.
+    if (targetId !== byFounderId) {
+      this.realtime.emitUser(targetId, 'user:roles-updated', {
+        role: updated.role,
+        roles: updated.roles,
+      });
+    }
+
     return updated;
   }
 }

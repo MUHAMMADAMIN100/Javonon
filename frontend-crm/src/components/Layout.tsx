@@ -6,6 +6,9 @@ import NotificationBell from './NotificationBell';
 import RealtimeStatusBanner from './RealtimeStatusBanner';
 import Dialpad from './Dialpad';
 import Icon from '../Icon';
+import { useRealtimeEvent } from '../realtime';
+import { useUI } from '../ui/Dialogs';
+import { useAuth } from '../store/auth';
 
 const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
   '/dashboard': { eyebrow: 'OVERVIEW · 01', pre: 'Картина', em: 'дня.' },
@@ -30,8 +33,20 @@ const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
 export default function Layout() {
   const loc = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { toast } = useUI();
+  const logout = useAuth((s) => s.logout);
   const meta = Object.entries(TITLES).find(([k]) => loc.pathname.startsWith(k))?.[1]
     || { eyebrow: 'JAVONON · CRM', pre: 'Панель', em: 'управления.' };
+
+  // По ТЗ §2: «права передаются основателем». Когда FOUNDER меняет
+  // мои роли через RolesEditor, бэкенд шлёт `user:roles-updated` в мою
+  // личную комнату. JWT в localStorage уже устарел — backend RolesGuard
+  // читает старые роли. Логаут даёт сразу взять новый JWT с актуальными
+  // правами при следующем логине.
+  useRealtimeEvent('user:roles-updated', () => {
+    toast('Ваши права были изменены администратором. Пожалуйста, войдите заново.', 'info');
+    setTimeout(() => logout(), 4000);
+  });
 
   // Close mobile drawer on route change
   useEffect(() => {
