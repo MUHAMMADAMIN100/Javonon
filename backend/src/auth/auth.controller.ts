@@ -25,6 +25,11 @@ export class AuthController {
     return this.auth.me(user.sub);
   }
 
+  // Throttle: 5 попыток на 15 мин. Без него атакующий, получивший JWT
+  // (через XSS / shoulder-surfing), мог brute-force'ить currentPassword
+  // на global 60/min — 86k попыток/день. Тот же OWASP-стандарт что
+  // login.
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
   changePassword(
