@@ -87,9 +87,7 @@ export class OffersService {
    * Версия инкрементируется автоматически.
    */
   async createNew(data: { title?: string; content: string }) {
-    if (!data.content || !data.content.trim()) {
-      throw new BadRequestException('Текст оферты не может быть пустым');
-    }
+    this.validateOfferFields(data);
     await this.prisma.offerTemplate.updateMany({
       where: { isActive: true },
       data: { isActive: false },
@@ -100,12 +98,38 @@ export class OffersService {
     });
     return this.prisma.offerTemplate.create({
       data: {
-        title: data.title || 'Оферта сотрудника',
+        title: (data.title || 'Оферта сотрудника').trim(),
         content: data.content.trim(),
         version: (last?.version || 0) + 1,
         isActive: true,
       },
     });
+  }
+
+  /**
+   * Валидация полей оферты. Раньше офис-контроллер принимал `body: {
+   * title?, content }` без class-validator — admin мог сохранить
+   * 10MB строку (DB bloat) или `<script>` в title (попадает в audit-
+   * логи / Telegram-уведомления с html_mode).
+   */
+  private validateOfferFields(data: { title?: string; content?: string }) {
+    if (data.title !== undefined) {
+      const t = data.title.trim();
+      if (t.length > 200) {
+        throw new BadRequestException('Заголовок оферты слишком длинный (макс. 200 символов)');
+      }
+      if (/[<>]/.test(t)) {
+        throw new BadRequestException('Заголовок оферты не должен содержать HTML-теги');
+      }
+    }
+    if (data.content !== undefined) {
+      if (!data.content.trim()) {
+        throw new BadRequestException('Текст оферты не может быть пустым');
+      }
+      if (data.content.length > 100_000) {
+        throw new BadRequestException('Текст оферты слишком длинный (макс. 100000 символов)');
+      }
+    }
   }
 
   /** Обновить текст ТЕКУЩЕЙ версии (если ещё никто не подписал). */
@@ -120,10 +144,11 @@ export class OffersService {
         'Эту версию уже подписали. Создай новую вместо редактирования.',
       );
     }
+    this.validateOfferFields(data);
     return this.prisma.offerTemplate.update({
       where: { id },
       data: {
-        ...(data.title !== undefined && { title: data.title }),
+        ...(data.title !== undefined && { title: data.title.trim() }),
         ...(data.content !== undefined && { content: data.content.trim() }),
       },
     });
