@@ -12,6 +12,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { CallsService, CreateCallDto } from './calls.service';
+import { isElevated } from '../auth/role-utils';
 
 function parseDate(v?: string): Date | undefined {
   if (!v) return undefined;
@@ -40,10 +41,11 @@ export class CallsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    // EMPLOYEE/ACCOUNTANT видят только свои; ADMIN — любые / по фильтру
-    const isAdmin = me.role === 'ADMIN';
+    // Elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли) видит любые
+    // звонки / по фильтру; остальные — только свои.
+    const elevated = isElevated(me);
     const effectiveUserId =
-      mine === 'true' || !isAdmin ? me.id : userId || undefined;
+      mine === 'true' || !elevated ? me.id : userId || undefined;
     return this.svc.list({
       userId: effectiveUserId,
       from: parseDate(from),
@@ -54,14 +56,15 @@ export class CallsController {
   /** Статистика звонков по команде — только ADMIN. */
   @Get('stats')
   stats(@CurrentUser() me: any, @Query('from') from?: string, @Query('to') to?: string) {
-    if (me.role !== 'ADMIN') {
-      throw new BadRequestException('Статистика доступна только администратору');
+    // Elevated (ТЗ §2 мульти-роли).
+    if (!isElevated(me)) {
+      throw new BadRequestException('Статистика доступна только администрации');
     }
     return this.svc.stats({ from: parseDate(from), to: parseDate(to) });
   }
 
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() me: any) {
-    return this.svc.remove(id, me.id, me.role === 'ADMIN');
+    return this.svc.remove(id, me.id, isElevated(me));
   }
 }

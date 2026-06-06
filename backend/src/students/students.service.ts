@@ -396,8 +396,11 @@ export class StudentsService {
     patch: { managerId?: string | null; chinaManagerId?: string | null },
     user: CurrentUser,
   ) {
-    if (user.role !== 'ADMIN') {
-      throw new ForbiddenException('Только администратор может переназначать менеджеров');
+    // Переназначение менеджеров — elevated (FOUNDER/ADMIN/ACCOUNTANT,
+    // мульти-роли). Раньше primary `!== 'ADMIN'` блокировал FOUNDER
+    // и secondary-ADMIN'а из ТЗ §2.
+    if (!isElevated(user as any)) {
+      throw new ForbiddenException('Переназначать менеджеров может только администрация');
     }
     await this.findOne(id);
 

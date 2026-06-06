@@ -30,8 +30,11 @@ export class TasksController {
       mine: mine === 'true',
       currentUserId: user.id,
       role: user.role,
+      // Мульти-роли (ТЗ §2): roles[] нужен в service для elevated-check,
+      // иначе secondary-ADMIN видел бы только свои задачи а не все.
+      roles: user.roles,
       search,
-    });
+    } as any);
   }
 
   @Get('stats')

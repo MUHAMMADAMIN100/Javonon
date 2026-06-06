@@ -706,7 +706,11 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
   const [extra, setExtra] = useState<Set<string>>(new Set(initialRoles.slice(1)));
   const [saving, setSaving] = useState(false);
 
-  const isFounderTarget = user.role === 'FOUNDER';
+  // Учёт мульти-ролей: если FOUNDER в primary ИЛИ в roles[] — target
+  // считается FOUNDER'ом. Backend уже multi-role aware (isFounder()),
+  // фронт раньше был primary-only — UI показывал «edit roles» для
+  // secondary-FOUNDER, потом backend отбивал — несогласованно.
+  const isFounderTarget = user.role === 'FOUNDER' || (user.roles || []).includes('FOUNDER' as any);
 
   const toggleExtra = (role: string) => {
     if (role === primary) return; // primary не может быть в extra

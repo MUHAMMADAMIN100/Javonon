@@ -6,8 +6,9 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { isElevated } from '../auth/role-utils';
 
-type CurrentUser = { id: string; role: Role };
+type CurrentUser = { id: string; role: Role; roles?: Role[] };
 
 const TASK_INCLUDE = {
   assignedTo: { select: { id: true, fullName: true, email: true } },
@@ -24,8 +25,10 @@ export class TasksService {
   ) {}
 
   async create(dto: CreateTaskDto, user: CurrentUser) {
-    if (user.role !== 'ADMIN') {
-      throw new ForbiddenException('Только администратор может создавать задачи');
+    // Elevated (FOUNDER/ADMIN/ACCOUNTANT, мульти-роли). Раньше primary
+    // ADMIN-only блокировало FOUNDER и любого secondary-ADMIN'а (ТЗ §2).
+    if (!isElevated(user as any)) {
+      throw new ForbiddenException('Создавать задачи может только администрация');
     }
     const assignee = await this.prisma.user.findUnique({ where: { id: dto.assignedToId } });
     if (!assignee) throw new NotFoundException('Сотрудник не найден');
@@ -76,8 +79,12 @@ export class TasksService {
     role: Role;
     search?: string;
   }) {
+    // «Все задачи» вместо только своих доступен elevated (FOUNDER/ADMIN/
+    // ACCOUNTANT). Принимаем filters.role + extra hint filters.roles чтобы
+    // мульти-роли работали (раньше strict role === 'ADMIN').
+    const elevated = isElevated({ role: filters.role, roles: (filters as any).roles } as any);
     const baseWhere: any =
-      filters.role === 'ADMIN' && !filters.mine
+      elevated && !filters.mine
         ? {}
         : { assignedToId: filters.currentUserId };
     const search = (filters.search || '').trim();
@@ -106,12 +113,13 @@ export class TasksService {
   async update(id: string, dto: UpdateTaskDto, user: CurrentUser) {
     const task = await this.findOne(id);
     const isOwner = task.assignedToId === user.id;
-    if (user.role !== 'ADMIN' && !isOwner) {
+    const elevated = isElevated(user as any);
+    if (!elevated && !isOwner) {
       throw new ForbiddenException('Вы не можете редактировать эту задачу');
     }
-    // Сотрудник не может переназначать задачу — только админ
-    if (user.role !== 'ADMIN' && dto.assignedToId !== undefined) {
-      throw new ForbiddenException('Только администратор может переназначать задачу');
+    // Переназначать задачу — только elevated (ТЗ §2 мульти-роли).
+    if (!elevated && dto.assignedToId !== undefined) {
+      throw new ForbiddenException('Переназначать задачу может только администрация');
     }
     const updated = await this.prisma.task.update({
       where: { id },
