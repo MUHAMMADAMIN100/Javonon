@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { isFounder } from '../auth/role-utils';
 
 @Injectable()
 export class UsersService {
@@ -350,7 +351,7 @@ export class UsersService {
     // КРИТИЧНАЯ ЗАЩИТА: аккаунт FOUNDER может править ТОЛЬКО сам FOUNDER.
     // Без этой проверки любой ADMIN/ACCOUNTANT мог бы сменить пароль
     // основателю и захватить контроль над системой через PATCH /users/<founder_id>.
-    if (target.role === 'FOUNDER' && requester) {
+    if (isFounder(target as any) && requester) {
       const isRequesterFounder = requester.role === 'FOUNDER' || (requester.roles || []).includes('FOUNDER');
       const isSelf = requester.id === target.id;
       if (!isRequesterFounder && !isSelf) {
@@ -394,8 +395,9 @@ export class UsersService {
         );
       }
     }
-    // То же для FOUNDER — он один в системе.
-    if (dto.role && dto.role !== 'FOUNDER' && target.role === 'FOUNDER') {
+    // То же для FOUNDER — он один в системе. isFounder() учитывает
+    // мульти-роли (FOUNDER в primary ИЛИ в roles[]).
+    if (dto.role && dto.role !== 'FOUNDER' && isFounder(target as any)) {
       // FOUNDER может быть и в roles[] (multi-role grant). Считаем общее
       // число «эффективных FOUNDER» — единственный быть не должен.
       const founderCount = await this.prisma.user.count({
@@ -493,7 +495,7 @@ export class UsersService {
     const target = await this.findOne(id);
 
     // FOUNDER аккаунт может удалить только сам FOUNDER (через CLI/сидер).
-    if (target.role === 'FOUNDER' && requester) {
+    if (isFounder(target as any) && requester) {
       const isRequesterFounder = requester.role === 'FOUNDER' || (requester.roles || []).includes('FOUNDER');
       if (!isRequesterFounder) {
         throw new ForbiddenException('Удалить FOUNDER может только FOUNDER');
@@ -519,8 +521,8 @@ export class UsersService {
         );
       }
     }
-    // То же для FOUNDER
-    if (target.role === 'FOUNDER') {
+    // То же для FOUNDER — isFounder() учитывает мульти-роли.
+    if (isFounder(target as any)) {
       // FOUNDER может быть и в roles[] (multi-role grant). Считаем общее
       // число «эффективных FOUNDER» — единственный быть не должен.
       const founderCount = await this.prisma.user.count({
@@ -561,7 +563,9 @@ export class UsersService {
     const target = await this.findOne(targetId);
     // FOUNDER не разжаловать. Чтобы передать FOUNDER, сначала нужно вручную
     // создать ещё одного FOUNDER через seed/cli — endpoint не позволяет.
-    if (target.role === 'FOUNDER' && targetId !== byFounderId) {
+    // isFounder() — primary или roles[]; раньше primary-only пропускал
+    // юзера с FOUNDER в secondary roles[] (другой FOUNDER мог его понизить).
+    if (isFounder(target as any) && targetId !== byFounderId) {
       throw new BadRequestException('Нельзя изменить роли другого FOUNDER через этот endpoint');
     }
     const updated = await this.prisma.user.update({
