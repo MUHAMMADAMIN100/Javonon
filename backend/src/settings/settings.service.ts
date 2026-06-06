@@ -296,11 +296,7 @@ export class SettingsService {
     longitude: number;
     radiusMeters?: number;
   }) {
-    const lat = Number(data.latitude);
-    const lng = Number(data.longitude);
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90) throw new BadRequestException('Широта некорректна');
-    if (!Number.isFinite(lng) || lng < -180 || lng > 180) throw new BadRequestException('Долгота некорректна');
-    const radius = Math.max(20, Math.floor(Number(data.radiusMeters) || 150));
+    const clean = this.validateWorkLocationFields(data);
     // Деактивируем предыдущие активные — активная только одна.
     await this.prisma.workLocation.updateMany({
       where: { isActive: true },
@@ -308,13 +304,47 @@ export class SettingsService {
     });
     return this.prisma.workLocation.create({
       data: {
-        name: data.name?.trim() || 'Главный офис',
-        latitude: lat,
-        longitude: lng,
-        radiusMeters: radius,
+        name: clean.name,
+        latitude: clean.lat,
+        longitude: clean.lng,
+        radiusMeters: clean.radius,
         isActive: true,
       },
     });
+  }
+
+  /**
+   * Валидация полей рабочей локации. Раньше controller принимал
+   * `body: any`, и service делал только lat/lng range. Не хватало:
+   *   - name length cap + HTML guard (попадает в audit logs)
+   *   - radius upper bound (1М метров = весь континент = clockIn
+   *     везде проходит)
+   */
+  private validateWorkLocationFields(data: {
+    name?: string;
+    latitude?: number;
+    longitude?: number;
+    radiusMeters?: number;
+  }): { name: string; lat: number; lng: number; radius: number } {
+    const lat = Number(data.latitude);
+    const lng = Number(data.longitude);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      throw new BadRequestException('Широта некорректна');
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      throw new BadRequestException('Долгота некорректна');
+    }
+    // 20м — минимум для GPS-точности, 10км — разумный максимум
+    // (больше = смысл гео-проверки теряется).
+    const radius = Math.max(20, Math.min(10_000, Math.floor(Number(data.radiusMeters) || 150)));
+    const nameRaw = (data.name || '').trim();
+    if (nameRaw.length > 100) {
+      throw new BadRequestException('Название локации слишком длинное (макс. 100 символов)');
+    }
+    if (/[<>]/.test(nameRaw)) {
+      throw new BadRequestException('Название локации не должно содержать HTML-теги');
+    }
+    return { name: nameRaw || 'Главный офис', lat, lng, radius };
   }
 
   async updateLocation(
@@ -329,13 +359,22 @@ export class SettingsService {
         data: { isActive: false },
       });
     }
+    // Тот же validator что в createLocation. Объединяем patch с
+    // существующими значениями для cross-field range check.
+    const merged = {
+      name: patch.name ?? exists.name,
+      latitude: patch.latitude ?? exists.latitude,
+      longitude: patch.longitude ?? exists.longitude,
+      radiusMeters: patch.radiusMeters ?? exists.radiusMeters,
+    };
+    const clean = this.validateWorkLocationFields(merged);
     return this.prisma.workLocation.update({
       where: { id },
       data: {
-        ...(patch.name !== undefined && { name: patch.name.trim() }),
-        ...(patch.latitude !== undefined && { latitude: Number(patch.latitude) }),
-        ...(patch.longitude !== undefined && { longitude: Number(patch.longitude) }),
-        ...(patch.radiusMeters !== undefined && { radiusMeters: Math.max(20, Math.floor(patch.radiusMeters)) }),
+        ...(patch.name !== undefined && { name: clean.name }),
+        ...(patch.latitude !== undefined && { latitude: clean.lat }),
+        ...(patch.longitude !== undefined && { longitude: clean.lng }),
+        ...(patch.radiusMeters !== undefined && { radiusMeters: clean.radius }),
         ...(patch.isActive !== undefined && { isActive: patch.isActive }),
       },
     });
