@@ -2,10 +2,20 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
+
+  // Security headers (helmet) — CSP, X-Frame-Options, X-Content-Type-Options,
+  // HSTS и т.д. CSP отключаем потому что у нас REST + WebSocket API,
+  // нет inline-скриптов в response; CSP на фронте задаётся CDN-уровнем
+  // (Vercel) или статикой. Остальные default-настройки безопасны для API.
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }));
 
   // SIGTERM от Railway/Docker → onModuleDestroy → prisma.$disconnect().
   // Без этого каждый редеплой оставляет в Postgres «висящие» TCP-соединения,

@@ -10,13 +10,31 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { FinanceService, CreateTransactionDto } from './finance.service';
 import { TransactionCategory, TransactionType } from '@prisma/client';
 
+// Receipts: только изображения и PDF. Whitelist расширений и MIME —
+// раньше можно было загрузить .exe/.html/.php (потенциальный XSS если
+// файл потом отдаётся как static, либо исполнение кода на сервере).
+const RECEIPT_ALLOWED_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.pdf', '.heic']);
+const RECEIPT_ALLOWED_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf',
+]);
+
 const receiptStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
   filename: (_req, file, cb) => {
-    const ext = extname(file.originalname || '') || '';
+    const ext = (extname(file.originalname || '') || '').toLowerCase();
     cb(null, `receipt-${randomUUID()}${ext}`);
   },
 });
+
+const receiptFileFilter: any = (_req: any, file: any, cb: any) => {
+  const ext = (extname(file.originalname || '') || '').toLowerCase();
+  if (!RECEIPT_ALLOWED_EXT.has(ext) || !RECEIPT_ALLOWED_MIME.has(file.mimetype)) {
+    return cb(new BadRequestException(
+      `Тип файла «${file.mimetype}» (${ext}) не разрешён. Допустимы: JPG, PNG, WEBP, HEIC, PDF.`,
+    ), false);
+  }
+  cb(null, true);
+};
 
 // QA-fix #45/#46/#47: безопасный парсинг query-параметров для фильтров.
 const VALID_TX_TYPES: TransactionType[] = ['INCOME', 'EXPENSE'];
@@ -173,6 +191,7 @@ export class FinanceController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: receiptStorage,
+      fileFilter: receiptFileFilter,
       limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '20971520', 10) }, // 20MB
     }),
   )

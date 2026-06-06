@@ -24,12 +24,26 @@ import { UpdateProgramDto } from './dto/update-program.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 
+// Изображения программ — только картинки. Whitelist расширения + MIME,
+// иначе можно было загрузить .html/.js и получить XSS при отдаче статики.
+const PROGRAM_IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic']);
+const PROGRAM_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic']);
+
 const programImageStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
   filename: (_req, file, cb) => {
-    cb(null, `${randomUUID()}${extname(file.originalname)}`);
+    const ext = (extname(file.originalname || '') || '').toLowerCase();
+    cb(null, `${randomUUID()}${ext}`);
   },
 });
+
+const programImageFilter: any = (_req: any, file: any, cb: any) => {
+  const ext = (extname(file.originalname || '') || '').toLowerCase();
+  if (!PROGRAM_IMAGE_EXT.has(ext) || !PROGRAM_IMAGE_MIME.has(file.mimetype)) {
+    return cb(new Error(`Тип файла не разрешён: ${file.mimetype}`), false);
+  }
+  cb(null, true);
+};
 
 @Controller('programs')
 export class ProgramsController {
@@ -90,12 +104,7 @@ export class ProgramsController {
     FileInterceptor('file', {
       storage: programImageStorage,
       limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '209715200', 10) },
-      fileFilter: (_req, file, cb) => {
-        if (!/^image\//.test(file.mimetype)) {
-          return cb(new BadRequestException('Нужен файл-картинка'), false);
-        }
-        cb(null, true);
-      },
+      fileFilter: programImageFilter,
     }),
   )
   async create(
@@ -178,12 +187,7 @@ export class ProgramsController {
     FileInterceptor('file', {
       storage: programImageStorage,
       limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '209715200', 10) },
-      fileFilter: (_req, file, cb) => {
-        if (!/^image\//.test(file.mimetype)) {
-          return cb(new BadRequestException('Нужен файл-картинка'), false);
-        }
-        cb(null, true);
-      },
+      fileFilter: programImageFilter,
     }),
   )
   async uploadImage(
