@@ -23,6 +23,7 @@ import { CreateProgramDto } from './dto/create-program.dto';
 import { UpdateProgramDto } from './dto/update-program.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { isElevated } from '../auth/role-utils';
 
 // Изображения программ — только картинки. Whitelist расширения + MIME,
 // иначе можно было загрузить .html/.js и получить XSS при отдаче статики.
@@ -195,8 +196,10 @@ export class ProgramsController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: any,
   ) {
-    if (user.role !== 'ADMIN') {
-      throw new ForbiddenException('Только администратор');
+    // Elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли). Раньше primary
+    // ADMIN-only check блокировал FOUNDER и secondary-роли по ТЗ §2.
+    if (!isElevated(user)) {
+      throw new ForbiddenException('Только администрация');
     }
     if (!file) throw new BadRequestException('Файл не передан');
     const imageUrl = `/uploads/${file.filename}`;

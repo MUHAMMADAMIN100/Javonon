@@ -6,8 +6,9 @@ import { CreateProgramDto } from './dto/create-program.dto';
 import { UpdateProgramDto } from './dto/update-program.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { TelegramService } from '../telegram/telegram.service';
+import { isElevated } from '../auth/role-utils';
 
-type CurrentUser = { id: string; role: Role };
+type CurrentUser = { id: string; role: Role; roles?: Role[] };
 
 const DIRECTION_LABEL: Record<Direction, string> = {
   BACHELOR: 'Бакалавриат',
@@ -67,7 +68,7 @@ export class ProgramsService {
   }
 
   async create(dto: CreateProgramDto, user: CurrentUser) {
-    if (user.role !== 'ADMIN') {
+    if (!isElevated(user as any)) {
       throw new ForbiddenException('Только администратор может создавать программы');
     }
     const program = await this.prisma.program.create({
@@ -104,7 +105,7 @@ export class ProgramsService {
   }
 
   async update(id: string, dto: UpdateProgramDto, user: CurrentUser) {
-    if (user.role !== 'ADMIN') {
+    if (!isElevated(user as any)) {
       throw new ForbiddenException('Только администратор может редактировать программы');
     }
     const existing = await this.findOne(id);
@@ -126,7 +127,7 @@ export class ProgramsService {
   }
 
   async remove(id: string, user: CurrentUser) {
-    if (user.role !== 'ADMIN') {
+    if (!isElevated(user as any)) {
       throw new ForbiddenException('Только администратор может удалять программы');
     }
     const existing = await this.findOne(id);

@@ -270,7 +270,10 @@ export class ApplicationsService {
     app: { managerId: string | null; chinaManagerId?: string | null },
     user: CurrentUser,
   ) {
-    if (user.role === 'ADMIN') return;
+    // Elevated (FOUNDER/ADMIN/ACCOUNTANT, мульти-роли учтены) могут
+    // редактировать любую заявку. Раньше было `user.role === 'ADMIN'`
+    // — блокировало FOUNDER и игнорировало мульти-роли.
+    if (isElevated(user as any)) return;
     const assigned = app.managerId || app.chinaManagerId;
     if (!assigned) return; // ещё не назначен — любой может взять в работу
     if (app.managerId === user.id || app.chinaManagerId === user.id) return;
@@ -490,10 +493,11 @@ export class ApplicationsService {
   }
 
   async remove(id: string, user: CurrentUser) {
-    // QA-fix: удалять заявки (вместе со студентом) может только ADMIN.
-    // EMPLOYEE без назначения раньше мог удалить любую неназначенную заявку.
-    if (user.role !== 'ADMIN') {
-      throw new ForbiddenException('Удалять заявки может только администратор');
+    // Удаление заявки — elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли).
+    // Раньше primary-only `user.role !== 'ADMIN'` блокировало FOUNDER
+    // и любого ADMIN'а назначенного через secondary roles[] (ТЗ §2).
+    if (!isElevated(user as any)) {
+      throw new ForbiddenException('Удалять заявки может только администрация');
     }
     const app = await this.findOne(id);
     if (app.studentId) {

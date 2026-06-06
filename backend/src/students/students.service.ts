@@ -48,7 +48,10 @@ export class StudentsService {
     student: { managerId: string | null; chinaManagerId?: string | null },
     user: CurrentUser,
   ) {
-    if (user.role === 'ADMIN') return;
+    // Elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли) пропускаем.
+    // Раньше primary `=== 'ADMIN'` не давало пройти FOUNDER и
+    // secondary-ADMIN'ам (ТЗ §2).
+    if (isElevated(user as any)) return;
     const assigned = student.managerId || student.chinaManagerId;
     if (!assigned) return;
     if (student.managerId === user.id || student.chinaManagerId === user.id) return;
@@ -153,8 +156,9 @@ export class StudentsService {
   }
 
   async regeneratePassword(id: string, user: CurrentUser) {
-    if (user.role !== 'ADMIN') {
-      throw new ForbiddenException('Только администратор может сбрасывать пароль студента');
+    // Elevated, не primary-ADMIN-only (ТЗ §2 multi-role).
+    if (!isElevated(user as any)) {
+      throw new ForbiddenException('Сбрасывать пароль студента может только администрация');
     }
     const existing = await this.findOne(id);
     if (!existing.email) {
@@ -428,10 +432,14 @@ export class StudentsService {
   }
 
   async remove(id: string, user: CurrentUser) {
-    // QA-fix: удаление студента — только ADMIN.
-    // Раньше любой EMPLOYEE мог удалить студента без назначенного менеджера.
-    if (user.role !== 'ADMIN') {
-      throw new ForbiddenException('Удалять студентов может только администратор');
+    // Удаление студента — elevated (FOUNDER/ADMIN/ACCOUNTANT). Раньше
+    // проверка была `user.role !== 'ADMIN'` — primary-only, что:
+    //   1) Блокировало FOUNDER (его role=FOUNDER, не ADMIN → 403).
+    //   2) Игнорировало мульти-роли по ТЗ §2 (юзер с ADMIN в roles[]
+    //      и другой primary не мог удалять, хотя должен).
+    // isElevated() корректно учитывает оба случая.
+    if (!isElevated(user as any)) {
+      throw new ForbiddenException('Удалять студентов может только администрация');
     }
     await this.findOne(id); // проверяем существование (бросит NotFoundException если нет)
     // Заявки сохраняем как историю — Prisma автоматически делает SetNull для
