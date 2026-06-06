@@ -70,6 +70,25 @@ export class PartnersService {
     if (amount > 100_000_000) {
       throw new BadRequestException('Сумма слишком большая');
     }
+    // method и details — partner-controlled. Попадают в админ-дашборд.
+    // Раньше принимали любую строку → stored XSS в админ UI + DB bloat
+    // через гигантский details.
+    const VALID_METHODS = new Set(['bank_card', 'bank_transfer', 'crypto', 'cash', 'other']);
+    let method: string | null = null;
+    if (body.method) {
+      const m = body.method.toLowerCase().trim();
+      if (!VALID_METHODS.has(m)) {
+        throw new BadRequestException(`method должен быть один из: ${[...VALID_METHODS].join(', ')}`);
+      }
+      method = m;
+    }
+    let details: string | null = null;
+    if (body.details) {
+      const d = body.details.trim();
+      if (d.length > 500) throw new BadRequestException('details слишком длинные (макс. 500)');
+      if (/[<>]/.test(d)) throw new BadRequestException('details не должны содержать HTML-теги');
+      details = d || null;
+    }
 
     // АТОМАРНО: проверка баланса + decrement + создание payout в одной
     // транзакции. Раньше check был ПЕРЕД tx → две параллельные requestPayout
@@ -92,8 +111,8 @@ export class PartnersService {
         data: {
           partnerId,
           amountCents: amount,
-          method: body.method,
-          details: body.details,
+          method,
+          details,
         },
       });
       return payout;
