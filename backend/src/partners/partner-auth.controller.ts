@@ -9,22 +9,16 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { PartnerAuthService } from './partner-auth.service';
 import { PartnerJwtGuard } from './partner-jwt.guard';
+import { PartnerLoginDto, PartnerRegisterDto } from './dto/partner-auth.dto';
 
 @Controller('partner-auth')
 export class PartnerAuthController {
   constructor(private svc: PartnerAuthService) {}
 
-  /** Регистрация партнёра — публичный эндпоинт, защищён throttle. */
+  /** Регистрация партнёра — публичный эндпоинт, защищён throttle + DTO. */
   @Post('register')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  register(
-    @Body() body: {
-      email: string;
-      password: string;
-      fullName: string;
-      phone?: string;
-    },
-  ) {
+  register(@Body() body: PartnerRegisterDto) {
     return this.svc.register(body);
   }
 
@@ -32,7 +26,7 @@ export class PartnerAuthController {
   // против перебора паролей коротких партнёров.
   @Post('login')
   @Throttle({ default: { limit: 10, ttl: 15 * 60_000 } })
-  login(@Body() body: { email: string; password: string }) {
+  login(@Body() body: PartnerLoginDto) {
     return this.svc.login(body.email, body.password);
   }
 
