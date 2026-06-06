@@ -7,6 +7,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { MassmailService } from './massmail.service';
+import { CreateMassmailDto } from './dto/massmail.dto';
 
 @Controller('integrations/massmail')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -18,7 +19,7 @@ export class MassmailController {
   list() { return this.mm.list(); }
 
   @Post()
-  create(@Body() body: any, @CurrentUser() me: any) {
+  create(@Body() body: CreateMassmailDto, @CurrentUser() me: any) {
     return this.mm.create({ ...body, createdById: me.id });
   }
 

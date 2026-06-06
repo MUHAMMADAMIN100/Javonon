@@ -347,6 +347,21 @@ export class ChatService {
   }
 
   async createTeamRoom(creatorId: string, title: string, memberIds: string[]) {
+    // Минимальная валидация title — раньше @Body() body: { title } без DTO
+    // пропускал что угодно, включая `<script>`. React автоэкранирует, но
+    // имена rooms светятся в Telegram-уведомлениях (html-mode) и в
+    // activity-логах — нужна общая защита.
+    const trimmed = (title || '').trim();
+    if (!trimmed || trimmed.length < 2) {
+      throw new BadRequestException('Название комнаты обязательно (мин. 2 символа)');
+    }
+    if (trimmed.length > 120) {
+      throw new BadRequestException('Название комнаты слишком длинное (макс. 120 символов)');
+    }
+    if (/[<>]/.test(trimmed)) {
+      throw new BadRequestException('Название комнаты не должно содержать HTML-теги');
+    }
+    title = trimmed;
     const ids = Array.from(new Set([creatorId, ...memberIds]));
     // QA-fix: валидируем все memberId, чтобы вместо FK-500 пользователь получал 400.
     const existing = await this.prisma.user.findMany({
