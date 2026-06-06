@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { WhatsappService } from './whatsapp.service';
+import { WhatsappSignatureGuard } from '../../common/meta-signature.guard';
 
 @Controller('integrations/whatsapp')
 export class WhatsappController {
@@ -24,8 +25,12 @@ export class WhatsappController {
     return { ok: false };
   }
 
-  // Webhook inbound — без auth (Meta не передаёт JWT).
+  // Webhook inbound — раньше «без auth». Теперь X-Hub-Signature-256
+  // HMAC-SHA256 проверка через WHATSAPP_APP_SECRET. Без подписи любой в
+  // интернете POST'ил сюда и создавал фейковые ExternalMessage записи,
+  // флудя Inbox / подделывая историю клиента.
   @Post('webhook')
+  @UseGuards(WhatsappSignatureGuard)
   inbound(@Body() payload: any, @Req() _req: Request) {
     return this.wa.handleIncoming(payload);
   }

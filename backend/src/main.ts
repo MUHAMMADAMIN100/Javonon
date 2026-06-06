@@ -5,7 +5,11 @@ import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true сохраняет неизменный буфер body на req.rawBody. Нужно
+  // для проверки X-Hub-Signature-256 на webhook'ах Meta (WhatsApp/IG) —
+  // подпись считается от точных байтов до парсинга JSON. Без этой опции
+  // переcчитанный JSON.stringify не совпадал бы с подписью Meta.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
 
   // Security headers (helmet) — CSP, X-Frame-Options, X-Content-Type-Options,

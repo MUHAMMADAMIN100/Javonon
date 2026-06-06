@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { InstagramService } from './instagram.service';
+import { InstagramSignatureGuard } from '../../common/meta-signature.guard';
 
 @Controller('integrations/instagram')
 export class InstagramController {
@@ -22,7 +23,10 @@ export class InstagramController {
     return { ok: false };
   }
 
+  // X-Hub-Signature-256 verification по INSTAGRAM_APP_SECRET. Раньше
+  // endpoint принимал любого POST'ера — фейковые DM появлялись в Inbox.
   @Post('webhook')
+  @UseGuards(InstagramSignatureGuard)
   inbound(@Body() payload: any) {
     return this.ig.handleIncoming(payload);
   }
