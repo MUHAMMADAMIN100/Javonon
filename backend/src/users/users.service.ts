@@ -472,6 +472,18 @@ export class UsersService {
       });
     }
 
+    // Когда admin меняет user'у пароль через этот endpoint — текущий JWT
+    // у юзера ещё валиден, без kick он продолжает работать со старой
+    // сессией ~7 дней. Это разрывает смысл смены пароля (особенно
+    // important когда admin меняет пароль для блокировки подозрительной
+    // активности). Эмитим тот же realtime event, что и при смене роли —
+    // фронт делает logout, юзер вынужден залогиниться новым паролем.
+    if (dto.password && (!requester || requester.id !== id)) {
+      this.realtime.emitUser(id, 'user:roles-updated', {
+        reason: 'password-changed-by-admin',
+      });
+    }
+
     // Скрываем password из ответа клиенту
     const { password: _omit, ...safe } = user as any;
     return safe;
