@@ -462,6 +462,16 @@ export class UsersService {
       this.logger.log(`Password updated and verified for user ${id} (${user.email})`);
     }
 
+    // Если admin сменил primary role — шлём realtime kick, как в setRoles
+    // (ТЗ §2 «права передаются основателем»). Иначе у target в JWT остаётся
+    // старая роль, новые права применятся только после релогина.
+    if (dto.role && (!requester || requester.id !== id)) {
+      this.realtime.emitUser(id, 'user:roles-updated', {
+        role: (user as any).role,
+        roles: (user as any).roles || [],
+      });
+    }
+
     // Скрываем password из ответа клиенту
     const { password: _omit, ...safe } = user as any;
     return safe;
@@ -513,6 +523,12 @@ export class UsersService {
         throw new BadRequestException('Нельзя удалить единственного FOUNDER');
       }
     }
+    // Шлём kick ПЕРЕД delete (после уже не сможем emit — у пользователя
+    // удалена сессия в БД, гейтвей всё равно дойдёт по WS), чтобы Bob,
+    // залогиненный в браузере, моментально получил logout. Без этого его
+    // JWT работал бы до истечения (~7 дней) — «удалённый» сотрудник
+    // продолжает иметь доступ.
+    this.realtime.emitUser(id, 'user:deleted', { reason: 'removed-by-admin' });
     await this.prisma.user.delete({ where: { id } });
     return { ok: true };
   }

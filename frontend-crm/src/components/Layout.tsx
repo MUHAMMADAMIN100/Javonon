@@ -48,6 +48,14 @@ export default function Layout() {
     setTimeout(() => logout(), 4000);
   });
 
+  // Аккаунт удалён администратором — кикаем сразу. JWT в localStorage
+  // продолжал бы работать ~7 дней до истечения, что давало «удалённому»
+  // сотруднику фактический доступ к системе.
+  useRealtimeEvent('user:deleted', () => {
+    toast('Ваш аккаунт был удалён администратором.', 'error');
+    setTimeout(() => logout(), 3000);
+  });
+
   // Close mobile drawer on route change
   useEffect(() => {
     setMobileNavOpen(false);
