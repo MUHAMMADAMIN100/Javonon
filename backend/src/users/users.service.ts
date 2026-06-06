@@ -373,7 +373,17 @@ export class UsersService {
     // Защита: если меняем роль с ADMIN на не-ADMIN — убедимся что это
     // не последний ADMIN. Иначе систему некому будет администрировать.
     if (dto.role && dto.role !== 'ADMIN' && target.role === 'ADMIN') {
-      const adminCount = await this.prisma.user.count({ where: { role: 'ADMIN' } });
+      // Мульти-роли (ТЗ §2): юзер с ADMIN в roles[] тоже считается админом.
+      // Без OR на roles[] эта защита блокировала легитимный сценарий, когда
+      // у компании primary-ADMIN один, но есть юзер с ADMIN как secondary.
+      const adminCount = await this.prisma.user.count({
+        where: {
+          OR: [
+            { role: 'ADMIN' },
+            { roles: { has: 'ADMIN' } },
+          ],
+        },
+      });
       if (adminCount <= 1) {
         throw new BadRequestException(
           'Нельзя понизить роль последнего администратора. Сначала создай другого ADMIN.',
@@ -382,7 +392,16 @@ export class UsersService {
     }
     // То же для FOUNDER — он один в системе.
     if (dto.role && dto.role !== 'FOUNDER' && target.role === 'FOUNDER') {
-      const founderCount = await this.prisma.user.count({ where: { role: 'FOUNDER' } });
+      // FOUNDER может быть и в roles[] (multi-role grant). Считаем общее
+      // число «эффективных FOUNDER» — единственный быть не должен.
+      const founderCount = await this.prisma.user.count({
+        where: {
+          OR: [
+            { role: 'FOUNDER' },
+            { roles: { has: 'FOUNDER' } },
+          ],
+        },
+      });
       if (founderCount <= 1) {
         throw new BadRequestException('Нельзя снять роль с единственного FOUNDER.');
       }
@@ -457,7 +476,17 @@ export class UsersService {
 
     // Защита: нельзя удалить последнего ADMIN
     if (target.role === 'ADMIN') {
-      const adminCount = await this.prisma.user.count({ where: { role: 'ADMIN' } });
+      // Мульти-роли (ТЗ §2): юзер с ADMIN в roles[] тоже считается админом.
+      // Без OR на roles[] эта защита блокировала легитимный сценарий, когда
+      // у компании primary-ADMIN один, но есть юзер с ADMIN как secondary.
+      const adminCount = await this.prisma.user.count({
+        where: {
+          OR: [
+            { role: 'ADMIN' },
+            { roles: { has: 'ADMIN' } },
+          ],
+        },
+      });
       if (adminCount <= 1) {
         throw new BadRequestException(
           'Нельзя удалить последнего администратора',
@@ -466,7 +495,16 @@ export class UsersService {
     }
     // То же для FOUNDER
     if (target.role === 'FOUNDER') {
-      const founderCount = await this.prisma.user.count({ where: { role: 'FOUNDER' } });
+      // FOUNDER может быть и в roles[] (multi-role grant). Считаем общее
+      // число «эффективных FOUNDER» — единственный быть не должен.
+      const founderCount = await this.prisma.user.count({
+        where: {
+          OR: [
+            { role: 'FOUNDER' },
+            { roles: { has: 'FOUNDER' } },
+          ],
+        },
+      });
       if (founderCount <= 1) {
         throw new BadRequestException('Нельзя удалить единственного FOUNDER');
       }
