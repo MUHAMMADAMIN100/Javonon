@@ -55,7 +55,10 @@ async function main() {
       phone: '+992 901 222 333',
       direction: Direction.LANGUAGE,
       comment: 'Хочу пройти языковую программу в Германии.',
-      status: ApplicationStatus.IN_PROGRESS,
+      // Раньше было ApplicationStatus.IN_PROGRESS — legacy enum, который
+      // фронт уже не отображает (STATUS_LABEL/BADGE не содержат его).
+      // Новый эквивалент — DOCS_REVIEW.
+      status: ApplicationStatus.DOCS_REVIEW,
     },
     {
       fullName: 'Раджабов Фаррух',
