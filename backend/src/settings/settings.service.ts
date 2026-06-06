@@ -158,26 +158,63 @@ export class SettingsService {
     currency?: string;
     comment?: string;
   }) {
+    const clean = this.validatePenaltyRuleFields(data);
+    return this.prisma.penaltyRule.create({
+      data: {
+        minLateMinutes: clean.min,
+        maxLateMinutes: clean.max,
+        amount: clean.amount,
+        currency: clean.currency,
+        comment: clean.comment,
+      },
+    });
+  }
+
+  /**
+   * Валидация полей правила штрафа. Раньше controller принимал
+   * `body: any`, service делал базовый Number-check но без upper bound /
+   * currency whitelist / HTML-protection на comment. Реальные риски:
+   *   - amount: typo «50000» вместо «500» → массовые ошибочные штрафы
+   *   - currency: любая строка → ломает downstream бухгалтерию
+   *   - comment: `<script>` стримился в audit logs и notifications
+   */
+  private validatePenaltyRuleFields(data: {
+    minLateMinutes?: number;
+    maxLateMinutes?: number | null;
+    amount?: number;
+    currency?: string;
+    comment?: string;
+  }): { min: number; max: number | null; amount: number; currency: string; comment: string | null } {
+    const VALID_CURRENCIES = new Set(['TJS', 'USD', 'EUR', 'CNY', 'RUB']);
     const min = Math.floor(Number(data.minLateMinutes));
     if (!Number.isFinite(min) || min < 0) throw new BadRequestException('minLateMinutes ≥ 0');
+    if (min > 24 * 60) throw new BadRequestException('minLateMinutes слишком велик (макс. 1440 = сутки)');
     let max: number | null = null;
     if (data.maxLateMinutes !== undefined && data.maxLateMinutes !== null) {
       max = Math.floor(Number(data.maxLateMinutes));
       if (!Number.isFinite(max) || max <= min) {
         throw new BadRequestException('maxLateMinutes должен быть > minLateMinutes');
       }
+      if (max > 24 * 60) throw new BadRequestException('maxLateMinutes слишком велик (макс. 1440)');
     }
     const amount = Number(data.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('amount > 0');
-    return this.prisma.penaltyRule.create({
-      data: {
-        minLateMinutes: min,
-        maxLateMinutes: max,
-        amount,
-        currency: data.currency || 'TJS',
-        comment: data.comment?.trim() || null,
-      },
-    });
+    if (amount > 1_000_000) {
+      // Защита от typo (50000 вместо 500). Реальный штраф < 10k TJS.
+      throw new BadRequestException('amount слишком велик (макс. 1 000 000)');
+    }
+    const currency = (data.currency || 'TJS').toUpperCase();
+    if (!VALID_CURRENCIES.has(currency)) {
+      throw new BadRequestException(`currency должен быть один из: ${[...VALID_CURRENCIES].join(', ')}`);
+    }
+    const commentRaw = (data.comment || '').trim();
+    if (commentRaw.length > 200) {
+      throw new BadRequestException('comment слишком длинный (макс. 200 символов)');
+    }
+    if (/[<>]/.test(commentRaw)) {
+      throw new BadRequestException('comment не должен содержать HTML-теги');
+    }
+    return { min, max, amount, currency, comment: commentRaw || null };
   }
 
   async updatePenaltyRule(
@@ -193,17 +230,26 @@ export class SettingsService {
   ) {
     const exists = await this.prisma.penaltyRule.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Правило не найдено');
+    // Тот же валидатор что в createPenaltyRule. Объединяем patch с
+    // существующими значениями, чтобы cross-field check (max > min)
+    // корректно сработал даже если patch меняет только одно поле.
+    const merged = {
+      minLateMinutes: patch.minLateMinutes ?? exists.minLateMinutes,
+      maxLateMinutes: patch.maxLateMinutes !== undefined ? patch.maxLateMinutes : exists.maxLateMinutes,
+      amount: patch.amount ?? exists.amount,
+      currency: patch.currency ?? exists.currency,
+      comment: patch.comment ?? exists.comment ?? '',
+    };
+    const clean = this.validatePenaltyRuleFields(merged);
     return this.prisma.penaltyRule.update({
       where: { id },
       data: {
-        ...(patch.minLateMinutes !== undefined && { minLateMinutes: Math.floor(patch.minLateMinutes) }),
-        ...(patch.maxLateMinutes !== undefined && {
-          maxLateMinutes: patch.maxLateMinutes === null ? null : Math.floor(patch.maxLateMinutes),
-        }),
-        ...(patch.amount !== undefined && { amount: Number(patch.amount) }),
-        ...(patch.currency !== undefined && { currency: patch.currency }),
+        ...(patch.minLateMinutes !== undefined && { minLateMinutes: clean.min }),
+        ...(patch.maxLateMinutes !== undefined && { maxLateMinutes: clean.max }),
+        ...(patch.amount !== undefined && { amount: clean.amount }),
+        ...(patch.currency !== undefined && { currency: clean.currency }),
         ...(patch.isActive !== undefined && { isActive: patch.isActive }),
-        ...(patch.comment !== undefined && { comment: patch.comment?.trim() || null }),
+        ...(patch.comment !== undefined && { comment: clean.comment }),
       },
     });
   }
