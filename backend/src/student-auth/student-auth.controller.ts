@@ -85,9 +85,11 @@ export class StudentAuthController {
     });
   }
 
-  // Forgot password: студент вводит email — на него высылается новый
-  // одноразовый пароль. Лимит: 3 запроса в минуту с IP (anti-spam).
-  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  // Forgot password: каждый запрос отправляет email. Раньше 3/min
+  // позволяло 4320 email/день/IP — потенциальное email bombing студентов
+  // + биллинг SES/SendGrid провайдера. Тот же window что у login по
+  // OWASP — 3 за 15 минут на IP.
+  @Throttle({ default: { limit: 3, ttl: 15 * 60_000 } })
   @Post('forgot-password')
   forgotPassword(@Body() body: StudentForgotPasswordDto) {
     return this.auth.forgotPassword(body.email);
