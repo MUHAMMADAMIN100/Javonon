@@ -496,8 +496,18 @@ export class ChatService {
     });
     if (!msg) throw new NotFoundException('Сообщение не найдено');
     if (msg.deletedAt) return { ok: true };
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-    if (msg.authorId !== userId && user?.role !== 'ADMIN') {
+    // Мульти-роли (ТЗ §2): admin'ом считается primary=ADMIN ИЛИ ADMIN в
+    // roles[]. FOUNDER тоже модерирует (расширенные права). Раньше было
+    // строго `role === 'ADMIN'`, мульти-роль не работала.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, roles: true },
+    });
+    const isModerator = user && (
+      user.role === 'ADMIN' || user.role === 'FOUNDER' ||
+      (user.roles || []).some((r) => r === 'ADMIN' || r === 'FOUNDER')
+    );
+    if (msg.authorId !== userId && !isModerator) {
       throw new BadRequestException('Можно удалять только свои сообщения');
     }
     await this.prisma.chatMessage.update({
@@ -510,8 +520,17 @@ export class ChatService {
 
   /** Pin/unpin сообщение в комнате. ADMIN-only. */
   async togglePin(messageId: string, userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-    if (user?.role !== 'ADMIN') throw new BadRequestException('Только администратор может закреплять');
+    // Та же мульти-ролевая логика что и в deleteMessage — pin/unpin
+    // должен быть доступен ADMIN (primary или roles[]) и FOUNDER.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, roles: true },
+    });
+    const canPin = user && (
+      user.role === 'ADMIN' || user.role === 'FOUNDER' ||
+      (user.roles || []).some((r) => r === 'ADMIN' || r === 'FOUNDER')
+    );
+    if (!canPin) throw new BadRequestException('Только администратор может закреплять');
     const msg = await this.prisma.chatMessage.findUnique({
       where: { id: messageId },
       select: { roomId: true, isPinned: true },

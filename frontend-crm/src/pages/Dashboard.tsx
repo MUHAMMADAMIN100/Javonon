@@ -7,7 +7,7 @@ import { leaderboard, type KpiRow } from '../api/kpi';
 import { DIRECTION_LABEL, STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { keys } from '../lib/queryKeys';
-import { isElevated } from '../lib/roles';
+import { isElevated, hasRole } from '../lib/roles';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -24,7 +24,9 @@ const fadeUp = {
 export default function Dashboard() {
   const me = useAuth((s) => s.user);
   const isAdmin = isElevated(me);
-  const isAccountant = me?.role === 'ACCOUNTANT';
+  // hasRole учитывает мульти-роли (ТЗ §2). Раньше было `me?.role === 'ACCOUNTANT'`
+  // — ловило только primary, юзер с roles=[ACCOUNTANT] проваливался.
+  const isAccountant = hasRole(me, 'ACCOUNTANT');
   const showFinance = isAdmin || isAccountant;
 
   const appStatsQuery = useQuery({ queryKey: ['applications', 'stats'], queryFn: () => applicationStats() });
