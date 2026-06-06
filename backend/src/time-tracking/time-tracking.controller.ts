@@ -20,13 +20,29 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { TimeTrackingService } from './time-tracking.service';
 
+// Фото-доказательство опоздания (ТЗ §5) — только картинки + PDF.
+// Раньше storage принимал любой тип файла (включая .exe/.html), что
+// открывало stored-XSS если файл потом отдавался как static.
+const TIME_PROOF_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf']);
+const TIME_PROOF_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf',
+]);
+
 const timeProofStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
   filename: (_req, file, cb) => {
-    const ext = extname(file.originalname || '') || '';
+    const ext = (extname(file.originalname || '') || '').toLowerCase();
     cb(null, `time-${randomUUID()}${ext}`);
   },
 });
+
+const timeProofFilter: any = (_req: any, file: any, cb: any) => {
+  const ext = (extname(file.originalname || '') || '').toLowerCase();
+  if (!TIME_PROOF_EXT.has(ext) || !TIME_PROOF_MIME.has(file.mimetype)) {
+    return cb(new Error(`Тип файла не разрешён: ${file.mimetype}. Допустимы JPG/PNG/WEBP/HEIC/PDF.`), false);
+  }
+  cb(null, true);
+};
 
 @Controller('time')
 @UseGuards(JwtAuthGuard)
@@ -87,6 +103,7 @@ export class TimeTrackingController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: timeProofStorage,
+      fileFilter: timeProofFilter,
       limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800', 10) }, // 50MB
     }),
   )

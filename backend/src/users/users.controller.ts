@@ -26,13 +26,29 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 
+// Документы сотрудника (паспорт, фото, контракт, диплом). Whitelist
+// типов: иначе можно было загрузить .html/.exe/.svg и получить stored-XSS
+// либо файл-зловред при отдаче статики.
+const USER_DOC_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf']);
+const USER_DOC_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf',
+]);
+
 const userDocStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
   filename: (_req, file, cb) => {
-    const ext = extname(file.originalname || '') || '';
+    const ext = (extname(file.originalname || '') || '').toLowerCase();
     cb(null, `userdoc-${randomUUID()}${ext}`);
   },
 });
+
+const userDocFilter: any = (_req: any, file: any, cb: any) => {
+  const ext = (extname(file.originalname || '') || '').toLowerCase();
+  if (!USER_DOC_EXT.has(ext) || !USER_DOC_MIME.has(file.mimetype)) {
+    return cb(new Error(`Тип файла не разрешён: ${file.mimetype}. Допустимы JPG/PNG/WEBP/HEIC/PDF.`), false);
+  }
+  cb(null, true);
+};
 
 /**
  * Self-эндпоинты + просмотр чужих профилей с проверкой доступа.
@@ -68,6 +84,7 @@ export class MeController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: userDocStorage,
+      fileFilter: userDocFilter,
       limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '209715200', 10) },
     }),
   )
@@ -148,6 +165,7 @@ export class UsersController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: userDocStorage,
+      fileFilter: userDocFilter,
       limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '209715200', 10) },
     }),
   )
