@@ -75,7 +75,7 @@ export class StudentAuthService {
   async register(dto: {
     fullName: string;
     email: string;
-    phone: string;
+    phone?: string;
     password: string;
     direction?: string;
     comment?: string;

@@ -25,6 +25,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { StudentForgotPasswordDto, StudentLoginDto } from './dto/student-login.dto';
+import { StudentRegisterDto } from './dto/student-register.dto';
 
 const uploadStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
@@ -70,10 +71,11 @@ export class StudentAuthController {
     return this.auth.login(body.email, body.password);
   }
 
-  // Self-registration через лендинг. Лимит: 5 в минуту c IP.
+  // Self-registration через лендинг — теперь через DTO. Раньше body: any
+  // пропускало weak пароли, XSS в fullName, мусорные direction-значения.
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register')
-  register(@Body() body: any) {
+  register(@Body() body: StudentRegisterDto) {
     return this.auth.register({
       fullName: body.fullName,
       email: body.email,
