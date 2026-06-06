@@ -152,7 +152,9 @@ export class TasksService {
   }
 
   async stats(user: CurrentUser) {
-    const where = user.role === 'ADMIN' ? {} : { assignedToId: user.id };
+    // Elevated видит статистику по всем; остальные — только по своим.
+    // Раньше `user.role === 'ADMIN'` исключало FOUNDER и secondary-ADMIN.
+    const where = isElevated(user as any) ? {} : { assignedToId: user.id };
     const [total, todo, inProgress, done] = await Promise.all([
       this.prisma.task.count({ where }),
       this.prisma.task.count({ where: { ...where, status: TaskStatus.TODO } }),

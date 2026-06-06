@@ -284,9 +284,16 @@ export class ChatService {
 
     const author = await this.prisma.user.findUnique({
       where: { id: authorId },
-      select: { role: true, fullName: true },
+      select: { role: true, roles: true, fullName: true },
     });
-    if (!author || (author.role !== 'ADMIN' && author.role !== 'ACCOUNTANT')) {
+    // Elevated (FOUNDER/ADMIN/ACCOUNTANT) могут вызвать AI-парсинг
+    // финансов чат-ботом. Multi-role: проверяем primary И roles[]
+    // (раньше primary-only пропускало secondary-ADMIN/ACCOUNTANT).
+    const isElevatedAuthor = author && (
+      author.role === 'FOUNDER' || author.role === 'ADMIN' || author.role === 'ACCOUNTANT' ||
+      (author.roles || []).some((r) => r === 'FOUNDER' || r === 'ADMIN' || r === 'ACCOUNTANT')
+    );
+    if (!isElevatedAuthor) {
       // Не имеет прав — игнорируем (не отвечаем, чтоб не спамить)
       return;
     }
