@@ -19,10 +19,46 @@ type JwtPayload = {
 
 const STAFF_ROLES = new Set(['FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER']);
 
+// WebSocket origin allow-list. Раньше тут было `origin: true` — отражало
+// любой origin, позволяя любому сайту через CSRF-сценарий открыть WS с
+// аутентифицированным cookie/токеном. Используем тот же паттерн что и
+// HTTP CORS в main.ts: env CORS_ORIGINS (csv) + всегда-разрешённые
+// продакшен хосты + *.javonon.com / *.vercel.app suffix-match.
+const WS_ALWAYS_ALLOWED = [
+  'javonon.com',
+  'www.javonon.com',
+  'javonon-crm.vercel.app',
+  'javonon-landing.vercel.app',
+  'javonon.vercel.app',
+  'localhost:5173',
+  'localhost:5174',
+];
+function wsCheckOrigin(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+  // socket.io вызывает с origin=undefined при server-to-server или curl —
+  // пропускаем (HTTP-уровень и JWT всё равно отрежут).
+  if (!origin) return callback(null, true);
+  const env = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const all = [...env, ...WS_ALWAYS_ALLOWED];
+  try {
+    const url = new URL(origin);
+    const host = url.host;
+    if (all.some((h) => h === origin || h === host || h === `${url.protocol}//${host}`)) {
+      return callback(null, true);
+    }
+    // Wildcard *.javonon.com / *.vercel.app
+    if (/\.javonon\.com$/.test(host) || /\.vercel\.app$/.test(host)) {
+      return callback(null, true);
+    }
+  } catch {
+    /* malformed origin — отказ */
+  }
+  return callback(new Error(`WebSocket: origin '${origin}' not allowed`));
+}
+
 @Injectable()
 @WebSocketGateway({
   cors: {
-    origin: true,
+    origin: wsCheckOrigin,
     credentials: true,
   },
 })
