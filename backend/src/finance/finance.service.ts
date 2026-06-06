@@ -168,6 +168,45 @@ export class FinanceService {
   }
 
   async update(id: string, patch: Partial<CreateTransactionDto>) {
+    // Те же проверки что в create. Раньше update тупо форвардил patch
+    // в Prisma — currency/comment/receiptUrl/etc обходили все защиты,
+    // которые я добавил в create. Делаем те же check'и.
+    if (patch.amount !== undefined) {
+      if (!Number.isFinite(patch.amount) || patch.amount <= 0) {
+        throw new BadRequestException('Сумма должна быть больше 0');
+      }
+      if (patch.amount > 1_000_000) {
+        throw new BadRequestException('Сумма слишком большая');
+      }
+    }
+    const VALID_CURRENCIES = new Set(['TJS', 'USD', 'EUR', 'CNY', 'RUB']);
+    if (patch.currency !== undefined && patch.currency !== null) {
+      const c = patch.currency.toUpperCase();
+      if (!VALID_CURRENCIES.has(c)) {
+        throw new BadRequestException(`currency должен быть один из: ${[...VALID_CURRENCIES].join(', ')}`);
+      }
+      patch.currency = c;
+    }
+    if (patch.date !== undefined && patch.date !== null) {
+      const d = new Date(patch.date as any);
+      if (Number.isNaN(d.getTime())) throw new BadRequestException('Некорректная дата');
+    }
+    const checkText = (val: string | undefined | null, field: string, maxLen: number) => {
+      if (val === undefined || val === null) return;
+      if (val.length > maxLen) throw new BadRequestException(`${field}: макс. ${maxLen} символов`);
+      if (/[<>]/.test(val)) throw new BadRequestException(`${field}: HTML-теги запрещены`);
+    };
+    checkText(patch.comment, 'comment', 1000);
+    checkText(patch.productCategory, 'productCategory', 100);
+    checkText(patch.payerName, 'payerName', 200);
+    checkText(patch.noReceiptReason, 'noReceiptReason', 500);
+    if (patch.receiptUrl) {
+      const u = patch.receiptUrl.trim();
+      if (!/^(https?:\/\/|\/\/|\/)\S{0,2000}$/i.test(u)) {
+        throw new BadRequestException('receiptUrl должен быть http(s) или относительной ссылкой');
+      }
+      patch.receiptUrl = u;
+    }
     return this.prisma.transaction.update({
       where: { id },
       data: {
