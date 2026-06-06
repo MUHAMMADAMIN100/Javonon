@@ -8,6 +8,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { requireJwtSecret } from '../auth/jwt-secret';
 
 type JwtPayload = {
   sub: string;
@@ -46,8 +47,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
 
     try {
-      const staffSecret =
-        this.config.get<string>('JWT_SECRET') || 'fallback-secret';
+      const staffSecret = requireJwtSecret(this.config.get<string>('JWT_SECRET'));
       const studentSecret = this.config.get<string>('STUDENT_JWT_SECRET');
 
       // Сначала пробуем как staff-токен (JWT_SECRET).

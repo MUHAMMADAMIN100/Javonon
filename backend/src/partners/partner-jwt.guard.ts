@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { requireJwtSecret } from '../auth/jwt-secret';
 
 /**
  * Гард для эндпоинтов партнёра. Принимает только токены с role === 'PARTNER'.
@@ -26,7 +27,9 @@ export class PartnerJwtGuard implements CanActivate {
     const token = auth.slice(7).trim();
 
     const partnerSecret = this.config.get<string>('PARTNER_JWT_SECRET');
-    const legacy = this.config.get<string>('JWT_SECRET') || 'fallback-secret';
+    // Legacy verification path: tries the main JWT_SECRET. requireJwtSecret
+    // refuses a hard-coded fallback in production (see jwt-secret.ts).
+    const legacy = requireJwtSecret(this.config.get<string>('JWT_SECRET'));
 
     let payload: any = null;
     if (partnerSecret) {

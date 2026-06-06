@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { requireJwtSecret } from '../auth/jwt-secret';
 
 /**
  * Гард для эндпоинтов студента.
@@ -30,8 +31,9 @@ export class StudentJwtGuard implements CanActivate {
     const token = auth.slice(7).trim();
 
     const studentSecret = this.config.get<string>('STUDENT_JWT_SECRET');
-    const legacySecret =
-      this.config.get<string>('JWT_SECRET') || 'fallback-secret';
+    // Legacy fallback path: tries main JWT_SECRET. requireJwtSecret
+    // refuses a hard-coded value in production (see jwt-secret.ts).
+    const legacySecret = requireJwtSecret(this.config.get<string>('JWT_SECRET'));
 
     let payload: any = null;
     if (studentSecret) {

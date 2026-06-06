@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { requireJwtSecret } from '../auth/jwt-secret';
 
 /**
  * Простая alphabet для ref-кодов: исключены неоднозначные 0/O/1/l/I,
@@ -33,10 +34,13 @@ export class PartnerAuthService {
   ) {}
 
   private async signFor(partner: { id: string; email: string }) {
-    const secret =
+    // Prefer PARTNER_JWT_SECRET; fall back to JWT_SECRET; refuse to use a
+    // hard-coded value in production (see jwt-secret.ts).
+    const secret = requireJwtSecret(
       this.config.get<string>('PARTNER_JWT_SECRET') ||
-      this.config.get<string>('JWT_SECRET') ||
-      'fallback-secret';
+        this.config.get<string>('JWT_SECRET'),
+      'PARTNER_JWT_SECRET (or JWT_SECRET)',
+    );
     return this.jwt.signAsync(
       { sub: partner.id, email: partner.email, role: 'PARTNER' },
       { secret, expiresIn: this.config.get<string>('JWT_EXPIRES_IN') || '30d' },
