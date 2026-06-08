@@ -6,19 +6,29 @@ import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 
 async function bootstrap() {
-  // rawBody: true сохраняет неизменный буфер body на req.rawBody. Нужно
-  // для проверки X-Hub-Signature-256 на webhook'ах Meta (WhatsApp/IG) —
-  // подпись считается от точных байтов до парсинга JSON. Без этой опции
-  // переcчитанный JSON.stringify не совпадал бы с подписью Meta.
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  // bodyParser: false отключает Nest'овский авто-парсер. Мы добавим json/
+  // urlencoded ниже с явными limit'ами + verify-хуком который сохраняет
+  // rawBody на req.rawBody (нужно для X-Hub-Signature-256 на webhook'ах
+  // Meta — подпись считается от точных байтов до парсинга).
+  //
+  // Прошлый коммит делал NestFactory.create({ rawBody: true }) и сверху
+  // app.use(json({ limit })) — но второй парсер вешался ПОВЕРХ Nest'овского,
+  // лимит фактически не применялся, а rawBody мог двусмысленно работать
+  // на больших телах.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
 
-  // Явные body-parser лимиты. Без них NestJS+rawBody:true мог принять
-  // мегабайтные JSON-тела в обычных endpoint'ах (multer-uploads ходят
-  // отдельным multipart-парсером со своими per-route limits). 1MB
-  // здесь хватит для большинства запросов; гигантские пейлоады
-  // отшиваются 413 до того как попадут в Nest pipeline.
-  app.use(json({ limit: '1mb' }));
+  // 1MB — generous для plain-JSON (auth payloads ≤ 1KB, DTOs <10KB,
+  // student-form-update теперь capped at 100KB). Multer-uploads идут
+  // отдельным multipart-парсером со своими per-route limits и не задеты.
+  // verify-хук кладёт исходный буфер на req.rawBody — этим пользуются
+  // TwilioSignatureGuard и MetaSignatureGuard.
+  app.use(
+    json({
+      limit: '1mb',
+      verify: (req: any, _res, buf) => { req.rawBody = buf; },
+    }),
+  );
   app.use(urlencoded({ limit: '1mb', extended: true }));
 
   // Security headers (helmet) — CSP, X-Frame-Options, X-Content-Type-Options,
