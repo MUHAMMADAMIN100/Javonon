@@ -122,6 +122,19 @@ export class StudentAuthController {
   @UseGuards(StudentJwtGuard)
   @Patch('form')
   async updateForm(@CurrentUser() user: any, @Body() form: any) {
+    // Cap на размер JSON. Раньше student мог запостить 100MB JSON →
+    // applicationForm колонка раздувалась → list-запросы по студентам
+    // тормозили + DB бэкап раздувался. 100KB хватит для очень большой
+    // анкеты (десятки полей с длинными ответами).
+    try {
+      const json = JSON.stringify(form ?? {});
+      if (json.length > 100_000) {
+        throw new BadRequestException('Форма слишком большая (макс. ~100KB)');
+      }
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+      throw new BadRequestException('Невалидный JSON формы');
+    }
     const updated = await this.prisma.student.update({
       where: { id: user.id },
       data: { applicationForm: form },
