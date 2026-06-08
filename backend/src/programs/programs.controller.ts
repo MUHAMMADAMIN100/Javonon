@@ -60,6 +60,9 @@ export class ProgramsController {
     @Query('maxCost') maxCost?: string,
     @Query('search') search?: string,
   ) {
+    if (search && search.length > 200) {
+      throw new BadRequestException('Поисковая строка слишком длинная');
+    }
     return this.programs.findAll({
       city,
       major,
@@ -90,6 +93,9 @@ export class ProgramsController {
     @Query('direction') direction?: Direction,
     @Query('search') search?: string,
   ) {
+    if (search && search.length > 200) {
+      throw new BadRequestException('Поисковая строка слишком длинная');
+    }
     return this.programs.findAll({ city, major, direction, search });
   }
 

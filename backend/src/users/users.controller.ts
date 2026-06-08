@@ -127,6 +127,9 @@ export class UsersController {
 
   @Get()
   list(@Query('search') search?: string) {
+    if (search && search.length > 200) {
+      throw new BadRequestException('Поисковая строка слишком длинная');
+    }
     return this.users.findAll({ search });
   }
 

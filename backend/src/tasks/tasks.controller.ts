@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -26,6 +27,9 @@ export class TasksController {
     @Query('mine') mine?: string,
     @Query('search') search?: string,
   ) {
+    if (search && search.length > 200) {
+      throw new BadRequestException('Поисковая строка слишком длинная');
+    }
     return this.tasks.findAll({
       mine: mine === 'true',
       currentUserId: user.id,

@@ -44,6 +44,10 @@ export class ApplicationsController {
     const VALID_DIR = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
     if (status && !VALID_STATUS.includes(status)) throw new BadRequestException('Неизвестный статус');
     if (direction && !VALID_DIR.includes(direction)) throw new BadRequestException('Неизвестное направление');
+    // search cap: без него юзер мог запросить ?search=AAA...×100k →
+    // ILIKE %AAA% сканировал бы всю Application таблицу с гигантским
+    // паттерном. 200 символов хватит для любого реального поиска.
+    if (search && search.length > 200) throw new BadRequestException('Поисковая строка слишком длинная');
     return this.apps.findAll({
       status: status as ApplicationStatus | undefined,
       direction: direction as Direction | undefined,

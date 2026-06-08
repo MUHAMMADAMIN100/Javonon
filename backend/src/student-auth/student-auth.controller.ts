@@ -182,6 +182,9 @@ export class StudentAuthController {
     @Query('maxCost') maxCost?: string,
     @Query('search') search?: string,
   ) {
+    if (search && search.length > 200) {
+      throw new BadRequestException('Поисковая строка слишком длинная');
+    }
     const where: any = { published: true };
     if (city) where.city = { contains: city, mode: 'insensitive' };
     if (major) where.major = { contains: major, mode: 'insensitive' };

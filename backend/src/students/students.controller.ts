@@ -80,6 +80,8 @@ export class StudentsController {
     if (status && !VALID_STATUS.includes(status)) {
       throw new BadRequestException('Неизвестный статус');
     }
+    // search cap (DoS защита от гигантской ILIKE строки).
+    if (search && search.length > 200) throw new BadRequestException('Поисковая строка слишком длинная');
     let cabinetN: number | undefined;
     if (cabinet !== undefined && cabinet !== '') {
       const n = parseInt(cabinet, 10);
