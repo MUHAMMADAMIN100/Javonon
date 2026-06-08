@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
+import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   // rawBody: true сохраняет неизменный буфер body на req.rawBody. Нужно
@@ -11,6 +12,14 @@ async function bootstrap() {
   // переcчитанный JSON.stringify не совпадал бы с подписью Meta.
   const app = await NestFactory.create(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
+
+  // Явные body-parser лимиты. Без них NestJS+rawBody:true мог принять
+  // мегабайтные JSON-тела в обычных endpoint'ах (multer-uploads ходят
+  // отдельным multipart-парсером со своими per-route limits). 1MB
+  // здесь хватит для большинства запросов; гигантские пейлоады
+  // отшиваются 413 до того как попадут в Nest pipeline.
+  app.use(json({ limit: '1mb' }));
+  app.use(urlencoded({ limit: '1mb', extended: true }));
 
   // Security headers (helmet) — CSP, X-Frame-Options, X-Content-Type-Options,
   // HSTS и т.д. CSP отключаем потому что у нас REST + WebSocket API,
