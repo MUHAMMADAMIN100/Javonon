@@ -71,9 +71,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         <span className="crm-section-eyebrow">
           {isAdmin ? `ТА · ${user.role}` : 'МОЙ ПРОФИЛЬ'}
         </span>
-        <h2 className="crm-section-title">
-          {user.fullName} <em>{isAdmin ? 'досье' : ''}</em>
-        </h2>
+        <h2 className="crm-section-title">{user.fullName}</h2>
       </div>
 
       {/* HR блок */}
