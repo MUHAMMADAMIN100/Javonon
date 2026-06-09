@@ -20,6 +20,10 @@ export interface TimeEntry {
   lateExcuseUrl?: string | null;
   lateExcuseReason?: string | null;
   lateExcuseAt?: string | null;
+  // По ТЗ §5: статус одобрения причины опоздания основателем.
+  // PENDING — ждёт; APPROVED — одобрена; REJECTED — отклонена; null — нет причины.
+  lateExcuseStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+  lateExcuseReviewedAt?: string | null;
   latePenaltyApplied?: boolean;
   date: string;
   createdAt: string;

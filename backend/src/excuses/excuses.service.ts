@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 /**
  * Workflow одобрения причин опоздания (ТЗ §5).
@@ -13,7 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
  */
 @Injectable()
 export class ExcusesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private realtime: RealtimeGateway) {}
 
   /** Список pending-причин для FOUNDER'а — что нужно разобрать. */
   async listPending() {
@@ -72,6 +73,10 @@ export class ExcusesService {
         latePenaltyApplied: true,  // больше не пытаемся штрафовать
       },
     });
+    // Сотрудник на странице /time сразу увидит обновлённый статус.
+    this.realtime.emitUser(entry.userId, 'excuse:approved', { entryId });
+    // FOUNDER'у обновляем список pending.
+    this.realtime.emitStaff('excuse:reviewed', { entryId });
     return { ok: true, penaltiesRemoved: deleted.count };
   }
 
@@ -92,6 +97,8 @@ export class ExcusesService {
         // REJECTED + applied=false и создаст штраф.
       },
     });
+    this.realtime.emitUser(entry.userId, 'excuse:rejected', { entryId });
+    this.realtime.emitStaff('excuse:reviewed', { entryId });
     return { ok: true };
   }
 }

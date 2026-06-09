@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeEntryStatus } from '@prisma/client';
 import { SettingsService } from '../settings/settings.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 // Норма прихода в офис — 09:00 локального времени.
 const OFFICE_START_HOUR = 9;
@@ -45,6 +46,7 @@ export class TimeTrackingService {
   constructor(
     private prisma: PrismaService,
     private settings: SettingsService,
+    private realtime: RealtimeGateway,
   ) {}
 
   /** Возвращает активную запись (WORKING или ON_LUNCH) либо null. */
@@ -146,7 +148,7 @@ export class TimeTrackingService {
       ? Math.max(0, minutesFromMidnight - sched.startMinute)
       : 0;
 
-    return this.prisma.timeEntry.create({
+    const entry = await this.prisma.timeEntry.create({
       data: {
         userId,
         clockIn: now,
@@ -158,6 +160,9 @@ export class TimeTrackingService {
         clockInProofUrl: hasProof ? opts!.proofUrl : null,
       },
     });
+    // По ТЗ — посещаемость у основателя обновляется мгновенно.
+    this.realtime.emitStaff('attendance:updated', { userId, entryId: entry.id, action: 'clockIn' });
+    return entry;
   }
 
   /**
@@ -183,7 +188,7 @@ export class TimeTrackingService {
     if (!body.excuseUrl && (!body.excuseReason || body.excuseReason.trim().length < 5)) {
       throw new BadRequestException('Укажи причину (мин. 5 символов) или приложи фото/видео');
     }
-    return this.prisma.timeEntry.update({
+    const updated = await this.prisma.timeEntry.update({
       where: { id: entryId },
       data: {
         lateExcuseUrl: body.excuseUrl || null,
@@ -197,6 +202,10 @@ export class TimeTrackingService {
         lateExcuseReviewedBy: null,
       },
     });
+    // По ТЗ — у основателя страница «Причины» обновляется мгновенно.
+    // FOUNDER в общей staff-комнате; событие триггерит инвалидейт списка.
+    this.realtime.emitStaff('excuse:new', { entryId, userId });
+    return updated;
   }
 
   async lunchOut(userId: string) {
@@ -205,10 +214,12 @@ export class TimeTrackingService {
     if (active.status !== TimeEntryStatus.WORKING) {
       throw new BadRequestException('Вы уже на обеде или вне работы');
     }
-    return this.prisma.timeEntry.update({
+    const upd = await this.prisma.timeEntry.update({
       where: { id: active.id },
       data: { status: TimeEntryStatus.ON_LUNCH, lunchOut: new Date() },
     });
+    this.realtime.emitStaff('attendance:updated', { userId, entryId: upd.id, action: 'lunchOut' });
+    return upd;
   }
 
   async lunchIn(userId: string) {
@@ -220,7 +231,7 @@ export class TimeTrackingService {
     const now = new Date();
     const lunchMs = active.lunchOut ? now.getTime() - active.lunchOut.getTime() : 0;
     const lunchMin = Math.max(0, Math.round(lunchMs / 60000));
-    return this.prisma.timeEntry.update({
+    const upd = await this.prisma.timeEntry.update({
       where: { id: active.id },
       data: {
         status: TimeEntryStatus.WORKING,
@@ -228,6 +239,8 @@ export class TimeTrackingService {
         totalLunchMinutes: active.totalLunchMinutes + lunchMin,
       },
     });
+    this.realtime.emitStaff('attendance:updated', { userId, entryId: upd.id, action: 'lunchIn' });
+    return upd;
   }
 
   async clockOut(userId: string) {
@@ -259,7 +272,7 @@ export class TimeTrackingService {
     }
     const overtimeMinutes = Math.max(0, totalMin - standardDayMin);
 
-    return this.prisma.timeEntry.update({
+    const upd = await this.prisma.timeEntry.update({
       where: { id: active.id },
       data: {
         status: TimeEntryStatus.OFF,
@@ -269,6 +282,8 @@ export class TimeTrackingService {
         overtimeMinutes,
       },
     });
+    this.realtime.emitStaff('attendance:updated', { userId, entryId: upd.id, action: 'clockOut' });
+    return upd;
   }
 
   async history(userId: string, opts: { from?: Date; to?: Date; take?: number } = {}) {

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
+import { useRealtimeEvent } from '../realtime';
 import { listAttendance } from '../api/attendance';
 import { listUsers } from '../api/users';
 
@@ -25,6 +26,7 @@ export default function Attendance() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
+  const qc = useQueryClient();
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => listUsers() });
   const users = usersQuery.data || [];
 
@@ -38,6 +40,12 @@ export default function Attendance() {
     }),
   });
   const items = query.data || [];
+
+  // По ТЗ — когда сотрудник начал работу/обед/закончил день — таблица
+  // у основателя обновляется мгновенно без релоада.
+  useRealtimeEvent('attendance:updated', () => {
+    qc.invalidateQueries({ queryKey: ['attendance'] });
+  });
 
   return (
     <>

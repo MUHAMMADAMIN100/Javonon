@@ -16,6 +16,7 @@ import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { useOptimisticMutation } from '../lib/optimistic';
+import { useRealtimeEvent } from '../realtime';
 
 function fmtMin(min: number): string {
   if (min <= 0) return '0м';
@@ -64,6 +65,19 @@ export default function TimeTracker() {
   const historyQuery = useQuery<TimeEntry[]>({
     queryKey: historyKey,
     queryFn: () => getHistory({ take: 30 }),
+  });
+
+  // По ТЗ §5 — когда FOUNDER одобрит/отклонит причину, плашка
+  // на странице /time меняется мгновенно (без релоада).
+  useRealtimeEvent('excuse:approved', () => {
+    qc.invalidateQueries({ queryKey: todayKey });
+    qc.invalidateQueries({ queryKey: historyKey });
+    toast('Основатель одобрил вашу причину — штраф не списан', 'success');
+  });
+  useRealtimeEvent('excuse:rejected', () => {
+    qc.invalidateQueries({ queryKey: todayKey });
+    qc.invalidateQueries({ queryKey: historyKey });
+    toast('Основатель отклонил вашу причину — штраф будет списан', 'error');
   });
   const history = historyQuery.data ?? [];
 
@@ -251,19 +265,33 @@ export default function TimeTracker() {
             </button>
           </div>
         )}
-        {today && today.lateMinutes > 15 && today.lateExcuseAt && (
-          <div style={{
-            marginTop: 20,
-            padding: '12px 16px',
-            background: '#dcfce7',
-            border: '1px solid #86efac',
-            borderRadius: 12,
-            fontSize: 13,
-            color: '#15803d',
-          }}>
-            ✓ Оправдание отправлено — штраф не будет начислен
-          </div>
-        )}
+        {today && today.lateMinutes > 15 && today.lateExcuseAt && (() => {
+          // По ТЗ §5: статус определяет цвет/текст плашки.
+          //   PENDING/null  → жёлтая, «на рассмотрении у основателя»
+          //   APPROVED      → зелёная, «одобрено, штраф не списан»
+          //   REJECTED      → красная, «отклонено, штраф будет списан»
+          const status = (today as any).lateExcuseStatus as 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+          const isApproved = status === 'APPROVED';
+          const isRejected = status === 'REJECTED';
+          const style = isApproved
+            ? { bg: '#dcfce7', border: '#86efac', color: '#15803d', text: '✓ Причина одобрена — штраф не будет начислен' }
+            : isRejected
+            ? { bg: '#fee2e2', border: '#fca5a5', color: '#991b1b', text: '✕ Причина отклонена — штраф будет начислен' }
+            : { bg: '#fef3c7', border: '#fcd34d', color: '#92400e', text: '⏳ Ваша причина на рассмотрении у основателя' };
+          return (
+            <div style={{
+              marginTop: 20,
+              padding: '12px 16px',
+              background: style.bg,
+              border: `1px solid ${style.border}`,
+              borderRadius: 12,
+              fontSize: 13,
+              color: style.color,
+            }}>
+              {style.text}
+            </div>
+          );
+        })()}
 
         {/* Кнопки действий */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -416,7 +444,7 @@ export default function TimeTracker() {
             onDone={() => {
               setShowExcuseModal(false);
               qc.invalidateQueries({ queryKey: todayKey });
-              toast('Оправдание отправлено', 'success');
+              toast('Причина отправлена основателю — ждите решения', 'success');
             }}
             onError={(e) => toast(e, 'error')}
           />

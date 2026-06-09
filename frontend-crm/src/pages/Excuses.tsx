@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
 import { useUI } from '../ui/Dialogs';
+import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
 import {
   listPendingExcuses,
@@ -65,6 +66,12 @@ function PendingTab() {
   const { toast } = useUI();
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ['excuses', 'pending'], queryFn: listPendingExcuses });
+
+  // По ТЗ — когда сотрудник присылает причину, у основателя список
+  // обновляется мгновенно. Тот же event тригерится после approve/reject
+  // (другой сессии основателя — например на мобильнике).
+  useRealtimeEvent('excuse:new', () => qc.invalidateQueries({ queryKey: ['excuses'] }));
+  useRealtimeEvent('excuse:reviewed', () => qc.invalidateQueries({ queryKey: ['excuses'] }));
 
   const approveMut = useMutation({
     mutationFn: (id: string) => approveExcuse(id),
