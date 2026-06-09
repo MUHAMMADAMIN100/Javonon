@@ -35,7 +35,10 @@ export default function Attendance() {
     queryFn: () => listAttendance({
       userId: userId || undefined,
       from: from || undefined,
-      to: to || undefined,
+      // input type=date даёт «YYYY-MM-DD» → new Date() парсит как 00:00 UTC.
+      // Без +T23:59:59 «по: сегодня» отрезало бы все clockIn'ы после
+      // полуночи UTC — пустая таблица.
+      to: to ? `${to}T23:59:59` : undefined,
       take: 200,
     }),
   });
@@ -73,6 +76,25 @@ export default function Attendance() {
             <label>По</label>
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
+          {(() => {
+            // YYYY-MM-DD в локальной зоне сотрудника (а не UTC через
+            // toISOString, иначе после 19:00 Душанбе фильтр показывал бы
+            // «завтра» по UTC).
+            const t = new Date();
+            const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+            const isToday = from === today && to === today;
+            return (
+              <button
+                className={`btn btn-sm ${isToday ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => {
+                  setFrom(today);
+                  setTo(today);
+                }}
+              >
+                Сегодня
+              </button>
+            );
+          })()}
           {(userId || from || to) && (
             <button className="btn btn-sm btn-secondary" onClick={() => { setUserId(''); setFrom(''); setTo(''); }}>
               Сбросить
