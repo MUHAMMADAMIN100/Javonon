@@ -75,7 +75,36 @@ export class TimeTrackingService {
   }) {
     const active = await this.getActive(userId);
     if (active) {
-      throw new BadRequestException('Сначала закройте текущую сессию (Закончить день)');
+      // Активная сессия с СЕГОДНЯ — реально открыта, режем.
+      // Активная с прошлых дней — сотрудник просто забыл нажать
+      // «Закончить день» (закрыл вкладку, ушёл домой). Авто-закрываем
+      // её чтобы не блокировать новый рабочий день. Иначе фронт
+      // показывает «Начать работу», бэкенд режет — UX сломан.
+      const { weekday: activeWeekday } = localDayAndMinutes(active.clockIn);
+      const { weekday: nowWeekday } = localDayAndMinutes(new Date());
+      const activeDayStr = active.clockIn.toISOString().slice(0, 10);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const sameDay = activeDayStr === todayStr;
+      if (sameDay) {
+        throw new BadRequestException('Сначала закройте текущую сессию (Закончить день)');
+      }
+      // Стейл-сессия — закрываем её. clockOut = время последнего
+      // зафиксированного действия (lunchIn / lunchOut / clockIn).
+      // Переработку считаем 0 — мы не знаем сколько он реально работал.
+      const lastTouch = active.lunchIn || active.lunchOut || active.clockIn;
+      const wallMin = Math.max(0, Math.round((lastTouch.getTime() - active.clockIn.getTime()) / 60000));
+      await this.prisma.timeEntry.update({
+        where: { id: active.id },
+        data: {
+          status: TimeEntryStatus.OFF,
+          clockOut: lastTouch,
+          totalMinutes: Math.max(0, wallMin - active.totalLunchMinutes),
+          overtimeMinutes: 0,
+        },
+      });
+      console.warn(
+        `clockIn: auto-closed stale session for user=${userId} from ${activeDayStr} (started ${activeWeekday}, today ${nowWeekday})`,
+      );
     }
     // ТРЕБОВАНИЕ: хотя бы одно подтверждение — геолокация ИЛИ
     // фото/видео рабочего места. Без этого clock-in невозможен.
