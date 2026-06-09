@@ -68,7 +68,7 @@ export class MeController {
   /** Профиль другого сотрудника — доступ через canViewProfile. */
   @Get('profile/:id')
   async viewProfile(@Param('id') id: string, @CurrentUser() me: any) {
-    const ok = await this.users.canViewProfile(me.id, me.role, id);
+    const ok = await this.users.canViewProfile(me.id, me.role, id, me.roles);
     if (!ok) {
       throw new BadRequestException('Нет доступа к данным этого сотрудника');
     }

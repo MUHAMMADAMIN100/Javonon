@@ -12,7 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { isFounder } from '../auth/role-utils';
+import { isElevated, isFounder } from '../auth/role-utils';
 
 @Injectable()
 export class UsersService {
@@ -281,8 +281,16 @@ export class UsersService {
    *  - сам сотрудник — свой профиль
    *  - есть активный DataAccessGrant
    */
-  async canViewProfile(viewerId: string, viewerRole: string, targetId: string) {
-    if (viewerRole === 'ADMIN') return true;
+  async canViewProfile(
+    viewerId: string,
+    viewerRole: string,
+    targetId: string,
+    viewerRoles?: string[],
+  ) {
+    // Elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли). Раньше строго
+    // `viewerRole === 'ADMIN'` — FOUNDER не мог открыть чужой профиль,
+    // secondary-ADMIN/ACCOUNTANT тоже обходился.
+    if (isElevated({ role: viewerRole, roles: viewerRoles } as any)) return true;
     if (viewerId === targetId) return true;
     const grant = await this.prisma.dataAccessGrant.findUnique({
       where: { grantedToId_targetUserId: { grantedToId: viewerId, targetUserId: targetId } },
