@@ -265,7 +265,7 @@ export default function TimeTracker() {
             </button>
           </div>
         )}
-        {today && today.lateMinutes > 15 && today.lateExcuseAt && (() => {
+        {today && today.lateMinutes > 15 && today.lateExcuseAt && today.status !== 'OFF' && (() => {
           // По ТЗ §5: статус определяет цвет/текст плашки.
           //   PENDING/null  → жёлтая, «на рассмотрении у основателя»
           //   APPROVED      → зелёная, «одобрено, штраф не списан»
