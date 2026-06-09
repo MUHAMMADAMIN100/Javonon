@@ -25,6 +25,14 @@ enum TimeEntryStatus {
   OFF           // закончил день
 }
 
+// Статус одобрения причины опоздания основателем.
+// Workflow: PENDING (сотрудник прислал) → APPROVED / REJECTED.
+enum ExcuseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum TransactionType {
   INCOME
   EXPENSE
@@ -496,6 +504,13 @@ model TimeEntry {
   lateExcuseUrl     String?
   lateExcuseReason  String?
   lateExcuseAt      DateTime?
+  // Статус причины опоздания (требует одобрения основателя по ТЗ).
+  // PENDING — ждёт одобрения. APPROVED — основатель одобрил, штраф
+  // не списывается / уже отменён. REJECTED — отклонил, штраф остаётся.
+  // null — причина не прислана, обычное опоздание.
+  lateExcuseStatus  ExcuseStatus?
+  lateExcuseReviewedAt DateTime?
+  lateExcuseReviewedBy String?
   // Помечается true когда Cron уже создал штраф за это опоздание
   // (защита от дублей при перезапуске Cron).
   latePenaltyApplied Boolean @default(false)

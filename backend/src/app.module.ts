@@ -33,6 +33,8 @@ import { CronModule } from './cron/cron.module';
 import { HealthController } from './common/health.controller';
 import { InteractionsModule } from './interactions/interactions.module';
 import { PenaltiesModule } from './penalties/penalties.module';
+import { ExcusesModule } from './excuses/excuses.module';
+import { AttendanceModule } from './attendance/attendance.module';
 import { PaymentsModule } from './payments/payments.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { DailyReportsModule } from './daily-reports/daily-reports.module';
@@ -88,6 +90,8 @@ import { SmsIntegrationModule } from './integrations/sms/sms-integration.module'
     CronModule,
     InteractionsModule,
     PenaltiesModule,
+    ExcusesModule,
+    AttendanceModule,
     PaymentsModule,
     KnowledgeModule,
     DailyReportsModule,

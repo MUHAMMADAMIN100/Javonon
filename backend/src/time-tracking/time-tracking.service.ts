@@ -160,6 +160,12 @@ export class TimeTrackingService {
         lateExcuseUrl: body.excuseUrl || null,
         lateExcuseReason: body.excuseReason?.trim() || null,
         lateExcuseAt: new Date(),
+        // По ТЗ §5 — причина уходит на одобрение FOUNDER'у.
+        lateExcuseStatus: 'PENDING' as any,
+        // Сбрасываем reviewedAt/By если сотрудник прислал новую причину
+        // (после предыдущего REJECTED, например).
+        lateExcuseReviewedAt: null,
+        lateExcuseReviewedBy: null,
       },
     });
   }

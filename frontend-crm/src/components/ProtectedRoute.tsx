@@ -20,6 +20,10 @@ const ROUTE_ROLES: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: '/pipelines', roles: ['ADMIN', 'ACCOUNTANT'] },
   { prefix: '/massmail', roles: ['ADMIN', 'ACCOUNTANT'] },
   { prefix: '/offers', roles: ['ADMIN', 'ACCOUNTANT'] },
+  // По ТЗ §5 — причины опозданий рассматривает только основатель.
+  { prefix: '/excuses', roles: ['FOUNDER'] },
+  // Посещаемость по ТЗ §3 — тоже FOUNDER.
+  { prefix: '/attendance', roles: ['FOUNDER'] },
 ];
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {

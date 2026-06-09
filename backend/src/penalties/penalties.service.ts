@@ -120,10 +120,14 @@ export class PenaltiesService {
 
     let created = 0;
     let excused = 0;
+    let pending = 0;
     for (const e of entries) {
-      // Если есть оправдание — не штрафуем (но помечаем applied, чтобы
-      // повторный запуск Cron не штрафовал).
-      if (e.lateExcuseAt) {
+      // По ТЗ §5 — причина уходит на одобрение FOUNDER'у. Только
+      // APPROVED отменяет штраф. PENDING — ждём решения (cron сегодня
+      // пропускает, латеPenaltyApplied остаётся false → завтра попробуем
+      // снова). REJECTED — штраф начисляем как обычно.
+      const status = (e as any).lateExcuseStatus as string | null;
+      if (status === 'APPROVED') {
         await this.prisma.timeEntry.update({
           where: { id: e.id },
           data: { latePenaltyApplied: true },
@@ -131,6 +135,13 @@ export class PenaltiesService {
         excused++;
         continue;
       }
+      if (status === 'PENDING') {
+        // Не штрафуем пока, но и не помечаем applied — следующий cron
+        // ещё раз посмотрит. FOUNDER должен разобрать pending.
+        pending++;
+        continue;
+      }
+      // null (нет причины) или REJECTED → штрафуем.
 
       // Считаем сколько LATE_ARRIVAL штрафов уже было в этом месяце
       const monthStart = new Date(from.getFullYear(), from.getMonth(), 1);
@@ -177,7 +188,7 @@ export class PenaltiesService {
       ]);
       created++;
     }
-    return { created, excused, scanned: entries.length };
+    return { created, excused, pending, scanned: entries.length };
   }
 
   /** Сумма неучтённых штрафов за период (для зарплатного расчёта). */

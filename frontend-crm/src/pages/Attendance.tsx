@@ -1,0 +1,129 @@
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+import { useAuth } from '../store/auth';
+import { isFounder } from '../lib/roles';
+import { listAttendance } from '../api/attendance';
+import { listUsers } from '../api/users';
+
+function fmtTime(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+export default function Attendance() {
+  const me = useAuth((s) => s.user);
+  if (!isFounder(me)) {
+    return <div className="card" style={{ padding: 28 }}>Доступ только для основателя.</div>;
+  }
+
+  const [userId, setUserId] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
+  const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => listUsers() });
+  const users = usersQuery.data || [];
+
+  const query = useQuery({
+    queryKey: ['attendance', userId, from, to],
+    queryFn: () => listAttendance({
+      userId: userId || undefined,
+      from: from || undefined,
+      to: to || undefined,
+      take: 200,
+    }),
+  });
+  const items = query.data || [];
+
+  return (
+    <>
+      <div className="crm-section-head">
+        <span className="crm-section-eyebrow">HR · ПОСЕЩАЕМОСТЬ</span>
+        <h2 className="crm-section-title">Посещаемость сотрудников</h2>
+      </div>
+
+      <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ padding: 18, marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="form-group" style={{ minWidth: 200, margin: 0 }}>
+            <label>Сотрудник</label>
+            <select value={userId} onChange={(e) => setUserId(e.target.value)}>
+              <option value="">Все</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.fullName}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label>С</label>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label>По</label>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </div>
+          {(userId || from || to) && (
+            <button className="btn btn-sm btn-secondary" onClick={() => { setUserId(''); setFrom(''); setTo(''); }}>
+              Сбросить
+            </button>
+          )}
+        </div>
+      </motion.div>
+
+      {query.isLoading ? (
+        <div className="card" style={{ padding: 24 }}>Загружаем…</div>
+      ) : items.length === 0 ? (
+        <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
+          Записей не найдено.
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+          <table className="table" style={{ minWidth: 920 }}>
+            <thead>
+              <tr>
+                <th>Сотрудник</th>
+                <th>Дата</th>
+                <th>Пришёл</th>
+                <th>Ушёл на обед</th>
+                <th>Вернулся</th>
+                <th>Ушёл</th>
+                <th style={{ textAlign: 'right' }}>Опоздание</th>
+                <th style={{ textAlign: 'right' }}>Переработка</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((e) => (
+                <tr key={e.id}>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{e.user.fullName}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>{e.user.email}</div>
+                  </td>
+                  <td>{fmtDate(e.clockIn)}</td>
+                  <td>{fmtTime(e.clockIn)}</td>
+                  <td>{fmtTime(e.lunchOut)}</td>
+                  <td>{fmtTime(e.lunchIn)}</td>
+                  <td>{fmtTime(e.clockOut)}</td>
+                  <td style={{ textAlign: 'right', color: e.lateMinutes > 0 ? '#ef4444' : 'var(--text-soft)' }}>
+                    {e.lateMinutes > 0 ? `+${e.lateMinutes} мин` : '—'}
+                    {e.lateExcuseStatus === 'APPROVED' && (
+                      <span style={{ fontSize: 10, marginLeft: 4, color: '#10b981' }}>· одобрено</span>
+                    )}
+                    {e.lateExcuseStatus === 'PENDING' && (
+                      <span style={{ fontSize: 10, marginLeft: 4, color: '#fbbf24' }}>· на разборе</span>
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'right', color: e.overtimeMinutes > 0 ? '#10b981' : 'var(--text-soft)' }}>
+                    {e.overtimeMinutes > 0 ? `+${e.overtimeMinutes} мин` : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}

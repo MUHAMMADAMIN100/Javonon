@@ -123,6 +123,10 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     { to: '/activity', icon: 'history', label: 'Активность' },
     { to: '/users', icon: 'group', label: 'Сотрудники' },
     ...(isFounder ? [
+      // По ТЗ §5 — FOUNDER одобряет / отклоняет причины опозданий.
+      { to: '/excuses', icon: 'gavel', label: 'Причины' },
+      // По ТЗ §3 — посещаемость всех сотрудников (clockIn/lunch/clockOut).
+      { to: '/attendance', icon: 'fact_check', label: 'Посещаемость' },
       { to: '/settings', icon: 'settings', label: 'Настройки системы' },
     ] : []),
   ] : [];
