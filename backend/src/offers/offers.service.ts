@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+
+const VALID_ROLES: Role[] = ['FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'];
 
 const DEFAULT_OFFER = `# Оферта сотрудника Javonon
 
@@ -35,10 +38,26 @@ export class OffersService {
    * Если активных нет — создаём дефолтную (FOUNDER потом отредактирует).
    */
   async current(userId: string) {
-    let offer = await this.prisma.offerTemplate.findFirst({
-      where: { isActive: true },
-      orderBy: { version: 'desc' },
+    // По ТЗ §1 — оферта своя для каждой роли. Ищем активную для
+    // primary роли юзера; если нет — fallback на «общую» (role=null),
+    // которая работает как универсальный шаблон.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
     });
+    let offer = null as any;
+    if (user?.role) {
+      offer = await this.prisma.offerTemplate.findFirst({
+        where: { isActive: true, role: user.role },
+        orderBy: { version: 'desc' },
+      });
+    }
+    if (!offer) {
+      offer = await this.prisma.offerTemplate.findFirst({
+        where: { isActive: true, role: null },
+        orderBy: { version: 'desc' },
+      });
+    }
     if (!offer) {
       offer = await this.prisma.offerTemplate.create({
         data: { title: 'Оферта сотрудника', content: DEFAULT_OFFER, version: 1 },
@@ -86,12 +105,26 @@ export class OffersService {
    * Создать новую версию оферты. Делает старую активную неактивной.
    * Версия инкрементируется автоматически.
    */
-  async createNew(data: { title?: string; content: string }) {
+  async createNew(data: { title?: string; content: string; role?: Role | null }) {
     this.validateOfferFields(data);
+    // Validate role explicitly: null = «общая» оферта, иначе должен быть
+    // один из 5 ТЗ-ролей.
+    let role: Role | null = null;
+    if (data.role !== undefined && data.role !== null) {
+      if (!VALID_ROLES.includes(data.role)) {
+        throw new BadRequestException(`role должен быть один из: ${VALID_ROLES.join(', ')} или null`);
+      }
+      role = data.role;
+    }
+    // Деактивируем только версии ДЛЯ ЭТОЙ ЖЕ роли. Раньше деактивировали
+    // ВСЕ активные — после внедрения role-specific офёрт это бы убивало
+    // оферту для других ролей при создании новой для одной роли.
     await this.prisma.offerTemplate.updateMany({
-      where: { isActive: true },
+      where: { isActive: true, role },
       data: { isActive: false },
     });
+    // Version — глобальный счётчик независимо от роли, проще для
+    // адмиx-страницы (видна общая хронология).
     const last = await this.prisma.offerTemplate.findFirst({
       orderBy: { version: 'desc' },
       select: { version: true },
@@ -102,6 +135,7 @@ export class OffersService {
         content: data.content.trim(),
         version: (last?.version || 0) + 1,
         isActive: true,
+        role,
       },
     });
   }
@@ -180,9 +214,12 @@ export class OffersService {
       );
     }
     await this.prisma.offerTemplate.delete({ where: { id } });
-    // Если удалили активную — поднимаем предыдущую активной.
+    // Если удалили активную — поднимаем предыдущую активной для ТОЙ ЖЕ
+    // роли. Без фильтра на роль удаление активной CLIENT_MANAGER-оферты
+    // могло «активировать» ADMIN-версию по версии, что путало UI.
     if (offer.isActive) {
       const prev = await this.prisma.offerTemplate.findFirst({
+        where: { role: offer.role },
         orderBy: { version: 'desc' },
       });
       if (prev) {

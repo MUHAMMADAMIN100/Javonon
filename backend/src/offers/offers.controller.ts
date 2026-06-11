@@ -47,11 +47,11 @@ export class OffersController {
     return this.offers.list();
   }
 
-  /** Создать новую версию (старая станет inactive). FOUNDER/ADMIN. */
+  /** Создать новую версию (старая для этой ЖЕ роли станет inactive). FOUNDER/ADMIN. */
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
-  create(@Body() body: { title?: string; content: string }) {
+  create(@Body() body: { title?: string; content: string; role?: Role | null }) {
     return this.offers.createNew(body);
   }
 

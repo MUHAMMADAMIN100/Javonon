@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { Role } from './types';
 
 export interface OfferTemplate {
   id: string;
@@ -6,6 +7,8 @@ export interface OfferTemplate {
   content: string;
   version: number;
   isActive: boolean;
+  // По ТЗ §1 — оферта своя для каждой роли. null = «общая» (legacy).
+  role: Role | null;
   createdAt: string;
   updatedAt: string;
   _count?: { signatures: number };
@@ -37,7 +40,7 @@ export const offerSign = (id: string) =>
 export const offerList = () =>
   api.get<OfferTemplate[]>('/offers').then((r) => r.data);
 
-export const offerCreate = (data: { title?: string; content: string }) =>
+export const offerCreate = (data: { title?: string; content: string; role?: Role | null }) =>
   api.post<OfferTemplate>('/offers', data).then((r) => r.data);
 
 export const offerPatch = (id: string, data: { title?: string; content?: string }) =>

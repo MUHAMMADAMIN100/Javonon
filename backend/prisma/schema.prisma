@@ -198,12 +198,16 @@ model OfferTemplate {
   content   String   // markdown / plain text
   version   Int      @default(1)
   isActive  Boolean  @default(true)
+  // Для какой роли эта оферта. null = «общая» (legacy fallback,
+  // показывается тем, для чьей роли нет специальной).
+  role      Role?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   signatures OfferSignature[]
 
   @@index([isActive])
+  @@index([role, isActive])
 }
 
 // Подпись оферты конкретным сотрудником. После создания запись не

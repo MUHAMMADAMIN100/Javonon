@@ -14,6 +14,18 @@ import {
   offerDelete,
   offerSignatures,
 } from '../api/offers';
+import { ROLE_LABEL, type Role } from '../api/types';
+
+// Все 5 ТЗ-ролей + «общая» (для legacy fallback). Каждая роль может
+// иметь свою активную оферту с уникальными принципами работы.
+const ROLE_TABS: { key: Role | null; label: string }[] = [
+  { key: null, label: 'Общая' },
+  { key: 'FOUNDER', label: ROLE_LABEL.FOUNDER },
+  { key: 'ADMIN', label: ROLE_LABEL.ADMIN },
+  { key: 'ACCOUNTANT', label: ROLE_LABEL.ACCOUNTANT },
+  { key: 'SALES_MANAGER', label: ROLE_LABEL.SALES_MANAGER },
+  { key: 'CLIENT_MANAGER', label: ROLE_LABEL.CLIENT_MANAGER },
+];
 
 /**
  * Управление офертами (FOUNDER/ADMIN/ACCOUNTANT). Закрывает «полный
@@ -22,10 +34,10 @@ import {
  */
 export default function Offers() {
   const me = useAuth((s) => s.user);
-  const { toast } = useUI();
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
   const [signaturesOf, setSignaturesOf] = useState<OfferTemplate | null>(null);
+  const [tab, setTab] = useState<Role | null>(null);
 
   if (!isElevated(me)) {
     return <div className="card" style={{ padding: 28 }}>Доступ только для администрации.</div>;
@@ -35,9 +47,18 @@ export default function Offers() {
     queryKey: ['offers', 'all'],
     queryFn: offerList,
   });
-  const offers = query.data ?? [];
+  const allOffers = query.data ?? [];
+  const offers = allOffers.filter((o) => (o.role ?? null) === tab);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['offers'] });
+
+  // Количество активных по ролям — для бейджа на табе.
+  const activeByRole = new Map<Role | 'null', number>();
+  for (const o of allOffers) {
+    if (!o.isActive) continue;
+    const k = (o.role ?? 'null') as Role | 'null';
+    activeByRole.set(k, (activeByRole.get(k) || 0) + 1);
+  }
 
   return (
     <>
@@ -48,6 +69,36 @@ export default function Offers() {
         </h2>
       </div>
 
+      {/* Табы по ролям (по ТЗ §1 — у каждой роли своя оферта). */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        {ROLE_TABS.map((t) => {
+          const isActive = tab === t.key;
+          const cnt = activeByRole.get((t.key ?? 'null') as any) || 0;
+          return (
+            <button
+              key={t.key ?? 'null'}
+              className={`btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => { setTab(t.key); setCreating(false); }}
+            >
+              {t.label}
+              {cnt > 0 && (
+                <span style={{
+                  marginLeft: 6,
+                  padding: '1px 6px',
+                  borderRadius: 10,
+                  fontSize: 10,
+                  background: isActive ? 'rgba(255,255,255,0.25)' : '#10b981',
+                  color: isActive ? '#fff' : '#fff',
+                  fontWeight: 700,
+                }}>
+                  ●
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <motion.div
         className="card"
         initial={{ opacity: 0, y: 10 }}
@@ -56,10 +107,10 @@ export default function Offers() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <p style={{ color: 'var(--text-soft)', fontSize: 13, margin: 0, maxWidth: 640 }}>
-            Версии текста оферты. При создании новой версии — старая
-            автоматически деактивируется. Подписи остаются у каждой
-            версии (audit log). Редактировать можно только активную
-            версию пока её никто не подписал.
+            {tab === null
+              ? 'Общая оферта — fallback для сотрудников, у которых для их роли ещё нет специальной версии.'
+              : `Оферта для роли «${ROLE_LABEL[tab]}» — её увидят и подпишут только сотрудники с этой ролью.`}
+            {' '}При создании новой версии — старая для ЭТОЙ ЖЕ роли деактивируется. Подписи остаются у каждой версии (audit log).
           </p>
           {!creating && (
             <button className="btn btn-primary" onClick={() => setCreating(true)}>
@@ -67,7 +118,7 @@ export default function Offers() {
             </button>
           )}
         </div>
-        {creating && <CreateForm onClose={() => { setCreating(false); invalidate(); }} />}
+        {creating && <CreateForm role={tab} onClose={() => { setCreating(false); invalidate(); }} />}
       </motion.div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -81,7 +132,9 @@ export default function Offers() {
         ))}
         {offers.length === 0 && (
           <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
-            Оферт пока нет. Создай первую.
+            {tab === null
+              ? 'Общих оферт нет. Сначала создай оферты для конкретных ролей выше.'
+              : `Для роли «${ROLE_LABEL[tab]}» оферт пока нет. Создай первую.`}
           </div>
         )}
       </div>
@@ -96,9 +149,12 @@ export default function Offers() {
   );
 }
 
-function CreateForm({ onClose }: { onClose: () => void }) {
+function CreateForm({ role, onClose }: { role: Role | null; onClose: () => void }) {
   const { toast } = useUI();
-  const [title, setTitle] = useState('Оферта сотрудника');
+  const defaultTitle = role
+    ? `Оферта для ${ROLE_LABEL[role].toLowerCase()}`
+    : 'Оферта сотрудника';
+  const [title, setTitle] = useState(defaultTitle);
   const [content, setContent] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -109,8 +165,13 @@ function CreateForm({ onClose }: { onClose: () => void }) {
     }
     setBusy(true);
     try {
-      await offerCreate({ title: title.trim() || undefined, content: content.trim() });
-      toast('Новая версия оферты создана', 'success');
+      await offerCreate({ title: title.trim() || undefined, content: content.trim(), role });
+      toast(
+        role
+          ? `Новая версия оферты для «${ROLE_LABEL[role]}» создана`
+          : 'Новая версия общей оферты создана',
+        'success',
+      );
       onClose();
     } catch (e: any) {
       toast(e?.response?.data?.message || 'Ошибка', 'error');
@@ -200,7 +261,7 @@ function OfferCard({
             marginBottom: 4,
             textTransform: 'uppercase',
           }}>
-            v{offer.version} {offer.isActive ? '· ACTIVE' : '· ARCHIVED'}
+            v{offer.version} {offer.isActive ? '· ACTIVE' : '· ARCHIVED'} {offer.role ? `· ${ROLE_LABEL[offer.role]}` : '· общая'}
           </div>
           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, margin: 0 }}>
             {offer.title}
