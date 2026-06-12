@@ -15,6 +15,15 @@ import {
   type ExcuseStatus,
 } from '../api/excuses';
 
+// Файлы лежат на backend (Railway), а не на фронте (Vercel). Без этого
+// префикса <a href="/uploads/..."> тыкается в Vercel и получает 404 /
+// пустую страницу. Снимаем суффикс `/api` если он есть в env.
+const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
+const absUrl = (u: string | null | undefined) => {
+  if (!u) return '';
+  return u.startsWith('http') ? u : `${API_BASE}${u}`;
+};
+
 const STATUS_LABEL: Record<ExcuseStatus, string> = {
   PENDING: 'Ожидает',
   APPROVED: 'Одобрено',
@@ -201,7 +210,7 @@ function ExcuseCard({
 
       {entry.lateExcuseUrl && (
         <div style={{ marginBottom: 12 }}>
-          <a href={entry.lateExcuseUrl} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
+          <a href={absUrl(entry.lateExcuseUrl)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
             <Icon name="image" size={14} /> Открыть фото
           </a>
         </div>
