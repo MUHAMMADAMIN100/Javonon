@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
+import { tjStartOfDay } from '../common/tj-time';
 
 export interface DailyReportInput {
   date?: string;
@@ -125,9 +126,9 @@ export class DailyReportsService {
     return { ok: true };
   }
 
+  /** День «отчётной даты» — считается по Asia/Dushanbe, чтобы
+   *  отчёт за сегодня в Душанбе не съезжал на вчерашний UTC. */
   private startOfDay(d: Date) {
-    const x = new Date(d);
-    x.setHours(0, 0, 0, 0);
-    return x;
+    return tjStartOfDay(d);
   }
 }

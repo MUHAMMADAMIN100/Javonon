@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeTrackingService } from '../time-tracking/time-tracking.service';
 import { PenaltiesService } from '../penalties/penalties.service';
+import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
 @Injectable()
 export class SalaryService {
@@ -106,8 +107,10 @@ export class SalaryService {
     comment?: string;
   }) {
     // QA-fix #29: безопасный парсинг дат — раньше "not-a-date" падало в 500.
-    const start = new Date(dto.periodStart);
-    const end = new Date(dto.periodEnd);
+    // Парсим как Asia/Dushanbe — UI присылает 'YYYY-MM-DD'; обычный
+    // new Date(s) трактует это как UTC-полночь и съезжает на -5 часов.
+    const start = tjParseLocalDate(dto.periodStart);
+    const end = tjParseLocalDateEnd(dto.periodEnd);
     if (isNaN(start.getTime())) throw new BadRequestException('Некорректная дата начала периода');
     if (isNaN(end.getTime())) throw new BadRequestException('Некорректная дата конца периода');
     if (end < start) throw new BadRequestException('Конец периода раньше начала');

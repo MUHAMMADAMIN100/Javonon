@@ -6,7 +6,12 @@ import App from './App';
 import { UIProvider } from './ui/Dialogs';
 import ErrorBoundary from './components/ErrorBoundary';
 import { queryClient } from './lib/queryClient';
+import { installTjLocalePatch } from './lib/tjLocalePatch';
 import './index.css';
+
+// Глобально форсируем Asia/Dushanbe для всех toLocaleString* без явной
+// timeZone. По ТЗ — все времена в системе показываются в TJ-зоне.
+installTjLocalePatch();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

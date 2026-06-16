@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { tjStartOfDay, tjStartOfNextDay } from '../common/tj-time';
 
 /**
  * Workflow одобрения причин опоздания (ТЗ §5).
@@ -52,10 +53,10 @@ export class ExcusesService {
       throw new BadRequestException('У этой записи нет причины опоздания');
     }
     // Если cron уже создал штраф за этот день — отменяем его.
-    const dayStart = new Date(entry.clockIn);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
+    // Границы дня — по Asia/Dushanbe, иначе при отметке clockIn в 04:00 ТJT
+    // UTC-день уже «вчера», и фильтр промахивается мимо реального штрафа.
+    const dayStart = tjStartOfDay(entry.clockIn);
+    const dayEnd = tjStartOfNextDay(entry.clockIn);
     const deleted = await this.prisma.penalty.deleteMany({
       where: {
         userId: entry.userId,

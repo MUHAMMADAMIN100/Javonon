@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { SalaryService } from './salary.service';
+import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
 @Controller('salary')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -14,8 +15,10 @@ export class SalaryController {
   list(@Query('userId') userId?: string, @Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.list({
       userId,
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
+      // Парсим как Asia/Dushanbe — UI присылает 'YYYY-MM-DD', а
+      // new Date(s) даёт UTC-полночь, которая в Душанбе уже 05:00 след. дня.
+      from: from ? tjParseLocalDate(from) : undefined,
+      to: to ? tjParseLocalDateEnd(to) : undefined,
     });
   }
 
@@ -28,8 +31,8 @@ export class SalaryController {
   ) {
     return this.svc.preview(
       userId,
-      new Date(periodStart),
-      new Date(periodEnd),
+      tjParseLocalDate(periodStart),
+      tjParseLocalDateEnd(periodEnd),
       kpiBonus ? parseFloat(kpiBonus) : 0,
     );
   }

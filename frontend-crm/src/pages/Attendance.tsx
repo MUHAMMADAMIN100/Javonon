@@ -6,14 +6,17 @@ import { isFounder } from '../lib/roles';
 import { useRealtimeEvent } from '../realtime';
 import { listAttendance } from '../api/attendance';
 import { listUsers } from '../api/users';
+import { tjFormatTime, tjFormatDate, tjToday } from '../lib/tjTime';
 
 function fmtTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  // По ТЗ — время в зоне Asia/Dushanbe, а не браузера. Если FOUNDER
+  // открывает CRM из Москвы, без явной timeZone время clockIn съезжает
+  // на час.
+  return iso ? tjFormatTime(iso) : '—';
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return tjFormatDate(iso);
 }
 
 export default function Attendance() {
@@ -77,11 +80,11 @@ export default function Attendance() {
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           {(() => {
-            // YYYY-MM-DD в локальной зоне сотрудника (а не UTC через
-            // toISOString, иначе после 19:00 Душанбе фильтр показывал бы
-            // «завтра» по UTC).
-            const t = new Date();
-            const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+            // YYYY-MM-DD по Asia/Dushanbe — а не браузера/UTC. Без этого
+            // у пользователя в РФ кнопка «Сегодня» в 23:30 МСК = 01:30
+            // ТJT уже завтрашний день, но юзер видит свой московский день
+            // → фильтр показывает «завтрашние» записи (пусто).
+            const today = tjToday();
             const isToday = from === today && to === today;
             return (
               <button

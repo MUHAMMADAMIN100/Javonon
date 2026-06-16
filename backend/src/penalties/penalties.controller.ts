@@ -4,6 +4,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { PenaltiesService } from './penalties.service';
 import { PenaltyReason } from '@prisma/client';
+import { tjParseLocalDate, tjParseLocalDateEnd, tjStartOfDay } from '../common/tj-time';
 
 @Controller('penalties')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -18,17 +19,24 @@ export class PenaltiesController {
     @Query('to') to?: string,
     @Query('applied') applied?: string,
   ) {
-    // QA-fix #47: безопасный парсинг дат.
-    const parseDate = (v: string | undefined, name: string): Date | undefined => {
+    // Парсим как Asia/Dushanbe — без этого 'YYYY-MM-DD' трактуется как
+    // UTC-полночь и фильтр промахивается.
+    const parseStart = (v: string | undefined, name: string): Date | undefined => {
       if (!v) return undefined;
-      const d = new Date(v);
+      const d = tjParseLocalDate(v);
+      if (isNaN(d.getTime())) throw new BadRequestException(`${name}: некорректная дата`);
+      return d;
+    };
+    const parseEnd = (v: string | undefined, name: string): Date | undefined => {
+      if (!v) return undefined;
+      const d = tjParseLocalDateEnd(v);
       if (isNaN(d.getTime())) throw new BadRequestException(`${name}: некорректная дата`);
       return d;
     };
     return this.svc.list({
       userId,
-      from: parseDate(from, 'from'),
-      to: parseDate(to, 'to'),
+      from: parseStart(from, 'from'),
+      to: parseEnd(to, 'to'),
       applied: applied === undefined ? undefined : applied === 'true',
     });
   }
@@ -52,12 +60,13 @@ export class PenaltiesController {
     return this.svc.remove(id);
   }
 
-  /** Ручной запуск авто-генерации штрафов за вчера — чтобы можно было тыкнуть из CRM. */
+  /** Ручной запуск авто-генерации штрафов за вчера — чтобы можно было
+   *  тыкнуть из CRM. «Вчера» считается по Asia/Dushanbe. */
   @Post('generate-yesterday')
   @Roles('ADMIN', 'ACCOUNTANT')
   async runYesterday() {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
+    const todayTjStart = tjStartOfDay();
+    const yesterday = new Date(todayTjStart.getTime() - 60_000);
     return this.svc.generateLatePenaltiesForDate(yesterday);
   }
 }

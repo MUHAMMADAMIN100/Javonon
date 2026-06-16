@@ -19,6 +19,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { TimeTrackingService } from './time-tracking.service';
+import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
 // Фото-доказательство опоздания (ТЗ §5) — только картинки + PDF.
 // Раньше storage принимал любой тип файла (включая .exe/.html), что
@@ -62,8 +63,8 @@ export class TimeTrackingController {
     @Query('take') take?: string,
   ) {
     return this.svc.history(me.id, {
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
+      from: from ? tjParseLocalDate(from) : undefined,
+      to: to ? tjParseLocalDateEnd(to) : undefined,
       take: take ? parseInt(take, 10) : undefined,
     });
   }

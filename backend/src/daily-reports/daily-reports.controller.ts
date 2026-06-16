@@ -4,6 +4,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { DailyReportsService, DailyReportInput } from './daily-reports.service';
+import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
 @Controller('daily-reports')
 @UseGuards(JwtAuthGuard)
@@ -25,8 +26,8 @@ export class DailyReportsController {
     @Query('take') take?: string,
   ) {
     return this.svc.myList(me.id, {
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
+      from: from ? tjParseLocalDate(from) : undefined,
+      to: to ? tjParseLocalDateEnd(to) : undefined,
       take: take ? parseInt(take, 10) : undefined,
     });
   }
@@ -54,8 +55,8 @@ export class DailyReportsController {
   ) {
     return this.svc.adminList({
       userId,
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
+      from: from ? tjParseLocalDate(from) : undefined,
+      to: to ? tjParseLocalDateEnd(to) : undefined,
     });
   }
 }

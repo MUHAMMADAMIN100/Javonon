@@ -4,6 +4,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { ReportsService } from './reports.service';
+import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard)
@@ -23,8 +24,8 @@ export class ReportsController {
     @Query('take') take?: string,
   ) {
     return this.svc.list(me.id, {
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
+      from: from ? tjParseLocalDate(from) : undefined,
+      to: to ? tjParseLocalDateEnd(to) : undefined,
       take: take ? parseInt(take, 10) : undefined,
     });
   }
@@ -39,8 +40,8 @@ export class ReportsController {
     @Query('take') take?: string,
   ) {
     return this.svc.list(userId, {
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
+      from: from ? tjParseLocalDate(from) : undefined,
+      to: to ? tjParseLocalDateEnd(to) : undefined,
       take: take ? parseInt(take, 10) : undefined,
     });
   }
@@ -59,6 +60,6 @@ export class ReportsController {
       challenges?: string;
     },
   ) {
-    return this.svc.upsertDaily(me.id, body.date ? new Date(body.date) : new Date(), body);
+    return this.svc.upsertDaily(me.id, body.date ? tjParseLocalDate(body.date) : new Date(), body);
   }
 }

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TimeEntryStatus } from '@prisma/client';
 import { SettingsService } from '../settings/settings.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { tjLocalDay, tjStartOfDay, tjStartOfNextDay } from '../common/tj-time';
 
 // Норма прихода в офис — 09:00 локального времени.
 const OFFICE_START_HOUR = 9;
@@ -57,12 +58,12 @@ export class TimeTrackingService {
     });
   }
 
-  /** Сегодняшняя запись (любая) — для UI. */
+  /** Сегодняшняя запись (любая) — для UI.
+   *  «Сегодня» определяется по Asia/Dushanbe — иначе на Railway-UTC
+   *  «сегодня» в 04:00 Душанбе ещё считается «вчера». */
   async getToday(userId: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const today = tjStartOfDay();
+    const tomorrow = tjStartOfNextDay();
 
     return this.prisma.timeEntry.findFirst({
       where: { userId, clockIn: { gte: today, lt: tomorrow } },
@@ -84,8 +85,11 @@ export class TimeTrackingService {
       // показывает «Начать работу», бэкенд режет — UX сломан.
       const { weekday: activeWeekday } = localDayAndMinutes(active.clockIn);
       const { weekday: nowWeekday } = localDayAndMinutes(new Date());
-      const activeDayStr = active.clockIn.toISOString().slice(0, 10);
-      const todayStr = new Date().toISOString().slice(0, 10);
+      // День — в Asia/Dushanbe. toISOString даёт UTC-день; в 04:00 Душанбе
+      // вчерашняя сессия выглядит как «сегодня» по UTC → блокирует
+      // новый clockIn хотя это новый рабочий день.
+      const activeDayStr = tjLocalDay(active.clockIn);
+      const todayStr = tjLocalDay();
       const sameDay = activeDayStr === todayStr;
       if (sameDay) {
         throw new BadRequestException('Сначала закройте текущую сессию (Закончить день)');
@@ -299,12 +303,11 @@ export class TimeTrackingService {
     });
   }
 
-  /** Для админа: команда — кто сейчас работает / на обеде / закончил. */
+  /** Для админа: команда — кто сейчас работает / на обеде / закончил.
+   *  «Сегодня» — в Asia/Dushanbe. */
   async teamStatus() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const today = tjStartOfDay();
+    const tomorrow = tjStartOfNextDay();
 
     const todayEntries = await this.prisma.timeEntry.findMany({
       where: { clockIn: { gte: today, lt: tomorrow } },

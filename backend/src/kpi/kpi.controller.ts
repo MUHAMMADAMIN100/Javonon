@@ -4,6 +4,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { KpiService } from './kpi.service';
+import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
 @Controller('kpi')
 @UseGuards(JwtAuthGuard)
@@ -14,8 +15,8 @@ export class KpiController {
   @Get('leaderboard')
   leaderboard(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.leaderboard({
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
+      from: from ? tjParseLocalDate(from) : undefined,
+      to: to ? tjParseLocalDateEnd(to) : undefined,
     });
   }
 

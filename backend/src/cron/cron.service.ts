@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PenaltiesService } from '../penalties/penalties.service';
 import { SmsService } from '../sms/sms.service';
+import { tjStartOfDay, tjStartOfNextDay, tjYMD } from '../common/tj-time';
 
 const TASK_OVERDUE_PENALTY_USD = 10; // ТЗ §3.9: «Нарушение → штраф» за просроченную задачу
 
@@ -37,10 +38,11 @@ export class CronService {
   @Cron('30 9 * * 1-5', { timeZone: 'Asia/Dushanbe' })
   async checkLateArrivals() {
     this.logger.log('Cron: checkLateArrivals');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // Границы дня — по Asia/Dushanbe. Cron @09:30 ТJT даёт 04:30 UTC,
+    // setHours(0,0,0,0) на UTC даст 00:00 UTC = 05:00 ТJT — окно
+    // сегодня запишет половину «сегодня» Душанбе.
+    const today = tjStartOfDay();
+    const tomorrow = tjStartOfNextDay();
 
     // Все, кто отмечается по графику: ADMIN/ACCOUNTANT/SALES_MANAGER/
     // CLIENT_MANAGER. FOUNDER не пингуем — он не в общем графике.
@@ -286,9 +288,10 @@ export class CronService {
   @Cron('0 9 * * *', { timeZone: 'Asia/Dushanbe' })
   async birthdayGreetings() {
     this.logger.log('Cron: birthdayGreetings');
-    const today = new Date();
-    const month = today.getMonth() + 1;
-    const day = today.getDate();
+    // getMonth/getDate возвращают UTC-локальное на сервере. В 09:00 ТJT
+    // = 04:00 UTC — день в UTC ещё «вчера», поздравляли бы клиентов с ДР
+    // которое было ВЧЕРА в Душанбе. Считаем месяц/день в TJT.
+    const { m: month, d: day } = tjYMD(new Date());
 
     // Postgres extract: where extract(month from birthday)=$1 AND day=$2
     const students = await this.prisma.$queryRawUnsafe<any[]>(

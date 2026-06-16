@@ -17,6 +17,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { useOptimisticMutation } from '../lib/optimistic';
 import { useRealtimeEvent } from '../realtime';
+import { tjFormatTime, TJ_TZ } from '../lib/tjTime';
 
 function fmtMin(min: number): string {
   if (min <= 0) return '0м';
@@ -27,16 +28,20 @@ function fmtMin(min: number): string {
 }
 
 function fmtTime(iso: string | null): string {
+  // Время clockIn/lunchOut/clockOut — серверный UTC. Форматируем в
+  // Asia/Dushanbe — пользователь видит время прихода в бизнес-зоне,
+  // независимо от того в каком TZ открыл CRM.
   if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return tjFormatTime(iso);
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('ru-RU', {
+  return new Intl.DateTimeFormat('ru-RU', {
+    timeZone: TJ_TZ,
     day: '2-digit',
     month: 'short',
     weekday: 'short',
-  });
+  }).format(new Date(iso));
 }
 
 export default function TimeTracker() {

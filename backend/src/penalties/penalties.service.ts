@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { PenaltyReason } from '@prisma/client';
 import { SettingsService } from '../settings/settings.service';
+import { tjStartOfDay, tjStartOfNextDay, tjStartOfMonth, tjStartOfNextMonth, tjLocalDay } from '../common/tj-time';
 
 const VALID_REASONS: PenaltyReason[] = ['LATE_ARRIVAL', 'ABSENCE', 'TASK_OVERDUE', 'CUSTOM'];
 
@@ -101,10 +102,12 @@ export class PenaltiesService {
    *  - Помечаем TimeEntry.latePenaltyApplied=true для идемпотентности.
    */
   async generateLatePenaltiesForDate(targetDate: Date) {
-    const from = new Date(targetDate);
-    from.setHours(0, 0, 0, 0);
-    const to = new Date(from);
-    to.setDate(to.getDate() + 1);
+    // Границы суток — по Asia/Dushanbe. setHours использует
+    // часовой пояс сервера (UTC на Railway), из-за чего «день» съезжает
+    // на 5 часов и penalty cron может промахнуться по записям, сделанным
+    // около полуночи Душанбе.
+    const from = tjStartOfDay(targetDate);
+    const to = tjStartOfNextDay(targetDate);
 
     const entries = await this.prisma.timeEntry.findMany({
       where: {
@@ -143,9 +146,11 @@ export class PenaltiesService {
       }
       // null (нет причины) или REJECTED → штрафуем.
 
-      // Считаем сколько LATE_ARRIVAL штрафов уже было в этом месяце
-      const monthStart = new Date(from.getFullYear(), from.getMonth(), 1);
-      const monthEnd = new Date(from.getFullYear(), from.getMonth() + 1, 1);
+      // Считаем сколько LATE_ARRIVAL штрафов уже было в этом месяце.
+      // Границы месяца — в Asia/Dushanbe, иначе у юзера-полуночника
+      // первое опоздание месяца может посчитаться вторым.
+      const monthStart = tjStartOfMonth(from);
+      const monthEnd = tjStartOfNextMonth(from);
       const priorLateCount = await this.prisma.penalty.count({
         where: {
           userId: e.userId,
@@ -236,7 +241,7 @@ export class PenaltiesService {
     };
     const byDay = new Map<string, string | null>();
     for (const e of entries) {
-      const day = localDay(e.clockIn);
+      const day = tjLocalDay(e.clockIn);
       const cur = byDay.get(day) ?? null;
       const next = e.lateExcuseStatus as string | null;
       const curRank = cur ? STATUS_PRIORITY[cur] ?? 0 : 0;
@@ -251,7 +256,7 @@ export class PenaltiesService {
     for (const p of penalties) {
       let excuseStatus: string | null = null;
       if (p.reason === 'LATE_ARRIVAL') {
-        excuseStatus = byDay.get(localDay(p.date)) ?? null;
+        excuseStatus = byDay.get(tjLocalDay(p.date)) ?? null;
       }
       if (excuseStatus === 'APPROVED') {
         excused += p.amount;
@@ -289,8 +294,3 @@ export class PenaltiesService {
   }
 }
 
-/** YYYY-MM-DD в Asia/Dushanbe — единственный источник «дня» во всём
- *  расчёте штрафов. Иначе toISOString() ломается на границе суток UTC. */
-function localDay(d: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dushanbe' }).format(d);
-}

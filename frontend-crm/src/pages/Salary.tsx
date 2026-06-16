@@ -16,6 +16,7 @@ import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
+import { tjStartOfMonthStr, tjEndOfMonthStr, tjFormatDate } from '../lib/tjTime';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -27,10 +28,10 @@ function fmtMin(min: number) {
   return m > 0 ? `${h}ч ${m}м` : `${h}ч`;
 }
 function defaultMonthRange() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-  return { start, end };
+  // Границы месяца — в Asia/Dushanbe, а не в UTC и не в TZ браузера.
+  // Иначе у пользователя в РФ месяц мог открываться «с 30-го» из-за
+  // toISOString → UTC.
+  return { start: tjStartOfMonthStr(), end: tjEndOfMonthStr() };
 }
 
 export default function Salary() {
@@ -315,9 +316,9 @@ export default function Salary() {
               <tr key={r.id}>
                 <td style={{ fontWeight: 500 }}>{r.user?.fullName}</td>
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                  {new Date(r.periodStart).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}
+                  {tjFormatDate(r.periodStart)}
                   {' → '}
-                  {new Date(r.periodEnd).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}
+                  {tjFormatDate(r.periodEnd)}
                 </td>
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtMin(r.workedMinutes)}</td>
                 <td style={{ color: 'var(--text-soft)' }}>{fmtMoney(r.salesAmount, r.currency)}</td>

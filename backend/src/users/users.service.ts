@@ -13,6 +13,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { isElevated, isFounder } from '../auth/role-utils';
+import { tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
 
 @Injectable()
 export class UsersService {
@@ -92,9 +93,12 @@ export class UsersService {
     if (!user) throw new NotFoundException('Пользователь не найден');
 
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    const yearStart = new Date(now.getFullYear(), 0, 1);
+    // Границы месяца/года — в Asia/Dushanbe, иначе у юзера, открывшего
+    // профиль в 04:00 ТJT 1-го числа, KPI считается за прошлый месяц.
+    const monthStart = tjStartOfMonth(now);
+    const monthEnd = tjEndOfMonth(now);
+    const { y } = tjYMD(now);
+    const yearStart = new Date(`${y}-01-01T00:00:00+05:00`);
 
     const [
       documents,

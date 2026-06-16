@@ -14,6 +14,7 @@ import {
   type ExcuseEntry,
   type ExcuseStatus,
 } from '../api/excuses';
+import { tjFormatDateTime, tjFormatFull } from '../lib/tjTime';
 
 // Файлы лежат на backend (Railway), а не на фронте (Vercel). Без этого
 // префикса <a href="/uploads/..."> тыкается в Vercel и получает 404 /
@@ -177,7 +178,7 @@ function ExcuseCard({
           <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{entry.user.fullName}</div>
           <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{entry.user.email}</div>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
-            {new Date(entry.clockIn).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            {tjFormatDateTime(entry.clockIn)}
             {' · '}
             <span style={{ color: 'var(--primary-dark)', fontWeight: 600 }}>
               опоздал на {entry.lateMinutes} мин
@@ -229,7 +230,7 @@ function ExcuseCard({
 
       {!isPending && entry.lateExcuseReviewedAt && (
         <div style={{ fontSize: 11, color: 'var(--text-soft)', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 6 }}>
-          Разобрано: {new Date(entry.lateExcuseReviewedAt).toLocaleString('ru-RU')}
+          Разобрано: {tjFormatFull(entry.lateExcuseReviewedAt)}
         </div>
       )}
     </motion.div>

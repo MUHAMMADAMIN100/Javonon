@@ -28,6 +28,7 @@ import { financeTimeseries, type TimeseriesPoint } from '../api/finance';
 import { listPayments, confirmPayment, rejectPayment, type Payment, PAYMENT_METHOD_LABEL } from '../api/payments';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
+import { tjToday } from '../lib/tjTime';
 
 function fmtMoney(n: number, currency = 'TJS'): string {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -753,7 +754,9 @@ function TransactionForm({
   const [studentId, setStudentId] = useState<string>(preselect?.studentId || '');
   const [managerId, setManagerId] = useState<string>(preselect?.managerId || '');
   const [comment, setComment] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  // Сегодня — по Asia/Dushanbe (toISOString даёт UTC-день, что после 19:00
+  // ТJT уже завтра по UTC и форма открывалась бы с завтрашним числом).
+  const [date, setDate] = useState(tjToday());
   const [submitting, setSubmitting] = useState(false);
 
   // Расширенные поля для финансового модуля
