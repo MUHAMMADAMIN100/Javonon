@@ -3,10 +3,11 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { requireJwtSecret } from './jwt-secret';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService) {
+  constructor(config: ConfigService, private prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -25,6 +26,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // но их старые токены валидны до истечения (7д). Мапим на лету, чтобы
     // им не пришлось разлогиниваться.
     const normalize = (r?: string) => (r === 'EMPLOYEE' ? 'SALES_MANAGER' : r);
+
+    // Подгружаем CustomRole.permissions свежими из БД — чтобы при изменении
+    // custom-роли FOUNDER'ом доступы применялись сразу, без перевыпуска JWT.
+    // Selective fields: только то что нужно RolesGuard'у.
+    let permissions: string[] = [];
+    try {
+      const u = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: {
+          customRole: { select: { permissions: true, isActive: true } },
+        },
+      });
+      if (u?.customRole?.isActive) {
+        permissions = u.customRole.permissions || [];
+      }
+    } catch {
+      // Если БД недоступна — лучше пропустить permissions, чем уронить
+      // запрос. Базовые роли продолжат работать.
+    }
+
     return {
       id: payload.sub,
       sub: payload.sub, // для обратной совместимости со старым кодом
@@ -33,6 +54,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // Множественные роли — основатель раздаёт через /users/:id/roles.
       // FOUNDER неявно имеет доступ ко всему (см. RolesGuard).
       roles: (payload.roles || []).map(normalize),
+      permissions,
     };
   }
 }

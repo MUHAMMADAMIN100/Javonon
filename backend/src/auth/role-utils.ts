@@ -16,7 +16,18 @@ export const MANAGER_ROLES: Role[] = ['SALES_MANAGER', 'CLIENT_MANAGER'];
 export type UserWithRoles = {
   role?: Role | string | null;
   roles?: (Role | string)[] | null;
+  // Пермиссии из CustomRole. Заполняются JwtStrategy при validate.
+  permissions?: string[] | null;
 };
+
+/** Проверка наличия пермиссии у юзера (через CustomRole). */
+export function hasPermission(user: UserWithRoles | undefined | null, ...required: string[]): boolean {
+  if (!user) return false;
+  if (isFounder(user)) return true;  // FOUNDER — неявно всё
+  const list = user.permissions || [];
+  if (list.length === 0) return false;
+  return required.some((p) => list.includes(p));
+}
 
 /** Есть ли у пользователя любая из перечисленных ролей. */
 export function hasRole(user: UserWithRoles | undefined | null, ...required: Role[]): boolean {

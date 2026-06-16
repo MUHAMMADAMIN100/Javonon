@@ -135,6 +135,11 @@ model User {
   hourlyRate Float?   @default(0)
   // Процент от продажи клиента, привязанного к этому менеджеру (бонусный %).
   bonusPercent Float? @default(0)
+  // Кастомная роль (FOUNDER создаёт через /settings → Роли).
+  // null = работает только по базовым ролям (role + roles[]).
+  // Если задана — пермиссии custom-роли ДОБАВЛЯЮТСЯ к базовым.
+  customRoleId String?
+  customRole   CustomRole? @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
   // Доп. поля для HR-профиля (паспорт, телефон, дата приёма на работу)
   phone         String?
   passportNo    String?
@@ -1341,5 +1346,27 @@ model PipelineStage {
 
   @@unique([pipelineId, order])
   @@index([pipelineId])
+}
+
+// ============================================================
+// CUSTOM ROLES — пользовательские роли с произвольным набором
+// доступов. FOUNDER может создать роль вида «Таргетолог» с
+// доступом к разделам "Заявки" и "KPI" и привязать к ней
+// сотрудника через UserDetail.
+// permissions — массив строковых ключей из PERMISSION_CATALOG
+// (см. backend/src/auth/permissions.ts).
+// ============================================================
+model CustomRole {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  permissions String[] @default([])
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+
+  @@index([isActive])
 }
 

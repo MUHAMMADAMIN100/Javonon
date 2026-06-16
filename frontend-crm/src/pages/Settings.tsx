@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
@@ -14,9 +14,18 @@ import {
   createLocation,
   updateLocation,
 } from '../api/settings';
+import {
+  type CustomRole,
+  type PermissionDef,
+  listCustomRoles,
+  listPermissionsCatalog,
+  createCustomRole,
+  updateCustomRole,
+  deleteCustomRole,
+} from '../api/customRoles';
 import ScheduleEditor from '../components/ScheduleEditor';
 
-type Tab = 'schedule' | 'penalties' | 'location';
+type Tab = 'schedule' | 'penalties' | 'location' | 'roles';
 
 export default function Settings() {
   const me = useAuth((s) => s.user);
@@ -49,11 +58,13 @@ export default function Settings() {
           <TabButton active={tab === 'schedule'} onClick={() => setTab('schedule')} label="График работы" />
           <TabButton active={tab === 'penalties'} onClick={() => setTab('penalties')} label="Штрафы" />
           <TabButton active={tab === 'location'} onClick={() => setTab('location')} label="Гео-зона" />
+          <TabButton active={tab === 'roles'} onClick={() => setTab('roles')} label="Роли и доступы" />
         </div>
         <div style={{ padding: 24 }}>
           {tab === 'schedule' && <ScheduleTab />}
           {tab === 'penalties' && <PenaltiesTab />}
           {tab === 'location' && <LocationTab />}
+          {tab === 'roles' && <RolesTab />}
         </div>
       </div>
     </>
@@ -264,6 +275,240 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="form-group" style={{ marginBottom: 0 }}>
       <label>{label}</label>
       {children}
+    </div>
+  );
+}
+
+// ===== Roles & Permissions (кастомные роли) =====
+
+function RolesTab() {
+  const { toast, confirm } = useUI();
+  const qc = useQueryClient();
+  const catalogQuery = useQuery({
+    queryKey: ['custom-roles', 'catalog'],
+    queryFn: listPermissionsCatalog,
+  });
+  const rolesQuery = useQuery({
+    queryKey: ['custom-roles'],
+    queryFn: listCustomRoles,
+  });
+  const catalog = catalogQuery.data ?? [];
+  const roles = rolesQuery.data ?? [];
+
+  const [editing, setEditing] = useState<CustomRole | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const onDelete = async (r: CustomRole) => {
+    const ok = await confirm({
+      title: 'Удалить роль?',
+      message: `«${r.name}» будет удалена. Сотрудники с этой ролью должны быть переведены на другую заранее.`,
+      danger: true,
+      confirmText: 'Удалить',
+    });
+    if (!ok) return;
+    try {
+      await deleteCustomRole(r.id);
+      qc.invalidateQueries({ queryKey: ['custom-roles'] });
+      toast('Роль удалена', 'success');
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
+  };
+
+  const onToggle = async (r: CustomRole) => {
+    try {
+      await updateCustomRole(r.id, { isActive: !r.isActive });
+      qc.invalidateQueries({ queryKey: ['custom-roles'] });
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
+  };
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 16 }}>
+        Создавайте свои роли (например «Таргетолог», «HR») и точечно выбирайте
+        доступы к разделам. Сотруднику привязывается одна кастомная роль
+        в его карточке (раздел «Сотрудники»). Базовые 5 ролей продолжают работать.
+      </p>
+
+      {editing || creating ? (
+        <RoleForm
+          initial={editing}
+          catalog={catalog}
+          onCancel={() => { setEditing(null); setCreating(false); }}
+          onSaved={() => {
+            setEditing(null); setCreating(false);
+            qc.invalidateQueries({ queryKey: ['custom-roles'] });
+          }}
+        />
+      ) : (
+        <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)} style={{ marginBottom: 16 }}>
+          + Новая роль
+        </button>
+      )}
+
+      {rolesQuery.isLoading ? (
+        <div style={{ color: 'var(--text-soft)' }}>Загружаем…</div>
+      ) : roles.length === 0 ? (
+        <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>
+          Пока нет кастомных ролей. Создайте первую — например, «Таргетолог»
+          с доступом к разделам «Заявки» и «KPI».
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {roles.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 10,
+                opacity: r.isActive ? 1 : 0.5, gap: 12, flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontWeight: 600 }}>{r.name}</div>
+                {r.description && (
+                  <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 2 }}>{r.description}</div>
+                )}
+                <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
+                  {r.permissions.length} доступов · {r._count?.users ?? 0} сотрудник(ов)
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-sm btn-secondary" onClick={() => onToggle(r)}>
+                  {r.isActive ? 'Выкл' : 'Вкл'}
+                </button>
+                <button className="btn btn-sm btn-secondary" onClick={() => setEditing(r)}>
+                  Редактировать
+                </button>
+                <button className="btn btn-sm btn-danger" onClick={() => onDelete(r)}>
+                  Удалить
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RoleForm({
+  initial, catalog, onCancel, onSaved,
+}: {
+  initial: CustomRole | null;
+  catalog: PermissionDef[];
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useUI();
+  const [name, setName] = useState(initial?.name ?? '');
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [perms, setPerms] = useState<Set<string>>(new Set(initial?.permissions ?? []));
+  const [saving, setSaving] = useState(false);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, PermissionDef[]>();
+    for (const p of catalog) {
+      if (!map.has(p.group)) map.set(p.group, []);
+      map.get(p.group)!.push(p);
+    }
+    return Array.from(map.entries());
+  }, [catalog]);
+
+  const toggle = (key: string) => {
+    const next = new Set(perms);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    setPerms(next);
+  };
+
+  const save = async () => {
+    if (!name.trim()) return toast('Укажите название роли', 'error');
+    setSaving(true);
+    try {
+      if (initial) {
+        await updateCustomRole(initial.id, {
+          name: name.trim(),
+          description: description.trim() || undefined,
+          permissions: Array.from(perms),
+        });
+        toast('Роль обновлена', 'success');
+      } else {
+        await createCustomRole({
+          name: name.trim(),
+          description: description.trim() || undefined,
+          permissions: Array.from(perms),
+        });
+        toast('Роль создана', 'success');
+      }
+      onSaved();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{
+      border: '1px solid var(--border-soft)',
+      borderRadius: 12,
+      padding: 16,
+      background: 'var(--bg-soft)',
+      marginBottom: 16,
+    }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
+        <Field label="Название роли">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Таргетолог" maxLength={50} />
+        </Field>
+        <Field label="Описание (опц.)">
+          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="за что отвечает роль" maxLength={300} />
+        </Field>
+      </div>
+
+      <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600 }}>
+        Доступы ({perms.size} выбрано)
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+        {grouped.map(([group, items]) => (
+          <div key={group} style={{
+            border: '1px solid var(--border)', borderRadius: 10,
+            padding: '10px 12px', background: 'var(--bg)',
+          }}>
+            <div style={{
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: 'var(--text-soft)',
+              marginBottom: 8,
+            }}>{group}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {items.map((p) => (
+                <label key={p.key} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  fontSize: 13, cursor: 'pointer',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={perms.has(p.key)}
+                    onChange={() => toggle(p.key)}
+                  />
+                  <span>{p.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+        <button className="btn btn-sm btn-secondary" onClick={onCancel} disabled={saving}>Отмена</button>
+        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+          {saving ? 'Сохраняем…' : (initial ? 'Сохранить' : 'Создать роль')}
+        </button>
+      </div>
     </div>
   );
 }

@@ -36,7 +36,11 @@ export class UsersService {
     const users = await this.prisma.user.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      select: { id: true, email: true, fullName: true, role: true, createdAt: true },
+      select: {
+        id: true, email: true, fullName: true, role: true, createdAt: true,
+        customRoleId: true,
+        customRole: { select: { id: true, name: true, isActive: true } },
+      },
     });
     return users;
   }
@@ -44,7 +48,11 @@ export class UsersService {
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      select: { id: true, email: true, fullName: true, role: true, createdAt: true },
+      select: {
+        id: true, email: true, fullName: true, role: true, createdAt: true,
+        customRoleId: true,
+        customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
+      },
     });
     if (!user) throw new NotFoundException('Пользователь не найден');
     return user;
@@ -66,6 +74,7 @@ export class UsersService {
         email: true,
         fullName: true,
         role: true,
+        roles: true,
         phone: true,
         passportNo: true,
         hiredAt: true,
@@ -76,6 +85,8 @@ export class UsersService {
         kpiAutoStepPct: true,
         kpiMaxPct: true,
         createdAt: true,
+        customRoleId: true,
+        customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
       },
     });
     if (!user) throw new NotFoundException('Пользователь не найден');
@@ -600,6 +611,44 @@ export class UsersService {
       });
     }
 
+    return updated;
+  }
+
+  /**
+   * Привязка / отвязка custom-роли (ТЗ-доработка). Только FOUNDER.
+   * customRoleId=null убирает привязку — юзер работает по базовым ролям.
+   */
+  async setCustomRole(targetId: string, customRoleId: string | null) {
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true },
+    });
+    if (!target) throw new NotFoundException('Пользователь не найден');
+
+    if (customRoleId) {
+      const role = await this.prisma.customRole.findUnique({ where: { id: customRoleId } });
+      if (!role) throw new BadRequestException('Кастомная роль не найдена');
+      if (!role.isActive) throw new BadRequestException('Кастомная роль отключена');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetId },
+      data: { customRoleId },
+      select: {
+        id: true, email: true, fullName: true, role: true, roles: true,
+        customRoleId: true,
+        customRole: { select: { id: true, name: true, permissions: true } },
+      },
+    });
+    // Permissions берутся из БД при validate каждого JWT —
+    // изменения применятся со следующего запроса. realtime-уведомление
+    // нужно чтобы Sidebar фронта перерисовался без F5.
+    this.realtime.emitUser(targetId, 'user:roles-updated', {
+      role: updated.role,
+      roles: updated.roles,
+      customRoleId: updated.customRoleId,
+      customRole: updated.customRole,
+    });
     return updated;
   }
 }

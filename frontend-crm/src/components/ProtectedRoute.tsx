@@ -1,29 +1,26 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 import { hasRole } from '../lib/roles';
+import { hasPermission } from '../lib/permissions';
 import type { Role } from '../api/types';
 
-// Карта роут → разрешённые роли. FOUNDER неявно имеет доступ ко всему
-// (см. hasRole — он трактует FOUNDER как любую роль). Если роута нет в
-// карте — доступ всем залогиненным. Backend всё равно перепроверяет, но
-// это улучшает UX: не показываем UI который потом упадёт 403.
-const ROUTE_ROLES: Array<{ prefix: string; roles: Role[] }> = [
-  { prefix: '/finance', roles: ['ADMIN', 'ACCOUNTANT'] },
-  { prefix: '/salary', roles: ['ADMIN', 'ACCOUNTANT'] },
-  { prefix: '/users', roles: ['ADMIN', 'ACCOUNTANT'] },
-  { prefix: '/activity', roles: ['ADMIN', 'ACCOUNTANT'] },
-  { prefix: '/lms', roles: ['ADMIN', 'ACCOUNTANT'] },
-  { prefix: '/partners', roles: ['ADMIN', 'ACCOUNTANT'] },
-  // Новые admin/founder-страницы — раньше component-level guard был
-  // только в Settings.tsx; остальные могли отображать UI до 403 от API.
-  { prefix: '/settings', roles: ['FOUNDER'] },
-  { prefix: '/pipelines', roles: ['ADMIN', 'ACCOUNTANT'] },
-  { prefix: '/massmail', roles: ['ADMIN', 'ACCOUNTANT'] },
-  { prefix: '/offers', roles: ['ADMIN', 'ACCOUNTANT'] },
-  // По ТЗ §5 — причины опозданий рассматривает только основатель.
-  { prefix: '/excuses', roles: ['FOUNDER'] },
-  // Посещаемость по ТЗ §3 — тоже FOUNDER.
-  { prefix: '/attendance', roles: ['FOUNDER'] },
+// Карта роут → разрешённые роли + опциональные permissions. FOUNDER неявно
+// имеет доступ ко всему. Если route есть в карте и у юзера нет ни роли,
+// ни permission (OR) — редиректим на /dashboard. Backend всё равно
+// перепроверяет, это UX-слой.
+const ROUTE_ROLES: Array<{ prefix: string; roles: Role[]; perms?: string[] }> = [
+  { prefix: '/finance',     roles: ['ADMIN', 'ACCOUNTANT'], perms: ['finance:read', 'finance:write'] },
+  { prefix: '/salary',      roles: ['ADMIN', 'ACCOUNTANT'], perms: ['salary:read', 'salary:write'] },
+  { prefix: '/users',       roles: ['ADMIN', 'ACCOUNTANT'], perms: ['users:read', 'users:write'] },
+  { prefix: '/activity',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['activity:read'] },
+  { prefix: '/lms',         roles: ['ADMIN', 'ACCOUNTANT'], perms: ['lms:read', 'lms:write'] },
+  { prefix: '/partners',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['partners:read'] },
+  { prefix: '/settings',    roles: ['FOUNDER'] },
+  { prefix: '/pipelines',   roles: ['ADMIN', 'ACCOUNTANT'], perms: ['pipelines:write'] },
+  { prefix: '/massmail',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['mass-mail:write'] },
+  { prefix: '/offers',      roles: ['ADMIN', 'ACCOUNTANT'] },
+  { prefix: '/excuses',     roles: ['FOUNDER'] },
+  { prefix: '/attendance',  roles: ['FOUNDER'] },
 ];
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -32,10 +29,13 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   if (!user) return <Navigate to="/login" replace />;
 
   const match = ROUTE_ROLES.find((r) => location.pathname.startsWith(r.prefix));
-  // FOUNDER пропускаем всегда (hasRole(user, 'FOUNDER') не проверяет required —
-  // отдельный кейс). Иначе проверяем пересечение ролей.
-  if (match && !hasRole(user, 'FOUNDER', ...match.roles)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-  return <>{children}</>;
+  if (!match) return <>{children}</>;
+
+  // FOUNDER пропускаем неявно — повторим тут (на случай если в match.roles
+  // его забыли).
+  if (hasRole(user, 'FOUNDER', ...match.roles)) return <>{children}</>;
+  // Custom-role-юзер: достаточно одного permission из match.perms.
+  if (match.perms && hasPermission(user as any, ...match.perms)) return <>{children}</>;
+
+  return <Navigate to="/dashboard" replace />;
 }

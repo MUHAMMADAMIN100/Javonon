@@ -15,7 +15,8 @@ import { listUsers } from '../api/users';
 import { listCourses } from '../api/lms';
 import { financeSummary, listTransactions } from '../api/finance';
 import { listSalaries } from '../api/salary';
-import { hasRole } from '../lib/roles';
+import { hasRole, isFounder as isFounderFn } from '../lib/roles';
+import { hasPermission } from '../lib/permissions';
 import { ROLE_LABEL, type Role } from '../api/types';
 
 // Map route → prefetch fn. Срабатывает по hover/touchstart на nav-link
@@ -84,52 +85,57 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) видят рабочие зоны (заявки,
   // студенты, KPI, отчёты), но не финансы/обучение/партнёров/активность.
   const elevated = hasRole(user, 'FOUNDER', 'ADMIN', 'ACCOUNTANT');
-  const isFounder = hasRole(user, 'FOUNDER');
+  const isFounder = isFounderFn(user);
   const isWorkforce = hasRole(user, 'FOUNDER', 'ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER');
 
-  // CRM core — для всех (Dashboard, Заявки, Студенты, Программы, Задачи, Время, KPI)
-  const coreLinks = [
+  // Custom-роль (ТЗ-доработка): FOUNDER создал, например, «Таргетолога».
+  // Тогда сайдбар фильтруется ТОЛЬКО по custom-role.permissions —
+  // дефолтный набор по базовой роли подавляется, потому что таргетологу
+  // лишние пункты не нужны. Если custom-роли нет — поведение прежнее.
+  const hasCustomRole = !!(user?.customRoleId);
+  const can = (perm: string) => hasPermission(user as any, perm);
+  /** Показывать ли пункт: либо у юзера есть permission, либо у него нет
+   *  custom-роли и подходит базовая ролевая проверка. */
+  const show = (perm: string, baseCond: boolean) => hasCustomRole ? can(perm) : baseCond;
+
+  // CRM core
+  const coreLinks: Array<{ to: string; icon: string; label: string }> = [
     { to: '/dashboard', icon: 'dashboard', label: 'Дашборд' },
-    ...(isWorkforce ? [
-      { to: '/applications', icon: 'assignment', label: 'Заявки' },
-      { to: '/students', icon: 'school', label: 'Студенты' },
-      { to: '/programs', icon: 'menu_book', label: 'Программы' },
-      { to: '/tasks', icon: 'task_alt', label: 'Задачи' },
-    ] : []),
-    { to: '/chat', icon: 'forum', label: 'Чат' },
-    ...(isWorkforce ? [{ to: '/inbox', icon: 'inbox', label: 'Входящие' }] : []),
-    { to: '/time', icon: 'schedule', label: 'Время' },
-    ...(isWorkforce ? [
-      { to: '/reports', icon: 'description', label: 'Мои отчёты' },
-      { to: '/calls', icon: 'call', label: 'Звонки' },
-      { to: '/kpi', icon: 'leaderboard', label: 'KPI' },
-    ] : []),
-    { to: '/me', icon: 'person', label: 'Мой профиль' },
   ];
+  if (show('applications:read', isWorkforce)) coreLinks.push({ to: '/applications', icon: 'assignment', label: 'Заявки' });
+  if (show('students:read', isWorkforce)) coreLinks.push({ to: '/students', icon: 'school', label: 'Студенты' });
+  if (show('programs:read', isWorkforce)) coreLinks.push({ to: '/programs', icon: 'menu_book', label: 'Программы' });
+  if (show('tasks:read', isWorkforce)) coreLinks.push({ to: '/tasks', icon: 'task_alt', label: 'Задачи' });
+  if (show('chat:read', true)) coreLinks.push({ to: '/chat', icon: 'forum', label: 'Чат' });
+  if (show('inbox:read', isWorkforce)) coreLinks.push({ to: '/inbox', icon: 'inbox', label: 'Входящие' });
+  // Время / Профиль — у всех залогиненных без исключения.
+  coreLinks.push({ to: '/time', icon: 'schedule', label: 'Время' });
+  if (show('reports:read', isWorkforce)) coreLinks.push({ to: '/reports', icon: 'description', label: 'Мои отчёты' });
+  if (show('calls:read', isWorkforce)) coreLinks.push({ to: '/calls', icon: 'call', label: 'Звонки' });
+  if (show('kpi:read', isWorkforce)) coreLinks.push({ to: '/kpi', icon: 'leaderboard', label: 'KPI' });
+  coreLinks.push({ to: '/me', icon: 'person', label: 'Мой профиль' });
 
-  // Finance — для FOUNDER/ADMIN/ACCOUNTANT
-  const financeLinks = elevated ? [
-    { to: '/finance', icon: 'payments', label: 'Финансы' },
-    { to: '/salary', icon: 'paid', label: 'Зарплата' },
-  ] : [];
+  // Finance
+  const financeLinks: Array<{ to: string; icon: string; label: string }> = [];
+  if (show('finance:read', elevated)) financeLinks.push({ to: '/finance', icon: 'payments', label: 'Финансы' });
+  if (show('salary:read', elevated)) financeLinks.push({ to: '/salary', icon: 'paid', label: 'Зарплата' });
 
-  // Elevated-only (управление)
-  const adminLinks = elevated ? [
-    { to: '/pipelines', icon: 'route', label: 'Воронки' },
-    { to: '/massmail', icon: 'campaign', label: 'Рассылки' },
-    { to: '/offers', icon: 'description', label: 'Оферты' },
-    { to: '/lms', icon: 'menu_book', label: 'Обучение' },
-    { to: '/partners', icon: 'handshake', label: 'Партнёры' },
-    { to: '/activity', icon: 'history', label: 'Активность' },
-    { to: '/users', icon: 'group', label: 'Сотрудники' },
-    ...(isFounder ? [
-      // По ТЗ §5 — FOUNDER одобряет / отклоняет причины опозданий.
-      { to: '/excuses', icon: 'gavel', label: 'Причины' },
-      // По ТЗ §3 — посещаемость всех сотрудников (clockIn/lunch/clockOut).
-      { to: '/attendance', icon: 'fact_check', label: 'Посещаемость' },
-      { to: '/settings', icon: 'settings', label: 'Настройки системы' },
-    ] : []),
-  ] : [];
+  // Admin / management
+  const adminLinks: Array<{ to: string; icon: string; label: string }> = [];
+  if (show('pipelines:write', elevated)) adminLinks.push({ to: '/pipelines', icon: 'route', label: 'Воронки' });
+  if (show('mass-mail:write', elevated)) adminLinks.push({ to: '/massmail', icon: 'campaign', label: 'Рассылки' });
+  // Оферты — пока без permission, только elevated. Custom-role-юзеры
+  // не имеют доступа к управлению оффертами.
+  if (!hasCustomRole && elevated) adminLinks.push({ to: '/offers', icon: 'description', label: 'Оферты' });
+  if (show('lms:read', elevated)) adminLinks.push({ to: '/lms', icon: 'menu_book', label: 'Обучение' });
+  if (show('partners:read', elevated)) adminLinks.push({ to: '/partners', icon: 'handshake', label: 'Партнёры' });
+  if (show('activity:read', elevated)) adminLinks.push({ to: '/activity', icon: 'history', label: 'Активность' });
+  if (show('users:read', elevated)) adminLinks.push({ to: '/users', icon: 'group', label: 'Сотрудники' });
+  if (isFounder) {
+    adminLinks.push({ to: '/excuses', icon: 'gavel', label: 'Причины' });
+    adminLinks.push({ to: '/attendance', icon: 'fact_check', label: 'Посещаемость' });
+    adminLinks.push({ to: '/settings', icon: 'settings', label: 'Настройки системы' });
+  }
 
   const links = [...coreLinks, ...financeLinks, ...adminLinks];
 

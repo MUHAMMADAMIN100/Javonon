@@ -42,6 +42,7 @@ import { PartnersModule } from './partners/partners.module';
 import { CallsModule } from './calls/calls.module';
 import { OffersModule } from './offers/offers.module';
 import { SettingsModule } from './settings/settings.module';
+import { CustomRolesModule } from './custom-roles/custom-roles.module';
 import { SalesModule } from './sales/sales.module';
 import { WhatsappModule } from './integrations/whatsapp/whatsapp.module';
 import { InstagramModule } from './integrations/instagram/instagram.module';
@@ -99,6 +100,7 @@ import { SmsIntegrationModule } from './integrations/sms/sms-integration.module'
     CallsModule,
     OffersModule,
     SettingsModule,
+    CustomRolesModule,
     SalesModule,
     WhatsappModule,
     InstagramModule,

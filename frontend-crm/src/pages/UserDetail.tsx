@@ -18,6 +18,7 @@ import {
   type UserDocumentType,
 } from '../api/userProfile';
 import { offerCurrent, offerSign, type CurrentOfferState } from '../api/offers';
+import { listCustomRoles, setUserCustomRole, type CustomRole } from '../api/customRoles';
 import ScheduleEditor from '../components/ScheduleEditor';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
@@ -91,6 +92,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         {isAdmin && <HREditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />}
         {isFounder(meStore) && (
           <RolesEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
+        )}
+        {isFounder(meStore) && (
+          <CustomRoleEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
         )}
       </section>
 
@@ -830,6 +834,108 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
         </button>
         <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
           {saving ? 'Сохраняем…' : 'Сохранить роли'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * CustomRoleEditor — FOUNDER привязывает кастомную роль (созданную в
+ * /settings → Роли и доступы) к сотруднику. Это ОРТОГОНАЛЬНО базовым 5
+ * ролям: если custom-роль задана, у юзера активируются её permissions
+ * (см. lib/permissions.ts и Sidebar). Если убрать — сотрудник работает
+ * только по своим базовым ролям.
+ */
+function CustomRoleEditor({
+  user, userId, onSaved,
+}: {
+  user: FullProfile['user'];
+  userId: string;
+  onSaved: () => void;
+}) {
+  const { toast } = useUI();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string>((user as any).customRoleId || '');
+  const [saving, setSaving] = useState(false);
+  const rolesQuery = useQuery({
+    queryKey: ['custom-roles'],
+    queryFn: listCustomRoles,
+    enabled: open,
+  });
+  const roles = rolesQuery.data ?? [];
+
+  const isFounderTarget = user.role === 'FOUNDER' || (user.roles || []).includes('FOUNDER' as any);
+  if (isFounderTarget) return null;
+
+  const currentName = (user as any).customRole?.name as string | undefined;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await setUserCustomRole(userId, selected || null);
+      toast(selected ? 'Кастомная роль привязана' : 'Кастомная роль снята', 'success');
+      setOpen(false);
+      onSaved();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div style={{ marginTop: 12 }}>
+        <button
+          className="btn btn-sm btn-secondary"
+          onClick={() => setOpen(true)}
+          style={{ marginLeft: 8 }}
+        >
+          {currentName ? `Кастомная роль: ${currentName}` : 'Кастомная роль (FOUNDER)'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      marginTop: 16,
+      padding: 14,
+      border: '1px solid var(--primary)',
+      borderRadius: 10,
+      background: 'var(--bg-soft)',
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.12em',
+        color: 'var(--primary-dark)',
+        marginBottom: 8,
+      }}>
+        FOUNDER · CUSTOM ROLE
+      </div>
+      <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-soft)' }}>
+        Дополнительный набор доступов поверх базовых ролей. Создаются в
+        Настройки → Роли и доступы.
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
+          Кастомная роль:
+        </label>
+        <select value={selected} onChange={(e) => setSelected(e.target.value)} disabled={rolesQuery.isLoading}>
+          <option value="">— не назначена —</option>
+          {roles.filter((r: CustomRole) => r.isActive).map((r: CustomRole) => (
+            <option key={r.id} value={r.id}>{r.name} ({r.permissions.length} доступов)</option>
+          ))}
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>
+          Отмена
+        </button>
+        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+          {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
       </div>
     </div>

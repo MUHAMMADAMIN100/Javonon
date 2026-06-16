@@ -241,4 +241,18 @@ export class UsersController {
     }
     return this.users.setRoles(id, body.roles, me.id);
   }
+
+  /** FOUNDER-only: привязка кастомной роли (или null = снять). */
+  @Put(':id/custom-role')
+  @Roles(Role.FOUNDER)
+  setCustomRole(
+    @Param('id') id: string,
+    @Body() body: { customRoleId: string | null },
+  ) {
+    const cid = body.customRoleId === undefined ? null : body.customRoleId;
+    if (cid !== null && typeof cid !== 'string') {
+      throw new BadRequestException('customRoleId должен быть строкой или null');
+    }
+    return this.users.setCustomRole(id, cid);
+  }
 }

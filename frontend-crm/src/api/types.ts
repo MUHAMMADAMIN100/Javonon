@@ -62,6 +62,16 @@ export interface User {
   role: Role;
   /** Дополнительные роли (один человек может быть, например, ADMIN+ACCOUNTANT). */
   roles?: Role[];
+  /** Permissions (берём из customRole) — backend кладёт в JWT-payload при validate. */
+  permissions?: string[];
+  /** Кастомная роль, если назначена. */
+  customRoleId?: string | null;
+  customRole?: {
+    id: string;
+    name: string;
+    isActive?: boolean;
+    permissions?: string[];
+  } | null;
   createdAt?: string;
 }
 

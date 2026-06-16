@@ -31,6 +31,17 @@ export class AuthService {
     };
     const token = await this.jwt.signAsync(payload);
 
+    // Подтянем CustomRole для login response, чтобы UI сразу знал
+    // permissions без второго запроса.
+    const fullUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        customRoleId: true,
+        customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
+      },
+    });
+    const perms = fullUser?.customRole?.isActive ? (fullUser.customRole.permissions || []) : [];
+
     return {
       token,
       user: {
@@ -39,19 +50,33 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
         roles: user.roles || [],
+        customRoleId: fullUser?.customRoleId || null,
+        customRole: fullUser?.customRole || null,
+        permissions: perms,
       },
     };
   }
 
   async me(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, email: true, fullName: true, role: true, roles: true,
+        customRoleId: true,
+        customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
+      },
+    });
     if (!user) throw new UnauthorizedException();
+    const perms = user.customRole?.isActive ? (user.customRole.permissions || []) : [];
     return {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
       role: user.role,
       roles: user.roles || [],
+      customRoleId: user.customRoleId || null,
+      customRole: user.customRole || null,
+      permissions: perms,
     };
   }
 
