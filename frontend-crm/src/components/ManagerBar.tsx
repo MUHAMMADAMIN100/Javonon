@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ROLE_LABEL, type ManagerInfo, type User } from '../api/types';
+import { displayRoleLabel } from '../lib/roles';
 import { listUsers } from '../api/users';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
@@ -90,7 +91,7 @@ function Slot({
                       <div>
                         <div className="manager-dropdown-name">{u.fullName}</div>
                         <div className="manager-dropdown-role">
-                          {ROLE_LABEL[u.role] || '—'}
+                          {displayRoleLabel(u as any)}
                         </div>
                       </div>
                     </button>

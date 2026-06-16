@@ -12,6 +12,7 @@ import {
 } from '../api/salary';
 import { listUsers } from '../api/users';
 import { ROLE_LABEL, type Role } from '../api/types';
+import { displayRoleLabel } from '../lib/roles';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
@@ -167,7 +168,7 @@ export default function Salary() {
             <label>Сотрудник</label>
             <select value={userId} onChange={(e) => setUserId(e.target.value)}>
               {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.fullName} · {ROLE_LABEL[u.role as Role] || u.role}</option>
+                <option key={u.id} value={u.id}>{u.fullName} · {displayRoleLabel(u as any)}</option>
               ))}
             </select>
           </div>

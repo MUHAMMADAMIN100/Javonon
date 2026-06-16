@@ -13,7 +13,7 @@ import { compose, hasErrors, maxLen, minLen, required, validateAll } from '../ut
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
-import { isElevated } from '../lib/roles';
+import { isElevated, displayRoleLabel } from '../lib/roles';
 
 type Scope = 'all' | 'mine';
 
@@ -227,7 +227,7 @@ export default function Tasks() {
                   <option value="">— Выберите сотрудника —</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.fullName} · {ROLE_LABEL[u.role as Role] || u.role}
+                      {u.fullName} · {displayRoleLabel(u as any)}
                     </option>
                   ))}
                 </select>

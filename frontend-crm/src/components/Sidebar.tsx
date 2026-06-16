@@ -15,9 +15,8 @@ import { listUsers } from '../api/users';
 import { listCourses } from '../api/lms';
 import { financeSummary, listTransactions } from '../api/finance';
 import { listSalaries } from '../api/salary';
-import { hasRole, isFounder as isFounderFn } from '../lib/roles';
+import { hasRole, isFounder as isFounderFn, displayRoleLabel } from '../lib/roles';
 import { hasPermission } from '../lib/permissions';
-import { ROLE_LABEL, type Role } from '../api/types';
 
 // Map route → prefetch fn. Срабатывает по hover/touchstart на nav-link
 // и грузит данные ДО клика — экран открывается мгновенно с готовым кешем.
@@ -246,7 +245,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
         </motion.div>
         <div className="user-info">
           <div className="user-name">{user?.fullName}</div>
-          <div className="user-role">{ROLE_LABEL[(user?.role as Role) || 'SALES_MANAGER'] || '—'}</div>
+          <div className="user-role">{displayRoleLabel(user as any)}</div>
         </div>
         <motion.button
           className="logout-btn"

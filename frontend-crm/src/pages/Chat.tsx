@@ -25,7 +25,7 @@ import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation, tempId } from '../lib/optimistic';
-import { isElevated } from '../lib/roles';
+import { isElevated, displayRoleLabel } from '../lib/roles';
 import { ROLE_LABEL, type Role } from '../api/types';
 
 // Базовый URL для статических attachments (chat-uploads).
@@ -1178,7 +1178,7 @@ export default function Chat() {
                     <span style={{ flex: 1 }}>
                       <div style={{ fontWeight: 500 }}>{u.fullName}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>
-                        {ROLE_LABEL[u.role as Role] || u.role}
+                        {displayRoleLabel(u as any)}
                       </div>
                     </span>
                   </button>
@@ -1464,7 +1464,7 @@ export default function Chat() {
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 500, fontSize: 14 }}>{u.fullName}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
-                          {ROLE_LABEL[u.role as Role] || u.role}
+                          {displayRoleLabel(u as any)}
                         </div>
                       </span>
                     </button>

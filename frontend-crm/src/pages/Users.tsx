@@ -56,13 +56,16 @@ export default function Users() {
   });
   const items = usersQuery.data ?? [];
 
-  // Кастомные роли (Настройки → Роли и доступы). Доступны только FOUNDER'у
-  // на endpoint — для остальных просто пустой список (запрос вернёт 403,
-  // вгоняем в empty без ошибки UI).
+  // Кастомные роли (Настройки → Роли и доступы). Read-эндпоинт открыт
+  // FOUNDER/ADMIN/ACCOUNTANT — все они могут создавать сотрудников и им
+  // нужен полный список ролей в dropdown.
   const customRolesQuery = useQuery({
     queryKey: ['custom-roles'],
     queryFn: listCustomRoles,
-    enabled: !!me && isFounder(me),
+    enabled: !!me,
+    // Если ответ 403 (юзер не в whitelist), TanStack по умолчанию ретраит
+    // 3 раза — не нужно, сразу гасим.
+    retry: false,
   });
   const customRoles = (customRolesQuery.data || []).filter((r) => r.isActive);
 
@@ -169,6 +172,26 @@ export default function Users() {
                         ролями теперь в карточке /users/:id через RolesEditor
                         (FOUNDER-only). Здесь — только просмотр всех ролей. */}
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {/* Custom-роль (если есть) показываем первым отдельным
+                          chip'ом с акцентным цветом — это «главная» роль
+                          юзера в UI; базовая остаётся ниже как «носитель»
+                          permissions. */}
+                      {(u as any).customRole && (u as any).customRole.isActive !== false && (
+                        <span
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: 999,
+                            background: 'var(--primary-light, #e0e7ff)',
+                            border: '1.5px solid var(--primary, #4f46e5)',
+                            color: 'var(--primary-dark, #4338ca)',
+                            fontSize: 11,
+                            fontWeight: 600,
+                          }}
+                          title="Кастомная роль"
+                        >
+                          {(u as any).customRole.name}
+                        </span>
+                      )}
                       {(() => {
                         const allRoles = Array.from(
                           new Set([u.role, ...((u as any).roles || [])])

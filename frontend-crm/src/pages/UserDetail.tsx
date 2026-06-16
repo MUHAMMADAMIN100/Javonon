@@ -22,7 +22,7 @@ import { listCustomRoles, setUserCustomRole, type CustomRole } from '../api/cust
 import ScheduleEditor from '../components/ScheduleEditor';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
-import { isElevated, isFounder } from '../lib/roles';
+import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -70,7 +70,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">
-          {isAdmin ? `ТА · ${user.role}` : 'МОЙ ПРОФИЛЬ'}
+          {isAdmin ? `ТА · ${displayRoleLabel(user as any).toUpperCase()}` : 'МОЙ ПРОФИЛЬ'}
         </span>
         <h2 className="crm-section-title">{user.fullName}</h2>
       </div>
@@ -82,7 +82,18 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <Field label="Email" value={user.email} />
           <Field
             label="Роли"
-            value={[user.role, ...(user.roles || [])].filter((r, i, a) => r && a.indexOf(r) === i).join(', ')}
+            value={(() => {
+              // Если есть активная кастомная — это «главная роль» юзера
+              // в UI. Дальше отдельно показываем базовые как «доступы».
+              const parts: string[] = [];
+              const cr = (user as any).customRole;
+              if (cr?.name && cr.isActive !== false) parts.push(cr.name);
+              const base = [user.role, ...(user.roles || [])]
+                .filter((r, i, a) => r && a.indexOf(r) === i)
+                .join(', ');
+              if (base) parts.push(parts.length ? `(база: ${base})` : base);
+              return parts.join(' ') || '—';
+            })()}
           />
           <Field label="Телефон" value={user.phone || '—'} />
           <Field label="Паспорт №" value={user.passportNo || '—'} />

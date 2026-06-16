@@ -1,4 +1,4 @@
-import type { Role } from '../api/types';
+import { ROLE_LABEL, type Role } from '../api/types';
 
 /**
  * Хелперы проверки ролей. Зеркалят backend/src/auth/role-utils.ts.
@@ -45,4 +45,23 @@ export function isManager(user: UserWithRoles | undefined | null): boolean {
 
 export function isStaff(user: UserWithRoles | undefined | null): boolean {
   return hasRole(user, 'FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER');
+}
+
+/**
+ * Лейбл роли для отображения. Если у юзера привязана активная кастомная
+ * роль (Настройки → Роли и доступы) — показываем её имя; иначе — лейбл
+ * базовой роли из ROLE_LABEL. Используется везде в UI чтобы «Таргетолог»
+ * выводился вместо «Менеджер по продажам» (которая внутри как «носитель»
+ * permissions для прав FK).
+ */
+export function displayRoleLabel(user: {
+  role?: string | null;
+  customRole?: { name?: string; isActive?: boolean } | null;
+} | null | undefined): string {
+  if (!user) return '—';
+  if (user.customRole && user.customRole.name && user.customRole.isActive !== false) {
+    return user.customRole.name;
+  }
+  const role = (user.role || 'SALES_MANAGER') as Role;
+  return ROLE_LABEL[role] || String(role);
 }
