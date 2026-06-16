@@ -360,10 +360,31 @@ export class UsersService {
     const exists = await this.prisma.user.findUnique({ where: { email } });
     if (exists) throw new ConflictException('Email уже занят');
 
+    // Если FOUNDER при создании сразу указал кастомную роль — проверим
+    // что она существует и активна. Без этой проверки в БД мог уехать
+    // мёртвый customRoleId (роль удалили / выключили).
+    let customRoleId: string | null = null;
+    if (dto.customRoleId) {
+      const role = await this.prisma.customRole.findUnique({
+        where: { id: dto.customRoleId },
+        select: { id: true, isActive: true },
+      });
+      if (!role) throw new BadRequestException('Кастомная роль не найдена');
+      if (!role.isActive) throw new BadRequestException('Кастомная роль отключена');
+      customRoleId = role.id;
+    }
+
     const password = await bcrypt.hash(rawPassword, 10);
     const user = await this.prisma.user.create({
-      data: { email, password, fullName: dto.fullName, role: dto.role },
-      select: { id: true, email: true, fullName: true, role: true, createdAt: true },
+      data: {
+        email, password, fullName: dto.fullName, role: dto.role,
+        customRoleId,
+      },
+      select: {
+        id: true, email: true, fullName: true, role: true, createdAt: true,
+        customRoleId: true,
+        customRole: { select: { id: true, name: true, isActive: true } },
+      },
     });
     return user;
   }

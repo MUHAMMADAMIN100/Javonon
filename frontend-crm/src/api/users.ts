@@ -8,7 +8,14 @@ export async function listUsers(search?: string) {
   return data;
 }
 
-export async function createUser(payload: { email: string; fullName: string; password: string; role: Role }) {
+export async function createUser(payload: {
+  email: string;
+  fullName: string;
+  password: string;
+  role: Role;
+  /** Опц.: сразу привязать кастомную роль (Настройки → Роли и доступы). */
+  customRoleId?: string | null;
+}) {
   const { data } = await api.post<User>('/users', payload);
   return data;
 }

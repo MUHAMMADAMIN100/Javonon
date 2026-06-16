@@ -4,7 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createUser, deleteUser, listUsers, updateUser } from '../api/users';
 import { ROLE_LABEL, type Role, type User } from '../api/types';
+import { listCustomRoles } from '../api/customRoles';
 import { useAuth } from '../store/auth';
+import { isFounder } from '../lib/roles';
 import { useUI } from '../ui/Dialogs';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, passwordRule, required, validateAll } from '../utils/validators';
 import ChangePasswordModal from '../components/ChangePasswordModal';
@@ -13,7 +15,12 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
-const EMPTY_FORM = { email: '', fullName: '', password: '', role: 'SALES_MANAGER' as Role };
+const EMPTY_FORM = {
+  email: '', fullName: '', password: '',
+  role: 'SALES_MANAGER' as Role,
+  // Кастомная роль (ТЗ-доработка). null = только базовая.
+  customRoleId: null as string | null,
+};
 
 export default function Users() {
   const me = useAuth((s) => s.user);
@@ -48,6 +55,16 @@ export default function Users() {
     queryFn: () => listUsers(debouncedSearch || undefined),
   });
   const items = usersQuery.data ?? [];
+
+  // Кастомные роли (Настройки → Роли и доступы). Доступны только FOUNDER'у
+  // на endpoint — для остальных просто пустой список (запрос вернёт 403,
+  // вгоняем в empty без ошибки UI).
+  const customRolesQuery = useQuery({
+    queryKey: ['custom-roles'],
+    queryFn: listCustomRoles,
+    enabled: !!me && isFounder(me),
+  });
+  const customRoles = (customRolesQuery.data || []).filter((r) => r.isActive);
 
   const createMut = useInvalidatingMutation({
     mutationFn: createUser,
@@ -288,16 +305,43 @@ export default function Users() {
 
               <div className="form-group" style={{ textAlign: 'left', marginBottom: 16 }}>
                 <label>Роль</label>
-                {/* ТЗ §2: 5 ролей. FOUNDER не доступен в обычном create —
-                    его раздаёт только FOUNDER в RolesEditor. */}
-                <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-                  <option value="ADMIN">Администратор</option>
-                  <option value="ACCOUNTANT">Бухгалтер</option>
-                  <option value="SALES_MANAGER">Менеджер по продажам</option>
-                  <option value="CLIENT_MANAGER">Клиентский менеджер</option>
+                {/* ТЗ §2: 5 базовых ролей + кастомные роли FOUNDER'а.
+                    Составное значение «base:X» / «custom:<id>» — чтобы
+                    одним dropdown'ом покрыть оба типа. */}
+                <select
+                  value={form.customRoleId ? `custom:${form.customRoleId}` : `base:${form.role}`}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v.startsWith('custom:')) {
+                      // Кастомная роль: базовая ставится «нейтральной»
+                      // (SALES_MANAGER — ничего лишнего сама по себе не
+                      // открывает), permissions берутся из CustomRole.
+                      setForm({ ...form, role: 'SALES_MANAGER', customRoleId: v.slice('custom:'.length) });
+                    } else {
+                      setForm({ ...form, role: v.slice('base:'.length) as Role, customRoleId: null });
+                    }
+                  }}
+                >
+                  <optgroup label="Базовые роли">
+                    <option value="base:ADMIN">Администратор</option>
+                    <option value="base:ACCOUNTANT">Бухгалтер</option>
+                    <option value="base:SALES_MANAGER">Менеджер по продажам</option>
+                    <option value="base:CLIENT_MANAGER">Клиентский менеджер</option>
+                  </optgroup>
+                  {customRoles.length > 0 && (
+                    <optgroup label="Кастомные роли">
+                      {customRoles.map((r) => (
+                        <option key={r.id} value={`custom:${r.id}`}>
+                          {r.name} ({r.permissions.length} доступов)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
-                  Дополнительные роли (мульти-доступ) назначаются после создания в карточке сотрудника.
+                  {customRoles.length === 0 && isFounder(me)
+                    ? 'Чтобы добавить свою роль — Настройки → Роли и доступы.'
+                    : 'Дополнительные роли назначаются после создания в карточке сотрудника.'}
                 </div>
               </div>
 

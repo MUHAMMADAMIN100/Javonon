@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { Role } from '@prisma/client';
 
@@ -30,4 +30,13 @@ export class CreateUserDto {
 
   @IsEnum(Role)
   role: Role;
+
+  // ТЗ-доработка: при создании сотрудника FOUNDER может сразу
+  // назначить ему кастомную роль (например «Таргетолог»). null/undefined =
+  // только базовая роль. UUID-проверка отсекает мусор; саму существенность
+  // и isActive проверяет service.
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  customRoleId?: string | null;
 }
