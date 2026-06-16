@@ -58,6 +58,7 @@ export function installTjLocalePatch(): void {
   Wrapped.prototype = OrigFmt.prototype;
   Wrapped.supportedLocalesOf = OrigFmt.supportedLocalesOf.bind(OrigFmt);
   (Wrapped as any).__tjPatched = true;
-  // @ts-expect-error — точно знаем что переопределяем именованный конструктор
-  Intl.DateTimeFormat = Wrapped;
+  // Переопределяем именованный конструктор в namespace Intl —
+  // приходится тегать as any, иначе TS считает свойство read-only.
+  (Intl as any).DateTimeFormat = Wrapped;
 }
