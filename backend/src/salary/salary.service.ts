@@ -69,7 +69,12 @@ export class SalaryService {
     const hours = time.workedMinutes / 60;
     const baseAmount = baseSalary > 0 ? baseSalary : hourlyRate * hours;
     // Штрафы берутся из таблицы Penalty (auto-cron) — fairness.
-    const penalties = await this.penaltiesSvc.pendingTotalForUser(userId, periodStart, periodEnd);
+    // По ТЗ §5: штраф за опоздание попадает в зарплату ТОЛЬКО если
+    // FOUNDER не одобрил причину. PENDING (ждёт решения) и APPROVED
+    // не вычитаются — но показываем их отдельными строками в превью,
+    // чтобы было видно «висит на рассмотрении ещё X TJS».
+    const eff = await this.penaltiesSvc.effectivePenaltiesForUser(userId, periodStart, periodEnd);
+    const penalties = eff.effective;
 
     const net = baseAmount + bonusAmount + kpiBonus - penalties;
 
@@ -86,6 +91,8 @@ export class SalaryService {
       bonusPercent,
       kpiBonus: round(kpiBonus),
       penalties: round(penalties),
+      penaltiesPending: round(eff.pending),
+      penaltiesExcused: round(eff.excused),
       netAmount: round(net),
       currency: 'TJS',
     };
@@ -150,8 +157,14 @@ export class SalaryService {
       },
       include: { user: { select: { id: true, fullName: true, role: true } } },
     });
-    // Помечаем штрафы как учтённые
-    await this.penaltiesSvc.markApplied(dto.userId, start, end);
+    // Помечаем applied ТОЛЬКО те штрафы, которые реально вошли в
+    // netAmount. Pending/excused оставляем — они либо станут REJECTED
+    // (тогда учтутся в следующей зарплате), либо умрут.
+    const eff = await this.penaltiesSvc.effectivePenaltiesForUser(dto.userId, start, end);
+    const effectiveIds = eff.items
+      .filter((i: any) => i.excuseStatus !== 'PENDING' && i.excuseStatus !== 'APPROVED')
+      .map((i: any) => i.id as string);
+    await this.penaltiesSvc.markApplied(dto.userId, start, end, effectiveIds);
     return record;
   }
 

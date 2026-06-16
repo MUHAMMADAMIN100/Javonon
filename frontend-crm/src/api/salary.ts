@@ -36,6 +36,10 @@ export interface SalaryPreview {
   bonusPercent: number;
   kpiBonus: number;
   penalties: number;
+  /** Штрафы по причинам на рассмотрении основателя (не вычитаются). */
+  penaltiesPending?: number;
+  /** Штрафы по одобренным причинам (отменены, не вычитаются). */
+  penaltiesExcused?: number;
   netAmount: number;
   currency: string;
   overtimeMinutes?: number;

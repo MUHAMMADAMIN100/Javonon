@@ -191,21 +191,93 @@ export class PenaltiesService {
     return { created, excused, pending, scanned: entries.length };
   }
 
-  /** Сумма неучтённых штрафов за период (для зарплатного расчёта). */
+  /** Сумма неучтённых штрафов за период (для зарплатного расчёта).
+   *  Legacy — оставлен для backward compat. Новый код должен звать
+   *  effectivePenaltiesForUser, который учитывает статус причины. */
   async pendingTotalForUser(userId: string, from: Date, to: Date) {
-    const agg = await this.prisma.penalty.aggregate({
-      where: {
-        userId,
-        applied: false,
-        date: { gte: from, lte: to },
-      },
-      _sum: { amount: true },
-    });
-    return agg._sum.amount || 0;
+    const eff = await this.effectivePenaltiesForUser(userId, from, to);
+    return eff.effective;
   }
 
-  /** Помечает штрафы как учтённые (после создания SalaryRecord). */
-  async markApplied(userId: string, from: Date, to: Date) {
+  /**
+   * Возвращает разбивку штрафов за период с учётом статуса
+   * причины опоздания (lateExcuseStatus):
+   *   - effective — реально вычитается из зарплаты (нет причины, или
+   *     REJECTED, или не LATE_ARRIVAL)
+   *   - pending — основатель ещё не разобрал причину (не вычитается)
+   *   - excused — основатель одобрил причину (не вычитается)
+   *
+   *  По ТЗ §5: штраф за опоздание идёт в зарплату ТОЛЬКО если
+   *  основатель не одобрил причину. До решения — не списываем.
+   */
+  async effectivePenaltiesForUser(userId: string, from: Date, to: Date) {
+    const penalties = await this.prisma.penalty.findMany({
+      where: { userId, applied: false, date: { gte: from, lte: to } },
+      orderBy: { date: 'asc' },
+    });
+    if (penalties.length === 0) {
+      return { effective: 0, pending: 0, excused: 0, items: [] as Array<any> };
+    }
+    // Подтянем TimeEntries за этот же период, чтобы понять статус
+    // причины. Жмём в один запрос для всех дней.
+    const entries = await this.prisma.timeEntry.findMany({
+      where: {
+        userId,
+        clockIn: { gte: from, lte: to },
+        lateMinutes: { gte: LATE_THRESHOLD_MIN },
+      },
+      select: { clockIn: true, lateExcuseStatus: true },
+    });
+    // Ключ — день в Asia/Dushanbe (penalty.date хранится setHours(0,0,0,0)
+    // в локальной TZ сервера; entry.clockIn — реальный приход).
+    // Берём «лучший» статус для юзера (APPROVED > PENDING > REJECTED > null).
+    const STATUS_PRIORITY: Record<string, number> = {
+      APPROVED: 3, PENDING: 2, REJECTED: 1,
+    };
+    const byDay = new Map<string, string | null>();
+    for (const e of entries) {
+      const day = localDay(e.clockIn);
+      const cur = byDay.get(day) ?? null;
+      const next = e.lateExcuseStatus as string | null;
+      const curRank = cur ? STATUS_PRIORITY[cur] ?? 0 : 0;
+      const nextRank = next ? STATUS_PRIORITY[next] ?? 0 : 0;
+      if (nextRank > curRank) byDay.set(day, next);
+      else if (!byDay.has(day)) byDay.set(day, next);
+    }
+    let effective = 0;
+    let pending = 0;
+    let excused = 0;
+    const items: Array<any> = [];
+    for (const p of penalties) {
+      let excuseStatus: string | null = null;
+      if (p.reason === 'LATE_ARRIVAL') {
+        excuseStatus = byDay.get(localDay(p.date)) ?? null;
+      }
+      if (excuseStatus === 'APPROVED') {
+        excused += p.amount;
+        items.push({ ...p, excuseStatus });
+      } else if (excuseStatus === 'PENDING') {
+        pending += p.amount;
+        items.push({ ...p, excuseStatus });
+      } else {
+        effective += p.amount;
+        items.push({ ...p, excuseStatus });
+      }
+    }
+    return { effective, pending, excused, items };
+  }
+
+  /** Помечает штрафы как учтённые (после создания SalaryRecord).
+   *  Если переданы ids — помечает ТОЛЬКО их (используется чтобы
+   *  не помечать pending/excused, которые не вошли в netAmount). */
+  async markApplied(userId: string, from: Date, to: Date, ids?: string[]) {
+    if (ids !== undefined) {
+      if (ids.length === 0) return { count: 0 };
+      return this.prisma.penalty.updateMany({
+        where: { id: { in: ids }, userId, applied: false },
+        data: { applied: true },
+      });
+    }
     return this.prisma.penalty.updateMany({
       where: {
         userId,
@@ -215,4 +287,10 @@ export class PenaltiesService {
       data: { applied: true },
     });
   }
+}
+
+/** YYYY-MM-DD в Asia/Dushanbe — единственный источник «дня» во всём
+ *  расчёте штрафов. Иначе toISOString() ломается на границе суток UTC. */
+function localDay(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dushanbe' }).format(d);
 }

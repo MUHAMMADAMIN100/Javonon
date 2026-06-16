@@ -211,7 +211,27 @@ export default function Salary() {
                 sub={`Продажи: ${fmtMoney(preview.salesAmount)}`}
               />
               <PreviewCell label="KPI" value={fmtMoney(preview.kpiBonus)} />
-              <PreviewCell label="Штрафы" value={`− ${fmtMoney(preview.penalties)}`} negative={preview.penalties > 0} />
+              <PreviewCell
+                label="Штрафы"
+                value={`− ${fmtMoney(preview.penalties)}`}
+                negative={preview.penalties > 0}
+                sub={
+                  // По ТЗ §5 — штраф за опоздание попадает в зп только
+                  // если основатель НЕ одобрил причину. Показываем что
+                  // ещё висит на рассмотрении / уже отменено, чтобы
+                  // основатель видел «откуда взялась эта сумма».
+                  preview.penaltiesPending || preview.penaltiesExcused
+                    ? [
+                        preview.penaltiesPending
+                          ? `На рассмотрении: ${fmtMoney(preview.penaltiesPending)}`
+                          : null,
+                        preview.penaltiesExcused
+                          ? `Одобрено: ${fmtMoney(preview.penaltiesExcused)}`
+                          : null,
+                      ].filter(Boolean).join(' · ')
+                    : undefined
+                }
+              />
             </div>
             <div style={{
               borderTop: '1px solid var(--border)',
