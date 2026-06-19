@@ -676,4 +676,70 @@ export class UsersService {
     });
     return updated;
   }
+
+  /**
+   * Массовое чтение зарплатных полей — для вкладки «Зарплата» в /settings.
+   * FOUNDER видит всех сотрудников + их baseSalary/hourlyRate/bonusPercent/
+   * overtimeMultiplier. FOUNDER исключаем — у него своя оплата вне системы.
+   */
+  async listSalarySettings() {
+    return this.prisma.user.findMany({
+      where: { role: { not: 'FOUNDER' as any } },
+      orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
+      select: {
+        id: true, fullName: true, email: true, role: true,
+        baseSalary: true, hourlyRate: true, bonusPercent: true,
+        overtimeMultiplier: true,
+        customRole: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  /** Точечная правка зарплатных полей. FOUNDER-only через гард на
+   *  controller. Все поля опц. — отправляются только те что меняются. */
+  async updateSalary(targetId: string, dto: {
+    baseSalary?: number;
+    hourlyRate?: number;
+    bonusPercent?: number;
+    overtimeMultiplier?: number;
+  }) {
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, role: true, roles: true },
+    });
+    if (!target) throw new NotFoundException('Пользователь не найден');
+    if (isFounder(target as any)) {
+      throw new BadRequestException('Зарплату FOUNDER нельзя редактировать через систему');
+    }
+
+    const num = (v: any, name: string, max: number) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) throw new BadRequestException(`${name}: должно быть числом`);
+      if (n < 0) throw new BadRequestException(`${name}: не может быть отрицательным`);
+      if (n > max) throw new BadRequestException(`${name}: слишком большое значение (макс. ${max})`);
+      return n;
+    };
+
+    const data: any = {};
+    if (dto.baseSalary !== undefined) data.baseSalary = num(dto.baseSalary, 'baseSalary', 1_000_000);
+    if (dto.hourlyRate !== undefined) data.hourlyRate = num(dto.hourlyRate, 'hourlyRate', 100_000);
+    if (dto.bonusPercent !== undefined) {
+      const p = num(dto.bonusPercent, 'bonusPercent', 100);
+      data.bonusPercent = p;
+    }
+    if (dto.overtimeMultiplier !== undefined) {
+      const m = num(dto.overtimeMultiplier, 'overtimeMultiplier', 10);
+      data.overtimeMultiplier = m;
+    }
+
+    return this.prisma.user.update({
+      where: { id: targetId },
+      data,
+      select: {
+        id: true, fullName: true, email: true, role: true,
+        baseSalary: true, hourlyRate: true, bonusPercent: true,
+        overtimeMultiplier: true,
+      },
+    });
+  }
 }

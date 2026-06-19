@@ -442,6 +442,137 @@ export class SettingsService {
     };
   }
 
+  // ===== Bonus Tiers (тарифная сетка комиссии) =====
+
+  /** Список этапов комиссионной сетки, упорядочен по minAmount. */
+  async listBonusTiers() {
+    return this.prisma.bonusTier.findMany({
+      orderBy: [{ order: 'asc' }, { minAmount: 'asc' }],
+    });
+  }
+
+  /** Подставить дефолтные 5 этапов (ТЗ) если таблица пустая.
+   *  Безопасно вызывать многократно — после первого create уже не пусто. */
+  async seedBonusTiersIfEmpty() {
+    const count = await this.prisma.bonusTier.count();
+    if (count > 0) return { seeded: 0 };
+    const DEFAULT: Array<{ minAmount: number; maxAmount: number | null; percent: number; order: number; comment: string }> = [
+      { minAmount: 0,       maxAmount: 49990,   percent: 4, order: 1, comment: 'Этап 1' },
+      { minAmount: 50000,   maxAmount: 99990,   percent: 5, order: 2, comment: 'Этап 2' },
+      { minAmount: 100000,  maxAmount: 149990,  percent: 6, order: 3, comment: 'Этап 3' },
+      { minAmount: 150000,  maxAmount: 199990,  percent: 7, order: 4, comment: 'Этап 4' },
+      { minAmount: 200000,  maxAmount: null,    percent: 8, order: 5, comment: 'Этап 5 (и выше)' },
+    ];
+    await this.prisma.bonusTier.createMany({
+      data: DEFAULT.map((d) => ({ ...d, currency: 'TJS', isActive: true })),
+    });
+    return { seeded: DEFAULT.length };
+  }
+
+  async createBonusTier(data: {
+    minAmount: number;
+    maxAmount?: number | null;
+    percent: number;
+    order?: number;
+    comment?: string;
+  }) {
+    const clean = this.validateBonusTierFields(data);
+    return this.prisma.bonusTier.create({
+      data: {
+        minAmount: clean.min,
+        maxAmount: clean.max,
+        percent: clean.percent,
+        order: clean.order,
+        comment: clean.comment,
+      },
+    });
+  }
+
+  async updateBonusTier(
+    id: string,
+    patch: {
+      minAmount?: number;
+      maxAmount?: number | null;
+      percent?: number;
+      order?: number;
+      isActive?: boolean;
+      comment?: string;
+    },
+  ) {
+    const exists = await this.prisma.bonusTier.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException('Этап не найден');
+    const merged = {
+      minAmount: patch.minAmount ?? exists.minAmount,
+      maxAmount: patch.maxAmount !== undefined ? patch.maxAmount : exists.maxAmount,
+      percent: patch.percent ?? exists.percent,
+      order: patch.order ?? exists.order,
+      comment: patch.comment ?? exists.comment ?? '',
+    };
+    const clean = this.validateBonusTierFields(merged);
+    return this.prisma.bonusTier.update({
+      where: { id },
+      data: {
+        ...(patch.minAmount !== undefined && { minAmount: clean.min }),
+        ...(patch.maxAmount !== undefined && { maxAmount: clean.max }),
+        ...(patch.percent !== undefined && { percent: clean.percent }),
+        ...(patch.order !== undefined && { order: clean.order }),
+        ...(patch.isActive !== undefined && { isActive: patch.isActive }),
+        ...(patch.comment !== undefined && { comment: clean.comment }),
+      },
+    });
+  }
+
+  async deleteBonusTier(id: string) {
+    await this.prisma.bonusTier.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  private validateBonusTierFields(data: {
+    minAmount?: number;
+    maxAmount?: number | null;
+    percent?: number;
+    order?: number;
+    comment?: string;
+  }) {
+    const min = Number(data.minAmount);
+    if (!Number.isFinite(min) || min < 0) throw new BadRequestException('minAmount ≥ 0');
+    if (min > 1e9) throw new BadRequestException('minAmount слишком большой');
+    let max: number | null = null;
+    if (data.maxAmount !== undefined && data.maxAmount !== null) {
+      max = Number(data.maxAmount);
+      if (!Number.isFinite(max) || max <= min) {
+        throw new BadRequestException('maxAmount должен быть > minAmount');
+      }
+      if (max > 1e10) throw new BadRequestException('maxAmount слишком большой');
+    }
+    const percent = Number(data.percent);
+    if (!Number.isFinite(percent) || percent < 0) throw new BadRequestException('percent ≥ 0');
+    if (percent > 100) throw new BadRequestException('percent не может быть > 100');
+    const order = Math.floor(Number(data.order ?? 0));
+    const commentRaw = (data.comment || '').trim();
+    if (commentRaw.length > 200) throw new BadRequestException('comment слишком длинный (макс. 200)');
+    if (/[<>]/.test(commentRaw)) throw new BadRequestException('comment не должен содержать HTML-теги');
+    return { min, max, percent, order, comment: commentRaw || null };
+  }
+
+  /** Найти этап для конкретной суммы продаж. Возвращает null если сетка
+   *  пустая или сумма не попадает ни в один активный этап. Используется
+   *  salary.service.preview для расчёта bonusAmount.
+   *  Flat-per-tier: первый активный этап с min ≤ sales и (max=null или
+   *  sales < max). Порядок сортировки — по убыванию minAmount, чтобы для
+   *  «200 000+» правильно срабатывал этап без верхней границы. */
+  async findBonusTierForAmount(amount: number) {
+    if (!Number.isFinite(amount) || amount < 0) return null;
+    const tiers = await this.prisma.bonusTier.findMany({
+      where: { isActive: true },
+      orderBy: { minAmount: 'desc' },
+    });
+    return tiers.find((t) =>
+      amount >= t.minAmount &&
+      (t.maxAmount === null || amount < t.maxAmount),
+    ) || null;
+  }
+
   /**
    * Дистанция в метрах между двумя точками (haversine). Используется
    * time-tracking для проверки радиуса при clock-in.

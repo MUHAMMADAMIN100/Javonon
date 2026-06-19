@@ -95,6 +95,55 @@ export const updateLocation = (id: string, patch: Partial<WorkLocation>) =>
 export const deleteLocation = (id: string) =>
   api.delete(`/settings/work-locations/${id}`).then((r) => r.data);
 
+// --- Bonus Tiers (тарифная сетка комиссии) ---
+
+export interface BonusTier {
+  id: string;
+  minAmount: number;
+  maxAmount: number | null;
+  percent: number;
+  currency: string;
+  order: number;
+  isActive: boolean;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const listBonusTiers = () =>
+  api.get<BonusTier[]>('/settings/bonus-tiers').then((r) => r.data);
+
+export const createBonusTier = (data: Partial<BonusTier>) =>
+  api.post<BonusTier>('/settings/bonus-tiers', data).then((r) => r.data);
+
+export const updateBonusTier = (id: string, patch: Partial<BonusTier>) =>
+  api.patch<BonusTier>(`/settings/bonus-tiers/${id}`, patch).then((r) => r.data);
+
+export const deleteBonusTier = (id: string) =>
+  api.delete(`/settings/bonus-tiers/${id}`).then((r) => r.data);
+
+// --- Salary settings (table of all employees) ---
+
+export interface UserSalarySettings {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  baseSalary: number | null;
+  hourlyRate: number | null;
+  bonusPercent: number | null;
+  overtimeMultiplier: number | null;
+  customRole?: { id: string; name: string } | null;
+}
+
+export const listSalarySettings = () =>
+  api.get<UserSalarySettings[]>('/users/salary/list').then((r) => r.data);
+
+export const updateUserSalary = (
+  userId: string,
+  patch: { baseSalary?: number; hourlyRate?: number; bonusPercent?: number; overtimeMultiplier?: number },
+) => api.patch<UserSalarySettings>(`/users/${userId}/salary`, patch).then((r) => r.data);
+
 // --- Helpers ---
 export function minutesToHHMM(m: number): string {
   const h = Math.floor(m / 60);

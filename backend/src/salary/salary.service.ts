@@ -2,7 +2,13 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeTrackingService } from '../time-tracking/time-tracking.service';
 import { PenaltiesService } from '../penalties/penalties.service';
+import { SettingsService } from '../settings/settings.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+
+// Сколько рабочих часов в «нормальном» месяце (для расчёта почасовой
+// ставки сотрудника, у которого задан только baseSalary). ТЗ §3:
+// 5 дней × 8 часов × ~4 недели ≈ 160 часов.
+const STANDARD_MONTH_HOURS = 160;
 
 @Injectable()
 export class SalaryService {
@@ -10,6 +16,7 @@ export class SalaryService {
     private prisma: PrismaService,
     private timeSvc: TimeTrackingService,
     private penaltiesSvc: PenaltiesService,
+    private settings: SettingsService,
   ) {}
 
   async list(filters: { userId?: string; from?: Date; to?: Date }) {
@@ -61,7 +68,22 @@ export class SalaryService {
       _sum: { amount: true },
     });
     const salesAmount = salesAgg._sum.amount || 0;
-    const bonusPercent = user.bonusPercent || 0;
+    // ТЗ-доработка: комиссия по тарифной сетке BonusTier (Настройки →
+    // Зарплата). Flat-per-tier: сумма продаж попадает в этап, его
+    // процент применяется ко всей сумме. Персональный bonusPercent у
+    // юзера, если > 0, перебивает сетку (ручной override).
+    const personalPct = user.bonusPercent || 0;
+    let bonusPercent = personalPct;
+    let bonusTierId: string | null = null;
+    let bonusTierComment: string | null = null;
+    if (personalPct <= 0) {
+      const tier = await this.settings.findBonusTierForAmount(salesAmount);
+      if (tier) {
+        bonusPercent = tier.percent;
+        bonusTierId = tier.id;
+        bonusTierComment = tier.comment || null;
+      }
+    }
     const bonusAmount = (salesAmount * bonusPercent) / 100;
 
     const baseSalary = user.baseSalary || 0;
@@ -69,6 +91,18 @@ export class SalaryService {
     // Итоговая базовая ставка: либо фикс., либо почасовая.
     const hours = time.workedMinutes / 60;
     const baseAmount = baseSalary > 0 ? baseSalary : hourlyRate * hours;
+
+    // ТЗ-доработка: оплата переработки. overtimeMinutes пишется в TimeEntry
+    // при clockOut (см. time-tracking.service). Если у юзера задана
+    // hourlyRate — используем её; иначе берём базовую / STANDARD_MONTH_HOURS.
+    // Множитель overtimeMultiplier по умолч. 1.5 (FOUNDER может изменить).
+    const effectiveHourlyRate = hourlyRate > 0
+      ? hourlyRate
+      : (baseSalary > 0 ? baseSalary / STANDARD_MONTH_HOURS : 0);
+    const overtimeMultiplier = (user as any).overtimeMultiplier ?? 1.5;
+    const overtimeMinutes = (time as any).overtimeMinutes || 0;
+    const overtimePay = (overtimeMinutes / 60) * effectiveHourlyRate * overtimeMultiplier;
+
     // Штрафы берутся из таблицы Penalty (auto-cron) — fairness.
     // По ТЗ §5: штраф за опоздание попадает в зарплату ТОЛЬКО если
     // FOUNDER не одобрил причину. PENDING (ждёт решения) и APPROVED
@@ -77,7 +111,7 @@ export class SalaryService {
     const eff = await this.penaltiesSvc.effectivePenaltiesForUser(userId, periodStart, periodEnd);
     const penalties = eff.effective;
 
-    const net = baseAmount + bonusAmount + kpiBonus - penalties;
+    const net = baseAmount + bonusAmount + kpiBonus + overtimePay - penalties;
 
     return {
       userId,
@@ -86,10 +120,15 @@ export class SalaryService {
       periodEnd,
       workedMinutes: time.workedMinutes,
       lateMinutes: time.lateMinutes,
+      overtimeMinutes,
       baseAmount: round(baseAmount),
       salesAmount: round(salesAmount),
       bonusAmount: round(bonusAmount),
       bonusPercent,
+      bonusTierId,
+      bonusTierComment,
+      overtimePay: round(overtimePay),
+      overtimeMultiplier,
       kpiBonus: round(kpiBonus),
       penalties: round(penalties),
       penaltiesPending: round(eff.pending),
@@ -149,9 +188,11 @@ export class SalaryService {
         periodEnd: end,
         workedMinutes: preview.workedMinutes,
         lateMinutes: preview.lateMinutes,
+        overtimeMinutes: preview.overtimeMinutes || 0,
         baseAmount: preview.baseAmount,
         salesAmount: preview.salesAmount,
         bonusAmount: preview.bonusAmount,
+        overtimePay: preview.overtimePay || 0,
         kpiBonus: preview.kpiBonus,
         penalties: preview.penalties,
         netAmount: preview.netAmount,

@@ -6,6 +6,8 @@ import { useUI } from '../ui/Dialogs';
 import {
   type PenaltyRule,
   type WorkLocation,
+  type BonusTier,
+  type UserSalarySettings,
   listPenaltyRules,
   createPenaltyRule,
   updatePenaltyRule,
@@ -13,6 +15,12 @@ import {
   getActiveLocation,
   createLocation,
   updateLocation,
+  listBonusTiers,
+  createBonusTier,
+  updateBonusTier,
+  deleteBonusTier,
+  listSalarySettings,
+  updateUserSalary,
 } from '../api/settings';
 import {
   type CustomRole,
@@ -25,7 +33,7 @@ import {
 } from '../api/customRoles';
 import ScheduleEditor from '../components/ScheduleEditor';
 
-type Tab = 'schedule' | 'penalties' | 'location' | 'roles';
+type Tab = 'schedule' | 'penalties' | 'location' | 'roles' | 'salary';
 
 export default function Settings() {
   const me = useAuth((s) => s.user);
@@ -59,12 +67,14 @@ export default function Settings() {
           <TabButton active={tab === 'penalties'} onClick={() => setTab('penalties')} label="Штрафы" />
           <TabButton active={tab === 'location'} onClick={() => setTab('location')} label="Гео-зона" />
           <TabButton active={tab === 'roles'} onClick={() => setTab('roles')} label="Роли и доступы" />
+          <TabButton active={tab === 'salary'} onClick={() => setTab('salary')} label="Зарплата" />
         </div>
         <div style={{ padding: 24 }}>
           {tab === 'schedule' && <ScheduleTab />}
           {tab === 'penalties' && <PenaltiesTab />}
           {tab === 'location' && <LocationTab />}
           {tab === 'roles' && <RolesTab />}
+          {tab === 'salary' && <SalaryTab />}
         </div>
       </div>
     </>
@@ -508,6 +518,277 @@ function RoleForm({
         <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
           {saving ? 'Сохраняем…' : (initial ? 'Сохранить' : 'Создать роль')}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ===== Зарплата (базовые ставки + тарифная сетка комиссии) =====
+
+function SalaryTab() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+      <SalaryRosterSection />
+      <BonusTiersSection />
+    </div>
+  );
+}
+
+function SalaryRosterSection() {
+  const { toast } = useUI();
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ['salary-settings'],
+    queryFn: listSalarySettings,
+  });
+  const items = query.data ?? [];
+
+  // Локальные «черновики» полей по userId — чтобы можно было править
+  // несколько строк без авто-сохранения на каждый keystroke.
+  const [edits, setEdits] = useState<Record<string, Partial<UserSalarySettings>>>({});
+
+  const setField = (userId: string, field: keyof UserSalarySettings, value: any) => {
+    setEdits((e) => ({ ...e, [userId]: { ...e[userId], [field]: value } }));
+  };
+
+  const save = async (u: UserSalarySettings) => {
+    const patch = edits[u.id];
+    if (!patch || Object.keys(patch).length === 0) return;
+    try {
+      await updateUserSalary(u.id, {
+        baseSalary: patch.baseSalary === undefined ? undefined : Number(patch.baseSalary),
+        hourlyRate: patch.hourlyRate === undefined ? undefined : Number(patch.hourlyRate),
+        bonusPercent: patch.bonusPercent === undefined ? undefined : Number(patch.bonusPercent),
+        overtimeMultiplier: patch.overtimeMultiplier === undefined ? undefined : Number(patch.overtimeMultiplier),
+      });
+      toast(`Зарплата ${u.fullName} обновлена`, 'success');
+      setEdits((e) => {
+        const { [u.id]: _omit, ...rest } = e;
+        return rest;
+      });
+      qc.invalidateQueries({ queryKey: ['salary-settings'] });
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
+  };
+
+  return (
+    <div>
+      <h3 style={{
+        fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 6,
+      }}>
+        Базовые ставки сотрудников
+      </h3>
+      <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12 }}>
+        Оклад, почасовая ставка, ручной % комиссии (перебивает сетку) и множитель
+        переработки. Изменения применяются к следующей зарплате — уже выплаченные
+        не пересчитываются.
+      </p>
+      <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+        <table className="table" style={{ width: '100%', minWidth: 880 }}>
+          <thead>
+            <tr>
+              <th>Сотрудник</th>
+              <th>Оклад (TJS/мес)</th>
+              <th>Почасовая (TJS/ч)</th>
+              <th>Бонус % (override)</th>
+              <th>× переработка</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {query.isLoading && (
+              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>Загружаем…</td></tr>
+            )}
+            {!query.isLoading && items.length === 0 && (
+              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>Сотрудников нет</td></tr>
+            )}
+            {items.map((u) => {
+              const patch = edits[u.id] || {};
+              const has = (k: keyof UserSalarySettings) => k in patch;
+              const val = (k: keyof UserSalarySettings, fallback: any) =>
+                has(k) ? (patch[k] ?? '') : (fallback ?? '');
+              const dirty = Object.keys(patch).length > 0;
+              return (
+                <tr key={u.id}>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{u.fullName}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>
+                      {u.customRole?.name || u.role}
+                    </div>
+                  </td>
+                  <td>
+                    <input
+                      type="number" min={0} step={50}
+                      value={val('baseSalary', u.baseSalary) as any}
+                      onChange={(e) => setField(u.id, 'baseSalary', e.target.value)}
+                      style={{ width: 110 }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number" min={0} step={1}
+                      value={val('hourlyRate', u.hourlyRate) as any}
+                      onChange={(e) => setField(u.id, 'hourlyRate', e.target.value)}
+                      style={{ width: 90 }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number" min={0} max={100} step={0.5}
+                      value={val('bonusPercent', u.bonusPercent) as any}
+                      onChange={(e) => setField(u.id, 'bonusPercent', e.target.value)}
+                      style={{ width: 80 }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number" min={1} max={5} step={0.1}
+                      value={val('overtimeMultiplier', u.overtimeMultiplier ?? 1.5) as any}
+                      onChange={(e) => setField(u.id, 'overtimeMultiplier', e.target.value)}
+                      style={{ width: 70 }}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => save(u)}
+                      disabled={!dirty}
+                    >
+                      Сохранить
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function BonusTiersSection() {
+  const { toast, confirm } = useUI();
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ['bonus-tiers'],
+    queryFn: listBonusTiers,
+  });
+  const tiers = query.data ?? [];
+
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+  const [percent, setPercent] = useState('');
+  const [comment, setComment] = useState('');
+
+  const add = async () => {
+    try {
+      await createBonusTier({
+        minAmount: parseFloat(minAmount),
+        maxAmount: maxAmount === '' ? null : parseFloat(maxAmount),
+        percent: parseFloat(percent),
+        order: tiers.length + 1,
+        comment: comment || undefined,
+      });
+      setMinAmount(''); setMaxAmount(''); setPercent(''); setComment('');
+      qc.invalidateQueries({ queryKey: ['bonus-tiers'] });
+      toast('Этап добавлен', 'success');
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
+  };
+
+  const remove = async (t: BonusTier) => {
+    const ok = await confirm({
+      title: 'Удалить этап?',
+      message: `${t.minAmount} - ${t.maxAmount ?? '∞'} TJS → ${t.percent}%`,
+      danger: true,
+      confirmText: 'Удалить',
+    });
+    if (!ok) return;
+    await deleteBonusTier(t.id);
+    qc.invalidateQueries({ queryKey: ['bonus-tiers'] });
+  };
+
+  const toggleActive = async (t: BonusTier) => {
+    await updateBonusTier(t.id, { isActive: !t.isActive });
+    qc.invalidateQueries({ queryKey: ['bonus-tiers'] });
+  };
+
+  return (
+    <div>
+      <h3 style={{
+        fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 6,
+      }}>
+        Комиссионное вознаграждение (тарифная сетка)
+      </h3>
+      <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 16 }}>
+        Сумма продаж сотрудника за период попадает в один этап — его процент
+        применяется ко всей сумме (flat-per-tier). Если у сотрудника указан
+        ручной бонус % (см. таблицу выше) — он перебивает сетку.
+      </p>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+        gap: 8, marginBottom: 16, padding: 12,
+        border: '1px solid var(--border-soft)', borderRadius: 10,
+        background: 'var(--bg-soft)',
+      }}>
+        <Field label="От, TJS">
+          <input type="number" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+        </Field>
+        <Field label="До, TJS (пусто = ∞)">
+          <input type="number" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+        </Field>
+        <Field label="Процент %">
+          <input type="number" step="0.1" value={percent} onChange={(e) => setPercent(e.target.value)} />
+        </Field>
+        <Field label="Комментарий">
+          <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="например: Этап 3" />
+        </Field>
+        <button
+          className="btn btn-sm btn-primary"
+          onClick={add}
+          style={{ alignSelf: 'flex-end' }}
+          disabled={!minAmount || !percent}
+        >
+          Добавить этап
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {tiers.length === 0 && (
+          <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>
+            Сетка пустая — при первой загрузке создадутся дефолтные 5 этапов из ТЗ.
+          </div>
+        )}
+        {tiers.map((t) => (
+          <div
+            key={t.id}
+            style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '8px 14px', border: '1px solid var(--border)', borderRadius: 8,
+              opacity: t.isActive ? 1 : 0.5,
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 500 }}>
+                {t.minAmount.toLocaleString('ru-RU')} - {t.maxAmount === null ? '∞' : t.maxAmount.toLocaleString('ru-RU')} {t.currency}
+                {' → '}
+                <b>{t.percent}%</b>
+              </div>
+              {t.comment && (
+                <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{t.comment}</div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-sm btn-secondary" onClick={() => toggleActive(t)}>
+                {t.isActive ? 'Выкл' : 'Вкл'}
+              </button>
+              <button className="btn btn-sm btn-danger" onClick={() => remove(t)}>Удалить</button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

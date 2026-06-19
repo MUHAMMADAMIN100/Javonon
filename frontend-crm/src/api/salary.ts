@@ -43,6 +43,12 @@ export interface SalaryPreview {
   netAmount: number;
   currency: string;
   overtimeMinutes?: number;
+  /** Доплата за переработку (overtimeMinutes × hourlyRate × multiplier). */
+  overtimePay?: number;
+  overtimeMultiplier?: number;
+  /** Какой этап тарифной сетки применился (если bonusPercent не override). */
+  bonusTierId?: string | null;
+  bonusTierComment?: string | null;
 }
 
 export const listSalaries = (params?: { userId?: string; from?: string; to?: string }) =>

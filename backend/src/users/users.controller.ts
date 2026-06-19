@@ -255,4 +255,23 @@ export class UsersController {
     }
     return this.users.setCustomRole(id, cid);
   }
+
+  // ===== Зарплатные настройки (ТЗ-доработка) =====
+
+  /** Список всех сотрудников + их зарплатные поля. FOUNDER-only. */
+  @Get('salary/list')
+  @Roles(Role.FOUNDER)
+  listSalarySettings() {
+    return this.users.listSalarySettings();
+  }
+
+  /** Точечная правка зарплатных полей. FOUNDER-only. */
+  @Patch(':id/salary')
+  @Roles(Role.FOUNDER)
+  updateSalary(
+    @Param('id') id: string,
+    @Body() body: { baseSalary?: number; hourlyRate?: number; bonusPercent?: number; overtimeMultiplier?: number },
+  ) {
+    return this.users.updateSalary(id, body);
+  }
 }

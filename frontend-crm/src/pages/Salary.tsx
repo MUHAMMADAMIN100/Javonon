@@ -210,9 +210,18 @@ export default function Salary() {
               <PreviewCell
                 label={`Бонус · ${preview.bonusPercent}% от продаж`}
                 value={fmtMoney(preview.bonusAmount)}
-                sub={`Продажи: ${fmtMoney(preview.salesAmount)}`}
+                sub={
+                  preview.bonusTierId
+                    ? `Этап${preview.bonusTierComment ? ` «${preview.bonusTierComment}»` : ''} · ${fmtMoney(preview.salesAmount)}`
+                    : `Продажи: ${fmtMoney(preview.salesAmount)}`
+                }
               />
               <PreviewCell label="KPI" value={fmtMoney(preview.kpiBonus)} />
+              <PreviewCell
+                label={`Переработка${preview.overtimeMultiplier ? ` · ×${preview.overtimeMultiplier}` : ''}`}
+                value={preview.overtimePay ? `+ ${fmtMoney(preview.overtimePay)}` : '—'}
+                sub={preview.overtimeMinutes ? `${preview.overtimeMinutes} мин` : undefined}
+              />
               <PreviewCell
                 label="Штрафы"
                 value={`− ${fmtMoney(preview.penalties)}`}

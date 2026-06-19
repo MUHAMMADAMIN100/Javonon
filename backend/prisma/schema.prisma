@@ -134,7 +134,12 @@ model User {
   baseSalary Float?   @default(0)
   hourlyRate Float?   @default(0)
   // Процент от продажи клиента, привязанного к этому менеджеру (бонусный %).
+  // Если > 0 — перебивает тарифную сетку BonusTier (ручной override
+  // для отдельных сотрудников). 0 (по умолч.) = считаем по сетке.
   bonusPercent Float? @default(0)
+  // Множитель оплаты за переработку (overtimeMinutes × hourlyRate × multiplier).
+  // По умолчанию 1.5 — стандартная мировая практика «полтора часа за час».
+  overtimeMultiplier Float? @default(1.5)
   // Кастомная роль (FOUNDER создаёт через /settings → Роли).
   // null = работает только по базовым ролям (role + roles[]).
   // Если задана — пермиссии custom-роли ДОБАВЛЯЮТСЯ к базовым.
@@ -628,9 +633,11 @@ model SalaryRecord {
 
   workedMinutes Int      @default(0)   // отработано за период
   lateMinutes   Int      @default(0)   // суммарное опоздание
+  overtimeMinutes Int    @default(0)   // суммарная переработка (ТЗ-доработка)
   baseAmount    Float    @default(0)   // базовая ставка за период
   salesAmount   Float    @default(0)   // сумма продаж клиентов менеджера
   bonusAmount   Float    @default(0)   // baseSalesAmount × bonusPercent
+  overtimePay   Float    @default(0)   // оплата переработки (ТЗ-доработка)
   kpiBonus      Float    @default(0)   // ручной бонус
   penalties     Float    @default(0)   // штрафы (за опоздания и т.п.)
   netAmount     Float    @default(0)   // итог к выплате
@@ -1213,6 +1220,29 @@ model PenaltyRule {
   updatedAt       DateTime @updatedAt
 
   @@index([isActive, minLateMinutes])
+}
+
+/// Тарифная сетка комиссионного вознаграждения (ТЗ-доработка).
+/// FOUNDER задаёт в Настройки → Зарплата. По умолчанию seed заливает
+/// 5 этапов: 0-49990→4%, 50000-99990→5%, 100000-149990→6%,
+/// 150000-199990→7%, 200000+→8%. Сумма продаж сотрудника за период
+/// попадает в один этап (flat-per-tier), и весь объём умножается на
+/// процент этого этапа. Если у юзера выставлен персональный
+/// bonusPercent > 0, он перебивает сетку.
+model BonusTier {
+  id           String   @id @default(uuid())
+  minAmount    Float    // нижняя граница (включительно)
+  maxAmount    Float?   // верхняя граница (исключительно). null = ∞
+  percent      Float    // процент от продаж
+  currency     String   @default("TJS")
+  order        Int      @default(0)
+  isActive     Boolean  @default(true)
+  comment      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, order])
+  @@index([isActive, minAmount])
 }
 
 // Рабочая локация (геозона). Сотрудник может нажать «Начать работу»

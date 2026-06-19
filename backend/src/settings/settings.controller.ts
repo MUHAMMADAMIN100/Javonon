@@ -126,4 +126,35 @@ export class SettingsController {
   deleteLocation(@Param('id') id: string) {
     return this.svc.deleteLocation(id);
   }
+
+  // ----- Bonus Tiers (тарифная сетка комиссии, ТЗ-доработка) -----
+
+  /** Список этапов — кому угодно (используется в Live Preview зарплаты).
+   *  При первом обращении лениво сидим дефолтные 5 этапов. */
+  @Get('bonus-tiers')
+  async listBonusTiers() {
+    await this.svc.seedBonusTiersIfEmpty();
+    return this.svc.listBonusTiers();
+  }
+
+  @Post('bonus-tiers')
+  @UseGuards(RolesGuard)
+  @Roles(Role.FOUNDER)
+  createBonusTier(@Body() body: any) {
+    return this.svc.createBonusTier(body);
+  }
+
+  @Patch('bonus-tiers/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.FOUNDER)
+  updateBonusTier(@Param('id') id: string, @Body() body: any) {
+    return this.svc.updateBonusTier(id, body);
+  }
+
+  @Delete('bonus-tiers/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.FOUNDER)
+  deleteBonusTier(@Param('id') id: string) {
+    return this.svc.deleteBonusTier(id);
+  }
 }

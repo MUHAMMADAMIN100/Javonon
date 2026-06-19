@@ -325,6 +325,7 @@ export class TimeTrackingService {
     });
     const workedMinutes = entries.reduce((s, e) => s + e.totalMinutes, 0);
     const lateMinutes = entries.reduce((s, e) => s + e.lateMinutes, 0);
-    return { workedMinutes, lateMinutes, days: entries.length };
+    const overtimeMinutes = entries.reduce((s, e) => s + (e.overtimeMinutes || 0), 0);
+    return { workedMinutes, lateMinutes, overtimeMinutes, days: entries.length };
   }
 }
