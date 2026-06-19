@@ -606,8 +606,15 @@ function SalaryRosterSection() {
             {items.map((u) => {
               const patch = edits[u.id] || {};
               const has = (k: keyof UserSalarySettings) => k in patch;
-              const val = (k: keyof UserSalarySettings, fallback: any) =>
-                has(k) ? (patch[k] ?? '') : (fallback ?? '');
+              /** Значение для input: если значение 0/null/undefined —
+               *  показываем пустую строку (placeholder отрисует "0").
+               *  Иначе курсор после "0" приводил к вводу "01500" вместо
+               *  "1500" — пользователь не мог стереть ведущий ноль. */
+              const val = (k: keyof UserSalarySettings, fallback: any) => {
+                const v = has(k) ? patch[k] : fallback;
+                if (v === null || v === undefined || v === 0 || v === '0') return '';
+                return v;
+              };
               const dirty = Object.keys(patch).length > 0;
               return (
                 <tr key={u.id}>
@@ -619,7 +626,7 @@ function SalaryRosterSection() {
                   </td>
                   <td>
                     <input
-                      type="number" min={0} step={50}
+                      type="number" min={0} step={50} placeholder="0"
                       value={val('baseSalary', u.baseSalary) as any}
                       onChange={(e) => setField(u.id, 'baseSalary', e.target.value)}
                       style={{ width: 110 }}
@@ -627,7 +634,7 @@ function SalaryRosterSection() {
                   </td>
                   <td>
                     <input
-                      type="number" min={0} step={1}
+                      type="number" min={0} step={1} placeholder="0"
                       value={val('hourlyRate', u.hourlyRate) as any}
                       onChange={(e) => setField(u.id, 'hourlyRate', e.target.value)}
                       style={{ width: 90 }}
@@ -635,7 +642,7 @@ function SalaryRosterSection() {
                   </td>
                   <td>
                     <input
-                      type="number" min={0} max={100} step={0.5}
+                      type="number" min={0} max={100} step={0.5} placeholder="0"
                       value={val('bonusPercent', u.bonusPercent) as any}
                       onChange={(e) => setField(u.id, 'bonusPercent', e.target.value)}
                       style={{ width: 80 }}
@@ -643,7 +650,7 @@ function SalaryRosterSection() {
                   </td>
                   <td>
                     <input
-                      type="number" min={1} max={5} step={0.1}
+                      type="number" min={1} max={5} step={0.1} placeholder="1.5"
                       value={val('overtimeMultiplier', u.overtimeMultiplier ?? 1.5) as any}
                       onChange={(e) => setField(u.id, 'overtimeMultiplier', e.target.value)}
                       style={{ width: 70 }}
