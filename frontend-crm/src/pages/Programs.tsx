@@ -15,11 +15,10 @@ import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../l
 import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
 
-// QA-fix #3: латиница-only для name/university/city/major.
-// Разрешаем латиницу + пробелы + знаки препинания типичные для названий
-// (— & ( ) , . ' / : ; "). Цифры и кириллицу — отбрасываем.
-const latinOnly = (s: string) =>
-  s.replace(/[^A-Za-z\s\-&(),.':;\/"]/g, '');
+// Допускаем кириллицу и латиницу в названиях программ/университетов
+// (по запросу основателя — пишут на русском тоже). Защита только от
+// HTML-тегов и фигурных скобок (XSS / template-injection в audit логи).
+const safeText = (s: string) => s.replace(/[<>{}[\]\\]/g, '');
 
 const LANGUAGES = [
   'English',
@@ -343,50 +342,50 @@ export default function Programs() {
                 {editing.id ? 'Редактировать программу' : 'Новая программа'}
               </div>
               <div className="form-group">
-                <label>Название программы * <span style={{ fontSize: 11, color: 'var(--text-soft)', fontWeight: 400 }}>(только латиница)</span></label>
+                <label>Название программы *</label>
                 <input
                   value={editing.name || ''}
-                  onChange={(e) => setEditing({ ...editing, name: latinOnly(e.target.value) })}
+                  onChange={(e) => setEditing({ ...editing, name: safeText(e.target.value) })}
                   className={formErrors.name ? 'input-error' : ''}
                   maxLength={200}
-                  placeholder="Erasmus Mundus Joint Masters"
+                  placeholder="Erasmus Mundus Joint Masters / Совместная магистратура"
                   required
                 />
                 {formErrors.name && <div className="form-error-text">{formErrors.name}</div>}
               </div>
               <div className="form-grid-2">
                 <div className="form-group">
-                  <label>Университет * <span style={{ fontSize: 11, color: 'var(--text-soft)', fontWeight: 400 }}>(латиница)</span></label>
+                  <label>Университет *</label>
                   <input
                     value={editing.university || ''}
-                    onChange={(e) => setEditing({ ...editing, university: latinOnly(e.target.value) })}
+                    onChange={(e) => setEditing({ ...editing, university: safeText(e.target.value) })}
                     className={formErrors.university ? 'input-error' : ''}
                     maxLength={200}
-                    placeholder="Tsinghua University"
+                    placeholder="Tsinghua University / МГУ"
                     required
                   />
                   {formErrors.university && <div className="form-error-text">{formErrors.university}</div>}
                 </div>
                 <div className="form-group">
-                  <label>Город * <span style={{ fontSize: 11, color: 'var(--text-soft)', fontWeight: 400 }}>(латиница)</span></label>
+                  <label>Город *</label>
                   <input
                     value={editing.city || ''}
-                    onChange={(e) => setEditing({ ...editing, city: latinOnly(e.target.value) })}
+                    onChange={(e) => setEditing({ ...editing, city: safeText(e.target.value) })}
                     className={formErrors.city ? 'input-error' : ''}
                     maxLength={100}
-                    placeholder="Beijing, China"
+                    placeholder="Beijing, China / Пекин, Китай"
                     required
                   />
                   {formErrors.city && <div className="form-error-text">{formErrors.city}</div>}
                 </div>
                 <div className="form-group">
-                  <label>Специальность * <span style={{ fontSize: 11, color: 'var(--text-soft)', fontWeight: 400 }}>(латиница)</span></label>
+                  <label>Специальность *</label>
                   <input
                     value={editing.major || ''}
-                    onChange={(e) => setEditing({ ...editing, major: latinOnly(e.target.value) })}
+                    onChange={(e) => setEditing({ ...editing, major: safeText(e.target.value) })}
                     className={formErrors.major ? 'input-error' : ''}
                     maxLength={200}
-                    placeholder="Computer Science"
+                    placeholder="Computer Science / Информатика"
                     required
                   />
                   {formErrors.major && <div className="form-error-text">{formErrors.major}</div>}
@@ -415,6 +414,7 @@ export default function Programs() {
                   <select value={editing.currency || 'CNY'} onChange={(e) => setEditing({ ...editing, currency: e.target.value })}>
                     <option value="CNY">CNY (юань)</option>
                     <option value="USD">USD</option>
+                    <option value="EUR">EUR (евро)</option>
                     <option value="RUB">RUB</option>
                     <option value="TJS">TJS</option>
                   </select>
