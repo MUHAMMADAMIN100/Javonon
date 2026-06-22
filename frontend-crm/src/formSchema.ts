@@ -287,12 +287,16 @@ export function displayValue(def: FieldDef, raw: any): string {
   return v;
 }
 
-export const LATIN_RE = /^[A-Za-z0-9 .,'\-/()&+#@]*$/;
-/** ТОЛЬКО латинские буквы (+ пробел, дефис, апостроф) — для имён, ФИО, должностей */
-export const LETTERS_RE = /^[A-Za-z\s'\-]*$/;
-/** ТОЛЬКО латинские буквы и цифры — для паспорта, специальности, степени */
-export const LATIN_DIGITS_RE = /^[A-Za-z0-9]*$/;
+// По запросу основателя разрешена кириллица во всех формах. Регексы
+// принимают и латиницу, и русский (включая Ёё), и цифры/пунктуацию.
+// Защита от HTML-инъекций и фигурных скобок остаётся в onChange-фильтре.
+export const LATIN_RE = /^[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ0-9 .,'\-/()&+#@№]*$/;
+/** Только буквы (любой алфавит) + пробел/дефис/апостроф — для ФИО, должностей */
+export const LETTERS_RE = /^[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ\s'\-]*$/;
+/** Только буквы и цифры — для паспорта/специальности/степени */
+export const LATIN_DIGITS_RE = /^[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ0-9]*$/;
 
+// Email по RFC обязан быть в Latin — здесь кириллицу НЕ разрешаем.
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
 /**
@@ -306,9 +310,9 @@ export function validateField(def: FieldDef, raw: any, row?: any): string | unde
     return def.optional ? undefined : 'Обязательное поле';
   }
 
-  if (def.lettersOnly && !LETTERS_RE.test(v)) return 'Только латинские буквы';
-  if (def.latinDigits && !LATIN_DIGITS_RE.test(v)) return 'Только латиница и цифры (без символов)';
-  if (def.latin && !LATIN_RE.test(v)) return 'Только латиница и цифры';
+  if (def.lettersOnly && !LETTERS_RE.test(v)) return 'Допустимы только буквы';
+  if (def.latinDigits && !LATIN_DIGITS_RE.test(v)) return 'Допустимы только буквы и цифры (без символов)';
+  if (def.latin && !LATIN_RE.test(v)) return 'Недопустимые символы';
   // digitsOnly без kind=number (например, телефон родственника, индекс): только цифры
   if (def.digitsOnly && def.kind !== 'number' && !/^\d+$/.test(v)) return 'Только цифры';
 

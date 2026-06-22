@@ -33,12 +33,12 @@ function Field({
   const sanitizeText = (raw: string): string => {
     if (def.kind === 'tel') return raw;
     if (def.lettersOnly) {
-      // ТОЛЬКО латинские буквы + пробел + дефис + апостроф
-      return raw.replace(/[^A-Za-z\s'\-]/g, '');
+      // Буквы (любой алфавит — латиница И кириллица) + пробел + дефис + апостроф.
+      return raw.replace(/[^A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ\s'\-]/g, '');
     }
     if (def.latinDigits) {
-      // ТОЛЬКО латинские буквы и цифры (без пробелов и символов)
-      return raw.replace(/[^A-Za-z0-9]/g, '');
+      // Буквы (любой алфавит) + цифры (без пробелов и символов).
+      return raw.replace(/[^A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ0-9]/g, '');
     }
     if (def.digitsOnly) {
       // Целые числа: запрещаем точки, запятые, минусы и т. п.
@@ -60,8 +60,8 @@ function Field({
       return raw.replace(/[^A-Za-z0-9._%+\-@]/g, '');
     }
     if (def.latin) {
-      // Жёсткая фильтрация: только латиница / цифры / разрешённые знаки пунктуации
-      return raw.replace(/[^A-Za-z0-9 .,'\-/()&+#@]/g, '');
+      // Буквы (любой алфавит) / цифры / разрешённые знаки пунктуации.
+      return raw.replace(/[^A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ0-9 .,'\-/()&+#@№]/g, '');
     }
     // Любое текстовое: запрещаем «опасные» символы которые ломают вёрстку
     return raw.replace(/[<>{}[\]\\]/g, '');
@@ -74,9 +74,9 @@ function Field({
     onKeyDown: (e: any) => {
       // Пропускаем служебные клавиши (Backspace, стрелки, Tab, Enter, Ctrl+...)
       if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (def.lettersOnly && !/[A-Za-z\s'\-]/.test(e.key)) {
+      if (def.lettersOnly && !/[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ\s'\-]/.test(e.key)) {
         e.preventDefault();
-      } else if (def.latinDigits && !/[A-Za-z0-9]/.test(e.key)) {
+      } else if (def.latinDigits && !/[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ0-9]/.test(e.key)) {
         e.preventDefault();
       } else if (def.digitsOnly) {
         if (!/\d/.test(e.key)) e.preventDefault();

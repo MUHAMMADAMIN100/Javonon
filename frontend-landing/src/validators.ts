@@ -17,10 +17,12 @@ export const email = (msg = 'Некорректный email'): Rule => (v) => {
   return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(s) ? undefined : msg;
 };
 
-export const latinOnly = (msg = 'Только латиница'): Rule => (v) => {
+// По запросу основателя — допускаем и кириллицу. Имя оставлено
+// `latinOnly` для backward compatibility с уже импортирующим кодом.
+export const latinOnly = (msg = 'Недопустимые символы'): Rule => (v) => {
   const s = String(v ?? '');
   if (!s) return undefined;
-  return /^[A-Za-z0-9 .,'\-/()&+#@]*$/.test(s) ? undefined : msg;
+  return /^[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ0-9 .,'\-/()&+#@№]*$/.test(s) ? undefined : msg;
 };
 
 export const passwordRule = (): Rule => (v) => {
