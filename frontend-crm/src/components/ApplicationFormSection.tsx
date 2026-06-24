@@ -14,6 +14,7 @@ import { updateStudentForm } from '../api/students';
 import Icon from '../Icon';
 import PhoneInput from './PhoneInput';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
+import { useT } from '../lib/i18n';
 
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -252,6 +253,7 @@ function TableSection({
   onChange: (rows: any[]) => void;
   readOnly?: boolean;
 }) {
+  const { t } = useT();
   const [openRows, setOpenRows] = useState<Record<number, boolean>>(() => {
     const init: Record<number, boolean> = {};
     rows.forEach((row, i) => {
@@ -315,7 +317,7 @@ function TableSection({
                     checked={notAttended}
                     onChange={(e) => setNotAttended(ri, e.target.checked)}
                   />
-                  <span>{skipLabels?.[ri] || 'Не учился(-ась)'}</span>
+                  <span>{skipLabels?.[ri] || t('appForm.notAttended')}</span>
                 </label>
                 {!notAttended && (
                   <Icon name={isOpen ? 'expand_less' : 'expand_more'} size={20} />
@@ -365,7 +367,7 @@ function TableSection({
                 type="button"
                 className="af-row-remove"
                 onClick={() => removeRow(ri)}
-                title="Удалить строку"
+                title={t('common.delete')}
               >
                 <Icon name="close" size={16} />
               </button>
@@ -375,7 +377,7 @@ function TableSection({
       </div>
       {!fixedRows && !readOnly && (
         <button type="button" className="af-add-row" onClick={addRow}>
-          <Icon name="add" size={16} /> Добавить ещё
+          <Icon name="add" size={16} /> {t('common.add')}
         </button>
       )}
     </div>
@@ -390,6 +392,7 @@ type Props = {
 };
 
 export default function ApplicationFormSection({ studentId, initialForm, canEdit, onSaved }: Props) {
+  const { t } = useT();
   const [form, setForm] = useState<any>(initialForm || emptyForm());
   const [manualSaving, setManualSaving] = useState(false);
   const [manualSaved, setManualSaved] = useState(false);
@@ -454,20 +457,20 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
       <div className="af-header">
         <div>
           <h2 className="stu-section-title" style={{ margin: 0 }}>
-            Application Form — Анкета студента
+            {t('appForm.title')}
           </h2>
           <div className="af-sub" style={canEdit && dirty ? { color: 'var(--danger)' } : undefined}>
             {!canEdit
-              ? 'Просмотр анкеты (редактирование недоступно)'
+              ? t('appForm.readonly')
               : dirty
-                ? 'У вас есть несохранённые изменения — не забудьте нажать «Сохранить анкету»'
-                : 'Не забудьте нажать «Сохранить анкету» после редактирования'}
+                ? t('appForm.dirty')
+                : t('appForm.hint')}
           </div>
         </div>
         <div className="af-save-state">
           {canEdit && manualSaved && (
             <span className="af-save saved">
-              <Icon name="check_circle" size={16} /> Сохранено
+              <Icon name="check_circle" size={16} /> {t('common.save')}
             </span>
           )}
         </div>
@@ -476,14 +479,13 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
       {externalConflict && (
         <div className="af-conflict-banner">
           <Icon name="warning" size={16} />
-          Анкета была изменена другим пользователем. Сохраните свои правки или обновите страницу,
-          чтобы увидеть актуальную версию.
+          {t('appForm.conflict')}
         </div>
       )}
 
       <div className="af-progress">
         <div className="af-progress-text">
-          <span>Заполнено <b>{progress.filled}</b> из {progress.total} полей</span>
+          <span>{t('docs.uploaded')} <b>{progress.filled}</b> / {progress.total}</span>
           <span className="af-progress-percent">{percent}%</span>
         </div>
         <div className="af-progress-bar">
@@ -498,7 +500,7 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
       <div className="af-note">
         <Icon name="info" size={18} />
         <div>
-          Заполняйте поля <b>на английском языке</b> (как в паспорте). Анкета войдёт в пакет документов.
+          {t('appForm.langNote')}
         </div>
       </div>
 
@@ -567,15 +569,15 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
               className="btn btn-primary af-save-btn"
               onClick={onManualSave}
               disabled={manualSaving || !dirty}
-              title={!dirty ? 'Нет изменений для сохранения' : 'Сохранить анкету'}
+              title={t('appForm.save')}
             >
               <Icon name="save" size={18} />
-              {manualSaving ? 'Сохраняем...' : manualSaved ? 'Сохранено ✓' : 'Сохранить анкету'}
+              {manualSaving ? t('common.saving') : manualSaved ? `${t('common.save')} ✓` : t('appForm.save')}
             </button>
             <div className="af-save-hint">
               {dirty
-                ? 'Изменения сохранятся только после нажатия кнопки'
-                : 'Все изменения сохранены'}
+                ? t('appForm.dirty')
+                : t('appForm.allSaved')}
             </div>
           </div>
         )}

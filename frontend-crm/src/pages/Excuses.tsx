@@ -135,14 +135,15 @@ function PendingTab() {
 }
 
 function HistoryTab() {
+  const { t } = useT();
   const query = useQuery({ queryKey: ['excuses', 'all'], queryFn: () => listExcuses({ take: 200 }) });
 
-  if (query.isLoading) return <div className="card" style={{ padding: 24 }}>Загружаем…</div>;
+  if (query.isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
   const items = query.data || [];
   if (items.length === 0) {
     return (
       <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
-        Истории пока нет.
+        {t('common.empty')}
       </div>
     );
   }
@@ -167,6 +168,7 @@ function ExcuseCard({
   onReject?: () => void;
   busy?: boolean;
 }) {
+  const { t } = useT();
   const status = entry.lateExcuseStatus || 'PENDING';
   const isPending = status === 'PENDING';
   return (
@@ -184,7 +186,7 @@ function ExcuseCard({
             {tjFormatDateTime(entry.clockIn)}
             {' · '}
             <span style={{ color: 'var(--primary-dark)', fontWeight: 600 }}>
-              опоздал на {entry.lateMinutes} мин
+              {t('excuses.late')}: {entry.lateMinutes} {t('common.minutes')}
             </span>
           </div>
         </div>
@@ -199,14 +201,14 @@ function ExcuseCard({
             border: `1.5px solid ${STATUS_COLOR[status]}`,
           }}
         >
-          {STATUS_LABEL[status]}
+          {t(`excuses.status.${status}`) !== `excuses.status.${status}` ? t(`excuses.status.${status}`) : STATUS_LABEL[status]}
         </span>
       </div>
 
       {entry.lateExcuseReason && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-            Причина
+            {t('excuses.reason')}
           </div>
           <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{entry.lateExcuseReason}</div>
         </div>
@@ -215,7 +217,7 @@ function ExcuseCard({
       {entry.lateExcuseUrl && (
         <div style={{ marginBottom: 12 }}>
           <a href={absUrl(entry.lateExcuseUrl)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
-            <Icon name="image" size={14} /> Открыть фото
+            <Icon name="image" size={14} /> {t('common.open')}
           </a>
         </div>
       )}
@@ -223,17 +225,17 @@ function ExcuseCard({
       {isPending && onApprove && onReject && (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid var(--border-soft)', paddingTop: 12 }}>
           <button className="btn btn-sm btn-danger" onClick={onReject} disabled={busy}>
-            <Icon name="close" size={14} /> Отклонить
+            <Icon name="close" size={14} /> {t('excuses.reject')}
           </button>
           <button className="btn btn-sm btn-primary" onClick={onApprove} disabled={busy}>
-            <Icon name="check" size={14} /> Одобрить
+            <Icon name="check" size={14} /> {t('excuses.approve')}
           </button>
         </div>
       )}
 
       {!isPending && entry.lateExcuseReviewedAt && (
         <div style={{ fontSize: 11, color: 'var(--text-soft)', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 6 }}>
-          Разобрано: {tjFormatFull(entry.lateExcuseReviewedAt)}
+          {tjFormatFull(entry.lateExcuseReviewedAt)}
         </div>
       )}
     </motion.div>

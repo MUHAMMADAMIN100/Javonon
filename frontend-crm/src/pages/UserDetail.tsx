@@ -620,6 +620,7 @@ function AccessSection({ userId, userName }: { userId: string; userName: string 
 function OfferSection() {
   const qc = useQueryClient();
   const { toast } = useUI();
+  const { t } = useT();
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const query = useQuery<CurrentOfferState>({
@@ -629,7 +630,7 @@ function OfferSection() {
   const data = query.data;
 
   if (query.isLoading) {
-    return <section className="card" style={{ padding: 22, marginBottom: 14 }}>Загружаем оферту…</section>;
+    return <section className="card" style={{ padding: 22, marginBottom: 14 }}>{t('common.loading')}</section>;
   }
   if (!data) return null;
 
@@ -637,10 +638,10 @@ function OfferSection() {
     setBusy(true);
     try {
       await offerSign(data.offer.id);
-      toast('Оферта подписана', 'success');
+      toast(t('toast.updated'), 'success');
       qc.invalidateQueries({ queryKey: ['offers', 'current'] });
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Не удалось подписать', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setBusy(false);
     }
@@ -650,14 +651,14 @@ function OfferSection() {
     <section className="card" style={{ padding: 22, marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, margin: 0 }}>
-          Оферта · v{data.offer.version}
+          {t('userDetail.section.offer')} · v{data.offer.version}
         </h3>
         {data.signed && (
           <span style={{
             fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 999,
             background: '#dcfce7', color: '#15803d',
           }}>
-            ПОДПИСАНА {data.signedAt ? new Date(data.signedAt).toLocaleDateString('ru-RU') : ''}
+            {t('offer.signed').toUpperCase()} {data.signedAt ? new Date(data.signedAt).toLocaleDateString('ru-RU') : ''}
           </span>
         )}
       </div>
@@ -679,7 +680,7 @@ function OfferSection() {
         <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
-            Я прочитал(а) оферту и согласен(на) с условиями.
+            {t('offer.agreeCheckbox')}
           </label>
           <button
             className="btn btn-sm btn-primary"
@@ -687,7 +688,7 @@ function OfferSection() {
             disabled={!agreed || busy}
             style={{ marginLeft: 'auto' }}
           >
-            {busy ? 'Подписываем…' : 'Подписать'}
+            {busy ? t('common.saving') : t('offer.sign')}
           </button>
         </div>
       )}
