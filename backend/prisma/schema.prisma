@@ -420,6 +420,9 @@ model Program {
   language           String?
   description        String?
   imageUrl           String?
+  /// Ссылка на официальный сайт университета (ТЗ-доработка).
+  /// На карточке/детальной показывается кнопкой «🌐 Официальный сайт».
+  universityWebsiteUrl String?
   published          Boolean   @default(true)
   telegramMessageId  Int?
   telegramHasPhoto   Boolean   @default(false)

@@ -140,23 +140,28 @@ export class ProgramsController {
     if (file) {
       dto.imageUrl = `/uploads/${file.filename}`;
     }
-    if (!dto.name || !dto.university || !dto.city || !dto.major || !dto.direction) {
-      throw new BadRequestException('Заполните обязательные поля программы');
+    // ТЗ-доработка: обязательны ТОЛЬКО name + university. Остальные поля
+    // (city/major/direction/cost) опциональны — программа может быть без
+    // фиксированного города, бесплатной (cost=0), не определённой по
+    // специальности и т.п.
+    if (!dto.name || !dto.university) {
+      throw new BadRequestException('Заполните название и университет');
     }
-    // QA-fix #37/#38: cost > 0
-    if (!Number.isFinite(dto.cost)) {
-      throw new BadRequestException('Стоимость должна быть числом');
+    // Cost опц.: 0 = бесплатно / уточняется. Только если задано — валидируем.
+    if (dto.cost !== undefined && dto.cost !== null) {
+      if (!Number.isFinite(dto.cost) || dto.cost < 0) {
+        throw new BadRequestException('Стоимость должна быть числом ≥ 0');
+      }
+      if (dto.cost > 10_000_000) {
+        throw new BadRequestException('Стоимость слишком большая');
+      }
     }
-    if (dto.cost <= 0) {
-      throw new BadRequestException('Стоимость должна быть > 0');
-    }
-    if (dto.cost > 10_000_000) {
-      throw new BadRequestException('Стоимость слишком большая');
-    }
-    // QA-fix #39: валидируем direction enum (раньше падало в 500 при FOO).
-    const VALID_DIRECTIONS = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
-    if (!VALID_DIRECTIONS.includes(dto.direction as string)) {
-      throw new BadRequestException(`Неизвестное направление. Доступно: ${VALID_DIRECTIONS.join(', ')}`);
+    // Direction опц.: BACHELOR по умолч., если задано — валидируем enum.
+    if (dto.direction) {
+      const VALID_DIRECTIONS = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
+      if (!VALID_DIRECTIONS.includes(dto.direction as string)) {
+        throw new BadRequestException(`Неизвестное направление. Доступно: ${VALID_DIRECTIONS.join(', ')}`);
+      }
     }
     // HTML/script-теги в текстовых полях запрещены. Раньше только 4
     // обязательных проверялись — description/duration/language/grant*
@@ -181,7 +186,7 @@ export class ProgramsController {
     }
     // QA-fix #41: валюту — против белого списка.
     if (dto.currency) {
-      const VALID_CURRENCIES = ['USD', 'EUR', 'RUB', 'CNY', 'TJS', 'KZT', 'UZS', 'GBP', 'JPY', 'KRW'];
+      const VALID_CURRENCIES = ['USD', 'EUR', 'RUB', 'CNY', 'TJS', 'KZT', 'UZS', 'GBP', 'JPY', 'KRW', 'CAD', 'MYR'];
       const cur = dto.currency.toUpperCase();
       if (!VALID_CURRENCIES.includes(cur)) {
         throw new BadRequestException(`Неподдерживаемая валюта. Доступно: ${VALID_CURRENCIES.join(', ')}`);

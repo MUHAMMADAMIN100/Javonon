@@ -14,6 +14,8 @@ export interface Program {
   language: string | null;
   description: string | null;
   imageUrl: string | null;
+  /** Ссылка на официальный сайт университета (ТЗ-доработка). */
+  universityWebsiteUrl?: string | null;
   published: boolean;
   englishLevel?: string | null;
   hasGrant?: boolean;

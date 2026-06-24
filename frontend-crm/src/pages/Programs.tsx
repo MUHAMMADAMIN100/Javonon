@@ -9,7 +9,7 @@ import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import DirectionOptions from '../components/DirectionOptions';
-import { compose, hasErrors, maxLen, minLen, positive, required, validateAll } from '../utils/validators';
+import { compose, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
@@ -19,6 +19,26 @@ import { isElevated } from '../lib/roles';
 // (по запросу основателя — пишут на русском тоже). Защита только от
 // HTML-тегов и фигурных скобок (XSS / template-injection в audit логи).
 const safeText = (s: string) => s.replace(/[<>{}[\]\\]/g, '');
+
+// Helpers для markdown-кнопок описания. Оборачивают / вставляют
+// маркеры в конце текущего value (без работы с курсором — простой UX).
+function wrapDescription(
+  editing: any,
+  setEditing: (v: any) => void,
+  open: string,
+  close: string,
+) {
+  const cur = editing?.description || '';
+  setEditing({ ...editing, description: `${cur}${open}текст${close}` });
+}
+function insertDescription(
+  editing: any,
+  setEditing: (v: any) => void,
+  snippet: string,
+) {
+  const cur = editing?.description || '';
+  setEditing({ ...editing, description: `${cur}${snippet}` });
+}
 
 const LANGUAGES = [
   'English',
@@ -162,6 +182,9 @@ export default function Programs() {
     },
   });
 
+  // ТЗ-доработка: обязательные ТОЛЬКО name + university. Город/специальность/
+  // стоимость могут быть пустыми (бесплатная программа, несколько кампусов,
+  // ещё не определено). Cost может быть 0 — не блокируем.
   const formErrors = editing
     ? validateAll(
         {
@@ -174,9 +197,9 @@ export default function Programs() {
         {
           name: compose(required('Введите название'), minLen(2), maxLen(200)),
           university: compose(required('Введите университет'), minLen(2), maxLen(200)),
-          city: compose(required('Укажите город'), minLen(2), maxLen(100)),
-          major: compose(required('Укажите специальность'), minLen(2), maxLen(200)),
-          cost: compose(required('Укажите стоимость'), positive('Стоимость должна быть больше 0')),
+          city: maxLen(100),
+          major: maxLen(200),
+          cost: numberRule({ min: 0, max: 10_000_000 }),
         },
       )
     : {};
@@ -315,8 +338,21 @@ export default function Programs() {
                     </div>
                   )}
                   <div className="program-card-cost">
-                    {p.cost.toLocaleString('ru-RU')} {p.currency} <span>/ год</span>
+                    {p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : 'Бесплатно / уточняется'}
+                    {p.cost ? <span> / год</span> : null}
                   </div>
+                  {p.universityWebsiteUrl && (
+                    <a
+                      href={p.universityWebsiteUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="btn btn-sm btn-secondary"
+                      style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    >
+                      🌐 Официальный сайт
+                    </a>
+                  )}
                   {!p.published && <div className="program-card-draft">Скрыто на лендинге</div>}
                 </motion.div>
               ))}
@@ -367,26 +403,24 @@ export default function Programs() {
                   {formErrors.university && <div className="form-error-text">{formErrors.university}</div>}
                 </div>
                 <div className="form-group">
-                  <label>Город *</label>
+                  <label>Город</label>
                   <input
                     value={editing.city || ''}
                     onChange={(e) => setEditing({ ...editing, city: safeText(e.target.value) })}
                     className={formErrors.city ? 'input-error' : ''}
                     maxLength={100}
-                    placeholder="Beijing, China / Пекин, Китай"
-                    required
+                    placeholder="Пекин / Beijing / 北京"
                   />
                   {formErrors.city && <div className="form-error-text">{formErrors.city}</div>}
                 </div>
                 <div className="form-group">
-                  <label>Специальность *</label>
+                  <label>Специальность</label>
                   <input
                     value={editing.major || ''}
                     onChange={(e) => setEditing({ ...editing, major: safeText(e.target.value) })}
                     className={formErrors.major ? 'input-error' : ''}
                     maxLength={200}
-                    placeholder="Computer Science / Информатика"
-                    required
+                    placeholder="Информатика / Computer Science"
                   />
                   {formErrors.major && <div className="form-error-text">{formErrors.major}</div>}
                 </div>
@@ -397,15 +431,15 @@ export default function Programs() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Стоимость / год *</label>
+                  <label>Стоимость / год</label>
                   <input
                     type="number"
-                    min={1}
+                    min={0}
                     step={1}
-                    value={editing.cost as any || ''}
-                    onChange={(e) => setEditing({ ...editing, cost: Number(e.target.value) })}
+                    value={editing.cost as any ?? ''}
+                    onChange={(e) => setEditing({ ...editing, cost: e.target.value === '' ? undefined : Number(e.target.value) })}
                     className={formErrors.cost ? 'input-error' : ''}
-                    required
+                    placeholder="0 = бесплатная / уточняется"
                   />
                   {formErrors.cost && <div className="form-error-text">{formErrors.cost}</div>}
                 </div>
@@ -415,8 +449,15 @@ export default function Programs() {
                     <option value="CNY">CNY (юань)</option>
                     <option value="USD">USD</option>
                     <option value="EUR">EUR (евро)</option>
+                    <option value="KRW">KRW (вона)</option>
+                    <option value="JPY">JPY (йена)</option>
+                    <option value="GBP">GBP (фунт)</option>
+                    <option value="CAD">CAD (канадский $)</option>
+                    <option value="MYR">MYR (ринггит)</option>
                     <option value="RUB">RUB</option>
                     <option value="TJS">TJS</option>
+                    <option value="KZT">KZT</option>
+                    <option value="UZS">UZS</option>
                   </select>
                 </div>
                 <div className="form-group">
@@ -507,8 +548,44 @@ export default function Programs() {
               )}
 
               <div className="form-group">
+                <label>Официальный сайт университета</label>
+                <input
+                  type="url"
+                  value={editing.universityWebsiteUrl || ''}
+                  placeholder="https://www.tsinghua.edu.cn"
+                  onChange={(e) => setEditing({ ...editing, universityWebsiteUrl: e.target.value.trim() })}
+                />
+                <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
+                  Просто вставь URL — на карточке кнопка «🌐 Официальный сайт» появится сама.
+                </div>
+              </div>
+              <div className="form-group">
                 <label>Описание</label>
-                <textarea rows={4} value={editing.description || ''} onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
+                <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                  <button type="button" className="btn btn-sm btn-secondary" title="Жирный"
+                    onClick={() => wrapDescription(editing, setEditing, '**', '**')}>
+                    <b>Ж</b>
+                  </button>
+                  <button type="button" className="btn btn-sm btn-secondary" title="Курсив"
+                    onClick={() => wrapDescription(editing, setEditing, '*', '*')}>
+                    <i>К</i>
+                  </button>
+                  <button type="button" className="btn btn-sm btn-secondary" title="Маркированный список"
+                    onClick={() => insertDescription(editing, setEditing, '\n- ')}>
+                    • Список
+                  </button>
+                  <button type="button" className="btn btn-sm btn-secondary" title="Ссылка"
+                    onClick={() => insertDescription(editing, setEditing, '[текст](https://)')}>
+                    🔗 Ссылка
+                  </button>
+                </div>
+                <textarea
+                  rows={10}
+                  style={{ minHeight: 250, fontFamily: 'inherit', resize: 'vertical' }}
+                  value={editing.description || ''}
+                  placeholder={`Подробное описание программы.\n\nПоддерживается markdown: **жирный**, *курсив*, - список, [ссылка](https://...)`}
+                  onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+                />
               </div>
               <div className="form-group">
                 <label>Картинка программы</label>

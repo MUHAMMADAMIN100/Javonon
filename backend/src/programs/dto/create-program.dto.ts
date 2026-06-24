@@ -1,5 +1,9 @@
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { Direction } from '@prisma/client';
+
+// ТЗ-доработка: обязательные только name + university. Остальное опц.
+// (программа может быть бесплатной, без фиксированного города и т.д.).
+const HTTP_URL = /^(https?:\/\/)\S{0,2000}$|^$/i;
 
 export class CreateProgramDto {
   @IsString()
@@ -12,23 +16,25 @@ export class CreateProgramDto {
   @MaxLength(200)
   university: string;
 
+  @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
-  city: string;
+  city?: string;
 
+  @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(200)
-  major: string;
+  major?: string;
 
+  @IsOptional()
   @IsEnum(Direction)
-  direction: Direction;
+  direction?: Direction;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(10_000_000)
-  cost: number;
+  cost?: number;
 
   @IsOptional()
   @IsString()
@@ -54,6 +60,12 @@ export class CreateProgramDto {
   @IsString()
   @MaxLength(400)
   imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  @Matches(HTTP_URL, { message: 'universityWebsiteUrl должен быть http(s) ссылкой' })
+  universityWebsiteUrl?: string;
 
   @IsOptional()
   @IsBoolean()

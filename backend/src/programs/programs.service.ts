@@ -75,15 +75,18 @@ export class ProgramsService {
       data: {
         name: dto.name.trim(),
         university: dto.university.trim(),
-        city: dto.city.trim(),
-        major: dto.major.trim(),
-        direction: dto.direction,
-        cost: dto.cost,
+        // ТЗ-доработка: city/major/direction/cost — опциональны.
+        // direction по умолчанию BACHELOR если не задано, cost 0 = бесплатно.
+        city: dto.city?.trim() || '',
+        major: dto.major?.trim() || '',
+        direction: dto.direction || 'BACHELOR',
+        cost: dto.cost ?? 0,
         currency: dto.currency || 'CNY',
         duration: dto.duration || null,
         language: dto.language || null,
         description: dto.description || null,
         imageUrl: dto.imageUrl || null,
+        universityWebsiteUrl: dto.universityWebsiteUrl?.trim() || null,
         published: dto.published ?? true,
         englishLevel: dto.englishLevel?.trim() || null,
         hasGrant: dto.hasGrant ?? false,
