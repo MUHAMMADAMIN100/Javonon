@@ -58,7 +58,7 @@ export default function Inbox() {
         >
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <ChannelTab active={channelFilter === ''} onClick={() => setChannelFilter('')} label="Все" />
+              <ChannelTab active={channelFilter === ''} onClick={() => setChannelFilter('')} label={t('common.all')} />
               {(['WHATSAPP', 'INSTAGRAM', 'TELEGRAM', 'SMS'] as InboxChannel[]).map((ch) => (
                 <ChannelTab
                   key={ch}
@@ -72,22 +72,21 @@ export default function Inbox() {
           </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {threadsQuery.isLoading && (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-soft)' }}>Загружаем…</div>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-soft)' }}>{t('common.loading')}</div>
             )}
             {threads.length === 0 && !threadsQuery.isLoading && (
               <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-soft)', fontSize: 13 }}>
-                Входящих ещё нет.<br />
-                <span style={{ fontSize: 11 }}>Для WhatsApp/Instagram нужно настроить webhook URL в Meta Business Suite.</span>
+                {t('inbox.empty')}
               </div>
             )}
-            {threads.map((t) => {
-              const handle = t.direction === 'IN' ? t.fromHandle : t.toHandle;
+            {threads.map((th) => {
+              const handle = th.direction === 'IN' ? th.fromHandle : th.toHandle;
               if (!handle) return null;
-              const isSelected = selected?.channel === t.channel && selected?.handle === handle;
+              const isSelected = selected?.channel === th.channel && selected?.handle === handle;
               return (
                 <button
-                  key={t.id}
-                  onClick={() => setSelected({ channel: t.channel, handle })}
+                  key={th.id}
+                  onClick={() => setSelected({ channel: th.channel, handle })}
                   style={{
                     display: 'block',
                     width: '100%',
@@ -100,12 +99,12 @@ export default function Inbox() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <Icon name={INBOX_CHANNEL_ICON[t.channel]} size={14} style={{ color: CHANNEL_COLOR[t.channel] }} />
+                    <Icon name={INBOX_CHANNEL_ICON[th.channel]} size={14} style={{ color: CHANNEL_COLOR[th.channel] }} />
                     <span style={{ fontWeight: 600, fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {handle}
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-soft)' }}>
-                      {new Date(t.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+                      {new Date(th.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
                     </span>
                   </div>
                   <div style={{
@@ -115,8 +114,8 @@ export default function Inbox() {
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                   }}>
-                    {t.direction === 'OUT' && '→ '}
-                    {t.content || (t.mediaUrl ? '📎 файл' : '—')}
+                    {th.direction === 'OUT' && '→ '}
+                    {th.content || (th.mediaUrl ? '📎' : '—')}
                   </div>
                 </button>
               );
@@ -142,7 +141,7 @@ export default function Inbox() {
               flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'var(--text-soft)', padding: 40, textAlign: 'center',
             }}>
-              Выбери диалог слева
+              ←
             </div>
           )}
         </motion.div>
@@ -172,6 +171,7 @@ function ChannelTab({ active, onClick, label, color }: { active: boolean; onClic
 
 function ThreadView({ channel, handle, onClose }: { channel: InboxChannel; handle: string; onClose: () => void }) {
   const { toast } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
@@ -204,9 +204,9 @@ function ThreadView({ channel, handle, onClose }: { channel: InboxChannel; handl
       setReply('');
       qc.invalidateQueries({ queryKey: ['inbox', 'thread', channel, handle] });
       qc.invalidateQueries({ queryKey: ['inbox', 'threads'] });
-      toast('Отправлено', 'success');
+      toast(t('toast.sent'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка отправки', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setSending(false);
     }
@@ -240,7 +240,7 @@ function ThreadView({ channel, handle, onClose }: { channel: InboxChannel; handl
         ))}
         {messages.length === 0 && (
           <div style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 24 }}>
-            Сообщений пока нет
+            {t('chat.empty')}
           </div>
         )}
       </div>
@@ -254,7 +254,7 @@ function ThreadView({ channel, handle, onClose }: { channel: InboxChannel; handl
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), send())}
-          placeholder={`Ответить через ${INBOX_CHANNEL_LABEL[channel]}…`}
+          placeholder={`${INBOX_CHANNEL_LABEL[channel]} · ${t('chat.placeholder')}`}
           style={{ flex: 1 }}
           disabled={sending}
         />

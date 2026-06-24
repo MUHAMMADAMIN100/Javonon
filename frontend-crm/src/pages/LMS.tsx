@@ -86,10 +86,10 @@ export default function Lms() {
 
   const onDeleteCourse = async (c: Course) => {
     const ok = await confirm({
-      title: 'Удалить курс?',
+      title: t('lms.confirm.deleteCourse'),
       message: `«${c.title}» — все уроки и прогресс будут удалены`,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (!ok) return;
     deleteCourseMut.mutate(c.id);
@@ -145,7 +145,7 @@ export default function Lms() {
             )}
           </AnimatePresence>
           <div>
-            {courses.length === 0 && <div className="empty" style={{ padding: 32 }}>Нет курсов</div>}
+            {courses.length === 0 && <div className="empty" style={{ padding: 32 }}>{t('lms.empty')}</div>}
             {courses.map((c) => (
               <button
                 key={c.id}
@@ -229,21 +229,22 @@ function NewCourseForm({ onSubmit, onCancel }: {
   onSubmit: (data: { title: string; description?: string }) => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit({ title, description: desc || undefined }); }}>
       <div className="form-group">
-        <label>Название</label>
+        <label>{t('lms.course.title')}</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} required />
       </div>
       <div className="form-group">
-        <label>Описание</label>
+        <label>{t('lms.course.description')}</label>
         <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} />
       </div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>Отмена</button>
-        <button type="submit" className="btn btn-sm btn-primary" disabled={!title.trim()}>Создать</button>
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
+        <button type="submit" className="btn btn-sm btn-primary" disabled={!title.trim()}>{t('common.create')}</button>
       </div>
     </form>
   );
@@ -257,6 +258,7 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
   onDelete: () => void;
 }) {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const [editingMeta, setEditingMeta] = useState(false);
   const [title, setTitle] = useState(course.title);
   const [description, setDescription] = useState(course.description || '');
@@ -284,10 +286,10 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
 
   const onDeleteLesson = async (l: Lesson) => {
     const ok = await confirm({
-      title: 'Удалить урок?',
+      title: t('lms.confirm.deleteLesson'),
       message: `«${l.title}»`,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (!ok) return;
     await deleteLesson(l.id);
@@ -395,7 +397,7 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
       </AnimatePresence>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {course.lessons.length === 0 && <div className="empty" style={{ padding: 32 }}>Уроков пока нет</div>}
+        {course.lessons.length === 0 && <div className="empty" style={{ padding: 32 }}>{t('lms.lesson.empty')}</div>}
         {course.lessons.map((l, i) => (
           <div key={l.id} style={{
             border: '1px solid var(--border-soft)',

@@ -55,10 +55,10 @@ export default function Pipelines() {
 
   const onDeletePipeline = async (p: Pipeline) => {
     const ok = await confirm({
-      title: 'Удалить воронку?',
+      title: t('pipelines.confirm.delete'),
       message: `«${p.name}» и все её этапы будут удалены. Заявки останутся.`,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (!ok) return;
     await deletePipeline(p.id);
@@ -95,7 +95,7 @@ export default function Pipelines() {
           </p>
           {!creatingNew && (
             <button className="btn btn-primary" onClick={() => setCreatingNew(true)}>
-              <Icon name="add" size={16} /> Новая воронка
+              <Icon name="add" size={16} /> {t('pipelines.new')}
             </button>
           )}
         </div>
@@ -121,7 +121,7 @@ export default function Pipelines() {
         ))}
         {pipelines.length === 0 && !creatingNew && (
           <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
-            Воронок пока нет. Создай первую.
+            {t('pipelines.empty')}
           </div>
         )}
       </div>
@@ -136,6 +136,7 @@ function CreateForm({
   onCreate: (d: { name: string; description?: string; isDefault?: boolean }) => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isDefault, setIsDefault] = useState(false);
@@ -148,11 +149,11 @@ function CreateForm({
       borderRadius: 12,
     }}>
       <div className="form-group" style={{ marginBottom: 10 }}>
-        <label>Название</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Бакалавриат" />
+        <label>{t('pipelines.field.name')}</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div className="form-group" style={{ marginBottom: 10 }}>
-        <label>Описание</label>
+        <label>{t('pipelines.field.description')}</label>
         <input value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 10 }}>
@@ -187,6 +188,7 @@ function PipelineCard({
   onChanged: () => void;
 }) {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const [newStageName, setNewStageName] = useState('');
 
   const onAddStage = async () => {
@@ -198,8 +200,8 @@ function PipelineCard({
 
   const onDeleteStage = async (s: PipelineStage) => {
     const ok = await confirm({
-      title: 'Удалить этап?',
-      message: `«${s.name}» будет удалён.`,
+      title: t('common.delete') + '?',
+      message: `«${s.name}»`,
       danger: true,
     });
     if (!ok) return;
@@ -258,9 +260,9 @@ function PipelineCard({
             {pipeline.isDefault ? 'Снять default' : 'Сделать default'}
           </button>
           <button className="btn btn-sm btn-secondary" onClick={onToggleActive}>
-            {pipeline.isActive ? 'Выключить' : 'Включить'}
+            {pipeline.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
           </button>
-          <button className="btn btn-sm btn-danger" onClick={onDelete}>Удалить</button>
+          <button className="btn btn-sm btn-danger" onClick={onDelete}>{t('common.delete')}</button>
         </div>
       </div>
 
@@ -284,12 +286,12 @@ function PipelineCard({
         <input
           value={newStageName}
           onChange={(e) => setNewStageName(e.target.value)}
-          placeholder="Новый этап (например: Документы)"
+          placeholder={t('pipelines.stage.name')}
           onKeyDown={(e) => e.key === 'Enter' && onAddStage()}
           style={{ flex: 1 }}
         />
         <button className="btn btn-sm btn-secondary" onClick={onAddStage} disabled={!newStageName.trim()}>
-          + Этап
+          {t('pipelines.stage.add')}
         </button>
       </div>
     </motion.div>
@@ -359,7 +361,7 @@ function StageChip({
       <button title="Вверх" onClick={onMoveUp} disabled={!canMoveUp} style={btnIcon}>‹</button>
       <button title="Вниз" onClick={onMoveDown} disabled={!canMoveDown} style={btnIcon}>›</button>
       <button title="Изменить" onClick={() => setEditing(true)} style={btnIcon}>✎</button>
-      <button title="Удалить" onClick={onDelete} style={{ ...btnIcon, color: 'var(--danger)' }}>×</button>
+      <button title="✕" onClick={onDelete} style={{ ...btnIcon, color: 'var(--danger)' }}>×</button>
     </div>
   );
 }
