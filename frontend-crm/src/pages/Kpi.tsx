@@ -2,30 +2,31 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { KpiRow, leaderboard } from '../api/kpi';
-import { ROLE_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useRoleLabel } from '../lib/labels';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 
-const RANGES: Array<{ label: string; days: number | null }> = [
-  { label: 'Все время', days: null },
-  { label: '7 дней', days: 7 },
-  { label: '30 дней', days: 30 },
-  { label: '90 дней', days: 90 },
+const RANGE_KEYS: Array<{ key: string; days: number | null }> = [
+  { key: 'kpi.range.all', days: null },
+  { key: 'kpi.range.7', days: 7 },
+  { key: 'kpi.range.30', days: 30 },
+  { key: 'kpi.range.90', days: 90 },
 ];
 
 export default function Kpi() {
   const { t } = useT();
+  const roleLabel = useRoleLabel();
   const me = useAuth((s) => s.user);
   const [rangeIdx, setRangeIdx] = useState(2); // 30 days по умолчанию
 
-  const r = RANGES[rangeIdx];
-  const params = r.days
-    ? { from: new Date(Date.now() - r.days * 24 * 60 * 60 * 1000).toISOString() }
+  const range = RANGE_KEYS[rangeIdx];
+  const params = range.days
+    ? { from: new Date(Date.now() - range.days * 24 * 60 * 60 * 1000).toISOString() }
     : undefined;
   const kpiQuery = useQuery<KpiRow[]>({
     queryKey: ['kpi', 'leaderboard', rangeIdx],
@@ -46,12 +47,12 @@ export default function Kpi() {
 
       <div className="filters" style={{ alignItems: 'center' }}>
         <div className="pagination-controls" style={{ padding: 4 }}>
-          {RANGES.map((r, i) => (
+          {RANGE_KEYS.map((rg, i) => (
             <button
-              key={r.label}
+              key={rg.key}
               className={i === rangeIdx ? 'active' : ''}
               onClick={() => setRangeIdx(i)}
-            >{r.label}</button>
+            >{t(rg.key)}</button>
           ))}
         </div>
       </div>
@@ -65,7 +66,7 @@ export default function Kpi() {
           style={{ marginBottom: 32 }}
         >
           <div className="bento-card feature span-3 row-2">
-            <span className="bento-num">YOUR RANK · #{myRank}</span>
+            <span className="bento-num">{t('kpi.label.thisRank')} · #{myRank}</span>
             <div style={{ marginTop: 'auto' }}>
               <div style={{
                 fontFamily: 'var(--font-display)',
@@ -81,19 +82,12 @@ export default function Kpi() {
                 letterSpacing: '0.12em',
                 color: 'rgba(255,255,255,0.55)',
                 textTransform: 'uppercase',
-              }}>Твои продажи <span style={{
-                fontFamily: 'Times New Roman, Georgia, serif',
-                fontStyle: 'italic',
-                fontSize: 18,
-                color: 'var(--primary-light)',
-                textTransform: 'none',
-                marginLeft: 6,
-              }}>в периоде.</span></div>
+              }}>{t('kpi.label.youSales')}</div>
             </div>
           </div>
-          <KpiBento eyebrow="CONVERSION" label="Конверсия" value={`${myRow.conversionRate}%`} accent />
-          <KpiBento eyebrow="ENROLLED" label="Зачислено" value={String(myRow.applicationsEnrolled)} />
-          <KpiBento eyebrow="STUDENTS" label="Активных студентов" value={String(myRow.studentsCount)} span="span-3" />
+          <KpiBento eyebrow="CONVERSION" label={t('kpi.col.conversion')} value={`${myRow.conversionRate}%`} accent />
+          <KpiBento eyebrow="ENROLLED" label={t('kpi.col.enrolled')} value={String(myRow.applicationsEnrolled)} />
+          <KpiBento eyebrow="STUDENTS" label={t('kpi.col.students')} value={String(myRow.studentsCount)} span="span-3" />
         </motion.div>
       )}
 
@@ -117,7 +111,7 @@ export default function Kpi() {
             letterSpacing: '0.16em',
             color: 'var(--primary-light)',
             marginBottom: 12,
-          }}>🏆 TOP PERFORMER · LEADERBOARD #1</div>
+          }}>{t('kpi.label.topPerformer')}</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 32, flexWrap: 'wrap' }}>
             <div>
               <div style={{
@@ -133,7 +127,7 @@ export default function Kpi() {
                 fontSize: 12,
                 color: 'rgba(255,255,255,0.55)',
                 letterSpacing: '0.08em',
-              }}>{ROLE_LABEL[top.role]}</div>
+              }}>{roleLabel(top.role)}</div>
             </div>
             <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
               <div style={{
@@ -160,19 +154,19 @@ export default function Kpi() {
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>#</th>
-              <th>Сотрудник</th>
-              <th>Заявок</th>
-              <th>Зачислено</th>
-              <th>Конверсия</th>
-              <th>Студентов</th>
-              <th>Продажи</th>
-              <th>Задачи</th>
+              <th>{t('kpi.col.rank')}</th>
+              <th>{t('kpi.col.employee')}</th>
+              <th>{t('kpi.col.applications')}</th>
+              <th>{t('kpi.col.enrolled')}</th>
+              <th>{t('kpi.col.conversion')}</th>
+              <th>{t('kpi.col.students')}</th>
+              <th>{t('kpi.col.sales')}</th>
+              <th>{t('kpi.col.tasks')}</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={8} className="empty">Нет данных</td></tr>
+              <tr><td colSpan={8} className="empty">{t('kpi.empty')}</td></tr>
             )}
             {rows.map((r, i) => {
               const isMe = r.id === me?.id;
@@ -188,9 +182,9 @@ export default function Kpi() {
                     {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
                   </td>
                   <td>
-                    <div style={{ fontWeight: 500 }}>{r.fullName} {isMe && <span style={{ fontFamily: 'Times New Roman, Georgia, serif', fontStyle: 'italic', color: 'var(--primary-dark)' }}>— это вы</span>}</div>
+                    <div style={{ fontWeight: 500 }}>{r.fullName} {isMe && <span style={{ fontFamily: 'Times New Roman, Georgia, serif', fontStyle: 'italic', color: 'var(--primary-dark)' }}>{t('kpi.label.itsYou')}</span>}</div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                      {ROLE_LABEL[r.role]}
+                      {roleLabel(r.role)}
                     </div>
                   </td>
                   <td>{r.applicationsAssigned}</td>

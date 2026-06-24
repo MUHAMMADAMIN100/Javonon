@@ -112,45 +112,39 @@ export default function Reports() {
           letterSpacing: '-0.02em',
           marginBottom: 24,
         }}>
-          Что ты сделал <em style={{
-            fontFamily: 'Times New Roman, Georgia, serif',
-            fontWeight: 400,
-            color: 'var(--primary-dark)',
-          }}>сегодня?</em>
+          {t('reports.new')}
         </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16 }}>
-          <NumberField label="Звонков" value={calls} onChange={setCalls} />
-          <NumberField label="Встреч" value={meetings} onChange={setMeetings} />
-          <NumberField label="Заявок обработано" value={contacted} onChange={setContacted} />
-          <NumberField label="Оффлайн консультаций" value={offlineConsult} onChange={setOfflineConsult} />
-          <NumberField label="Онлайн консультаций" value={onlineConsult} onChange={setOnlineConsult} />
-          <NumberField label="Продаж (шт.)" value={salesCount} onChange={setSalesCount} highlight />
-          <NumberField label="Сумма продаж ($)" value={salesAmount} onChange={setSalesAmount} highlight />
+          <NumberField label={t('reports.field.calls')} value={calls} onChange={setCalls} />
+          <NumberField label={t('reports.field.meetings')} value={meetings} onChange={setMeetings} />
+          <NumberField label={t('reports.field.applications')} value={contacted} onChange={setContacted} />
+          <NumberField label={t('reports.field.offline')} value={offlineConsult} onChange={setOfflineConsult} />
+          <NumberField label={t('reports.field.online')} value={onlineConsult} onChange={setOnlineConsult} />
+          <NumberField label={t('reports.field.salesCount')} value={salesCount} onChange={setSalesCount} highlight />
+          <NumberField label={t('reports.field.salesAmount')} value={salesAmount} onChange={setSalesAmount} highlight />
         </div>
 
         <div className="form-group" style={{ marginTop: 16 }}>
-          <label>Что сделал за день</label>
+          <label>{t('reports.field.activity')}</label>
           <textarea
             value={activity}
             onChange={(e) => setActivity(e.target.value)}
-            placeholder="Краткое описание главных результатов дня"
             rows={3}
           />
         </div>
         <div className="form-group">
-          <label>Блокеры / проблемы</label>
+          <label>{t('reports.field.challenges')}</label>
           <textarea
             value={challenges}
             onChange={(e) => setChallenges(e.target.value)}
-            placeholder="Что мешало, нужна ли помощь"
             rows={2}
           />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
           <button className="btn btn-primary" onClick={onSave} disabled={saving}>
-            <Icon name="save" size={16} /> {saving ? 'Сохраняем...' : 'Сохранить отчёт'}
+            <Icon name="save" size={16} /> {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </motion.div>
@@ -167,25 +161,23 @@ export default function Reports() {
       {/* История */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
         <span className="crm-section-eyebrow">HISTORY · LAST 30 DAYS</span>
-        <h2 className="crm-section-title">
-          Журнал <em>отчётов.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('reports.history')}</h2>
       </div>
       <div className="card" style={{ padding: 0 }}>
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>Дата</th>
-              <th>Звонки</th>
-              <th>Встречи</th>
-              <th>Заявки</th>
-              <th>Сделок</th>
-              <th>Сумма $</th>
-              <th>Активность</th>
+              <th>{t('reports.col.date')}</th>
+              <th>{t('reports.field.calls')}</th>
+              <th>{t('reports.field.meetings')}</th>
+              <th>{t('reports.field.applications')}</th>
+              <th>{t('reports.field.salesCount')}</th>
+              <th>{t('reports.field.salesAmount')}</th>
+              <th>{t('reports.field.activity')}</th>
             </tr>
           </thead>
           <tbody>
-            {history.length === 0 && <tr><td colSpan={7} className="empty">Пока нет отчётов</td></tr>}
+            {history.length === 0 && <tr><td colSpan={7} className="empty">{t('reports.empty')}</td></tr>}
             {history.map((r) => (
               <tr key={r.id}>
                 <td style={{ fontWeight: 500 }}>{fmtDate(r.date)}</td>

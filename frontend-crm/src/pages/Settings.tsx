@@ -208,6 +208,7 @@ function PenaltiesTab() {
 
 function LocationTab() {
   const { toast } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: ['settings', 'work-location'],
@@ -268,14 +269,14 @@ function LocationTab() {
         он за пределами — будет видеть фото/видео-альтернативу.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <Field label="Название"><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Широта"><input type="number" step="0.0000001" value={lat} onChange={(e) => setLat(e.target.value)} /></Field>
-        <Field label="Долгота"><input type="number" step="0.0000001" value={lng} onChange={(e) => setLng(e.target.value)} /></Field>
-        <Field label="Радиус, м"><input type="number" value={radius} onChange={(e) => setRadius(e.target.value)} /></Field>
+        <Field label={t('settings.location.name')}><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label={t('settings.location.lat')}><input type="number" step="0.0000001" value={lat} onChange={(e) => setLat(e.target.value)} /></Field>
+        <Field label={t('settings.location.lng')}><input type="number" step="0.0000001" value={lng} onChange={(e) => setLng(e.target.value)} /></Field>
+        <Field label={t('settings.location.radius')}><input type="number" value={radius} onChange={(e) => setRadius(e.target.value)} /></Field>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, gap: 8 }}>
-        <button className="btn btn-sm btn-secondary" onClick={detect}>📍 Использовать текущую</button>
-        <button className="btn btn-primary" onClick={save} disabled={!lat || !lng}>Сохранить</button>
+        <button className="btn btn-sm btn-secondary" onClick={detect}>{t('settings.location.detect')}</button>
+        <button className="btn btn-primary" onClick={save} disabled={!lat || !lng}>{t('common.save')}</button>
       </div>
     </div>
   );
@@ -294,6 +295,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function RolesTab() {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const catalogQuery = useQuery({
     queryKey: ['custom-roles', 'catalog'],
@@ -311,10 +313,10 @@ function RolesTab() {
 
   const onDelete = async (r: CustomRole) => {
     const ok = await confirm({
-      title: 'Удалить роль?',
-      message: `«${r.name}» будет удалена. Сотрудники с этой ролью должны быть переведены на другую заранее.`,
+      title: t('common.delete') + '?',
+      message: `«${r.name}»`,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (!ok) return;
     try {
@@ -355,16 +357,15 @@ function RolesTab() {
         />
       ) : (
         <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)} style={{ marginBottom: 16 }}>
-          + Новая роль
+          {t('settings.roles.new')}
         </button>
       )}
 
       {rolesQuery.isLoading ? (
-        <div style={{ color: 'var(--text-soft)' }}>Загружаем…</div>
+        <div style={{ color: 'var(--text-soft)' }}>{t('common.loading')}</div>
       ) : roles.length === 0 ? (
         <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>
-          Пока нет кастомных ролей. Создайте первую — например, «Таргетолог»
-          с доступом к разделам «Заявки» и «KPI».
+          {t('settings.roles.empty')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -388,13 +389,13 @@ function RolesTab() {
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button className="btn btn-sm btn-secondary" onClick={() => onToggle(r)}>
-                  {r.isActive ? 'Выкл' : 'Вкл'}
+                  {r.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
                 </button>
                 <button className="btn btn-sm btn-secondary" onClick={() => setEditing(r)}>
-                  Редактировать
+                  {t('common.edit')}
                 </button>
                 <button className="btn btn-sm btn-danger" onClick={() => onDelete(r)}>
-                  Удалить
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -537,6 +538,7 @@ function SalaryTab() {
 
 function SalaryRosterSection() {
   const { toast } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: ['salary-settings'],
@@ -576,33 +578,28 @@ function SalaryRosterSection() {
   return (
     <div>
       <h3 style={{
-        fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 6,
+        fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12,
       }}>
-        Базовые ставки сотрудников
+        {t('settings.salary.title')}
       </h3>
-      <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12 }}>
-        Оклад, почасовая ставка, ручной % комиссии (перебивает сетку) и множитель
-        переработки. Изменения применяются к следующей зарплате — уже выплаченные
-        не пересчитываются.
-      </p>
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
         <table className="table" style={{ width: '100%', minWidth: 880 }}>
           <thead>
             <tr>
-              <th>Сотрудник</th>
-              <th>Оклад (TJS/мес)</th>
-              <th>Почасовая (TJS/ч)</th>
-              <th>Бонус % (override)</th>
-              <th>× переработка</th>
+              <th>{t('salary.field.employee')}</th>
+              <th>{t('settings.salary.field.base')}</th>
+              <th>{t('settings.salary.field.hourly')}</th>
+              <th>{t('settings.salary.field.bonusPercent')}</th>
+              <th>{t('settings.salary.field.overtimeMult')}</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {query.isLoading && (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>Загружаем…</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('common.loading')}</td></tr>
             )}
             {!query.isLoading && items.length === 0 && (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>Сотрудников нет</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('users.empty')}</td></tr>
             )}
             {items.map((u) => {
               const patch = edits[u.id] || {};
@@ -663,7 +660,7 @@ function SalaryRosterSection() {
                       onClick={() => save(u)}
                       disabled={!dirty}
                     >
-                      Сохранить
+                      {t('common.save')}
                     </button>
                   </td>
                 </tr>
@@ -678,6 +675,7 @@ function SalaryRosterSection() {
 
 function BonusTiersSection() {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: ['bonus-tiers'],
@@ -707,52 +705,47 @@ function BonusTiersSection() {
     }
   };
 
-  const remove = async (t: BonusTier) => {
+  const remove = async (tier: BonusTier) => {
     const ok = await confirm({
-      title: 'Удалить этап?',
-      message: `${t.minAmount} - ${t.maxAmount ?? '∞'} TJS → ${t.percent}%`,
+      title: t('common.delete') + '?',
+      message: `${tier.minAmount} - ${tier.maxAmount ?? '∞'} TJS → ${tier.percent}%`,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (!ok) return;
-    await deleteBonusTier(t.id);
+    await deleteBonusTier(tier.id);
     qc.invalidateQueries({ queryKey: ['bonus-tiers'] });
   };
 
-  const toggleActive = async (t: BonusTier) => {
-    await updateBonusTier(t.id, { isActive: !t.isActive });
+  const toggleActive = async (tier: BonusTier) => {
+    await updateBonusTier(tier.id, { isActive: !tier.isActive });
     qc.invalidateQueries({ queryKey: ['bonus-tiers'] });
   };
 
   return (
     <div>
       <h3 style={{
-        fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 6,
+        fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16,
       }}>
-        Комиссионное вознаграждение (тарифная сетка)
+        {t('settings.salary.bonusTiers')}
       </h3>
-      <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 16 }}>
-        Сумма продаж сотрудника за период попадает в один этап — его процент
-        применяется ко всей сумме (flat-per-tier). Если у сотрудника указан
-        ручной бонус % (см. таблицу выше) — он перебивает сетку.
-      </p>
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
         gap: 8, marginBottom: 16, padding: 12,
         border: '1px solid var(--border-soft)', borderRadius: 10,
         background: 'var(--bg-soft)',
       }}>
-        <Field label="От, TJS">
+        <Field label={t('settings.salary.tier.from')}>
           <input type="number" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
         </Field>
-        <Field label="До, TJS (пусто = ∞)">
+        <Field label={t('settings.penalties.maxLate')}>
           <input type="number" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
         </Field>
-        <Field label="Процент %">
+        <Field label={t('settings.salary.tier.percent')}>
           <input type="number" step="0.1" value={percent} onChange={(e) => setPercent(e.target.value)} />
         </Field>
-        <Field label="Комментарий">
-          <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="например: Этап 3" />
+        <Field label={t('common.comment')}>
+          <input value={comment} onChange={(e) => setComment(e.target.value)} />
         </Field>
         <button
           className="btn btn-sm btn-primary"
@@ -760,40 +753,40 @@ function BonusTiersSection() {
           style={{ alignSelf: 'flex-end' }}
           disabled={!minAmount || !percent}
         >
-          Добавить этап
+          {t('settings.salary.tier.add')}
         </button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {tiers.length === 0 && (
           <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>
-            Сетка пустая — при первой загрузке создадутся дефолтные 5 этапов из ТЗ.
+            {t('common.empty')}
           </div>
         )}
-        {tiers.map((t) => (
+        {tiers.map((tier) => (
           <div
-            key={t.id}
+            key={tier.id}
             style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '8px 14px', border: '1px solid var(--border)', borderRadius: 8,
-              opacity: t.isActive ? 1 : 0.5,
+              opacity: tier.isActive ? 1 : 0.5,
             }}
           >
             <div>
               <div style={{ fontWeight: 500 }}>
-                {t.minAmount.toLocaleString('ru-RU')} - {t.maxAmount === null ? '∞' : t.maxAmount.toLocaleString('ru-RU')} {t.currency}
+                {tier.minAmount.toLocaleString('ru-RU')} - {tier.maxAmount === null ? '∞' : tier.maxAmount.toLocaleString('ru-RU')} {tier.currency}
                 {' → '}
-                <b>{t.percent}%</b>
+                <b>{tier.percent}%</b>
               </div>
-              {t.comment && (
-                <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{t.comment}</div>
+              {tier.comment && (
+                <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{tier.comment}</div>
               )}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn btn-sm btn-secondary" onClick={() => toggleActive(t)}>
-                {t.isActive ? 'Выкл' : 'Вкл'}
+              <button className="btn btn-sm btn-secondary" onClick={() => toggleActive(tier)}>
+                {tier.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
               </button>
-              <button className="btn btn-sm btn-danger" onClick={() => remove(t)}>Удалить</button>
+              <button className="btn btn-sm btn-danger" onClick={() => remove(tier)}>{t('common.delete')}</button>
             </div>
           </div>
         ))}

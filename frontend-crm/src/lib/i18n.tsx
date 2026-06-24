@@ -650,9 +650,26 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== kpi extra =====
     'kpi.leaderboard.title': 'Топ сотрудников',
+    'kpi.range.all': 'Все время',
+    'kpi.range.7': '7 дней',
+    'kpi.range.30': '30 дней',
+    'kpi.range.90': '90 дней',
+    'kpi.col.rank': '#',
+    'kpi.col.applications': 'Заявок',
+    'kpi.col.enrolled': 'Зачислено',
+    'kpi.col.conversion': 'Конверсия',
+    'kpi.col.students': 'Студентов',
+    'kpi.col.sales': 'Продажи',
+    'kpi.col.tasks': 'Задачи',
+    'kpi.label.youSales': 'Твои продажи',
+    'kpi.label.thisRank': 'Твой ранг',
+    'kpi.label.itsYou': '— это вы',
+    'kpi.label.topPerformer': '🏆 Топ-1 рейтинга',
 
     // ===== reports extra =====
     'reports.history': 'История отчётов',
+    'reports.send': 'Отправить отчёт',
+    'reports.col.date': 'Дата',
 
     // ===== misc =====
     'common.period': 'Период',
@@ -1295,9 +1312,26 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== kpi extra =====
     'kpi.leaderboard.title': 'Беҳтарин кормандон',
+    'kpi.range.all': 'Тамоми вақт',
+    'kpi.range.7': '7 рӯз',
+    'kpi.range.30': '30 рӯз',
+    'kpi.range.90': '90 рӯз',
+    'kpi.col.rank': '#',
+    'kpi.col.applications': 'Аризаҳо',
+    'kpi.col.enrolled': 'Қабул шуд',
+    'kpi.col.conversion': 'Конверсия',
+    'kpi.col.students': 'Донишҷӯён',
+    'kpi.col.sales': 'Фурӯш',
+    'kpi.col.tasks': 'Вазифаҳо',
+    'kpi.label.youSales': 'Фурӯши шумо',
+    'kpi.label.thisRank': 'Ранги ту',
+    'kpi.label.itsYou': '— ин шумо',
+    'kpi.label.topPerformer': '🏆 Топ-1 рейтинг',
 
     // ===== reports extra =====
     'reports.history': 'Таърихи ҳисоботҳо',
+    'reports.send': 'Фиристодани ҳисобот',
+    'reports.col.date': 'Сана',
 
     // ===== misc =====
     'common.period': 'Давра',
