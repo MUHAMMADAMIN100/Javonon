@@ -210,6 +210,7 @@ export class UsersController {
 
   /** Выдать доступ к данным сотрудника :id пользователю grantedToId. */
   @Post(':id/access')
+  @Roles(Role.FOUNDER, Role.ADMIN)
   grantAccess(
     @Param('id') id: string,
     @Body() body: { grantedToId: string },
@@ -220,6 +221,7 @@ export class UsersController {
   }
 
   @Delete(':id/access/:granteeId')
+  @Roles(Role.FOUNDER, Role.ADMIN)
   revokeAccess(@Param('id') id: string, @Param('granteeId') granteeId: string) {
     return this.users.revokeAccess(granteeId, id);
   }

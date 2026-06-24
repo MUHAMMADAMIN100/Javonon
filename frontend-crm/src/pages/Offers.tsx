@@ -44,7 +44,7 @@ export default function Offers() {
   const [tab, setTab] = useState<Role | null>(null);
 
   if (!isElevated(me)) {
-    return <div className="card" style={{ padding: 28 }}>Доступ только для администрации.</div>;
+    return <div className="card" style={{ padding: 28 }}>{t('common.accessDenied')}</div>;
   }
 
   const query = useQuery({

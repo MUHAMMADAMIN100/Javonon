@@ -335,6 +335,14 @@ export class ProgramsController {
           cb(null, `${randomUUID()}${ext}`);
         },
       }),
+      // Whitelist: PDF + офисные документы + изображения + текст.
+      // Без этого можно было загрузить .html → если потом отдавать
+      // как статику, получим stored XSS. Audit fix.
+      fileFilter: (_req, file, cb) => {
+        const ok = /^(application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|vnd\.ms-excel|vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.presentationml\.presentation|zip|x-zip-compressed)|image\/(jpeg|jpg|png|webp|heic|heif)|text\/plain)$/i.test(file.mimetype || '');
+        if (!ok) return cb(new BadRequestException('Недопустимый тип файла'), false);
+        cb(null, true);
+      },
       limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
     }),
   )

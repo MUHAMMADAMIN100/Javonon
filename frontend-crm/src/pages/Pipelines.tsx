@@ -30,7 +30,7 @@ export default function Pipelines() {
   const [creatingNew, setCreatingNew] = useState(false);
 
   if (!isElevated(me)) {
-    return <div className="card" style={{ padding: 28 }}>Доступ только для администраторов.</div>;
+    return <div className="card" style={{ padding: 28 }}>{t('common.accessDenied')}</div>;
   }
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['sales', 'pipelines'] });
@@ -46,17 +46,17 @@ export default function Pipelines() {
         ],
       });
       invalidate();
-      toast('Воронка создана', 'success');
+      toast(t('toast.created'), 'success');
       setCreatingNew(false);
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
   const onDeletePipeline = async (p: Pipeline) => {
     const ok = await confirm({
       title: t('pipelines.confirm.delete'),
-      message: `«${p.name}» и все её этапы будут удалены. Заявки останутся.`,
+      message: `«${p.name}»`,
       danger: true,
       confirmText: t('common.delete'),
     });

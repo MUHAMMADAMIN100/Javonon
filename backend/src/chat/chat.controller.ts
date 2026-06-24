@@ -149,6 +149,8 @@ export class ChatController {
   }
 
   @Post('rooms/team')
+  @UseGuards(RolesGuard)
+  @Roles('FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER')
   createTeam(
     @CurrentUser() me: any,
     @Body() body: { title: string; memberIds: string[] },
@@ -157,6 +159,8 @@ export class ChatController {
   }
 
   @Post('rooms/direct')
+  @UseGuards(RolesGuard)
+  @Roles('FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER')
   createDirect(
     @CurrentUser() me: any,
     @Body() body: { userId: string },
