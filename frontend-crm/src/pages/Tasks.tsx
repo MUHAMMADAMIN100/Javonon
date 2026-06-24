@@ -124,15 +124,15 @@ export default function Tasks() {
     updateMut.mutate({ id: t.id, patch: { status: next } });
   };
 
-  const onDelete = async (t: Task) => {
+  const onDelete = async (task: Task) => {
     const ok = await confirm({
-      title: 'Удалить задачу',
-      message: `«${t.title}» — действие нельзя отменить.`,
-      confirmText: 'Удалить',
+      title: t('common.delete') + ' ' + t('tasks.title').toLowerCase(),
+      message: `«${task.title}»`,
+      confirmText: t('common.delete'),
       danger: true,
     });
     if (!ok) return;
-    deleteMut.mutate(t.id);
+    deleteMut.mutate(task.id);
   };
 
   return (
@@ -171,7 +171,7 @@ export default function Tasks() {
               whileTap={{ scale: 0.95 }}
             >
               <Icon name="add" size={16} style={{ marginRight: 4 }} />
-              Новая задача
+              {t('tasks.new')}
             </motion.button>
           )}
         </div>
@@ -196,7 +196,7 @@ export default function Tasks() {
               style={{ marginBottom: 20, padding: 18, background: 'var(--bg)', borderRadius: 10, overflow: 'hidden' }}
             >
               <div className="form-group">
-                <label>Заголовок *</label>
+                <label>{t('tasks.field.title')} *</label>
                 <input
                   type="text"
                   value={form.title}
@@ -209,7 +209,7 @@ export default function Tasks() {
                 {formErrors.title && <div className="form-error-text">{formErrors.title}</div>}
               </div>
               <div className="form-group">
-                <label>Описание *</label>
+                <label>{t('tasks.field.description')} *</label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -237,7 +237,7 @@ export default function Tasks() {
                 </select>
               </div>
               <div className="form-group">
-                <label>Дедлайн (опционально)</label>
+                <label>{t('tasks.field.deadline')}</label>
                 <input
                   type="datetime-local"
                   value={form.deadline}
@@ -250,7 +250,7 @@ export default function Tasks() {
                   className="btn btn-secondary"
                   onClick={() => { setCreating(false); setForm({ title: '', description: '', assignedToId: '', deadline: '' }); }}
                 >
-                  Отмена
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -281,18 +281,18 @@ export default function Tasks() {
               animate="show"
               variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
             >
-              {items.map((t) => {
-                const isOwner = t.assignedToId === me?.id;
+              {items.map((task) => {
+                const isOwner = task.assignedToId === me?.id;
                 const canChange = isAdmin || isOwner;
                 const statuses: { value: TaskStatus; icon: string; label: string }[] = [
-                  { value: 'TODO', icon: 'radio_button_unchecked', label: 'К выполнению' },
-                  { value: 'IN_PROGRESS', icon: 'autorenew', label: 'В работе' },
-                  { value: 'DONE', icon: 'check_circle', label: 'Выполнено' },
+                  { value: 'TODO', icon: 'radio_button_unchecked', label: t('task.status.TODO') },
+                  { value: 'IN_PROGRESS', icon: 'autorenew', label: t('task.status.IN_PROGRESS') },
+                  { value: 'DONE', icon: 'check_circle', label: t('task.status.DONE') },
                 ];
                 return (
                   <motion.div
-                    key={t.id}
-                    className={`task-item task-${t.status.toLowerCase()}`}
+                    key={task.id}
+                    className={`task-item task-${task.status.toLowerCase()}`}
                     variants={{
                       hidden: { opacity: 0, y: 10 },
                       show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
@@ -300,40 +300,37 @@ export default function Tasks() {
                     layout
                   >
                     <div className="task-content">
-                      <div className="task-title">{t.title}</div>
-                      <div className="task-desc">{t.description}</div>
+                      <div className="task-title">{task.title}</div>
+                      <div className="task-desc">{task.description}</div>
                       <div className="task-meta">
-                        <span className={`badge ${TASK_STATUS_BADGE[t.status]}`}>{taskStatusLabel(t.status)}</span>
+                        <span className={`badge ${TASK_STATUS_BADGE[task.status]}`}>{taskStatusLabel(task.status)}</span>
                         <span className="task-meta-item">
                           <Icon name="person" size={14} />
-                          {t.assignedTo?.fullName || '—'}
-                          {isOwner && <span className="mgr-you"> (вы)</span>}
+                          {task.assignedTo?.fullName || '—'}
                         </span>
-                        {t.createdBy && (
+                        {task.createdBy && (
                           <span className="task-meta-item">
                             <Icon name="edit" size={14} />
-                            От: {t.createdBy.fullName}
+                            {task.createdBy.fullName}
                           </span>
                         )}
-                        {t.deadline && (() => {
-                          const dl = new Date(t.deadline);
+                        {task.deadline && (() => {
+                          const dl = new Date(task.deadline);
                           const now = new Date();
                           const ms = dl.getTime() - now.getTime();
-                          const isOverdue = ms < 0 && t.status !== 'DONE';
-                          const isSoon = ms >= 0 && ms < 24 * 60 * 60 * 1000 && t.status !== 'DONE';
+                          const isOverdue = ms < 0 && task.status !== 'DONE';
+                          const isSoon = ms >= 0 && ms < 24 * 60 * 60 * 1000 && task.status !== 'DONE';
                           const cls = isOverdue ? 'badge-danger' : isSoon ? 'badge-warning' : 'badge-info';
-                          const label = isOverdue ? 'ПРОСРОЧЕНО' : isSoon ? 'СРОЧНО' : '';
                           return (
                             <span className={`badge ${cls}`} style={{ fontFamily: 'var(--font-mono)' }}>
                               <Icon name="schedule" size={12} />
-                              {label && <strong style={{ marginRight: 4 }}>{label}</strong>}
-                              до {dl.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              {dl.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                             </span>
                           );
                         })()}
                         <span className="task-meta-item">
                           <Icon name="event" size={14} />
-                          {new Date(t.createdAt).toLocaleDateString('ru-RU')}
+                          {new Date(task.createdAt).toLocaleDateString('ru-RU')}
                         </span>
                       </div>
 
@@ -341,10 +338,10 @@ export default function Tasks() {
                         {statuses.map((s) => (
                           <button
                             key={s.value}
-                            className={`task-status-btn${t.status === s.value ? ' active' : ''} task-status-${s.value.toLowerCase()}`}
-                            onClick={() => canChange && setStatus(t, s.value)}
+                            className={`task-status-btn${task.status === s.value ? ' active' : ''} task-status-${s.value.toLowerCase()}`}
+                            onClick={() => canChange && setStatus(task, s.value)}
                             disabled={!canChange}
-                            title={canChange ? s.label : 'Только назначенный сотрудник или админ'}
+                            title={s.label}
                           >
                             <Icon name={s.icon} size={16} />
                             <span>{s.label}</span>
@@ -353,7 +350,7 @@ export default function Tasks() {
                       </div>
                     </div>
                     {isAdmin && (
-                      <button className="btn btn-sm btn-danger task-delete-btn" onClick={() => onDelete(t)} title="Удалить задачу">
+                      <button className="btn btn-sm btn-danger task-delete-btn" onClick={() => onDelete(task)} title={t('common.delete')}>
                         <Icon name="delete" size={16} />
                       </button>
                     )}

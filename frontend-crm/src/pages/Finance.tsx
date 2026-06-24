@@ -173,9 +173,9 @@ export default function Finance() {
 
   const onConfirmPayment = async (p: Payment) => {
     const ok = await confirm({
-      title: 'Подтвердить оплату?',
+      title: t('finance.payment.confirm') + '?',
       message: `${p.student?.fullName}: ${fmtMoney(p.amount, p.currency)}. Будет создана транзакция-доход.`,
-      confirmText: 'Подтвердить',
+      confirmText: t('finance.payment.confirm'),
     });
     if (!ok) return;
     confirmPayMut.mutate(p);
@@ -183,10 +183,10 @@ export default function Finance() {
 
   const onRejectPayment = async (p: Payment) => {
     const ok = await confirm({
-      title: 'Отклонить заявку?',
+      title: t('finance.payment.reject') + '?',
       message: `${p.student?.fullName}: ${fmtMoney(p.amount, p.currency)}`,
       danger: true,
-      confirmText: 'Отклонить',
+      confirmText: t('finance.payment.reject'),
     });
     if (!ok) return;
     rejectPayMut.mutate(p);
@@ -198,15 +198,15 @@ export default function Finance() {
     aiMut.mutate(aiInput);
   };
 
-  const onDelete = async (t: Transaction) => {
+  const onDelete = async (tx: Transaction) => {
     const ok = await confirm({
-      title: 'Удалить транзакцию?',
-      message: `${t.type === 'INCOME' ? 'Доход' : 'Расход'} ${fmtMoney(t.amount, t.currency)}`,
+      title: t('finance.confirm.delete'),
+      message: `${tx.type === 'INCOME' ? t('finance.income') : t('finance.expense')} ${fmtMoney(tx.amount, tx.currency)}`,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (!ok) return;
-    deleteTxMut.mutate(t.id);
+    deleteTxMut.mutate(tx.id);
   };
 
   return (
@@ -484,11 +484,11 @@ export default function Finance() {
               </colgroup>
               <thead>
                 <tr>
-                  <th style={{ whiteSpace: 'nowrap' }}>Когда</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>Студент</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>Сумма</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>Метод</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>Комментарий</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>{t('common.date')}</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>{t('finance.col.student')}</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>{t('common.amount')}</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>{t('common.type')}</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>{t('common.comment')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -518,7 +518,7 @@ export default function Finance() {
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button className="btn btn-sm btn-primary" onClick={() => onConfirmPayment(p)}>
-                          <Icon name="check" size={14} /> Подтвердить
+                          <Icon name="check" size={14} /> {t('finance.payment.confirm')}
                         </button>
                         <button className="btn btn-sm btn-danger" onClick={() => onRejectPayment(p)}>
                           <Icon name="close" size={14} />
@@ -545,7 +545,7 @@ export default function Finance() {
           <div className="card" style={{ padding: 0 }}>
             <table className="table" style={{ width: '100%' }}>
               <thead>
-                <tr><th>Студент</th><th>Программа</th><th>Сумма</th><th>Менеджер</th><th></th></tr>
+                <tr><th>{t('finance.col.student')}</th><th>{t('sidebar.programs')}</th><th>{t('common.amount')}</th><th>{t('finance.col.manager')}</th><th></th></tr>
               </thead>
               <tbody>
                 {pending.map((app) => (
@@ -601,13 +601,13 @@ export default function Finance() {
             className={filterType === 'INCOME' ? 'active' : ''}
             onClick={() => setFilterType('INCOME')}
           >
-            Доходы
+            {t('finance.income')}
           </button>
           <button
             className={filterType === 'EXPENSE' ? 'active' : ''}
             onClick={() => setFilterType('EXPENSE')}
           >
-            Расходы
+            {t('finance.expense')}
           </button>
         </div>
         <div style={{ flex: 1 }} />
@@ -636,45 +636,45 @@ export default function Finance() {
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>Дата</th>
-              <th>Тип</th>
-              <th>Категория</th>
-              <th>Сумма</th>
-              <th>Связь</th>
-              <th>Комментарий</th>
+              <th>{t('finance.col.date')}</th>
+              <th>{t('finance.col.type')}</th>
+              <th>{t('finance.col.category')}</th>
+              <th>{t('finance.col.amount')}</th>
+              <th>{t('finance.col.student')}</th>
+              <th>{t('finance.col.comment')}</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {transactions.length === 0 && (
-              <tr><td colSpan={7} className="empty">Нет транзакций</td></tr>
+              <tr><td colSpan={7} className="empty">{t('finance.empty')}</td></tr>
             )}
-            {transactions.map((t) => (
-              <tr key={t.id}>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtDate(t.date)}</td>
+            {transactions.map((tx) => (
+              <tr key={tx.id}>
+                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtDate(tx.date)}</td>
                 <td>
-                  <span className={`badge ${t.type === 'INCOME' ? 'badge-success' : 'badge-danger'}`}>
-                    {t.type === 'INCOME' ? 'Доход' : 'Расход'}
+                  <span className={`badge ${tx.type === 'INCOME' ? 'badge-success' : 'badge-danger'}`}>
+                    {tx.type === 'INCOME' ? t('finance.income') : t('finance.expense')}
                   </span>
                 </td>
-                <td>{TRANSACTION_CATEGORY_LABEL[t.category]}</td>
+                <td>{t(`finance.cat.${tx.category}`) !== `finance.cat.${tx.category}` ? t(`finance.cat.${tx.category}`) : TRANSACTION_CATEGORY_LABEL[tx.category]}</td>
                 <td style={{
                   fontFamily: 'var(--font-display)',
                   fontWeight: 500,
                   fontSize: 17,
                   letterSpacing: '-0.01em',
-                  color: t.type === 'INCOME' ? 'var(--primary-dark)' : 'var(--danger)',
+                  color: tx.type === 'INCOME' ? 'var(--primary-dark)' : 'var(--danger)',
                 }}>
-                  {t.type === 'INCOME' ? '+' : '−'} {fmtMoney(t.amount, t.currency)}
+                  {tx.type === 'INCOME' ? '+' : '−'} {fmtMoney(tx.amount, tx.currency)}
                 </td>
                 <td style={{ fontSize: 13 }}>
-                  {t.student && <div>👤 {t.student.fullName}</div>}
-                  {t.manager && <div style={{ color: 'var(--text-soft)' }}>💼 {t.manager.fullName}</div>}
-                  {!t.student && !t.manager && <span style={{ color: 'var(--text-light)' }}>—</span>}
+                  {tx.student && <div>👤 {tx.student.fullName}</div>}
+                  {tx.manager && <div style={{ color: 'var(--text-soft)' }}>💼 {tx.manager.fullName}</div>}
+                  {!tx.student && !tx.manager && <span style={{ color: 'var(--text-light)' }}>—</span>}
                 </td>
-                <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t.comment || '—'}</td>
+                <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{tx.comment || '—'}</td>
                 <td>
-                  <button className="btn btn-sm btn-danger" onClick={() => onDelete(t)}>
+                  <button className="btn btn-sm btn-danger" onClick={() => onDelete(tx)}>
                     <Icon name="delete" size={14} />
                   </button>
                 </td>

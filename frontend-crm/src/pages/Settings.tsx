@@ -117,6 +117,7 @@ function ScheduleTab() {
 
 function PenaltiesTab() {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: ['settings', 'penalty-rules'],
@@ -147,10 +148,10 @@ function PenaltiesTab() {
 
   const remove = async (r: PenaltyRule) => {
     const ok = await confirm({
-      title: 'Удалить правило?',
-      message: `Штраф ${r.amount} ${r.currency} при опоздании ≥${r.minLateMinutes} мин`,
+      title: t('common.delete') + '?',
+      message: `${r.amount} ${r.currency}`,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (!ok) return;
     await deletePenaltyRule(r.id);
@@ -169,15 +170,15 @@ function PenaltiesTab() {
         возвращается к старой формуле (200 TJS + 50 за каждое повторное).
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 16, padding: 12, border: '1px solid var(--border-soft)', borderRadius: 10, background: 'var(--bg-soft)' }}>
-        <Field label="От, мин"><input type="number" value={minLate} onChange={(e) => setMinLate(e.target.value)} /></Field>
-        <Field label="До, мин (пусто = ∞)"><input type="number" value={maxLate} onChange={(e) => setMaxLate(e.target.value)} /></Field>
-        <Field label="Сумма (TJS)"><input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
-        <Field label="Комментарий"><input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="например: за час и больше" /></Field>
-        <button className="btn btn-sm btn-primary" onClick={add} style={{ alignSelf: 'flex-end' }}>Добавить</button>
+        <Field label={t('settings.penalties.minLate')}><input type="number" value={minLate} onChange={(e) => setMinLate(e.target.value)} /></Field>
+        <Field label={t('settings.penalties.maxLate')}><input type="number" value={maxLate} onChange={(e) => setMaxLate(e.target.value)} /></Field>
+        <Field label={t('settings.penalties.amount')}><input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+        <Field label={t('settings.penalties.comment')}><input value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
+        <button className="btn btn-sm btn-primary" onClick={add} style={{ alignSelf: 'flex-end' }}>{t('common.add')}</button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {rules.length === 0 && <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>Правил пока нет — используется fallback (200+50/повтор).</div>}
+        {rules.length === 0 && <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('settings.penalties.empty')}</div>}
         {rules.map((r) => (
           <div key={r.id} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -192,9 +193,9 @@ function PenaltiesTab() {
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
               <button className="btn btn-sm btn-secondary" onClick={() => toggleActive(r)}>
-                {r.isActive ? 'Выкл' : 'Вкл'}
+                {r.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
               </button>
-              <button className="btn btn-sm btn-danger" onClick={() => remove(r)}>Удалить</button>
+              <button className="btn btn-sm btn-danger" onClick={() => remove(r)}>{t('common.delete')}</button>
             </div>
           </div>
         ))}
