@@ -9,6 +9,7 @@ import Icon from '../Icon';
 import { useRealtimeEvent } from '../realtime';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
+import { useT } from '../lib/i18n';
 
 const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
   '/dashboard': { eyebrow: 'OVERVIEW · 01', pre: 'Картина', em: 'дня.' },
@@ -34,6 +35,7 @@ export default function Layout() {
   const loc = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { toast } = useUI();
+  const { t } = useT();
   const logout = useAuth((s) => s.logout);
   const meta = Object.entries(TITLES).find(([k]) => loc.pathname.startsWith(k))?.[1]
     || { eyebrow: 'JAVONON · CRM', pre: 'Панель', em: 'управления.' };
@@ -44,15 +46,12 @@ export default function Layout() {
   // читает старые роли. Логаут даёт сразу взять новый JWT с актуальными
   // правами при следующем логине.
   useRealtimeEvent('user:roles-updated', () => {
-    toast('Ваши права были изменены администратором. Пожалуйста, войдите заново.', 'info');
+    toast(t('layout.rolesUpdated'), 'info');
     setTimeout(() => logout(), 4000);
   });
 
-  // Аккаунт удалён администратором — кикаем сразу. JWT в localStorage
-  // продолжал бы работать ~7 дней до истечения, что давало «удалённому»
-  // сотруднику фактический доступ к системе.
   useRealtimeEvent('user:deleted', () => {
-    toast('Ваш аккаунт был удалён администратором.', 'error');
+    toast(t('layout.accountDeleted'), 'error');
     setTimeout(() => logout(), 3000);
   });
 
@@ -106,7 +105,7 @@ export default function Layout() {
             type="button"
             className="topbar-burger"
             onClick={() => setMobileNavOpen((v) => !v)}
-            aria-label="Меню"
+            aria-label={t('sidebar.menu')}
           >
             <Icon name={mobileNavOpen ? 'close' : 'menu'} size={24} />
           </button>

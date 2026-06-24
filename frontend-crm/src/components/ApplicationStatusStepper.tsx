@@ -10,6 +10,8 @@ import {
 import { updateApplication } from '../api/applications';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
+import { useApplicationStatusLabel } from '../lib/labels';
 
 type Props = {
   application: Application;
@@ -19,6 +21,8 @@ type Props = {
 
 export default function ApplicationStatusStepper({ application, canEdit, onChanged }: Props) {
   const { toast } = useUI();
+  const { t } = useT();
+  const statusLabel = useApplicationStatusLabel();
   const [saving, setSaving] = useState(false);
 
   const currentIdx = STAGE_INDEX[application.status] ?? 0;
@@ -30,10 +34,10 @@ export default function ApplicationStatusStepper({ application, canEdit, onChang
     setSaving(true);
     try {
       await updateApplication(application.id, { status: next });
-      toast(`Статус → «${STATUS_LABEL[next]}»`, 'success');
+      toast(`${t('common.status')} → «${statusLabel(next)}»`, 'success');
       onChanged?.();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setSaving(false);
     }
@@ -51,7 +55,7 @@ export default function ApplicationStatusStepper({ application, canEdit, onChang
               className={`stage-step${done ? ' done' : ''}${current ? ' current' : ''}`}
               onClick={() => canEdit && !saving && change(stage)}
               style={canEdit ? { cursor: 'pointer' } : undefined}
-              title={canEdit ? `Перейти: ${STATUS_LABEL[stage]}` : STATUS_LABEL[stage]}
+              title={statusLabel(stage)}
             >
               <div className="stage-dot">
                 {done ? <Icon name="check" size={16} /> : <span>{i + 1}</span>}
@@ -69,10 +73,10 @@ export default function ApplicationStatusStepper({ application, canEdit, onChang
               className="btn btn-sm btn-secondary"
               onClick={() => change(prevStage)}
               disabled={saving}
-              title="Вернуться на предыдущий этап"
+              title={t('common.back')}
             >
               <Icon name="arrow_back" size={16} style={{ marginRight: 4 }} />
-              Назад
+              {t('common.back')}
             </button>
           )}
           {nextStage && (
@@ -80,9 +84,9 @@ export default function ApplicationStatusStepper({ application, canEdit, onChang
               className="btn btn-sm btn-primary"
               onClick={() => change(nextStage)}
               disabled={saving}
-              title={`Перейти: ${STATUS_LABEL[nextStage]}`}
+              title={statusLabel(nextStage)}
             >
-              {STATUS_LABEL[nextStage]}
+              {statusLabel(nextStage)}
               <Icon name="arrow_forward" size={16} style={{ marginLeft: 4 }} />
             </button>
           )}

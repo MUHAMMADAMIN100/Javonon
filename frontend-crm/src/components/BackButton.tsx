@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
 
 type Props = {
   /** Куда возвращаться, если истории нет (например, прямой вход по ссылке). */
@@ -12,8 +13,10 @@ type Props = {
  * Кнопка «Назад» — идёт назад по истории браузера. Если истории нет
  * (открыли страницу по прямой ссылке), уводит на fallback (по умолчанию '/').
  */
-export default function BackButton({ fallback = '/', label = 'Назад' }: Props) {
+export default function BackButton({ fallback = '/', label }: Props) {
   const navigate = useNavigate();
+  const { t } = useT();
+  const text = label ?? t('common.back').replace(/^[←\s]+/, '');
 
   const onClick = () => {
     // window.history.length > 1 не всегда надёжно (включает первую загрузку),
@@ -34,10 +37,10 @@ export default function BackButton({ fallback = '/', label = 'Назад' }: Pro
       onClick={onClick}
       whileHover={{ x: -2 }}
       whileTap={{ scale: 0.96 }}
-      title={label}
+      title={text}
     >
       <Icon name="arrow_back" size={16} />
-      {label}
+      {text}
     </motion.button>
   );
 }

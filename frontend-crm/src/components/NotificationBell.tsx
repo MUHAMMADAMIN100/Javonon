@@ -8,6 +8,7 @@ import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useOptimisticMutation } from '../lib/optimistic';
+import { useT } from '../lib/i18n';
 
 function notificationHref(n: Notification): string | null {
   const p = n.payload || {};
@@ -46,6 +47,7 @@ function showBrowserNotif(title: string, body: string, onClick?: () => void) {
 export default function NotificationBell() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -156,7 +158,7 @@ export default function NotificationBell() {
       <motion.button
         className="notif-button"
         onClick={() => setOpen(!open)}
-        title="Уведомления"
+        title={t('notif.title')}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         animate={count > 0 ? { rotate: [0, -12, 12, -8, 8, 0] } : {}}
@@ -188,7 +190,7 @@ export default function NotificationBell() {
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="notif-panel-header">
-              <span>Уведомления</span>
+              <span>{t('notif.title')}</span>
               {items.some((i) => !i.read) && (
                 <motion.button
                   className="btn btn-sm btn-secondary"
@@ -196,7 +198,7 @@ export default function NotificationBell() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  Прочитать все
+                  {t('notif.markAll')}
                 </motion.button>
               )}
             </div>
@@ -206,13 +208,13 @@ export default function NotificationBell() {
                 type="date"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                placeholder="От"
+                placeholder={t('common.from')}
               />
               <input
                 type="date"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                placeholder="До"
+                placeholder={t('common.until')}
               />
               <label className="notif-only-unread">
                 <input
@@ -220,13 +222,13 @@ export default function NotificationBell() {
                   checked={onlyUnread}
                   onChange={(e) => setOnlyUnread(e.target.checked)}
                 />
-                <span>Только непрочитанные</span>
+                <span>{t('notif.onlyUnread')}</span>
               </label>
             </div>
 
             {filtered.length === 0 ? (
               <div className="notif-empty">
-                {items.length === 0 ? 'Уведомлений пока нет' : 'По фильтру ничего нет'}
+                {t('common.empty')}
               </div>
             ) : (
               <motion.div
@@ -255,7 +257,7 @@ export default function NotificationBell() {
                     {!n.read && (
                       <button
                         className="notif-item-read"
-                        title="Отметить прочитанным"
+                        title={t('notif.markRead')}
                         onClick={(e) => {
                           e.stopPropagation();
                           markReadMut.mutate(n.id);

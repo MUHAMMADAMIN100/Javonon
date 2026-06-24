@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useT } from '../lib/i18n';
 
 export type Country = {
   cc: string;
@@ -71,6 +72,7 @@ interface Props {
 }
 
 export default function PhoneInput({ value, onChange, error, placeholder, disabled }: Props) {
+  const { t } = useT();
   const [countryIdx, setCountryIdx] = useState(() => findCountryByPhone(value || '+992').idx);
   const [local, setLocal] = useState(() => findCountryByPhone(value || '+992').rest);
   const [open, setOpen] = useState(false);
@@ -239,14 +241,14 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
             <input
               ref={searchRef}
               type="text"
-              placeholder="Поиск страны или кода..."
+              placeholder={t('common.search')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <div className="phone-dropdown-list">
             {filtered.length === 0 ? (
-              <div className="phone-dropdown-empty">Не найдено</div>
+              <div className="phone-dropdown-empty">{t('common.empty')}</div>
             ) : (
               filtered.map(({ c, i }) => (
                 <button

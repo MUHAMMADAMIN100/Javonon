@@ -5,6 +5,7 @@ import Icon from '../Icon';
 import { useUI } from '../ui/Dialogs';
 import { createCall } from '../api/calls';
 import { api } from '../api/client';
+import { useT } from '../lib/i18n';
 
 /**
  * Плавающий dialpad — программа-телефон в CRM (по ТЗ §6d).
@@ -27,6 +28,7 @@ import { api } from '../api/client';
  */
 export default function Dialpad() {
   const { toast } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [number, setNumber] = useState('+992');
@@ -61,7 +63,7 @@ export default function Dialpad() {
   const dial = async () => {
     const cleaned = number.trim();
     if (!cleaned || cleaned === '+') {
-      toast('Введи номер', 'error');
+      toast(t('common.phone'), 'error');
       return;
     }
     setCallState('connecting');
@@ -125,12 +127,12 @@ export default function Dialpad() {
         direction: 'OUTGOING',
         outcome: durationSeconds > 5 ? 'ANSWERED' : 'NO_ANSWER',
         durationSeconds,
-        notes: 'Звонок через dialpad',
+        notes: 'dialpad',
       });
       qc.invalidateQueries({ queryKey: ['calls'] });
-      toast('Звонок зафиксирован в CRM', 'success');
+      toast(t('toast.created'), 'success');
     } catch (e: any) {
-      toast('Не удалось зафиксировать звонок: ' + (e?.response?.data?.message || e.message), 'error');
+      toast(t('toast.error') + ': ' + (e?.response?.data?.message || e.message), 'error');
     } finally {
       setCallState('idle');
       setCallStartedAt(null);
@@ -156,7 +158,7 @@ export default function Dialpad() {
         onClick={() => setOpen((v) => !v)}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        title="Звонок"
+        title={t('calls.title')}
         style={{
           position: 'fixed',
           right: 20,
@@ -287,7 +289,7 @@ export default function Dialpad() {
                 }}
               >
                 <Icon name={callState === 'idle' ? 'call' : 'call_end'} size={20} />
-                {callState === 'idle' ? 'Позвонить' : 'Отбой'}
+                {callState === 'idle' ? t('dialpad.call') : t('dialpad.hangup')}
               </button>
               <button
                 onClick={backspace}
@@ -301,7 +303,7 @@ export default function Dialpad() {
                   cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
-                title="Стереть"
+                title={t('dialpad.erase')}
               >
                 <Icon name="backspace" size={18} />
               </button>
@@ -317,7 +319,7 @@ export default function Dialpad() {
                   cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
-                title="Очистить"
+                title={t('common.reset')}
               >
                 <Icon name="clear" size={18} />
               </button>

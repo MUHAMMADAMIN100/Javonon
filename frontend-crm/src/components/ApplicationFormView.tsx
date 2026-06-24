@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FORM_SECTIONS, countProgress, displayValue, type FieldDef } from '../formSchema';
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
 
 type Props = {
   form: any;
@@ -21,7 +22,7 @@ function EditField({
   if (def.kind === 'radio' && def.options) {
     return (
       <select value={v} onChange={(e) => onChange(e.target.value)}>
-        <option value="">— выберите —</option>
+        <option value="">—</option>
         {def.options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
@@ -31,7 +32,7 @@ function EditField({
   if ((def as any).options) {
     return (
       <select value={v} onChange={(e) => onChange(e.target.value)}>
-        <option value="">— выберите —</option>
+        <option value="">—</option>
         {(def as any).options.map((o: any) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
@@ -51,6 +52,7 @@ function EditField({
 }
 
 export default function ApplicationFormView({ form, canEdit, onSave }: Props) {
+  const { t } = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<any>(form || {});
   const [saving, setSaving] = useState(false);
@@ -95,16 +97,16 @@ export default function ApplicationFormView({ form, canEdit, onSave }: Props) {
     <div className="af-view">
       <div className="af-view-header">
         <div>
-          <h3 className="af-view-title">Анкета студента</h3>
+          <h3 className="af-view-title">{t('appForm.title')}</h3>
           <div className="af-view-sub">
             {empty
-              ? 'Студент ещё не начал заполнять анкету'
-              : `Заполнено ${progress.filled} из ${progress.total} полей (${percent}%)`}
+              ? t('common.empty')
+              : `${t('docs.uploaded')} ${progress.filled} / ${progress.total} (${percent}%)`}
           </div>
         </div>
         {canEdit && !editing && (
           <button className="btn btn-sm btn-secondary" onClick={() => setEditing(true)}>
-            <Icon name="edit" size={14} style={{ marginRight: 4 }} /> Редактировать анкету
+            <Icon name="edit" size={14} style={{ marginRight: 4 }} /> {t('common.edit')}
           </button>
         )}
         {editing && (
@@ -114,10 +116,10 @@ export default function ApplicationFormView({ form, canEdit, onSave }: Props) {
               onClick={() => { setDraft(form || {}); setEditing(false); }}
               disabled={saving}
             >
-              Отмена
+              {t('common.cancel')}
             </button>
             <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={saving}>
-              {saving ? 'Сохранение...' : 'Сохранить'}
+              {saving ? t('common.saving') : t('common.save')}
             </button>
           </div>
         )}
@@ -131,7 +133,7 @@ export default function ApplicationFormView({ form, canEdit, onSave }: Props) {
       {empty && !editing ? (
         <div className="af-view-empty">
           <Icon name="hourglass_empty" size={40} />
-          <div>Анкета не заполнена</div>
+          <div>{t('common.empty')}</div>
         </div>
       ) : (
         <div className="af-view-sections">

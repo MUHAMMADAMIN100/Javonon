@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
 
 type Props = {
   open: boolean;
@@ -25,11 +26,16 @@ export default function UnsavedChangesDialog({
   open,
   onConfirm,
   onCancel,
-  title = 'Несохранённые изменения',
-  message = 'У вас есть несохранённые изменения в анкете. Если уйти сейчас — они потеряются.',
-  confirmLabel = 'Уйти без сохранения',
-  cancelLabel = 'Остаться',
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
 }: Props) {
+  const { t } = useT();
+  const _title = title ?? t('unsaved.title');
+  const _message = message ?? t('unsaved.message');
+  const _confirmLabel = confirmLabel ?? t('unsaved.confirm');
+  const _cancelLabel = cancelLabel ?? t('unsaved.cancel');
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -61,19 +67,19 @@ export default function UnsavedChangesDialog({
             <div className="dialog-icon danger">
               <Icon name="warning" size={28} />
             </div>
-            <div className="dialog-title">{title}</div>
-            <div className="dialog-message">{message}</div>
+            <div className="dialog-title">{_title}</div>
+            <div className="dialog-message">{_message}</div>
 
             <div className="dialog-actions">
               <button type="button" className="btn btn-secondary" onClick={onCancel} autoFocus>
-                {cancelLabel}
+                {_cancelLabel}
               </button>
               <button
                 type="button"
                 className="btn btn-danger"
                 onClick={onConfirm}
               >
-                {confirmLabel}
+                {_confirmLabel}
               </button>
             </div>
           </motion.div>
