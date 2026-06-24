@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { listPublicPrograms, type Program } from '../programs';
 
@@ -104,6 +105,7 @@ export default function PublicProgramsSection() {
                   display: 'flex', flexDirection: 'column',
                 }}
               >
+              <Link to={`/program/${p.id}`} style={{ display: 'contents', color: 'inherit', textDecoration: 'none' }}>
                 <div style={{
                   height: 180,
                   background: photo
@@ -130,6 +132,7 @@ export default function PublicProgramsSection() {
                       href={(p as any).universityWebsiteUrl}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
                       style={{
                         marginTop: 12,
                         textAlign: 'center',
@@ -146,6 +149,7 @@ export default function PublicProgramsSection() {
                     </a>
                   )}
                 </div>
+              </Link>
               </motion.div>
             );
           })}

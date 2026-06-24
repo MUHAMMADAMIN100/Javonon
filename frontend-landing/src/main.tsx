@@ -7,6 +7,7 @@ import StudentLogin from './pages/StudentLogin';
 import StudentRegister from './pages/StudentRegister';
 import StudentCabinet from './pages/StudentCabinet';
 import Knowledge from './pages/Knowledge';
+import PublicProgramDetail from './pages/PublicProgramDetail';
 import ErrorBoundary from './components/ErrorBoundary';
 import { initAnalytics, trackPageView } from './analytics';
 import { queryClient } from './queryClient';
@@ -40,6 +41,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/register" element={<StudentRegister />} />
             <Route path="/cabinet" element={<StudentCabinet />} />
             <Route path="/knowledge" element={<Knowledge />} />
+            <Route path="/program/:id" element={<PublicProgramDetail />} />
             <Route path="/partner/register" element={<PartnerRegister />} />
             <Route path="/partner/login" element={<PartnerLogin />} />
             <Route path="/partner/cabinet" element={<PartnerCabinet />} />

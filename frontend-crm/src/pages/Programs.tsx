@@ -275,10 +275,10 @@ export default function Programs() {
       </div>
       <div className="card-body">
         <div className="filters">
-          <input placeholder="Город" value={city} onChange={(e) => setCity(e.target.value)} />
-          <input placeholder="Специальность" value={major} onChange={(e) => setMajor(e.target.value)} />
+          <input placeholder={t('programs.filter.city')} value={city} onChange={(e) => setCity(e.target.value)} />
+          <input placeholder={t('programs.filter.major')} value={major} onChange={(e) => setMajor(e.target.value)} />
           <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
-            <option value="">Все направления</option>
+            <option value="">{t('programs.filter.direction')}</option>
             <DirectionOptions />
           </select>
         </div>
@@ -291,7 +291,7 @@ export default function Programs() {
               className={`btn btn-sm ${countryFilter === '' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setCountryFilter('')}
             >
-              Все ({allItems.length})
+              {t('programs.all')} ({allItems.length})
             </button>
             {countries.map((c) => {
               const count = allItems.filter((p) => p.country === c).length;
@@ -425,10 +425,10 @@ export default function Programs() {
               onSubmit={onSave}
             >
               <div className="dialog-title" style={{ textAlign: 'left', marginBottom: 14 }}>
-                {editing.id ? 'Редактировать программу' : 'Новая программа'}
+                {editing.id ? t('programs.edit') : t('programs.new')}
               </div>
               <div className="form-group">
-                <label>Название программы *</label>
+                <label>{t('programs.field.name')} *</label>
                 <input
                   value={editing.name || ''}
                   onChange={(e) => setEditing({ ...editing, name: safeText(e.target.value) })}
@@ -441,7 +441,7 @@ export default function Programs() {
               </div>
               <div className="form-grid-2">
                 <div className="form-group">
-                  <label>Университет *</label>
+                  <label>{t('programs.field.university')} *</label>
                   <input
                     value={editing.university || ''}
                     onChange={(e) => setEditing({ ...editing, university: safeText(e.target.value) })}
@@ -453,7 +453,7 @@ export default function Programs() {
                   {formErrors.university && <div className="form-error-text">{formErrors.university}</div>}
                 </div>
                 <div className="form-group">
-                  <label>Страна</label>
+                  <label>{t('programs.field.country')}</label>
                   <input
                     value={editing.country || ''}
                     onChange={(e) => setEditing({ ...editing, country: safeText(e.target.value) })}
@@ -462,7 +462,7 @@ export default function Programs() {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Город</label>
+                  <label>{t('programs.field.city')}</label>
                   <input
                     value={editing.city || ''}
                     onChange={(e) => setEditing({ ...editing, city: safeText(e.target.value) })}
@@ -473,7 +473,7 @@ export default function Programs() {
                   {formErrors.city && <div className="form-error-text">{formErrors.city}</div>}
                 </div>
                 <div className="form-group">
-                  <label>Специальность</label>
+                  <label>{t('programs.field.major')}</label>
                   <input
                     value={editing.major || ''}
                     onChange={(e) => setEditing({ ...editing, major: safeText(e.target.value) })}
@@ -484,13 +484,13 @@ export default function Programs() {
                   {formErrors.major && <div className="form-error-text">{formErrors.major}</div>}
                 </div>
                 <div className="form-group">
-                  <label>Направление *</label>
+                  <label>{t('programs.field.direction')}</label>
                   <select value={editing.direction} onChange={(e) => setEditing({ ...editing, direction: e.target.value as Direction })}>
                     <DirectionOptions />
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Стоимость / год</label>
+                  <label>{t('programs.field.cost')}</label>
                   <input
                     type="number"
                     min={0}
@@ -498,12 +498,12 @@ export default function Programs() {
                     value={editing.cost as any ?? ''}
                     onChange={(e) => setEditing({ ...editing, cost: e.target.value === '' ? undefined : Number(e.target.value) })}
                     className={formErrors.cost ? 'input-error' : ''}
-                    placeholder="0 = бесплатная / уточняется"
+                    placeholder={t('programs.field.costHint')}
                   />
                   {formErrors.cost && <div className="form-error-text">{formErrors.cost}</div>}
                 </div>
                 <div className="form-group">
-                  <label>Валюта</label>
+                  <label>{t('programs.field.currency')}</label>
                   <select value={editing.currency || 'CNY'} onChange={(e) => setEditing({ ...editing, currency: e.target.value })}>
                     <option value="CNY">CNY (юань)</option>
                     <option value="USD">USD</option>
@@ -520,16 +520,16 @@ export default function Programs() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Длительность</label>
+                  <label>{t('programs.field.duration')}</label>
                   <input value={editing.duration || ''} placeholder="4 года" onChange={(e) => setEditing({ ...editing, duration: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>Язык обучения</label>
+                  <label>{t('programs.field.language')}</label>
                   <select
                     value={editing.language || ''}
                     onChange={(e) => setEditing({ ...editing, language: e.target.value })}
                   >
-                    <option value="">— Выберите язык —</option>
+                    <option value="">{t('programs.field.languageEmpty')}</option>
                     {LANGUAGES.map((l) => (
                       <option key={l} value={l}>{l}</option>
                     ))}
@@ -540,7 +540,7 @@ export default function Programs() {
               {/* Расширенные поля каталога */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
                 <div className="form-group">
-                  <label>Уровень английского</label>
+                  <label>{t('programs.field.englishLevel')}</label>
                   <input
                     value={editing.englishLevel || ''}
                     placeholder="IELTS 6.0 / HSK 4 / —"
@@ -548,7 +548,7 @@ export default function Programs() {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Средний проходной балл</label>
+                  <label>{t('programs.field.avgScore')}</label>
                   <input
                     value={editing.avgAdmissionScore || ''}
                     placeholder="GPA 3.0 / 80%"
@@ -556,7 +556,7 @@ export default function Programs() {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Дедлайн подачи</label>
+                  <label>{t('programs.field.deadline')}</label>
                   <input
                     value={editing.applicationDeadline || ''}
                     placeholder="1 марта / круглый год"
@@ -564,7 +564,7 @@ export default function Programs() {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Наборов в год</label>
+                  <label>{t('programs.field.intakes')}</label>
                   <input
                     type="number"
                     min={0}
@@ -608,19 +608,19 @@ export default function Programs() {
 
               {/* Академические направления — теги (ТЗ-доработка п.6). */}
               <div className="form-group">
-                <label>Академические направления / специализации</label>
+                <label>{t('programs.field.disciplines')}</label>
                 <TagsInput
                   value={editing.disciplines || []}
                   onChange={(next) => setEditing({ ...editing, disciplines: next })}
-                  placeholder="Введите название и Enter (Machine Learning, Robotics, ...)"
+                  placeholder="Machine Learning, Robotics, ..."
                 />
                 <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
-                  Конкретные специализации внутри программы (до 30 шт.).
+                  {t('programs.field.disciplinesHint')}
                 </div>
               </div>
 
               <div className="form-group">
-                <label>Официальный сайт университета</label>
+                <label>{t('programs.field.website')}</label>
                 <input
                   type="url"
                   value={editing.universityWebsiteUrl || ''}
@@ -628,11 +628,11 @@ export default function Programs() {
                   onChange={(e) => setEditing({ ...editing, universityWebsiteUrl: e.target.value.trim() })}
                 />
                 <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
-                  Просто вставь URL — на карточке кнопка «🌐 Официальный сайт» появится сама.
+                  {t('programs.field.websiteHint')}
                 </div>
               </div>
               <div className="form-group">
-                <label>Описание</label>
+                <label>{t('programs.field.description')}</label>
                 <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
                   <button type="button" className="btn btn-sm btn-secondary" title="Жирный"
                     onClick={() => wrapDescription(editing, setEditing, '**', '**')}>
@@ -660,7 +660,7 @@ export default function Programs() {
                 />
               </div>
               <div className="form-group">
-                <label>Картинка программы</label>
+                <label>{t('programs.field.image')}</label>
                 <div className="program-image-uploader">
                   {(pendingPreview || editing.imageUrl) && (
                     <div className="program-image-preview">
@@ -720,18 +720,18 @@ export default function Programs() {
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'row' }}>
                   <input type="checkbox" checked={editing.published !== false} onChange={(e) => setEditing({ ...editing, published: e.target.checked })} />
-                  Показывать на лендинге
+                  {t('programs.field.published')}
                 </label>
               </div>
               <div className="form-actions">
-                <button type="button" className="btn btn-secondary" onClick={closeEditor} disabled={saving}>Отмена</button>
+                <button type="button" className="btn btn-secondary" onClick={closeEditor} disabled={saving}>{t('common.cancel')}</button>
                 <button
                   type="submit"
                   className="btn btn-primary"
                   disabled={saving || formInvalid}
                   title={formInvalid ? 'Исправьте ошибки в форме' : ''}
                 >
-                  {saving ? 'Сохраняем...' : 'Сохранить'}
+                  {saving ? t('common.loading') : t('common.save')}
                 </button>
               </div>
             </motion.form>
