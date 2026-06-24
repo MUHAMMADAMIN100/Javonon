@@ -376,6 +376,7 @@ function Stat({ label, value, sub, accent }: { label: string; value: string; sub
 
 function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId: string; onSaved: () => void }) {
   const { toast } = useUI();
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState(user.phone || '');
   const [passportNo, setPassportNo] = useState(user.passportNo || '');
@@ -400,18 +401,18 @@ function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId
         kpiAutoStepPct: Number(kpiAutoStepPct) || 0,
         kpiMaxPct: Number(kpiMaxPct) || 0,
       });
-      toast('Сохранено', 'success');
+      toast(t('toast.updated'), 'success');
       setOpen(false);
       onSaved();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
   if (!open) {
     return (
       <button className="btn btn-sm btn-secondary" style={{ marginTop: 12 }} onClick={() => setOpen(true)}>
-        Изменить
+        {t('common.edit')}
       </button>
     );
   }
@@ -419,22 +420,19 @@ function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId
   return (
     <div style={{ marginTop: 16, padding: 14, border: '1px solid var(--border)', borderRadius: 10 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-        <LabelInput label="Телефон" value={phone} onChange={setPhone} />
-        <LabelInput label="Паспорт №" value={passportNo} onChange={setPassportNo} />
-        <LabelInput label="Принят (дата)" value={hiredAt} onChange={setHiredAt} type="date" />
-        <LabelInput label="Фикс / мес" value={baseSalary} onChange={setBaseSalary} type="number" />
-        <LabelInput label="Почасовая" value={hourlyRate} onChange={setHourlyRate} type="number" />
-        <LabelInput label="Бонус %" value={bonusPercent} onChange={setBonusPercent} type="number" />
-        <LabelInput label="KPI цель %" value={kpiTargetPct} onChange={setKpiTargetPct} type="number" />
-        <LabelInput label="Авто-рост KPI / мес (0 = выкл)" value={kpiAutoStepPct} onChange={setKpiAutoStepPct} type="number" />
-        <LabelInput label="Потолок KPI %" value={kpiMaxPct} onChange={setKpiMaxPct} type="number" />
-      </div>
-      <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-soft)' }}>
-        Авто-рост: 1-го числа каждого месяца KPI-цель повышается на указанный шаг, пока не достигнет потолка.
+        <LabelInput label={t('userDetail.field.phone')} value={phone} onChange={setPhone} />
+        <LabelInput label={t('userDetail.field.passport')} value={passportNo} onChange={setPassportNo} />
+        <LabelInput label={t('userDetail.field.hiredAt')} value={hiredAt} onChange={setHiredAt} type="date" />
+        <LabelInput label={t('userDetail.field.baseSalary')} value={baseSalary} onChange={setBaseSalary} type="number" />
+        <LabelInput label={t('userDetail.field.hourlyRate')} value={hourlyRate} onChange={setHourlyRate} type="number" />
+        <LabelInput label={t('userDetail.field.bonusPercent')} value={bonusPercent} onChange={setBonusPercent} type="number" />
+        <LabelInput label={t('userDetail.field.kpiTarget')} value={kpiTargetPct} onChange={setKpiTargetPct} type="number" />
+        <LabelInput label={t('userDetail.field.kpiAutoStep')} value={kpiAutoStepPct} onChange={setKpiAutoStepPct} type="number" />
+        <LabelInput label={t('userDetail.field.kpiMax')} value={kpiMaxPct} onChange={setKpiMaxPct} type="number" />
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-        <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)}>Отмена</button>
-        <button className="btn btn-sm btn-primary" onClick={save}>Сохранить</button>
+        <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)}>{t('common.cancel')}</button>
+        <button className="btn btn-sm btn-primary" onClick={save}>{t('common.save')}</button>
       </div>
     </div>
   );
@@ -868,6 +866,7 @@ function CustomRoleEditor({
   onSaved: () => void;
 }) {
   const { toast } = useUI();
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string>((user as any).customRoleId || '');
   const [saving, setSaving] = useState(false);
@@ -887,11 +886,11 @@ function CustomRoleEditor({
     setSaving(true);
     try {
       await setUserCustomRole(userId, selected || null);
-      toast(selected ? 'Кастомная роль привязана' : 'Кастомная роль снята', 'success');
+      toast(t('toast.updated'), 'success');
       setOpen(false);
       onSaved();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setSaving(false);
     }
@@ -905,7 +904,7 @@ function CustomRoleEditor({
           onClick={() => setOpen(true)}
           style={{ marginLeft: 8 }}
         >
-          {currentName ? `Кастомная роль: ${currentName}` : 'Кастомная роль (FOUNDER)'}
+          {currentName ? `${t('userDetail.field.customRole')}: ${currentName}` : t('userDetail.field.customRole')}
         </button>
       </div>
     );
@@ -928,27 +927,23 @@ function CustomRoleEditor({
       }}>
         FOUNDER · CUSTOM ROLE
       </div>
-      <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-soft)' }}>
-        Дополнительный набор доступов поверх базовых ролей. Создаются в
-        Настройки → Роли и доступы.
-      </div>
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
-          Кастомная роль:
+          {t('userDetail.field.customRole')}:
         </label>
         <select value={selected} onChange={(e) => setSelected(e.target.value)} disabled={rolesQuery.isLoading}>
-          <option value="">— не назначена —</option>
+          <option value="">— {t('managerBar.notAssigned')} —</option>
           {roles.filter((r: CustomRole) => r.isActive).map((r: CustomRole) => (
-            <option key={r.id} value={r.id}>{r.name} ({r.permissions.length} доступов)</option>
+            <option key={r.id} value={r.id}>{r.name} ({r.permissions.length})</option>
           ))}
         </select>
       </div>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>
-          Отмена
+          {t('common.cancel')}
         </button>
         <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
-          {saving ? 'Сохраняем…' : 'Сохранить'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
       </div>
     </div>

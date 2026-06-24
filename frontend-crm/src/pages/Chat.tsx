@@ -611,19 +611,19 @@ export default function Chat() {
               letterSpacing: '0.12em',
               color: 'var(--text-soft)',
               textTransform: 'uppercase',
-            }}>Чаты</div>
+            }}>{t('chat.title')}</div>
             <div style={{ display: 'flex', gap: 4 }}>
               <button
                 className="btn btn-sm btn-secondary"
                 onClick={() => { setShowNewTeam(false); setShowNewDirect((v) => !v); }}
-                title="Новый личный чат"
+                title={t('chat.newDirect')}
               >
                 <Icon name="person_add" size={14} />
               </button>
               <button
                 className="btn btn-sm btn-secondary"
                 onClick={() => { setShowNewDirect(false); setShowNewTeam((v) => !v); }}
-                title="Новая команда"
+                title={t('chat.newTeam')}
               >
                 <Icon name="groups" size={14} />
               </button>
@@ -644,7 +644,7 @@ export default function Chat() {
                 return r.type === 'GENERAL'
                   ? 'Команда Javonon'
                   : r.type === 'DIRECT'
-                    ? otherMember?.user.fullName || r.title || 'Чат'
+                    ? otherMember?.user.fullName || r.title || t('chat.title')
                     : r.title || 'Команда';
               };
 
@@ -792,7 +792,7 @@ export default function Chat() {
                             (me?.id ? m.userId !== me.id : true)
                             && (me?.fullName ? m.user.fullName !== me.fullName : true),
                           );
-                          return other?.user.fullName || activeRoom.title || 'Чат';
+                          return other?.user.fullName || activeRoom.title || t('chat.title');
                         })()
                       : activeRoom.title}
                 </div>
@@ -802,7 +802,7 @@ export default function Chat() {
 
           <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
             {messages.length === 0 && (
-              <div className="empty" style={{ marginTop: 80 }}>Сообщений пока нет — начни первым</div>
+              <div className="empty" style={{ marginTop: 80 }}>{t('chat.empty')}</div>
             )}
             {messages.map((m, i) => {
               // QA-fix #6: надёжное определение isMine. Bot (__BOT__ mention)
@@ -911,7 +911,7 @@ export default function Chat() {
                           opacity: 0.85,
                         }}>
                           <div style={{ fontWeight: 600, fontSize: 11, marginBottom: 2 }}>
-                            {m.replyTo.author?.fullName || 'Сообщение'}
+                            {m.replyTo.author?.fullName || t('chat.message')}
                           </div>
                           <div style={{
                             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280,
@@ -1213,7 +1213,7 @@ export default function Chat() {
               value={input}
               onChange={onInputChange}
               onKeyDown={onInputKeyDown}
-              placeholder="Напиши сообщение... (@ — упомянуть)"
+              placeholder={t('chat.placeholder')}
               style={{
                 flex: 1,
                 padding: '12px 16px',
@@ -1358,7 +1358,7 @@ export default function Chat() {
                       ? r.members.find((mm) =>
                           (me?.id ? mm.userId !== me.id : true)
                           && (me?.fullName ? mm.user.fullName !== me.fullName : true),
-                        )?.user.fullName || r.title || 'Чат'
+                        )?.user.fullName || r.title || t('chat.title')
                       : r.title || 'Команда';
                   return (
                     <button
@@ -1580,6 +1580,7 @@ function NewTeamForm({ users, onCreate, onCancel }: {
   onCreate: (title: string, memberIds: string[]) => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   const [title, setTitle] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -1596,11 +1597,11 @@ function NewTeamForm({ users, onCreate, onCancel }: {
         color: 'var(--text-soft)',
         margin: '4px 4px 8px',
         textTransform: 'uppercase',
-      }}>Новая команда</div>
+      }}>{t('chat.newTeam')}</div>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Название команды"
+        placeholder={t('chat.teamName')}
         style={{
           width: '100%',
           padding: '10px 12px',

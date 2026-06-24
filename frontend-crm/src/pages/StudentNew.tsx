@@ -10,9 +10,12 @@ import PhoneInput from '../components/PhoneInput';
 import BackButton from '../components/BackButton';
 import { keys } from '../lib/queryKeys';
 import { useInvalidatingMutation } from '../lib/optimistic';
+import { useT } from '../lib/i18n';
+import { useDirectionLabel, useChannelLabel } from '../lib/labels';
 
 // Строка-копируемое поле для модалки выдачи доступа.
 function CredRow({ label, value, small }: { label: string; value: string; small?: boolean }) {
+  const { t } = useT();
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
     try {
@@ -31,7 +34,7 @@ function CredRow({ label, value, small }: { label: string; value: string; small?
         type="button"
         onClick={onCopy}
         className="creds-copy-btn"
-        title={copied ? 'Скопировано' : 'Скопировать'}
+        title={copied ? t('toast.copied') : t('common.copy')}
       >
         <Icon name={copied ? 'check' : 'content_copy'} size={15} />
       </button>
@@ -42,6 +45,9 @@ function CredRow({ label, value, small }: { label: string; value: string; small?
 export default function StudentNew() {
   const navigate = useNavigate();
   const { toast } = useUI();
+  const { t } = useT();
+  const directionLabel = useDirectionLabel();
+  const channelLabel = useChannelLabel();
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [phoneLabel, setPhoneLabel] = useState('сам');
@@ -82,7 +88,7 @@ export default function StudentNew() {
         fullName: res.fullName,
       });
     },
-    onError: (e: any) => setError(e.response?.data?.message?.toString() || 'Ошибка создания'),
+    onError: (e: any) => setError(e.response?.data?.message?.toString() || t('toast.error')),
   });
   const submitting = createMut.isPending;
 
@@ -118,12 +124,12 @@ export default function StudentNew() {
 
   const copyBoth = async () => {
     if (!credentials) return;
-    const text = `Логин: ${credentials.email}\nПароль: ${credentials.password}\nВход: https://javonon.vercel.app/login`;
+    const text = `${t('userDetail.field.email')}: ${credentials.email}\n${t('login.password')}: ${credentials.password}\n${t('login.title')}: https://javonon.vercel.app/login`;
     try {
       await navigator.clipboard.writeText(text);
-      toast('Данные скопированы', 'success');
+      toast(t('toast.copied'), 'success');
     } catch {
-      toast('Не удалось скопировать', 'error');
+      toast(t('toast.error'), 'error');
     }
   };
 
@@ -131,16 +137,16 @@ export default function StudentNew() {
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
       <BackButton fallback="/students" />
       <div className="card">
-      <div className="card-header"><h2 className="card-title">Новый студент</h2></div>
+      <div className="card-header"><h2 className="card-title">{t('studentNew.title')}</h2></div>
       <div className="card-body">
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={onSubmit}>
           <div className="form-group">
-            <label>ФИО *</label>
+            <label>{t('app.field.fullName')} *</label>
             <input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
+              onBlur={() => setTouched((tt) => ({ ...tt, fullName: true }))}
               className={showErr('fullName') ? 'input-error' : ''}
               maxLength={100}
               required
@@ -149,7 +155,7 @@ export default function StudentNew() {
           </div>
           <div className="form-grid-2">
             <div className="form-group">
-              <label>Основной телефон</label>
+              <label>{t('app.field.phone')}</label>
               <PhoneInput
                 value={phone}
                 onChange={(v) => setPhone(v)}
@@ -158,47 +164,45 @@ export default function StudentNew() {
               {showErr('phone') && <div className="form-error-text">{errors.phone}</div>}
             </div>
             <div className="form-group">
-              <label>Подпись основного <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— чей номер</span></label>
+              <label>{t('studentNew.field.phoneLabel')}</label>
               <input
                 value={phoneLabel}
                 onChange={(e) => setPhoneLabel(e.target.value)}
-                placeholder="сам"
                 maxLength={40}
               />
             </div>
           </div>
           <div className="form-grid-2">
             <div className="form-group">
-              <label>Доп. телефон <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— мать/отец/др.</span></label>
+              <label>{t('app.field.secondaryPhone')}</label>
               <PhoneInput
                 value={secondaryPhone}
                 onChange={(v) => setSecondaryPhone(v)}
               />
             </div>
             <div className="form-group">
-              <label>Подпись доп. контакта</label>
+              <label>{t('studentNew.field.secondaryLabel')}</label>
               <input
                 value={secondaryLabel}
                 onChange={(e) => setSecondaryLabel(e.target.value)}
-                placeholder="Отец, Мать..."
                 maxLength={40}
               />
             </div>
           </div>
           <div className="form-grid-2">
             <div className="form-group">
-              <label>Предпочтительный канал связи</label>
+              <label>{t('app.field.preferredChannel')}</label>
               <select value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
                 <option value="">—</option>
-                <option value="WHATSAPP">WhatsApp</option>
-                <option value="PHONE">Телефон</option>
-                <option value="INSTAGRAM">Instagram</option>
-                <option value="TELEGRAM">Telegram</option>
-                <option value="EMAIL">Email</option>
+                <option value="WHATSAPP">{channelLabel('WHATSAPP' as any)}</option>
+                <option value="PHONE">{channelLabel('PHONE' as any)}</option>
+                <option value="INSTAGRAM">{channelLabel('INSTAGRAM' as any)}</option>
+                <option value="TELEGRAM">{channelLabel('TELEGRAM' as any)}</option>
+                <option value="EMAIL">{channelLabel('EMAIL' as any)}</option>
               </select>
             </div>
             <div className="form-group">
-              <label>Дата рождения <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— для авто-поздравлений</span></label>
+              <label>{t('app.field.birthday')}</label>
               <input
                 type="date"
                 value={birthday}
@@ -207,30 +211,30 @@ export default function StudentNew() {
             </div>
           </div>
           <div className="form-group">
-            <label>Email * <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— станет логином студента</span></label>
+            <label>{t('userDetail.field.email')} *</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+              onBlur={() => setTouched((tt) => ({ ...tt, email: true }))}
               className={showErr('email') ? 'input-error' : ''}
               required
             />
             {showErr('email') && <div className="form-error-text">{errors.email}</div>}
           </div>
           <div className="form-group">
-            <label>Направление *</label>
+            <label>{t('app.field.direction')} *</label>
             <select value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
-              <option value="BACHELOR">Бакалавриат → каб. 1</option>
-              <option value="MASTER">Магистратура → каб. 2</option>
-              <option value="LANGUAGE">Языковые курсы → каб. 3</option>
-              <option value="LANGUAGE_COLLEGE">Языковой + колледж → каб. 4</option>
-              <option value="LANGUAGE_BACHELOR">Языковой + бакалавриат → каб. 5</option>
-              <option value="COLLEGE">Колледж → каб. 6</option>
+              <option value="BACHELOR">{directionLabel('BACHELOR')}</option>
+              <option value="MASTER">{directionLabel('MASTER')}</option>
+              <option value="LANGUAGE">{directionLabel('LANGUAGE')}</option>
+              <option value="LANGUAGE_COLLEGE">{directionLabel('LANGUAGE_COLLEGE')}</option>
+              <option value="LANGUAGE_BACHELOR">{directionLabel('LANGUAGE_BACHELOR')}</option>
+              <option value="COLLEGE">{directionLabel('COLLEGE')}</option>
             </select>
           </div>
           <div className="form-group">
-            <label>Комментарий <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— до 1000 символов</span></label>
+            <label>{t('app.field.comment')}</label>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
@@ -240,14 +244,13 @@ export default function StudentNew() {
             {showErr('comment') && <div className="form-error-text">{errors.comment}</div>}
           </div>
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => navigate('/students')}>Отмена</button>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/students')}>{t('common.cancel')}</button>
             <button
               type="submit"
               className="btn btn-primary"
               disabled={submitting || isInvalid}
-              title={isInvalid ? 'Исправьте ошибки в форме' : ''}
             >
-              {submitting ? 'Создаём...' : 'Создать'}
+              {submitting ? t('common.saving') : t('common.create')}
             </button>
           </div>
         </form>
@@ -272,27 +275,27 @@ export default function StudentNew() {
               <div className="dialog-icon" style={{ background: 'var(--success-soft)', color: 'var(--success)' }}>
                 <Icon name="check_circle" size={28} />
               </div>
-              <div className="dialog-title">Студент создан</div>
+              <div className="dialog-title">{t('toast.created')}</div>
               <div className="dialog-message">
-                Передайте эти данные <b>{credentials.fullName}</b> — это единственный раз, когда система показывает пароль.
+                <b>{credentials.fullName}</b> — {t('studentDetail.password.oneTime')}
               </div>
 
               <div className="creds-box">
-                <CredRow label="Логин" value={credentials.email} />
-                <CredRow label="Пароль" value={credentials.password} />
-                <CredRow label="Ссылка" value="javonon.vercel.app/login" small />
+                <CredRow label={t('userDetail.field.email')} value={credentials.email} />
+                <CredRow label={t('login.password')} value={credentials.password} />
+                <CredRow label={t('login.title')} value="javonon.vercel.app/login" small />
               </div>
 
               <div className="dialog-actions">
                 <button className="btn btn-secondary" onClick={copyBoth}>
                   <Icon name="content_copy" size={16} style={{ marginRight: 4 }} />
-                  Копировать
+                  {t('common.copy')}
                 </button>
                 <button
                   className="btn btn-primary"
                   onClick={() => navigate(`/students/${credentials.id}`)}
                 >
-                  Открыть карточку
+                  {t('common.open')}
                 </button>
               </div>
             </motion.div>

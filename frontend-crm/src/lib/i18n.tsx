@@ -439,6 +439,10 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== chat =====
     'chat.title': 'Корпоративный чат',
+    'chat.newDirect': 'Новый личный чат',
+    'chat.newTeam': 'Новая команда',
+    'chat.teamName': 'Название команды',
+    'chat.message': 'Сообщение',
     'chat.new': 'Новый чат',
     'chat.empty': 'Сообщений пока нет',
     'chat.placeholder': 'Сообщение…',
@@ -599,6 +603,8 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== student detail / new =====
     'studentNew.title': 'Новый студент',
+    'studentNew.field.phoneLabel': 'Чей основной телефон',
+    'studentNew.field.secondaryLabel': 'Подпись доп. контакта',
     'studentDetail.title': 'Карточка студента',
     'studentDetail.tab.info': 'Информация',
     'studentDetail.tab.documents': 'Документы',
@@ -716,6 +722,8 @@ const DICT: Record<Lang, Record<string, string>> = {
     'userDetail.field.bonusPercent': 'Бонус % с продаж',
     'userDetail.field.overtimeMult': '× за переработку',
     'userDetail.field.kpiTarget': 'KPI цель %',
+    'userDetail.field.kpiAutoStep': 'Авто-рост KPI / мес',
+    'userDetail.field.kpiMax': 'Потолок KPI %',
     'userDetail.action.saveProfile': 'Сохранить профиль',
     'userDetail.action.uploadDoc': '+ Загрузить документ',
     'userDetail.action.resetPassword': 'Сбросить пароль',
@@ -1288,6 +1296,10 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== chat =====
     'chat.title': 'Чати корпоративӣ',
+    'chat.newDirect': 'Сӯҳбати шахсии нав',
+    'chat.newTeam': 'Команда нав',
+    'chat.teamName': 'Номи команда',
+    'chat.message': 'Паём',
     'chat.new': 'Чати нав',
     'chat.empty': 'Паём нест',
     'chat.placeholder': 'Паём…',
@@ -1448,6 +1460,8 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== student detail / new =====
     'studentNew.title': 'Донишҷӯи нав',
+    'studentNew.field.phoneLabel': 'Соҳиби телефони асосӣ',
+    'studentNew.field.secondaryLabel': 'Тавсифи алоқаи иловагӣ',
     'studentDetail.title': 'Карточкаи донишҷӯ',
     'studentDetail.tab.info': 'Маълумот',
     'studentDetail.tab.documents': 'Ҳуҷҷатҳо',
@@ -1565,6 +1579,8 @@ const DICT: Record<Lang, Record<string, string>> = {
     'userDetail.field.bonusPercent': 'Бонус % аз фурӯш',
     'userDetail.field.overtimeMult': '× барои кори иловагӣ',
     'userDetail.field.kpiTarget': 'Ҳадафи KPI %',
+    'userDetail.field.kpiAutoStep': 'Авторушди KPI / моҳ',
+    'userDetail.field.kpiMax': 'Сақфи KPI %',
     'userDetail.action.saveProfile': 'Сабти профил',
     'userDetail.action.uploadDoc': '+ Боргузории ҳуҷҷат',
     'userDetail.action.resetPassword': 'Тағйири парол',
