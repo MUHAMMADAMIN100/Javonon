@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createTask, deleteTask, listTasks, updateTask } from '../api/tasks';
 import { listUsers } from '../api/users';
 import type { Role, Task, TaskStatus } from '../api/types';
-import { ROLE_LABEL, TASK_STATUS_BADGE, TASK_STATUS_LABEL } from '../api/types';
+import { TASK_STATUS_BADGE } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
@@ -15,11 +15,13 @@ import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../l
 import Loading from '../components/Loading';
 import { isElevated, displayRoleLabel } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useTaskStatusLabel } from '../lib/labels';
 
 type Scope = 'all' | 'mine';
 
 export default function Tasks() {
   const { t } = useT();
+  const taskStatusLabel = useTaskStatusLabel();
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
@@ -301,7 +303,7 @@ export default function Tasks() {
                       <div className="task-title">{t.title}</div>
                       <div className="task-desc">{t.description}</div>
                       <div className="task-meta">
-                        <span className={`badge ${TASK_STATUS_BADGE[t.status]}`}>{TASK_STATUS_LABEL[t.status]}</span>
+                        <span className={`badge ${TASK_STATUS_BADGE[t.status]}`}>{taskStatusLabel(t.status)}</span>
                         <span className="task-meta-item">
                           <Icon name="person" size={14} />
                           {t.assignedTo?.fullName || '—'}

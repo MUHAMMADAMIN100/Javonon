@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createUser, deleteUser, listUsers, updateUser } from '../api/users';
-import { ROLE_LABEL, type Role, type User } from '../api/types';
+import { type Role, type User } from '../api/types';
 import { listCustomRoles } from '../api/customRoles';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useRoleLabel } from '../lib/labels';
 import { useUI } from '../ui/Dialogs';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, passwordRule, required, validateAll } from '../utils/validators';
 import ChangePasswordModal from '../components/ChangePasswordModal';
@@ -25,6 +26,7 @@ const EMPTY_FORM = {
 
 export default function Users() {
   const { t } = useT();
+  const roleLabel = useRoleLabel();
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const [creating, setCreating] = useState(false);
@@ -210,7 +212,7 @@ export default function Users() {
                               fontWeight: 500,
                             }}
                           >
-                            {ROLE_LABEL[r as Role] || r}
+                            {roleLabel(r as string)}
                           </span>
                         ));
                       })()}

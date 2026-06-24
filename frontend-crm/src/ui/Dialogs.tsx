@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
 
 type ConfirmOptions = {
   title?: string;
@@ -27,6 +28,7 @@ export function useUI() {
 }
 
 export function UIProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useT();
   const [dialog, setDialog] = useState<(ConfirmOptions & { resolve: (v: boolean) => void }) | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
@@ -84,7 +86,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  {dialog.cancelText || 'Отмена'}
+                  {dialog.cancelText || t('confirm.cancel')}
                 </motion.button>
                 <motion.button
                   className={`btn ${dialog.danger ? 'btn-danger' : 'btn-primary'}`}
@@ -93,7 +95,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
                   whileTap={{ scale: 0.97 }}
                   autoFocus
                 >
-                  {dialog.confirmText || 'Подтвердить'}
+                  {dialog.confirmText || t('confirm.ok')}
                 </motion.button>
               </div>
             </motion.div>

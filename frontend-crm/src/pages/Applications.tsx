@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listApplications } from '../api/applications';
 import { listUsers } from '../api/users';
 import type { ApplicationStatus, Direction } from '../api/types';
-import { DIRECTION_LABEL, STATUS_BADGE, STATUS_LABEL } from '../api/types';
+import { STATUS_BADGE } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
@@ -15,6 +15,7 @@ import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useDirectionLabel, useApplicationStatusLabel } from '../lib/labels';
 
 type Scope = 'all' | 'mine';
 
@@ -30,6 +31,8 @@ const MANAGER_ROLES = new Set(['SALES_MANAGER', 'CLIENT_MANAGER']);
 
 export default function Applications() {
   const { t } = useT();
+  const directionLabel = useDirectionLabel();
+  const statusLabel = useApplicationStatusLabel();
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
@@ -182,7 +185,7 @@ export default function Applications() {
                     >
                       <td><strong>{a.fullName}</strong></td>
                       <td data-label="Телефон">{a.phone}</td>
-                      <td data-label="Направление">{DIRECTION_LABEL[a.direction]}</td>
+                      <td data-label="Направление">{directionLabel(a.direction)}</td>
                       <td data-label="Менеджер">
                         <div className="mgr-cell">
                           <div className="mgr-row">
@@ -207,7 +210,7 @@ export default function Applications() {
                           </div>
                         </div>
                       </td>
-                      <td data-label="Статус"><span className={`badge ${STATUS_BADGE[a.status]}`}>{STATUS_LABEL[a.status]}</span></td>
+                      <td data-label="Статус"><span className={`badge ${STATUS_BADGE[a.status]}`}>{statusLabel(a.status)}</span></td>
                       <td data-label="Дата">{new Date(a.createdAt).toLocaleDateString('ru-RU')}</td>
                     </motion.tr>
                   ))}

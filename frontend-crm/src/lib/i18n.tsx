@@ -500,6 +500,100 @@ const DICT: Record<Lang, Record<string, string>> = {
     'dashboard.stats.tasks': 'Активных задач',
     'dashboard.recent': 'Недавняя активность',
 
+    // ===== confirm dialog =====
+    'confirm.title': 'Подтвердить действие',
+    'confirm.ok': 'Да, подтвердить',
+    'confirm.cancel': 'Отмена',
+
+    // ===== toast =====
+    'toast.saved': 'Сохранено',
+    'toast.deleted': 'Удалено',
+    'toast.created': 'Создано',
+    'toast.updated': 'Обновлено',
+    'toast.error': 'Ошибка',
+    'toast.uploaded': 'Загружено',
+    'toast.sent': 'Отправлено',
+    'toast.copied': 'Скопировано в буфер',
+
+    // ===== task status long =====
+    'task.status.TODO': 'К выполнению',
+    'task.status.IN_PROGRESS': 'В работе',
+    'task.status.DONE': 'Выполнено',
+
+    // ===== student status =====
+    'student.status.ACTIVE': 'Активный',
+    'student.status.PAUSED': 'Приостановлен',
+    'student.status.GRADUATED': 'Выпустился',
+    'student.status.ARCHIVED': 'В архиве',
+
+    // ===== onboarding =====
+    'onboarding.WELCOME': 'Приветствие',
+    'onboarding.DOCS_COLLECTED': 'Документы собраны',
+    'onboarding.CABINET_OPENED': 'Кабинет открыт',
+    'onboarding.ACADEMY_INTRO': 'Ознакомление с программой',
+    'onboarding.ACTIVE': 'В активной работе',
+
+    // ===== contact channels =====
+    'channel.WHATSAPP': 'WhatsApp',
+    'channel.PHONE': 'Телефон',
+    'channel.INSTAGRAM': 'Instagram',
+    'channel.TELEGRAM': 'Telegram',
+    'channel.EMAIL': 'Email',
+
+    // ===== filters / pagination =====
+    'filter.reset': 'Сбросить',
+    'filter.apply': 'Применить',
+    'pagination.prev': '← Назад',
+    'pagination.next': 'Вперёд →',
+    'pagination.page': 'Стр.',
+    'pagination.of': 'из',
+
+    // ===== changePassword modal =====
+    'changePwd.title': 'Сменить пароль',
+    'changePwd.titleAdmin': 'Сбросить пароль',
+    'changePwd.current': 'Текущий пароль',
+    'changePwd.new': 'Новый пароль',
+    'changePwd.repeat': 'Повторите пароль',
+    'changePwd.success': 'Пароль обновлён',
+    'changePwd.mismatch': 'Пароли не совпадают',
+
+    // ===== profile page =====
+    'profile.personal': 'Личные данные',
+    'profile.hrFields': 'HR-блок',
+    'profile.field.phone': 'Телефон',
+    'profile.field.passport': 'Паспорт №',
+    'profile.field.hiredAt': 'Принят на работу',
+    'profile.field.createdAt': 'Аккаунт создан',
+    'profile.field.baseSalary': 'Базовый оклад',
+    'profile.field.hourlyRate': 'Почасовая ставка',
+    'profile.field.bonusPercent': 'Бонус % с продаж',
+    'profile.field.kpi': 'KPI %',
+    'profile.section.salary': 'Зарплата и оплата',
+    'profile.section.documents': 'Документы',
+    'profile.section.stats': 'Статистика',
+    'profile.section.schedule': 'График работы',
+    'profile.section.offer': 'Оферта',
+    'profile.sign': 'Подписать',
+    'profile.offer.signed': 'Подписана',
+    'profile.offer.pending': 'Не подписана',
+
+    // ===== student detail / new =====
+    'studentNew.title': 'Новый студент',
+    'studentDetail.title': 'Карточка студента',
+    'studentDetail.tab.info': 'Информация',
+    'studentDetail.tab.documents': 'Документы',
+    'studentDetail.tab.payments': 'Платежи',
+    'studentDetail.tab.history': 'История',
+    'studentDetail.tab.programs': 'Программа',
+    'studentDetail.tab.tasks': 'Задачи',
+
+    // ===== application detail =====
+    'appDetail.title': 'Карточка заявки',
+    'appDetail.tab.info': 'Информация',
+    'appDetail.tab.history': 'История общения',
+    'appDetail.tab.calls': 'Звонки',
+    'appDetail.tab.notes': 'Заметки',
+
     // ===== lang =====
     'lang.switch': 'Язык',
     'lang.ru': 'Русский',
@@ -986,6 +1080,100 @@ const DICT: Record<Lang, Record<string, string>> = {
     'dashboard.stats.income': 'Даромади моҳ',
     'dashboard.stats.tasks': 'Вазифаҳои фаъол',
     'dashboard.recent': 'Фаъолияти ахир',
+
+    // ===== confirm dialog =====
+    'confirm.title': 'Амалро тасдиқ кунед',
+    'confirm.ok': 'Ҳа, тасдиқ',
+    'confirm.cancel': 'Бекор',
+
+    // ===== toast =====
+    'toast.saved': 'Сабт шуд',
+    'toast.deleted': 'Нест шуд',
+    'toast.created': 'Сохта шуд',
+    'toast.updated': 'Навсозӣ шуд',
+    'toast.error': 'Хатогӣ',
+    'toast.uploaded': 'Бор шуд',
+    'toast.sent': 'Фиристода шуд',
+    'toast.copied': 'Нусхабардорӣ шуд',
+
+    // ===== task status long =====
+    'task.status.TODO': 'Барои иҷро',
+    'task.status.IN_PROGRESS': 'Дар ҷараён',
+    'task.status.DONE': 'Иҷро шуд',
+
+    // ===== student status =====
+    'student.status.ACTIVE': 'Фаъол',
+    'student.status.PAUSED': 'Боздошташуда',
+    'student.status.GRADUATED': 'Хатм',
+    'student.status.ARCHIVED': 'Дар бойгонӣ',
+
+    // ===== onboarding =====
+    'onboarding.WELCOME': 'Хушомадед',
+    'onboarding.DOCS_COLLECTED': 'Ҳуҷҷатҳо ҷамъ шуд',
+    'onboarding.CABINET_OPENED': 'Кабинет кушода шуд',
+    'onboarding.ACADEMY_INTRO': 'Шиносоӣ бо барнома',
+    'onboarding.ACTIVE': 'Дар кори фаъол',
+
+    // ===== contact channels =====
+    'channel.WHATSAPP': 'WhatsApp',
+    'channel.PHONE': 'Телефон',
+    'channel.INSTAGRAM': 'Instagram',
+    'channel.TELEGRAM': 'Telegram',
+    'channel.EMAIL': 'Email',
+
+    // ===== filters / pagination =====
+    'filter.reset': 'Бекор кардан',
+    'filter.apply': 'Татбиқ',
+    'pagination.prev': '← Қаблӣ',
+    'pagination.next': 'Минбаъд →',
+    'pagination.page': 'Саҳ.',
+    'pagination.of': 'аз',
+
+    // ===== changePassword modal =====
+    'changePwd.title': 'Тағйири парол',
+    'changePwd.titleAdmin': 'Барқарор кардани парол',
+    'changePwd.current': 'Пароли ҷорӣ',
+    'changePwd.new': 'Пароли нав',
+    'changePwd.repeat': 'Паролро такрор кунед',
+    'changePwd.success': 'Парол навсозӣ шуд',
+    'changePwd.mismatch': 'Паролҳо мувофиқат намекунанд',
+
+    // ===== profile page =====
+    'profile.personal': 'Маълумоти шахсӣ',
+    'profile.hrFields': 'Блоки HR',
+    'profile.field.phone': 'Телефон',
+    'profile.field.passport': 'Паспорт №',
+    'profile.field.hiredAt': 'Ба кор қабул шуд',
+    'profile.field.createdAt': 'Аккаунт сохта шуд',
+    'profile.field.baseSalary': 'Маоши асосӣ',
+    'profile.field.hourlyRate': 'Маблағ бо соат',
+    'profile.field.bonusPercent': 'Бонус % аз фурӯш',
+    'profile.field.kpi': 'KPI %',
+    'profile.section.salary': 'Маош',
+    'profile.section.documents': 'Ҳуҷҷатҳо',
+    'profile.section.stats': 'Омор',
+    'profile.section.schedule': 'Ҷадвал',
+    'profile.section.offer': 'Қарордод',
+    'profile.sign': 'Имзо',
+    'profile.offer.signed': 'Имзо шудааст',
+    'profile.offer.pending': 'Имзо нашудааст',
+
+    // ===== student detail / new =====
+    'studentNew.title': 'Донишҷӯи нав',
+    'studentDetail.title': 'Карточкаи донишҷӯ',
+    'studentDetail.tab.info': 'Маълумот',
+    'studentDetail.tab.documents': 'Ҳуҷҷатҳо',
+    'studentDetail.tab.payments': 'Пардохтҳо',
+    'studentDetail.tab.history': 'Таърих',
+    'studentDetail.tab.programs': 'Барнома',
+    'studentDetail.tab.tasks': 'Вазифаҳо',
+
+    // ===== application detail =====
+    'appDetail.title': 'Карточкаи ариза',
+    'appDetail.tab.info': 'Маълумот',
+    'appDetail.tab.history': 'Таърихи муошират',
+    'appDetail.tab.calls': 'Зангҳо',
+    'appDetail.tab.notes': 'Қайдҳо',
 
     // ===== lang =====
     'lang.switch': 'Забон',

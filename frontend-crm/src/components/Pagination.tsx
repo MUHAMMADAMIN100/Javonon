@@ -1,4 +1,5 @@
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
 
 /**
  * Возвращает массив элементов пагинации в стиле Google: номера страниц
@@ -36,6 +37,7 @@ type Props = {
  * Использует CSS-классы `.pagination`, `.pg-btn`, `.pg-num` и т.д.
  */
 export default function Pagination({ page, total, pageSize, onChange }: Props) {
+  const { t } = useT();
   if (total <= pageSize) return null;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageRange = buildPageRange(page, totalPages);
@@ -45,17 +47,16 @@ export default function Pagination({ page, total, pageSize, onChange }: Props) {
   return (
     <div className="pagination">
       <div className="pagination-info">
-        Показано {rangeStart}–{rangeEnd} из {total}
+        {t('pagination.page')} {rangeStart}–{rangeEnd} {t('pagination.of')} {total}
       </div>
       <div className="pagination-controls">
         <button
           className="pg-btn pg-arrow"
           onClick={() => onChange(Math.max(1, page - 1))}
           disabled={page === 1}
-          title="Предыдущая страница"
         >
           <Icon name="chevron_left" size={16} />
-          Назад
+          {t('pagination.prev')}
         </button>
         {pageRange.map((p, i) =>
           p === '…' ? (
@@ -75,9 +76,8 @@ export default function Pagination({ page, total, pageSize, onChange }: Props) {
           className="pg-btn pg-arrow"
           onClick={() => onChange(Math.min(totalPages, page + 1))}
           disabled={page === totalPages}
-          title="Следующая страница"
         >
-          Далее
+          {t('pagination.next')}
           <Icon name="chevron_right" size={16} />
         </button>
       </div>

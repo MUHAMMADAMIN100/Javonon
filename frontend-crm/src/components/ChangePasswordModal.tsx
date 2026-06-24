@@ -5,6 +5,7 @@ import { updateUser } from '../api/users';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import PasswordInput from './PasswordInput';
+import { useT } from '../lib/i18n';
 
 type Mode =
   | { kind: 'self' }
@@ -18,6 +19,7 @@ type Props = {
 
 export default function ChangePasswordModal({ open, mode, onClose }: Props) {
   const { toast } = useUI();
+  const { t } = useT();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -49,11 +51,11 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
     const cnf = confirm.trim();
 
     if (nxt.length < 8) {
-      setErr('Новый пароль: минимум 8 символов');
+      setErr(t('auth.passwordHint'));
       return;
     }
     if (nxt !== cnf) {
-      setErr('Пароли не совпадают');
+      setErr(t('changePwd.mismatch'));
       return;
     }
     setBusy(true);
@@ -63,7 +65,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
       } else {
         await updateUser(mode.userId, { password: nxt });
       }
-      toast('Пароль обновлён', 'success');
+      toast(t('changePwd.success'), 'success');
       reset();
       onClose();
     } catch (e: any) {
@@ -97,12 +99,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
               <Icon name="lock_reset" size={28} />
             </div>
             <div className="dialog-title">
-              {mode.kind === 'self' ? 'Сменить пароль' : `Пароль: ${mode.userName}`}
-            </div>
-            <div className="dialog-message" style={{ marginBottom: 16 }}>
-              {mode.kind === 'self'
-                ? 'Укажите текущий и новый пароль.'
-                : 'Установите новый пароль для этого сотрудника.'}
+              {mode.kind === 'self' ? t('changePwd.title') : `${t('changePwd.titleAdmin')}: ${mode.userName}`}
             </div>
 
             {err && (
@@ -113,7 +110,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
 
             {mode.kind === 'self' && (
               <div className="form-group" style={{ textAlign: 'left', marginBottom: 12 }}>
-                <label>Текущий пароль</label>
+                <label>{t('changePwd.current')}</label>
                 <PasswordInput
                   value={current}
                   onChange={(e) => setCurrent(e.target.value)}
@@ -124,7 +121,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
               </div>
             )}
             <div className="form-group" style={{ textAlign: 'left', marginBottom: 12 }}>
-              <label>Новый пароль (мин. 8 симв.)</label>
+              <label>{t('changePwd.new')}</label>
               <PasswordInput
                 value={next}
                 onChange={(e) => setNext(e.target.value)}
@@ -135,7 +132,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
               />
             </div>
             <div className="form-group" style={{ textAlign: 'left', marginBottom: 16 }}>
-              <label>Повторите новый пароль</label>
+              <label>{t('changePwd.repeat')}</label>
               <PasswordInput
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
@@ -147,10 +144,10 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
 
             <div className="dialog-actions">
               <button type="button" className="btn btn-secondary" onClick={close} disabled={busy}>
-                Отмена
+                {t('common.cancel')}
               </button>
               <button type="submit" className="btn btn-primary" disabled={busy}>
-                {busy ? 'Сохранение…' : 'Сохранить'}
+                {busy ? t('common.saving') : t('common.save')}
               </button>
             </div>
           </motion.form>

@@ -253,7 +253,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
         <motion.button
           className="logout-btn"
           onClick={() => setPwdOpen(true)}
-          title="Сменить пароль"
+          title={t('auth.changePassword')}
           whileHover={{ scale: 1.15 }}
           whileTap={{ scale: 0.9 }}
         >
@@ -262,7 +262,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
         <motion.button
           className="logout-btn"
           onClick={logout}
-          title="Выйти"
+          title={t('auth.logout')}
           whileHover={{ scale: 1.15, rotate: 15 }}
           whileTap={{ scale: 0.9 }}
         >
