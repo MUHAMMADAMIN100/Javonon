@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createUser, deleteUser, listUsers, updateUser } from '../api/users';
@@ -28,6 +28,7 @@ export default function Users() {
   const { t } = useT();
   const roleLabel = useRoleLabel();
   const me = useAuth((s) => s.user);
+  const navigate = useNavigate();
   const { confirm, toast } = useUI();
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -160,27 +161,26 @@ export default function Users() {
               <tr><th>{t('app.field.fullName')}</th><th>{t('userDetail.field.email')}</th><th>{t('userDetail.field.role')}</th><th>{t('profile.field.createdAt')}</th><th></th></tr>
             </thead>
             <tbody>
-              {items.map((u) => (
-                <tr key={u.id} style={{ cursor: 'default' }}>
+              {items.map((u) => {
+                const customRole = (u as any).customRole;
+                const hasActiveCustom = customRole && customRole.isActive !== false;
+                return (
+                <tr
+                  key={u.id}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => navigate(`/users/${u.id}`)}
+                >
                   <td>
-                    <Link to={`/users/${u.id}`} style={{ fontWeight: 600, color: 'inherit' }}>
-                      {u.fullName}
-                    </Link>
+                    <span style={{ fontWeight: 600 }}>{u.fullName}</span>
                     {u.id === me?.id && <span style={{ color: '#5b6478', fontSize: 12 }}> (вы)</span>}
                   </td>
-                  <td data-label="Email">{u.email}</td>
-                  <td data-label="Роль">
-                    {/* Мульти-роли по ТЗ §2. Раньше тут был inline-select с
-                        опциями EMPLOYEE/ADMIN — обе устарели (EMPLOYEE
-                        удалён, выбора из 5 ролей не было). Управление
-                        ролями теперь в карточке /users/:id через RolesEditor
-                        (FOUNDER-only). Здесь — только просмотр всех ролей. */}
+                  <td>{u.email}</td>
+                  <td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {/* Custom-роль (если есть) показываем первым отдельным
-                          chip'ом с акцентным цветом — это «главная» роль
-                          юзера в UI; базовая остаётся ниже как «носитель»
-                          permissions. */}
-                      {(u as any).customRole && (u as any).customRole.isActive !== false && (
+                      {hasActiveCustom ? (
+                        // Если есть активная кастомная роль — показываем
+                        // только её, чтобы пользователь не путался с
+                        // «технической» базовой ролью под ней.
                         <span
                           style={{
                             padding: '3px 8px',
@@ -193,14 +193,10 @@ export default function Users() {
                           }}
                           title={t('userDetail.field.customRole')}
                         >
-                          {(u as any).customRole.name}
+                          {customRole.name}
                         </span>
-                      )}
-                      {(() => {
-                        const allRoles = Array.from(
-                          new Set([u.role, ...((u as any).roles || [])])
-                        ).filter(Boolean);
-                        return allRoles.map((r) => (
+                      ) : (
+                        Array.from(new Set([u.role, ...((u as any).roles || [])])).filter(Boolean).map((r) => (
                           <span
                             key={r}
                             style={{
@@ -214,12 +210,12 @@ export default function Users() {
                           >
                             {roleLabel(r as string)}
                           </span>
-                        ));
-                      })()}
+                        ))
+                      )}
                     </div>
                   </td>
-                  <td data-label="Создан">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('ru-RU') : '—'}</td>
-                  <td>
+                  <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('ru-RU') : '—'}</td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button
                         className="btn btn-sm btn-secondary"
@@ -234,7 +230,8 @@ export default function Users() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

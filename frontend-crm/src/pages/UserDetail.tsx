@@ -19,6 +19,7 @@ import {
 } from '../api/userProfile';
 import { offerCurrent, offerSign, type CurrentOfferState } from '../api/offers';
 import { listCustomRoles, setUserCustomRole, type CustomRole } from '../api/customRoles';
+import { updateUser } from '../api/users';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
 import ScheduleEditor from '../components/ScheduleEditor';
@@ -86,15 +87,13 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <Field
             label={t('userDetail.field.role')}
             value={(() => {
-              // Если есть активная кастомная — это «главная роль» юзера
-              // в UI. Дальше отдельно показываем базовые как «доступы».
               const parts: string[] = [];
               const cr = (user as any).customRole;
               if (cr?.name && cr.isActive !== false) parts.push(cr.name);
               const base = [user.role, ...(user.roles || [])]
                 .filter((r, i, a) => r && a.indexOf(r) === i)
                 .join(', ');
-              if (base) parts.push(parts.length ? `(база: ${base})` : base);
+              if (base) parts.push(parts.length ? `(${base})` : base);
               return parts.join(' ') || '—';
             })()}
           />
@@ -103,6 +102,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <Field label={t('userDetail.field.hiredAt')} value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
           <Field label={t('profile.field.createdAt')} value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
         </div>
+        {isFounder(meStore) && (
+          <PersonalInfoEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
+        )}
         {isAdmin && <HREditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />}
         {isFounder(meStore) && (
           <RolesEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
@@ -371,6 +373,72 @@ function Stat({ label, value, sub, accent }: { label: string; value: string; sub
       <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500, color, marginTop: 4 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * PersonalInfoEditor — FOUNDER редактирует базовые личные поля
+ * сотрудника (ФИО + email). Отдельно от HR-блока, чтобы было видно,
+ * что это «менять как FOUNDER переименовывает аккаунт».
+ */
+function PersonalInfoEditor({ user, userId, onSaved }: { user: FullProfile['user']; userId: string; onSaved: () => void }) {
+  const { toast } = useUI();
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const [fullName, setFullName] = useState(user.fullName);
+  const [email, setEmail] = useState(user.email);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      toast(t('toast.error'), 'error');
+      return;
+    }
+    if (!trimmedEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmedEmail)) {
+      toast(t('toast.error'), 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateUser(userId, {
+        fullName: trimmedName,
+        email: trimmedEmail,
+      });
+      toast(t('toast.updated'), 'success');
+      setOpen(false);
+      onSaved();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button className="btn btn-sm btn-secondary" style={{ marginTop: 12, marginRight: 8 }} onClick={() => setOpen(true)}>
+        {t('userDetail.section.personal')} · {t('common.edit')}
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 16, padding: 14, border: '1px solid var(--border)', borderRadius: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+        <LabelInput label={t('app.field.fullName')} value={fullName} onChange={setFullName} />
+        <LabelInput label={t('userDetail.field.email')} value={email} onChange={setEmail} type="email" />
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+        <button className="btn btn-sm btn-secondary" onClick={() => { setFullName(user.fullName); setEmail(user.email); setOpen(false); }} disabled={saving}>
+          {t('common.cancel')}
+        </button>
+        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+          {saving ? t('common.saving') : t('common.save')}
+        </button>
+      </div>
     </div>
   );
 }
