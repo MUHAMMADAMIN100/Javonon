@@ -15,6 +15,7 @@ import {
   type ExcuseStatus,
 } from '../api/excuses';
 import { tjFormatDateTime, tjFormatFull } from '../lib/tjTime';
+import { useT } from '../lib/i18n';
 
 // Файлы лежат на backend (Railway), а не на фронте (Vercel). Без этого
 // префикса <a href="/uploads/..."> тыкается в Vercel и получает 404 /
@@ -39,6 +40,7 @@ const STATUS_COLOR: Record<ExcuseStatus, string> = {
 
 export default function Excuses() {
   const me = useAuth((s) => s.user);
+  const { t } = useT();
   if (!isFounder(me)) {
     return <div className="card" style={{ padding: 28 }}>Доступ только для основателя.</div>;
   }
@@ -49,7 +51,7 @@ export default function Excuses() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">HR · ПРИЧИНЫ</span>
-        <h2 className="crm-section-title">Причины опозданий</h2>
+        <h2 className="crm-section-title">{t('excuses.title')}</h2>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -57,13 +59,13 @@ export default function Excuses() {
           className={`btn btn-sm ${tab === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setTab('pending')}
         >
-          Ожидают
+          {t('excuses.tab.pending')}
         </button>
         <button
           className={`btn btn-sm ${tab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setTab('history')}
         >
-          История
+          {t('excuses.tab.history')}
         </button>
       </div>
 
@@ -74,6 +76,7 @@ export default function Excuses() {
 
 function PendingTab() {
   const { toast } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ['excuses', 'pending'], queryFn: listPendingExcuses });
 
@@ -111,7 +114,7 @@ function PendingTab() {
   if (items.length === 0) {
     return (
       <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
-        Нет причин на рассмотрении. 🎉
+        {t('excuses.empty')}
       </div>
     );
   }

@@ -18,6 +18,7 @@ import { keys } from '../lib/queryKeys';
 import { useOptimisticMutation } from '../lib/optimistic';
 import { useRealtimeEvent } from '../realtime';
 import { tjFormatTime, TJ_TZ } from '../lib/tjTime';
+import { useT } from '../lib/i18n';
 
 function fmtMin(min: number): string {
   if (min <= 0) return '0м';
@@ -45,6 +46,7 @@ function fmtDate(iso: string): string {
 }
 
 export default function TimeTracker() {
+  const { t } = useT();
   const { toast } = useUI();
   const qc = useQueryClient();
 
@@ -175,9 +177,7 @@ export default function TimeTracker() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">HR · 04</span>
-        <h2 className="crm-section-title">
-          Учёт <em>рабочего времени.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('time.title')}</h2>
       </div>
 
       {/* Главная панель — статус + кнопки */}
@@ -310,7 +310,7 @@ export default function TimeTracker() {
               style={{ fontSize: 15, padding: '14px 28px' }}
             >
               <Icon name="play_arrow" size={20} />
-              Начать работу
+              {t('time.clockIn')}
             </motion.button>
           )}
           {isWorking && (
@@ -323,7 +323,7 @@ export default function TimeTracker() {
                 whileTap={{ scale: 0.98 }}
               >
                 <Icon name="restaurant" size={18} />
-                Уйти на обед
+                {t('time.lunchOut')}
               </motion.button>
               <motion.button
                 className="btn btn-primary"
@@ -333,7 +333,7 @@ export default function TimeTracker() {
                 whileTap={{ scale: 0.98 }}
               >
                 <Icon name="stop" size={18} />
-                Закончить день
+                {t('time.clockOut')}
               </motion.button>
             </>
           )}
@@ -348,7 +348,7 @@ export default function TimeTracker() {
                 style={{ fontSize: 15, padding: '14px 28px' }}
               >
                 <Icon name="login" size={18} />
-                Вернуться с обеда
+                {t('time.lunchIn')}
               </motion.button>
               <motion.button
                 className="btn btn-secondary"
@@ -357,7 +357,7 @@ export default function TimeTracker() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                Закончить день
+                {t('time.clockOut')}
               </motion.button>
             </>
           )}

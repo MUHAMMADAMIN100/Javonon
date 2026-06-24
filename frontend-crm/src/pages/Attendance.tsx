@@ -7,6 +7,7 @@ import { useRealtimeEvent } from '../realtime';
 import { listAttendance } from '../api/attendance';
 import { listUsers } from '../api/users';
 import { tjFormatTime, tjFormatDate, tjToday } from '../lib/tjTime';
+import { useT } from '../lib/i18n';
 
 function fmtTime(iso: string | null): string {
   // По ТЗ — время в зоне Asia/Dushanbe, а не браузера. Если FOUNDER
@@ -20,6 +21,7 @@ function fmtDate(iso: string): string {
 }
 
 export default function Attendance() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   if (!isFounder(me)) {
     return <div className="card" style={{ padding: 28 }}>Доступ только для основателя.</div>;
@@ -57,26 +59,26 @@ export default function Attendance() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">HR · ПОСЕЩАЕМОСТЬ</span>
-        <h2 className="crm-section-title">Посещаемость сотрудников</h2>
+        <h2 className="crm-section-title">{t('attendance.title')}</h2>
       </div>
 
       <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ padding: 18, marginBottom: 14 }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ minWidth: 200, margin: 0 }}>
-            <label>Сотрудник</label>
+            <label>{t('attendance.col.employee')}</label>
             <select value={userId} onChange={(e) => setUserId(e.target.value)}>
-              <option value="">Все</option>
+              <option value="">{t('common.all')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
             </select>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
-            <label>С</label>
+            <label>{t('common.from')}</label>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
-            <label>По</label>
+            <label>{t('common.to')}</label>
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           {(() => {
@@ -94,37 +96,37 @@ export default function Attendance() {
                   setTo(today);
                 }}
               >
-                Сегодня
+                {t('common.today')}
               </button>
             );
           })()}
           {(userId || from || to) && (
             <button className="btn btn-sm btn-secondary" onClick={() => { setUserId(''); setFrom(''); setTo(''); }}>
-              Сбросить
+              {t('filter.reset')}
             </button>
           )}
         </div>
       </motion.div>
 
       {query.isLoading ? (
-        <div className="card" style={{ padding: 24 }}>Загружаем…</div>
+        <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
-          Записей не найдено.
+          {t('attendance.empty')}
         </div>
       ) : (
         <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
           <table className="table" style={{ minWidth: 920 }}>
             <thead>
               <tr>
-                <th>Сотрудник</th>
-                <th>Дата</th>
-                <th>Пришёл</th>
-                <th>Ушёл на обед</th>
-                <th>Вернулся</th>
-                <th>Ушёл</th>
-                <th style={{ textAlign: 'right' }}>Опоздание</th>
-                <th style={{ textAlign: 'right' }}>Переработка</th>
+                <th>{t('attendance.col.employee')}</th>
+                <th>{t('attendance.col.date')}</th>
+                <th>{t('attendance.col.in')}</th>
+                <th>{t('attendance.col.lunchOut')}</th>
+                <th>{t('attendance.col.lunchIn')}</th>
+                <th>{t('attendance.col.out')}</th>
+                <th style={{ textAlign: 'right' }}>{t('attendance.col.late')}</th>
+                <th style={{ textAlign: 'right' }}>{t('attendance.col.overtime')}</th>
               </tr>
             </thead>
             <tbody>

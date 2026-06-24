@@ -44,7 +44,7 @@ export default function Settings() {
   if (!isFounder(me)) {
     return (
       <div className="card" style={{ padding: 28 }}>
-        Раздел доступен только основателю.
+        {t('settings.foundersOnly')}
       </div>
     );
   }

@@ -114,9 +114,9 @@ export default function Salary() {
 
   const onPay = async (r: SalaryRecord) => {
     const ok = await confirm({
-      title: 'Выплатить зарплату?',
+      title: t('salary.confirmPay'),
       message: `${r.user?.fullName}: ${fmtMoney(r.netAmount, r.currency)} — будет создана расходная транзакция.`,
-      confirmText: 'Выплатить',
+      confirmText: t('salary.pay'),
     });
     if (!ok) return;
     payMut.mutate(r.id);
@@ -124,10 +124,10 @@ export default function Salary() {
 
   const onDelete = async (r: SalaryRecord) => {
     const ok = await confirm({
-      title: 'Удалить расчёт?',
+      title: t('common.delete') + '?',
       message: `${r.user?.fullName}: ${fmtMoney(r.netAmount)}`,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (!ok) return;
     deleteMut.mutate(r.id);
@@ -165,7 +165,7 @@ export default function Salary() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
           <div className="form-group">
-            <label>Сотрудник</label>
+            <label>{t('salary.field.employee')}</label>
             <select value={userId} onChange={(e) => setUserId(e.target.value)}>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName} · {displayRoleLabel(u as any)}</option>
@@ -173,15 +173,15 @@ export default function Salary() {
             </select>
           </div>
           <div className="form-group">
-            <label>Период с</label>
+            <label>{t('salary.field.periodFrom')}</label>
             <input type="date" value={start} onChange={(e) => setRange({ start: e.target.value, end })} />
           </div>
           <div className="form-group">
-            <label>По</label>
+            <label>{t('salary.field.periodTo')}</label>
             <input type="date" value={end} onChange={(e) => setRange({ start, end: e.target.value })} />
           </div>
           <div className="form-group">
-            <label>KPI бонус ($)</label>
+            <label>{t('salary.field.kpiBonus')}</label>
             <input type="number" step="0.01" value={kpiBonus} onChange={(e) => setKpiBonus(e.target.value)} placeholder="0" />
           </div>
         </div>
@@ -204,11 +204,11 @@ export default function Salary() {
               gap: 24,
               marginBottom: 24,
             }}>
-              <PreviewCell label="Часов" value={fmtMin(preview.workedMinutes)} />
-              <PreviewCell label="Опоздания" value={preview.lateMinutes > 0 ? `${preview.lateMinutes}м` : '—'} />
-              <PreviewCell label="База" value={fmtMoney(preview.baseAmount)} />
+              <PreviewCell label={t('salary.cell.hours')} value={fmtMin(preview.workedMinutes)} />
+              <PreviewCell label={t('salary.cell.late')} value={preview.lateMinutes > 0 ? `${preview.lateMinutes}м` : '—'} />
+              <PreviewCell label={t('salary.cell.base')} value={fmtMoney(preview.baseAmount)} />
               <PreviewCell
-                label={`Бонус · ${preview.bonusPercent}% от продаж`}
+                label={`${t('salary.cell.bonus')} · ${preview.bonusPercent}%`}
                 value={fmtMoney(preview.bonusAmount)}
                 sub={
                   preview.bonusTierId
@@ -218,26 +218,22 @@ export default function Salary() {
               />
               <PreviewCell label="KPI" value={fmtMoney(preview.kpiBonus)} />
               <PreviewCell
-                label={`Переработка${preview.overtimeMultiplier ? ` · ×${preview.overtimeMultiplier}` : ''}`}
+                label={`${t('salary.cell.overtime')}${preview.overtimeMultiplier ? ` · ×${preview.overtimeMultiplier}` : ''}`}
                 value={preview.overtimePay ? `+ ${fmtMoney(preview.overtimePay)}` : '—'}
                 sub={preview.overtimeMinutes ? `${preview.overtimeMinutes} мин` : undefined}
               />
               <PreviewCell
-                label="Штрафы"
+                label={t('salary.cell.penalties')}
                 value={`− ${fmtMoney(preview.penalties)}`}
                 negative={preview.penalties > 0}
                 sub={
-                  // По ТЗ §5 — штраф за опоздание попадает в зп только
-                  // если основатель НЕ одобрил причину. Показываем что
-                  // ещё висит на рассмотрении / уже отменено, чтобы
-                  // основатель видел «откуда взялась эта сумма».
                   preview.penaltiesPending || preview.penaltiesExcused
                     ? [
                         preview.penaltiesPending
-                          ? `На рассмотрении: ${fmtMoney(preview.penaltiesPending)}`
+                          ? `${t('salary.pendingReview')}: ${fmtMoney(preview.penaltiesPending)}`
                           : null,
                         preview.penaltiesExcused
-                          ? `Одобрено: ${fmtMoney(preview.penaltiesExcused)}`
+                          ? `${t('salary.excused')}: ${fmtMoney(preview.penaltiesExcused)}`
                           : null,
                       ].filter(Boolean).join(' · ')
                     : undefined
@@ -261,7 +257,7 @@ export default function Salary() {
                   color: 'var(--text-soft)',
                   textTransform: 'uppercase',
                   marginBottom: 6,
-                }}>К ВЫПЛАТЕ</div>
+                }}>{t('salary.cell.net').toUpperCase()}</div>
                 <div style={{
                   fontFamily: 'var(--font-display)',
                   fontSize: 56,
@@ -276,7 +272,7 @@ export default function Salary() {
                   type="text"
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="Комментарий (опционально)"
+                  placeholder={t('salary.field.commentPlaceholder')}
                   style={{
                     padding: '12px 14px',
                     border: '1px solid var(--border)',
@@ -287,7 +283,7 @@ export default function Salary() {
                   }}
                 />
                 <button className="btn btn-primary" onClick={onCreate} style={{ flex: '0 1 auto', minWidth: 0 }}>
-                  <Icon name="bookmark_add" size={18} /> Зафиксировать
+                  <Icon name="bookmark_add" size={18} /> {t('salary.new')}
                 </button>
               </div>
             </div>
@@ -298,29 +294,27 @@ export default function Salary() {
       {/* История расчётов */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
         <span className="crm-section-eyebrow">HISTORY · ALL RECORDS</span>
-        <h2 className="crm-section-title">
-          Журнал <em>выплат.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('salary.history')}</h2>
       </div>
 
       <div className="card" style={{ padding: 0 }}>
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>Сотрудник</th>
-              <th>Период</th>
-              <th>Часы</th>
-              <th>Продажи</th>
-              <th>База</th>
-              <th>Бонус</th>
-              <th>Итого</th>
-              <th>Статус</th>
+              <th>{t('salary.field.employee')}</th>
+              <th>{t('common.period') !== 'common.period' ? t('common.period') : 'Период'}</th>
+              <th>{t('salary.cell.hours')}</th>
+              <th>{t('finance.summary.income')}</th>
+              <th>{t('salary.cell.base')}</th>
+              <th>{t('salary.cell.bonus')}</th>
+              <th>{t('salary.cell.net')}</th>
+              <th>{t('common.status')}</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {records.length === 0 && (
-              <tr><td colSpan={9} className="empty">Нет расчётов</td></tr>
+              <tr><td colSpan={9} className="empty">{t('salary.empty')}</td></tr>
             )}
             {records.map((r) => (
               <tr key={r.id}>
@@ -341,14 +335,14 @@ export default function Salary() {
                 }}>{fmtMoney(r.netAmount, r.currency)}</td>
                 <td>
                   {r.status === 'PAID'
-                    ? <span className="badge badge-success">Выплачено</span>
-                    : <span className="badge badge-warning">Черновик</span>}
+                    ? <span className="badge badge-success">{t('salary.status.PAID')}</span>
+                    : <span className="badge badge-warning">{t('salary.status.DRAFT')}</span>}
                 </td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
                     {r.status === 'DRAFT' && (
                       <button className="btn btn-sm btn-secondary" onClick={() => onPay(r)}>
-                        <Icon name="paid" size={14} /> Выплатить
+                        <Icon name="paid" size={14} /> {t('salary.pay')}
                       </button>
                     )}
                     <button className="btn btn-sm btn-danger" onClick={() => onDelete(r)}>
