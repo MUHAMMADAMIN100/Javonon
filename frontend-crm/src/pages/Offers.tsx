@@ -15,17 +15,18 @@ import {
   offerDelete,
   offerSignatures,
 } from '../api/offers';
-import { ROLE_LABEL, type Role } from '../api/types';
+import { type Role } from '../api/types';
+import { useRoleLabel } from '../lib/labels';
 
 // Все 5 ТЗ-ролей + «общая» (для legacy fallback). Каждая роль может
 // иметь свою активную оферту с уникальными принципами работы.
-const ROLE_TABS: { key: Role | null; label: string }[] = [
-  { key: null, label: 'Общая' },
-  { key: 'FOUNDER', label: ROLE_LABEL.FOUNDER },
-  { key: 'ADMIN', label: ROLE_LABEL.ADMIN },
-  { key: 'ACCOUNTANT', label: ROLE_LABEL.ACCOUNTANT },
-  { key: 'SALES_MANAGER', label: ROLE_LABEL.SALES_MANAGER },
-  { key: 'CLIENT_MANAGER', label: ROLE_LABEL.CLIENT_MANAGER },
+const ROLE_TAB_KEYS: { key: Role | null }[] = [
+  { key: null },
+  { key: 'FOUNDER' },
+  { key: 'ADMIN' },
+  { key: 'ACCOUNTANT' },
+  { key: 'SALES_MANAGER' },
+  { key: 'CLIENT_MANAGER' },
 ];
 
 /**
@@ -35,6 +36,7 @@ const ROLE_TABS: { key: Role | null; label: string }[] = [
  */
 export default function Offers() {
   const { t } = useT();
+  const roleLabel = useRoleLabel();
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -71,16 +73,17 @@ export default function Offers() {
 
       {/* Табы по ролям (по ТЗ §1 — у каждой роли своя оферта). */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        {ROLE_TABS.map((t) => {
-          const isActive = tab === t.key;
-          const cnt = activeByRole.get((t.key ?? 'null') as any) || 0;
+        {ROLE_TAB_KEYS.map((rt) => {
+          const isActive = tab === rt.key;
+          const cnt = activeByRole.get((rt.key ?? 'null') as any) || 0;
+          const label = rt.key === null ? t('offers.role.all') : roleLabel(rt.key);
           return (
             <button
-              key={t.key ?? 'null'}
+              key={rt.key ?? 'null'}
               className={`btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => { setTab(t.key); setCreating(false); }}
+              onClick={() => { setTab(rt.key); setCreating(false); }}
             >
-              {t.label}
+              {label}
               {cnt > 0 && (
                 <span style={{
                   marginLeft: 6,
@@ -107,14 +110,11 @@ export default function Offers() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <p style={{ color: 'var(--text-soft)', fontSize: 13, margin: 0, maxWidth: 640 }}>
-            {tab === null
-              ? 'Общая оферта — fallback для сотрудников, у которых для их роли ещё нет специальной версии.'
-              : `Оферта для роли «${ROLE_LABEL[tab]}» — её увидят и подпишут только сотрудники с этой ролью.`}
-            {' '}При создании новой версии — старая для ЭТОЙ ЖЕ роли деактивируется. Подписи остаются у каждой версии (audit log).
+            {tab === null ? t('offers.role.all') : roleLabel(tab)}
           </p>
           {!creating && (
             <button className="btn btn-primary" onClick={() => setCreating(true)}>
-              <Icon name="add" size={16} /> Новая версия
+              <Icon name="add" size={16} /> {t('offers.new')}
             </button>
           )}
         </div>
@@ -132,9 +132,7 @@ export default function Offers() {
         ))}
         {offers.length === 0 && (
           <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
-            {tab === null
-              ? 'Общих оферт нет. Сначала создай оферты для конкретных ролей выше.'
-              : `Для роли «${ROLE_LABEL[tab]}» оферт пока нет. Создай первую.`}
+            {t('offers.empty')}
           </div>
         )}
       </div>
@@ -151,30 +149,27 @@ export default function Offers() {
 
 function CreateForm({ role, onClose }: { role: Role | null; onClose: () => void }) {
   const { toast } = useUI();
+  const { t } = useT();
+  const roleLabel = useRoleLabel();
   const defaultTitle = role
-    ? `Оферта для ${ROLE_LABEL[role].toLowerCase()}`
-    : 'Оферта сотрудника';
+    ? `${t('sidebar.offers')} · ${roleLabel(role)}`
+    : t('sidebar.offers');
   const [title, setTitle] = useState(defaultTitle);
   const [content, setContent] = useState('');
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
     if (!content.trim()) {
-      toast('Текст оферты обязателен', 'error');
+      toast(t('toast.error'), 'error');
       return;
     }
     setBusy(true);
     try {
       await offerCreate({ title: title.trim() || undefined, content: content.trim(), role });
-      toast(
-        role
-          ? `Новая версия оферты для «${ROLE_LABEL[role]}» создана`
-          : 'Новая версия общей оферты создана',
-        'success',
-      );
+      toast(t('toast.created'), 'success');
       onClose();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setBusy(false);
     }
@@ -189,23 +184,23 @@ function CreateForm({ role, onClose }: { role: Role | null; onClose: () => void 
       borderRadius: 12,
     }}>
       <div className="form-group" style={{ marginBottom: 10 }}>
-        <label>Заголовок</label>
+        <label>{t('common.title')}</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} />
       </div>
       <div className="form-group" style={{ marginBottom: 10 }}>
-        <label>Текст оферты (markdown поддерживается)</label>
+        <label>{t('offers.editor.title')}</label>
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={14}
-          placeholder="# Заголовок&#10;&#10;Текст оферты..."
+          placeholder={t('offers.editor.placeholder')}
           style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
         />
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button className="btn btn-sm btn-secondary" onClick={onClose} disabled={busy}>Отмена</button>
+        <button className="btn btn-sm btn-secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
         <button className="btn btn-sm btn-primary" onClick={submit} disabled={busy}>
-          {busy ? 'Создаём…' : 'Создать новую версию'}
+          {busy ? t('common.saving') : t('common.create')}
         </button>
       </div>
     </div>
@@ -222,6 +217,8 @@ function OfferCard({
   onShowSignatures: () => void;
 }) {
   const { toast, confirm } = useUI();
+  const { t } = useT();
+  const roleLabel = useRoleLabel();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(offer.title);
   const [content, setContent] = useState(offer.content);
@@ -261,26 +258,26 @@ function OfferCard({
             marginBottom: 4,
             textTransform: 'uppercase',
           }}>
-            v{offer.version} {offer.isActive ? '· ACTIVE' : '· ARCHIVED'} {offer.role ? `· ${ROLE_LABEL[offer.role]}` : '· общая'}
+            {t('offers.version')} {offer.version} · {offer.isActive ? t('offers.active') : t('offers.archived')} · {offer.role ? roleLabel(offer.role) : t('offers.role.all')}
           </div>
           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, margin: 0 }}>
             {offer.title}
           </h3>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
-            Создана: {new Date(offer.createdAt).toLocaleDateString('ru-RU')}
+            {new Date(offer.createdAt).toLocaleDateString('ru-RU')}
             {' · '}
             <button
               onClick={onShowSignatures}
               style={{ background: 'transparent', border: 'none', color: 'var(--primary-dark)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
             >
-              Подписей: {signCount}
+              {t('offers.tab.signatures')}: {signCount}
             </button>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {canEdit && !editing && (
             <button className="btn btn-sm btn-secondary" onClick={() => setEditing(true)}>
-              <Icon name="edit" size={14} /> Изменить
+              <Icon name="edit" size={14} /> {t('common.edit')}
             </button>
           )}
           {canDelete && !editing && (
@@ -289,24 +286,24 @@ function OfferCard({
               disabled={busy}
               onClick={async () => {
                 const ok = await confirm({
-                  title: 'Удалить версию?',
-                  message: `«${offer.title}» v${offer.version} будет полностью удалена. Подписей нет, отменить нельзя.`,
+                  title: t('offers.confirm.delete'),
+                  message: `«${offer.title}» v${offer.version}`,
                   danger: true,
-                  confirmText: 'Удалить',
+                  confirmText: t('common.delete'),
                 });
                 if (!ok) return;
                 setBusy(true);
                 try {
                   await offerDelete(offer.id);
-                  toast('Версия удалена', 'success');
+                  toast(t('toast.deleted'), 'success');
                   onChanged();
                 } catch (e: any) {
-                  toast(e?.response?.data?.message || 'Ошибка', 'error');
+                  toast(e?.response?.data?.message || t('toast.error'), 'error');
                 } finally {
                   setBusy(false);
                 }
               }}
-              title="Удалить версию (только если нет подписей)"
+              title={t('common.delete')}
             >
               <Icon name="delete" size={14} />
             </button>
@@ -330,11 +327,11 @@ function OfferCard({
       ) : (
         <>
           <div className="form-group" style={{ marginBottom: 10 }}>
-            <label>Заголовок</label>
+            <label>{t('common.title')}</label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div className="form-group" style={{ marginBottom: 10 }}>
-            <label>Текст</label>
+            <label>{t('offers.editor.title')}</label>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -343,9 +340,9 @@ function OfferCard({
             />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <button className="btn btn-sm btn-secondary" onClick={() => setEditing(false)} disabled={busy}>Отмена</button>
+            <button className="btn btn-sm btn-secondary" onClick={() => setEditing(false)} disabled={busy}>{t('common.cancel')}</button>
             <button className="btn btn-sm btn-primary" onClick={save} disabled={busy}>
-              {busy ? 'Сохраняем…' : 'Сохранить'}
+              {busy ? t('common.saving') : t('common.save')}
             </button>
           </div>
         </>

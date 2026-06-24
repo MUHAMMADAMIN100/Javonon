@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useDirectionLabel } from '../lib/labels';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import {
@@ -39,42 +40,42 @@ export default function MassMail() {
   const campaigns = query.data ?? [];
 
   if (!isElevated(me)) {
-    return <div className="card" style={{ padding: 28 }}>Доступ только для администраторов.</div>;
+    return <div className="card" style={{ padding: 28 }}>{t('common.accessDenied')}</div>;
   }
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['massmail'] });
 
   const onSendNow = async (c: MassMailCampaign) => {
     const ok = await confirm({
-      title: 'Запустить рассылку?',
-      message: `«${c.name}» (${MASS_MAIL_CHANNEL_LABEL[c.channel]}) будет отправлена сейчас. Это нельзя отменить после старта.`,
-      confirmText: 'Запустить',
+      title: t('massmail.confirm.send'),
+      message: `«${c.name}» (${MASS_MAIL_CHANNEL_LABEL[c.channel]})`,
+      confirmText: t('massmail.action.send'),
       danger: false,
     });
     if (!ok) return;
     try {
       await sendCampaignNow(c.id);
-      toast('Рассылка запущена', 'success');
+      toast(t('toast.sent'), 'success');
       invalidate();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
   const onCancel = async (c: MassMailCampaign) => {
     const ok = await confirm({
-      title: 'Отменить рассылку?',
-      message: `«${c.name}» получит статус CANCELED.`,
+      title: t('massmail.confirm.cancel'),
+      message: `«${c.name}»`,
       danger: true,
-      confirmText: 'Отменить',
+      confirmText: t('common.cancel'),
     });
     if (!ok) return;
     try {
       await cancelCampaign(c.id);
-      toast('Рассылка отменена', 'info');
+      toast(t('toast.updated'), 'info');
       invalidate();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
@@ -88,16 +89,11 @@ export default function MassMail() {
       <motion.div className="card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ padding: 22, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <p style={{ color: 'var(--text-soft)', fontSize: 13, margin: 0, maxWidth: 640 }}>
-            Рассылка по всем лидам или сегменту: акции, новые программы.
-            Канал и аудиторию выбираешь при создании. Запуск — кнопка «Отправить».
-            <br />
-            <span style={{ fontSize: 12 }}>
-              ⚠️ Для WhatsApp/Instagram нужны env vars в Railway, иначе сообщения упадут в FAILED.
-            </span>
+            {t('massmail.subtitle')}
           </p>
           {!creating && (
             <button className="btn btn-primary" onClick={() => setCreating(true)}>
-              <Icon name="add" size={16} /> Новая кампания
+              <Icon name="add" size={16} /> {t('massmail.new')}
             </button>
           )}
         </div>
@@ -125,7 +121,7 @@ export default function MassMail() {
                     color: STATUS_COLOR[c.status],
                     textTransform: 'uppercase',
                   }}>
-                    {MASS_MAIL_STATUS_LABEL[c.status]}
+                    {t(`massmail.status.${c.status}`)}
                   </span>
                   <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>
                     {MASS_MAIL_CHANNEL_LABEL[c.channel]}
@@ -150,12 +146,12 @@ export default function MassMail() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 110 }}>
                 {(c.status === 'DRAFT' || c.status === 'SCHEDULED') && (
                   <button className="btn btn-sm btn-primary" onClick={() => onSendNow(c)}>
-                    <Icon name="send" size={14} /> Отправить
+                    <Icon name="send" size={14} /> {t('massmail.action.send')}
                   </button>
                 )}
                 {(c.status === 'DRAFT' || c.status === 'SCHEDULED' || c.status === 'SENDING') && (
                   <button className="btn btn-sm btn-danger" onClick={() => onCancel(c)}>
-                    Отменить
+                    {t('common.cancel')}
                   </button>
                 )}
               </div>
@@ -164,7 +160,7 @@ export default function MassMail() {
         ))}
         {campaigns.length === 0 && !creating && (
           <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
-            Кампаний пока нет.
+            {t('common.empty')}
           </div>
         )}
       </div>
@@ -174,6 +170,8 @@ export default function MassMail() {
 
 function CreateForm({ onClose }: { onClose: () => void }) {
   const { toast } = useUI();
+  const { t } = useT();
+  const directionLabel = useDirectionLabel();
   const [name, setName] = useState('');
   const [channel, setChannel] = useState<MassMailChannel>('WHATSAPP');
   const [subject, setSubject] = useState('');
@@ -184,7 +182,7 @@ function CreateForm({ onClose }: { onClose: () => void }) {
 
   const submit = async () => {
     if (!name.trim() || !body.trim()) {
-      toast('Заполни название и текст', 'error');
+      toast(t('toast.error'), 'error');
       return;
     }
     setBusy(true);
@@ -196,10 +194,10 @@ function CreateForm({ onClose }: { onClose: () => void }) {
         body: body.trim(),
         audience: { type: audienceType, ...(audienceType === 'by-direction' && audienceValue ? { value: audienceValue } : {}) },
       });
-      toast('Кампания создана', 'success');
+      toast(t('toast.created'), 'success');
       onClose();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setBusy(false);
     }
@@ -215,11 +213,11 @@ function CreateForm({ onClose }: { onClose: () => void }) {
     }}>
       <div className="form-grid-2" style={{ gap: 12, marginBottom: 12 }}>
         <div className="form-group">
-          <label>Название</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Скидка 20% на лето" />
+          <label>{t('massmail.field.name')}</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="form-group">
-          <label>Канал</label>
+          <label>{t('massmail.field.channel')}</label>
           <select value={channel} onChange={(e) => setChannel(e.target.value as MassMailChannel)}>
             <option value="WHATSAPP">WhatsApp</option>
             <option value="TELEGRAM">Telegram</option>
@@ -229,46 +227,45 @@ function CreateForm({ onClose }: { onClose: () => void }) {
         </div>
       </div>
       <div className="form-group" style={{ marginBottom: 12 }}>
-        <label>Тема (опционально)</label>
+        <label>{t('massmail.field.subject')}</label>
         <input value={subject} onChange={(e) => setSubject(e.target.value)} />
       </div>
       <div className="form-group" style={{ marginBottom: 12 }}>
-        <label>Текст сообщения</label>
+        <label>{t('massmail.field.body')}</label>
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={5}
-          placeholder="Здравствуйте! У нас новая программа..."
         />
       </div>
       <div className="form-grid-2" style={{ gap: 12, marginBottom: 12 }}>
         <div className="form-group">
-          <label>Аудитория</label>
+          <label>{t('massmail.field.audience')}</label>
           <select value={audienceType} onChange={(e) => setAudienceType(e.target.value as any)}>
-            <option value="all-leads">Все лиды</option>
-            <option value="paid-students">Только оплатившие студенты</option>
-            <option value="by-direction">По направлению</option>
+            <option value="all-leads">{t('massmail.audience.all-leads')}</option>
+            <option value="paid-students">{t('massmail.audience.paid-students')}</option>
+            <option value="by-direction">{t('app.field.direction')}</option>
           </select>
         </div>
         {audienceType === 'by-direction' && (
           <div className="form-group">
-            <label>Направление</label>
+            <label>{t('app.field.direction')}</label>
             <select value={audienceValue} onChange={(e) => setAudienceValue(e.target.value)}>
               <option value="">—</option>
-              <option value="BACHELOR">Бакалавриат</option>
-              <option value="MASTER">Магистратура</option>
-              <option value="LANGUAGE">Языковые курсы</option>
-              <option value="LANGUAGE_COLLEGE">Языковые + Колледж</option>
-              <option value="LANGUAGE_BACHELOR">Языковые + Бакалавриат</option>
-              <option value="COLLEGE">Колледж</option>
+              <option value="BACHELOR">{directionLabel('BACHELOR')}</option>
+              <option value="MASTER">{directionLabel('MASTER')}</option>
+              <option value="LANGUAGE">{directionLabel('LANGUAGE')}</option>
+              <option value="LANGUAGE_COLLEGE">{directionLabel('LANGUAGE_COLLEGE')}</option>
+              <option value="LANGUAGE_BACHELOR">{directionLabel('LANGUAGE_BACHELOR')}</option>
+              <option value="COLLEGE">{directionLabel('COLLEGE')}</option>
             </select>
           </div>
         )}
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button className="btn btn-sm btn-secondary" onClick={onClose} disabled={busy}>Отмена</button>
+        <button className="btn btn-sm btn-secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
         <button className="btn btn-sm btn-primary" onClick={submit} disabled={busy}>
-          {busy ? 'Создаём…' : 'Создать черновик'}
+          {busy ? t('common.saving') : t('common.create')}
         </button>
       </div>
     </div>

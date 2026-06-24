@@ -483,6 +483,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.col.commission': 'Комиссия',
     'partners.col.balance': 'Баланс',
     'partners.col.referrals': 'Привлёк',
+    'partners.commission.markPaid': 'Отметить выплаченным?',
+    'partners.commission.col.base': 'База',
+    'partners.payout.col.details': 'Реквизиты',
+    'common.accessDenied': 'Доступ только для администраторов',
+    'massmail.subtitle': 'Рассылка по лидам или сегменту: акции, новые программы.',
 
     // ===== profile =====
     'profile.title': 'Мой профиль',
@@ -1312,6 +1317,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.col.commission': 'Комиссия',
     'partners.col.balance': 'Баланс',
     'partners.col.referrals': 'Ҷалб кардааст',
+    'partners.commission.markPaid': 'Ҳамчун пардохтшуда қайд кунам?',
+    'partners.commission.col.base': 'Асос',
+    'partners.payout.col.details': 'Реквизитҳо',
+    'common.accessDenied': 'Танҳо барои администраторон',
+    'massmail.subtitle': 'Паёмфиристӣ ба лидҳо ё сегмент: акция, барномаҳои нав.',
 
     // ===== profile =====
     'profile.title': 'Профили ман',
