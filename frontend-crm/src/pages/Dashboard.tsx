@@ -77,17 +77,17 @@ export default function Dashboard() {
     accent?: 'feature' | 'accent' | undefined;
     span: string; row?: string;
   }> = [
-    { eyebrow: 'TOTAL · 01', label: 'Всего заявок', value: appStats?.total ?? '—', em: 'в работе.', accent: 'feature', span: 'span-4', row: 'row-2' },
-    { eyebrow: 'NEW · 02', label: 'Новые', value: newCount, span: 'span-2' },
-    { eyebrow: 'PIPELINE · 03', label: 'В воронке', value: inProgress, accent: 'accent', span: 'span-2' },
-    { eyebrow: 'ACTIVE · 04', label: 'Активные клиенты', value: activeStudents, em: 'учатся.', span: 'span-3' },
-    { eyebrow: 'WIN · 05', label: 'Зачислено всего', value: enrolled, span: 'span-3' },
+    { eyebrow: 'TOTAL · 01', label: t('dashboard.kpi.total'), value: appStats?.total ?? '—', accent: 'feature', span: 'span-4', row: 'row-2' },
+    { eyebrow: 'NEW · 02', label: t('dashboard.kpi.new'), value: newCount, span: 'span-2' },
+    { eyebrow: 'PIPELINE · 03', label: t('dashboard.kpi.pipeline'), value: inProgress, accent: 'accent', span: 'span-2' },
+    { eyebrow: 'ACTIVE · 04', label: t('dashboard.kpi.active'), value: activeStudents, span: 'span-3' },
+    { eyebrow: 'WIN · 05', label: t('dashboard.kpi.enrolled'), value: enrolled, span: 'span-3' },
   ];
 
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">КЛЮЧЕВЫЕ МЕТРИКИ</span>
+        <span className="crm-section-eyebrow">KPI</span>
         <h2 className="crm-section-title">{t('dashboard.title')}</h2>
       </div>
 
@@ -148,9 +148,7 @@ export default function Dashboard() {
         <>
           <div className="crm-section-head" style={{ marginTop: 8 }}>
             <span className="crm-section-eyebrow">FINANCE · MONEY MAP</span>
-            <h2 className="crm-section-title">
-              Деньги <em>в моменте.</em>
-            </h2>
+            <h2 className="crm-section-title">{t('dashboard.section.finance')}</h2>
           </div>
           <div className="bento" style={{ marginBottom: 32 }}>
             <motion.div
@@ -174,31 +172,24 @@ export default function Dashboard() {
                   letterSpacing: '0.12em',
                   color: 'rgba(255,255,255,0.55)',
                   textTransform: 'uppercase',
-                }}>Чистая прибыль <span style={{
-                  fontFamily: 'Times New Roman, Georgia, serif',
-                  fontStyle: 'italic',
-                  fontSize: 18,
-                  color: 'var(--primary-light)',
-                  textTransform: 'none',
-                  marginLeft: 6,
-                }}>за всё время.</span></div>
+                }}>{t('dashboard.finance.netProfit')}</div>
               </div>
             </motion.div>
 
             <SmallBento
               eyebrow="INCOME · 07"
-              label="Доходы"
+              label={t('dashboard.finance.income')}
               value={fmtMoney(finance.totalIncome)}
               accent
             />
             <SmallBento
               eyebrow="EXPENSE · 08"
-              label="Расходы"
+              label={t('dashboard.finance.expense')}
               value={fmtMoney(finance.totalExpense)}
             />
             <SmallBento
               eyebrow="DEBT · 09"
-              label={pending.length === 1 ? '1 студент должен оплатить' : `${pending.length} студентов с задолженностью`}
+              label={t('dashboard.finance.debt')}
               value={String(pending.length)}
               span="span-3"
             />
@@ -211,9 +202,7 @@ export default function Dashboard() {
         <>
           <div className="crm-section-head" style={{ marginTop: 8 }}>
             <span className="crm-section-eyebrow">TOP TEAM · LEADERBOARD</span>
-            <h2 className="crm-section-title">
-              Лучшие <em>сотрудники.</em>
-            </h2>
+            <h2 className="crm-section-title">{t('dashboard.section.top')}</h2>
           </div>
           <div style={{
             display: 'grid',
@@ -276,16 +265,14 @@ export default function Dashboard() {
       )}
 
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">ДЕТАЛИЗАЦИЯ</span>
-        <h2 className="crm-section-title">
-          Распределение <em>по срезам.</em>
-        </h2>
+        <span className="crm-section-eyebrow">DETAILS</span>
+        <h2 className="crm-section-title">{t('dashboard.section.breakdown')}</h2>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
         <BreakdownCard
           eyebrow="01 · DIRECTIONS"
-          title="Заявки по направлениям"
+          title={t('dashboard.breakdown.directions')}
           rows={(appStats?.byDirection || []).map((d: any) => ({
             label: DIRECTION_LABEL[d.direction as keyof typeof DIRECTION_LABEL] || d.direction,
             value: d._count,
@@ -293,15 +280,15 @@ export default function Dashboard() {
         />
         <BreakdownCard
           eyebrow="02 · CABINETS"
-          title="Студенты по кабинетам"
+          title={t('dashboard.breakdown.cabinets')}
           rows={(stuStats?.byCabinet || []).map((c: any) => ({
-            label: `Кабинет ${c.cabinet}`,
+            label: `${t('app.field.cabinet')} ${c.cabinet}`,
             value: c._count,
           }))}
         />
         <BreakdownCard
           eyebrow="03 · FUNNEL"
-          title="Воронка статусов"
+          title={t('dashboard.breakdown.funnel')}
           rows={(appStats?.byStatus || []).map((s: any) => ({
             label: STATUS_LABEL[s.status as keyof typeof STATUS_LABEL] || s.status,
             value: s._count,
@@ -353,6 +340,7 @@ function BreakdownCard({
   title: string;
   rows: Array<{ label: string; value: any }>;
 }) {
+  const { t } = useT();
   const total = rows.reduce((s, r) => s + (Number(r.value) || 0), 0) || 1;
 
   return (
@@ -382,7 +370,7 @@ function BreakdownCard({
         {title}
       </h3>
       {rows.length === 0 ? (
-        <div style={{ color: 'var(--text-light)', fontSize: 14, padding: '12px 0' }}>Нет данных</div>
+        <div style={{ color: 'var(--text-light)', fontSize: 14, padding: '12px 0' }}>{t('common.empty')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {rows.map((r) => {

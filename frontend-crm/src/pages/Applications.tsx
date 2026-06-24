@@ -113,40 +113,40 @@ export default function Applications() {
               onClick={() => setScope('mine')}
             >
               <Icon name="person" size={16} />
-              Мои
+              {t('scope.mine')}
             </button>
             <button
               className={`scope-btn${scope === 'all' ? ' active' : ''}`}
               onClick={() => setScope('all')}
             >
               <Icon name="groups" size={16} />
-              Все
+              {t('common.all')}
             </button>
           </div>
         )}
       </div>
       <div className="card-body">
         <div className="filters">
-          <input placeholder="Поиск по ФИО, телефону, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
           <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-            <option value="">Все статусы</option>
-            <option value="NEW">Новая заявка</option>
-            <option value="DOCS_REVIEW">Документы на проверке</option>
-            <option value="DOCS_SUBMITTED">Подача документов</option>
-            <option value="PRE_ADMISSION">Предварительное зачисление</option>
-            <option value="AWAITING_PAYMENT">Ожидание оплаты</option>
-            <option value="ENROLLED">Зачислен</option>
+            <option value="">{t('app.filter.status')}</option>
+            <option value="NEW">{statusLabel('NEW' as any)}</option>
+            <option value="DOCS_REVIEW">{statusLabel('DOCS_REVIEW' as any)}</option>
+            <option value="DOCS_SUBMITTED">{statusLabel('DOCS_SUBMITTED' as any)}</option>
+            <option value="PRE_ADMISSION">{statusLabel('PRE_ADMISSION' as any)}</option>
+            <option value="AWAITING_PAYMENT">{statusLabel('AWAITING_PAYMENT' as any)}</option>
+            <option value="ENROLLED">{statusLabel('ENROLLED' as any)}</option>
           </select>
           {isAdmin && (
-            <select value={manager} onChange={(e) => setManager(e.target.value)} title="Фильтр по менеджеру">
-              <option value="">Все менеджеры</option>
+            <select value={manager} onChange={(e) => setManager(e.target.value)} title={t('app.filter.manager')}>
+              <option value="">{t('app.filter.manager')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
             </select>
           )}
           <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
-            <option value="">Все направления</option>
+            <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
           </select>
         </div>
@@ -157,14 +157,14 @@ export default function Applications() {
           ) : items.length === 0 ? (
             <motion.div key="empty" className="empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="empty-icon"><Icon name="inbox" size={48} /></div>
-              {scope === 'mine' ? 'У вас пока нет назначенных заявок' : 'Заявок не найдено'}
+              {t('app.empty')}
             </motion.div>
           ) : (
             <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>ФИО</th><th>Телефон</th><th>Направление</th><th>Менеджер</th><th>Статус</th><th>Дата</th>
+                    <th>{t('app.field.fullName')}</th><th>{t('app.field.phone')}</th><th>{t('app.field.direction')}</th><th>{t('app.field.manager')}</th><th>{t('common.status')}</th><th>{t('reports.col.date')}</th>
                   </tr>
                 </thead>
                 <motion.tbody
@@ -184,9 +184,9 @@ export default function Applications() {
                       style={{ cursor: 'pointer' }}
                     >
                       <td><strong>{a.fullName}</strong></td>
-                      <td data-label="Телефон">{a.phone}</td>
-                      <td data-label="Направление">{directionLabel(a.direction)}</td>
-                      <td data-label="Менеджер">
+                      <td>{a.phone}</td>
+                      <td>{directionLabel(a.direction)}</td>
+                      <td>
                         <div className="mgr-cell">
                           <div className="mgr-row">
                             <span className="mgr-tag tj">TJ</span>
@@ -210,8 +210,8 @@ export default function Applications() {
                           </div>
                         </div>
                       </td>
-                      <td data-label="Статус"><span className={`badge ${STATUS_BADGE[a.status]}`}>{statusLabel(a.status)}</span></td>
-                      <td data-label="Дата">{new Date(a.createdAt).toLocaleDateString('ru-RU')}</td>
+                      <td><span className={`badge ${STATUS_BADGE[a.status]}`}>{statusLabel(a.status)}</span></td>
+                      <td>{new Date(a.createdAt).toLocaleDateString('ru-RU')}</td>
                     </motion.tr>
                   ))}
                 </motion.tbody>

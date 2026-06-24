@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '../ui/Dialogs';
+import { useT } from '../lib/i18n';
 import {
   WEEKDAY_LABEL,
   type Weekday,
@@ -28,6 +29,7 @@ export default function ScheduleEditor({
   hint?: string;
 }) {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: ['settings', 'schedule', userId],
@@ -47,13 +49,13 @@ export default function ScheduleEditor({
     try {
       await upsertSchedule(userId, draft);
       qc.invalidateQueries({ queryKey: ['settings', 'schedule', userId] });
-      toast('График сохранён', 'success');
+      toast(t('toast.updated'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
-  if (query.isLoading) return <div>Загружаем график…</div>;
+  if (query.isLoading) return <div>{t('common.loading')}</div>;
 
   return (
     <div>
@@ -80,35 +82,33 @@ export default function ScheduleEditor({
         <button
           className="btn btn-sm btn-secondary"
           onClick={async () => {
-            const msg = userId
-              ? 'Все 7 дней личного графика будут удалены. Сотрудник вернётся к компанийскому дефолту.'
-              : 'Все 7 дней компанийского графика будут удалены. clockIn будет использовать hardcoded 09:00-18:00 fallback пока не задашь новый.';
             const ok = await confirm({
-              title: 'Сбросить график?',
-              message: msg,
+              title: t('schedule.confirm.reset'),
+              message: '',
               danger: true,
-              confirmText: 'Сбросить',
+              confirmText: t('common.reset'),
             });
             if (!ok) return;
             try {
               await deleteSchedule(userId);
               qc.invalidateQueries({ queryKey: ['settings', 'schedule', userId] });
-              toast('График сброшен', 'success');
+              toast(t('toast.updated'), 'success');
             } catch (e: any) {
-              toast(e?.response?.data?.message || 'Ошибка', 'error');
+              toast(e?.response?.data?.message || t('toast.error'), 'error');
             }
           }}
-          title="Удалить все 7 дней (CRUD-Delete)"
+          title={t('common.reset')}
         >
-          Сбросить
+          {t('common.reset')}
         </button>
-        <button className="btn btn-primary" onClick={save}>Сохранить график</button>
+        <button className="btn btn-primary" onClick={save}>{t('common.save')}</button>
       </div>
     </div>
   );
 }
 
 function DayRow({ day, onChange }: { day: ScheduleDay; onChange: (patch: Partial<ScheduleDay>) => void }) {
+  const { t } = useT();
   const setTime = (field: keyof ScheduleDay, hhmm: string) => {
     onChange({ [field]: hhmmToMinutes(hhmm) } as any);
   };
@@ -123,25 +123,25 @@ function DayRow({ day, onChange }: { day: ScheduleDay; onChange: (patch: Partial
       borderRadius: 10,
       background: day.isWorkday ? 'transparent' : 'var(--bg-soft)',
     }}>
-      <div style={{ fontWeight: 500 }}>{WEEKDAY_LABEL[day.weekday as Weekday]}</div>
+      <div style={{ fontWeight: 500 }}>{t(`weekday.${day.weekday}`) !== `weekday.${day.weekday}` ? t(`weekday.${day.weekday}`) : WEEKDAY_LABEL[day.weekday as Weekday]}</div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
         <input
           type="checkbox"
           checked={day.isWorkday}
           onChange={(e) => onChange({ isWorkday: e.target.checked })}
         />
-        рабочий
+        {t('schedule.workday')}
       </label>
-      <TimeField label="Начало" value={minutesToHHMM(day.startMinute)} onChange={(v) => setTime('startMinute', v)} disabled={!day.isWorkday} />
-      <TimeField label="Конец" value={minutesToHHMM(day.endMinute)} onChange={(v) => setTime('endMinute', v)} disabled={!day.isWorkday} />
+      <TimeField label={t('schedule.field.start')} value={minutesToHHMM(day.startMinute)} onChange={(v) => setTime('startMinute', v)} disabled={!day.isWorkday} />
+      <TimeField label={t('schedule.field.end')} value={minutesToHHMM(day.endMinute)} onChange={(v) => setTime('endMinute', v)} disabled={!day.isWorkday} />
       <TimeField
-        label="Обед нач."
+        label={t('schedule.field.lunchStart')}
         value={day.lunchStartMinute !== null ? minutesToHHMM(day.lunchStartMinute) : ''}
         onChange={(v) => onChange({ lunchStartMinute: v ? hhmmToMinutes(v) : null })}
         disabled={!day.isWorkday}
       />
       <TimeField
-        label="Обед кон."
+        label={t('schedule.field.lunchEnd')}
         value={day.lunchEndMinute !== null ? minutesToHHMM(day.lunchEndMinute) : ''}
         onChange={(v) => onChange({ lunchEndMinute: v ? hhmmToMinutes(v) : null })}
         disabled={!day.isWorkday}

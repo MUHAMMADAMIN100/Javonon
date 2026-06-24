@@ -4,6 +4,7 @@ import type { Document } from '../api/types';
 import { deleteDocument, uploadDocument } from '../api/students';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 
@@ -40,6 +41,12 @@ const sanitizeFileName = (s: string) =>
 
 export default function DocumentsChecklist({ studentId, studentName, documents, applicationForm, onChange, editable }: Props) {
   const { confirm, toast } = useUI();
+  const { t } = useT();
+  const docLabel = (type: string, fallback: string) => {
+    const key = `docs.type.${type}`;
+    const tr = t(key);
+    return tr === key ? fallback : tr;
+  };
   const [uploadingType, setUploadingType] = useState<string | null>(null);
   const [zipping, setZipping] = useState(false);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -61,10 +68,10 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
       for (const file of files) {
         await uploadDocument(studentId, file, type);
       }
-      toast(files.length > 1 ? `Загружено: ${files.length}` : 'Документ загружен', 'success');
+      toast(t('toast.uploaded'), 'success');
       onChange();
     } catch (err: any) {
-      toast(err?.response?.data?.message || 'Ошибка загрузки', 'error');
+      toast(err?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setUploadingType(null);
       e.target.value = '';
@@ -124,9 +131,9 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
       const date = new Date().toISOString().slice(0, 10);
       const safeName = sanitizeFileName(studentName || 'student');
       saveAs(blob, `${safeName}_документы_${date}.zip`);
-      toast('Архив скачан', 'success');
+      toast(t('toast.downloaded'), 'success');
     } catch (e: any) {
-      toast(e?.message || 'Ошибка создания архива', 'error');
+      toast(e?.message || t('toast.error'), 'error');
     } finally {
       setZipping(false);
     }
@@ -134,14 +141,14 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
 
   const handleDelete = async (doc: Document) => {
     const ok = await confirm({
-      title: 'Удалить документ',
-      message: `«${doc.originalName}» будет удалён безвозвратно.`,
-      confirmText: 'Удалить',
+      title: t('common.delete'),
+      message: `«${doc.originalName}»`,
+      confirmText: t('common.delete'),
       danger: true,
     });
     if (!ok) return;
     await deleteDocument(doc.id);
-    toast('Документ удалён', 'success');
+    toast(t('toast.deleted'), 'success');
     onChange();
   };
 
@@ -150,13 +157,13 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
       <div className="docs-info">
         <Icon name="info" size={20} />
         <div>
-          Все документы необходимо <b>перевести на английский язык</b> и <b>нотариально заверить</b>.
+          {t('docs.info')}
         </div>
       </div>
 
       <div className="docs-progress">
         <div className="docs-progress-text">
-          <span>Загружено <b>{uploadedCount}</b> из {total}</span>
+          <span>{t('docs.uploaded')} <b>{uploadedCount}</b> / {total}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="docs-progress-percent">{percent}%</span>
             <motion.button
@@ -165,15 +172,11 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
               disabled={zipping || documents.length === 0}
               whileHover={!zipping && documents.length > 0 ? { scale: 1.04 } : {}}
               whileTap={{ scale: 0.96 }}
-              title={
-                documents.length === 0
-                  ? 'Нет документов для скачивания'
-                  : 'Скачать все файлы одним архивом'
-              }
+              title={t('docs.downloadZip')}
               style={documents.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
             >
               <Icon name={zipping ? 'progress_activity' : 'folder_zip'} size={16} style={{ marginRight: 4 }} />
-              {zipping ? 'Архивируем…' : `Скачать ZIP (${documents.length})`}
+              {zipping ? t('common.saving') : `ZIP (${documents.length})`}
             </motion.button>
           </div>
         </div>
@@ -205,10 +208,9 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
                 </div>
                 <div className="doc-slot-info">
                   <div className="doc-slot-label">
-                    {req.label}
-                    {docs.length > 1 && <span className="doc-slot-count"> · {docs.length} файла</span>}
+                    {docLabel(req.type, req.label)}
+                    {docs.length > 1 && <span className="doc-slot-count"> · {docs.length}</span>}
                   </div>
-                  {req.hint && <div className="doc-slot-hint">{req.hint}</div>}
                 </div>
               </div>
 
@@ -239,7 +241,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
                       disabled={isUploading}
                     >
                       <Icon name={isUploading ? 'progress_activity' : 'add'} size={16} style={{ marginRight: 4 }} />
-                      {isUploading ? 'Загрузка...' : 'Добавить ещё'}
+                      {isUploading ? t('common.uploading') : t('common.add')}
                     </button>
                   )}
                 </>
@@ -250,7 +252,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
                   disabled={isUploading}
                 >
                   <Icon name={isUploading ? 'progress_activity' : 'upload'} size={18} style={{ marginRight: 6 }} />
-                  {isUploading ? 'Загрузка...' : 'Загрузить'}
+                  {isUploading ? t('common.uploading') : t('common.upload')}
                 </button>
               ) : (
                 <div className="doc-slot-empty">Не загружено</div>
@@ -270,9 +272,9 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
 
       {/* Прочие документы */}
       <div className="docs-other-section">
-        <h4 className="docs-other-title">Прочие документы</h4>
+        <h4 className="docs-other-title">{t('docs.other.title')}</h4>
         {otherDocs.length === 0 ? (
-          <div className="empty" style={{ padding: 16 }}>Прочих документов нет</div>
+          <div className="empty" style={{ padding: 16 }}>{t('common.empty')}</div>
         ) : (
           <div className="documents-list">
             {otherDocs.map((d) => (
@@ -287,7 +289,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
                   <div className="doc-size">{fmtBytes(d.size)} · {new Date(d.createdAt).toLocaleDateString('ru-RU')}</div>
                 </div>
                 {editable && (
-                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(d)}>Удалить</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(d)}>{t('common.delete')}</button>
                 )}
               </div>
             ))}
@@ -300,7 +302,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
               onClick={() => otherRef.current?.click()}
             >
               <Icon name="attach_file" size={16} style={{ marginRight: 4 }} />
-              Загрузить другой документ
+              {t('common.upload')}
             </button>
             <input
               ref={otherRef}
