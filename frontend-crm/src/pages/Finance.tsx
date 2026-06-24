@@ -134,8 +134,8 @@ export default function Finance() {
     queryKey: paymentsKey,
     applyOptimistic: (cur, p) => optimistic.removeById(cur, p.id),
     invalidateAlso: [keys.finance.all, keys.payments.all],
-    onSuccess: () => toast('Оплата подтверждена', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('toast.updated'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const rejectPayMut = useOptimisticMutation<Payment, Payment, Payment[]>({
@@ -143,8 +143,8 @@ export default function Finance() {
     queryKey: paymentsKey,
     applyOptimistic: (cur, p) => optimistic.removeById(cur, p.id),
     invalidateAlso: [keys.payments.all],
-    onSuccess: () => toast('Отклонено', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('toast.updated'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const deleteTxMut = useOptimisticMutation<unknown, string, Transaction[]>({
@@ -152,8 +152,8 @@ export default function Finance() {
     queryKey: txKey,
     applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
     invalidateAlso: [keys.finance.all],
-    onSuccess: () => toast('Удалено', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('toast.deleted'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const aiMut = useInvalidatingMutation({
@@ -161,20 +161,20 @@ export default function Finance() {
     invalidate: [keys.finance.all],
     onSuccess: (res: any) => {
       if (res.ok) {
-        toast(`Добавлено: ${res.transaction?.type === 'INCOME' ? '+' : '−'}${res.transaction?.amount}${res.transaction?.currency}`, 'success');
+        toast(`${res.transaction?.type === 'INCOME' ? '+' : '−'}${res.transaction?.amount}${res.transaction?.currency}`, 'success');
         setAiInput('');
       } else {
-        toast(res.error || 'Не распознано', 'error');
+        toast(res.error || t('toast.error'), 'error');
       }
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
   const aiBusy = aiMut.isPending;
 
   const onConfirmPayment = async (p: Payment) => {
     const ok = await confirm({
       title: t('finance.payment.confirm') + '?',
-      message: `${p.student?.fullName}: ${fmtMoney(p.amount, p.currency)}. Будет создана транзакция-доход.`,
+      message: `${p.student?.fullName}: ${fmtMoney(p.amount, p.currency)}`,
       confirmText: t('finance.payment.confirm'),
     });
     if (!ok) return;
@@ -243,21 +243,14 @@ export default function Finance() {
                 color: 'rgba(255,255,255,0.55)',
                 textTransform: 'uppercase',
               }}>
-                Чистая прибыль <span style={{
-                  fontFamily: 'Times New Roman, Georgia, serif',
-                  fontStyle: 'italic',
-                  fontSize: 18,
-                  color: 'var(--primary-light)',
-                  textTransform: 'none',
-                  marginLeft: 6,
-                }}>за всё время.</span>
+                {t('dashboard.finance.netProfit')}
               </div>
             </div>
           </motion.div>
 
-          <KpiBento eyebrow="INCOME · 02" label="Доходы всего" value={fmtMoney(summary.totalIncome)} accent />
-          <KpiBento eyebrow="EXPENSE · 03" label="Расходы всего" value={fmtMoney(summary.totalExpense)} />
-          <KpiBento eyebrow="COUNT · 04" label="Всего транзакций" value={String(summary.incomeCount + summary.expenseCount)} span="span-3" />
+          <KpiBento eyebrow="INCOME · 02" label={t('dashboard.finance.income')} value={fmtMoney(summary.totalIncome)} accent />
+          <KpiBento eyebrow="EXPENSE · 03" label={t('dashboard.finance.expense')} value={fmtMoney(summary.totalExpense)} />
+          <KpiBento eyebrow="COUNT · 04" label={t('finance.transactions')} value={String(summary.incomeCount + summary.expenseCount)} span="span-3" />
         </div>
       )}
 
@@ -300,16 +293,12 @@ export default function Finance() {
             fontFamily: 'var(--font-display)',
             fontSize: 16,
             fontWeight: 500,
-          }}>Добавь <em style={{
-            fontFamily: 'Times New Roman, Georgia, serif',
-            fontWeight: 400,
-            color: 'var(--primary-light)',
-          }}>командой.</em></div>
+          }}>{t('finance.ai.title')}</div>
         </div>
         <input
           value={aiInput}
           onChange={(e) => setAiInput(e.target.value)}
-          placeholder='Например: "добавь расход 200$ аренда"'
+          placeholder={t('finance.ai.placeholder')}
           style={{
             flex: 1,
             minWidth: 240,
@@ -332,7 +321,7 @@ export default function Finance() {
           }}
           disabled={aiBusy || !aiInput.trim()}
         >
-          {aiBusy ? 'Парсим...' : 'Добавить'} <Icon name="arrow_outward" size={14} />
+          {aiBusy ? t('common.saving') : t('common.add')} <Icon name="arrow_outward" size={14} />
         </button>
       </motion.form>
 
@@ -352,11 +341,7 @@ export default function Finance() {
             fontWeight: 500,
             letterSpacing: '-0.02em',
             marginBottom: 24,
-          }}>Динамика <em style={{
-            fontFamily: 'Times New Roman, Georgia, serif',
-            fontWeight: 400,
-            color: 'var(--primary-dark)',
-          }}>денежных потоков.</em></h3>
+          }}>{t('finance.chart.title')}</h3>
           <RevenueChart points={series} />
         </div>
       )}
@@ -370,16 +355,16 @@ export default function Finance() {
               color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
             }}>DISTRIBUTION · 70/20/10</div>
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
-              Чистая прибыль <em style={{ fontFamily: 'Times New Roman, Georgia, serif' }}>распределение.</em>
+              {t('finance.dist.title')}
             </h3>
             <div style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12 }}>
-              За текущий месяц · чистая: <b style={{ color: distribution.net >= 0 ? '#15803d' : '#b91c1c' }}>
+              <b style={{ color: distribution.net >= 0 ? '#15803d' : '#b91c1c' }}>
                 {distribution.net.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
               </b>
             </div>
-            <DistRow label="Бизнес-расходы (зарплаты/аренда/опер.)" pct={70} amount={distribution.distribution.business} color="#3b82f6" />
-            <DistRow label="Долги / аутсорс / подрядчики" pct={20} amount={distribution.distribution.debts} color="#f59e0b" />
-            <DistRow label="Резерв (отложить)" pct={10} amount={distribution.distribution.reserve} color="#10b981" />
+            <DistRow label={t('finance.dist.business')} pct={70} amount={distribution.distribution.business} color="#3b82f6" />
+            <DistRow label={t('finance.dist.debts')} pct={20} amount={distribution.distribution.debts} color="#f59e0b" />
+            <DistRow label={t('finance.dist.reserve')} pct={10} amount={distribution.distribution.reserve} color="#10b981" />
           </div>
 
           <div className="card" style={{ padding: 24 }}>
@@ -388,11 +373,11 @@ export default function Finance() {
               color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
             }}>TOP MANAGERS · MONTH</div>
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
-              Кто <em style={{ fontFamily: 'Times New Roman, Georgia, serif' }}>принёс.</em>
+              {t('finance.topManagers.title')}
             </h3>
             {topManagers.length === 0 ? (
               <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 24 }}>
-                Продаж в этом месяце ещё нет
+                {t('common.empty')}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -403,7 +388,7 @@ export default function Finance() {
                     <div key={tm.manager.id}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                         <span style={{ fontSize: 13 }}>
-                          <b>#{i + 1}</b> {tm.manager.fullName} · {tm.count} сделок
+                          <b>#{i + 1}</b> {tm.manager.fullName} · {tm.count}
                         </span>
                         <span style={{ fontWeight: 600, fontSize: 13 }}>
                           {tm.amount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
@@ -449,7 +434,7 @@ export default function Finance() {
                 color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
               }}>BY PRODUCT · MONTH</div>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
-                Доход <em style={{ fontFamily: 'Times New Roman, Georgia, serif' }}>по продуктам.</em>
+                {t('finance.byProduct')}
               </h3>
               <BarList
                 items={incomeByProduct.map((p) => ({ label: p.product, value: p.amount, sub: `${p.count} шт` }))}
@@ -465,9 +450,7 @@ export default function Finance() {
         <div style={{ marginBottom: 32 }}>
           <div className="crm-section-head">
             <span className="crm-section-eyebrow" style={{ color: 'var(--primary-dark)' }}>PAYMENT REQUESTS · WAITING FOR YOU</span>
-            <h2 className="crm-section-title">
-              Заявки <em>на оплату.</em>
-            </h2>
+            <h2 className="crm-section-title">{t('finance.paymentRequests')}</h2>
           </div>
           <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
             <table className="table" style={{ width: '100%', tableLayout: 'fixed' }}>
@@ -538,9 +521,7 @@ export default function Finance() {
         <div style={{ marginBottom: 32 }}>
           <div className="crm-section-head">
             <span className="crm-section-eyebrow" style={{ color: '#b45309' }}>OUTSTANDING · WAITING FOR PAYMENT</span>
-            <h2 className="crm-section-title">
-              Задолженность <em>студентов.</em>
-            </h2>
+            <h2 className="crm-section-title">{t('finance.outstanding')}</h2>
           </div>
           <div className="card" style={{ padding: 0 }}>
             <table className="table" style={{ width: '100%' }}>
@@ -570,7 +551,7 @@ export default function Finance() {
                           });
                         }}
                       >
-                        Записать оплату
+                        {t('finance.recordPayment')}
                       </button>
                     </td>
                   </tr>
@@ -584,9 +565,7 @@ export default function Finance() {
       {/* Управление транзакциями */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
         <span className="crm-section-eyebrow">LEDGER · ALL TRANSACTIONS</span>
-        <h2 className="crm-section-title">
-          Журнал <em>транзакций.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('finance.ledger')}</h2>
       </div>
 
       <div className="filters" style={{ alignItems: 'center' }}>
@@ -595,7 +574,7 @@ export default function Finance() {
             className={!filterType ? 'active' : ''}
             onClick={() => setFilterType('')}
           >
-            Все
+            {t('common.all')}
           </button>
           <button
             className={filterType === 'INCOME' ? 'active' : ''}
@@ -612,7 +591,7 @@ export default function Finance() {
         </div>
         <div style={{ flex: 1 }} />
         <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-          <Icon name="add" size={18} /> Новая транзакция
+          <Icon name="add" size={18} /> {t('finance.newTransaction')}
         </button>
       </div>
 
@@ -747,6 +726,7 @@ function TransactionForm({
   onCreated: () => void;
 }) {
   const { toast } = useUI();
+  const { t } = useT();
   const [type, setType] = useState<TransactionType>('INCOME');
   const [category, setCategory] = useState<TransactionCategory>('TUITION_PAYMENT');
   const [amount, setAmount] = useState<string>(preselect?.amount ? String(preselect.amount) : '');
@@ -775,18 +755,17 @@ function TransactionForm({
     e.preventDefault();
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) {
-      toast('Введите корректную сумму', 'error');
+      toast(t('toast.error'), 'error');
       return;
     }
-    // EXPENSE — обязательное подтверждение
     if (type === 'EXPENSE') {
       if (receiptKind === 'REASON_ONLY') {
         if (!noReceiptReason.trim() || noReceiptReason.trim().length < 5) {
-          toast('Укажи причину отсутствия чека (мин. 5 символов)', 'error');
+          toast(t('toast.error'), 'error');
           return;
         }
       } else if (!receiptFile) {
-        toast(receiptKind === 'CASH_PHOTO' ? 'Загрузи фото наличных' : 'Загрузи чек', 'error');
+        toast(t('toast.error'), 'error');
         return;
       }
     }
@@ -822,10 +801,10 @@ function TransactionForm({
         }),
       };
       await createTransaction(dto);
-      toast('Транзакция создана', 'success');
+      toast(t('toast.created'), 'success');
       onCreated();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setSubmitting(false);
       setUploadingReceipt(false);
@@ -858,27 +837,23 @@ function TransactionForm({
           letterSpacing: '-0.02em',
           marginBottom: 24,
         }}>
-          Запись <em style={{
-            fontFamily: 'Times New Roman, Georgia, serif',
-            fontWeight: 400,
-            color: 'var(--primary-dark)',
-          }}>о деньгах.</em>
+          {t('finance.newTransaction')}
         </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div className="form-group">
-            <label>Тип</label>
+            <label>{t('common.type')}</label>
             <select value={type} onChange={(e) => {
-              const t = e.target.value as TransactionType;
-              setType(t);
-              setCategory(t === 'INCOME' ? 'TUITION_PAYMENT' : 'SALARY');
+              const tt = e.target.value as TransactionType;
+              setType(tt);
+              setCategory(tt === 'INCOME' ? 'TUITION_PAYMENT' : 'SALARY');
             }}>
-              <option value="INCOME">Доход</option>
-              <option value="EXPENSE">Расход</option>
+              <option value="INCOME">{t('finance.income')}</option>
+              <option value="EXPENSE">{t('finance.expense')}</option>
             </select>
           </div>
           <div className="form-group">
-            <label>Категория</label>
+            <label>{t('finance.col.category')}</label>
             <select value={category} onChange={(e) => setCategory(e.target.value as TransactionCategory)}>
               {cats.map((c) => (
                 <option key={c} value={c}>{TRANSACTION_CATEGORY_LABEL[c]}</option>
@@ -886,11 +861,11 @@ function TransactionForm({
             </select>
           </div>
           <div className="form-group">
-            <label>Сумма</label>
+            <label>{t('common.amount')}</label>
             <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
           </div>
           <div className="form-group">
-            <label>Валюта</label>
+            <label>{t('finance.col.currency')}</label>
             <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
@@ -900,14 +875,14 @@ function TransactionForm({
             </select>
           </div>
           <div className="form-group">
-            <label>Дата</label>
+            <label>{t('common.date')}</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           {type === 'INCOME' && (
             <div className="form-group">
-              <label>Студент</label>
+              <label>{t('finance.col.student')}</label>
               <select value={studentId} onChange={(e) => setStudentId(e.target.value)}>
-                <option value="">— не выбран —</option>
+                <option value="">—</option>
                 {students.map((s) => (
                   <option key={s.id} value={s.id}>{s.fullName}</option>
                 ))}
@@ -916,9 +891,9 @@ function TransactionForm({
           )}
           {(type === 'EXPENSE' && category === 'SALARY') && (
             <div className="form-group">
-              <label>Сотрудник (получатель)</label>
+              <label>{t('salary.field.employee')}</label>
               <select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-                <option value="">— не выбран —</option>
+                <option value="">—</option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>{u.fullName}</option>
                 ))}
@@ -927,9 +902,9 @@ function TransactionForm({
           )}
           {type === 'INCOME' && (
             <div className="form-group">
-              <label>Менеджер (бонус)</label>
+              <label>{t('finance.col.manager')}</label>
               <select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-                <option value="">— авто из студента —</option>
+                <option value="">—</option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>{u.fullName}</option>
                 ))}
@@ -937,32 +912,32 @@ function TransactionForm({
             </div>
           )}
           <div className="form-group">
-            <label>Способ оплаты</label>
+            <label>{t('finance.paymentChannel')}</label>
             <select value={paymentChannel} onChange={(e) => setPaymentChannel(e.target.value)}>
-              <option value="CASH">Наличные</option>
-              <option value="ALIF_MOBILE">АлифМобайл</option>
-              <option value="BANK_TRANSFER">Банк. перевод</option>
-              <option value="CARD">Карта</option>
+              <option value="CASH">{t('finance.channel.CASH')}</option>
+              <option value="ALIF_MOBILE">{t('finance.channel.ALIF_MOBILE')}</option>
+              <option value="BANK_TRANSFER">{t('finance.channel.BANK_TRANSFER')}</option>
+              <option value="CARD">{t('finance.channel.CARD')}</option>
               <option value="CRYPTO">Crypto</option>
-              <option value="OTHER">Другое</option>
+              <option value="OTHER">{t('userDoc.OTHER')}</option>
             </select>
           </div>
           {type === 'INCOME' && (
             <div className="form-group">
-              <label>Тип оплаты</label>
+              <label>{t('finance.paymentKind')}</label>
               <select value={paymentKind} onChange={(e) => setPaymentKind(e.target.value)}>
-                <option value="FULL">Полная</option>
-                <option value="PREPAYMENT">Предоплата</option>
-                <option value="ADDITIONAL">Доплата</option>
-                <option value="OWNER_INVESTMENT">Вложение собственника</option>
+                <option value="FULL">{t('finance.kind.FULL')}</option>
+                <option value="PREPAYMENT">{t('finance.kind.PREPAYMENT')}</option>
+                <option value="ADDITIONAL">{t('finance.kind.ADDITIONAL')}</option>
+                <option value="OWNER_INVESTMENT">{t('finance.kind.OWNER_INVESTMENT')}</option>
               </select>
             </div>
           )}
           {type === 'INCOME' && (
             <div className="form-group">
-              <label>Продукт</label>
+              <label>{t('finance.product')}</label>
               <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)}>
-                <option value="">— не указан —</option>
+                <option value="">—</option>
                 {PRODUCT_CATEGORIES.map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
@@ -971,13 +946,13 @@ function TransactionForm({
           )}
           {type === 'INCOME' && (
             <div className="form-group">
-              <label>ФИО плательщика</label>
-              <input type="text" value={payerName} onChange={(e) => setPayerName(e.target.value)} placeholder="если отличается от студента" />
+              <label>{t('finance.payerName')}</label>
+              <input type="text" value={payerName} onChange={(e) => setPayerName(e.target.value)} />
             </div>
           )}
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-            <label>Комментарий</label>
-            <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="(опционально)" />
+            <label>{t('app.field.comment')}</label>
+            <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} />
           </div>
 
           {type === 'EXPENSE' && (

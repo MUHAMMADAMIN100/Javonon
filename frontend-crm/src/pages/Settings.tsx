@@ -106,10 +106,7 @@ function TabButton({ active, onClick, label }: { active: boolean; onClick: () =>
 
 function ScheduleTab() {
   return (
-    <ScheduleEditor
-      userId={null}
-      hint="Дефолтный график для всех сотрудников. Индивидуальный график конкретного сотрудника задаётся в его карточке."
-    />
+    <ScheduleEditor userId={null} />
   );
 }
 
@@ -140,9 +137,9 @@ function PenaltiesTab() {
       });
       setMinLate(''); setMaxLate(''); setAmount(''); setComment('');
       qc.invalidateQueries({ queryKey: ['settings', 'penalty-rules'] });
-      toast('Правило добавлено', 'success');
+      toast(t('toast.created'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
@@ -166,8 +163,7 @@ function PenaltiesTab() {
   return (
     <div>
       <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 16 }}>
-        Ступенчатая шкала штрафов за опоздание. Если правило не подходит — система
-        возвращается к старой формуле (200 TJS + 50 за каждое повторное).
+        {t('settings.penalties.hint')}
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 16, padding: 12, border: '1px solid var(--border-soft)', borderRadius: 10, background: 'var(--bg-soft)' }}>
         <Field label={t('settings.penalties.minLate')}><input type="number" value={minLate} onChange={(e) => setMinLate(e.target.value)} /></Field>
@@ -187,7 +183,7 @@ function PenaltiesTab() {
           }}>
             <div>
               <div style={{ fontWeight: 500 }}>
-                {r.minLateMinutes}-{r.maxLateMinutes ?? '∞'} мин → <b>{r.amount} {r.currency}</b>
+                {r.minLateMinutes}-{r.maxLateMinutes ?? '∞'} {t('common.minutes')} → <b>{r.amount} {r.currency}</b>
               </div>
               {r.comment && <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{r.comment}</div>}
             </div>
@@ -216,7 +212,7 @@ function LocationTab() {
   });
   const loc = query.data;
 
-  const [name, setName] = useState('Главный офис');
+  const [name, setName] = useState('');
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
   const [radius, setRadius] = useState('150');
@@ -231,14 +227,14 @@ function LocationTab() {
   }, [loc?.id]);
 
   const detect = () => {
-    if (!navigator.geolocation) return toast('Геолокация недоступна в браузере', 'error');
+    if (!navigator.geolocation) return toast(t('toast.error'), 'error');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLat(String(pos.coords.latitude));
         setLng(String(pos.coords.longitude));
-        toast('Координаты получены', 'success');
+        toast(t('toast.updated'), 'success');
       },
-      (e) => toast('Не удалось получить координаты: ' + e.message, 'error'),
+      (e) => toast(t('toast.error') + ': ' + e.message, 'error'),
     );
   };
 
@@ -256,17 +252,16 @@ function LocationTab() {
         await createLocation(payload);
       }
       qc.invalidateQueries({ queryKey: ['settings', 'work-location'] });
-      toast('Локация сохранена', 'success');
+      toast(t('toast.updated'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
   return (
     <div>
       <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 16 }}>
-        Радиус, внутри которого сотрудник может «Начать работу» по геолокации. Если
-        он за пределами — будет видеть фото/видео-альтернативу.
+        {t('settings.location.hint')}
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
         <Field label={t('settings.location.name')}><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
@@ -322,9 +317,9 @@ function RolesTab() {
     try {
       await deleteCustomRole(r.id);
       qc.invalidateQueries({ queryKey: ['custom-roles'] });
-      toast('Роль удалена', 'success');
+      toast(t('toast.deleted'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
@@ -333,16 +328,14 @@ function RolesTab() {
       await updateCustomRole(r.id, { isActive: !r.isActive });
       qc.invalidateQueries({ queryKey: ['custom-roles'] });
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
   return (
     <div>
       <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 16 }}>
-        Создавайте свои роли (например «Таргетолог», «HR») и точечно выбирайте
-        доступы к разделам. Сотруднику привязывается одна кастомная роль
-        в его карточке (раздел «Сотрудники»). Базовые 5 ролей продолжают работать.
+        {t('settings.roles.hint')}
       </p>
 
       {editing || creating ? (
@@ -384,7 +377,7 @@ function RolesTab() {
                   <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 2 }}>{r.description}</div>
                 )}
                 <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
-                  {r.permissions.length} доступов · {r._count?.users ?? 0} сотрудник(ов)
+                  {r.permissions.length} · {r._count?.users ?? 0}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -415,6 +408,7 @@ function RoleForm({
   onSaved: () => void;
 }) {
   const { toast } = useUI();
+  const { t } = useT();
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [perms, setPerms] = useState<Set<string>>(new Set(initial?.permissions ?? []));
@@ -436,7 +430,7 @@ function RoleForm({
   };
 
   const save = async () => {
-    if (!name.trim()) return toast('Укажите название роли', 'error');
+    if (!name.trim()) return toast(t('toast.error'), 'error');
     setSaving(true);
     try {
       if (initial) {
@@ -445,18 +439,18 @@ function RoleForm({
           description: description.trim() || undefined,
           permissions: Array.from(perms),
         });
-        toast('Роль обновлена', 'success');
+        toast(t('toast.updated'), 'success');
       } else {
         await createCustomRole({
           name: name.trim(),
           description: description.trim() || undefined,
           permissions: Array.from(perms),
         });
-        toast('Роль создана', 'success');
+        toast(t('toast.created'), 'success');
       }
       onSaved();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setSaving(false);
     }
@@ -471,16 +465,16 @@ function RoleForm({
       marginBottom: 16,
     }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
-        <Field label="Название роли">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Таргетолог" maxLength={50} />
+        <Field label={t('settings.roles.name')}>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} />
         </Field>
-        <Field label="Описание (опц.)">
-          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="за что отвечает роль" maxLength={300} />
+        <Field label={t('settings.roles.description')}>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
         </Field>
       </div>
 
       <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600 }}>
-        Доступы ({perms.size} выбрано)
+        {t('settings.roles.permissions')} ({perms.size})
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
         {grouped.map(([group, items]) => (
@@ -516,9 +510,9 @@ function RoleForm({
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-        <button className="btn btn-sm btn-secondary" onClick={onCancel} disabled={saving}>Отмена</button>
+        <button className="btn btn-sm btn-secondary" onClick={onCancel} disabled={saving}>{t('common.cancel')}</button>
         <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
-          {saving ? 'Сохраняем…' : (initial ? 'Сохранить' : 'Создать роль')}
+          {saving ? t('common.saving') : (initial ? t('common.save') : t('common.create'))}
         </button>
       </div>
     </div>
@@ -564,14 +558,14 @@ function SalaryRosterSection() {
         bonusPercent: patch.bonusPercent === undefined ? undefined : Number(patch.bonusPercent),
         overtimeMultiplier: patch.overtimeMultiplier === undefined ? undefined : Number(patch.overtimeMultiplier),
       });
-      toast(`Зарплата ${u.fullName} обновлена`, 'success');
+      toast(t('toast.updated'), 'success');
       setEdits((e) => {
         const { [u.id]: _omit, ...rest } = e;
         return rest;
       });
       qc.invalidateQueries({ queryKey: ['salary-settings'] });
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
@@ -699,9 +693,9 @@ function BonusTiersSection() {
       });
       setMinAmount(''); setMaxAmount(''); setPercent(''); setComment('');
       qc.invalidateQueries({ queryKey: ['bonus-tiers'] });
-      toast('Этап добавлен', 'success');
+      toast(t('toast.created'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
