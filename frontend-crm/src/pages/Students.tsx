@@ -17,6 +17,7 @@ import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useDirectionLabel, useStudentStatusLabel, useApplicationStatusLabel } from '../lib/labels';
 
 type Scope = 'all' | 'mine';
 
@@ -31,6 +32,9 @@ const MANAGER_ROLES = new Set(['SALES_MANAGER', 'CLIENT_MANAGER']);
 
 export default function Students() {
   const { t } = useT();
+  const directionLabel = useDirectionLabel();
+  const studentStatusLabel = useStudentStatusLabel();
+  const appStatusLabel = useApplicationStatusLabel();
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
   const { toast } = useUI();
@@ -120,11 +124,11 @@ export default function Students() {
 
   const onDownloadReport = async () => {
     if (!reportFrom || !reportTo) {
-      toast('Выберите обе даты: "От" и "До"', 'error');
+      toast(t('toast.error'), 'error');
       return;
     }
     if (new Date(reportFrom) > new Date(reportTo)) {
-      toast('Дата "До" должна быть позже "От"', 'error');
+      toast(t('toast.error'), 'error');
       return;
     }
     setGenerating(true);
@@ -137,7 +141,7 @@ export default function Students() {
         return d >= from && d <= to;
       });
       if (filtered.length === 0) {
-        toast('За выбранный период нет студентов', 'error');
+        toast(t('common.empty'), 'error');
         setGenerating(false);
         return;
       }
@@ -151,7 +155,7 @@ export default function Students() {
       setReportFrom('');
       setReportTo('');
     } catch (e: any) {
-      toast(e?.message || 'Ошибка генерации отчёта', 'error');
+      toast(e?.message || t('toast.error'), 'error');
     } finally {
       setGenerating(false);
     }
@@ -190,7 +194,7 @@ export default function Students() {
             onClick={() => setReportOpen(true)}
             whileHover={{ scale: 1.05, y: -2 }}
             whileTap={{ scale: 0.95 }}
-            title="Скачать отчёт в Word"
+            title={t('common.download')}
           >
             <Icon name="description" size={16} style={{ marginRight: 4 }} />
             Отчёт Word
@@ -201,50 +205,50 @@ export default function Students() {
             whileHover={{ scale: 1.05, y: -2 }}
             whileTap={{ scale: 0.95 }}
           >
-            + Новый студент
+            + {t('studentNew.title')}
           </motion.button>
         </div>
       </div>
       <div className="card-body">
         <div className="filters">
-          <input placeholder="Поиск по ФИО или телефону..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
           <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
-            <option value="">Все направления</option>
+            <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
           </select>
           <select
             value={stageFilter}
             onChange={(e) => setStageFilter(e.target.value)}
-            title="Фильтр по этапу заявки"
+            title={t('app.filter.status')}
           >
-            <option value="">Все статусы</option>
-            <optgroup label="Этап заявки">
-              <option value="NEW">Новая заявка</option>
-              <option value="DOCS_REVIEW">Документы на проверке</option>
-              <option value="DOCS_SUBMITTED">Подача документов</option>
-              <option value="PRE_ADMISSION">Предв. зачисление</option>
-              <option value="AWAITING_PAYMENT">Ожидает оплаты</option>
-              <option value="ENROLLED">Зачислен</option>
+            <option value="">{t('app.filter.status')}</option>
+            <optgroup label={t('app.field.stage')}>
+              <option value="NEW">{appStatusLabel('NEW' as any)}</option>
+              <option value="DOCS_REVIEW">{appStatusLabel('DOCS_REVIEW' as any)}</option>
+              <option value="DOCS_SUBMITTED">{appStatusLabel('DOCS_SUBMITTED' as any)}</option>
+              <option value="PRE_ADMISSION">{appStatusLabel('PRE_ADMISSION' as any)}</option>
+              <option value="AWAITING_PAYMENT">{appStatusLabel('AWAITING_PAYMENT' as any)}</option>
+              <option value="ENROLLED">{appStatusLabel('ENROLLED' as any)}</option>
             </optgroup>
-            <optgroup label="Особые">
-              <option value="PAUSED">Приостановлен</option>
-              <option value="GRADUATED">Выпустился</option>
-              <option value="ARCHIVED">В архиве</option>
+            <optgroup label={t('common.status')}>
+              <option value="PAUSED">{studentStatusLabel('PAUSED' as any)}</option>
+              <option value="GRADUATED">{studentStatusLabel('GRADUATED' as any)}</option>
+              <option value="ARCHIVED">{studentStatusLabel('ARCHIVED' as any)}</option>
             </optgroup>
           </select>
           <select value={cabinet} onChange={(e) => setCabinet(e.target.value)}>
-            <option value="">Все кабинеты</option>
-            <option value="1">Кабинет 1</option>
-            <option value="2">Кабинет 2</option>
-            <option value="3">Кабинет 3</option>
+            <option value="">{t('app.field.cabinet')}</option>
+            <option value="1">{t('app.field.cabinet')} 1</option>
+            <option value="2">{t('app.field.cabinet')} 2</option>
+            <option value="3">{t('app.field.cabinet')} 3</option>
           </select>
           {isAdmin && (
             <select
               value={manager}
               onChange={(e) => setManager(e.target.value)}
-              title="Фильтр по менеджеру"
+              title={t('app.filter.manager')}
             >
-              <option value="">Все менеджеры</option>
+              <option value="">{t('app.filter.manager')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
@@ -266,7 +270,7 @@ export default function Students() {
               onChange={(e) => setPaidOnly(e.target.checked)}
               style={{ margin: 0 }}
             />
-            Только оплатившие
+            {t('students.paidOnly')}
           </label>
         </div>
 
@@ -276,14 +280,14 @@ export default function Students() {
           ) : filteredItems.length === 0 ? (
             <motion.div key="empty" className="empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="empty-icon"><Icon name="school" size={48} /></div>
-              {scope === 'mine' ? 'У вас пока нет назначенных студентов' : 'Студентов не найдено'}
+              {t('common.empty')}
             </motion.div>
           ) : (
             <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>ФИО</th><th>Телефоны</th><th>Направление</th><th>Кабинет</th><th>Менеджер</th><th>Статус</th>
+                    <th>{t('app.field.fullName')}</th><th>{t('app.field.phones')}</th><th>{t('app.field.direction')}</th><th>{t('app.field.cabinet')}</th><th>{t('app.field.manager')}</th><th>{t('common.status')}</th>
                   </tr>
                 </thead>
                 <motion.tbody
@@ -303,10 +307,10 @@ export default function Students() {
                       style={{ cursor: 'pointer' }}
                     >
                       <td><strong>{s.fullName}</strong></td>
-                      <td data-label="Телефоны">{s.phones.join(', ') || '—'}</td>
-                      <td data-label="Направление">{DIRECTION_LABEL[s.direction]}</td>
-                      <td data-label="Кабинет">№{s.cabinet}</td>
-                      <td data-label="Менеджеры">
+                      <td>{s.phones.join(', ') || '—'}</td>
+                      <td>{directionLabel(s.direction)}</td>
+                      <td>№{s.cabinet}</td>
+                      <td>
                         <div className="mgr-cell">
                           <div className="mgr-row">
                             <span className="mgr-tag tj">TJ</span>
@@ -330,19 +334,19 @@ export default function Students() {
                           </div>
                         </div>
                       </td>
-                      <td data-label="Статус">
+                      <td>
                         {(() => {
                           const appStatus = s.applications?.[0]?.status;
                           if (s.status !== 'ACTIVE' || !appStatus) {
                             return (
                               <span className={`badge ${STUDENT_STATUS_BADGE[s.status]}`}>
-                                {STUDENT_STATUS_LABEL[s.status]}
+                                {studentStatusLabel(s.status)}
                               </span>
                             );
                           }
                           return (
                             <span className={`badge ${STATUS_BADGE[appStatus]}`}>
-                              {STATUS_LABEL[appStatus]}
+                              {appStatusLabel(appStatus)}
                             </span>
                           );
                         })()}
@@ -386,14 +390,14 @@ export default function Students() {
               <div className="dialog-icon">
                 <Icon name="description" size={28} />
               </div>
-              <div className="dialog-title">Отчёт по студентам (Word)</div>
+              <div className="dialog-title">{t('students.reportTitle')}</div>
               <div className="dialog-message">
-                Укажите обе даты — "От" и "До". В отчёт попадут студенты, зарегистрированные в этот период.
+                {t('students.reportHint')}
               </div>
 
               <div className="form-grid-2" style={{ textAlign: 'left', marginBottom: 20 }}>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label>От *</label>
+                  <label>{t('common.from')} *</label>
                   <input
                     type="date"
                     value={reportFrom}
@@ -403,7 +407,7 @@ export default function Students() {
                   />
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label>До *</label>
+                  <label>{t('common.until')} *</label>
                   <input
                     type="date"
                     value={reportTo}
@@ -421,7 +425,7 @@ export default function Students() {
                   disabled={generating}
                   whileTap={{ scale: 0.97 }}
                 >
-                  Отмена
+                  {t('common.cancel')}
                 </motion.button>
                 <motion.button
                   className="btn btn-primary"
@@ -429,9 +433,9 @@ export default function Students() {
                   disabled={generating || !reportDatesValid}
                   whileTap={{ scale: 0.97 }}
                   style={!reportDatesValid && !generating ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-                  title={!reportDatesValid ? 'Выберите обе даты' : 'Скачать Word'}
+                  title={t('common.download')}
                 >
-                  {generating ? 'Создание…' : 'Скачать Word'}
+                  {generating ? t('common.saving') : t('common.download')}
                 </motion.button>
               </div>
             </motion.div>

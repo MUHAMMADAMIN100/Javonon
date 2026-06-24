@@ -266,7 +266,7 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
                     className="phone-country-flag"
                     loading="lazy"
                   />
-                  <span className="phone-dropdown-label">{c.label}</span>
+                  <span className="phone-dropdown-label">{t(`country.${c.cc}`) !== `country.${c.cc}` ? t(`country.${c.cc}`) : c.label}</span>
                   <span className="phone-dropdown-code">{c.code}</span>
                 </button>
               ))

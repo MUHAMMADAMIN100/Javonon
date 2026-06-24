@@ -11,25 +11,26 @@ import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { useT } from '../lib/i18n';
 
-const TITLES: Record<string, { eyebrow: string; pre: string; em: string }> = {
-  '/dashboard': { eyebrow: 'OVERVIEW · 01', pre: 'Картина', em: 'дня.' },
-  '/applications': { eyebrow: 'INBOUND · 02', pre: 'Заявки', em: 'студентов.' },
-  '/students': { eyebrow: 'PIPELINE · 03', pre: 'Студенты', em: 'в работе.' },
-  '/programs': { eyebrow: 'CATALOG · 04', pre: 'Программы', em: 'и гранты.' },
-  '/tasks': { eyebrow: 'WORK · 05', pre: 'Задачи', em: 'команды.' },
-  '/activity': { eyebrow: 'AUDIT · 06', pre: 'Хронология', em: 'действий.' },
-  '/users': { eyebrow: 'TEAM · 07', pre: 'Сотрудники', em: 'Javonon.' },
-  '/time': { eyebrow: 'HR · 04', pre: 'Учёт', em: 'времени.' },
-  '/finance': { eyebrow: 'FINANCE · 08', pre: 'Деньги', em: 'компании.' },
-  '/salary': { eyebrow: 'PAYROLL · 09', pre: 'Зарплата', em: 'команды.' },
-  '/kpi': { eyebrow: 'KPI · 10', pre: 'Эффективность', em: 'каждого.' },
-  '/reports': { eyebrow: 'DAILY · 11', pre: 'Мой', em: 'отчёт.' },
-  '/calls': { eyebrow: 'CALLS · 12', pre: 'Журнал', em: 'звонков.' },
-  '/chat': { eyebrow: 'CHAT · 13', pre: 'Внутренний', em: 'чат.' },
-  '/lms': { eyebrow: 'LMS · 14', pre: 'Курсы', em: 'и материалы.' },
-  '/partners': { eyebrow: 'PARTNERS · 15', pre: 'Партнёрская', em: 'программа.' },
-  '/me': { eyebrow: 'PROFILE · 16', pre: 'Мой', em: 'кабинет.' },
-};
+const TITLE_ROUTES: Array<{ path: string; eyebrow: string; titleKey: string }> = [
+  { path: '/dashboard',    eyebrow: 'OVERVIEW · 01', titleKey: 'dashboard.title' },
+  { path: '/applications', eyebrow: 'INBOUND · 02',  titleKey: 'app.title' },
+  { path: '/students',     eyebrow: 'PIPELINE · 03', titleKey: 'students.title' },
+  { path: '/programs',     eyebrow: 'CATALOG · 04',  titleKey: 'programs.title' },
+  { path: '/tasks',        eyebrow: 'WORK · 05',     titleKey: 'tasks.title' },
+  { path: '/activity',     eyebrow: 'AUDIT · 06',    titleKey: 'activity.title' },
+  { path: '/users',        eyebrow: 'TEAM · 07',     titleKey: 'users.title' },
+  { path: '/workday',      eyebrow: 'HR · 04',       titleKey: 'workday.title' },
+  { path: '/time',         eyebrow: 'HR · 04',       titleKey: 'workday.title' },
+  { path: '/finance',      eyebrow: 'FINANCE · 08',  titleKey: 'finance.title' },
+  { path: '/salary',       eyebrow: 'PAYROLL · 09',  titleKey: 'salary.title' },
+  { path: '/kpi',          eyebrow: 'KPI · 10',      titleKey: 'kpi.title' },
+  { path: '/reports',      eyebrow: 'DAILY · 11',    titleKey: 'reports.title' },
+  { path: '/calls',        eyebrow: 'CALLS · 12',    titleKey: 'calls.title' },
+  { path: '/chat',         eyebrow: 'CHAT · 13',     titleKey: 'chat.title' },
+  { path: '/lms',          eyebrow: 'LMS · 14',      titleKey: 'lms.title' },
+  { path: '/partners',     eyebrow: 'PARTNERS · 15', titleKey: 'partners.title' },
+  { path: '/me',           eyebrow: 'PROFILE · 16',  titleKey: 'profile.title' },
+];
 
 export default function Layout() {
   const loc = useLocation();
@@ -37,8 +38,10 @@ export default function Layout() {
   const { toast } = useUI();
   const { t } = useT();
   const logout = useAuth((s) => s.logout);
-  const meta = Object.entries(TITLES).find(([k]) => loc.pathname.startsWith(k))?.[1]
-    || { eyebrow: 'JAVONON · CRM', pre: 'Панель', em: 'управления.' };
+  const route = TITLE_ROUTES.find((r) => loc.pathname.startsWith(r.path));
+  const meta = route
+    ? { eyebrow: route.eyebrow, title: t(route.titleKey) }
+    : { eyebrow: 'JAVONON · CRM', title: 'Javonon' };
 
   // По ТЗ §2: «права передаются основателем». Когда FOUNDER меняет
   // мои роли через RolesEditor, бэкенд шлёт `user:roles-updated` в мою
@@ -120,7 +123,7 @@ export default function Layout() {
             >
               <div className="topbar-eyebrow">{meta.eyebrow}</div>
               <div className="topbar-title">
-                {meta.pre} <em>{meta.em}</em>
+                {meta.title}
               </div>
             </motion.div>
           </AnimatePresence>

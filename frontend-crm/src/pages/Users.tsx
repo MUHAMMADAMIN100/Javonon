@@ -40,9 +40,9 @@ export default function Users() {
   const formErrors = validateAll(
     form,
     {
-      email: compose(required('Введите email'), emailRule()),
-      fullName: compose(required('Введите ФИО'), minLen(2), maxLen(100)),
-      password: compose(required('Введите пароль'), passwordRule()),
+      email: compose(required(t('toast.error')), emailRule()),
+      fullName: compose(required(t('toast.error')), minLen(2), maxLen(100)),
+      password: compose(required(t('toast.error')), passwordRule()),
     },
   );
   const showErr = (k: keyof typeof formErrors) => touched[k] && formErrors[k];
@@ -82,22 +82,22 @@ export default function Users() {
       setTouched({});
       setError(null);
     },
-    onError: (e: any) => setError(e.response?.data?.message?.toString() || 'Ошибка создания'),
+    onError: (e: any) => setError(e.response?.data?.message?.toString() || t('toast.error')),
   });
 
   const updateMut = useOptimisticMutation<User, { id: string; patch: Partial<User> }, User[]>({
     mutationFn: ({ id, patch }) => updateUser(id, patch as any),
     queryKey: listKey,
     applyOptimistic: (cur, { id, patch }) => optimistic.updateById(cur, id, patch),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const deleteMut = useOptimisticMutation<unknown, string, User[]>({
     mutationFn: deleteUser,
     queryKey: listKey,
     applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
-    onSuccess: () => toast('Пользователь удалён', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('toast.deleted'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const onCreate = (e: React.FormEvent) => {
@@ -127,13 +127,13 @@ export default function Users() {
 
   const onDelete = async (u: User) => {
     if (u.id === me?.id) {
-      toast('Нельзя удалить самого себя', 'error');
+      toast(t('toast.error'), 'error');
       return;
     }
     const ok = await confirm({
-      title: 'Удалить пользователя',
-      message: `Пользователь «${u.fullName}» будет удалён. Действие нельзя отменить.`,
-      confirmText: 'Удалить',
+      title: t('common.delete'),
+      message: `«${u.fullName}»`,
+      confirmText: t('common.delete'),
       danger: true,
     });
     if (!ok) return;
@@ -144,12 +144,12 @@ export default function Users() {
     <div className="card">
       <div className="card-header">
         <h2 className="card-title">{t('users.title')}</h2>
-        <button className="btn btn-primary" onClick={openCreate}>+ Добавить</button>
+        <button className="btn btn-primary" onClick={openCreate}>+ {t('common.add')}</button>
       </div>
       <div className="card-body">
         <div className="filters">
           <input
-            placeholder="Поиск по email или ФИО..."
+            placeholder={t('common.search')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -157,7 +157,7 @@ export default function Users() {
         <div className="table-wrap">
           <table className="table">
             <thead>
-              <tr><th>ФИО</th><th>Email</th><th>Роль</th><th>Создан</th><th></th></tr>
+              <tr><th>{t('app.field.fullName')}</th><th>{t('userDetail.field.email')}</th><th>{t('userDetail.field.role')}</th><th>{t('profile.field.createdAt')}</th><th></th></tr>
             </thead>
             <tbody>
               {items.map((u) => (
@@ -191,7 +191,7 @@ export default function Users() {
                             fontSize: 11,
                             fontWeight: 600,
                           }}
-                          title="Кастомная роль"
+                          title={t('userDetail.field.customRole')}
                         >
                           {(u as any).customRole.name}
                         </span>
@@ -224,12 +224,12 @@ export default function Users() {
                       <button
                         className="btn btn-sm btn-secondary"
                         onClick={() => setPwdTarget(u)}
-                        title="Сменить пароль"
+                        title={t('login.password')}
                       >
-                        Пароль
+                        {t('login.password')}
                       </button>
                       <button className="btn btn-sm btn-danger" onClick={() => onDelete(u)} disabled={u.id === me?.id}>
-                        Удалить
+                        {t('common.delete')}
                       </button>
                     </div>
                   </td>
@@ -267,7 +267,7 @@ export default function Users() {
               </div>
               <div className="dialog-title">{t('users.new')}</div>
               <div className="dialog-message" style={{ marginBottom: 16 }}>
-                Заполни данные нового пользователя системы.
+                {t('studentNew.subtitle')}
               </div>
 
               {error && (
@@ -283,7 +283,7 @@ export default function Users() {
               <input type="password" name="fake-password" autoComplete="current-password" style={{ display: 'none' }} />
 
               <div className="form-group" style={{ textAlign: 'left', marginBottom: 12 }}>
-                <label>ФИО *</label>
+                <label>{t('app.field.fullName')} *</label>
                 <input
                   name="newUserFullName"
                   value={form.fullName}
@@ -299,7 +299,7 @@ export default function Users() {
               </div>
 
               <div className="form-group" style={{ textAlign: 'left', marginBottom: 12 }}>
-                <label>Email *</label>
+                <label>{t('userDetail.field.email')} *</label>
                 <input
                   type="email"
                   name="newUserEmail"
@@ -315,7 +315,7 @@ export default function Users() {
 
               <div className="form-group" style={{ textAlign: 'left', marginBottom: 12 }}>
                 <label>
-                  Пароль * <span style={{ fontWeight: 400, color: 'var(--text-soft)', fontSize: 12 }}>— мин. 8 симв., буквы и цифры</span>
+                  {t('login.password')} *
                 </label>
                 <PasswordInput
                   name="newUserPassword"
@@ -331,7 +331,7 @@ export default function Users() {
               </div>
 
               <div className="form-group" style={{ textAlign: 'left', marginBottom: 16 }}>
-                <label>Роль</label>
+                <label>{t('userDetail.field.role')}</label>
                 {/* ТЗ §2: 5 базовых ролей + кастомные роли FOUNDER'а.
                     Составное значение «base:X» / «custom:<id>» — чтобы
                     одним dropdown'ом покрыть оба типа. */}
@@ -349,40 +349,34 @@ export default function Users() {
                     }
                   }}
                 >
-                  <optgroup label="Базовые роли">
-                    <option value="base:ADMIN">Администратор</option>
-                    <option value="base:ACCOUNTANT">Бухгалтер</option>
-                    <option value="base:SALES_MANAGER">Менеджер по продажам</option>
-                    <option value="base:CLIENT_MANAGER">Клиентский менеджер</option>
+                  <optgroup label={t('userDetail.field.role')}>
+                    <option value="base:ADMIN">{roleLabel('ADMIN' as any)}</option>
+                    <option value="base:ACCOUNTANT">{roleLabel('ACCOUNTANT' as any)}</option>
+                    <option value="base:SALES_MANAGER">{roleLabel('SALES_MANAGER' as any)}</option>
+                    <option value="base:CLIENT_MANAGER">{roleLabel('CLIENT_MANAGER' as any)}</option>
                   </optgroup>
                   {customRoles.length > 0 && (
-                    <optgroup label="Кастомные роли">
+                    <optgroup label={t('userDetail.field.customRole')}>
                       {customRoles.map((r) => (
                         <option key={r.id} value={`custom:${r.id}`}>
-                          {r.name} ({r.permissions.length} доступов)
+                          {r.name} ({r.permissions.length})
                         </option>
                       ))}
                     </optgroup>
                   )}
                 </select>
-                <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
-                  {customRoles.length === 0 && isFounder(me)
-                    ? 'Чтобы добавить свою роль — Настройки → Роли и доступы.'
-                    : 'Дополнительные роли назначаются после создания в карточке сотрудника.'}
-                </div>
               </div>
 
               <div className="dialog-actions">
                 <button type="button" className="btn btn-secondary" onClick={closeCreate} disabled={createMut.isPending}>
-                  Отмена
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="btn btn-primary"
                   disabled={formInvalid || createMut.isPending}
-                  title={formInvalid ? 'Исправьте ошибки в форме' : ''}
                 >
-                  {createMut.isPending ? 'Создаём…' : 'Создать'}
+                  {createMut.isPending ? t('common.saving') : t('common.create')}
                 </button>
               </div>
             </motion.form>
