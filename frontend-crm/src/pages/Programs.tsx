@@ -18,6 +18,7 @@ import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import DirectionOptions from '../components/DirectionOptions';
 import { compose, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
+import { useT } from '../lib/i18n';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
@@ -89,6 +90,7 @@ export default function Programs() {
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
+  const { t } = useT();
   const isAdmin = isElevated(me);
   const [city, setCity] = useState('');
   const [major, setMajor] = useState('');
@@ -259,7 +261,7 @@ export default function Programs() {
   return (
     <motion.div className="card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
       <div className="card-header">
-        <h2 className="card-title">Программы обучения</h2>
+        <h2 className="card-title">{t('programs.title')}</h2>
         {isAdmin && (
           <motion.button
             className="btn btn-primary"
@@ -267,7 +269,7 @@ export default function Programs() {
             whileHover={{ scale: 1.05, y: -2 }}
             whileTap={{ scale: 0.95 }}
           >
-            <Icon name="add" size={16} style={{ marginRight: 4 }} /> Новая программа
+            <Icon name="add" size={16} style={{ marginRight: 4 }} /> {t('programs.new')}
           </motion.button>
         )}
       </div>
@@ -312,7 +314,7 @@ export default function Programs() {
           ) : items.length === 0 ? (
             <motion.div key="e" className="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className="empty-icon"><Icon name="school" size={48} /></div>
-              Программ пока нет
+              {t('programs.empty')}
             </motion.div>
           ) : (
             <motion.div key="g" className="programs-grid" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>

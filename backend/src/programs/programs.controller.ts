@@ -315,4 +315,69 @@ export class ProgramsController {
   ) {
     return this.programs.removeScholarship(sid, user);
   }
+
+  // ===== Документы программы (ТЗ-доработка п.7) =====
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/documents')
+  listDocuments(@Param('id') id: string) {
+    return this.programs.listDocuments(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/documents')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: process.env.UPLOADS_DIR || './uploads',
+        filename: (_req, file, cb) => {
+          const ext = (extname(file.originalname || '') || '').toLowerCase();
+          cb(null, `${randomUUID()}${ext}`);
+        },
+      }),
+      limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+    }),
+  )
+  async addDocument(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
+  ) {
+    if (!file) throw new BadRequestException('Файл не передан');
+    return this.programs.addDocument(id, user, {
+      name: file.originalname || 'document',
+      url: `/uploads/${file.filename}`,
+      size: file.size,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('documents/:documentId')
+  removeDocument(@Param('documentId') did: string, @CurrentUser() user: any) {
+    return this.programs.removeDocument(did, user);
+  }
+
+  // ===== Комментарии программы (ТЗ-доработка п.7) =====
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/comments')
+  listComments(@Param('id') id: string) {
+    return this.programs.listComments(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/comments')
+  addComment(
+    @Param('id') id: string,
+    @Body() body: { text: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.programs.addComment(id, user, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('comments/:commentId')
+  removeComment(@Param('commentId') cid: string, @CurrentUser() user: any) {
+    return this.programs.removeComment(cid, user);
+  }
 }

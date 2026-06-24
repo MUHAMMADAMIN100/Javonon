@@ -1,11 +1,23 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { getProgram, programImageUrl } from '../api/programs';
+import {
+  getProgram, programImageUrl,
+  listProgramDocuments, uploadProgramDocument, deleteProgramDocument,
+  listProgramComments, addProgramComment, deleteProgramComment,
+  type ProgramDocument, type ProgramComment,
+} from '../api/programs';
 import { DIRECTION_LABEL } from '../api/types';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
+import { MiniMarkdown } from '../lib/miniMarkdown';
+import { useAuth } from '../store/auth';
+import { useUI } from '../ui/Dialogs';
+import { isElevated } from '../lib/roles';
+
+const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
+const fileUrl = (u: string) => (u.startsWith('http') ? u : `${API_BASE}${u}`);
 
 /**
  * Детальная страница программы (ТЗ-доработка п.7). Открывается по клику
@@ -159,11 +171,15 @@ export default function ProgramDetail() {
       {p.description && (
         <div className="card" style={{ padding: 20, marginTop: 16 }}>
           <h3 style={{ marginBottom: 12 }}>Описание программы</h3>
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-            {p.description}
-          </div>
+          <MiniMarkdown text={p.description} />
         </div>
       )}
+
+      {/* Документы программы (ТЗ п.7) */}
+      <ProgramDocumentsSection programId={p.id} />
+
+      {/* Комментарии (ТЗ п.7) */}
+      <ProgramCommentsSection programId={p.id} />
     </motion.div>
   );
 }
@@ -174,6 +190,173 @@ function Row({ label, value }: { label: string; value: string | null | undefined
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-soft)' }}>
       <span style={{ color: 'var(--text-soft)', fontSize: 13 }}>{label}</span>
       <span style={{ fontWeight: 500, textAlign: 'right' }}>{value}</span>
+    </div>
+  );
+}
+
+function ProgramDocumentsSection({ programId }: { programId: string }) {
+  const { toast, confirm } = useUI();
+  const me = useAuth((s) => s.user);
+  const qc = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const query = useQuery({
+    queryKey: ['program-documents', programId],
+    queryFn: () => listProgramDocuments(programId),
+  });
+  const items = query.data ?? [];
+  const canEdit = isElevated(me as any);
+
+  const upload = async (file: File) => {
+    setUploading(true);
+    try {
+      await uploadProgramDocument(programId, file);
+      qc.invalidateQueries({ queryKey: ['program-documents', programId] });
+      toast('Документ загружен', 'success');
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally { setUploading(false); }
+  };
+  const remove = async (d: ProgramDocument) => {
+    const ok = await confirm({ title: 'Удалить документ?', message: d.name, danger: true });
+    if (!ok) return;
+    await deleteProgramDocument(d.id);
+    qc.invalidateQueries({ queryKey: ['program-documents', programId] });
+  };
+
+  return (
+    <div className="card" style={{ padding: 20, marginTop: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <h3>📎 Документы ({items.length})</h3>
+        {canEdit && (
+          <>
+            <input
+              ref={inputRef}
+              type="file"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) upload(f);
+                e.target.value = '';
+              }}
+            />
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? 'Загружаем…' : '+ Загрузить документ'}
+            </button>
+          </>
+        )}
+      </div>
+      {items.length === 0 ? (
+        <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>Документов пока нет</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {items.map((d) => (
+            <div key={d.id} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8,
+            }}>
+              <a
+                href={fileUrl(d.url)}
+                target="_blank"
+                rel="noreferrer"
+                style={{ flex: 1, color: 'inherit', textDecoration: 'none' }}
+              >
+                📄 {d.name}
+                {d.size ? <span style={{ color: 'var(--text-soft)', fontSize: 12, marginLeft: 8 }}>
+                  ({(d.size / 1024).toFixed(0)} KB)
+                </span> : null}
+              </a>
+              {canEdit && (
+                <button className="btn btn-sm btn-danger" onClick={() => remove(d)}>×</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProgramCommentsSection({ programId }: { programId: string }) {
+  const me = useAuth((s) => s.user);
+  const qc = useQueryClient();
+  const { toast, confirm } = useUI();
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const query = useQuery({
+    queryKey: ['program-comments', programId],
+    queryFn: () => listProgramComments(programId),
+  });
+  const items = query.data ?? [];
+
+  const submit = async () => {
+    const t = draft.trim();
+    if (!t || sending) return;
+    setSending(true);
+    try {
+      await addProgramComment(programId, t);
+      setDraft('');
+      qc.invalidateQueries({ queryKey: ['program-comments', programId] });
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally { setSending(false); }
+  };
+  const remove = async (c: ProgramComment) => {
+    const ok = await confirm({ title: 'Удалить комментарий?', message: c.text, danger: true });
+    if (!ok) return;
+    await deleteProgramComment(c.id);
+    qc.invalidateQueries({ queryKey: ['program-comments', programId] });
+  };
+
+  return (
+    <div className="card" style={{ padding: 20, marginTop: 16 }}>
+      <h3 style={{ marginBottom: 12 }}>💬 Комментарии ({items.length})</h3>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Внутренний комментарий — виден только сотрудникам"
+          rows={2}
+          maxLength={4000}
+          style={{ flex: 1, fontFamily: 'inherit', resize: 'vertical' }}
+        />
+        <button
+          className="btn btn-primary"
+          onClick={submit}
+          disabled={!draft.trim() || sending}
+        >
+          {sending ? 'Отправляем…' : 'Отправить'}
+        </button>
+      </div>
+      {items.length === 0 ? (
+        <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>Комментариев пока нет</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {items.map((c) => (
+            <div key={c.id} style={{
+              padding: 12, border: '1px solid var(--border)', borderRadius: 10,
+              background: 'var(--bg-soft)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{c.authorName}</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-soft)', fontSize: 11 }}>
+                    {new Date(c.createdAt).toLocaleString('ru-RU')}
+                  </span>
+                  {(c.authorId === me?.id || isElevated(me as any)) && (
+                    <button className="btn btn-sm btn-danger" onClick={() => remove(c)}>×</button>
+                  )}
+                </div>
+              </div>
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.5 }}>{c.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

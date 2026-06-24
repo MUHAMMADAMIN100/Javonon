@@ -17,7 +17,7 @@ import { financeSummary, listTransactions } from '../api/finance';
 import { listSalaries } from '../api/salary';
 import { hasRole, isFounder as isFounderFn, displayRoleLabel } from '../lib/roles';
 import { hasPermission } from '../lib/permissions';
-import { LangSwitcher } from '../lib/i18n';
+import { LangSwitcher, useT } from '../lib/i18n';
 
 // Map route → prefetch fn. Срабатывает по hover/touchstart на nav-link
 // и грузит данные ДО клика — экран открывается мгновенно с готовым кешем.
@@ -78,6 +78,7 @@ interface SidebarProps {
 export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = {}) {
   const user = useAuth((s) => s.user);
   const logout = useAuth((s) => s.logout);
+  const { t } = useT();
   const [pwdOpen, setPwdOpen] = useState(false);
   const initials = user?.fullName?.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '?';
 
@@ -100,25 +101,25 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
 
   // CRM core
   const coreLinks: Array<{ to: string; icon: string; label: string }> = [
-    { to: '/dashboard', icon: 'dashboard', label: 'Дашборд' },
+    { to: '/dashboard', icon: 'dashboard', label: t('sidebar.dashboard') },
   ];
-  if (show('applications:read', isWorkforce)) coreLinks.push({ to: '/applications', icon: 'assignment', label: 'Заявки' });
-  if (show('students:read', isWorkforce)) coreLinks.push({ to: '/students', icon: 'school', label: 'Студенты' });
-  if (show('programs:read', isWorkforce)) coreLinks.push({ to: '/programs', icon: 'menu_book', label: 'Программы' });
-  if (show('tasks:read', isWorkforce)) coreLinks.push({ to: '/tasks', icon: 'task_alt', label: 'Задачи' });
-  if (show('chat:read', true)) coreLinks.push({ to: '/chat', icon: 'forum', label: 'Чат' });
+  if (show('applications:read', isWorkforce)) coreLinks.push({ to: '/applications', icon: 'assignment', label: t('sidebar.applications') });
+  if (show('students:read', isWorkforce)) coreLinks.push({ to: '/students', icon: 'school', label: t('sidebar.students') });
+  if (show('programs:read', isWorkforce)) coreLinks.push({ to: '/programs', icon: 'menu_book', label: t('sidebar.programs') });
+  if (show('tasks:read', isWorkforce)) coreLinks.push({ to: '/tasks', icon: 'task_alt', label: t('sidebar.tasks') });
+  if (show('chat:read', true)) coreLinks.push({ to: '/chat', icon: 'forum', label: t('sidebar.chat') });
   if (show('inbox:read', isWorkforce)) coreLinks.push({ to: '/inbox', icon: 'inbox', label: 'Входящие' });
   // Время / Профиль — у всех залогиненных без исключения.
-  coreLinks.push({ to: '/time', icon: 'schedule', label: 'Время' });
-  if (show('reports:read', isWorkforce)) coreLinks.push({ to: '/reports', icon: 'description', label: 'Мои отчёты' });
-  if (show('calls:read', isWorkforce)) coreLinks.push({ to: '/calls', icon: 'call', label: 'Звонки' });
-  if (show('kpi:read', isWorkforce)) coreLinks.push({ to: '/kpi', icon: 'leaderboard', label: 'KPI' });
-  coreLinks.push({ to: '/me', icon: 'person', label: 'Мой профиль' });
+  coreLinks.push({ to: '/time', icon: 'schedule', label: t('sidebar.time') });
+  if (show('reports:read', isWorkforce)) coreLinks.push({ to: '/reports', icon: 'description', label: t('sidebar.reports') });
+  if (show('calls:read', isWorkforce)) coreLinks.push({ to: '/calls', icon: 'call', label: t('sidebar.calls') });
+  if (show('kpi:read', isWorkforce)) coreLinks.push({ to: '/kpi', icon: 'leaderboard', label: t('sidebar.kpi') });
+  coreLinks.push({ to: '/me', icon: 'person', label: t('sidebar.profile') });
 
   // Finance
   const financeLinks: Array<{ to: string; icon: string; label: string }> = [];
-  if (show('finance:read', elevated)) financeLinks.push({ to: '/finance', icon: 'payments', label: 'Финансы' });
-  if (show('salary:read', elevated)) financeLinks.push({ to: '/salary', icon: 'paid', label: 'Зарплата' });
+  if (show('finance:read', elevated)) financeLinks.push({ to: '/finance', icon: 'payments', label: t('sidebar.finance') });
+  if (show('salary:read', elevated)) financeLinks.push({ to: '/salary', icon: 'paid', label: t('sidebar.salary') });
 
   // Admin / management
   const adminLinks: Array<{ to: string; icon: string; label: string }> = [];
@@ -130,11 +131,11 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   if (show('lms:read', elevated)) adminLinks.push({ to: '/lms', icon: 'menu_book', label: 'Обучение' });
   if (show('partners:read', elevated)) adminLinks.push({ to: '/partners', icon: 'handshake', label: 'Партнёры' });
   if (show('activity:read', elevated)) adminLinks.push({ to: '/activity', icon: 'history', label: 'Активность' });
-  if (show('users:read', elevated)) adminLinks.push({ to: '/users', icon: 'group', label: 'Сотрудники' });
+  if (show('users:read', elevated)) adminLinks.push({ to: '/users', icon: 'group', label: t('sidebar.users') });
   if (isFounder) {
     adminLinks.push({ to: '/excuses', icon: 'gavel', label: 'Причины' });
     adminLinks.push({ to: '/attendance', icon: 'fact_check', label: 'Посещаемость' });
-    adminLinks.push({ to: '/settings', icon: 'settings', label: 'Настройки системы' });
+    adminLinks.push({ to: '/settings', icon: 'settings', label: t('sidebar.settings') });
   }
 
   const links = [...coreLinks, ...financeLinks, ...adminLinks];

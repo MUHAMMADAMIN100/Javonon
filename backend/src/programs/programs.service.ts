@@ -144,6 +144,72 @@ export class ProgramsService {
     return { ok: true };
   }
 
+  // ===== Documents (ТЗ-доработка п.7) =====
+
+  async listDocuments(programId: string) {
+    return this.prisma.programDocument.findMany({
+      where: { programId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async addDocument(programId: string, user: CurrentUser, data: { name: string; url: string; size?: number }) {
+    if (!isElevated(user as any)) throw new ForbiddenException('Только администратор');
+    if (!data.name?.trim()) throw new BadRequestException('Укажите название документа');
+    if (!data.url?.trim()) throw new BadRequestException('Не указан URL документа');
+    return this.prisma.programDocument.create({
+      data: {
+        programId,
+        name: data.name.trim().slice(0, 200),
+        url: data.url.trim().slice(0, 2000),
+        size: data.size ?? null,
+        uploadedById: user?.id || null,
+      },
+    });
+  }
+
+  async removeDocument(id: string, user: CurrentUser) {
+    if (!isElevated(user as any)) throw new ForbiddenException('Только администратор');
+    await this.prisma.programDocument.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  // ===== Comments (ТЗ-доработка п.7) =====
+
+  async listComments(programId: string) {
+    return this.prisma.programComment.findMany({
+      where: { programId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async addComment(programId: string, user: CurrentUser, data: { text: string }) {
+    if (!user?.id) throw new ForbiddenException('Требуется авторизация');
+    const text = (data.text || '').trim();
+    if (!text) throw new BadRequestException('Комментарий не может быть пустым');
+    if (text.length > 4000) throw new BadRequestException('Слишком длинный комментарий (макс. 4000)');
+    if (/[<>]/.test(text)) throw new BadRequestException('Комментарий не должен содержать HTML-теги');
+    return this.prisma.programComment.create({
+      data: {
+        programId,
+        authorId: user.id,
+        authorName: (user as any).fullName || (user as any).email || 'Сотрудник',
+        text,
+      },
+    });
+  }
+
+  async removeComment(id: string, user: CurrentUser) {
+    const c = await this.prisma.programComment.findUnique({ where: { id } });
+    if (!c) throw new NotFoundException('Комментарий не найден');
+    // Удалять может автор ИЛИ FOUNDER/ADMIN.
+    if (c.authorId !== user.id && !isElevated(user as any)) {
+      throw new ForbiddenException('Можно удалить только свой комментарий');
+    }
+    await this.prisma.programComment.delete({ where: { id } });
+    return { ok: true };
+  }
+
   async create(dto: CreateProgramDto, user: CurrentUser) {
     if (!isElevated(user as any)) {
       throw new ForbiddenException('Только администратор может создавать программы');

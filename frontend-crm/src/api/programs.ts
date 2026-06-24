@@ -131,6 +131,64 @@ export async function deleteProgramScholarship(id: string) {
   return data;
 }
 
+// === Документы программы (ТЗ-доработка п.7) ===
+
+export interface ProgramDocument {
+  id: string;
+  programId: string;
+  name: string;
+  url: string;
+  size: number | null;
+  uploadedById: string | null;
+  createdAt: string;
+}
+
+export async function listProgramDocuments(programId: string) {
+  const { data } = await api.get<ProgramDocument[]>(`/programs/${programId}/documents`);
+  return data;
+}
+
+export async function uploadProgramDocument(programId: string, file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const { data } = await api.post<ProgramDocument>(`/programs/${programId}/documents`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function deleteProgramDocument(id: string) {
+  const { data } = await api.delete(`/programs/documents/${id}`);
+  return data;
+}
+
+// === Комментарии программы (ТЗ-доработка п.7) ===
+
+export interface ProgramComment {
+  id: string;
+  programId: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listProgramComments(programId: string) {
+  const { data } = await api.get<ProgramComment[]>(`/programs/${programId}/comments`);
+  return data;
+}
+
+export async function addProgramComment(programId: string, text: string) {
+  const { data } = await api.post<ProgramComment>(`/programs/${programId}/comments`, { text });
+  return data;
+}
+
+export async function deleteProgramComment(id: string) {
+  const { data } = await api.delete(`/programs/comments/${id}`);
+  return data;
+}
+
 const apiRoot = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 
 export function programImageUrl(imageUrl: string | null | undefined): string | null {

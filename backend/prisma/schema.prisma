@@ -458,12 +458,45 @@ model Program {
   applications Application[]
   students     Student[]
   scholarships ProgramScholarship[]
+  documents    ProgramDocument[]
+  comments     ProgramComment[]
 
   @@index([city])
   @@index([country])
   @@index([major])
   @@index([direction])
   @@index([published])
+}
+
+/// Документы программы (ТЗ-доработка п.7): syllabus, requirements,
+/// admission_guide и т.п. Загружаются админом, видны на детальной
+/// странице как ссылки на скачивание.
+model ProgramDocument {
+  id           String   @id @default(uuid())
+  programId    String
+  program      Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  name         String   // отображаемое название
+  url          String   // /uploads/...
+  size         Int?     // байты, опц.
+  uploadedById String?  // FK не делаем — историю не теряем при удалении юзера
+  createdAt    DateTime @default(now())
+
+  @@index([programId])
+}
+
+/// Внутренние комментарии админов к программе (ТЗ-доработка п.7).
+/// Видны только сотрудникам (CRM), не показываются на лендинге.
+model ProgramComment {
+  id        String   @id @default(uuid())
+  programId String
+  program   Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  authorId  String   // FK не делаем для сохранения истории
+  authorName String  // снэпшот имени на момент создания
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([programId, createdAt])
 }
 
 /// Стипендия / грант для программы (ТЗ-доработка п.10).
