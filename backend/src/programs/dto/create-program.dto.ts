@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { Direction } from '@prisma/client';
 
 // ТЗ-доработка: обязательные только name + university. Остальное опц.
@@ -66,6 +66,23 @@ export class CreateProgramDto {
   @MaxLength(2000)
   @Matches(HTTP_URL, { message: 'universityWebsiteUrl должен быть http(s) ссылкой' })
   universityWebsiteUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(7)
+  @IsString({ each: true })
+  imageUrls?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @IsString({ each: true })
+  disciplines?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  country?: string;
 
   @IsOptional()
   @IsBoolean()

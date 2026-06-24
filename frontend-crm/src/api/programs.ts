@@ -14,8 +14,16 @@ export interface Program {
   language: string | null;
   description: string | null;
   imageUrl: string | null;
-  /** Ссылка на официальный сайт университета (ТЗ-доработка). */
+  /** Дополнительные фото для галереи (ТЗ-доработка п.4). */
+  imageUrls?: string[];
+  /** Академические направления тегами (ТЗ-доработка п.6). */
+  disciplines?: string[];
+  /** Страна для группировки (ТЗ-доработка п.9). */
+  country?: string | null;
+  /** Ссылка на официальный сайт университета (ТЗ-доработка п.12). */
   universityWebsiteUrl?: string | null;
+  /** Стипендии — приходят в findOne (ТЗ-доработка п.10). */
+  scholarships?: ProgramScholarship[];
   published: boolean;
   englishLevel?: string | null;
   hasGrant?: boolean;
@@ -70,6 +78,56 @@ export async function uploadProgramImage(id: string, file: File) {
   const { data } = await api.post<Program>(`/programs/${id}/image`, fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return data;
+}
+
+export async function uploadProgramGalleryImage(id: string, file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const { data } = await api.post<Program>(`/programs/${id}/gallery`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function removeProgramGalleryImage(id: string, url: string) {
+  const { data } = await api.delete<Program>(`/programs/${id}/gallery`, { data: { url } });
+  return data;
+}
+
+// === Стипендии (ТЗ-доработка п.10) ===
+
+export interface ProgramScholarship {
+  id: string;
+  programId: string;
+  name: string;
+  coverage: string | null;
+  amount: string | null;
+  includes: string | null;
+  requirements: string | null;
+  deadline: string | null;
+  link: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listProgramScholarships(programId: string) {
+  const { data } = await api.get<ProgramScholarship[]>(`/programs/${programId}/scholarships`);
+  return data;
+}
+
+export async function addProgramScholarship(programId: string, payload: Partial<ProgramScholarship>) {
+  const { data } = await api.post<ProgramScholarship>(`/programs/${programId}/scholarships`, payload);
+  return data;
+}
+
+export async function updateProgramScholarship(id: string, payload: Partial<ProgramScholarship>) {
+  const { data } = await api.patch<ProgramScholarship>(`/programs/scholarships/${id}`, payload);
+  return data;
+}
+
+export async function deleteProgramScholarship(id: string) {
+  const { data } = await api.delete(`/programs/scholarships/${id}`);
   return data;
 }
 

@@ -231,4 +231,88 @@ export class ProgramsController {
     const imageUrl = `/uploads/${file.filename}`;
     return this.programs.update(id, { imageUrl } as any, user);
   }
+
+  // ===== Дополнительные фото галереи (ТЗ-доработка п.4) =====
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/gallery')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: programImageStorage,
+      fileFilter: programImageFilter,
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadGalleryImage(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
+  ) {
+    if (!isElevated(user)) throw new ForbiddenException('Только администрация');
+    if (!file) throw new BadRequestException('Файл не передан');
+    const existing = await this.programs.findOne(id);
+    const current = (existing as any).imageUrls || [];
+    if (current.length >= 7) {
+      throw new BadRequestException('Максимум 7 фото в галерее');
+    }
+    const url = `/uploads/${file.filename}`;
+    const next = [...current, url];
+    return this.programs.update(id, { imageUrls: next } as any, user);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/gallery')
+  async removeGalleryImage(
+    @Param('id') id: string,
+    @Body() body: { url: string },
+    @CurrentUser() user: any,
+  ) {
+    if (!isElevated(user)) throw new ForbiddenException('Только администрация');
+    if (!body?.url) throw new BadRequestException('Не указан URL фото');
+    const existing = await this.programs.findOne(id);
+    const next = ((existing as any).imageUrls || []).filter((u: string) => u !== body.url);
+    return this.programs.update(id, { imageUrls: next } as any, user);
+  }
+
+  // ===== Стипендии (ТЗ-доработка п.10) =====
+
+  @Get('public/:id/scholarships')
+  publicListScholarships(@Param('id') id: string) {
+    return this.programs.listScholarships(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/scholarships')
+  listScholarships(@Param('id') id: string) {
+    return this.programs.listScholarships(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/scholarships')
+  addScholarship(
+    @Param('id') id: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+  ) {
+    return this.programs.addScholarship(id, user, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('scholarships/:scholarshipId')
+  updateScholarship(
+    @Param('scholarshipId') sid: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+  ) {
+    return this.programs.updateScholarship(sid, user, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('scholarships/:scholarshipId')
+  removeScholarship(
+    @Param('scholarshipId') sid: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.programs.removeScholarship(sid, user);
+  }
 }

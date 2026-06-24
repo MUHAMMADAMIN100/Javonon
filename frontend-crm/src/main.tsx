@@ -7,6 +7,7 @@ import { UIProvider } from './ui/Dialogs';
 import ErrorBoundary from './components/ErrorBoundary';
 import { queryClient } from './lib/queryClient';
 import { installTjLocalePatch } from './lib/tjLocalePatch';
+import { I18nProvider } from './lib/i18n';
 import './index.css';
 
 // Глобально форсируем Asia/Dushanbe для всех toLocaleString* без явной
@@ -18,9 +19,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter basename="/admin">
-          <UIProvider>
-            <App />
-          </UIProvider>
+          <I18nProvider>
+            <UIProvider>
+              <App />
+            </UIProvider>
+          </I18nProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>

@@ -13,6 +13,7 @@ import StudentNew from './pages/StudentNew';
 import Users from './pages/Users';
 import Tasks from './pages/Tasks';
 import Programs from './pages/Programs';
+import ProgramDetail from './pages/ProgramDetail';
 import Activity from './pages/Activity';
 import TimeTracker from './pages/TimeTracker';
 import Finance from './pages/Finance';
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/students/:id" element={<StudentDetail />} />
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/programs" element={<Programs />} />
+        <Route path="/programs/:id" element={<ProgramDetail />} />
         <Route path="/users" element={<Users />} />
         <Route path="/users/:id" element={<UserDetail />} />
         {/* /profile/:id — для сотрудников с выданным доступом к чужому досье */}

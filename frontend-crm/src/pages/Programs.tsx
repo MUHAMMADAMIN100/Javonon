@@ -1,7 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createProgram, deleteProgram, listPrograms, programImageUrl, updateProgram, uploadProgramImage, type Program } from '../api/programs';
+import {
+  createProgram, deleteProgram, listPrograms, programImageUrl,
+  updateProgram, uploadProgramImage, uploadProgramGalleryImage,
+  removeProgramGalleryImage,
+  listProgramScholarships, addProgramScholarship, updateProgramScholarship,
+  deleteProgramScholarship,
+  type Program, type ProgramScholarship,
+} from '../api/programs';
 import type { Direction } from '../api/types';
 import { DIRECTION_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
@@ -130,7 +138,20 @@ export default function Programs() {
     queryKey: filteredKey,
     queryFn: () => listPrograms(filters),
   });
-  const items = programsQuery.data ?? [];
+  const allItems = programsQuery.data ?? [];
+  // ТЗ-доработка п.9: фильтр по странам (таб-бар сверху).
+  const [countryFilter, setCountryFilter] = useState<string>('');
+  const countries = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of allItems) {
+      if (p.country) set.add(p.country);
+    }
+    return Array.from(set).sort();
+  }, [allItems]);
+  const items = countryFilter
+    ? allItems.filter((p) => p.country === countryFilter)
+    : allItems;
+  const navigate = useNavigate();
   const loading = programsQuery.isLoading;
 
   useRealtime({
@@ -260,6 +281,31 @@ export default function Programs() {
           </select>
         </div>
 
+        {/* Таб-бар по странам (ТЗ-доработка п.9). Показываем только если
+            у программ заданы страны — иначе бесполезно. */}
+        {countries.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+            <button
+              className={`btn btn-sm ${countryFilter === '' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setCountryFilter('')}
+            >
+              Все ({allItems.length})
+            </button>
+            {countries.map((c) => {
+              const count = allItems.filter((p) => p.country === c).length;
+              return (
+                <button
+                  key={c}
+                  className={`btn btn-sm ${countryFilter === c ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setCountryFilter(c)}
+                >
+                  {c} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <AnimatePresence mode="wait">
           {loading ? (
             <Loading />
@@ -276,11 +322,13 @@ export default function Programs() {
                   className={`program-card${!p.published ? ' unpublished' : ''}`}
                   variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }}
                   whileHover={{ y: -4 }}
+                  onClick={() => navigate(`/programs/${p.id}`)}
+                  style={{ cursor: 'pointer' }}
                 >
-                  {p.imageUrl ? (
+                  {(p.imageUrl || (p.imageUrls && p.imageUrls[0])) ? (
                     <div className="program-card-img">
                       <img
-                        src={programImageUrl(p.imageUrl)!}
+                        src={programImageUrl(p.imageUrl || p.imageUrls![0])!}
                         alt={p.name}
                         onError={(e) => {
                           // QA-fix #4: при сломанной картинке не показывать
@@ -307,7 +355,7 @@ export default function Programs() {
                       <div className="program-card-uni">{p.university}</div>
                     </div>
                     {isAdmin && (
-                      <div className="program-card-actions">
+                      <div className="program-card-actions" onClick={(e) => e.stopPropagation()}>
                         <button className="btn btn-sm btn-secondary" onClick={() => setEditing({ ...p })}>
                           <Icon name="edit" size={14} />
                         </button>
@@ -401,6 +449,15 @@ export default function Programs() {
                     required
                   />
                   {formErrors.university && <div className="form-error-text">{formErrors.university}</div>}
+                </div>
+                <div className="form-group">
+                  <label>Страна</label>
+                  <input
+                    value={editing.country || ''}
+                    onChange={(e) => setEditing({ ...editing, country: safeText(e.target.value) })}
+                    maxLength={100}
+                    placeholder="США / Китай / Корея / Канада / ..."
+                  />
                 </div>
                 <div className="form-group">
                   <label>Город</label>
@@ -547,6 +604,19 @@ export default function Programs() {
                 </div>
               )}
 
+              {/* Академические направления — теги (ТЗ-доработка п.6). */}
+              <div className="form-group">
+                <label>Академические направления / специализации</label>
+                <TagsInput
+                  value={editing.disciplines || []}
+                  onChange={(next) => setEditing({ ...editing, disciplines: next })}
+                  placeholder="Введите название и Enter (Machine Learning, Robotics, ...)"
+                />
+                <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
+                  Конкретные специализации внутри программы (до 30 шт.).
+                </div>
+              </div>
+
               <div className="form-group">
                 <label>Официальный сайт университета</label>
                 <input
@@ -629,6 +699,22 @@ export default function Programs() {
                   )}
                 </div>
               </div>
+
+              {/* Галерея фото — до 7 шт. (ТЗ-доработка п.4). Доступна только после
+                  сохранения программы (нужен programId для upload). */}
+              {editing.id && (
+                <ProgramGallery
+                  programId={editing.id}
+                  imageUrls={editing.imageUrls || []}
+                  onChange={(next) => setEditing({ ...editing, imageUrls: next })}
+                />
+              )}
+
+              {/* Стипендии — после сохранения (нужен programId). */}
+              {editing.id && (
+                <ScholarshipsEditor programId={editing.id} />
+              )}
+
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'row' }}>
                   <input type="checkbox" checked={editing.published !== false} onChange={(e) => setEditing({ ...editing, published: e.target.checked })} />
@@ -651,5 +737,244 @@ export default function Programs() {
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+// ===== Sub-компоненты =====
+
+function TagsInput({
+  value, onChange, placeholder,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const t = draft.trim();
+    if (!t) return;
+    if (value.includes(t)) { setDraft(''); return; }
+    onChange([...value, t]);
+    setDraft('');
+  };
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+        {value.map((t) => (
+          <span
+            key={t}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', borderRadius: 999,
+              background: 'var(--bg-soft, #f1f5f9)', border: '1px solid var(--border)',
+              fontSize: 13,
+            }}
+          >
+            {t}
+            <button
+              type="button"
+              onClick={() => onChange(value.filter((x) => x !== t))}
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder={placeholder || 'Введите и Enter'}
+          maxLength={100}
+          style={{ flex: 1 }}
+        />
+        <button type="button" className="btn btn-sm btn-secondary" onClick={add} disabled={!draft.trim()}>
+          + Добавить
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProgramGallery({
+  programId, imageUrls, onChange,
+}: {
+  programId: string;
+  imageUrls: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const { toast } = useUI();
+  const [uploading, setUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onPick = async (file: File) => {
+    setUploading(true);
+    try {
+      const updated = await uploadProgramGalleryImage(programId, file);
+      onChange(updated.imageUrls || []);
+      toast('Фото добавлено', 'success');
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка загрузки', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+  const onRemove = async (url: string) => {
+    try {
+      const updated = await removeProgramGalleryImage(programId, url);
+      onChange(updated.imageUrls || []);
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
+  };
+  return (
+    <div className="form-group">
+      <label>Галерея фото ({imageUrls.length}/7)</label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+        {imageUrls.map((u) => (
+          <div key={u} style={{ position: 'relative', width: 120, height: 90 }}>
+            <img
+              src={programImageUrl(u)!}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }}
+            />
+            <button
+              type="button"
+              onClick={() => onRemove(u)}
+              title="Удалить"
+              style={{
+                position: 'absolute', top: 4, right: 4,
+                width: 24, height: 24, borderRadius: '50%',
+                border: 'none', cursor: 'pointer',
+                background: 'rgba(0,0,0,0.6)', color: 'white',
+              }}
+            >×</button>
+          </div>
+        ))}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onPick(f);
+          e.target.value = '';
+        }}
+      />
+      <button
+        type="button"
+        className="btn btn-sm btn-secondary"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading || imageUrls.length >= 7}
+      >
+        {uploading ? 'Загружаем…' : imageUrls.length >= 7 ? 'Достигнут максимум (7)' : '+ Добавить фото'}
+      </button>
+    </div>
+  );
+}
+
+function ScholarshipsEditor({ programId }: { programId: string }) {
+  const { toast, confirm } = useUI();
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ['program-scholarships', programId],
+    queryFn: () => listProgramScholarships(programId),
+  });
+  const items = query.data ?? [];
+
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState<Partial<ProgramScholarship>>({});
+
+  const onAdd = async () => {
+    if (!draft.name?.trim()) return toast('Укажите название стипендии', 'error');
+    try {
+      await addProgramScholarship(programId, draft);
+      setDraft({});
+      setCreating(false);
+      qc.invalidateQueries({ queryKey: ['program-scholarships', programId] });
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    }
+  };
+  const onRemove = async (s: ProgramScholarship) => {
+    const ok = await confirm({ title: 'Удалить стипендию?', message: s.name, danger: true });
+    if (!ok) return;
+    await deleteProgramScholarship(s.id);
+    qc.invalidateQueries({ queryKey: ['program-scholarships', programId] });
+  };
+
+  return (
+    <div className="form-group">
+      <label>Стипендии / гранты ({items.length})</label>
+      <div style={{ fontSize: 11, color: 'var(--text-soft)', marginBottom: 8 }}>
+        Каждая стипендия отдельной строкой с деталями (название, покрытие, требования, дедлайн, ссылка).
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.map((s) => (
+          <div key={s.id} style={{
+            padding: 10, border: '1px solid var(--border)', borderRadius: 8,
+            background: 'var(--bg-soft)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontWeight: 600 }}>{s.name}</div>
+              <button type="button" className="btn btn-sm btn-danger" onClick={() => onRemove(s)}>×</button>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
+              {[
+                s.coverage && `Покрытие: ${s.coverage}`,
+                s.amount && `Сумма: ${s.amount}`,
+                s.includes && `Включено: ${s.includes}`,
+                s.requirements && `Требования: ${s.requirements}`,
+                s.deadline && `Дедлайн: ${s.deadline}`,
+              ].filter(Boolean).join(' · ')}
+            </div>
+            {s.link && (
+              <a href={s.link} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+                🔗 {s.link}
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+      {creating ? (
+        <div style={{
+          padding: 12, marginTop: 8,
+          border: '1px solid var(--primary)', borderRadius: 8, background: 'var(--bg-soft)',
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+            <input placeholder="Название (CSC Scholarship)" value={draft.name || ''}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+            <input placeholder="Покрытие (Полное / Частичное)" value={draft.coverage || ''}
+              onChange={(e) => setDraft({ ...draft, coverage: e.target.value })} />
+            <input placeholder="Сумма (5000 USD/год)" value={draft.amount || ''}
+              onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
+            <input placeholder="Что включено" value={draft.includes || ''}
+              onChange={(e) => setDraft({ ...draft, includes: e.target.value })} />
+            <input placeholder="Требования (GPA 3.5, IELTS 6.0)" value={draft.requirements || ''}
+              onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} />
+            <input placeholder="Дедлайн (1 марта)" value={draft.deadline || ''}
+              onChange={(e) => setDraft({ ...draft, deadline: e.target.value })} />
+            <input placeholder="Ссылка (https://...)" value={draft.link || ''}
+              onChange={(e) => setDraft({ ...draft, link: e.target.value })} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setCreating(false); setDraft({}); }}>Отмена</button>
+            <button type="button" className="btn btn-sm btn-primary" onClick={onAdd}>Добавить</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="btn btn-sm btn-secondary" style={{ marginTop: 8 }} onClick={() => setCreating(true)}>
+          + Добавить стипендию
+        </button>
+      )}
+    </div>
   );
 }

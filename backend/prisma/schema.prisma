@@ -420,6 +420,15 @@ model Program {
   language           String?
   description        String?
   imageUrl           String?
+  /// Дополнительные фото программы для галереи (до 5-7 шт., ТЗ-доработка п.4).
+  /// imageUrl остаётся как primary (обложка); imageUrls — все, включая её.
+  imageUrls          String[] @default([])
+  /// Академические направления / специальности тегами (ТЗ-доработка п.6).
+  /// Например ["Machine Learning", "Data Science", "Computer Vision"].
+  disciplines        String[] @default([])
+  /// Страна (для группировки/фильтра на странице программ, ТЗ-доработка п.9).
+  /// Отдельно от city — у одного университета может быть несколько кампусов.
+  country            String?
   /// Ссылка на официальный сайт университета (ТЗ-доработка).
   /// На карточке/детальной показывается кнопкой «🌐 Официальный сайт».
   universityWebsiteUrl String?
@@ -448,11 +457,34 @@ model Program {
 
   applications Application[]
   students     Student[]
+  scholarships ProgramScholarship[]
 
   @@index([city])
+  @@index([country])
   @@index([major])
   @@index([direction])
   @@index([published])
+}
+
+/// Стипендия / грант для программы (ТЗ-доработка п.10).
+/// Раньше был один чекбокс hasGrant + текст grantDetails — этого
+/// мало. Теперь у программы N стипендий, каждая со своими полями:
+/// сумма покрытия, что включено, требования, дедлайн, ссылка.
+model ProgramScholarship {
+  id           String   @id @default(uuid())
+  programId    String
+  program      Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  name         String   // "CSC Scholarship"
+  coverage     String?  // "Полное" / "Частичное"
+  amount       String?  // "5 000 USD в год" — свободный текст
+  includes     String?  // "Обучение, проживание, питание"
+  requirements String?  // "GPA 3.5+, IELTS 6.0"
+  deadline     String?  // "1 марта" — свободный текст
+  link         String?  // https://...
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([programId])
 }
 
 model Notification {

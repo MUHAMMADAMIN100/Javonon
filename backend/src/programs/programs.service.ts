@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Direction, Prisma, Program, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -62,9 +62,86 @@ export class ProgramsService {
   }
 
   async findOne(id: string) {
-    const p = await this.prisma.program.findUnique({ where: { id } });
+    const p = await this.prisma.program.findUnique({
+      where: { id },
+      include: {
+        scholarships: { orderBy: { createdAt: 'asc' } },
+      },
+    });
     if (!p) throw new NotFoundException('Программа не найдена');
     return p;
+  }
+
+  // ===== Scholarships (ТЗ-доработка п.10) =====
+
+  async listScholarships(programId: string) {
+    return this.prisma.programScholarship.findMany({
+      where: { programId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async addScholarship(programId: string, user: CurrentUser, dto: {
+    name: string;
+    coverage?: string;
+    amount?: string;
+    includes?: string;
+    requirements?: string;
+    deadline?: string;
+    link?: string;
+  }) {
+    if (!isElevated(user as any)) {
+      throw new ForbiddenException('Только администратор может добавлять стипендии');
+    }
+    if (!dto.name?.trim()) {
+      throw new BadRequestException('Укажите название стипендии');
+    }
+    return this.prisma.programScholarship.create({
+      data: {
+        programId,
+        name: dto.name.trim().slice(0, 200),
+        coverage: dto.coverage?.trim().slice(0, 100) || null,
+        amount: dto.amount?.trim().slice(0, 200) || null,
+        includes: dto.includes?.trim().slice(0, 500) || null,
+        requirements: dto.requirements?.trim().slice(0, 500) || null,
+        deadline: dto.deadline?.trim().slice(0, 200) || null,
+        link: dto.link?.trim().slice(0, 2000) || null,
+      },
+    });
+  }
+
+  async updateScholarship(id: string, user: CurrentUser, dto: {
+    name?: string;
+    coverage?: string;
+    amount?: string;
+    includes?: string;
+    requirements?: string;
+    deadline?: string;
+    link?: string;
+  }) {
+    if (!isElevated(user as any)) {
+      throw new ForbiddenException('Только администратор может править стипендии');
+    }
+    return this.prisma.programScholarship.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name.trim().slice(0, 200) }),
+        ...(dto.coverage !== undefined && { coverage: dto.coverage?.trim().slice(0, 100) || null }),
+        ...(dto.amount !== undefined && { amount: dto.amount?.trim().slice(0, 200) || null }),
+        ...(dto.includes !== undefined && { includes: dto.includes?.trim().slice(0, 500) || null }),
+        ...(dto.requirements !== undefined && { requirements: dto.requirements?.trim().slice(0, 500) || null }),
+        ...(dto.deadline !== undefined && { deadline: dto.deadline?.trim().slice(0, 200) || null }),
+        ...(dto.link !== undefined && { link: dto.link?.trim().slice(0, 2000) || null }),
+      },
+    });
+  }
+
+  async removeScholarship(id: string, user: CurrentUser) {
+    if (!isElevated(user as any)) {
+      throw new ForbiddenException('Только администратор может удалять стипендии');
+    }
+    await this.prisma.programScholarship.delete({ where: { id } });
+    return { ok: true };
   }
 
   async create(dto: CreateProgramDto, user: CurrentUser) {
@@ -86,6 +163,11 @@ export class ProgramsService {
         language: dto.language || null,
         description: dto.description || null,
         imageUrl: dto.imageUrl || null,
+        imageUrls: Array.isArray(dto.imageUrls) ? dto.imageUrls.slice(0, 7) : [],
+        disciplines: Array.isArray(dto.disciplines)
+          ? dto.disciplines.map((d) => String(d).trim()).filter(Boolean).slice(0, 30)
+          : [],
+        country: dto.country?.trim() || null,
         universityWebsiteUrl: dto.universityWebsiteUrl?.trim() || null,
         published: dto.published ?? true,
         englishLevel: dto.englishLevel?.trim() || null,
@@ -112,7 +194,20 @@ export class ProgramsService {
       throw new ForbiddenException('Только администратор может редактировать программы');
     }
     const existing = await this.findOne(id);
-    const updated = await this.prisma.program.update({ where: { id }, data: dto });
+    // Чистим массивы — null/undefined нельзя писать в String[] колонки
+    const data: any = { ...dto };
+    if (data.disciplines !== undefined) {
+      data.disciplines = Array.isArray(data.disciplines)
+        ? data.disciplines.map((d: any) => String(d).trim()).filter(Boolean).slice(0, 30)
+        : [];
+    }
+    if (data.imageUrls !== undefined) {
+      data.imageUrls = Array.isArray(data.imageUrls) ? data.imageUrls.slice(0, 7) : [];
+    }
+    if (data.country !== undefined) {
+      data.country = data.country?.trim() || null;
+    }
+    const updated = await this.prisma.program.update({ where: { id }, data });
 
     this.realtime.emitStaff('program:updated', { program: updated });
     this.realtime.emitAllStudents('program:updated', { program: updated });

@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { Direction } from '@prisma/client';
 
 // Раньше эти поля принимались с одним только MaxLength — `<script>`,
@@ -28,6 +28,9 @@ export class UpdateProgramDto {
   @IsOptional() @IsString() @MaxLength(80) @Matches(NO_HTML, { message: 'language содержит HTML-теги' }) language?: string;
   @IsOptional() @IsString() @MaxLength(4000) @Matches(NO_HTML, { message: 'description содержит HTML-теги' }) description?: string;
   @IsOptional() @IsString() @MaxLength(400) @Matches(SAFE_URL, { message: 'imageUrl должен быть http(s) или относительной ссылкой' }) imageUrl?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(7) @IsString({ each: true }) imageUrls?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @IsString({ each: true }) disciplines?: string[];
+  @IsOptional() @IsString() @MaxLength(100) @Matches(NO_HTML, { message: 'country содержит HTML-теги' }) country?: string;
   @IsOptional() @IsString() @MaxLength(2000) @Matches(HTTP_URL, { message: 'universityWebsiteUrl должен быть http(s) ссылкой' }) universityWebsiteUrl?: string;
   @IsOptional() @IsBoolean() published?: boolean;
   @IsOptional() @IsString() @MaxLength(120) @Matches(NO_HTML, { message: 'englishLevel содержит HTML-теги' }) englishLevel?: string;

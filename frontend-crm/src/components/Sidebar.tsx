@@ -17,6 +17,7 @@ import { financeSummary, listTransactions } from '../api/finance';
 import { listSalaries } from '../api/salary';
 import { hasRole, isFounder as isFounderFn, displayRoleLabel } from '../lib/roles';
 import { hasPermission } from '../lib/permissions';
+import { LangSwitcher } from '../lib/i18n';
 
 // Map route → prefetch fn. Срабатывает по hover/touchstart на nav-link
 // и грузит данные ДО клика — экран открывается мгновенно с готовым кешем.
@@ -246,6 +247,9 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
         <div className="user-info">
           <div className="user-name">{user?.fullName}</div>
           <div className="user-role">{displayRoleLabel(user as any)}</div>
+          <div style={{ marginTop: 6 }}>
+            <LangSwitcher />
+          </div>
         </div>
         <motion.button
           className="logout-btn"
