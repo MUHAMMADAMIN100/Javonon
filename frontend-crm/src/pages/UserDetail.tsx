@@ -19,6 +19,7 @@ import {
 } from '../api/userProfile';
 import { offerCurrent, offerSign, type CurrentOfferState } from '../api/offers';
 import { listCustomRoles, setUserCustomRole, type CustomRole } from '../api/customRoles';
+import { useT } from '../lib/i18n';
 import ScheduleEditor from '../components/ScheduleEditor';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
@@ -42,6 +43,7 @@ export function MyProfile() {
 function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
   const qc = useQueryClient();
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const meStore = useAuth((s) => s.user);
   const queryKey = isAdmin ? ['user', userId, 'full'] : ['me', 'full'];
 
@@ -77,11 +79,11 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
       {/* HR блок */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>Личные данные</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('userDetail.section.personal')}</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-          <Field label="Email" value={user.email} />
+          <Field label={t('userDetail.field.email')} value={user.email} />
           <Field
-            label="Роли"
+            label={t('userDetail.field.role')}
             value={(() => {
               // Если есть активная кастомная — это «главная роль» юзера
               // в UI. Дальше отдельно показываем базовые как «доступы».
@@ -95,10 +97,10 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
               return parts.join(' ') || '—';
             })()}
           />
-          <Field label="Телефон" value={user.phone || '—'} />
-          <Field label="Паспорт №" value={user.passportNo || '—'} />
-          <Field label="Принят на работу" value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
-          <Field label="Аккаунт создан" value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
+          <Field label={t('userDetail.field.phone')} value={user.phone || '—'} />
+          <Field label={t('userDetail.field.passport')} value={user.passportNo || '—'} />
+          <Field label={t('userDetail.field.hiredAt')} value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
+          <Field label={t('profile.field.createdAt')} value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
         </div>
         {isAdmin && <HREditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />}
         {isFounder(meStore) && (

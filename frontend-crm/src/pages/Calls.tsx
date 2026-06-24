@@ -115,10 +115,10 @@ export default function Calls() {
 
   const onDelete = async (c: CallLog) => {
     const ok = await confirm({
-      title: 'Удалить звонок?',
+      title: t('common.delete') + '?',
       message: `Звонок с «${c.clientName}» будет удалён без возможности восстановления.`,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (ok) deleteMut.mutate(c.id);
   };
@@ -160,24 +160,19 @@ export default function Calls() {
           letterSpacing: '-0.02em',
           marginBottom: 24,
         }}>
-          Записать <em style={{
-            fontFamily: 'Times New Roman, Georgia, serif',
-            fontWeight: 400,
-            color: 'var(--primary-dark)',
-          }}>звонок.</em>
+          {t('calls.new')}
         </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Клиент</label>
+            <label>{t('calls.field.client')}</label>
             <input
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
-              placeholder="Имя клиента"
             />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Телефон</label>
+            <label>{t('common.phone')}</label>
             <input
               value={clientPhone}
               onChange={(e) => setClientPhone(e.target.value)}
@@ -185,23 +180,23 @@ export default function Calls() {
             />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Направление</label>
+            <label>{t('calls.field.direction')}</label>
             <select value={direction} onChange={(e) => setDirection(e.target.value as CallDirection)}>
               {(Object.keys(CALL_DIRECTION_LABEL) as CallDirection[]).map((d) => (
-                <option key={d} value={d}>{CALL_DIRECTION_LABEL[d]}</option>
+                <option key={d} value={d}>{t(`calls.dir.${d}`)}</option>
               ))}
             </select>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Результат</label>
+            <label>{t('calls.field.outcome')}</label>
             <select value={outcome} onChange={(e) => setOutcome(e.target.value as CallOutcome)}>
               {(Object.keys(CALL_OUTCOME_LABEL) as CallOutcome[]).map((o) => (
-                <option key={o} value={o}>{CALL_OUTCOME_LABEL[o]}</option>
+                <option key={o} value={o}>{t(`calls.out.${o}`)}</option>
               ))}
             </select>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Длительность (мин)</label>
+            <label>{t('calls.field.duration')} ({t('common.time')})</label>
             <input
               type="number"
               min={0}
@@ -210,7 +205,7 @@ export default function Calls() {
             />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>Секунды</label>
+            <label>sec</label>
             <input
               type="number"
               min={0}
@@ -222,18 +217,17 @@ export default function Calls() {
         </div>
 
         <div className="form-group" style={{ marginTop: 16 }}>
-          <label>Заметки</label>
+          <label>{t('calls.field.notes')}</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="О чём договорились, что нужно сделать дальше"
             rows={2}
           />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
           <button className="btn btn-primary" onClick={onLog} disabled={createMut.isPending}>
-            <Icon name="call" size={16} /> {createMut.isPending ? 'Сохраняем...' : 'Записать звонок'}
+            <Icon name="call" size={16} /> {createMut.isPending ? t('common.saving') : t('calls.new')}
           </button>
         </div>
       </motion.div>
@@ -295,13 +289,13 @@ export default function Calls() {
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>Когда</th>
-              <th>Клиент</th>
-              {isAdmin && <th>Сотрудник</th>}
-              <th>Тип</th>
-              <th>Результат</th>
-              <th>Длит.</th>
-              <th>Заметки</th>
+              <th>{t('calls.col.when')}</th>
+              <th>{t('calls.col.client')}</th>
+              {isAdmin && <th>{t('kpi.col.employee')}</th>}
+              <th>{t('calls.col.direction')}</th>
+              <th>{t('calls.col.outcome')}</th>
+              <th>{t('calls.col.duration')}</th>
+              <th>{t('calls.field.notes')}</th>
               <th />
             </tr>
           </thead>
@@ -339,7 +333,7 @@ export default function Calls() {
                 <td>
                   <button
                     className="icon-btn"
-                    title="Удалить"
+                    title={t('common.delete')}
                     onClick={() => onDelete(c)}
                     disabled={deleteMut.isPending}
                   >

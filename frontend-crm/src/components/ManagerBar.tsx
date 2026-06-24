@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ROLE_LABEL, type ManagerInfo, type User } from '../api/types';
+import { type ManagerInfo, type User } from '../api/types';
 import { displayRoleLabel } from '../lib/roles';
 import { listUsers } from '../api/users';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 
 type Slot = 'local' | 'china';
 
@@ -37,6 +38,7 @@ function Slot({
   onPick: (kind: Slot, userId: string | null) => void;
   saving: boolean;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const isMine = manager?.id === meId;
 
@@ -54,7 +56,7 @@ function Slot({
         <div>
           <div className="manager-slot-label">{label}</div>
           <div className="manager-slot-name">
-            {manager ? manager.fullName : 'Не назначен'}
+            {manager ? manager.fullName : t('managerBar.notAssigned')}
             {isMine && <span className="manager-bar-you">(вы)</span>}
           </div>
         </div>
@@ -103,7 +105,7 @@ function Slot({
                       disabled={saving}
                     >
                       <Icon name="person_off" size={18} />
-                      Снять менеджера
+                      {t('managerBar.remove')}
                     </button>
                   )}
                 </div>
@@ -119,6 +121,7 @@ function Slot({
 export default function ManagerBar({ manager, chinaManager, onReassign }: Props) {
   const me = useAuth((s) => s.user);
   const { toast } = useUI();
+  const { t } = useT();
   const [users, setUsers] = useState<User[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -144,7 +147,7 @@ export default function ManagerBar({ manager, chinaManager, onReassign }: Props)
     <div className="manager-bar-two">
       <Slot
         kind="local"
-        label="Менеджер (Таджикистан)"
+        label={`${t('app.field.manager')} (TJ)`}
         icon="apartment"
         manager={manager}
         isAdmin={isAdmin}
@@ -155,7 +158,7 @@ export default function ManagerBar({ manager, chinaManager, onReassign }: Props)
       />
       <Slot
         kind="china"
-        label="Менеджер (Китай)"
+        label={`${t('app.field.chinaManager')} (CN)`}
         icon="flag"
         manager={chinaManager}
         isAdmin={isAdmin}

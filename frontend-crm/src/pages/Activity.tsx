@@ -117,16 +117,20 @@ export default function Activity() {
         <div className="card-header">
           <h2 className="card-title">{t('activity.title')}</h2>
           <button className="btn btn-secondary btn-sm" onClick={reset}>
-            <Icon name="filter_alt_off" size={16} style={{ marginRight: 4 }} /> Сброс
+            <Icon name="filter_alt_off" size={16} style={{ marginRight: 4 }} /> {t('filter.reset')}
           </button>
         </div>
         <div className="card-body">
           <div className="filters">
             <select value={action} onChange={(e) => setAction(e.target.value as any)}>
-              <option value="">Все действия</option>
-              {Object.entries(ACTIVITY_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
+              <option value="">{t('activity.filter.allActions')}</option>
+              {Object.entries(ACTIVITY_LABEL).map(([k, v]) => {
+                const key = `activity.action.${k}`;
+                const translated = t(key);
+                return (
+                  <option key={k} value={k}>{translated === key ? v : translated}</option>
+                );
+              })}
             </select>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
@@ -137,7 +141,7 @@ export default function Activity() {
           ) : items.length === 0 ? (
             <div className="empty">
               <div className="empty-icon"><Icon name="history" size={48} /></div>
-              Ничего не найдено
+              {t('common.empty')}
             </div>
           ) : (
             <div style={{ marginTop: 8 }}>
