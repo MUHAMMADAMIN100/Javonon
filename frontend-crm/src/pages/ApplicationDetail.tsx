@@ -21,6 +21,8 @@ import { motion } from 'framer-motion';
 import { listPipelines, moveApplicationStage } from '../api/sales';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
+import { useDirectionLabel, useApplicationStatusLabel, useStudentStatusLabel, useChannelLabel } from '../lib/labels';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 
@@ -30,6 +32,11 @@ export default function ApplicationDetail() {
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
+  const { t } = useT();
+  const directionLabel = useDirectionLabel();
+  const appStatusLabel = useApplicationStatusLabel();
+  const studentStatusLabel = useStudentStatusLabel();
+  const channelLabel = useChannelLabel();
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>(null);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -125,10 +132,9 @@ export default function ApplicationDetail() {
     applyOptimistic: (cur, status) => optimistic.patch(cur, { status }),
     invalidateAlso: [keys.applications.all, keys.students.all],
     onSuccess: (_d, status) => {
-      if (status === 'IN_PROGRESS') toast('Заявка взята в работу. Создана карточка студента.', 'success');
-      if (status === 'COMPLETED') toast('Заявка завершена. Студент доступен в разделе «Студенты».', 'success');
+      if (status === 'IN_PROGRESS' || status === 'COMPLETED') toast(t('toast.updated'), 'success');
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка изменения статуса', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const reassignMut = useOptimisticMutation<Application, { managerId?: string | null; chinaManagerId?: string | null }, Application>({
@@ -136,17 +142,17 @@ export default function ApplicationDetail() {
     queryKey: appKey,
     applyOptimistic: (cur, patch) => optimistic.patch(cur, patch as Partial<Application>),
     invalidateAlso: [keys.applications.all, keys.students.all],
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const deleteMut = useInvalidatingMutation({
     mutationFn: () => deleteApplication(id!),
     invalidate: [keys.applications.all, keys.students.all],
     onSuccess: () => {
-      toast('Заявка удалена', 'success');
+      toast(t('toast.deleted'), 'success');
       navigate('/applications');
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка удаления', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const updateStudentMut = useOptimisticMutation<Student, Parameters<typeof updateStudent>[1], Student>({
@@ -155,18 +161,18 @@ export default function ApplicationDetail() {
     applyOptimistic: (cur, patch) => optimistic.patch(cur, patch as Partial<Student>),
     invalidateAlso: [keys.students.all, keys.applications.all],
     onSuccess: () => {
-      toast('Данные сохранены', 'success');
+      toast(t('toast.updated'), 'success');
       setEdit(false);
       setTouched({});
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка сохранения', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const photoMut = useInvalidatingMutation({
     mutationFn: (file: File) => uploadPhoto(studentId!, file),
     invalidate: [studentKey, keys.students.all],
-    onSuccess: () => toast('Фото загружено', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка загрузки', 'error'),
+    onSuccess: () => toast(t('toast.updated'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const onStatus = (status: ApplicationStatus) => {
@@ -182,11 +188,9 @@ export default function ApplicationDetail() {
   const onDeleteApp = async () => {
     if (!id) return;
     const ok = await confirm({
-      title: 'Удалить заявку',
-      message: student
-        ? 'Заявка будет удалена вместе с карточкой студента и всеми документами.'
-        : 'Заявка будет удалена. Действие нельзя отменить.',
-      confirmText: 'Удалить',
+      title: t('common.delete') + ' · ' + t('applicationDetail.title'),
+      message: '',
+      confirmText: t('common.delete'),
       danger: true,
     });
     if (!ok) return;
@@ -197,7 +201,7 @@ export default function ApplicationDetail() {
     if (!student || !form) return;
     setTouched({ fullName: true, phones: true, email: true, cabinet: true, comment: true });
     if (hasErrors(formErrors)) {
-      toast('Исправьте ошибки в форме', 'error');
+      toast(t('toast.error'), 'error');
       return;
     }
     const phones = form.phones.split(',').map((p: string) => p.trim()).filter(Boolean);
@@ -244,9 +248,8 @@ export default function ApplicationDetail() {
 
   const handleNext = async () => {
     if (!nextStage) return;
-    // Гейт на "Подача документов" — нужны все 10 файлов
     if (nextStage === 'DOCS_SUBMITTED' && missingDocs.length > 0) {
-      toast(`Загрузите все документы (не хватает: ${missingDocs.length})`, 'error');
+      toast(t('applicationDetail.docs.missing') + ': ' + missingDocs.length, 'error');
       return;
     }
     await onStatus(nextStage);
@@ -261,17 +264,17 @@ export default function ApplicationDetail() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {canEdit && !edit && (
             <button className="btn btn-sm btn-secondary" onClick={() => setEdit(true)}>
-              Редактировать
+              {t('common.edit')}
             </button>
           )}
           {canEdit && edit && (
             <>
-              <button className="btn btn-sm btn-secondary" onClick={() => { setEdit(false); reload(); }}>Отмена</button>
-              <button className="btn btn-sm btn-primary" onClick={onSave}>Сохранить</button>
+              <button className="btn btn-sm btn-secondary" onClick={() => { setEdit(false); reload(); }}>{t('common.cancel')}</button>
+              <button className="btn btn-sm btn-primary" onClick={onSave}>{t('common.save')}</button>
             </>
           )}
           {canAct && (
-            <button className="btn btn-sm btn-danger" onClick={onDeleteApp}>Удалить</button>
+            <button className="btn btn-sm btn-danger" onClick={onDeleteApp}>{t('common.delete')}</button>
           )}
         </div>
       </div>
@@ -303,23 +306,19 @@ export default function ApplicationDetail() {
                 <button
                   className="btn btn-sm btn-secondary"
                   onClick={() => onStatus(prevStage)}
-                  title="Вернуться на предыдущий этап"
+                  title={t('common.back')}
                 >
                   <Icon name="arrow_back" size={16} style={{ marginRight: 4 }} />
-                  Назад
+                  {t('common.back')}
                 </button>
               )}
               {nextStage && (
                 <button
                   className="btn btn-sm btn-primary"
                   onClick={handleNext}
-                  title={
-                    nextStage === 'DOCS_SUBMITTED' && missingDocs.length > 0
-                      ? `Сначала загрузите все документы (не хватает: ${missingDocs.length})`
-                      : `Перейти: ${STATUS_LABEL[nextStage]}`
-                  }
+                  title={appStatusLabel(nextStage)}
                 >
-                  {STATUS_LABEL[nextStage]}
+                  {appStatusLabel(nextStage)}
                   <Icon name="arrow_forward" size={16} style={{ marginLeft: 4 }} />
                 </button>
               )}
@@ -333,10 +332,10 @@ export default function ApplicationDetail() {
             <button
               className="btn btn-sm btn-secondary"
               onClick={() => onStatus(prevStage)}
-              title="Вернуться на предыдущий этап"
+              title={t('common.back')}
             >
               <Icon name="arrow_back" size={16} style={{ marginRight: 4 }} />
-              Назад
+              {t('common.back')}
             </button>
           </div>
         </div>
@@ -362,7 +361,7 @@ export default function ApplicationDetail() {
         {isNew && (
           <>
             <NewApplicationEditor app={app} onSaved={reload} />
-            <div className="detail-row"><div className="detail-label">Создана</div><div className="detail-value">{new Date(app.createdAt).toLocaleString('ru-RU')}</div></div>
+            <div className="detail-row"><div className="detail-label">{t('profile.field.createdAt')}</div><div className="detail-value">{new Date(app.createdAt).toLocaleString('ru-RU')}</div></div>
           </>
         )}
 
@@ -384,7 +383,7 @@ export default function ApplicationDetail() {
                     style={{ color: '#16a34a' }}
                   >
                     <Icon name="verified" size={16} style={{ color: '#16a34a' }} />
-                    <span style={{ color: '#16a34a' }}>Зачислен</span>
+                    <span style={{ color: '#16a34a' }}>{appStatusLabel('ENROLLED' as any)}</span>
                   </motion.div>
                 )}
                 {canEdit && (
@@ -395,7 +394,7 @@ export default function ApplicationDetail() {
                       onClick={() => photoRef.current?.click()}
                     >
                       <Icon name="photo_camera" size={18} style={{ marginRight: 6 }} />
-                      Загрузить фото
+                      {t('studentDetail.action.uploadPhoto')}
                     </button>
                     <input ref={photoRef} type="file" accept="image/*" hidden onChange={onPhoto} />
                   </>
@@ -405,9 +404,9 @@ export default function ApplicationDetail() {
               <div>
                 {!edit ? (
                   <>
-                    <div className="detail-row"><div className="detail-label">ФИО</div><div className="detail-value">{student.fullName}</div></div>
+                    <div className="detail-row"><div className="detail-label">{t('app.field.fullName')}</div><div className="detail-value">{student.fullName}</div></div>
                     <div className="detail-row">
-                      <div className="detail-label">Телефоны</div>
+                      <div className="detail-label">{t('app.field.phones')}</div>
                       <div className="detail-value">
                         {student.phones.length === 0
                           ? '—'
@@ -425,72 +424,71 @@ export default function ApplicationDetail() {
                     </div>
                     {student.preferredChannel && (
                       <div className="detail-row">
-                        <div className="detail-label">Канал связи</div>
-                        <div className="detail-value">{student.preferredChannel}</div>
+                        <div className="detail-label">{t('app.field.preferredChannel')}</div>
+                        <div className="detail-value">{channelLabel(student.preferredChannel as any)}</div>
                       </div>
                     )}
                     {student.birthday && (
                       <div className="detail-row">
-                        <div className="detail-label">День рождения</div>
+                        <div className="detail-label">{t('app.field.birthday')}</div>
                         <div className="detail-value">{new Date(student.birthday).toLocaleDateString('ru-RU')}</div>
                       </div>
                     )}
-                    <div className="detail-row"><div className="detail-label">Email</div><div className="detail-value">{student.email || '—'}</div></div>
-                    <div className="detail-row"><div className="detail-label">Направление</div><div className="detail-value">{DIRECTION_LABEL[student.direction]}</div></div>
-                    <div className="detail-row"><div className="detail-label">Кабинет</div><div className="detail-value">№{student.cabinet}</div></div>
-                    <div className="detail-row"><div className="detail-label">Статус студента</div><div className="detail-value">{STUDENT_STATUS_LABEL[student.status]}</div></div>
-                    <div className="detail-row"><div className="detail-label">Комментарий</div><div className="detail-value" style={{ whiteSpace: 'pre-wrap' }}>{student.comment || '—'}</div></div>
-                    <div className="detail-row"><div className="detail-label">Создана заявка</div><div className="detail-value">{new Date(app.createdAt).toLocaleString('ru-RU')}</div></div>
+                    <div className="detail-row"><div className="detail-label">{t('userDetail.field.email')}</div><div className="detail-value">{student.email || '—'}</div></div>
+                    <div className="detail-row"><div className="detail-label">{t('app.field.direction')}</div><div className="detail-value">{directionLabel(student.direction)}</div></div>
+                    <div className="detail-row"><div className="detail-label">{t('app.field.cabinet')}</div><div className="detail-value">№{student.cabinet}</div></div>
+                    <div className="detail-row"><div className="detail-label">{t('common.status')}</div><div className="detail-value">{studentStatusLabel(student.status)}</div></div>
+                    <div className="detail-row"><div className="detail-label">{t('app.field.comment')}</div><div className="detail-value" style={{ whiteSpace: 'pre-wrap' }}>{student.comment || '—'}</div></div>
+                    <div className="detail-row"><div className="detail-label">{t('profile.field.createdAt')}</div><div className="detail-value">{new Date(app.createdAt).toLocaleString('ru-RU')}</div></div>
                   </>
                 ) : (
                   <>
                     <div className="form-group">
-                      <label>ФИО *</label>
+                      <label>{t('app.field.fullName')} *</label>
                       <input
                         value={form.fullName}
                         onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                        onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
+                        onBlur={() => setTouched((tt) => ({ ...tt, fullName: true }))}
                         className={showErr('fullName') ? 'input-error' : ''}
                         maxLength={100}
                       />
                       {showErr('fullName') && <div className="form-error-text">{(formErrors as any).fullName}</div>}
                     </div>
                     <div className="form-group">
-                      <label>Телефоны (через запятую — первый основной)</label>
+                      <label>{t('app.field.phones')}</label>
                       <input
                         value={form.phones}
                         onChange={(e) => setForm({ ...form, phones: e.target.value.replace(/[^\d ,+\-()]/g, '') })}
-                        onBlur={() => setTouched((t) => ({ ...t, phones: true }))}
+                        onBlur={() => setTouched((tt) => ({ ...tt, phones: true }))}
                         className={showErr('phones') ? 'input-error' : ''}
                         placeholder="+992123456789, +992111222333"
                       />
                       {showErr('phones') && <div className="form-error-text">{(formErrors as any).phones}</div>}
                     </div>
                     <div className="form-group">
-                      <label>Подписи к телефонам (через запятую)</label>
+                      <label>{t('studentDetail.field.phoneLabels')}</label>
                       <input
                         value={form.phoneLabels || ''}
                         onChange={(e) => setForm({ ...form, phoneLabels: e.target.value })}
-                        placeholder="сам, Отец, Мать"
                       />
                     </div>
                     <div className="form-grid-2">
                       <div className="form-group">
-                        <label>Предпочтительный канал связи</label>
+                        <label>{t('app.field.preferredChannel')}</label>
                         <select
                           value={form.preferredChannel || ''}
                           onChange={(e) => setForm({ ...form, preferredChannel: e.target.value })}
                         >
                           <option value="">—</option>
-                          <option value="WHATSAPP">WhatsApp</option>
-                          <option value="PHONE">Телефон</option>
-                          <option value="INSTAGRAM">Instagram</option>
-                          <option value="TELEGRAM">Telegram</option>
-                          <option value="EMAIL">Email</option>
+                          <option value="WHATSAPP">{channelLabel('WHATSAPP' as any)}</option>
+                          <option value="PHONE">{channelLabel('PHONE' as any)}</option>
+                          <option value="INSTAGRAM">{channelLabel('INSTAGRAM' as any)}</option>
+                          <option value="TELEGRAM">{channelLabel('TELEGRAM' as any)}</option>
+                          <option value="EMAIL">{channelLabel('EMAIL' as any)}</option>
                         </select>
                       </div>
                       <div className="form-group">
-                        <label>Дата рождения</label>
+                        <label>{t('app.field.birthday')}</label>
                         <input
                           type="date"
                           value={form.birthday || ''}
@@ -499,52 +497,52 @@ export default function ApplicationDetail() {
                       </div>
                     </div>
                     <div className="form-group">
-                      <label>Email</label>
+                      <label>{t('userDetail.field.email')}</label>
                       <input
                         type="email"
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                        onBlur={() => setTouched((tt) => ({ ...tt, email: true }))}
                         className={showErr('email') ? 'input-error' : ''}
                       />
                       {showErr('email') && <div className="form-error-text">{(formErrors as any).email}</div>}
                     </div>
                     <div className="form-grid-2">
                       <div className="form-group">
-                        <label>Направление</label>
+                        <label>{t('app.field.direction')}</label>
                         <select value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
                           <DirectionOptions />
                         </select>
                       </div>
                       <div className="form-group">
-                        <label>Кабинет</label>
+                        <label>{t('app.field.cabinet')}</label>
                         <input
                           type="number"
                           min={1}
                           max={99}
                           value={form.cabinet}
                           onChange={(e) => setForm({ ...form, cabinet: e.target.value.replace(/[^\d]/g, '') })}
-                          onBlur={() => setTouched((t) => ({ ...t, cabinet: true }))}
+                          onBlur={() => setTouched((tt) => ({ ...tt, cabinet: true }))}
                           className={showErr('cabinet') ? 'input-error' : ''}
                         />
                         {showErr('cabinet') && <div className="form-error-text">{(formErrors as any).cabinet}</div>}
                       </div>
                     </div>
                     <div className="form-group">
-                      <label>Статус студента</label>
+                      <label>{t('common.status')}</label>
                       <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
-                        <option value="ACTIVE">Активный</option>
-                        <option value="PAUSED">Приостановлен</option>
-                        <option value="GRADUATED">Выпустился</option>
-                        <option value="ARCHIVED">В архиве</option>
+                        <option value="ACTIVE">{studentStatusLabel('ACTIVE' as any)}</option>
+                        <option value="PAUSED">{studentStatusLabel('PAUSED' as any)}</option>
+                        <option value="GRADUATED">{studentStatusLabel('GRADUATED' as any)}</option>
+                        <option value="ARCHIVED">{studentStatusLabel('ARCHIVED' as any)}</option>
                       </select>
                     </div>
                     <div className="form-group">
-                      <label>Комментарий</label>
+                      <label>{t('app.field.comment')}</label>
                       <textarea
                         value={form.comment}
                         onChange={(e) => setForm({ ...form, comment: e.target.value })}
-                        onBlur={() => setTouched((t) => ({ ...t, comment: true }))}
+                        onBlur={() => setTouched((tt) => ({ ...tt, comment: true }))}
                         maxLength={2000}
                         className={showErr('comment') ? 'input-error' : ''}
                       />
