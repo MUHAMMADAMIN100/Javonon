@@ -249,9 +249,9 @@ export default function Programs() {
 
   const onDelete = async (p: Program) => {
     const ok = await confirm({
-      title: 'Удалить программу',
+      title: t('common.delete') + ' ' + t('programs.title').toLowerCase(),
       message: `«${p.name}» будет удалена. Студенты, привязанные к ней, останутся без программы.`,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
       danger: true,
     });
     if (!ok) return;
@@ -689,10 +689,10 @@ export default function Programs() {
                   >
                     <Icon name="image" size={16} style={{ marginRight: 6 }} />
                     {uploadingImage
-                      ? 'Загружаем...'
+                      ? t('common.uploading')
                       : pendingPreview || editing.imageUrl
-                        ? 'Заменить'
-                        : 'Загрузить'}
+                        ? t('common.replace')
+                        : t('common.upload')}
                   </button>
                   {!editing.id && pendingImage && (
                     <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>
@@ -813,6 +813,7 @@ function ProgramGallery({
   onChange: (next: string[]) => void;
 }) {
   const { toast } = useUI();
+  const { t } = useT();
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const onPick = async (file: File) => {
@@ -837,7 +838,7 @@ function ProgramGallery({
   };
   return (
     <div className="form-group">
-      <label>Галерея фото ({imageUrls.length}/7)</label>
+      <label>{t('programs.field.gallery')} ({imageUrls.length}/7)</label>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
         {imageUrls.map((u) => (
           <div key={u} style={{ position: 'relative', width: 120, height: 90 }}>
@@ -877,7 +878,7 @@ function ProgramGallery({
         onClick={() => inputRef.current?.click()}
         disabled={uploading || imageUrls.length >= 7}
       >
-        {uploading ? 'Загружаем…' : imageUrls.length >= 7 ? 'Достигнут максимум (7)' : '+ Добавить фото'}
+        {uploading ? t('common.uploading') : imageUrls.length >= 7 ? t('programs.gallery.max') : t('programs.gallery.add')}
       </button>
     </div>
   );
@@ -885,6 +886,7 @@ function ProgramGallery({
 
 function ScholarshipsEditor({ programId }: { programId: string }) {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: ['program-scholarships', programId],
@@ -907,7 +909,7 @@ function ScholarshipsEditor({ programId }: { programId: string }) {
     }
   };
   const onRemove = async (s: ProgramScholarship) => {
-    const ok = await confirm({ title: 'Удалить стипендию?', message: s.name, danger: true });
+    const ok = await confirm({ title: t('common.delete') + '?', message: s.name, danger: true });
     if (!ok) return;
     await deleteProgramScholarship(s.id);
     qc.invalidateQueries({ queryKey: ['program-scholarships', programId] });
@@ -915,10 +917,7 @@ function ScholarshipsEditor({ programId }: { programId: string }) {
 
   return (
     <div className="form-group">
-      <label>Стипендии / гранты ({items.length})</label>
-      <div style={{ fontSize: 11, color: 'var(--text-soft)', marginBottom: 8 }}>
-        Каждая стипендия отдельной строкой с деталями (название, покрытие, требования, дедлайн, ссылка).
-      </div>
+      <label>{t('programs.section.scholarships')} ({items.length})</label>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.map((s) => (
           <div key={s.id} style={{
@@ -931,11 +930,11 @@ function ScholarshipsEditor({ programId }: { programId: string }) {
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
               {[
-                s.coverage && `Покрытие: ${s.coverage}`,
-                s.amount && `Сумма: ${s.amount}`,
-                s.includes && `Включено: ${s.includes}`,
-                s.requirements && `Требования: ${s.requirements}`,
-                s.deadline && `Дедлайн: ${s.deadline}`,
+                s.coverage && `${t('programs.scholarship.coverage')}: ${s.coverage}`,
+                s.amount && `${t('programs.scholarship.amount')}: ${s.amount}`,
+                s.includes && `${t('programs.scholarship.includes')}: ${s.includes}`,
+                s.requirements && `${t('programs.scholarship.requirements')}: ${s.requirements}`,
+                s.deadline && `${t('programs.scholarship.deadline')}: ${s.deadline}`,
               ].filter(Boolean).join(' · ')}
             </div>
             {s.link && (
@@ -968,13 +967,13 @@ function ScholarshipsEditor({ programId }: { programId: string }) {
               onChange={(e) => setDraft({ ...draft, link: e.target.value })} />
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setCreating(false); setDraft({}); }}>Отмена</button>
-            <button type="button" className="btn btn-sm btn-primary" onClick={onAdd}>Добавить</button>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setCreating(false); setDraft({}); }}>{t('common.cancel')}</button>
+            <button type="button" className="btn btn-sm btn-primary" onClick={onAdd}>{t('common.add')}</button>
           </div>
         </div>
       ) : (
         <button type="button" className="btn btn-sm btn-secondary" style={{ marginTop: 8 }} onClick={() => setCreating(true)}>
-          + Добавить стипендию
+          {t('programs.scholarship.add')}
         </button>
       )}
     </div>

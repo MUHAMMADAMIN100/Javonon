@@ -15,6 +15,7 @@ import { MiniMarkdown } from '../lib/miniMarkdown';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 const fileUrl = (u: string) => (u.startsWith('http') ? u : `${API_BASE}${u}`);
@@ -25,6 +26,7 @@ const fileUrl = (u: string) => (u.startsWith('http') ? u : `${API_BASE}${u}`);
  * требования, дедлайны, стипендии, ссылку на сайт университета.
  */
 export default function ProgramDetail() {
+  const { t } = useT();
   const { id } = useParams<{ id: string }>();
   const query = useQuery({
     queryKey: ['program', id],
@@ -39,7 +41,7 @@ export default function ProgramDetail() {
   if (query.isError || !p) {
     return (
       <motion.div className="card" style={{ padding: 28 }}>
-        <Link to="/programs">← Назад к программам</Link>
+        <Link to="/programs">{t('programs.cta.back')}</Link>
         <h2 style={{ marginTop: 16 }}>Программа не найдена</h2>
       </motion.div>
     );
@@ -53,7 +55,7 @@ export default function ProgramDetail() {
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>
         <Link to="/programs" style={{ fontSize: 13, color: 'var(--text-soft)' }}>
-          ← Назад к программам
+          {t('programs.cta.back')}
         </Link>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 240 }}>
@@ -104,7 +106,7 @@ export default function ProgramDetail() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
         <div className="card" style={{ padding: 20 }}>
-          <h3 style={{ marginBottom: 12 }}>Основное</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('programs.section.main')}</h3>
           <Row label="Направление" value={p.direction ? DIRECTION_LABEL[p.direction] : '—'} />
           <Row label="Специальность" value={p.major || '—'} />
           <Row label="Стоимость / год" value={p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : 'Бесплатно / уточняется'} />
@@ -118,7 +120,7 @@ export default function ProgramDetail() {
 
         {p.disciplines && p.disciplines.length > 0 && (
           <div className="card" style={{ padding: 20 }}>
-            <h3 style={{ marginBottom: 12 }}>Направления</h3>
+            <h3 style={{ marginBottom: 12 }}>{t('programs.section.disciplines')}</h3>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {p.disciplines.map((d: string) => (
                 <span key={d} style={{
@@ -170,7 +172,7 @@ export default function ProgramDetail() {
 
       {p.description && (
         <div className="card" style={{ padding: 20, marginTop: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>Описание программы</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('programs.section.description')}</h3>
           <MiniMarkdown text={p.description} />
         </div>
       )}
@@ -196,6 +198,7 @@ function Row({ label, value }: { label: string; value: string | null | undefined
 
 function ProgramDocumentsSection({ programId }: { programId: string }) {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -227,7 +230,7 @@ function ProgramDocumentsSection({ programId }: { programId: string }) {
   return (
     <div className="card" style={{ padding: 20, marginTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h3>📎 Документы ({items.length})</h3>
+        <h3>{t('programs.section.documents')} ({items.length})</h3>
         {canEdit && (
           <>
             <input
@@ -245,13 +248,13 @@ function ProgramDocumentsSection({ programId }: { programId: string }) {
               onClick={() => inputRef.current?.click()}
               disabled={uploading}
             >
-              {uploading ? 'Загружаем…' : '+ Загрузить документ'}
+              {uploading ? t('common.uploading') : t('programs.documents.add')}
             </button>
           </>
         )}
       </div>
       {items.length === 0 ? (
-        <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>Документов пока нет</div>
+        <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('programs.documents.empty')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {items.map((d) => (
@@ -285,6 +288,7 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const query = useQuery({
@@ -314,12 +318,12 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
 
   return (
     <div className="card" style={{ padding: 20, marginTop: 16 }}>
-      <h3 style={{ marginBottom: 12 }}>💬 Комментарии ({items.length})</h3>
+      <h3 style={{ marginBottom: 12 }}>{t('programs.section.comments')} ({items.length})</h3>
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Внутренний комментарий — виден только сотрудникам"
+          placeholder={t('programs.comments.placeholder')}
           rows={2}
           maxLength={4000}
           style={{ flex: 1, fontFamily: 'inherit', resize: 'vertical' }}
@@ -329,11 +333,11 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
           onClick={submit}
           disabled={!draft.trim() || sending}
         >
-          {sending ? 'Отправляем…' : 'Отправить'}
+          {sending ? t('common.sending') : t('common.send')}
         </button>
       </div>
       {items.length === 0 ? (
-        <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>Комментариев пока нет</div>
+        <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('programs.comments.empty')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((c) => (
