@@ -713,6 +713,7 @@ function PipelineStageSelector({
   onChanged: () => void;
 }) {
   const { toast } = useUI();
+  const { t } = useT();
   const query = useQuery({ queryKey: ['sales', 'pipelines'], queryFn: listPipelines });
   const pipelines = query.data ?? [];
   const [busy, setBusy] = useState(false);
@@ -729,10 +730,10 @@ function PipelineStageSelector({
     setBusy(true);
     try {
       await moveApplicationStage(applicationId, stageId);
-      toast('Этап обновлён', 'success');
+      toast(t('toast.updated'), 'success');
       onChanged();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setBusy(false);
     }
@@ -757,7 +758,7 @@ function PipelineStageSelector({
         color: 'var(--text-soft)',
         textTransform: 'uppercase',
       }}>
-        Воронка · {currentPipeline.name}
+        {t('app.field.pipeline')} · {currentPipeline.name}
       </div>
       <select
         value={currentStageId || ''}
@@ -774,18 +775,13 @@ function PipelineStageSelector({
           color: currentStage?.color || 'var(--text)',
         }}
       >
-        <option value="">— этап не задан —</option>
+        <option value="">— {t('app.field.stage')} —</option>
         {currentPipeline.stages.map((s) => (
           <option key={s.id} value={s.id}>
             {s.name}{s.isClosingStage ? ' ✓' : ''}
           </option>
         ))}
       </select>
-      {pipelines.length > 1 && currentPipeline.id !== currentPipelineId && (
-        <span style={{ fontSize: 11, color: 'var(--text-soft)' }}>
-          (показана default воронка — заявка не привязана ни к одной)
-        </span>
-      )}
     </div>
   );
 }

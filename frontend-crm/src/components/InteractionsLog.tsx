@@ -17,6 +17,7 @@ import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
+import { useT } from '../lib/i18n';
 
 const TYPES: InteractionType[] = ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'SMS', 'TELEGRAM', 'WHATSAPP'];
 
@@ -35,6 +36,7 @@ function fmtRelative(iso: string) {
 
 export default function InteractionsLog({ studentId, canEdit = true }: { studentId: string; canEdit?: boolean }) {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   // По ТЗ §8 «вся связанная информация» — переключатель показывает либо
@@ -65,18 +67,18 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
     mutationFn: createInteraction,
     invalidate: [listKey],
     onSuccess: () => {
-      toast('Запись добавлена', 'success');
+      toast(t('toast.created'), 'success');
       setShowForm(false);
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const deleteMut = useOptimisticMutation<unknown, string, Interaction[]>({
     mutationFn: deleteInteraction,
     queryKey: listKey,
     applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
-    onSuccess: () => toast('Удалено', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('toast.deleted'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const onCreate = (data: { type: InteractionType; summary: string; details?: string; visibleToStudent: boolean }) => {
@@ -89,10 +91,10 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
     const source = (it as any).source;
     if (source && source !== 'interaction') return;
     const ok = await confirm({
-      title: 'Удалить запись?',
+      title: t('common.delete'),
       message: it.summary,
       danger: true,
-      confirmText: 'Удалить',
+      confirmText: t('common.delete'),
     });
     if (!ok) return;
     deleteMut.mutate(it.id);
@@ -108,15 +110,15 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
         bg: 'var(--primary-soft)',
       };
     }
-    const t = it as TimelineItem;
-    if (t.source === 'call') {
+    const item = it as TimelineItem;
+    if (item.source === 'call') {
       return {
-        label: t.direction === 'INCOMING' ? 'Звонок входящий' : 'Звонок исходящий',
+        label: item.direction === 'INCOMING' ? t('interactions.call.in') : t('interactions.call.out'),
         icon: 'call',
         bg: '#dbeafe',
       };
     }
-    if (t.source === 'message') {
+    if (item.source === 'message') {
       const labels: Record<string, string> = {
         WHATSAPP: 'WhatsApp',
         INSTAGRAM: 'Instagram',
@@ -124,14 +126,14 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
         SMS: 'SMS',
       };
       return {
-        label: `${labels[t.channel || ''] || t.channel} ${t.direction === 'IN' ? 'от клиента' : 'клиенту'}`,
-        icon: t.channel === 'INSTAGRAM' ? 'photo_camera' : t.channel === 'SMS' ? 'sms' : 'chat_bubble',
+        label: `${labels[item.channel || ''] || item.channel} ${item.direction === 'IN' ? t('interactions.from') : t('interactions.to')}`,
+        icon: item.channel === 'INSTAGRAM' ? 'photo_camera' : item.channel === 'SMS' ? 'sms' : 'chat_bubble',
         bg: '#fce7f3',
       };
     }
     return {
-      label: t.type ? INTERACTION_LABEL[t.type] : 'Запись',
-      icon: t.type ? INTERACTION_ICON[t.type] : 'chat',
+      label: item.type ? INTERACTION_LABEL[item.type] : t('interactions.entry'),
+      icon: item.type ? INTERACTION_ICON[item.type] : 'chat',
       bg: 'var(--primary-soft)',
     };
   };
@@ -154,11 +156,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
             fontWeight: 500,
             letterSpacing: '-0.02em',
           }}>
-            История <em style={{
-              fontFamily: 'Times New Roman, Georgia, serif',
-              fontWeight: 400,
-              color: 'var(--primary-dark)',
-            }}>общения.</em>
+            {t('interactions.title')}
           </h3>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -173,13 +171,13 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
               color: showFullTimeline ? 'var(--primary-dark)' : 'var(--text-soft)',
               fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}
-            title="Включает звонки и переписку из WhatsApp/IG/SMS"
+            title={t('interactions.fullTimeline')}
           >
-            {showFullTimeline ? '◉ Полная история' : '○ Полная история'}
+            {showFullTimeline ? '◉ ' : '○ '}{t('interactions.fullTimeline')}
           </button>
           {canEdit && !showForm && (
             <button className="btn btn-sm btn-primary" onClick={() => setShowForm(true)}>
-              <Icon name="add" size={14} /> Добавить
+              <Icon name="add" size={14} /> {t('common.add')}
             </button>
           )}
         </div>
@@ -200,7 +198,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.length === 0 && (
-          <div className="empty" style={{ padding: 32 }}>Записей пока нет</div>
+          <div className="empty" style={{ padding: 32 }}>{t('common.empty')}</div>
         )}
         {items.map((it) => {
           const vis = resolveVisuals(it);
@@ -297,6 +295,7 @@ function NewInteractionForm({
   onSubmit: (data: { type: InteractionType; summary: string; details?: string; visibleToStudent: boolean }) => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   const [type, setType] = useState<InteractionType>('CALL');
   const [summary, setSummary] = useState('');
   const [details, setDetails] = useState('');
@@ -313,34 +312,32 @@ function NewInteractionForm({
       }}
     >
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-        {TYPES.map((t) => (
+        {TYPES.map((tp) => (
           <button
-            key={t}
+            key={tp}
             type="button"
-            onClick={() => setType(t)}
-            className={`btn btn-sm ${type === t ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setType(tp)}
+            className={`btn btn-sm ${type === tp ? 'btn-primary' : 'btn-secondary'}`}
             style={{ padding: '6px 12px' }}
           >
-            {INTERACTION_LABEL[t]}
+            {INTERACTION_LABEL[tp]}
           </button>
         ))}
       </div>
       <div className="form-group">
-        <label>Краткое описание</label>
+        <label>{t('interactions.field.summary')}</label>
         <input
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
-          placeholder="Например: позвонил, договорились перезвонить во вторник"
           required
         />
       </div>
       <div className="form-group">
-        <label>Подробности (опционально)</label>
+        <label>{t('interactions.field.details')}</label>
         <textarea
           value={details}
           onChange={(e) => setDetails(e.target.value)}
           rows={3}
-          placeholder="Длинная заметка"
         />
       </div>
       <label style={{
@@ -357,11 +354,11 @@ function NewInteractionForm({
           onChange={(e) => setVisibleToStudent(e.target.checked)}
           style={{ width: 16, height: 16 }}
         />
-        Видно студенту в его кабинете
+        {t('interactions.visibleToStudent')}
       </label>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>Отмена</button>
-        <button type="submit" className="btn btn-sm btn-primary" disabled={!summary.trim()}>Сохранить</button>
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
+        <button type="submit" className="btn btn-sm btn-primary" disabled={!summary.trim()}>{t('common.save')}</button>
       </div>
     </form>
   );

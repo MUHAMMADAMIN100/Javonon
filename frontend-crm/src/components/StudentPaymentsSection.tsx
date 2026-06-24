@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../api/client';
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
 
 interface PaymentTx {
   id: string;
@@ -56,6 +57,7 @@ function fmt(n: number, c: string) {
 }
 
 export default function StudentPaymentsSection({ studentId }: { studentId: string }) {
+  const { t } = useT();
   const [data, setData] = useState<Response | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -70,7 +72,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
   if (loading) {
     return (
       <div className="card" style={{ padding: 28, marginBottom: 16 }}>
-        <div style={{ color: 'var(--text-soft)' }}>Загрузка истории оплат...</div>
+        <div style={{ color: 'var(--text-soft)' }}>{t('common.loading')}</div>
       </div>
     );
   }
@@ -104,11 +106,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
             letterSpacing: '-0.02em',
             margin: 0,
           }}>
-            История <em style={{
-              fontFamily: 'Times New Roman, Georgia, serif',
-              fontWeight: 400,
-              color: 'var(--primary-dark)',
-            }}>оплат.</em>
+            {t('payments.title')}
           </h3>
           <div style={{
             fontFamily: 'var(--font-display)',
@@ -132,7 +130,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
             textTransform: 'uppercase',
             color: 'var(--text-soft)',
             marginBottom: 8,
-          }}>Ожидают подтверждения · {pendingActive.length}</div>
+          }}>{t('payments.pending')} · {pendingActive.length}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {pendingActive.map((p) => (
               <div
@@ -157,7 +155,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
                   </div>
                 </div>
                 <span className="badge badge-warning" style={{ fontFamily: 'var(--font-mono)' }}>
-                  Ожидает
+                  {t('payments.status.PENDING')}
                 </span>
               </div>
             ))}
@@ -168,13 +166,13 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
       {/* Подтверждённые транзакции */}
       {transactions.length === 0 ? (
         <div style={{ padding: 24, color: 'var(--text-light)', fontSize: 13, textAlign: 'center' }}>
-          Подтверждённых платежей пока нет
+          {t('common.empty')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {transactions.map((t) => (
+          {transactions.map((tx) => (
             <motion.div
-              key={t.id}
+              key={tx.id}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               style={{
@@ -198,12 +196,12 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 500, fontSize: 14 }}>
-                  {CATEGORY_LABEL[t.category] || t.category}
+                  {t(`payments.cat.${tx.category}`) !== `payments.cat.${tx.category}` ? t(`payments.cat.${tx.category}`) : (CATEGORY_LABEL[tx.category] || tx.category)}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
-                  {new Date(t.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  {t.comment && ` · ${t.comment}`}
-                  {t.recordedBy && ` · принял ${t.recordedBy.fullName}`}
+                  {new Date(tx.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {tx.comment && ` · ${tx.comment}`}
+                  {tx.recordedBy && ` · ${tx.recordedBy.fullName}`}
                 </div>
               </div>
               <div style={{
@@ -212,7 +210,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
                 fontWeight: 500,
                 color: 'var(--primary-dark)',
               }}>
-                +{fmt(t.amount, t.currency)}
+                +{fmt(tx.amount, tx.currency)}
               </div>
             </motion.div>
           ))}
@@ -231,7 +229,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
             cursor: 'pointer',
             padding: '8px 0',
           }}>
-            История заявок · {paymentRequests.filter((p) => p.status !== 'PENDING').length}
+            {t('payments.history')} · {paymentRequests.filter((p) => p.status !== 'PENDING').length}
           </summary>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
             {paymentRequests.filter((p) => p.status !== 'PENDING').map((p) => (
@@ -247,7 +245,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
                 }}
               >
                 <span style={{ color: STATUS_COLOR[p.status], fontWeight: 500, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {STATUS_LABEL[p.status]}
+                  {t(`payments.status.${p.status}`) !== `payments.status.${p.status}` ? t(`payments.status.${p.status}`) : STATUS_LABEL[p.status]}
                 </span>
                 <span>{fmt(p.amount, p.currency)}</span>
                 <span>·</span>

@@ -20,6 +20,7 @@ import {
 import { offerCurrent, offerSign, type CurrentOfferState } from '../api/offers';
 import { listCustomRoles, setUserCustomRole, type CustomRole } from '../api/customRoles';
 import { useT } from '../lib/i18n';
+import { useRoleLabel } from '../lib/labels';
 import ScheduleEditor from '../components/ScheduleEditor';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
@@ -462,6 +463,7 @@ function DocUploader({
   onUploaded: () => void;
 }) {
   const { toast } = useUI();
+  const { t } = useT();
   const [type, setType] = useState<UserDocumentType>('PASSPORT');
   const [uploading, setUploading] = useState(false);
 
@@ -475,10 +477,10 @@ function DocUploader({
       } else {
         await uploadUserDocument(userId, file, type);
       }
-      toast('Документ загружен', 'success');
+      toast(t('toast.uploaded'), 'success');
       onUploaded();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка загрузки', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setUploading(false);
       e.target.value = '';
@@ -488,14 +490,14 @@ function DocUploader({
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       <select value={type} onChange={(e) => setType(e.target.value as UserDocumentType)} style={{ padding: 8, border: '1px solid var(--border)', borderRadius: 8 }}>
-        <option value="PASSPORT">Паспорт</option>
-        <option value="PHOTO">Фотография</option>
-        <option value="CONTRACT">Контракт</option>
-        <option value="DIPLOMA">Диплом</option>
-        <option value="OTHER">Другое</option>
+        <option value="PASSPORT">{t('userDoc.PASSPORT')}</option>
+        <option value="PHOTO">{t('userDoc.PHOTO')}</option>
+        <option value="CONTRACT">{t('userDoc.CONTRACT')}</option>
+        <option value="DIPLOMA">{t('userDoc.DIPLOMA')}</option>
+        <option value="OTHER">{t('userDoc.OTHER')}</option>
       </select>
       <label className="btn btn-sm btn-secondary" style={{ cursor: uploading ? 'wait' : 'pointer' }}>
-        {uploading ? 'Загружаем…' : 'Загрузить'}
+        {uploading ? t('common.uploading') : t('common.upload')}
         <input type="file" hidden onChange={upload} disabled={uploading} />
       </label>
     </div>
@@ -504,6 +506,7 @@ function DocUploader({
 
 function AccessSection({ userId, userName }: { userId: string; userName: string }) {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const qc = useQueryClient();
   const [pickUserId, setPickUserId] = useState('');
 
@@ -533,37 +536,37 @@ function AccessSection({ userId, userName }: { userId: string; userName: string 
       await m.grantUserAccess(userId, pickUserId);
       setPickUserId('');
       qc.invalidateQueries({ queryKey: ['user', userId, 'access'] });
-      toast('Доступ выдан', 'success');
+      toast(t('toast.updated'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
   const revoke = async (granteeId: string) => {
     const ok = await confirm({
-      title: 'Отозвать доступ?',
-      message: 'Пользователь больше не сможет видеть данные этого сотрудника.',
+      title: t('userDetail.access.revoke'),
+      message: '',
       danger: true,
-      confirmText: 'Отозвать',
+      confirmText: t('userDetail.access.revoke'),
     });
     if (!ok) return;
     try {
       const m = await import('../api/userProfile');
       await m.revokeUserAccess(userId, granteeId);
       qc.invalidateQueries({ queryKey: ['user', userId, 'access'] });
-      toast('Доступ отозван', 'success');
+      toast(t('toast.updated'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
   return (
     <section className="card" style={{ padding: 22, marginBottom: 14 }}>
       <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 6 }}>
-        Доступ к данным
+        {t('userDetail.access.title')}
       </h3>
       <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 14 }}>
-        Кто (кроме администраторов) может видеть полное досье «{userName}».
+        {userName}
       </p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <select
@@ -571,18 +574,18 @@ function AccessSection({ userId, userName }: { userId: string; userName: string 
           onChange={(e) => setPickUserId(e.target.value)}
           style={{ flex: '1 1 220px', padding: 9, border: '1px solid var(--border)', borderRadius: 8 }}
         >
-          <option value="">— выбери сотрудника —</option>
+          <option value="">— {t('common.search')} —</option>
           {users.map((u: any) => (
             <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>
           ))}
         </select>
         <button className="btn btn-sm btn-primary" onClick={grant} disabled={!pickUserId}>
-          Выдать доступ
+          {t('userDetail.access.grant')}
         </button>
       </div>
       {grants.length === 0 ? (
         <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>
-          Доступ выдан только администраторам
+          {t('common.empty')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -598,7 +601,7 @@ function AccessSection({ userId, userName }: { userId: string; userName: string 
                 </span>
               </span>
               <button className="btn btn-sm btn-danger" onClick={() => revoke(g.grantedTo.id)}>
-                Отозвать
+                {t('userDetail.access.revoke')}
               </button>
             </div>
           ))}
@@ -699,15 +702,12 @@ function OfferSection() {
  * и legacy-проверок. FOUNDER не редактируется через этот UI (его роль
  * меняется только в seed/CLI).
  */
-const ASSIGNABLE_ROLES: Array<{ value: string; label: string }> = [
-  { value: 'ADMIN', label: 'Администратор' },
-  { value: 'ACCOUNTANT', label: 'Бухгалтер' },
-  { value: 'SALES_MANAGER', label: 'Менеджер по продажам' },
-  { value: 'CLIENT_MANAGER', label: 'Клиентский менеджер' },
-];
+const ASSIGNABLE_ROLE_VALUES: string[] = ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'];
 
 function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; userId: string; onSaved: () => void }) {
   const { toast } = useUI();
+  const { t } = useT();
+  const roleLabel = useRoleLabel();
   const [open, setOpen] = useState(false);
   const initialRoles = (() => {
     const set = new Set<string>();
@@ -741,11 +741,11 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
       // primary первая в массиве, потом extras
       const roles = [primary, ...Array.from(extra).filter((r) => r !== primary)];
       await setUserRoles(userId, roles);
-      toast('Роли обновлены', 'success');
+      toast(t('toast.updated'), 'success');
       setOpen(false);
       onSaved();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setSaving(false);
     }
@@ -762,7 +762,7 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
         fontSize: 12,
         color: '#92400e',
       }}>
-        Это аккаунт основателя — его роль меняется только через сидер/CLI.
+        {t('userDetail.roles.founderLocked')}
       </div>
     );
   }
@@ -774,7 +774,7 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
         style={{ marginTop: 12, marginLeft: 8 }}
         onClick={() => setOpen(true)}
       >
-        Изменить роли (FOUNDER)
+        {t('userDetail.roles.edit')}
       </button>
     );
   }
@@ -799,29 +799,29 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
 
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
-          Основная роль (отображается в UI):
+          {t('userDetail.field.role')}:
         </label>
         <select value={primary} onChange={(e) => setPrimary(e.target.value)}>
-          {ASSIGNABLE_ROLES.map((r) => (
-            <option key={r.value} value={r.value}>{r.label}</option>
+          {ASSIGNABLE_ROLE_VALUES.map((v) => (
+            <option key={v} value={v}>{roleLabel(v as any)}</option>
           ))}
         </select>
       </div>
 
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>
-          Дополнительные роли (один человек может быть, например, и админ, и бухгалтер):
+          {t('userDetail.field.roles')}:
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {ASSIGNABLE_ROLES
-            .filter((r) => r.value !== primary)
-            .map((r) => {
-              const on = extra.has(r.value);
+          {ASSIGNABLE_ROLE_VALUES
+            .filter((v) => v !== primary)
+            .map((v) => {
+              const on = extra.has(v);
               return (
                 <button
-                  key={r.value}
+                  key={v}
                   type="button"
-                  onClick={() => toggleExtra(r.value)}
+                  onClick={() => toggleExtra(v)}
                   style={{
                     padding: '6px 12px',
                     borderRadius: 999,
@@ -832,7 +832,7 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
                     fontSize: 12, fontWeight: 600, cursor: 'pointer',
                   }}
                 >
-                  {on ? '✓ ' : '+ '}{r.label}
+                  {on ? '✓ ' : '+ '}{roleLabel(v as any)}
                 </button>
               );
             })}
@@ -841,10 +841,10 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>
-          Отмена
+          {t('common.cancel')}
         </button>
         <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
-          {saving ? 'Сохраняем…' : 'Сохранить роли'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
       </div>
     </div>
