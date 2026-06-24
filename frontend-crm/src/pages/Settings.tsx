@@ -530,6 +530,82 @@ function SalaryTab() {
   );
 }
 
+/**
+ * Красивый input для salary roster — без браузерных спиннер-стрелок,
+ * с suffix-юнитом справа («TJS», «TJS/ч», «%», «×»). Кружок-индикатор
+ * рисуется если значение отличается от исходного (визуальный «dirty»).
+ */
+function RosterNumberInput({
+  value, onChange, suffix, dirty, placeholder = '0', min = 0, max, step = 1, width,
+}: {
+  value: string | number;
+  onChange: (v: string) => void;
+  suffix?: string;
+  dirty?: boolean;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  width?: number;
+}) {
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '6px 10px',
+        border: `1.5px solid ${dirty ? 'var(--primary, #4f46e5)' : 'var(--border, #e2e8f0)'}`,
+        borderRadius: 10,
+        background: dirty ? 'var(--primary-light, #eef2ff)' : 'white',
+        boxShadow: dirty ? '0 0 0 3px rgba(79,70,229,0.08)' : 'none',
+        transition: 'border-color 0.15s, background 0.15s, box-shadow 0.15s',
+        width: width ?? 'auto',
+        minWidth: width ?? 100,
+      }}
+    >
+      <input
+        type="number"
+        inputMode="decimal"
+        value={value as any}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        min={min}
+        max={max}
+        step={step}
+        // hide browser spinners + clean look
+        className="roster-num-input"
+        style={{
+          border: 'none',
+          outline: 'none',
+          background: 'transparent',
+          fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)',
+          fontSize: 14,
+          fontWeight: 500,
+          textAlign: 'right',
+          padding: 0,
+          width: '100%',
+          color: 'var(--text, #0f172a)',
+          MozAppearance: 'textfield',
+        }}
+      />
+      {suffix && (
+        <span style={{
+          fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 11,
+          color: 'var(--text-soft, #64748b)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+        }}>
+          {suffix}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SalaryRosterSection() {
   const { toast } = useUI();
   const { t } = useT();
@@ -617,35 +693,46 @@ function SalaryRosterSection() {
                     </div>
                   </td>
                   <td>
-                    <input
-                      type="number" min={0} step={50} placeholder="0"
+                    <RosterNumberInput
                       value={val('baseSalary', u.baseSalary) as any}
-                      onChange={(e) => setField(u.id, 'baseSalary', e.target.value)}
-                      style={{ width: 110 }}
+                      onChange={(v) => setField(u.id, 'baseSalary', v)}
+                      suffix="TJS"
+                      dirty={has('baseSalary')}
+                      step={50}
+                      width={140}
                     />
                   </td>
                   <td>
-                    <input
-                      type="number" min={0} step={1} placeholder="0"
+                    <RosterNumberInput
                       value={val('hourlyRate', u.hourlyRate) as any}
-                      onChange={(e) => setField(u.id, 'hourlyRate', e.target.value)}
-                      style={{ width: 90 }}
+                      onChange={(v) => setField(u.id, 'hourlyRate', v)}
+                      suffix="TJS/ч"
+                      dirty={has('hourlyRate')}
+                      width={130}
                     />
                   </td>
                   <td>
-                    <input
-                      type="number" min={0} max={100} step={0.5} placeholder="0"
+                    <RosterNumberInput
                       value={val('bonusPercent', u.bonusPercent) as any}
-                      onChange={(e) => setField(u.id, 'bonusPercent', e.target.value)}
-                      style={{ width: 80 }}
+                      onChange={(v) => setField(u.id, 'bonusPercent', v)}
+                      suffix="%"
+                      dirty={has('bonusPercent')}
+                      max={100}
+                      step={0.5}
+                      width={100}
                     />
                   </td>
                   <td>
-                    <input
-                      type="number" min={1} max={5} step={0.1} placeholder="1.5"
+                    <RosterNumberInput
                       value={val('overtimeMultiplier', u.overtimeMultiplier ?? 1.5) as any}
-                      onChange={(e) => setField(u.id, 'overtimeMultiplier', e.target.value)}
-                      style={{ width: 70 }}
+                      onChange={(v) => setField(u.id, 'overtimeMultiplier', v)}
+                      suffix="×"
+                      dirty={has('overtimeMultiplier')}
+                      min={1}
+                      max={5}
+                      step={0.1}
+                      placeholder="1.5"
+                      width={90}
                     />
                   </td>
                   <td>

@@ -4134,3 +4134,14 @@ textarea:focus {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Salary roster — убираем браузерные spinner-стрелки у number-инпутов.
+   Они выглядят кустарно в таблице зарплат. */
+.roster-num-input::-webkit-outer-spin-button,
+.roster-num-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.roster-num-input {
+  -moz-appearance: textfield;
+}
