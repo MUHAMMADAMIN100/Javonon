@@ -16,6 +16,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 
 type Scope = 'all' | 'mine';
 
@@ -29,6 +30,7 @@ const PAGE_SIZE = 20;
 const MANAGER_ROLES = new Set(['SALES_MANAGER', 'CLIENT_MANAGER']);
 
 export default function Students() {
+  const { t } = useT();
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
   const { toast } = useUI();
@@ -163,7 +165,7 @@ export default function Students() {
       transition={{ duration: 0.3 }}
     >
       <div className="card-header">
-        <h2 className="card-title">База студентов</h2>
+        <h2 className="card-title">{t('students.title')}</h2>
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && (
             <div className="scope-switch">

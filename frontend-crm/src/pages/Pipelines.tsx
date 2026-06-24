@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import {
@@ -20,6 +21,7 @@ import {
 const DEFAULT_STAGE_COLOR = '#94a3b8';
 
 export default function Pipelines() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
@@ -77,9 +79,7 @@ export default function Pipelines() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">SALES · PIPELINES</span>
-        <h2 className="crm-section-title">
-          Воронки <em>продаж.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('pipelines.title')}</h2>
       </div>
 
       <motion.div

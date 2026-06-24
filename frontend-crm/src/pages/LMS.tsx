@@ -20,8 +20,10 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 
 export default function Lms() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
@@ -100,9 +102,7 @@ export default function Lms() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">LMS · 13</span>
-        <h2 className="crm-section-title">
-          Курсы <em>и обучение.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('lms.title')}</h2>
       </div>
 
       <div className="lms-grid" style={{

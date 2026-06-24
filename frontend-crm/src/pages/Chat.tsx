@@ -26,6 +26,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation, tempId } from '../lib/optimistic';
 import { isElevated, displayRoleLabel } from '../lib/roles';
+import { useT } from '../lib/i18n';
 import { ROLE_LABEL, type Role } from '../api/types';
 
 // Базовый URL для статических attachments (chat-uploads).
@@ -42,6 +43,7 @@ function initials(name: string) {
 }
 
 export default function Chat() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -578,9 +580,7 @@ export default function Chat() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">CHAT · 12</span>
-        <h2 className="crm-section-title">
-          Внутренний <em>чат.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('chat.title')}</h2>
       </div>
 
       <div className={`card chat-card${mobileShowList ? ' show-list' : ' show-thread'}`} style={{

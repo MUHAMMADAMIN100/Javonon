@@ -13,6 +13,7 @@ import {
 import { listUsers } from '../api/users';
 import { ROLE_LABEL, type Role } from '../api/types';
 import { displayRoleLabel } from '../lib/roles';
+import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
@@ -36,6 +37,7 @@ function defaultMonthRange() {
 }
 
 export default function Salary() {
+  const { t } = useT();
   const { toast, confirm } = useUI();
   const [userId, setUserId] = useState<string>('');
   const [{ start, end }, setRange] = useState(defaultMonthRange());
@@ -135,9 +137,7 @@ export default function Salary() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">PAYROLL · 09</span>
-        <h2 className="crm-section-title">
-          Зарплата <em>сотрудников.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('salary.title')}</h2>
       </div>
 
       {/* Калькулятор */}

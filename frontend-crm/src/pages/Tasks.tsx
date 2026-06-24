@@ -14,10 +14,12 @@ import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
 import { isElevated, displayRoleLabel } from '../lib/roles';
+import { useT } from '../lib/i18n';
 
 type Scope = 'all' | 'mine';
 
 export default function Tasks() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
@@ -139,7 +141,7 @@ export default function Tasks() {
       transition={{ duration: 0.3 }}
     >
       <div className="card-header">
-        <h2 className="card-title">Задачи</h2>
+        <h2 className="card-title">{t('tasks.title')}</h2>
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && (
             <div className="scope-switch">

@@ -32,11 +32,13 @@ import {
   deleteCustomRole,
 } from '../api/customRoles';
 import ScheduleEditor from '../components/ScheduleEditor';
+import { useT } from '../lib/i18n';
 
 type Tab = 'schedule' | 'penalties' | 'location' | 'roles' | 'salary';
 
 export default function Settings() {
   const me = useAuth((s) => s.user);
+  const { t } = useT();
   const [tab, setTab] = useState<Tab>('schedule');
 
   if (!isFounder(me)) {
@@ -51,9 +53,7 @@ export default function Settings() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">SYSTEM</span>
-        <h2 className="crm-section-title">
-          Настройки <em>компании.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('settings.title')}</h2>
       </div>
 
       <div className="card" style={{ padding: 0 }}>
@@ -63,11 +63,11 @@ export default function Settings() {
           gap: 4,
           padding: '8px 8px 0',
         }}>
-          <TabButton active={tab === 'schedule'} onClick={() => setTab('schedule')} label="График работы" />
-          <TabButton active={tab === 'penalties'} onClick={() => setTab('penalties')} label="Штрафы" />
-          <TabButton active={tab === 'location'} onClick={() => setTab('location')} label="Гео-зона" />
-          <TabButton active={tab === 'roles'} onClick={() => setTab('roles')} label="Роли и доступы" />
-          <TabButton active={tab === 'salary'} onClick={() => setTab('salary')} label="Зарплата" />
+          <TabButton active={tab === 'schedule'} onClick={() => setTab('schedule')} label={t('settings.tab.schedule')} />
+          <TabButton active={tab === 'penalties'} onClick={() => setTab('penalties')} label={t('settings.tab.penalties')} />
+          <TabButton active={tab === 'location'} onClick={() => setTab('location')} label={t('settings.tab.location')} />
+          <TabButton active={tab === 'roles'} onClick={() => setTab('roles')} label={t('settings.tab.roles')} />
+          <TabButton active={tab === 'salary'} onClick={() => setTab('salary')} label={t('settings.tab.salary')} />
         </div>
         <div style={{ padding: 24 }}>
           {tab === 'schedule' && <ScheduleTab />}

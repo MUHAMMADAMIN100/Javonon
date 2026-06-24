@@ -5,6 +5,7 @@ import { KpiRow, leaderboard } from '../api/kpi';
 import { ROLE_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -18,6 +19,7 @@ const RANGES: Array<{ label: string; days: number | null }> = [
 ];
 
 export default function Kpi() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const [rangeIdx, setRangeIdx] = useState(2); // 30 days по умолчанию
 
@@ -39,9 +41,7 @@ export default function Kpi() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">KPI · 10</span>
-        <h2 className="crm-section-title">
-          Эффективность <em>команды.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('kpi.title')}</h2>
       </div>
 
       <div className="filters" style={{ alignItems: 'center' }}>

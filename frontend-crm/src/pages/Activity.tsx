@@ -5,6 +5,7 @@ import { listActivity, ACTIVITY_LABEL, type ActivityAction, type ActivityEntry }
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
+import { useT } from '../lib/i18n';
 
 // Каждое действие — своя иконка + цвет (для визуального timeline'а).
 const ACTION_VISUAL: Record<ActivityAction, { icon: string; color: string; bg: string }> = {
@@ -38,6 +39,7 @@ function groupByDay(items: ActivityEntry[]) {
 }
 
 export default function Activity() {
+  const { t } = useT();
   const qc = useQueryClient();
   const [action, setAction] = useState<ActivityAction | ''>('');
   const [from, setFrom] = useState('');
@@ -113,7 +115,7 @@ export default function Activity() {
 
       <div className="card">
         <div className="card-header">
-          <h2 className="card-title">Журнал событий</h2>
+          <h2 className="card-title">{t('activity.title')}</h2>
           <button className="btn btn-secondary btn-sm" onClick={reset}>
             <Icon name="filter_alt_off" size={16} style={{ marginRight: 4 }} /> Сброс
           </button>

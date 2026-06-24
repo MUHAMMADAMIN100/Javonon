@@ -19,6 +19,7 @@ import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString('ru-RU', {
@@ -35,6 +36,7 @@ const OUTCOME_COLOR: Record<CallOutcome, string> = {
 };
 
 export default function Calls() {
+  const { t } = useT();
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
@@ -134,9 +136,7 @@ export default function Calls() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">CALL LOG · 12</span>
-        <h2 className="crm-section-title">
-          Журнал <em>звонков.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('calls.title')}</h2>
       </div>
 
       {/* Форма записи звонка */}

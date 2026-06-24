@@ -16,6 +16,7 @@ import Programs from './pages/Programs';
 import ProgramDetail from './pages/ProgramDetail';
 import Activity from './pages/Activity';
 import TimeTracker from './pages/TimeTracker';
+import Workday from './pages/Workday';
 import Finance from './pages/Finance';
 import Salary from './pages/Salary';
 import Kpi from './pages/Kpi';
@@ -64,7 +65,10 @@ export default function App() {
         <Route path="/profile/:id" element={<UserDetail />} />
         <Route path="/me" element={<MyProfile />} />
         <Route path="/activity" element={<Activity />} />
-        <Route path="/time" element={<TimeTracker />} />
+        <Route path="/workday" element={<Workday />} />
+        {/* Legacy: старые ссылки /time, /attendance, /excuses
+            теперь открываются как табы внутри /workday. */}
+        <Route path="/time" element={<Workday />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/calls" element={<Calls />} />
         <Route path="/settings" element={<Settings />} />
@@ -72,8 +76,8 @@ export default function App() {
         <Route path="/massmail" element={<MassMail />} />
         <Route path="/inbox" element={<Inbox />} />
         <Route path="/offers" element={<Offers />} />
-        <Route path="/excuses" element={<Excuses />} />
-        <Route path="/attendance" element={<Attendance />} />
+        <Route path="/excuses" element={<Workday />} />
+        <Route path="/attendance" element={<Workday />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/salary" element={<Salary />} />
         <Route path="/kpi" element={<Kpi />} />

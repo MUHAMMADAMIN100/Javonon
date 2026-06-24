@@ -6,6 +6,7 @@ import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useOptimisticMutation } from '../lib/optimistic';
+import { useT } from '../lib/i18n';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', weekday: 'short' });
@@ -13,6 +14,7 @@ function fmtDate(iso: string) {
 
 export default function Reports() {
   const { toast } = useUI();
+  const { t } = useT();
   const [calls, setCalls] = useState('0');
   const [meetings, setMeetings] = useState('0');
   const [contacted, setContacted] = useState('0');
@@ -87,9 +89,7 @@ export default function Reports() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">DAILY REPORT · 11</span>
-        <h2 className="crm-section-title">
-          Сегодняшний <em>отчёт.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('reports.title')}</h2>
       </div>
 
       <motion.div

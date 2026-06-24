@@ -29,6 +29,7 @@ import { listPayments, confirmPayment, rejectPayment, type Payment, PAYMENT_METH
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { tjToday } from '../lib/tjTime';
+import { useT } from '../lib/i18n';
 
 function fmtMoney(n: number, currency = 'TJS'): string {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -39,6 +40,7 @@ function fmtDate(iso: string): string {
 }
 
 export default function Finance() {
+  const { t } = useT();
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const [filterType, setFilterType] = useState<TransactionType | ''>('');
@@ -211,9 +213,7 @@ export default function Finance() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">FINANCE · 08</span>
-        <h2 className="crm-section-title">
-          Деньги <em>под контролем.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('finance.title')}</h2>
       </div>
 
       {/* Bento с финансовой сводкой */}

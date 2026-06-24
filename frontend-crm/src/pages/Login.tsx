@@ -5,10 +5,12 @@ import { useAuth } from '../store/auth';
 import { compose, email as emailRule, hasErrors, minLen, required, validateAll } from '../utils/validators';
 import PasswordInput from '../components/PasswordInput';
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
 
 export default function Login() {
   const navigate = useNavigate();
   const login = useAuth((s) => s.login);
+  const { t } = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -96,8 +98,8 @@ export default function Login() {
           <span className="login-logo-label">CRM</span>
         </motion.div>
 
-        <h2>Вход в панель.</h2>
-        <p className="login-sub">Используйте учётные данные менеджера для доступа к рабочей среде.</p>
+        <h2>{t('auth.title')}</h2>
+        <p className="login-sub">{t('auth.subtitle')}</p>
 
         <AnimatePresence>
           {error && (
@@ -115,12 +117,12 @@ export default function Login() {
         </AnimatePresence>
 
         <div className="form-group">
-          <label>Email</label>
+          <label>{t('auth.email')}</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+            onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
             className={showErr('email') ? 'input-error' : ''}
             placeholder="you@javonon.com"
             required
@@ -129,11 +131,11 @@ export default function Login() {
           {showErr('email') && <div className="form-error-text">{errors.email}</div>}
         </div>
         <div className="form-group">
-          <label>Пароль</label>
+          <label>{t('auth.password')}</label>
           <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+            onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
             className={showErr('password') ? 'input-error' : ''}
             placeholder="••••••••"
             required
@@ -149,8 +151,8 @@ export default function Login() {
           whileHover={!submitting ? { scale: 1.01 } : {}}
           whileTap={!submitting ? { scale: 0.99 } : {}}
         >
-          {submitting ? 'Входим...' : (
-            <>Войти <Icon name="arrow_outward" size={16} /></>
+          {submitting ? t('auth.logging') : (
+            <>{t('auth.login')} <Icon name="arrow_outward" size={16} /></>
           )}
         </motion.button>
       </motion.form>

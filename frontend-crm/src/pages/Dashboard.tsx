@@ -8,6 +8,7 @@ import { DIRECTION_LABEL, STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { keys } from '../lib/queryKeys';
 import { isElevated, hasRole } from '../lib/roles';
+import { useT } from '../lib/i18n';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -22,6 +23,7 @@ const fadeUp = {
 };
 
 export default function Dashboard() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const isAdmin = isElevated(me);
   // hasRole учитывает мульти-роли (ТЗ §2). Раньше было `me?.role === 'ACCOUNTANT'`
@@ -86,9 +88,7 @@ export default function Dashboard() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">КЛЮЧЕВЫЕ МЕТРИКИ</span>
-        <h2 className="crm-section-title">
-          Итоги <em>в моменте.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('dashboard.title')}</h2>
       </div>
 
       <div className="bento" style={{ marginBottom: 32 }}>

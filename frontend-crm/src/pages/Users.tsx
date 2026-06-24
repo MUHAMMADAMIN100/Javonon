@@ -7,6 +7,7 @@ import { ROLE_LABEL, type Role, type User } from '../api/types';
 import { listCustomRoles } from '../api/customRoles';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
+import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, passwordRule, required, validateAll } from '../utils/validators';
 import ChangePasswordModal from '../components/ChangePasswordModal';
@@ -23,6 +24,7 @@ const EMPTY_FORM = {
 };
 
 export default function Users() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const [creating, setCreating] = useState(false);
@@ -139,7 +141,7 @@ export default function Users() {
   return (
     <div className="card">
       <div className="card-header">
-        <h2 className="card-title">Пользователи системы</h2>
+        <h2 className="card-title">{t('users.title')}</h2>
         <button className="btn btn-primary" onClick={openCreate}>+ Добавить</button>
       </div>
       <div className="card-body">
@@ -261,7 +263,7 @@ export default function Users() {
               <div className="dialog-icon">
                 <Icon name="person_add" size={28} />
               </div>
-              <div className="dialog-title">Новый сотрудник</div>
+              <div className="dialog-title">{t('users.new')}</div>
               <div className="dialog-message" style={{ marginBottom: 16 }}>
                 Заполни данные нового пользователя системы.
               </div>

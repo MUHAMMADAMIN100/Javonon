@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import {
@@ -33,6 +34,7 @@ const ROLE_TABS: { key: Role | null; label: string }[] = [
  * текущую (если ещё никто не подписал), смотреть список подписавших.
  */
 export default function Offers() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -64,9 +66,7 @@ export default function Offers() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">LEGAL</span>
-        <h2 className="crm-section-title">
-          Оферты <em>сотрудников.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('offers.title')}</h2>
       </div>
 
       {/* Табы по ролям (по ТЗ §1 — у каждой роли своя оферта). */}

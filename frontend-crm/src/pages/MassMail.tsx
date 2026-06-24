@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import {
@@ -26,6 +27,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function MassMail() {
+  const { t } = useT();
   const me = useAuth((s) => s.user);
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
@@ -80,9 +82,7 @@ export default function MassMail() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">CAMPAIGNS</span>
-        <h2 className="crm-section-title">
-          Массовые <em>рассылки.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('massmail.title')}</h2>
       </div>
 
       <motion.div className="card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ padding: 22, marginBottom: 16 }}>

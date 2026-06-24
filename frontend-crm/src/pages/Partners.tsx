@@ -11,19 +11,19 @@ import {
   fmtMoneyCents,
 } from '../api/partners';
 import { useUI } from '../ui/Dialogs';
+import { useT } from '../lib/i18n';
 
 type Tab = 'partners' | 'commissions' | 'payouts';
 
 export default function Partners() {
+  const { t } = useT();
   const [tab, setTab] = useState<Tab>('partners');
 
   return (
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">PARTNERS · 14</span>
-        <h2 className="crm-section-title">
-          Партнёрская <em>программа.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('partners.title')}</h2>
       </div>
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>

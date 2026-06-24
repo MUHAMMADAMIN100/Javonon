@@ -108,9 +108,11 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   if (show('programs:read', isWorkforce)) coreLinks.push({ to: '/programs', icon: 'menu_book', label: t('sidebar.programs') });
   if (show('tasks:read', isWorkforce)) coreLinks.push({ to: '/tasks', icon: 'task_alt', label: t('sidebar.tasks') });
   if (show('chat:read', true)) coreLinks.push({ to: '/chat', icon: 'forum', label: t('sidebar.chat') });
-  if (show('inbox:read', isWorkforce)) coreLinks.push({ to: '/inbox', icon: 'inbox', label: 'Входящие' });
-  // Время / Профиль — у всех залогиненных без исключения.
-  coreLinks.push({ to: '/time', icon: 'schedule', label: t('sidebar.time') });
+  if (show('inbox:read', isWorkforce)) coreLinks.push({ to: '/inbox', icon: 'inbox', label: t('sidebar.inbox') });
+  // ТЗ-доработка: «Время / Посещаемость / Причины» → одна вкладка
+  // «Рабочий день» (/workday) со вкладками внутри. FOUNDER видит все
+  // 3 вкладки, остальные — только «Моё время».
+  coreLinks.push({ to: '/workday', icon: 'schedule', label: t('sidebar.workday') });
   if (show('reports:read', isWorkforce)) coreLinks.push({ to: '/reports', icon: 'description', label: t('sidebar.reports') });
   if (show('calls:read', isWorkforce)) coreLinks.push({ to: '/calls', icon: 'call', label: t('sidebar.calls') });
   if (show('kpi:read', isWorkforce)) coreLinks.push({ to: '/kpi', icon: 'leaderboard', label: t('sidebar.kpi') });
@@ -123,18 +125,14 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
 
   // Admin / management
   const adminLinks: Array<{ to: string; icon: string; label: string }> = [];
-  if (show('pipelines:write', elevated)) adminLinks.push({ to: '/pipelines', icon: 'route', label: 'Воронки' });
-  if (show('mass-mail:write', elevated)) adminLinks.push({ to: '/massmail', icon: 'campaign', label: 'Рассылки' });
-  // Оферты — пока без permission, только elevated. Custom-role-юзеры
-  // не имеют доступа к управлению оффертами.
-  if (!hasCustomRole && elevated) adminLinks.push({ to: '/offers', icon: 'description', label: 'Оферты' });
-  if (show('lms:read', elevated)) adminLinks.push({ to: '/lms', icon: 'menu_book', label: 'Обучение' });
-  if (show('partners:read', elevated)) adminLinks.push({ to: '/partners', icon: 'handshake', label: 'Партнёры' });
-  if (show('activity:read', elevated)) adminLinks.push({ to: '/activity', icon: 'history', label: 'Активность' });
+  if (show('pipelines:write', elevated)) adminLinks.push({ to: '/pipelines', icon: 'route', label: t('sidebar.pipelines') });
+  if (show('mass-mail:write', elevated)) adminLinks.push({ to: '/massmail', icon: 'campaign', label: t('sidebar.massmail') });
+  if (!hasCustomRole && elevated) adminLinks.push({ to: '/offers', icon: 'description', label: t('sidebar.offers') });
+  if (show('lms:read', elevated)) adminLinks.push({ to: '/lms', icon: 'menu_book', label: t('sidebar.lms') });
+  if (show('partners:read', elevated)) adminLinks.push({ to: '/partners', icon: 'handshake', label: t('sidebar.partners') });
+  if (show('activity:read', elevated)) adminLinks.push({ to: '/activity', icon: 'history', label: t('sidebar.activity') });
   if (show('users:read', elevated)) adminLinks.push({ to: '/users', icon: 'group', label: t('sidebar.users') });
   if (isFounder) {
-    adminLinks.push({ to: '/excuses', icon: 'gavel', label: 'Причины' });
-    adminLinks.push({ to: '/attendance', icon: 'fact_check', label: 'Посещаемость' });
     adminLinks.push({ to: '/settings', icon: 'settings', label: t('sidebar.settings') });
   }
 
@@ -227,7 +225,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
             <span className="sidebar-nav-icon">
               <Icon name="library_books" size={22} />
             </span>
-            <span>База знаний</span>
+            <span>{t('sidebar.knowledge')}</span>
             <Icon name="open_in_new" size={14} style={{ marginLeft: 'auto', opacity: 0.5 }} />
           </a>
         </motion.div>

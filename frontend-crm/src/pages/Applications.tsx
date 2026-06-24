@@ -14,6 +14,7 @@ import Pagination from '../components/Pagination';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
+import { useT } from '../lib/i18n';
 
 type Scope = 'all' | 'mine';
 
@@ -28,6 +29,7 @@ const PAGE_SIZE = 20;
 const MANAGER_ROLES = new Set(['SALES_MANAGER', 'CLIENT_MANAGER']);
 
 export default function Applications() {
+  const { t } = useT();
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
@@ -100,7 +102,7 @@ export default function Applications() {
       transition={{ duration: 0.3 }}
     >
       <div className="card-header">
-        <h2 className="card-title">Заявки</h2>
+        <h2 className="card-title">{t('app.title')}</h2>
         {isAdmin && (
           <div className="scope-switch">
             <button

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import { useT } from '../lib/i18n';
 import {
   InboxChannel,
   InboxMessage,
@@ -23,6 +24,7 @@ const CHANNEL_COLOR: Record<InboxChannel, string> = {
 };
 
 export default function Inbox() {
+  const { t } = useT();
   const [channelFilter, setChannelFilter] = useState<InboxChannel | ''>('');
   const [selected, setSelected] = useState<{ channel: InboxChannel; handle: string } | null>(null);
 
@@ -38,9 +40,7 @@ export default function Inbox() {
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">UNIFIED INBOX</span>
-        <h2 className="crm-section-title">
-          Входящие <em>сообщения.</em>
-        </h2>
+        <h2 className="crm-section-title">{t('inbox.title')}</h2>
       </div>
 
       <div className="inbox-grid" style={{
