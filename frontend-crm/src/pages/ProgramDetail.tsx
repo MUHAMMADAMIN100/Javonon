@@ -319,7 +319,7 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
   return (
     <div className="card" style={{ padding: 20, marginTop: 16 }}>
       <h3 style={{ marginBottom: 12 }}>{t('programs.section.comments')} ({items.length})</h3>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'flex-start' }}>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -332,6 +332,9 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
           className="btn btn-primary"
           onClick={submit}
           disabled={!draft.trim() || sending}
+          // alignSelf + flexShrink:0 чтобы кнопка не вытягивалась когда
+          // пользователь увеличивает textarea ручкой resize. ТЗ-фикс.
+          style={{ alignSelf: 'flex-start', flexShrink: 0 }}
         >
           {sending ? t('common.sending') : t('common.send')}
         </button>

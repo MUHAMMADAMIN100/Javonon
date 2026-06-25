@@ -274,7 +274,7 @@ export default function Finance() {
         <div style={{
           width: 36, height: 36, borderRadius: 10,
           background: 'var(--primary)',
-          color: 'var(--text)',
+          color: 'white',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
         }}>
@@ -316,7 +316,7 @@ export default function Finance() {
           className="btn"
           style={{
             background: 'var(--primary)',
-            color: 'var(--text)',
+            color: 'white',
             border: 'none',
           }}
           disabled={aiBusy || !aiInput.trim()}
