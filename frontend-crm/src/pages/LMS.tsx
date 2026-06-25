@@ -101,7 +101,7 @@ export default function Lms() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">LMS · 13</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.lms14')}</span>
         <h2 className="crm-section-title">{t('lms.title')}</h2>
       </div>
 
@@ -125,7 +125,7 @@ export default function Lms() {
               letterSpacing: '0.12em',
               color: 'var(--text-soft)',
               textTransform: 'uppercase',
-            }}>Курсы</div>
+            }}>{t('lms.courses')}</div>
             {isAdmin && (
               <button className="btn btn-sm btn-secondary" onClick={() => setShowNew((v) => !v)}>
                 <Icon name="add" size={14} />
@@ -177,10 +177,10 @@ export default function Lms() {
                   color: 'var(--text-soft)',
                   textTransform: 'uppercase',
                 }}>
-                  <span>{c._count?.lessons ?? 0} уроков</span>
+                  <span>{c._count?.lessons ?? 0} {t('lms.lessons')}</span>
                   <span>·</span>
-                  <span>{c._count?.enrollments ?? 0} студентов</span>
-                  {c.published && <span style={{ color: 'var(--primary-dark)' }}>· опубликовано</span>}
+                  <span>{c._count?.enrollments ?? 0} {t('lms.students')}</span>
+                  {c.published && <span style={{ color: 'var(--primary-dark)' }}>· {t('lms.course.published')}</span>}
                 </div>
               </button>
             ))}
@@ -198,17 +198,13 @@ export default function Lms() {
                 color: 'var(--text-light)',
                 textTransform: 'uppercase',
                 marginBottom: 12,
-              }}>NO COURSE SELECTED</div>
+              }}>{t('eyebrow.noCourseSelected')}</div>
               <h3 style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 28,
                 fontWeight: 500,
                 letterSpacing: '-0.02em',
-              }}>Выбери курс <em style={{
-                fontFamily: 'Times New Roman, Georgia, serif',
-                fontWeight: 400,
-                color: 'var(--primary-dark)',
-              }}>слева.</em></h3>
+              }}>{t('lms.selectLeft')}</h3>
             </div>
           ) : (
             <CourseEditor

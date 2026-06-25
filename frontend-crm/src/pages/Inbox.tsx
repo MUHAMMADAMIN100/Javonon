@@ -39,7 +39,7 @@ export default function Inbox() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">UNIFIED INBOX</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.unifiedInbox')}</span>
         <h2 className="crm-section-title">{t('inbox.title')}</h2>
       </div>
 

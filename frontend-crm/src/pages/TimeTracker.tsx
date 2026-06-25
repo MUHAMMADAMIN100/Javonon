@@ -79,12 +79,12 @@ export default function TimeTracker() {
   useRealtimeEvent('excuse:approved', () => {
     qc.invalidateQueries({ queryKey: todayKey });
     qc.invalidateQueries({ queryKey: historyKey });
-    toast('Основатель одобрил вашу причину — штраф не списан', 'success');
+    toast(t('excuses.status.APPROVED'), 'success');
   });
   useRealtimeEvent('excuse:rejected', () => {
     qc.invalidateQueries({ queryKey: todayKey });
     qc.invalidateQueries({ queryKey: historyKey });
-    toast('Основатель отклонил вашу причину — штраф будет списан', 'error');
+    toast(t('excuses.status.REJECTED'), 'error');
   });
   const history = historyQuery.data ?? [];
 
@@ -166,7 +166,7 @@ export default function TimeTracker() {
     }
   }
 
-  const statusLabel = isClockedOut ? 'НЕ В РАБОТЕ' : isWorking ? 'РАБОТАЮ' : 'НА ОБЕДЕ';
+  const statusLabel = isClockedOut ? t('workday.notWorking') : isWorking ? t('time.status.working') : t('time.status.lunch');
   const statusColor = isClockedOut
     ? 'var(--text-light)'
     : isWorking
@@ -176,7 +176,7 @@ export default function TimeTracker() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">HR · 04</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.hr04')}</span>
         <h2 className="crm-section-title">{t('time.title')}</h2>
       </div>
 
@@ -224,8 +224,8 @@ export default function TimeTracker() {
               marginTop: 8,
             }}>
               {today
-                ? `Начал: ${fmtTime(today.clockIn)} · Перерыв: ${fmtMin(today.totalLunchMinutes)}${today.lateMinutes > 0 ? ` · Опоздание: ${today.lateMinutes}м` : ''}`
-                : 'Сегодня ещё не начинал работу'}
+                ? `${t('workday.field.arrival')}: ${fmtTime(today.clockIn)} · ${t('workday.col.lunch')}: ${fmtMin(today.totalLunchMinutes)}${today.lateMinutes > 0 ? ` · ${t('workday.col.late')}: ${today.lateMinutes}${t('common.minutes')}` : ''}`
+                : t('workday.notStarted')}
             </div>
           </div>
 
@@ -236,10 +236,10 @@ export default function TimeTracker() {
             gap: 20,
             minWidth: 280,
           }}>
-            <TimeStamp label="Приход" value={fmtTime(today?.clockIn || null)} />
-            <TimeStamp label="Уход на обед" value={fmtTime(today?.lunchOut || null)} />
-            <TimeStamp label="Возврат" value={fmtTime(today?.lunchIn || null)} />
-            <TimeStamp label="Уход" value={fmtTime(today?.clockOut || null)} />
+            <TimeStamp label={t('workday.field.arrival')} value={fmtTime(today?.clockIn || null)} />
+            <TimeStamp label={t('workday.field.lunchOut')} value={fmtTime(today?.lunchOut || null)} />
+            <TimeStamp label={t('workday.field.lunchIn')} value={fmtTime(today?.lunchIn || null)} />
+            <TimeStamp label={t('workday.field.leave')} value={fmtTime(today?.clockOut || null)} />
           </div>
         </div>
 
@@ -366,9 +366,9 @@ export default function TimeTracker() {
 
       {/* История */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
-        <span className="crm-section-eyebrow">HISTORY · LAST 30 DAYS</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.historyLast30')}</span>
         <h2 className="crm-section-title">
-          Журнал <em>рабочих дней.</em>
+          {t('workday.journal')}
         </h2>
       </div>
 
@@ -376,20 +376,20 @@ export default function TimeTracker() {
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>Дата</th>
-              <th>Приход</th>
-              <th>Обед</th>
-              <th>Уход</th>
-              <th>Опоздание</th>
-              <th>Отработано</th>
-              <th>Переработка</th>
+              <th>{t('workday.col.date')}</th>
+              <th>{t('workday.col.arrival')}</th>
+              <th>{t('workday.col.lunch')}</th>
+              <th>{t('workday.col.leave')}</th>
+              <th>{t('workday.col.late')}</th>
+              <th>{t('workday.col.worked')}</th>
+              <th>{t('workday.col.overtime')}</th>
             </tr>
           </thead>
           <tbody>
             <AnimatePresence>
               {history.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty">Нет записей</td>
+                  <td colSpan={7} className="empty">{t('common.empty')}</td>
                 </tr>
               )}
               {history.map((h) => (
@@ -405,7 +405,7 @@ export default function TimeTracker() {
                   <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtTime(h.clockOut)}</td>
                   <td>
                     {h.lateMinutes > 0 ? (
-                      <span className="badge badge-warning">{h.lateMinutes}м</span>
+                      <span className="badge badge-warning">{h.lateMinutes}{t('common.minutes')}</span>
                     ) : (
                       <span style={{ color: 'var(--text-light)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>—</span>
                     )}
@@ -416,7 +416,7 @@ export default function TimeTracker() {
                     fontSize: 16,
                     letterSpacing: '-0.01em',
                   }}>
-                    {h.status === 'OFF' ? fmtMin(h.totalMinutes) : <span style={{ color: 'var(--primary-dark)' }}>в процессе…</span>}
+                    {h.status === 'OFF' ? fmtMin(h.totalMinutes) : <span style={{ color: 'var(--primary-dark)' }}>…</span>}
                   </td>
                   <td>
                     {h.overtimeMinutes > 0 ? (
@@ -449,7 +449,7 @@ export default function TimeTracker() {
             onDone={() => {
               setShowExcuseModal(false);
               qc.invalidateQueries({ queryKey: todayKey });
-              toast('Причина отправлена основателю — ждите решения', 'success');
+              toast(t('toast.sent'), 'success');
             }}
             onError={(e) => toast(e, 'error')}
           />

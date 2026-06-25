@@ -58,7 +58,7 @@ export default function Attendance() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">HR · ПОСЕЩАЕМОСТЬ</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.hr')} · {t('workday.tab.attendance')}</span>
         <h2 className="crm-section-title">{t('attendance.title')}</h2>
       </div>
 

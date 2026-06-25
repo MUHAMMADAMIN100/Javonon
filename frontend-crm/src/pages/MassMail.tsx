@@ -82,7 +82,7 @@ export default function MassMail() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">CAMPAIGNS</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.campaigns')}</span>
         <h2 className="crm-section-title">{t('massmail.title')}</h2>
       </div>
 

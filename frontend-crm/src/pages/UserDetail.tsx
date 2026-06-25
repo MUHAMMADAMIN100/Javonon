@@ -74,7 +74,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
     <>
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">
-          {isAdmin ? `ТА · ${displayRoleLabel(user as any).toUpperCase()}` : 'МОЙ ПРОФИЛЬ'}
+          {isAdmin ? `${t('eyebrow.team')} · ${displayRoleLabel(user as any).toUpperCase()}` : t('eyebrow.profile')}
         </span>
         <h2 className="crm-section-title">{user.fullName}</h2>
       </div>
@@ -116,24 +116,16 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
       {/* Зарплата — параметры расчёта */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>Зарплата · параметры</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('userDetail.section.salary')}</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          <Field label="Фикс/мес" value={fmtMoney(salary.baseSalary)} />
-          <Field label="Почасовая" value={fmtMoney(salary.hourlyRate)} />
-          <Field label="Бонус %" value={`${salary.bonusPercent}%`} />
+          <Field label={t('userDetail.field.baseSalary')} value={fmtMoney(salary.baseSalary)} />
+          <Field label={t('userDetail.field.hourlyRate')} value={fmtMoney(salary.hourlyRate)} />
+          <Field label={t('userDetail.field.bonusPercent')} value={`${salary.bonusPercent}%`} />
           <Field
-            label="KPI цель"
-            value={
-              `${kpi.targetPct}% от лидов` +
-              ((user.kpiAutoStepPct ?? 0) > 0
-                ? ` · авто +${user.kpiAutoStepPct}%/мес до ${user.kpiMaxPct ?? 3}%`
-                : '')
-            }
+            label={t('userDetail.field.kpiTarget')}
+            value={`${kpi.targetPct}%`}
           />
         </div>
-        <p style={{ marginTop: 12, fontSize: 13, color: 'var(--text-soft)' }}>
-          <b>Формула:</b> Зарплата = фикс + почасовая × часы + ({salary.bonusPercent}% × продажи) + KPI-бонус − штрафы
-        </p>
       </section>
 
       {/* Индивидуальный график работы — FOUNDER задаёт лично для этого сотрудника
@@ -141,70 +133,67 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       {isFounder(meStore) && (
         <section className="card" style={{ padding: 22, marginBottom: 14 }}>
           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
-            Личный график работы
+            {t('userDetail.section.schedule')}
           </h3>
-          <ScheduleEditor
-            userId={realId}
-            hint={`Этот график перекрывает дефолтный для «${user.fullName}». Если день не задан — используется компанийский дефолт из «Настройки → График работы».`}
-          />
+          <ScheduleEditor userId={realId} />
         </section>
       )}
 
       {/* Текущий месяц — фактика */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>Текущий месяц</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('profile.month.current')}</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          <Stat label="Часы" value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} раб.дней`} />
-          <Stat label="Опоздания" value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
-          <Stat label="Переработка" value={fmtMinutes(attendance.overtimeMinutes)} accent="green" />
-          <Stat label="Продажи" value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} сделок`} />
-          <Stat label="Заявок в этом месяце (всего)" value={String(kpi.totalLeadsMonth)} sub={`из них ${kpi.ownClientsMonth} моих`} />
-          <Stat label="Зачислено" value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`нужно ≥${kpi.requiredClosed}`} />
-          <Stat label="KPI %" value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`цель ${kpi.targetPct}%`} />
-          <Stat label="Штрафы (pending)" value={fmtMoney(penalties.pendingTotal)} accent="red" />
+          <Stat label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
+          <Stat label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
+          <Stat label={t('profile.month.overtime')} value={fmtMinutes(attendance.overtimeMinutes)} accent="green" />
+          <Stat label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}`} />
+          <Stat label={t('profile.month.leadsTotal')} value={String(kpi.totalLeadsMonth)} sub={`${kpi.ownClientsMonth} ${t('profile.month.myOwn')}`} />
+          <Stat label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />
+          <Stat label={t('profile.month.kpiPct')} value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.target')} ${kpi.targetPct}%`} />
+          <Stat label={t('profile.month.penalties')} value={fmtMoney(penalties.pendingTotal)} accent="red" />
         </div>
       </section>
 
       {/* История зарплат */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>История начислений</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('profile.salaryHistory')}</h3>
         {salary.records.length === 0 ? (
-          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>Расчётов пока нет</div>
+          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>{t('profile.salaryEmpty')}</div>
         ) : (
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Период</th>
-                  <th>Часы</th>
-                  <th>База</th>
-                  <th>Продажи</th>
-                  <th>Бонус</th>
+                  <th>{t('common.period')}</th>
+                  <th>{t('profile.month.hours')}</th>
+                  <th>{t('settings.salary.field.base')}</th>
+                  <th>{t('profile.month.sales')}</th>
+                  <th>{t('partners.tab.commissions')}</th>
                   <th>KPI</th>
-                  <th>Штрафы</th>
-                  <th>К выплате</th>
-                  <th>Статус</th>
+                  <th>{t('profile.month.penalties')}</th>
+                  <th>{t('finance.paymentForPay')}</th>
+                  <th>{t('common.status')}</th>
                 </tr>
               </thead>
               <tbody>
                 {salary.records.map((r) => (
                   <tr key={r.id}>
-                    <td data-label="Период">{new Date(r.periodStart).toLocaleDateString('ru-RU')} – {new Date(r.periodEnd).toLocaleDateString('ru-RU')}</td>
-                    <td data-label="Часы">{fmtMinutes(r.workedMinutes)}</td>
-                    <td data-label="База">{fmtMoney(r.baseAmount, r.currency)}</td>
-                    <td data-label="Продажи">{fmtMoney(r.salesAmount, r.currency)}</td>
-                    <td data-label="Бонус">{fmtMoney(r.bonusAmount, r.currency)}</td>
-                    <td data-label="KPI">{fmtMoney(r.kpiBonus, r.currency)}</td>
-                    <td data-label="Штрафы" style={{ color: r.penalties > 0 ? 'var(--danger)' : undefined }}>
+                    <td>{new Date(r.periodStart).toLocaleDateString('ru-RU')} – {new Date(r.periodEnd).toLocaleDateString('ru-RU')}</td>
+                    <td>{fmtMinutes(r.workedMinutes)}</td>
+                    <td>{fmtMoney(r.baseAmount, r.currency)}</td>
+                    <td>{fmtMoney(r.salesAmount, r.currency)}</td>
+                    <td>{fmtMoney(r.bonusAmount, r.currency)}</td>
+                    <td>{fmtMoney(r.kpiBonus, r.currency)}</td>
+                    <td style={{ color: r.penalties > 0 ? 'var(--danger)' : undefined }}>
                       {fmtMoney(r.penalties, r.currency)}
                     </td>
-                    <td data-label="К выплате"><b>{fmtMoney(r.netAmount, r.currency)}</b></td>
-                    <td data-label="Статус">
+                    <td><b>{fmtMoney(r.netAmount, r.currency)}</b></td>
+                    <td>
                       <span style={{
                         fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
                         background: r.status === 'PAID' ? '#dcfce7' : '#fef3c7',
                         color: r.status === 'PAID' ? '#15803d' : '#b45309',
-                      }}>{r.status === 'PAID' ? 'ВЫПЛАЧЕНО' : 'ЧЕРНОВИК'}</span>
+                      }}>{r.status === 'PAID' ? t('partners.payout.status.PAID').toUpperCase() : t('massmail.status.DRAFT').toUpperCase()}</span>
                     </td>
                   </tr>
                 ))}
@@ -216,29 +205,33 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
       {/* Штрафы */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>Штрафы</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('profile.month.penalties')}</h3>
         {penalties.list.length === 0 ? (
-          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>Штрафов нет</div>
+          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>{t('common.empty')}</div>
         ) : (
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Дата</th>
-                  <th>Причина</th>
-                  <th>Сумма</th>
-                  <th>Применён в ЗП</th>
+                  <th>{t('profile.penaltyCol.date')}</th>
+                  <th>{t('profile.penaltyCol.reason')}</th>
+                  <th>{t('profile.penaltyCol.amount')}</th>
+                  <th>{t('profile.penaltyCol.applied')}</th>
                 </tr>
               </thead>
               <tbody>
-                {penalties.list.map((p) => (
+                {penalties.list.map((p) => {
+                  const reasonKey = `penalty.reason.${p.reason}`;
+                  const reasonLbl = t(reasonKey) !== reasonKey ? t(reasonKey) : p.reason;
+                  return (
                   <tr key={p.id}>
-                    <td data-label="Дата">{new Date(p.date).toLocaleDateString('ru-RU')}</td>
-                    <td data-label="Причина">{p.reason}{p.comment ? ` · ${p.comment}` : ''}</td>
-                    <td data-label="Сумма" style={{ color: 'var(--danger)' }}>{fmtMoney(p.amount, p.currency)}</td>
-                    <td data-label="Применён">{p.applied ? '✓' : '—'}</td>
+                    <td>{new Date(p.date).toLocaleDateString('ru-RU')}</td>
+                    <td>{reasonLbl}{p.comment ? ` · ${p.comment}` : ''}</td>
+                    <td style={{ color: 'var(--danger)' }}>{fmtMoney(p.amount, p.currency)}</td>
+                    <td>{p.applied ? '✓' : '—'}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -250,7 +243,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
       {/* Документы */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>Документы</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('userDetail.section.documents')}</h3>
         {canManageDocs && (
           <DocUploader
             userId={realId}
@@ -259,7 +252,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           />
         )}
         {documents.length === 0 ? (
-          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center', marginTop: 8 }}>Документов нет</div>
+          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center', marginTop: 8 }}>{t('common.empty')}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
             {documents.map((d) => (
@@ -275,7 +268,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                     {d.comment ? ` · ${d.comment}` : ''}
                   </div>
                 </div>
-                <a href={d.url} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">Открыть</a>
+                <a href={d.url} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">{t('common.open')}</a>
                 {canManageDocs && (
                   <DocEditButton
                     doc={d}
@@ -289,10 +282,10 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                     className="btn btn-sm btn-danger"
                     onClick={async () => {
                       const ok = await confirm({
-                        title: 'Удалить документ?',
+                        title: t('common.delete') + '?',
                         message: `«${d.originalName || LABEL[d.type]}»`,
                         danger: true,
-                        confirmText: 'Удалить',
+                        confirmText: t('common.delete'),
                       });
                       if (!ok) return;
                       try {
@@ -302,12 +295,12 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                           await deleteMyDocument(d.id);
                         }
                         qc.invalidateQueries({ queryKey });
-                        toast('Документ удалён', 'success');
+                        toast(t('toast.deleted'), 'success');
                       } catch (e: any) {
-                        toast(e?.response?.data?.message || 'Ошибка', 'error');
+                        toast(e?.response?.data?.message || t('toast.error'), 'error');
                       }
                     }}
-                  >Удалить</button>
+                  >{t('common.delete')}</button>
                 )}
               </div>
             ))}
@@ -320,29 +313,29 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
       {/* Ежедневные отчёты текущего месяца */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>Отчёты этого месяца</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('profile.reportsMonth')}</h3>
         {dailyReports.length === 0 ? (
-          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>Отчётов пока нет</div>
+          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>{t('profile.reportsEmpty')}</div>
         ) : (
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Дата</th>
-                  <th>Звонки</th>
-                  <th>Встречи</th>
-                  <th>Сделки</th>
-                  <th>Сумма</th>
+                  <th>{t('common.date')}</th>
+                  <th>{t('eyebrow.calls')}</th>
+                  <th>{t('eyebrow.meetings')}</th>
+                  <th>{t('reports.up.dealsClosed')}</th>
+                  <th>{t('common.amount')}</th>
                 </tr>
               </thead>
               <tbody>
                 {dailyReports.map((r) => (
                   <tr key={r.id}>
-                    <td data-label="Дата">{new Date(r.date).toLocaleDateString('ru-RU')}</td>
-                    <td data-label="Звонки">{r.callsCount ?? 0}</td>
-                    <td data-label="Встречи">{r.meetingsCount ?? 0}</td>
-                    <td data-label="Сделки">{r.salesCount ?? 0}</td>
-                    <td data-label="Сумма">{r.salesAmount ? fmtMoney(r.salesAmount) : '—'}</td>
+                    <td>{new Date(r.date).toLocaleDateString('ru-RU')}</td>
+                    <td>{r.callsCount ?? 0}</td>
+                    <td>{r.meetingsCount ?? 0}</td>
+                    <td>{r.salesCount ?? 0}</td>
+                    <td>{r.salesAmount ? fmtMoney(r.salesAmount) : '—'}</td>
                   </tr>
                 ))}
               </tbody>

@@ -41,7 +41,7 @@ export default function Kpi() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">KPI · 10</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.kpi10')}</span>
         <h2 className="crm-section-title">{t('kpi.title')}</h2>
       </div>
 
@@ -85,9 +85,9 @@ export default function Kpi() {
               }}>{t('kpi.label.youSales')}</div>
             </div>
           </div>
-          <KpiBento eyebrow="CONVERSION" label={t('kpi.col.conversion')} value={`${myRow.conversionRate}%`} accent />
-          <KpiBento eyebrow="ENROLLED" label={t('kpi.col.enrolled')} value={String(myRow.applicationsEnrolled)} />
-          <KpiBento eyebrow="STUDENTS" label={t('kpi.col.students')} value={String(myRow.studentsCount)} span="span-3" />
+          <KpiBento eyebrow={t('kpi.col.conversion').toUpperCase()} label={t('kpi.col.conversion')} value={`${myRow.conversionRate}%`} accent />
+          <KpiBento eyebrow={t('kpi.col.enrolled').toUpperCase()} label={t('kpi.col.enrolled')} value={String(myRow.applicationsEnrolled)} />
+          <KpiBento eyebrow={t('kpi.col.students').toUpperCase()} label={t('kpi.col.students')} value={String(myRow.studentsCount)} span="span-3" />
         </motion.div>
       )}
 

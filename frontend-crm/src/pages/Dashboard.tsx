@@ -77,17 +77,17 @@ export default function Dashboard() {
     accent?: 'feature' | 'accent' | undefined;
     span: string; row?: string;
   }> = [
-    { eyebrow: 'TOTAL · 01', label: t('dashboard.kpi.total'), value: appStats?.total ?? '—', accent: 'feature', span: 'span-4', row: 'row-2' },
-    { eyebrow: 'NEW · 02', label: t('dashboard.kpi.new'), value: newCount, span: 'span-2' },
-    { eyebrow: 'PIPELINE · 03', label: t('dashboard.kpi.pipeline'), value: inProgress, accent: 'accent', span: 'span-2' },
-    { eyebrow: 'ACTIVE · 04', label: t('dashboard.kpi.active'), value: activeStudents, span: 'span-3' },
-    { eyebrow: 'WIN · 05', label: t('dashboard.kpi.enrolled'), value: enrolled, span: 'span-3' },
+    { eyebrow: `${t('eyebrow.total')} · 01`, label: t('dashboard.kpi.total'), value: appStats?.total ?? '—', accent: 'feature', span: 'span-4', row: 'row-2' },
+    { eyebrow: `${t('eyebrow.new')} · 02`, label: t('dashboard.kpi.new'), value: newCount, span: 'span-2' },
+    { eyebrow: `${t('eyebrow.pipeline')} · 03`, label: t('dashboard.kpi.pipeline'), value: inProgress, accent: 'accent', span: 'span-2' },
+    { eyebrow: `${t('eyebrow.active')} · 04`, label: t('dashboard.kpi.active'), value: activeStudents, span: 'span-3' },
+    { eyebrow: `${t('eyebrow.win')} · 05`, label: t('dashboard.kpi.enrolled'), value: enrolled, span: 'span-3' },
   ];
 
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">KPI</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.kpi')}</span>
         <h2 className="crm-section-title">{t('dashboard.title')}</h2>
       </div>
 
@@ -147,7 +147,7 @@ export default function Dashboard() {
       {showFinance && finance && (
         <>
           <div className="crm-section-head" style={{ marginTop: 8 }}>
-            <span className="crm-section-eyebrow">FINANCE · MONEY MAP</span>
+            <span className="crm-section-eyebrow">{t('eyebrow.financeMoney')}</span>
             <h2 className="crm-section-title">{t('dashboard.section.finance')}</h2>
           </div>
           <div className="bento" style={{ marginBottom: 32 }}>
@@ -177,18 +177,18 @@ export default function Dashboard() {
             </motion.div>
 
             <SmallBento
-              eyebrow="INCOME · 07"
+              eyebrow={`${t('eyebrow.income')} · 07`}
               label={t('dashboard.finance.income')}
               value={fmtMoney(finance.totalIncome)}
               accent
             />
             <SmallBento
-              eyebrow="EXPENSE · 08"
+              eyebrow={`${t('eyebrow.expense')} · 08`}
               label={t('dashboard.finance.expense')}
               value={fmtMoney(finance.totalExpense)}
             />
             <SmallBento
-              eyebrow="DEBT · 09"
+              eyebrow={`${t('dashboard.finance.debt')} · 09`}
               label={t('dashboard.finance.debt')}
               value={String(pending.length)}
               span="span-3"
@@ -201,7 +201,7 @@ export default function Dashboard() {
       {isAdmin && topPerformers.length > 0 && (
         <>
           <div className="crm-section-head" style={{ marginTop: 8 }}>
-            <span className="crm-section-eyebrow">TOP TEAM · LEADERBOARD</span>
+            <span className="crm-section-eyebrow">{t('eyebrow.topTeamLeader')}</span>
             <h2 className="crm-section-title">{t('dashboard.section.top')}</h2>
           </div>
           <div style={{
@@ -265,13 +265,13 @@ export default function Dashboard() {
       )}
 
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">DETAILS</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.details')}</span>
         <h2 className="crm-section-title">{t('dashboard.section.breakdown')}</h2>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
         <BreakdownCard
-          eyebrow="01 · DIRECTIONS"
+          eyebrow={`01 · ${t('eyebrow.directions')}`}
           title={t('dashboard.breakdown.directions')}
           rows={(appStats?.byDirection || []).map((d: any) => ({
             label: DIRECTION_LABEL[d.direction as keyof typeof DIRECTION_LABEL] || d.direction,
@@ -279,7 +279,7 @@ export default function Dashboard() {
           }))}
         />
         <BreakdownCard
-          eyebrow="02 · CABINETS"
+          eyebrow={`02 · ${t('eyebrow.cabinets')}`}
           title={t('dashboard.breakdown.cabinets')}
           rows={(stuStats?.byCabinet || []).map((c: any) => ({
             label: `${t('app.field.cabinet')} ${c.cabinet}`,
@@ -287,7 +287,7 @@ export default function Dashboard() {
           }))}
         />
         <BreakdownCard
-          eyebrow="03 · FUNNEL"
+          eyebrow={`03 · ${t('eyebrow.funnel')}`}
           title={t('dashboard.breakdown.funnel')}
           rows={(appStats?.byStatus || []).map((s: any) => ({
             label: STATUS_LABEL[s.status as keyof typeof STATUS_LABEL] || s.status,

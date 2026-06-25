@@ -52,7 +52,7 @@ export default function Settings() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">SYSTEM</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.system')}</span>
         <h2 className="crm-section-title">{t('settings.title')}</h2>
       </div>
 

@@ -212,7 +212,7 @@ export default function Finance() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">FINANCE · 08</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.finance08')}</span>
         <h2 className="crm-section-title">{t('finance.title')}</h2>
       </div>
 
@@ -224,7 +224,7 @@ export default function Finance() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <span className="bento-num">REVENUE · 01</span>
+            <span className="bento-num">{t('eyebrow.revenue')} · 01</span>
             <div style={{ marginTop: 'auto' }}>
               <div style={{
                 fontFamily: 'var(--font-display)',
@@ -248,9 +248,9 @@ export default function Finance() {
             </div>
           </motion.div>
 
-          <KpiBento eyebrow="INCOME · 02" label={t('dashboard.finance.income')} value={fmtMoney(summary.totalIncome)} accent />
-          <KpiBento eyebrow="EXPENSE · 03" label={t('dashboard.finance.expense')} value={fmtMoney(summary.totalExpense)} />
-          <KpiBento eyebrow="COUNT · 04" label={t('finance.transactions')} value={String(summary.incomeCount + summary.expenseCount)} span="span-3" />
+          <KpiBento eyebrow={`${t('eyebrow.income')} · 02`} label={t('dashboard.finance.income')} value={fmtMoney(summary.totalIncome)} accent />
+          <KpiBento eyebrow={`${t('eyebrow.expense')} · 03`} label={t('dashboard.finance.expense')} value={fmtMoney(summary.totalExpense)} />
+          <KpiBento eyebrow={`${t('eyebrow.count')} · 04`} label={t('finance.transactions')} value={String(summary.incomeCount + summary.expenseCount)} span="span-3" />
         </div>
       )}
 
@@ -449,7 +449,7 @@ export default function Finance() {
       {paymentRequests.length > 0 && (
         <div style={{ marginBottom: 32 }}>
           <div className="crm-section-head">
-            <span className="crm-section-eyebrow" style={{ color: 'var(--primary-dark)' }}>PAYMENT REQUESTS · WAITING FOR YOU</span>
+            <span className="crm-section-eyebrow" style={{ color: 'var(--primary-dark)' }}>{t('eyebrow.paymentRequests')}</span>
             <h2 className="crm-section-title">{t('finance.paymentRequests')}</h2>
           </div>
           <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
@@ -520,7 +520,7 @@ export default function Finance() {
       {pending.length > 0 && (
         <div style={{ marginBottom: 32 }}>
           <div className="crm-section-head">
-            <span className="crm-section-eyebrow" style={{ color: '#b45309' }}>OUTSTANDING · WAITING FOR PAYMENT</span>
+            <span className="crm-section-eyebrow" style={{ color: '#b45309' }}>{t('eyebrow.outstandingPayment')}</span>
             <h2 className="crm-section-title">{t('finance.outstanding')}</h2>
           </div>
           <div className="card" style={{ padding: 0 }}>
@@ -564,7 +564,7 @@ export default function Finance() {
 
       {/* Управление транзакциями */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
-        <span className="crm-section-eyebrow">LEDGER · ALL TRANSACTIONS</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.ledgerAll')}</span>
         <h2 className="crm-section-title">{t('finance.ledger')}</h2>
       </div>
 

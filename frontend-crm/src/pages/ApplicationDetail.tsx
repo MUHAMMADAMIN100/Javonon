@@ -294,7 +294,7 @@ export default function ApplicationDetail() {
                   <div className="stage-dot">
                     {done ? <Icon name="check" size={16} /> : <span>{i + 1}</span>}
                   </div>
-                  <div className="stage-label">{STATUS_SHORT[stage]}</div>
+                  <div className="stage-label">{t(`app.short.${stage}`) !== `app.short.${stage}` ? t(`app.short.${stage}`) : STATUS_SHORT[stage]}</div>
                   {i < APPLICATION_STAGES.length - 1 && <div className="stage-connector" />}
                 </div>
               );

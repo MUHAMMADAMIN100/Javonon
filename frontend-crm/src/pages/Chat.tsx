@@ -579,7 +579,7 @@ export default function Chat() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">CHAT · 12</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.chat')} · 12</span>
         <h2 className="crm-section-title">{t('chat.title')}</h2>
       </div>
 

@@ -88,7 +88,7 @@ export default function Reports() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">DAILY REPORT · 11</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.dailyReport11')}</span>
         <h2 className="crm-section-title">{t('reports.title')}</h2>
       </div>
 
@@ -151,16 +151,16 @@ export default function Reports() {
 
       {/* Сводка за период */}
       <div className="bento" style={{ marginBottom: 24 }}>
-        <SmallStat eyebrow="SALES · 30 DAYS" value={`$${totalSalesAmount.toLocaleString('ru-RU')}`} label="Сумма продаж" span="span-3" accent />
-        <SmallStat eyebrow="DEALS · 30 DAYS" value={String(totalSalesCount)} label="Сделок закрыто" span="span-3" />
-        <SmallStat eyebrow="CALLS" value={String(totalCalls)} label="Звонков" span="span-2" />
-        <SmallStat eyebrow="MEETINGS" value={String(totalMeetings)} label="Встреч" span="span-2" />
-        <SmallStat eyebrow="APPS" value={String(totalContacted)} label="Заявок" span="span-2" />
+        <SmallStat eyebrow={t('eyebrow.sales30')} value={`$${totalSalesAmount.toLocaleString('ru-RU')}`} label={t('reports.up.totalSales')} span="span-3" accent />
+        <SmallStat eyebrow={t('eyebrow.deals30')} value={String(totalSalesCount)} label={t('reports.up.dealsClosed')} span="span-3" />
+        <SmallStat eyebrow={t('eyebrow.calls')} value={String(totalCalls)} label={t('reports.up.calls')} span="span-2" />
+        <SmallStat eyebrow={t('eyebrow.meetings')} value={String(totalMeetings)} label={t('reports.up.meetings')} span="span-2" />
+        <SmallStat eyebrow={t('eyebrow.apps')} value={String(totalContacted)} label={t('reports.up.apps')} span="span-2" />
       </div>
 
       {/* История */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
-        <span className="crm-section-eyebrow">HISTORY · LAST 30 DAYS</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.historyLast30')}</span>
         <h2 className="crm-section-title">{t('reports.history')}</h2>
       </div>
       <div className="card" style={{ padding: 0 }}>

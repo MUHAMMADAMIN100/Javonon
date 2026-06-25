@@ -50,7 +50,7 @@ export default function Excuses() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">HR · ПРИЧИНЫ</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.hr')} · {t('workday.tab.excuses')}</span>
         <h2 className="crm-section-title">{t('excuses.title')}</h2>
       </div>
 

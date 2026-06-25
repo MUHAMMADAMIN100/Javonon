@@ -136,7 +136,7 @@ export default function Salary() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">PAYROLL · 09</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.payroll09')}</span>
         <h2 className="crm-section-title">{t('salary.title')}</h2>
       </div>
 
@@ -148,7 +148,7 @@ export default function Salary() {
           letterSpacing: '0.16em',
           color: 'var(--primary-dark)',
           marginBottom: 6,
-        }}>CALCULATOR · LIVE PREVIEW</div>
+        }}>{t('eyebrow.calculatorPreview')}</div>
         <h3 style={{
           fontFamily: 'var(--font-display)',
           fontSize: 26,
@@ -156,11 +156,7 @@ export default function Salary() {
           letterSpacing: '-0.02em',
           marginBottom: 24,
         }}>
-          Расчёт <em style={{
-            fontFamily: 'Times New Roman, Georgia, serif',
-            fontWeight: 400,
-            color: 'var(--primary-dark)',
-          }}>за период.</em>
+          {t('salary.calc.title')}
         </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
@@ -293,7 +289,7 @@ export default function Salary() {
 
       {/* История расчётов */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
-        <span className="crm-section-eyebrow">HISTORY · ALL RECORDS</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.historyAllRecords')}</span>
         <h2 className="crm-section-title">{t('salary.history')}</h2>
       </div>
 

@@ -67,7 +67,7 @@ export default function Offers() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">LEGAL</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.legal')}</span>
         <h2 className="crm-section-title">{t('offers.title')}</h2>
       </div>
 

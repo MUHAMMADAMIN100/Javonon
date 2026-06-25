@@ -80,7 +80,7 @@ export default function Activity() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">AUDIT · 06</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.audit06')}</span>
         <h2 className="crm-section-title">
           Хронология <em>действий.</em>
         </h2>

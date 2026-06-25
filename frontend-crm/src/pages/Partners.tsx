@@ -22,7 +22,7 @@ export default function Partners() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">PARTNERS · 14</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.partners15')}</span>
         <h2 className="crm-section-title">{t('partners.title')}</h2>
       </div>
 

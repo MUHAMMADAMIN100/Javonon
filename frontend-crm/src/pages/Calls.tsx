@@ -135,7 +135,7 @@ export default function Calls() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">CALL LOG · 12</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.callLog12')}</span>
         <h2 className="crm-section-title">{t('calls.title')}</h2>
       </div>
 
@@ -234,29 +234,27 @@ export default function Calls() {
 
       {/* Моя сводка */}
       <div className="bento" style={{ marginBottom: 24 }}>
-        <SmallStat eyebrow="CALLS" value={String(mine.total)} label="Всего звонков" span="span-3" accent />
-        <SmallStat eyebrow="ON LINE" value={fmtDuration(mine.seconds)} label="На линии" span="span-3" />
-        <SmallStat eyebrow="ANSWERED" value={String(mine.answered)} label="С ответом" span="span-3" />
-        <SmallStat eyebrow="DEALS" value={String(mine.converted)} label="Конверсий" span="span-3" />
+        <SmallStat eyebrow={t('eyebrow.calls')} value={String(mine.total)} label={t('calls.col.total')} span="span-3" accent />
+        <SmallStat eyebrow={t('calls.col.onLine')} value={fmtDuration(mine.seconds)} label={t('calls.col.onLineLabel')} span="span-3" />
+        <SmallStat eyebrow={t('calls.col.answered')} value={String(mine.answered)} label={t('calls.col.withAnswer')} span="span-3" />
+        <SmallStat eyebrow={t('eyebrow.deals30')} value={String(mine.converted)} label={t('calls.col.conversions')} span="span-3" />
       </div>
 
       {/* Статистика по команде — ADMIN */}
       {isAdmin && stats.length > 0 && (
         <>
           <div className="crm-section-head" style={{ marginTop: 32 }}>
-            <span className="crm-section-eyebrow">TEAM · PERFORMANCE</span>
-            <h2 className="crm-section-title">
-              Звонки <em>команды.</em>
-            </h2>
+            <span className="crm-section-eyebrow">{t('eyebrow.teamPerformance')}</span>
+            <h2 className="crm-section-title">{t('calls.team.title')}</h2>
           </div>
           <div className="card" style={{ padding: 0, marginBottom: 24 }}>
             <table className="table" style={{ width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Сотрудник</th>
-                  <th>Звонков</th>
-                  <th>На линии</th>
-                  <th>Конверсий</th>
+                  <th>{t('kpi.col.employee')}</th>
+                  <th>{t('calls.col.totalCalls')}</th>
+                  <th>{t('calls.col.onLineLabel')}</th>
+                  <th>{t('calls.col.conversions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -280,10 +278,8 @@ export default function Calls() {
 
       {/* История звонков */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
-        <span className="crm-section-eyebrow">HISTORY</span>
-        <h2 className="crm-section-title">
-          Последние <em>звонки.</em>
-        </h2>
+        <span className="crm-section-eyebrow">{t('eyebrow.history')}</span>
+        <h2 className="crm-section-title">{t('calls.recent')}</h2>
       </div>
       <div className="card" style={{ padding: 0 }}>
         <table className="table" style={{ width: '100%' }}>
@@ -301,7 +297,7 @@ export default function Calls() {
           </thead>
           <tbody>
             {calls.length === 0 && (
-              <tr><td colSpan={isAdmin ? 8 : 7} className="empty">Пока нет звонков</td></tr>
+              <tr><td colSpan={isAdmin ? 8 : 7} className="empty">{t('common.empty')}</td></tr>
             )}
             {calls.map((c) => (
               <tr key={c.id}>
@@ -317,9 +313,9 @@ export default function Calls() {
                 {isAdmin && (
                   <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{c.user?.fullName || '—'}</td>
                 )}
-                <td style={{ fontSize: 13 }}>{CALL_DIRECTION_LABEL[c.direction]}</td>
+                <td style={{ fontSize: 13 }}>{t(`calls.dir.${c.direction}`)}</td>
                 <td style={{ fontSize: 13, fontWeight: 600, color: OUTCOME_COLOR[c.outcome] }}>
-                  {CALL_OUTCOME_LABEL[c.outcome]}
+                  {t(`calls.out.${c.outcome}`)}
                 </td>
                 <td style={{ fontFamily: 'var(--font-mono)' }}>{fmtDuration(c.durationSeconds)}</td>
                 <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>
