@@ -207,7 +207,21 @@ function NumberField({ label, value, onChange, highlight }: {
         min={0}
         step={highlight ? '0.01' : 1}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onFocus={(e) => {
+          // Если в поле стоит "0" — сразу выделяем, чтобы первое нажатие
+          // цифры затёрло нолик, а не дописало к нему ("03" → пользователь
+          // не мог стереть ведущий 0). UX-фикс по скриншоту.
+          if (value === '0' || value === '') e.currentTarget.select();
+        }}
+        onChange={(e) => {
+          let v = e.target.value;
+          // Убираем leading zeros у целых чисел: "03" → "3", "001" → "1".
+          // Десятичные ("0.5") не трогаем. Пустое — оставляем пустым.
+          if (v.length > 1 && v.startsWith('0') && !v.startsWith('0.')) {
+            v = v.replace(/^0+/, '') || '0';
+          }
+          onChange(v);
+        }}
         style={{
           fontFamily: 'var(--font-display)',
           fontSize: 22,
