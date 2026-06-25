@@ -137,9 +137,12 @@ export default function NotificationBell() {
 
   const onItemClick = (n: Notification) => {
     if (!n.read) {
+      // markReadMut уже инвалидирует unread-count (invalidateAlso),
+      // оптимистично помечает item как read в listKey. Раньше тут был
+      // ещё ручной декремент qc.setQueryData(unread), но при быстрых
+      // двойных кликах по одному элементу счётчик расходился с реальностью.
+      // Полагаемся на серверный refetch после мутации.
       markReadMut.mutate(n.id);
-      // Оптимистично обновляем счётчик: декремент.
-      qc.setQueryData<number>(keys.notifications.unread(), (c) => Math.max(0, (c ?? 0) - 1));
     }
     const href = notificationHref(n);
     if (href) {
@@ -260,8 +263,8 @@ export default function NotificationBell() {
                         title={t('notif.markRead')}
                         onClick={(e) => {
                           e.stopPropagation();
+                          // invalidateAlso в markReadMut обновит счётчик.
                           markReadMut.mutate(n.id);
-                          qc.setQueryData<number>(keys.notifications.unread(), (c) => Math.max(0, (c ?? 0) - 1));
                         }}
                       >
                         <Icon name="done" size={16} />

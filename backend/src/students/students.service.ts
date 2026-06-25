@@ -166,7 +166,15 @@ export class StudentsService {
     }
     const plainPassword = generatePassword(8);
     const passwordHash = await bcrypt.hash(plainPassword, 10);
-    await this.prisma.student.update({ where: { id }, data: { password: passwordHash } });
+    // tokenVersion: { increment: 1 } — отзыв всех ранее выпущенных
+    // JWT этого студента (sec audit fix: раньше старый токен жил 7д).
+    await this.prisma.student.update({
+      where: { id },
+      data: {
+        password: passwordHash,
+        tokenVersion: { increment: 1 },
+      },
+    });
     return { email: existing.email, password: plainPassword };
   }
 
@@ -477,21 +485,43 @@ export class StudentsService {
     });
     this.realtime.emitStudentAndStaff(studentId, 'document:uploaded', { studentId, doc });
     this.realtime.emitStudentAndStaff(studentId, 'student:updated', { studentId });
+    // Audit trail — кто и когда загрузил какой документ (sec audit fix).
+    if (user) {
+      this.activity.log({
+        actorId: user.id,
+        actorRole: user.role || 'UNKNOWN',
+        action: 'DOCUMENT_UPLOAD',
+        studentId,
+        studentName: existing.fullName,
+        details: `Загружен ${type} · ${file.originalname}`,
+        payload: { documentId: doc.id, type, size: file.size },
+      }).catch(() => undefined);
+    }
     return doc;
   }
 
   async removeDocument(documentId: string, user: CurrentUser) {
     const doc = await this.prisma.document.findUnique({
       where: { id: documentId },
-      include: { student: { select: { managerId: true } } },
+      include: { student: { select: { managerId: true, fullName: true } } },
     });
     if (!doc) throw new NotFoundException('Документ не найден');
-    if (doc.student) this.ensureCanEdit(doc.student, user);
+    if (doc.student) this.ensureCanEdit(doc.student as any, user);
     await this.prisma.document.delete({ where: { id: documentId } });
     const studentId = (doc as any).studentId;
     if (studentId) {
       this.realtime.emitStudentAndStaff(studentId, 'document:deleted', { studentId, docId: documentId });
       this.realtime.emitStudentAndStaff(studentId, 'student:updated', { studentId });
+      // Audit trail — кто и когда удалил какой документ (sec audit fix).
+      this.activity.log({
+        actorId: user.id,
+        actorRole: user.role || 'UNKNOWN',
+        action: 'DOCUMENT_DELETE',
+        studentId,
+        studentName: (doc as any).student?.fullName ?? null,
+        details: `Удалён ${doc.type} · ${doc.originalName}`,
+        payload: { documentId, type: doc.type, originalName: doc.originalName },
+      }).catch(() => undefined);
     }
     return { ok: true };
   }

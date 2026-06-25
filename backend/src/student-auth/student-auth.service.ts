@@ -49,7 +49,11 @@ export class StudentAuthService {
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await this.prisma.student.update({
       where: { id: student.id },
-      data: { password: passwordHash },
+      data: {
+        password: passwordHash,
+        // Инвалидируем все старые токены студента (sec audit fix).
+        tokenVersion: { increment: 1 },
+      },
     });
     // Отправляем письмо со ссылкой и новым паролем
     const loginUrl = process.env.STUDENT_LOGIN_URL || 'https://javonon.vercel.app/login';
@@ -157,6 +161,10 @@ export class StudentAuthService {
       sub: student.id,
       email: student.email,
       role: 'STUDENT',
+      // Используется StudentJwtGuard для инвалидации старых токенов
+      // после смены пароля (sec audit fix). 0 для новых, increment в
+      // regeneratePassword/changePassword.
+      tokenVersion: (student as any).tokenVersion ?? 0,
     });
     return {
       token,
@@ -182,6 +190,7 @@ export class StudentAuthService {
       sub: student.id,
       email: student.email,
       role: 'STUDENT',
+      tokenVersion: (student as any).tokenVersion ?? 0,
     });
     return {
       token,

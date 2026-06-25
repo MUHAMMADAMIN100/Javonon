@@ -333,6 +333,11 @@ model Student {
   // Multiple null-email'ов разрешены (Prisma allows multiple NULLs).
   email           String?    @unique
   password        String?
+  /// Версия токена для инвалидации старых JWT после смены пароля.
+  /// Инкрементируется в regeneratePassword/changePassword. Старые токены
+  /// (с прежним tokenVersion) отбрасываются StudentJwtStrategy. Без этого
+  /// после reset пароля старый JWT жил ещё 7 дней — sec audit fix.
+  tokenVersion    Int        @default(0)
   applicationForm Json?
   photoUrl        String?
   direction    Direction

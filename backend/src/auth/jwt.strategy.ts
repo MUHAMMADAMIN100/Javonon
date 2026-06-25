@@ -31,6 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // custom-роли FOUNDER'ом доступы применялись сразу, без перевыпуска JWT.
     // Selective fields: только то что нужно RolesGuard'у.
     let permissions: string[] = [];
+    let hasCustomRole = false;
     try {
       const u = await this.prisma.user.findUnique({
         where: { id: payload.sub },
@@ -40,6 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       });
       if (u?.customRole?.isActive) {
         permissions = u.customRole.permissions || [];
+        hasCustomRole = true;
       }
     } catch {
       // Если БД недоступна — лучше пропустить permissions, чем уронить
@@ -55,6 +57,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // FOUNDER неявно имеет доступ ко всему (см. RolesGuard).
       roles: (payload.roles || []).map(normalize),
       permissions,
+      // Флаг для RolesGuard: если у юзера активная кастомная роль —
+      // base role (которая в БД как «подложка») не должна давать доступ
+      // через @Roles(). Только permissions из custom role + неявные
+      // permission-проверки по URL.
+      hasCustomRole,
     };
   }
 }

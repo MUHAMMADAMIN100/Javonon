@@ -8,7 +8,9 @@ export type ActivityAction =
   | 'STUDENT_CREATE'
   | 'STUDENT_DELETE'
   | 'MANAGER_CHANGE'
-  | 'PROGRAM_CHANGE';
+  | 'PROGRAM_CHANGE'
+  | 'DOCUMENT_UPLOAD'
+  | 'DOCUMENT_DELETE';
 
 @Injectable()
 export class ActivityService {

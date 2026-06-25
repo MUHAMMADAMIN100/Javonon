@@ -30,8 +30,16 @@ export class RolesGuard implements CanActivate {
     // FOUNDER — неявный супер-доступ.
     if (isFounder(user)) return true;
 
-    // OR: явная роль из @Roles(...)
-    if (requiredRoles.length > 0 && hasRole(user, ...requiredRoles)) return true;
+    // ТЗ-доработка: если у юзера активная кастомная роль (например «Таргетолог»),
+    // base role в БД — техническая «подложка» и НЕ должна давать доступа
+    // через @Roles(). Кастомная роль ЗАМЕНЯЕТ базу для целей авторизации:
+    // доступ — только по permissions из CustomRole + неявные permission
+    // checks по URL ниже. Без этого «Таргетолог» с base SALES_MANAGER
+    // получал бы все endpoints @Roles('SALES_MANAGER').
+    const skipBaseRole = !!user.hasCustomRole;
+
+    // OR: явная роль из @Roles(...) — только если нет активной custom-роли.
+    if (!skipBaseRole && requiredRoles.length > 0 && hasRole(user, ...requiredRoles)) return true;
     // OR: явный permission из @Permissions(...)
     if (requiredPerms.length > 0 && hasPermission(user, ...requiredPerms)) return true;
     // OR: implicit permission — если URL+method покрывается каким-либо

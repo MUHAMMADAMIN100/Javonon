@@ -29,24 +29,55 @@ import { isElevated } from '../lib/roles';
 // HTML-тегов и фигурных скобок (XSS / template-injection в audit логи).
 const safeText = (s: string) => s.replace(/[<>{}[\]\\]/g, '');
 
-// Helpers для markdown-кнопок описания. Оборачивают / вставляют
-// маркеры в конце текущего value (без работы с курсором — простой UX).
-function wrapDescription(
+// Helpers для markdown-кнопок описания. Вставляют по позиции курсора:
+// если есть выделение — оборачивают его, иначе — placeholder между
+// маркерами; курсор после вставки оказывается внутри маркеров.
+function wrapAtCursor(
+  ta: HTMLTextAreaElement | null,
   editing: any,
   setEditing: (v: any) => void,
   open: string,
   close: string,
+  placeholder = 'текст',
 ) {
   const cur = editing?.description || '';
-  setEditing({ ...editing, description: `${cur}${open}текст${close}` });
+  if (!ta) {
+    setEditing({ ...editing, description: `${cur}${open}${placeholder}${close}` });
+    return;
+  }
+  const start = ta.selectionStart ?? cur.length;
+  const end = ta.selectionEnd ?? cur.length;
+  const selected = cur.slice(start, end) || placeholder;
+  const next = cur.slice(0, start) + open + selected + close + cur.slice(end);
+  setEditing({ ...editing, description: next });
+  // Возвращаем фокус и ставим курсор внутри маркеров.
+  requestAnimationFrame(() => {
+    ta.focus();
+    const caretStart = start + open.length;
+    const caretEnd = caretStart + selected.length;
+    ta.setSelectionRange(caretStart, caretEnd);
+  });
 }
-function insertDescription(
+function insertAtCursor(
+  ta: HTMLTextAreaElement | null,
   editing: any,
   setEditing: (v: any) => void,
   snippet: string,
 ) {
   const cur = editing?.description || '';
-  setEditing({ ...editing, description: `${cur}${snippet}` });
+  if (!ta) {
+    setEditing({ ...editing, description: `${cur}${snippet}` });
+    return;
+  }
+  const start = ta.selectionStart ?? cur.length;
+  const end = ta.selectionEnd ?? cur.length;
+  const next = cur.slice(0, start) + snippet + cur.slice(end);
+  setEditing({ ...editing, description: next });
+  requestAnimationFrame(() => {
+    ta.focus();
+    const caret = start + snippet.length;
+    ta.setSelectionRange(caret, caret);
+  });
 }
 
 const LANGUAGES = [
@@ -101,6 +132,12 @@ export default function Programs() {
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [pendingPreview, setPendingPreview] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const descRef = useRef<HTMLTextAreaElement | null>(null);
+  // Локальные «отложенные» галерея и стипендии для НОВОЙ программы
+  // (нет id для upload, пока не сохранили). См. ТЗ-доработка п.4 + п.10.
+  const [pendingGalleryFiles, setPendingGalleryFiles] = useState<File[]>([]);
+  const [pendingGalleryPreviews, setPendingGalleryPreviews] = useState<string[]>([]);
+  const [pendingScholarships, setPendingScholarships] = useState<Array<Partial<ProgramScholarship>>>([]);
 
   useEffect(() => {
     return () => {
@@ -127,6 +164,11 @@ export default function Programs() {
       URL.revokeObjectURL(pendingPreview);
       setPendingPreview(null);
     }
+    // Освобождаем object URLs предпросмотра галереи (избегаем утечки памяти).
+    pendingGalleryPreviews.forEach((u) => URL.revokeObjectURL(u));
+    setPendingGalleryFiles([]);
+    setPendingGalleryPreviews([]);
+    setPendingScholarships([]);
   };
 
   const filters = {
@@ -163,15 +205,34 @@ export default function Programs() {
   });
 
   const saveMut = useInvalidatingMutation({
-    mutationFn: async (vars: { editing: Partial<Program>; pendingImage: File | null }) => {
+    mutationFn: async (vars: {
+      editing: Partial<Program>;
+      pendingImage: File | null;
+      pendingGalleryFiles: File[];
+      pendingScholarships: Array<Partial<ProgramScholarship>>;
+    }) => {
       const payload = {
         ...vars.editing,
         cost: typeof vars.editing.cost === 'string' ? parseFloat(vars.editing.cost) : vars.editing.cost,
       };
+      // UPDATE — обычный путь.
       if (vars.editing.id) {
         return updateProgram(vars.editing.id, payload);
       }
-      return createProgram(payload, vars.pendingImage);
+      // CREATE — после создания программы flush отложенных галереи и стипендий.
+      // ТЗ-доработка п.4 + п.10: возможность приложить фото и стипендии при
+      // создании, до того как программа имеет id.
+      const created = await createProgram(payload, vars.pendingImage);
+      for (const f of vars.pendingGalleryFiles) {
+        try { await uploadProgramGalleryImage(created.id, f); }
+        catch (e) { console.error('gallery upload failed', e); }
+      }
+      for (const sch of vars.pendingScholarships) {
+        if (!sch.name?.trim()) continue;
+        try { await addProgramScholarship(created.id, sch); }
+        catch (e) { console.error('scholarship add failed', e); }
+      }
+      return created;
     },
     invalidate: [keys.programs.all],
     onSuccess: (_data, vars) => {
@@ -231,7 +292,7 @@ export default function Programs() {
   const onSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing || formInvalid) return;
-    saveMut.mutate({ editing, pendingImage });
+    saveMut.mutate({ editing, pendingImage, pendingGalleryFiles, pendingScholarships });
   };
 
   const onPickImage = (file: File) => {
@@ -635,23 +696,24 @@ export default function Programs() {
                 <label>{t('programs.field.description')}</label>
                 <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
                   <button type="button" className="btn btn-sm btn-secondary" title="Жирный"
-                    onClick={() => wrapDescription(editing, setEditing, '**', '**')}>
+                    onClick={() => wrapAtCursor(descRef.current, editing, setEditing, '**', '**')}>
                     <b>Ж</b>
                   </button>
                   <button type="button" className="btn btn-sm btn-secondary" title="Курсив"
-                    onClick={() => wrapDescription(editing, setEditing, '*', '*')}>
+                    onClick={() => wrapAtCursor(descRef.current, editing, setEditing, '*', '*')}>
                     <i>К</i>
                   </button>
                   <button type="button" className="btn btn-sm btn-secondary" title="Маркированный список"
-                    onClick={() => insertDescription(editing, setEditing, '\n- ')}>
+                    onClick={() => insertAtCursor(descRef.current, editing, setEditing, '\n- ')}>
                     • Список
                   </button>
                   <button type="button" className="btn btn-sm btn-secondary" title="Ссылка"
-                    onClick={() => insertDescription(editing, setEditing, '[текст](https://)')}>
+                    onClick={() => wrapAtCursor(descRef.current, editing, setEditing, '[', '](https://)', 'текст')}>
                     🔗 Ссылка
                   </button>
                 </div>
                 <textarea
+                  ref={descRef}
                   rows={10}
                   style={{ minHeight: 250, fontFamily: 'inherit', resize: 'vertical' }}
                   value={editing.description || ''}
@@ -702,19 +764,36 @@ export default function Programs() {
                 </div>
               </div>
 
-              {/* Галерея фото — до 7 шт. (ТЗ-доработка п.4). Доступна только после
-                  сохранения программы (нужен programId для upload). */}
-              {editing.id && (
+              {/* Галерея фото — до 7 шт. (ТЗ-доработка п.4).
+                  Существующая программа → upload на сервер сразу.
+                  Новая программа → копим File[] локально, flush после save. */}
+              {editing.id ? (
                 <ProgramGallery
                   programId={editing.id}
                   imageUrls={editing.imageUrls || []}
                   onChange={(next) => setEditing({ ...editing, imageUrls: next })}
                 />
+              ) : (
+                <ProgramGalleryPending
+                  files={pendingGalleryFiles}
+                  previews={pendingGalleryPreviews}
+                  onChange={(files, previews) => {
+                    setPendingGalleryFiles(files);
+                    setPendingGalleryPreviews(previews);
+                  }}
+                />
               )}
 
-              {/* Стипендии — после сохранения (нужен programId). */}
-              {editing.id && (
+              {/* Стипендии — таблица (ТЗ-доработка п.10).
+                  Существующая программа → CRUD на сервер.
+                  Новая программа → копим локально, flush после save. */}
+              {editing.id ? (
                 <ScholarshipsEditor programId={editing.id} />
+              ) : (
+                <ScholarshipsPending
+                  items={pendingScholarships}
+                  onChange={setPendingScholarships}
+                />
               )}
 
               <div className="form-group">
@@ -975,6 +1054,176 @@ function ScholarshipsEditor({ programId }: { programId: string }) {
         <button type="button" className="btn btn-sm btn-secondary" style={{ marginTop: 8 }} onClick={() => setCreating(true)}>
           {t('programs.scholarship.add')}
         </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ProgramGalleryPending — версия галереи для НОВОЙ программы.
+ * Не имеет programId, поэтому upload откладывается до сохранения:
+ * держит File[] в памяти + локальные blob: URL для preview.
+ * При закрытии формы родитель должен освободить blob URLs.
+ */
+function ProgramGalleryPending({
+  files, previews, onChange,
+}: {
+  files: File[];
+  previews: string[];
+  onChange: (files: File[], previews: string[]) => void;
+}) {
+  const { t } = useT();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const max = 7;
+
+  const onPick = (file: File) => {
+    if (files.length >= max) return;
+    const url = URL.createObjectURL(file);
+    onChange([...files, file], [...previews, url]);
+  };
+  const onRemove = (idx: number) => {
+    const u = previews[idx];
+    if (u) URL.revokeObjectURL(u);
+    onChange(files.filter((_, i) => i !== idx), previews.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div className="form-group">
+      <label>{t('programs.field.gallery')} ({files.length}/{max})</label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+        {previews.map((u, i) => (
+          <div key={u} style={{ position: 'relative', width: 120, height: 90 }}>
+            <img
+              src={u}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }}
+            />
+            <button
+              type="button"
+              onClick={() => onRemove(i)}
+              title={t('common.delete')}
+              style={{
+                position: 'absolute', top: 4, right: 4,
+                width: 24, height: 24, borderRadius: '50%',
+                border: 'none', cursor: 'pointer',
+                background: 'rgba(0,0,0,0.6)', color: 'white',
+              }}
+            >×</button>
+          </div>
+        ))}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onPick(f);
+          e.target.value = '';
+        }}
+      />
+      <button
+        type="button"
+        className="btn btn-sm btn-secondary"
+        onClick={() => inputRef.current?.click()}
+        disabled={files.length >= max}
+      >
+        {files.length >= max ? t('programs.gallery.max') : t('programs.gallery.add')}
+      </button>
+      {files.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 6 }}>
+          Фото загрузятся после сохранения программы.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ScholarshipsPending — версия таблицы стипендий для НОВОЙ программы.
+ * Аналогично галерее: копит черновики локально, родитель сохранит их
+ * через addProgramScholarship после createProgram.
+ */
+function ScholarshipsPending({
+  items, onChange,
+}: {
+  items: Array<Partial<ProgramScholarship>>;
+  onChange: (items: Array<Partial<ProgramScholarship>>) => void;
+}) {
+  const { t } = useT();
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState<Partial<ProgramScholarship>>({});
+
+  const add = () => {
+    if (!draft.name?.trim()) return;
+    onChange([...items, draft]);
+    setDraft({});
+    setCreating(false);
+  };
+  const remove = (idx: number) => {
+    onChange(items.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div className="form-group">
+      <label>{t('programs.section.scholarships')} ({items.length})</label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.map((s, i) => (
+          <div key={i} style={{
+            padding: 10, border: '1px solid var(--border)', borderRadius: 8,
+            background: 'var(--bg-soft)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontWeight: 600 }}>{s.name}</div>
+              <button type="button" className="btn btn-sm btn-danger" onClick={() => remove(i)}>×</button>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
+              {[
+                s.coverage && `${t('programs.scholarship.coverage')}: ${s.coverage}`,
+                s.amount && `${t('programs.scholarship.amount')}: ${s.amount}`,
+                s.requirements && `${t('programs.scholarship.requirements')}: ${s.requirements}`,
+                s.deadline && `${t('programs.scholarship.deadline')}: ${s.deadline}`,
+              ].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+        ))}
+      </div>
+      {creating ? (
+        <div style={{
+          padding: 12, marginTop: 8,
+          border: '1px solid var(--primary)', borderRadius: 8, background: 'var(--bg-soft)',
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+            <input placeholder="CSC Scholarship" value={draft.name || ''}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+            <input placeholder={t('programs.scholarship.coverage')} value={draft.coverage || ''}
+              onChange={(e) => setDraft({ ...draft, coverage: e.target.value })} />
+            <input placeholder={t('programs.scholarship.amount')} value={draft.amount || ''}
+              onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
+            <input placeholder={t('programs.scholarship.includes')} value={draft.includes || ''}
+              onChange={(e) => setDraft({ ...draft, includes: e.target.value })} />
+            <input placeholder={t('programs.scholarship.requirements')} value={draft.requirements || ''}
+              onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} />
+            <input placeholder={t('programs.scholarship.deadline')} value={draft.deadline || ''}
+              onChange={(e) => setDraft({ ...draft, deadline: e.target.value })} />
+            <input placeholder="https://..." value={draft.link || ''}
+              onChange={(e) => setDraft({ ...draft, link: e.target.value })} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setCreating(false); setDraft({}); }}>{t('common.cancel')}</button>
+            <button type="button" className="btn btn-sm btn-primary" onClick={add}>{t('common.add')}</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="btn btn-sm btn-secondary" style={{ marginTop: 8 }} onClick={() => setCreating(true)}>
+          {t('programs.scholarship.add')}
+        </button>
+      )}
+      {items.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 6 }}>
+          Стипендии создадутся после сохранения программы.
+        </div>
       )}
     </div>
   );

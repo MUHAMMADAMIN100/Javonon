@@ -399,14 +399,36 @@ export class ApplicationsService {
     user: CurrentUser,
   ) {
     const existing = await this.findOne(id);
-    // По ТЗ §7: «ручное распределение лидов — Менеджером по продажам».
-    // Elevated (FOUNDER/ADMIN/ACCOUNTANT) переназначают любые заявки;
-    // не-elevated (SALES_MANAGER/CLIENT_MANAGER) — только если они сами
-    // сейчас являются managerId или chinaManagerId этой заявки.
+    // По ТЗ §7: переназначение между сотрудниками — ТОЛЬКО ADMIN/FOUNDER.
+    // Не-elevated (SALES_MANAGER/CLIENT_MANAGER) могут:
+    //   • взять неназначенный лид себе (managerId/chinaManagerId === null)
+    //   • снять себя с лида (присвоить null)
+    // Но НЕ могут передать чужой лид кому-то другому. Это закрывает дыру
+    // когда SM мог отнять чужого клиента, и аудит-замечание из код-ревью.
     if (!isElevated(user as any)) {
-      const isOwner = existing.managerId === user.id || existing.chinaManagerId === user.id;
-      if (!isOwner) {
-        throw new ForbiddenException('Переназначать можно только свои заявки');
+      const slot: 'managerId' | 'chinaManagerId' | null =
+        patch.managerId !== undefined ? 'managerId' :
+        patch.chinaManagerId !== undefined ? 'chinaManagerId' : null;
+      if (!slot) {
+        throw new ForbiddenException('Нет изменений');
+      }
+      const currentOwner = (existing as any)[slot] as string | null;
+      const requested = patch[slot] as string | null | undefined;
+      // 1) Слот пустой → можно присвоить только себе.
+      if (!currentOwner) {
+        if (requested !== null && requested !== user.id) {
+          throw new ForbiddenException('Можно взять лид только на себя');
+        }
+      } else {
+        // 2) Слот занят:
+        //    a) текущий владелец — я → могу снять (null), но НЕ могу передать другому
+        //    b) текущий владелец — не я → не могу трогать вообще
+        if (currentOwner !== user.id) {
+          throw new ForbiddenException('Лид назначен другому сотруднику — обратись к админу');
+        }
+        if (requested !== null && requested !== user.id) {
+          throw new ForbiddenException('Передать лид другому сотруднику может только админ');
+        }
       }
     }
 
