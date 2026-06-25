@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FORM_SECTIONS, countProgress, displayValue, type FieldDef } from '../formSchema';
+import { countProgress, displayValue, useTranslatedSections, type FieldDef } from '../formSchema';
 import Icon from '../Icon';
 import { useT } from '../lib/i18n';
 
@@ -53,6 +53,7 @@ function EditField({
 
 export default function ApplicationFormView({ form, canEdit, onSave }: Props) {
   const { t } = useT();
+  const sections = useTranslatedSections();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<any>(form || {});
   const [saving, setSaving] = useState(false);
@@ -137,7 +138,7 @@ export default function ApplicationFormView({ form, canEdit, onSave }: Props) {
         </div>
       ) : (
         <div className="af-view-sections">
-          {FORM_SECTIONS.map((s) => (
+          {sections.map((s) => (
             <div key={s.key} className="af-view-section">
               <div className="af-view-section-head">
                 <div className="af-view-section-icon">

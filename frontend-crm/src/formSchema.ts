@@ -1,3 +1,5 @@
+import { useT } from './lib/i18n';
+
 export type FieldKind = 'text' | 'date' | 'email' | 'tel' | 'number' | 'textarea' | 'radio' | 'year' | 'select';
 
 export interface FieldDef {
@@ -378,4 +380,45 @@ export function validateField(def: FieldDef, raw: any, row?: any): string | unde
   // textarea / text — длина не более 2000 символов
   if (v.length > 2000) return 'Слишком длинное значение (>2000 символов)';
   return undefined;
+}
+
+/**
+ * Хук, возвращающий FORM_SECTIONS с переведёнными labels через i18n.
+ * Все ключи имеют fallback на исходные значения схемы, чтобы при
+ * отсутствии перевода UI не ломался.
+ */
+export function useTranslatedSections(): SectionDef[] {
+  const { t } = useT();
+  const tr = (key: string, fallback: string): string => {
+    const v = t(key);
+    return v === key ? fallback : v;
+  };
+  return FORM_SECTIONS.map((s) => ({
+    ...s,
+    title: tr(`appForm.section.${s.key}`, s.title),
+    titleEn: s.titleEn,
+    fields: s.fields?.map((f) => ({
+      ...f,
+      label: tr(`appForm.field.${s.key}.${f.key}`, f.label),
+      options: f.options?.map((o) => ({
+        ...o,
+        label: tr(`appForm.opt.${s.key}.${f.key}.${o.value}`, o.label),
+      })),
+    })),
+    table: s.table
+      ? {
+          ...s.table,
+          rowLabels: s.table.rowLabels?.map((rl, i) => tr(`appForm.row.${s.key}.${i}`, rl)),
+          skipLabels: s.table.skipLabels?.map((sl, i) => tr(`appForm.skip.${s.key}.${i}`, sl)),
+          columns: s.table.columns.map((c) => ({
+            ...c,
+            label: tr(`appForm.col.${s.key}.${c.key}`, c.label),
+            options: c.options?.map((o) => ({
+              ...o,
+              label: tr(`appForm.opt.${s.key}.${c.key}.${o.value}`, o.label),
+            })),
+          })),
+        }
+      : undefined,
+  }));
 }

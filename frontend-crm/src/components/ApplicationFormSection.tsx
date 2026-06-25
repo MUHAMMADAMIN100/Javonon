@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  FORM_SECTIONS,
+  useTranslatedSections,
   countProgress,
   emptyForm,
   PRESENT_LABEL,
@@ -393,6 +393,7 @@ type Props = {
 
 export default function ApplicationFormSection({ studentId, initialForm, canEdit, onSaved }: Props) {
   const { t } = useT();
+  const sections = useTranslatedSections();
   const [form, setForm] = useState<any>(initialForm || emptyForm());
   const [manualSaving, setManualSaving] = useState(false);
   const [manualSaved, setManualSaved] = useState(false);
@@ -505,7 +506,7 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
       </div>
 
       <div className="af-sections">
-        {FORM_SECTIONS.map((section) => {
+        {sections.map((section) => {
           const isOpen = openSections[section.key] ?? false;
           return (
             <div key={section.key} className={`af-section${isOpen ? ' open' : ''}`}>
