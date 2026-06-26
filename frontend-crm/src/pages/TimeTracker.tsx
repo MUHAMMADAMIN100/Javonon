@@ -514,7 +514,7 @@ function ClockInModal({
 
   return (
     <motion.div
-      className="dialog-overlay"
+      className="dialog-backdrop"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -615,7 +615,7 @@ function ExcuseModal({
 
   return (
     <motion.div
-      className="dialog-overlay"
+      className="dialog-backdrop"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
