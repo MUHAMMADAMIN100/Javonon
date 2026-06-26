@@ -4324,9 +4324,22 @@ textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
 }
-.crm-checkbox {
-  width: 20px;
-  height: 20px;
+/* .crm-checkbox — стандартный квадратный чекбокс на ВСЕХ ширинах.
+   !important нужен потому что легаси-правило `.filters input { flex: 1;
+   min-width: 220px }` (line ~663) перебивает обычные width/height и
+   делает чекбокс длинной полосой 220px+. Дублируем селекторы для гарантии. */
+.crm-checkbox,
+input.crm-checkbox,
+input[type="checkbox"].crm-checkbox,
+.filters input.crm-checkbox,
+.filters input[type="checkbox"].crm-checkbox {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  max-width: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  flex: 0 0 20px !important;
   appearance: none;
   -webkit-appearance: none;
   border: 2px solid var(--border);
@@ -4336,9 +4349,11 @@ textarea:focus {
   flex-shrink: 0;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
   position: relative;
-  margin: 0;
+  margin: 0 !important;
+  padding: 0 !important;
   display: inline-block;
   vertical-align: middle;
+  box-sizing: border-box !important;
 }
 .crm-checkbox:checked {
   background: var(--primary) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>") center / 14px no-repeat;
