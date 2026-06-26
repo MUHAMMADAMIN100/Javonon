@@ -113,53 +113,66 @@ function DayRow({ day, onChange }: { day: ScheduleDay; onChange: (patch: Partial
     onChange({ [field]: hhmmToMinutes(hhmm) } as any);
   };
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '120px 100px 1fr 1fr 1fr 1fr',
-      alignItems: 'center',
-      gap: 8,
-      padding: '8px 12px',
-      border: '1px solid var(--border)',
-      borderRadius: 10,
-      background: day.isWorkday ? 'transparent' : 'var(--bg-soft)',
-    }}>
-      <div style={{ fontWeight: 500 }}>{t(`weekday.${day.weekday}`) !== `weekday.${day.weekday}` ? t(`weekday.${day.weekday}`) : WEEKDAY_LABEL[day.weekday as Weekday]}</div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-        <input
-          type="checkbox"
-          checked={day.isWorkday}
-          onChange={(e) => onChange({ isWorkday: e.target.checked })}
+    <div
+      className="schedule-day-row"
+      style={{
+        padding: '10px 12px',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        background: day.isWorkday ? 'transparent' : 'var(--bg-soft)',
+      }}
+    >
+      <div className="schedule-day-head">
+        <div style={{ fontWeight: 500, flex: '1 1 auto' }}>
+          {t(`weekday.${day.weekday}`) !== `weekday.${day.weekday}` ? t(`weekday.${day.weekday}`) : WEEKDAY_LABEL[day.weekday as Weekday]}
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, flexShrink: 0 }}>
+          <input
+            type="checkbox"
+            checked={day.isWorkday}
+            onChange={(e) => onChange({ isWorkday: e.target.checked })}
+          />
+          {t('schedule.workday')}
+        </label>
+      </div>
+      <div className="schedule-day-times">
+        <TimeField label={t('schedule.field.start')} value={minutesToHHMM(day.startMinute)} onChange={(v) => setTime('startMinute', v)} disabled={!day.isWorkday} />
+        <TimeField label={t('schedule.field.end')} value={minutesToHHMM(day.endMinute)} onChange={(v) => setTime('endMinute', v)} disabled={!day.isWorkday} />
+        <TimeField
+          label={t('schedule.field.lunchStart')}
+          value={day.lunchStartMinute !== null ? minutesToHHMM(day.lunchStartMinute) : ''}
+          onChange={(v) => onChange({ lunchStartMinute: v ? hhmmToMinutes(v) : null })}
+          disabled={!day.isWorkday}
         />
-        {t('schedule.workday')}
-      </label>
-      <TimeField label={t('schedule.field.start')} value={minutesToHHMM(day.startMinute)} onChange={(v) => setTime('startMinute', v)} disabled={!day.isWorkday} />
-      <TimeField label={t('schedule.field.end')} value={minutesToHHMM(day.endMinute)} onChange={(v) => setTime('endMinute', v)} disabled={!day.isWorkday} />
-      <TimeField
-        label={t('schedule.field.lunchStart')}
-        value={day.lunchStartMinute !== null ? minutesToHHMM(day.lunchStartMinute) : ''}
-        onChange={(v) => onChange({ lunchStartMinute: v ? hhmmToMinutes(v) : null })}
-        disabled={!day.isWorkday}
-      />
-      <TimeField
-        label={t('schedule.field.lunchEnd')}
-        value={day.lunchEndMinute !== null ? minutesToHHMM(day.lunchEndMinute) : ''}
-        onChange={(v) => onChange({ lunchEndMinute: v ? hhmmToMinutes(v) : null })}
-        disabled={!day.isWorkday}
-      />
+        <TimeField
+          label={t('schedule.field.lunchEnd')}
+          value={day.lunchEndMinute !== null ? minutesToHHMM(day.lunchEndMinute) : ''}
+          onChange={(v) => onChange({ lunchEndMinute: v ? hhmmToMinutes(v) : null })}
+          disabled={!day.isWorkday}
+        />
+      </div>
     </div>
   );
 }
 
 function TimeField({ label, value, onChange, disabled }: { label: string; value: string; onChange: (v: string) => void; disabled?: boolean }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+      <span style={{
+        fontSize: 10,
+        color: 'var(--text-soft)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}>{label}</span>
       <input
         type="time"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        style={{ padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+        style={{ padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, width: '100%', minWidth: 0 }}
       />
     </div>
   );

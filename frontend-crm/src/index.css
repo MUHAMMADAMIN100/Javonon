@@ -4145,3 +4145,40 @@ textarea:focus {
 .roster-num-input {
   -moz-appearance: textfield;
 }
+
+/* ScheduleEditor — адаптив для мобилы. Раньше grid 120px/100px/4×1fr
+   на 375px рушился: лейблы Начало/Конец/Обед нач./Обед кон. ломались
+   построчно (1 символ на строку). Теперь голова дня (название +
+   checkbox «рабочий») идёт сверху, 4 time-поля — 2×2 grid ниже.
+   На десктопе (≥720px) — всё в одну строку. */
+.schedule-day-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.schedule-day-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.schedule-day-times {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 720px) {
+  .schedule-day-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .schedule-day-head {
+    flex: 0 0 auto;
+    min-width: 220px;
+  }
+  .schedule-day-times {
+    flex: 1 1 auto;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
