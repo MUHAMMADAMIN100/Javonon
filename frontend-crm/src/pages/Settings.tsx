@@ -713,13 +713,59 @@ function SalaryRosterSection() {
                     />
                   </td>
                   <td>
-                    <RosterNumberInput
-                      value={val('hourlyRate', u.hourlyRate) as any}
-                      onChange={(v) => setField(u.id, 'hourlyRate', v)}
-                      suffix="TJS/ч"
-                      dirty={has('hourlyRate')}
-                      width={130}
-                    />
+                    {(() => {
+                      // Превью почасовой: считаем на лету от draft baseSalary
+                      // (если редактируется) или от сохранённого. monthHours
+                      // приходит с бэка как кол-во часов в текущем месяце
+                      // по графику сотрудника (без обеда).
+                      const draftBase = has('baseSalary')
+                        ? Number(patch.baseSalary) || 0
+                        : (u.baseSalary || 0);
+                      const monthHours = u.monthHours || 0;
+                      const computed = monthHours > 0 && draftBase > 0
+                        ? Math.round((draftBase / monthHours) * 100) / 100
+                        : 0;
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 10px',
+                            border: '1.5px solid var(--border)',
+                            borderRadius: 10,
+                            background: 'var(--bg-soft)',
+                            width: 130,
+                            justifyContent: 'flex-end',
+                          }}>
+                            <span style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: 'var(--text)',
+                            }}>
+                              {computed > 0 ? computed.toFixed(2) : '—'}
+                            </span>
+                            <span style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 11,
+                              color: 'var(--text-soft)',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.06em',
+                            }}>TJS/ч</span>
+                          </div>
+                          <div style={{
+                            fontSize: 10,
+                            color: 'var(--text-soft)',
+                            fontFamily: 'var(--font-mono)',
+                          }}>
+                            {monthHours > 0
+                              ? `${draftBase} ÷ ${monthHours}ч`
+                              : 'график не задан'}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td>
                     <RosterNumberInput

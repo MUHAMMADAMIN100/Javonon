@@ -93,12 +93,23 @@ export class SalaryService {
     const baseAmount = baseSalary > 0 ? baseSalary : hourlyRate * hours;
 
     // ТЗ-доработка: оплата переработки. overtimeMinutes пишется в TimeEntry
-    // при clockOut (см. time-tracking.service). Если у юзера задана
-    // hourlyRate — используем её; иначе берём базовую / STANDARD_MONTH_HOURS.
+    // при clockOut. Почасовая ставка для переработки:
+    //   1) user.hourlyRate (если FOUNDER задал вручную) — приоритет
+    //   2) baseSalary / monthHours по графику сотрудника (динамически)
+    //   3) baseSalary / STANDARD_MONTH_HOURS (legacy fallback) — если
+    //      график не настроен.
     // Множитель overtimeMultiplier по умолч. 1.5 (FOUNDER может изменить).
-    const effectiveHourlyRate = hourlyRate > 0
-      ? hourlyRate
-      : (baseSalary > 0 ? baseSalary / STANDARD_MONTH_HOURS : 0);
+    let effectiveHourlyRate = 0;
+    if (hourlyRate > 0) {
+      effectiveHourlyRate = hourlyRate;
+    } else if (baseSalary > 0) {
+      const { monthHours } = await this.settings.computeMonthlyWorkHoursForUser(userId, periodStart);
+      if (monthHours > 0) {
+        effectiveHourlyRate = baseSalary / monthHours;
+      } else {
+        effectiveHourlyRate = baseSalary / STANDARD_MONTH_HOURS;
+      }
+    }
     const overtimeMultiplier = (user as any).overtimeMultiplier ?? 1.5;
     const overtimeMinutes = (time as any).overtimeMinutes || 0;
     const overtimePay = (overtimeMinutes / 60) * effectiveHourlyRate * overtimeMultiplier;

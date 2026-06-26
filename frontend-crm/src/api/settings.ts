@@ -134,6 +134,13 @@ export interface UserSalarySettings {
   bonusPercent: number | null;
   overtimeMultiplier: number | null;
   customRole?: { id: string; name: string } | null;
+  // Поля вычисляются бэком на основе графика сотрудника:
+  //   monthHours    — рабочих часов в текущем месяце (за вычетом обеда)
+  //   workdays      — рабочих дней в текущем месяце
+  //   computedHourly — baseSalary / monthHours, основная почасовая
+  monthHours?: number;
+  workdays?: number;
+  computedHourly?: number;
 }
 
 export const listSalarySettings = () =>

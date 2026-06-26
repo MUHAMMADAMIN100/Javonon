@@ -442,6 +442,65 @@ export class SettingsService {
     };
   }
 
+  /**
+   * Сколько чистых рабочих часов у сотрудника в указанном месяце по
+   * его расписанию. Время обеда НЕ учитывается. Используется для
+   * расчёта почасовой ставки: hourlyRate = oklad / monthHours.
+   *
+   * Параметр month — любая дата внутри месяца (берётся локальный
+   * месяц, можно передать new Date() для текущего месяца).
+   *
+   * Логика:
+   *   1. Берём первое и последнее число месяца
+   *   2. Для каждого дня — getEffectiveScheduleForUser(userId, weekday)
+   *   3. Если isWorkday: workMin = end - start - (lunchEnd - lunchStart)
+   *   4. Сумма / 60 = часы
+   */
+  async computeMonthlyWorkHoursForUser(userId: string, month: Date): Promise<{
+    monthHours: number;
+    workdays: number;
+    totalMinutes: number;
+  }> {
+    const year = month.getFullYear();
+    const monthIdx = month.getMonth(); // 0-11
+    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+    // JS Date.getDay(): 0=Sun, 1=Mon, ..., 6=Sat
+    const JS_TO_WEEKDAY: Record<number, Weekday> = {
+      0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
+    };
+    // Кэш расписаний по weekday чтобы не дёргать БД 30 раз.
+    const cache = new Map<Weekday, {
+      isWorkday: boolean;
+      startMinute: number;
+      endMinute: number;
+      lunchStartMinute: number | null;
+      lunchEndMinute: number | null;
+    }>();
+    let totalMinutes = 0;
+    let workdays = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(year, monthIdx, day);
+      const wk = JS_TO_WEEKDAY[d.getDay()];
+      let sched = cache.get(wk);
+      if (!sched) {
+        sched = await this.getEffectiveScheduleForUser(userId, wk);
+        cache.set(wk, sched);
+      }
+      if (!sched.isWorkday) continue;
+      const lunch = (sched.lunchStartMinute !== null && sched.lunchEndMinute !== null)
+        ? Math.max(0, sched.lunchEndMinute - sched.lunchStartMinute)
+        : 0;
+      const dayMin = Math.max(0, sched.endMinute - sched.startMinute - lunch);
+      totalMinutes += dayMin;
+      workdays++;
+    }
+    return {
+      monthHours: Math.round((totalMinutes / 60) * 100) / 100,
+      workdays,
+      totalMinutes,
+    };
+  }
+
   // ===== Bonus Tiers (тарифная сетка комиссии) =====
 
   /** Список этапов комиссионной сетки, упорядочен по minAmount. */

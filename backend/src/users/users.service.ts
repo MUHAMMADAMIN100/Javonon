@@ -14,6 +14,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { isElevated, isFounder } from '../auth/role-utils';
 import { tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class UsersService {
@@ -22,6 +23,7 @@ export class UsersService {
   constructor(
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
+    private settings: SettingsService,
   ) {}
 
   async findAll(filters: { search?: string } = {}) {
@@ -683,7 +685,7 @@ export class UsersService {
    * overtimeMultiplier. FOUNDER исключаем — у него своя оплата вне системы.
    */
   async listSalarySettings() {
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       where: { role: { not: 'FOUNDER' as any } },
       orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
       select: {
@@ -693,6 +695,24 @@ export class UsersService {
         customRole: { select: { id: true, name: true } },
       },
     });
+    // По ТЗ: «почасовая» считается автоматически = oklad / monthHours.
+    // monthHours = сумма (end-start-lunch) по всем рабочим дням ТЕКУЩЕГО
+    // месяца из effective schedule сотрудника. Обед НЕ считается.
+    const now = new Date();
+    return Promise.all(
+      users.map(async (u) => {
+        const { monthHours, workdays } = await this.settings.computeMonthlyWorkHoursForUser(u.id, now);
+        const computedHourly = u.baseSalary && monthHours > 0
+          ? Math.round((u.baseSalary / monthHours) * 100) / 100
+          : 0;
+        return {
+          ...u,
+          monthHours,
+          workdays,
+          computedHourly,
+        };
+      }),
+    );
   }
 
   /** Точечная правка зарплатных полей. FOUNDER-only через гард на
