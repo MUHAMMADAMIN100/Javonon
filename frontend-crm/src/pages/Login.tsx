@@ -123,7 +123,7 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
-            className={showErr('email') ? 'input-error' : ''}
+            className={`crm-input${showErr('email') ? ' input-error' : ''}`}
             placeholder="you@javonon.com"
             required
             autoComplete="email"

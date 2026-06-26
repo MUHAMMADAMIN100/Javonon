@@ -66,7 +66,7 @@ export default function Attendance() {
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ minWidth: 200, margin: 0 }}>
             <label>{t('attendance.col.employee')}</label>
-            <select value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <select className="crm-select" value={userId} onChange={(e) => setUserId(e.target.value)}>
               <option value="">{t('common.all')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
@@ -75,11 +75,11 @@ export default function Attendance() {
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label>{t('common.from')}</label>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <input className="crm-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label>{t('common.to')}</label>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <input className="crm-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           {(() => {
             // YYYY-MM-DD по Asia/Dushanbe — а не браузера/UTC. Без этого

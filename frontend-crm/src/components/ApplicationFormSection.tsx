@@ -305,23 +305,38 @@ function TableSection({
           const notAttended = !!row?.__notAttended;
           return (
             <div key={ri} className={`af-edu-row${notAttended ? ' not-attended' : ''}`}>
-              <div className="af-edu-head" onClick={() => !notAttended && toggleRow(ri)}>
-                <div className="af-edu-title">{rowLabels![ri] || `Строка ${ri + 1}`}</div>
-                <label
-                  className="af-edu-skip"
-                  onClick={(e) => e.stopPropagation()}
+              <div
+                className="af-edu-head"
+                onClick={() => !notAttended && toggleRow(ri)}
+                style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}
+              >
+                <div className="af-edu-title" style={{ width: '100%' }}>{rowLabels![ri] || `Строка ${ri + 1}`}</div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    width: '100%',
+                  }}
                 >
-                  <input
-                    type="checkbox"
-                    disabled={readOnly}
-                    checked={notAttended}
-                    onChange={(e) => setNotAttended(ri, e.target.checked)}
-                  />
-                  <span>{skipLabels?.[ri] || t('appForm.notAttended')}</span>
-                </label>
-                {!notAttended && (
-                  <Icon name={isOpen ? 'expand_less' : 'expand_more'} size={20} />
-                )}
+                  <label
+                    className="crm-checkbox-label"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="crm-checkbox"
+                      disabled={readOnly}
+                      checked={notAttended}
+                      onChange={(e) => setNotAttended(ri, e.target.checked)}
+                    />
+                    <span>{skipLabels?.[ri] || t('appForm.notAttended')}</span>
+                  </label>
+                  {!notAttended && (
+                    <Icon name={isOpen ? 'expand_less' : 'expand_more'} size={20} />
+                  )}
+                </div>
               </div>
               {!notAttended && isOpen && (
                 <div className="af-row-cells">

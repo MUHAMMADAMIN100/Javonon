@@ -167,6 +167,7 @@ export default function Calls() {
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.client')}</label>
             <input
+              className="crm-input"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
             />
@@ -174,6 +175,7 @@ export default function Calls() {
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('common.phone')}</label>
             <input
+              className="crm-input"
               value={clientPhone}
               onChange={(e) => setClientPhone(e.target.value)}
               placeholder="+992 ..."
@@ -181,7 +183,7 @@ export default function Calls() {
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.direction')}</label>
-            <select value={direction} onChange={(e) => setDirection(e.target.value as CallDirection)}>
+            <select className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as CallDirection)}>
               {(Object.keys(CALL_DIRECTION_LABEL) as CallDirection[]).map((d) => (
                 <option key={d} value={d}>{t(`calls.dir.${d}`)}</option>
               ))}
@@ -189,7 +191,7 @@ export default function Calls() {
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.outcome')}</label>
-            <select value={outcome} onChange={(e) => setOutcome(e.target.value as CallOutcome)}>
+            <select className="crm-select" value={outcome} onChange={(e) => setOutcome(e.target.value as CallOutcome)}>
               {(Object.keys(CALL_OUTCOME_LABEL) as CallOutcome[]).map((o) => (
                 <option key={o} value={o}>{t(`calls.out.${o}`)}</option>
               ))}
@@ -198,6 +200,7 @@ export default function Calls() {
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.duration')} ({t('common.time')})</label>
             <input
+              className="crm-input"
               type="number"
               min={0}
               value={minutes}
@@ -207,6 +210,7 @@ export default function Calls() {
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>sec</label>
             <input
+              className="crm-input"
               type="number"
               min={0}
               max={59}
@@ -219,6 +223,7 @@ export default function Calls() {
         <div className="form-group" style={{ marginTop: 16 }}>
           <label>{t('calls.field.notes')}</label>
           <textarea
+            className="crm-textarea"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}

@@ -505,10 +505,11 @@ function LabelInput({ label, value, onChange, type = 'text' }: any) {
     <div>
       <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
       <input
+        className="crm-input"
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }}
+        style={{ width: '100%' }}
       />
     </div>
   );
@@ -550,7 +551,7 @@ function DocUploader({
 
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <select value={type} onChange={(e) => setType(e.target.value as UserDocumentType)} style={{ padding: 8, border: '1px solid var(--border)', borderRadius: 8 }}>
+      <select className="crm-select" value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
         <option value="PASSPORT">{t('userDoc.PASSPORT')}</option>
         <option value="PHOTO">{t('userDoc.PHOTO')}</option>
         <option value="CONTRACT">{t('userDoc.CONTRACT')}</option>
@@ -631,9 +632,10 @@ function AccessSection({ userId, userName }: { userId: string; userName: string 
       </p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <select
+          className="crm-select"
           value={pickUserId}
           onChange={(e) => setPickUserId(e.target.value)}
-          style={{ flex: '1 1 220px', padding: 9, border: '1px solid var(--border)', borderRadius: 8 }}
+          style={{ flex: '1 1 220px' }}
         >
           <option value="">— {t('common.search')} —</option>
           {users.map((u: any) => (
@@ -739,8 +741,8 @@ function OfferSection() {
       </div>
       {!data.signed && (
         <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+          <label className="crm-checkbox-label" style={{ fontSize: 13 }}>
+            <input className="crm-checkbox" type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
             {t('offer.agreeCheckbox')}
           </label>
           <button
@@ -863,7 +865,7 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
         <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
           {t('userDetail.field.role')}:
         </label>
-        <select value={primary} onChange={(e) => setPrimary(e.target.value)}>
+        <select className="crm-select" value={primary} onChange={(e) => setPrimary(e.target.value)}>
           {ASSIGNABLE_ROLE_VALUES.map((v) => (
             <option key={v} value={v}>{roleLabel(v as any)}</option>
           ))}
@@ -993,7 +995,7 @@ function CustomRoleEditor({
         <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
           {t('userDetail.field.customRole')}:
         </label>
-        <select value={selected} onChange={(e) => setSelected(e.target.value)} disabled={rolesQuery.isLoading}>
+        <select className="crm-select" value={selected} onChange={(e) => setSelected(e.target.value)} disabled={rolesQuery.isLoading}>
           <option value="">— {t('managerBar.notAssigned')} —</option>
           {roles.filter((r: CustomRole) => r.isActive).map((r: CustomRole) => (
             <option key={r.id} value={r.id}>{r.name} ({r.permissions.length})</option>
@@ -1074,7 +1076,7 @@ function DocEditButton({
     }}>
       <div className="form-group" style={{ marginBottom: 8 }}>
         <label>Тип</label>
-        <select value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
+        <select className="crm-select" value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
           <option value="PASSPORT">Паспорт</option>
           <option value="PHOTO">Фотография</option>
           <option value="CONTRACT">Контракт</option>
@@ -1085,7 +1087,7 @@ function DocEditButton({
       </div>
       <div className="form-group" style={{ marginBottom: 8 }}>
         <label>Комментарий</label>
-        <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="—" />
+        <input className="crm-input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="—" />
       </div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>Отмена</button>

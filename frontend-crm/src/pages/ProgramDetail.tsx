@@ -321,12 +321,13 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
       <h3 style={{ marginBottom: 12 }}>{t('programs.section.comments')} ({items.length})</h3>
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'flex-start' }}>
         <textarea
+          className="crm-textarea"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t('programs.comments.placeholder')}
           rows={2}
           maxLength={4000}
-          style={{ flex: 1, fontFamily: 'inherit', resize: 'vertical' }}
+          style={{ flex: 1, fontFamily: 'inherit' }}
         />
         <button
           className="btn btn-primary"

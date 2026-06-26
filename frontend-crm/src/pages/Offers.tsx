@@ -185,11 +185,12 @@ function CreateForm({ role, onClose }: { role: Role | null; onClose: () => void 
     }}>
       <div className="form-group" style={{ marginBottom: 10 }}>
         <label>{t('common.title')}</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className="crm-input" value={title} onChange={(e) => setTitle(e.target.value)} />
       </div>
       <div className="form-group" style={{ marginBottom: 10 }}>
         <label>{t('offers.editor.title')}</label>
         <textarea
+          className="crm-textarea"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={14}
@@ -328,11 +329,12 @@ function OfferCard({
         <>
           <div className="form-group" style={{ marginBottom: 10 }}>
             <label>{t('common.title')}</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input className="crm-input" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div className="form-group" style={{ marginBottom: 10 }}>
             <label>{t('offers.editor.title')}</label>
             <textarea
+              className="crm-textarea"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={14}

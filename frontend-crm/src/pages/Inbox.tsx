@@ -251,6 +251,7 @@ function ThreadView({ channel, handle, onClose }: { channel: InboxChannel; handl
         gap: 8,
       }}>
         <input
+          className="crm-input"
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), send())}

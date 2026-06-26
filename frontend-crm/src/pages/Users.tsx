@@ -150,6 +150,7 @@ export default function Users() {
       <div className="card-body">
         <div className="filters">
           <input
+            className="crm-input"
             placeholder={t('common.search')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -286,7 +287,7 @@ export default function Users() {
                   value={form.fullName}
                   onChange={(e) => setForm({ ...form, fullName: e.target.value })}
                   onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
-                  className={showErr('fullName') ? 'input-error' : ''}
+                  className={`crm-input${showErr('fullName') ? ' input-error' : ''}`}
                   maxLength={100}
                   autoComplete="off"
                   autoFocus
@@ -303,7 +304,7 @@ export default function Users() {
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-                  className={showErr('email') ? 'input-error' : ''}
+                  className={`crm-input${showErr('email') ? ' input-error' : ''}`}
                   autoComplete="off"
                   required
                 />
@@ -333,6 +334,7 @@ export default function Users() {
                     Составное значение «base:X» / «custom:<id>» — чтобы
                     одним dropdown'ом покрыть оба типа. */}
                 <select
+                  className="crm-select"
                   value={form.customRoleId ? `custom:${form.customRoleId}` : `base:${form.role}`}
                   onChange={(e) => {
                     const v = e.target.value;

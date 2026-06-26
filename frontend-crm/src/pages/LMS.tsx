@@ -232,11 +232,11 @@ function NewCourseForm({ onSubmit, onCancel }: {
     <form onSubmit={(e) => { e.preventDefault(); onSubmit({ title, description: desc || undefined }); }}>
       <div className="form-group">
         <label>{t('lms.course.title')}</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <input className="crm-input" value={title} onChange={(e) => setTitle(e.target.value)} required />
       </div>
       <div className="form-group">
         <label>{t('lms.course.description')}</label>
-        <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} />
+        <textarea className="crm-textarea" value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} />
       </div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
@@ -308,11 +308,11 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
             <>
               <div className="form-group">
                 <label>Название</label>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} />
+                <input className="crm-input" value={title} onChange={(e) => setTitle(e.target.value)} />
               </div>
               <div className="form-group">
                 <label>Описание</label>
-                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+                <textarea className="crm-textarea" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button className="btn btn-sm btn-secondary" onClick={() => { setEditingMeta(false); setTitle(course.title); setDescription(course.description || ''); }}>Отмена</button>
@@ -471,15 +471,15 @@ function NewLessonForm({ onSubmit, onCancel }: {
     >
       <div className="form-group">
         <label>Название урока</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <input className="crm-input" value={title} onChange={(e) => setTitle(e.target.value)} required />
       </div>
       <div className="form-group">
         <label>Текст урока (Markdown)</label>
-        <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={4} />
+        <textarea className="crm-textarea" value={content} onChange={(e) => setContent(e.target.value)} rows={4} />
       </div>
       <div className="form-group">
         <label>Ссылка на видео</label>
-        <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://youtube.com/..." />
+        <input className="crm-input" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://youtube.com/..." />
       </div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>Отмена</button>
@@ -499,15 +499,15 @@ function LessonEditForm({ lesson, onChange, onSave, onCancel }: {
     <div>
       <div className="form-group">
         <label>Название</label>
-        <input value={lesson.title} onChange={(e) => onChange({ ...lesson, title: e.target.value })} />
+        <input className="crm-input" value={lesson.title} onChange={(e) => onChange({ ...lesson, title: e.target.value })} />
       </div>
       <div className="form-group">
         <label>Текст</label>
-        <textarea value={lesson.content || ''} onChange={(e) => onChange({ ...lesson, content: e.target.value })} rows={4} />
+        <textarea className="crm-textarea" value={lesson.content || ''} onChange={(e) => onChange({ ...lesson, content: e.target.value })} rows={4} />
       </div>
       <div className="form-group">
         <label>Видео</label>
-        <input value={lesson.videoUrl || ''} onChange={(e) => onChange({ ...lesson, videoUrl: e.target.value })} />
+        <input className="crm-input" value={lesson.videoUrl || ''} onChange={(e) => onChange({ ...lesson, videoUrl: e.target.value })} />
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <button className="btn btn-sm btn-secondary" onClick={onCancel}>Отмена</button>

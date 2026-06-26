@@ -127,8 +127,8 @@ export default function Applications() {
       </div>
       <div className="card-body">
         <div className="filters">
-          <input placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+          <input className="crm-input" placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select className="crm-select" value={status} onChange={(e) => setStatus(e.target.value as any)}>
             <option value="">{t('app.filter.status')}</option>
             <option value="NEW">{statusLabel('NEW' as any)}</option>
             <option value="DOCS_REVIEW">{statusLabel('DOCS_REVIEW' as any)}</option>
@@ -138,14 +138,14 @@ export default function Applications() {
             <option value="ENROLLED">{statusLabel('ENROLLED' as any)}</option>
           </select>
           {isAdmin && (
-            <select value={manager} onChange={(e) => setManager(e.target.value)} title={t('app.filter.manager')}>
+            <select className="crm-select" value={manager} onChange={(e) => setManager(e.target.value)} title={t('app.filter.manager')}>
               <option value="">{t('app.filter.manager')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
             </select>
           )}
-          <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+          <select className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as any)}>
             <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
           </select>

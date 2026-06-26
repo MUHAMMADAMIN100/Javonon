@@ -843,7 +843,7 @@ function TransactionForm({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div className="form-group">
             <label>{t('common.type')}</label>
-            <select value={type} onChange={(e) => {
+            <select className="crm-select" value={type} onChange={(e) => {
               const tt = e.target.value as TransactionType;
               setType(tt);
               setCategory(tt === 'INCOME' ? 'TUITION_PAYMENT' : 'SALARY');
@@ -854,7 +854,7 @@ function TransactionForm({
           </div>
           <div className="form-group">
             <label>{t('finance.col.category')}</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value as TransactionCategory)}>
+            <select className="crm-select" value={category} onChange={(e) => setCategory(e.target.value as TransactionCategory)}>
               {cats.map((c) => (
                 <option key={c} value={c}>{TRANSACTION_CATEGORY_LABEL[c]}</option>
               ))}
@@ -862,11 +862,11 @@ function TransactionForm({
           </div>
           <div className="form-group">
             <label>{t('common.amount')}</label>
-            <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
+            <input className="crm-input" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
           </div>
           <div className="form-group">
             <label>{t('finance.col.currency')}</label>
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
               <option value="CNY">CNY</option>
@@ -876,12 +876,12 @@ function TransactionForm({
           </div>
           <div className="form-group">
             <label>{t('common.date')}</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <input className="crm-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.col.student')}</label>
-              <select value={studentId} onChange={(e) => setStudentId(e.target.value)}>
+              <select className="crm-select" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
                 <option value="">—</option>
                 {students.map((s) => (
                   <option key={s.id} value={s.id}>{s.fullName}</option>
@@ -892,7 +892,7 @@ function TransactionForm({
           {(type === 'EXPENSE' && category === 'SALARY') && (
             <div className="form-group">
               <label>{t('salary.field.employee')}</label>
-              <select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+              <select className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
                 <option value="">—</option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>{u.fullName}</option>
@@ -903,7 +903,7 @@ function TransactionForm({
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.col.manager')}</label>
-              <select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+              <select className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
                 <option value="">—</option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>{u.fullName}</option>
@@ -913,7 +913,7 @@ function TransactionForm({
           )}
           <div className="form-group">
             <label>{t('finance.paymentChannel')}</label>
-            <select value={paymentChannel} onChange={(e) => setPaymentChannel(e.target.value)}>
+            <select className="crm-select" value={paymentChannel} onChange={(e) => setPaymentChannel(e.target.value)}>
               <option value="CASH">{t('finance.channel.CASH')}</option>
               <option value="ALIF_MOBILE">{t('finance.channel.ALIF_MOBILE')}</option>
               <option value="BANK_TRANSFER">{t('finance.channel.BANK_TRANSFER')}</option>
@@ -925,7 +925,7 @@ function TransactionForm({
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.paymentKind')}</label>
-              <select value={paymentKind} onChange={(e) => setPaymentKind(e.target.value)}>
+              <select className="crm-select" value={paymentKind} onChange={(e) => setPaymentKind(e.target.value)}>
                 <option value="FULL">{t('finance.kind.FULL')}</option>
                 <option value="PREPAYMENT">{t('finance.kind.PREPAYMENT')}</option>
                 <option value="ADDITIONAL">{t('finance.kind.ADDITIONAL')}</option>
@@ -936,7 +936,7 @@ function TransactionForm({
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.product')}</label>
-              <select value={productCategory} onChange={(e) => setProductCategory(e.target.value)}>
+              <select className="crm-select" value={productCategory} onChange={(e) => setProductCategory(e.target.value)}>
                 <option value="">—</option>
                 {PRODUCT_CATEGORIES.map((p) => (
                   <option key={p} value={p}>{p}</option>
@@ -945,14 +945,14 @@ function TransactionForm({
             </div>
           )}
           {type === 'INCOME' && (
-            <div className="form-group">
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
               <label>{t('finance.payerName')}</label>
-              <input type="text" value={payerName} onChange={(e) => setPayerName(e.target.value)} />
+              <input className="crm-input" type="text" value={payerName} onChange={(e) => setPayerName(e.target.value)} />
             </div>
           )}
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
             <label>{t('app.field.comment')}</label>
-            <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} />
+            <input className="crm-input" type="text" value={comment} onChange={(e) => setComment(e.target.value)} />
           </div>
 
           {type === 'EXPENSE' && (
@@ -967,6 +967,7 @@ function TransactionForm({
               </div>
               {receiptKind === 'REASON_ONLY' ? (
                 <input
+                  className="crm-input"
                   type="text"
                   value={noReceiptReason}
                   onChange={(e) => setNoReceiptReason(e.target.value)}
@@ -976,6 +977,7 @@ function TransactionForm({
               ) : (
                 <div>
                   <input
+                    className="crm-input"
                     type="file"
                     accept="image/*,application/pdf"
                     onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}

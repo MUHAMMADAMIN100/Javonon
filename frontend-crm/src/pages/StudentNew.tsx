@@ -147,7 +147,7 @@ export default function StudentNew() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               onBlur={() => setTouched((tt) => ({ ...tt, fullName: true }))}
-              className={showErr('fullName') ? 'input-error' : ''}
+              className={`crm-input${showErr('fullName') ? ' input-error' : ''}`}
               maxLength={100}
               required
             />
@@ -166,6 +166,7 @@ export default function StudentNew() {
             <div className="form-group">
               <label>{t('studentNew.field.phoneLabel')}</label>
               <input
+                className="crm-input"
                 value={phoneLabel}
                 onChange={(e) => setPhoneLabel(e.target.value)}
                 maxLength={40}
@@ -183,6 +184,7 @@ export default function StudentNew() {
             <div className="form-group">
               <label>{t('studentNew.field.secondaryLabel')}</label>
               <input
+                className="crm-input"
                 value={secondaryLabel}
                 onChange={(e) => setSecondaryLabel(e.target.value)}
                 maxLength={40}
@@ -192,7 +194,7 @@ export default function StudentNew() {
           <div className="form-grid-2">
             <div className="form-group">
               <label>{t('app.field.preferredChannel')}</label>
-              <select value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
+              <select className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
                 <option value="">—</option>
                 <option value="WHATSAPP">{channelLabel('WHATSAPP' as any)}</option>
                 <option value="PHONE">{channelLabel('PHONE' as any)}</option>
@@ -204,6 +206,7 @@ export default function StudentNew() {
             <div className="form-group">
               <label>{t('app.field.birthday')}</label>
               <input
+                className="crm-input"
                 type="date"
                 value={birthday}
                 onChange={(e) => setBirthday(e.target.value)}
@@ -217,14 +220,14 @@ export default function StudentNew() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onBlur={() => setTouched((tt) => ({ ...tt, email: true }))}
-              className={showErr('email') ? 'input-error' : ''}
+              className={`crm-input${showErr('email') ? ' input-error' : ''}`}
               required
             />
             {showErr('email') && <div className="form-error-text">{errors.email}</div>}
           </div>
           <div className="form-group">
             <label>{t('app.field.direction')} *</label>
-            <select value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
+            <select className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
               <option value="BACHELOR">{directionLabel('BACHELOR')}</option>
               <option value="MASTER">{directionLabel('MASTER')}</option>
               <option value="LANGUAGE">{directionLabel('LANGUAGE')}</option>
@@ -239,7 +242,7 @@ export default function StudentNew() {
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               maxLength={1000}
-              className={showErr('comment') ? 'input-error' : ''}
+              className={`crm-textarea${showErr('comment') ? ' input-error' : ''}`}
             />
             {showErr('comment') && <div className="form-error-text">{errors.comment}</div>}
           </div>

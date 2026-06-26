@@ -122,7 +122,7 @@ export default function Activity() {
         </div>
         <div className="card-body">
           <div className="filters">
-            <select value={action} onChange={(e) => setAction(e.target.value as any)}>
+            <select className="crm-select" value={action} onChange={(e) => setAction(e.target.value as any)}>
               <option value="">{t('activity.filter.allActions')}</option>
               {Object.entries(ACTIVITY_LABEL).map(([k, v]) => {
                 const key = `activity.action.${k}`;
@@ -132,8 +132,8 @@ export default function Activity() {
                 );
               })}
             </select>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <input className="crm-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <input className="crm-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
 
           {loading ? (

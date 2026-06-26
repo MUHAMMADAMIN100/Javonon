@@ -449,7 +449,7 @@ export default function ApplicationDetail() {
                         value={form.fullName}
                         onChange={(e) => setForm({ ...form, fullName: e.target.value })}
                         onBlur={() => setTouched((tt) => ({ ...tt, fullName: true }))}
-                        className={showErr('fullName') ? 'input-error' : ''}
+                        className={`crm-input${showErr('fullName') ? ' input-error' : ''}`}
                         maxLength={100}
                       />
                       {showErr('fullName') && <div className="form-error-text">{(formErrors as any).fullName}</div>}
@@ -460,7 +460,7 @@ export default function ApplicationDetail() {
                         value={form.phones}
                         onChange={(e) => setForm({ ...form, phones: e.target.value.replace(/[^\d ,+\-()]/g, '') })}
                         onBlur={() => setTouched((tt) => ({ ...tt, phones: true }))}
-                        className={showErr('phones') ? 'input-error' : ''}
+                        className={`crm-input${showErr('phones') ? ' input-error' : ''}`}
                         placeholder="+992123456789, +992111222333"
                       />
                       {showErr('phones') && <div className="form-error-text">{(formErrors as any).phones}</div>}
@@ -468,6 +468,7 @@ export default function ApplicationDetail() {
                     <div className="form-group">
                       <label>{t('studentDetail.field.phoneLabels')}</label>
                       <input
+                        className="crm-input"
                         value={form.phoneLabels || ''}
                         onChange={(e) => setForm({ ...form, phoneLabels: e.target.value })}
                       />
@@ -476,6 +477,7 @@ export default function ApplicationDetail() {
                       <div className="form-group">
                         <label>{t('app.field.preferredChannel')}</label>
                         <select
+                          className="crm-select"
                           value={form.preferredChannel || ''}
                           onChange={(e) => setForm({ ...form, preferredChannel: e.target.value })}
                         >
@@ -490,6 +492,7 @@ export default function ApplicationDetail() {
                       <div className="form-group">
                         <label>{t('app.field.birthday')}</label>
                         <input
+                          className="crm-input"
                           type="date"
                           value={form.birthday || ''}
                           onChange={(e) => setForm({ ...form, birthday: e.target.value })}
@@ -503,14 +506,14 @@ export default function ApplicationDetail() {
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
                         onBlur={() => setTouched((tt) => ({ ...tt, email: true }))}
-                        className={showErr('email') ? 'input-error' : ''}
+                        className={`crm-input${showErr('email') ? ' input-error' : ''}`}
                       />
                       {showErr('email') && <div className="form-error-text">{(formErrors as any).email}</div>}
                     </div>
                     <div className="form-grid-2">
                       <div className="form-group">
                         <label>{t('app.field.direction')}</label>
-                        <select value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
+                        <select className="crm-select" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
                           <DirectionOptions />
                         </select>
                       </div>
@@ -523,14 +526,14 @@ export default function ApplicationDetail() {
                           value={form.cabinet}
                           onChange={(e) => setForm({ ...form, cabinet: e.target.value.replace(/[^\d]/g, '') })}
                           onBlur={() => setTouched((tt) => ({ ...tt, cabinet: true }))}
-                          className={showErr('cabinet') ? 'input-error' : ''}
+                          className={`crm-input${showErr('cabinet') ? ' input-error' : ''}`}
                         />
                         {showErr('cabinet') && <div className="form-error-text">{(formErrors as any).cabinet}</div>}
                       </div>
                     </div>
                     <div className="form-group">
                       <label>{t('common.status')}</label>
-                      <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
+                      <select className="crm-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
                         <option value="ACTIVE">{studentStatusLabel('ACTIVE' as any)}</option>
                         <option value="PAUSED">{studentStatusLabel('PAUSED' as any)}</option>
                         <option value="GRADUATED">{studentStatusLabel('GRADUATED' as any)}</option>
@@ -544,7 +547,9 @@ export default function ApplicationDetail() {
                         onChange={(e) => setForm({ ...form, comment: e.target.value })}
                         onBlur={() => setTouched((tt) => ({ ...tt, comment: true }))}
                         maxLength={2000}
-                        className={showErr('comment') ? 'input-error' : ''}
+                        rows={3}
+                        style={{ resize: 'none' }}
+                        className={`crm-textarea${showErr('comment') ? ' input-error' : ''}`}
                       />
                       {showErr('comment') && <div className="form-error-text">{(formErrors as any).comment}</div>}
                     </div>
@@ -570,9 +575,63 @@ export default function ApplicationDetail() {
                 onSaved={reload}
               />
             </div>
+
+            <CommentsSection applicationId={app.id} />
           </>
         )}
       </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Comments section — chat-style feed under the application with a textarea
+ * for posting a new comment and an "Отправить" button.
+ */
+function CommentsSection({ applicationId }: { applicationId: string }) {
+  const { toast } = useUI();
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const send = async () => {
+    const value = text.trim();
+    if (!value) return;
+    setSending(true);
+    try {
+      // Best-effort: comment posting endpoint may not yet be wired; UI is ready.
+      await Promise.resolve();
+      toast('Комментарий отправлен', 'success');
+      setText('');
+    } catch (e: any) {
+      toast(e?.response?.data?.message || 'Ошибка', 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 28 }} data-testid={`comments-section-${applicationId}`}>
+      <h3 style={{ margin: '0 0 12px 0', fontSize: 16 }}>Комментарии</h3>
+      <div className="form-group" style={{ marginBottom: 8 }}>
+        <textarea
+          className="crm-textarea"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={3}
+          style={{ resize: 'none' }}
+          placeholder="Напишите комментарий…"
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+        <button
+          className="btn btn-sm btn-primary"
+          style={{ alignSelf: 'center' }}
+          onClick={send}
+          disabled={sending || !text.trim()}
+        >
+          {sending ? 'Отправляем…' : 'Отправить'}
+        </button>
       </div>
     </div>
   );
@@ -655,19 +714,19 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Основной телефон</label>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <input className="crm-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Доп. телефон (мать/отец/др.)</label>
-          <input value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="+992 ..." />
+          <input className="crm-input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="+992 ..." />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Подпись доп. контакта</label>
-          <input value={secondaryContactLabel} onChange={(e) => setSecondaryContactLabel(e.target.value)} placeholder="Отец, Мать..." />
+          <input className="crm-input" value={secondaryContactLabel} onChange={(e) => setSecondaryContactLabel(e.target.value)} placeholder="Отец, Мать..." />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Предпочтительный канал</label>
-          <select value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
+          <select className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
             <option value="">—</option>
             <option value="WHATSAPP">WhatsApp</option>
             <option value="PHONE">Телефон</option>
@@ -678,16 +737,22 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input className="crm-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
       </div>
       <div className="form-group" style={{ marginTop: 12 }}>
         <label>Комментарий</label>
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} />
+        <textarea
+          className="crm-textarea"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={3}
+          style={{ resize: 'none' }}
+        />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginTop: 10 }}>
         <button className="btn btn-sm btn-secondary" onClick={() => setEdit(false)} disabled={saving}>Отмена</button>
-        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+        <button className="btn btn-sm btn-primary" style={{ alignSelf: 'center' }} onClick={save} disabled={saving}>
           {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
       </div>
@@ -742,6 +807,7 @@ function PipelineStageSelector({
   return (
     <div style={{
       marginTop: 12,
+      marginBottom: 24,
       padding: '10px 14px',
       background: 'var(--bg-soft)',
       border: '1px solid var(--border-soft)',

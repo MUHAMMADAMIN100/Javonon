@@ -180,6 +180,7 @@ export default function Tasks() {
       <div className="card-body">
         <div className="filters">
           <input
+            className="crm-input"
             placeholder="Поиск по заголовку или описанию..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -203,7 +204,7 @@ export default function Tasks() {
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   placeholder="Например: Собрать документы для Иванова"
                   maxLength={200}
-                  className={formErrors.title ? 'input-error' : ''}
+                  className={`crm-input${formErrors.title ? ' input-error' : ''}`}
                   required
                 />
                 {formErrors.title && <div className="form-error-text">{formErrors.title}</div>}
@@ -215,7 +216,7 @@ export default function Tasks() {
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="Что именно нужно сделать..."
                   maxLength={2000}
-                  className={formErrors.description ? 'input-error' : ''}
+                  className={`crm-textarea${formErrors.description ? ' input-error' : ''}`}
                   required
                   rows={4}
                 />
@@ -224,6 +225,7 @@ export default function Tasks() {
               <div className="form-group">
                 <label>Назначить сотрудника</label>
                 <select
+                  className="crm-select"
                   value={form.assignedToId}
                   onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}
                   required
@@ -239,6 +241,7 @@ export default function Tasks() {
               <div className="form-group">
                 <label>{t('tasks.field.deadline')}</label>
                 <input
+                  className="crm-input"
                   type="datetime-local"
                   value={form.deadline}
                   onChange={(e) => setForm({ ...form, deadline: e.target.value })}
@@ -334,7 +337,7 @@ export default function Tasks() {
                         </span>
                       </div>
 
-                      <div className="task-status-switch">
+                      <div className="task-status-switch" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                         {statuses.map((s) => (
                           <button
                             key={s.value}
@@ -342,9 +345,10 @@ export default function Tasks() {
                             onClick={() => canChange && setStatus(task, s.value)}
                             disabled={!canChange}
                             title={s.label}
+                            style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
                           >
                             <Icon name={s.icon} size={16} />
-                            <span>{s.label}</span>
+                            <span style={{ whiteSpace: 'nowrap' }}>{s.label}</span>
                           </button>
                         ))}
                       </div>

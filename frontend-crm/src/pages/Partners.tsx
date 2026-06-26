@@ -182,9 +182,9 @@ function CommissionsList() {
     <div className="card" style={{ padding: 0 }}>
       <div style={{ padding: 14, borderBottom: '1px solid var(--border-soft)' }}>
         <select
+          className="crm-select"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as any)}
-          style={{ padding: 8, border: '1px solid var(--border)', borderRadius: 8 }}
         >
           <option value="">{t('common.all')}</option>
           <option value="PENDING">{t('partners.commission.status.PENDING')}</option>

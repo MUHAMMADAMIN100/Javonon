@@ -682,11 +682,12 @@ function ExcuseModal({
         </p>
 
         <textarea
+          className="crm-textarea"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Причина (минимум 5 символов)"
           rows={3}
-          style={{ width: '100%', padding: 12, border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12, fontSize: 14, resize: 'vertical' }}
+          style={{ width: '100%', marginBottom: 12 }}
         />
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>ФОТО / ВИДЕО (опционально)</div>
@@ -779,11 +780,12 @@ function LunchExcuseModal({
         </p>
 
         <textarea
+          className="crm-textarea"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Причина (минимум 5 символов)"
           rows={3}
-          style={{ width: '100%', padding: 12, border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12, fontSize: 14, resize: 'vertical' }}
+          style={{ width: '100%', marginBottom: 12 }}
         />
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>ФОТО / ВИДЕО (опционально)</div>

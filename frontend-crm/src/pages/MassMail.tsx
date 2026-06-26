@@ -214,11 +214,11 @@ function CreateForm({ onClose }: { onClose: () => void }) {
       <div className="form-grid-2" style={{ gap: 12, marginBottom: 12 }}>
         <div className="form-group">
           <label>{t('massmail.field.name')}</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="crm-input" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="form-group">
           <label>{t('massmail.field.channel')}</label>
-          <select value={channel} onChange={(e) => setChannel(e.target.value as MassMailChannel)}>
+          <select className="crm-select" value={channel} onChange={(e) => setChannel(e.target.value as MassMailChannel)}>
             <option value="WHATSAPP">WhatsApp</option>
             <option value="TELEGRAM">Telegram</option>
             <option value="SMS">SMS</option>
@@ -228,20 +228,12 @@ function CreateForm({ onClose }: { onClose: () => void }) {
       </div>
       <div className="form-group" style={{ marginBottom: 12 }}>
         <label>{t('massmail.field.subject')}</label>
-        <input value={subject} onChange={(e) => setSubject(e.target.value)} />
-      </div>
-      <div className="form-group" style={{ marginBottom: 12 }}>
-        <label>{t('massmail.field.body')}</label>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          rows={5}
-        />
+        <input className="crm-input" value={subject} onChange={(e) => setSubject(e.target.value)} />
       </div>
       <div className="form-grid-2" style={{ gap: 12, marginBottom: 12 }}>
         <div className="form-group">
           <label>{t('massmail.field.audience')}</label>
-          <select value={audienceType} onChange={(e) => setAudienceType(e.target.value as any)}>
+          <select className="crm-select" value={audienceType} onChange={(e) => setAudienceType(e.target.value as any)}>
             <option value="all-leads">{t('massmail.audience.all-leads')}</option>
             <option value="paid-students">{t('massmail.audience.paid-students')}</option>
             <option value="by-direction">{t('app.field.direction')}</option>
@@ -250,7 +242,7 @@ function CreateForm({ onClose }: { onClose: () => void }) {
         {audienceType === 'by-direction' && (
           <div className="form-group">
             <label>{t('app.field.direction')}</label>
-            <select value={audienceValue} onChange={(e) => setAudienceValue(e.target.value)}>
+            <select className="crm-select" value={audienceValue} onChange={(e) => setAudienceValue(e.target.value)}>
               <option value="">—</option>
               <option value="BACHELOR">{directionLabel('BACHELOR')}</option>
               <option value="MASTER">{directionLabel('MASTER')}</option>
@@ -261,6 +253,15 @@ function CreateForm({ onClose }: { onClose: () => void }) {
             </select>
           </div>
         )}
+      </div>
+      <div className="form-group" style={{ marginBottom: 12 }}>
+        <label>{t('massmail.field.body')}</label>
+        <textarea
+          className="crm-textarea"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={5}
+        />
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn btn-sm btn-secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>

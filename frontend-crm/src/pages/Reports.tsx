@@ -128,6 +128,7 @@ export default function Reports() {
         <div className="form-group" style={{ marginTop: 16 }}>
           <label>{t('reports.field.activity')}</label>
           <textarea
+            className="crm-textarea"
             value={activity}
             onChange={(e) => setActivity(e.target.value)}
             rows={3}
@@ -136,6 +137,7 @@ export default function Reports() {
         <div className="form-group">
           <label>{t('reports.field.challenges')}</label>
           <textarea
+            className="crm-textarea"
             value={challenges}
             onChange={(e) => setChallenges(e.target.value)}
             rows={2}

@@ -933,7 +933,12 @@ export default function Chat() {
                       {!m.deletedAt && m.attachments && m.attachments.length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: m.text ? 8 : 0 }}>
                           {m.attachments.map((a, ai) => {
-                            const isImg = a.mimeType?.startsWith('image/');
+                            // QA-fix: некоторые загрузчики/прокси сбрасывают mimeType
+                            // в application/octet-stream — fallback по расширению,
+                            // чтобы картинка не упала в file-card.
+                            const nameForExt = (a.originalName || a.filename || '').toLowerCase();
+                            const extIsImg = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(nameForExt);
+                            const isImg = a.mimeType?.startsWith('image/') || extIsImg;
                             const isVid = a.mimeType?.startsWith('video/');
                             const isAud = a.mimeType?.startsWith('audio/');
                             const url = a.url.startsWith('http') ? a.url : `${API_BASE}${a.url}`;
@@ -941,12 +946,17 @@ export default function Chat() {
                               return (
                                 <img
                                   key={ai}
+                                  className="chat-msg-img"
                                   src={url}
                                   alt={a.originalName}
-                                  onClick={() => setLightbox(url)}
+                                  onClick={() => { try { window.open(url, '_blank'); } catch { setLightbox(url); } }}
                                   style={{
-                                    maxWidth: 320, maxHeight: 320, borderRadius: 10,
-                                    cursor: 'zoom-in', display: 'block',
+                                    maxWidth: 280,
+                                    maxHeight: 280,
+                                    borderRadius: 12,
+                                    cursor: 'pointer',
+                                    objectFit: 'cover',
+                                    display: 'block',
                                   }}
                                 />
                               );
@@ -1210,18 +1220,12 @@ export default function Chat() {
             />
             <input
               ref={inputRef}
+              className="crm-input"
               value={input}
               onChange={onInputChange}
               onKeyDown={onInputKeyDown}
               placeholder={t('chat.placeholder')}
-              style={{
-                flex: 1,
-                padding: '12px 16px',
-                border: '1px solid var(--border)',
-                borderRadius: 100,
-                fontSize: 14,
-                fontFamily: 'inherit',
-              }}
+              style={{ flex: 1, borderRadius: 100 }}
             />
             <button type="submit" className="btn btn-primary" disabled={!input.trim() && pendingFiles.length === 0}>
               <Icon name="send" size={16} />
@@ -1599,17 +1603,11 @@ function NewTeamForm({ users, onCreate, onCancel }: {
         textTransform: 'uppercase',
       }}>{t('chat.newTeam')}</div>
       <input
+        className="crm-input"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder={t('chat.teamName')}
-        style={{
-          width: '100%',
-          padding: '10px 12px',
-          border: '1px solid var(--border)',
-          borderRadius: 10,
-          fontSize: 14,
-          marginBottom: 12,
-        }}
+        style={{ width: '100%', marginBottom: 12 }}
       />
       <div style={{
         fontFamily: 'var(--font-mono)',

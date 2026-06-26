@@ -210,13 +210,15 @@ export default function Students() {
         </div>
       </div>
       <div className="card-body">
-        <div className="filters">
-          <input placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+        <div className="filters" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <input className="crm-input" style={{ flex: '1 1 200px' }} placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select className="crm-select" style={{ flex: '1 1 200px' }} value={direction} onChange={(e) => setDirection(e.target.value as any)}>
             <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
           </select>
           <select
+            className="crm-select"
+            style={{ flex: '1 1 200px' }}
             value={stageFilter}
             onChange={(e) => setStageFilter(e.target.value)}
             title={t('app.filter.status')}
@@ -236,7 +238,7 @@ export default function Students() {
               <option value="ARCHIVED">{studentStatusLabel('ARCHIVED' as any)}</option>
             </optgroup>
           </select>
-          <select value={cabinet} onChange={(e) => setCabinet(e.target.value)}>
+          <select className="crm-select" style={{ flex: '1 1 200px' }} value={cabinet} onChange={(e) => setCabinet(e.target.value)}>
             <option value="">{t('app.field.cabinet')}</option>
             <option value="1">{t('app.field.cabinet')} 1</option>
             <option value="2">{t('app.field.cabinet')} 2</option>
@@ -244,6 +246,8 @@ export default function Students() {
           </select>
           {isAdmin && (
             <select
+              className="crm-select"
+              style={{ flex: '1 1 200px' }}
               value={manager}
               onChange={(e) => setManager(e.target.value)}
               title={t('app.filter.manager')}
@@ -255,20 +259,12 @@ export default function Students() {
             </select>
           )}
           {/* По ТЗ: «база студентов — только оплатившие». Отдельная вкладка. */}
-          <label style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            padding: '6px 12px',
-            border: '1px solid var(--border)',
-            borderRadius: 999,
-            background: paidOnly ? 'var(--primary-light)' : 'transparent',
-            color: paidOnly ? 'var(--primary-dark)' : 'var(--text-soft)',
-            fontWeight: 500, fontSize: 13, cursor: 'pointer',
-          }}>
+          <label className="crm-checkbox-label" style={{ flex: '1 1 200px' }}>
             <input
               type="checkbox"
+              className="crm-checkbox"
               checked={paidOnly}
               onChange={(e) => setPaidOnly(e.target.checked)}
-              style={{ margin: 0 }}
             />
             {t('students.paidOnly')}
           </label>

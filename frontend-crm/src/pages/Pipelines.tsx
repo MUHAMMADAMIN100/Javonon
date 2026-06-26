@@ -150,14 +150,14 @@ function CreateForm({
     }}>
       <div className="form-group" style={{ marginBottom: 10 }}>
         <label>{t('pipelines.field.name')}</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} />
+        <input className="crm-input" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div className="form-group" style={{ marginBottom: 10 }}>
         <label>{t('pipelines.field.description')}</label>
-        <input value={description} onChange={(e) => setDescription(e.target.value)} />
+        <input className="crm-input" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 10 }}>
-        <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
+      <label className="crm-checkbox-label" style={{ marginBottom: 10 }}>
+        <input type="checkbox" className="crm-checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
         Сделать воронкой по умолчанию (в неё попадают новые лиды)
       </label>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -282,8 +282,9 @@ function PipelineCard({
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input
+          className="crm-input"
           value={newStageName}
           onChange={(e) => setNewStageName(e.target.value)}
           placeholder={t('pipelines.stage.name')}
@@ -334,7 +335,7 @@ function StageChip({
         borderRadius: 8,
       }}>
         <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ width: 32, height: 28, border: 'none', background: 'transparent' }} />
-        <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: 140, padding: '4px 8px' }} />
+        <input className="crm-input" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 160 }} />
         <button className="btn btn-sm btn-primary" onClick={save}>OK</button>
         <button className="btn btn-sm btn-secondary" onClick={() => setEditing(false)}>X</button>
       </div>

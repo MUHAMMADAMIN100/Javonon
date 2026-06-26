@@ -336,9 +336,9 @@ export default function Programs() {
       </div>
       <div className="card-body">
         <div className="filters">
-          <input placeholder={t('programs.filter.city')} value={city} onChange={(e) => setCity(e.target.value)} />
-          <input placeholder={t('programs.filter.major')} value={major} onChange={(e) => setMajor(e.target.value)} />
-          <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+          <input className="crm-input" placeholder={t('programs.filter.city')} value={city} onChange={(e) => setCity(e.target.value)} />
+          <input className="crm-input" placeholder={t('programs.filter.major')} value={major} onChange={(e) => setMajor(e.target.value)} />
+          <select className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as any)}>
             <option value="">{t('programs.filter.direction')}</option>
             <DirectionOptions />
           </select>
@@ -493,7 +493,7 @@ export default function Programs() {
                 <input
                   value={editing.name || ''}
                   onChange={(e) => setEditing({ ...editing, name: safeText(e.target.value) })}
-                  className={formErrors.name ? 'input-error' : ''}
+                  className={`crm-input${formErrors.name ? ' input-error' : ''}`}
                   maxLength={200}
                   placeholder="Erasmus Mundus Joint Masters / Совместная магистратура"
                   required
@@ -506,7 +506,7 @@ export default function Programs() {
                   <input
                     value={editing.university || ''}
                     onChange={(e) => setEditing({ ...editing, university: safeText(e.target.value) })}
-                    className={formErrors.university ? 'input-error' : ''}
+                    className={`crm-input${formErrors.university ? ' input-error' : ''}`}
                     maxLength={200}
                     placeholder="Tsinghua University / МГУ"
                     required
@@ -516,6 +516,7 @@ export default function Programs() {
                 <div className="form-group">
                   <label>{t('programs.field.country')}</label>
                   <input
+                    className="crm-input"
                     value={editing.country || ''}
                     onChange={(e) => setEditing({ ...editing, country: safeText(e.target.value) })}
                     maxLength={100}
@@ -527,7 +528,7 @@ export default function Programs() {
                   <input
                     value={editing.city || ''}
                     onChange={(e) => setEditing({ ...editing, city: safeText(e.target.value) })}
-                    className={formErrors.city ? 'input-error' : ''}
+                    className={`crm-input${formErrors.city ? ' input-error' : ''}`}
                     maxLength={100}
                     placeholder="Пекин / Beijing / 北京"
                   />
@@ -538,7 +539,7 @@ export default function Programs() {
                   <input
                     value={editing.major || ''}
                     onChange={(e) => setEditing({ ...editing, major: safeText(e.target.value) })}
-                    className={formErrors.major ? 'input-error' : ''}
+                    className={`crm-input${formErrors.major ? ' input-error' : ''}`}
                     maxLength={200}
                     placeholder="Информатика / Computer Science"
                   />
@@ -546,7 +547,7 @@ export default function Programs() {
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.direction')}</label>
-                  <select value={editing.direction} onChange={(e) => setEditing({ ...editing, direction: e.target.value as Direction })}>
+                  <select className="crm-select" value={editing.direction} onChange={(e) => setEditing({ ...editing, direction: e.target.value as Direction })}>
                     <DirectionOptions />
                   </select>
                 </div>
@@ -558,14 +559,14 @@ export default function Programs() {
                     step={1}
                     value={editing.cost as any ?? ''}
                     onChange={(e) => setEditing({ ...editing, cost: e.target.value === '' ? undefined : Number(e.target.value) })}
-                    className={formErrors.cost ? 'input-error' : ''}
+                    className={`crm-input${formErrors.cost ? ' input-error' : ''}`}
                     placeholder={t('programs.field.costHint')}
                   />
                   {formErrors.cost && <div className="form-error-text">{formErrors.cost}</div>}
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.currency')}</label>
-                  <select value={editing.currency || 'CNY'} onChange={(e) => setEditing({ ...editing, currency: e.target.value })}>
+                  <select className="crm-select" value={editing.currency || 'CNY'} onChange={(e) => setEditing({ ...editing, currency: e.target.value })}>
                     <option value="CNY">CNY (юань)</option>
                     <option value="USD">USD</option>
                     <option value="EUR">EUR (евро)</option>
@@ -582,11 +583,12 @@ export default function Programs() {
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.duration')}</label>
-                  <input value={editing.duration || ''} placeholder="4 года" onChange={(e) => setEditing({ ...editing, duration: e.target.value })} />
+                  <input className="crm-input" value={editing.duration || ''} placeholder="4 года" onChange={(e) => setEditing({ ...editing, duration: e.target.value })} />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label>{t('programs.field.language')}</label>
                   <select
+                    className="crm-select"
                     value={editing.language || ''}
                     onChange={(e) => setEditing({ ...editing, language: e.target.value })}
                   >
@@ -599,10 +601,11 @@ export default function Programs() {
               </div>
 
               {/* Расширенные поля каталога */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              <div className="form-grid-2">
                 <div className="form-group">
                   <label>{t('programs.field.englishLevel')}</label>
                   <input
+                    className="crm-input"
                     value={editing.englishLevel || ''}
                     placeholder="IELTS 6.0 / HSK 4 / —"
                     onChange={(e) => setEditing({ ...editing, englishLevel: e.target.value })}
@@ -611,6 +614,7 @@ export default function Programs() {
                 <div className="form-group">
                   <label>{t('programs.field.avgScore')}</label>
                   <input
+                    className="crm-input"
                     value={editing.avgAdmissionScore || ''}
                     placeholder="GPA 3.0 / 80%"
                     onChange={(e) => setEditing({ ...editing, avgAdmissionScore: e.target.value })}
@@ -619,6 +623,7 @@ export default function Programs() {
                 <div className="form-group">
                   <label>{t('programs.field.deadline')}</label>
                   <input
+                    className="crm-input"
                     value={editing.applicationDeadline || ''}
                     placeholder="1 марта / круглый год"
                     onChange={(e) => setEditing({ ...editing, applicationDeadline: e.target.value })}
@@ -627,6 +632,7 @@ export default function Programs() {
                 <div className="form-group">
                   <label>{t('programs.field.intakes')}</label>
                   <input
+                    className="crm-input"
                     type="number"
                     min={0}
                     max={12}
@@ -637,9 +643,10 @@ export default function Programs() {
                 </div>
               </div>
               <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'row' }}>
+                <label className="crm-checkbox-label" style={{ gridColumn: '1 / -1' }}>
                   <input
                     type="checkbox"
+                    className="crm-checkbox"
                     checked={!!editing.hasGrant}
                     onChange={(e) => setEditing({ ...editing, hasGrant: e.target.checked })}
                   />
@@ -647,10 +654,11 @@ export default function Programs() {
                 </label>
               </div>
               {editing.hasGrant && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                <div className="form-grid-2">
                   <div className="form-group">
                     <label>Что покрывает грант</label>
                     <input
+                      className="crm-input"
                       value={editing.grantDetails || ''}
                       placeholder="Обучение + проживание + стипендия"
                       onChange={(e) => setEditing({ ...editing, grantDetails: e.target.value })}
@@ -659,6 +667,7 @@ export default function Programs() {
                   <div className="form-group">
                     <label>Уровень англ. для гранта</label>
                     <input
+                      className="crm-input"
                       value={editing.grantEnglishLevel || ''}
                       placeholder="IELTS 6.5"
                       onChange={(e) => setEditing({ ...editing, grantEnglishLevel: e.target.value })}
@@ -683,6 +692,7 @@ export default function Programs() {
               <div className="form-group">
                 <label>{t('programs.field.website')}</label>
                 <input
+                  className="crm-input"
                   type="url"
                   value={editing.universityWebsiteUrl || ''}
                   placeholder="https://www.tsinghua.edu.cn"
@@ -714,8 +724,9 @@ export default function Programs() {
                 </div>
                 <textarea
                   ref={descRef}
+                  className="crm-textarea"
                   rows={10}
-                  style={{ minHeight: 250, fontFamily: 'inherit', resize: 'vertical' }}
+                  style={{ minHeight: 250, fontFamily: 'inherit' }}
                   value={editing.description || ''}
                   placeholder={`Подробное описание программы.\n\nПоддерживается markdown: **жирный**, *курсив*, - список, [ссылка](https://...)`}
                   onChange={(e) => setEditing({ ...editing, description: e.target.value })}
@@ -797,8 +808,8 @@ export default function Programs() {
               )}
 
               <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'row' }}>
-                  <input type="checkbox" checked={editing.published !== false} onChange={(e) => setEditing({ ...editing, published: e.target.checked })} />
+                <label className="crm-checkbox-label">
+                  <input className="crm-checkbox" type="checkbox" checked={editing.published !== false} onChange={(e) => setEditing({ ...editing, published: e.target.checked })} />
                   {t('programs.field.published')}
                 </label>
               </div>
@@ -864,6 +875,7 @@ function TagsInput({
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <input
+          className="crm-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -1029,20 +1041,20 @@ function ScholarshipsEditor({ programId }: { programId: string }) {
           padding: 12, marginTop: 8,
           border: '1px solid var(--primary)', borderRadius: 8, background: 'var(--bg-soft)',
         }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-            <input placeholder="Название (CSC Scholarship)" value={draft.name || ''}
+          <div className="form-grid-2" style={{ gap: 8 }}>
+            <input className="crm-input" placeholder="Название (CSC Scholarship)" value={draft.name || ''}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            <input placeholder="Покрытие (Полное / Частичное)" value={draft.coverage || ''}
+            <input className="crm-input" placeholder="Покрытие (Полное / Частичное)" value={draft.coverage || ''}
               onChange={(e) => setDraft({ ...draft, coverage: e.target.value })} />
-            <input placeholder="Сумма (5000 USD/год)" value={draft.amount || ''}
+            <input className="crm-input" placeholder="Сумма (5000 USD/год)" value={draft.amount || ''}
               onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
-            <input placeholder="Что включено" value={draft.includes || ''}
+            <input className="crm-input" placeholder="Что включено" value={draft.includes || ''}
               onChange={(e) => setDraft({ ...draft, includes: e.target.value })} />
-            <input placeholder="Требования (GPA 3.5, IELTS 6.0)" value={draft.requirements || ''}
+            <input className="crm-input" placeholder="Требования (GPA 3.5, IELTS 6.0)" value={draft.requirements || ''}
               onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} />
-            <input placeholder="Дедлайн (1 марта)" value={draft.deadline || ''}
+            <input className="crm-input" placeholder="Дедлайн (1 марта)" value={draft.deadline || ''}
               onChange={(e) => setDraft({ ...draft, deadline: e.target.value })} />
-            <input placeholder="Ссылка (https://...)" value={draft.link || ''}
+            <input className="crm-input" style={{ gridColumn: '1 / -1' }} placeholder="Ссылка (https://...)" value={draft.link || ''}
               onChange={(e) => setDraft({ ...draft, link: e.target.value })} />
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
@@ -1194,20 +1206,20 @@ function ScholarshipsPending({
           padding: 12, marginTop: 8,
           border: '1px solid var(--primary)', borderRadius: 8, background: 'var(--bg-soft)',
         }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-            <input placeholder="CSC Scholarship" value={draft.name || ''}
+          <div className="form-grid-2" style={{ gap: 8 }}>
+            <input className="crm-input" placeholder="CSC Scholarship" value={draft.name || ''}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            <input placeholder={t('programs.scholarship.coverage')} value={draft.coverage || ''}
+            <input className="crm-input" placeholder={t('programs.scholarship.coverage')} value={draft.coverage || ''}
               onChange={(e) => setDraft({ ...draft, coverage: e.target.value })} />
-            <input placeholder={t('programs.scholarship.amount')} value={draft.amount || ''}
+            <input className="crm-input" placeholder={t('programs.scholarship.amount')} value={draft.amount || ''}
               onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
-            <input placeholder={t('programs.scholarship.includes')} value={draft.includes || ''}
+            <input className="crm-input" placeholder={t('programs.scholarship.includes')} value={draft.includes || ''}
               onChange={(e) => setDraft({ ...draft, includes: e.target.value })} />
-            <input placeholder={t('programs.scholarship.requirements')} value={draft.requirements || ''}
+            <input className="crm-input" placeholder={t('programs.scholarship.requirements')} value={draft.requirements || ''}
               onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} />
-            <input placeholder={t('programs.scholarship.deadline')} value={draft.deadline || ''}
+            <input className="crm-input" placeholder={t('programs.scholarship.deadline')} value={draft.deadline || ''}
               onChange={(e) => setDraft({ ...draft, deadline: e.target.value })} />
-            <input placeholder="https://..." value={draft.link || ''}
+            <input className="crm-input" style={{ gridColumn: '1 / -1' }} placeholder="https://..." value={draft.link || ''}
               onChange={(e) => setDraft({ ...draft, link: e.target.value })} />
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>

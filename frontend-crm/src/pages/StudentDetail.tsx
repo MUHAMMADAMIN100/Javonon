@@ -436,7 +436,7 @@ export default function StudentDetail() {
                     value={form.fullName}
                     onChange={(e) => setForm({ ...form, fullName: e.target.value })}
                     onBlur={() => setTouched((tt) => ({ ...tt, fullName: true }))}
-                    className={showErr('fullName') ? 'input-error' : ''}
+                    className={`crm-input${showErr('fullName') ? ' input-error' : ''}`}
                     maxLength={100}
                   />
                   {showErr('fullName') && <div className="form-error-text">{(formErrors as any).fullName}</div>}
@@ -447,7 +447,7 @@ export default function StudentDetail() {
                     value={form.phones}
                     onChange={(e) => setForm({ ...form, phones: e.target.value.replace(/[^\d ,+\-()]/g, '') })}
                     onBlur={() => setTouched((tt) => ({ ...tt, phones: true }))}
-                    className={showErr('phones') ? 'input-error' : ''}
+                    className={`crm-input${showErr('phones') ? ' input-error' : ''}`}
                     placeholder="+992123456789, +992111222333"
                   />
                   {showErr('phones') && <div className="form-error-text">{(formErrors as any).phones}</div>}
@@ -455,6 +455,7 @@ export default function StudentDetail() {
                 <div className="form-group">
                   <label>{t('studentDetail.field.phoneLabels')}</label>
                   <input
+                    className="crm-input"
                     value={form.phoneLabels || ''}
                     onChange={(e) => setForm({ ...form, phoneLabels: e.target.value })}
                   />
@@ -463,6 +464,7 @@ export default function StudentDetail() {
                   <div className="form-group">
                     <label>{t('app.field.preferredChannel')}</label>
                     <select
+                      className="crm-select"
                       value={form.preferredChannel || ''}
                       onChange={(e) => setForm({ ...form, preferredChannel: e.target.value })}
                     >
@@ -477,6 +479,7 @@ export default function StudentDetail() {
                   <div className="form-group">
                     <label>{t('app.field.birthday')}</label>
                     <input
+                      className="crm-input"
                       type="date"
                       value={form.birthday || ''}
                       onChange={(e) => setForm({ ...form, birthday: e.target.value })}
@@ -490,14 +493,14 @@ export default function StudentDetail() {
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     onBlur={() => setTouched((tt) => ({ ...tt, email: true }))}
-                    className={showErr('email') ? 'input-error' : ''}
+                    className={`crm-input${showErr('email') ? ' input-error' : ''}`}
                   />
                   {showErr('email') && <div className="form-error-text">{(formErrors as any).email}</div>}
                 </div>
                 <div className="form-grid-2">
                   <div className="form-group">
                     <label>{t('app.field.direction')}</label>
-                    <select value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
+                    <select className="crm-select" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
                       <DirectionOptions />
                     </select>
                   </div>
@@ -510,7 +513,7 @@ export default function StudentDetail() {
                       value={form.cabinet}
                       onChange={(e) => setForm({ ...form, cabinet: e.target.value.replace(/[^\d]/g, '') })}
                       onBlur={() => setTouched((tt) => ({ ...tt, cabinet: true }))}
-                      className={showErr('cabinet') ? 'input-error' : ''}
+                      className={`crm-input${showErr('cabinet') ? ' input-error' : ''}`}
                     />
                     {showErr('cabinet') && <div className="form-error-text">{(formErrors as any).cabinet}</div>}
                   </div>
@@ -518,7 +521,7 @@ export default function StudentDetail() {
                 <div className="form-grid-2">
                   <div className="form-group">
                     <label>{t('common.status')}</label>
-                    <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
+                    <select className="crm-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
                       <option value="ACTIVE">{statusLabel('ACTIVE' as any)}</option>
                       <option value="PAUSED">{statusLabel('PAUSED' as any)}</option>
                       <option value="GRADUATED">{statusLabel('GRADUATED' as any)}</option>
@@ -527,7 +530,7 @@ export default function StudentDetail() {
                   </div>
                   <div className="form-group">
                     <label>{t('app.field.onboarding')}</label>
-                    <select value={form.onboardingStage || 'WELCOME'} onChange={(e) => setForm({ ...form, onboardingStage: e.target.value })}>
+                    <select className="crm-select" value={form.onboardingStage || 'WELCOME'} onChange={(e) => setForm({ ...form, onboardingStage: e.target.value })}>
                       <option value="WELCOME">{onboardingLabel('WELCOME' as any)}</option>
                       <option value="DOCS_COLLECTED">{onboardingLabel('DOCS_COLLECTED' as any)}</option>
                       <option value="CABINET_OPENED">{onboardingLabel('CABINET_OPENED' as any)}</option>
@@ -543,7 +546,7 @@ export default function StudentDetail() {
                     onChange={(e) => setForm({ ...form, comment: e.target.value })}
                     onBlur={() => setTouched((tt) => ({ ...tt, comment: true }))}
                     maxLength={2000}
-                    className={showErr('comment') ? 'input-error' : ''}
+                    className={`crm-textarea${showErr('comment') ? ' input-error' : ''}`}
                   />
                   {showErr('comment') && <div className="form-error-text">{(formErrors as any).comment}</div>}
                 </div>

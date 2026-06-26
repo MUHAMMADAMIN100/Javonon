@@ -162,7 +162,7 @@ export default function Salary() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
           <div className="form-group">
             <label>{t('salary.field.employee')}</label>
-            <select value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <select className="crm-select" value={userId} onChange={(e) => setUserId(e.target.value)}>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName} · {displayRoleLabel(u as any)}</option>
               ))}
@@ -170,15 +170,15 @@ export default function Salary() {
           </div>
           <div className="form-group">
             <label>{t('salary.field.periodFrom')}</label>
-            <input type="date" value={start} onChange={(e) => setRange({ start: e.target.value, end })} />
+            <input className="crm-input" type="date" value={start} onChange={(e) => setRange({ start: e.target.value, end })} />
           </div>
           <div className="form-group">
             <label>{t('salary.field.periodTo')}</label>
-            <input type="date" value={end} onChange={(e) => setRange({ start, end: e.target.value })} />
+            <input className="crm-input" type="date" value={end} onChange={(e) => setRange({ start, end: e.target.value })} />
           </div>
           <div className="form-group">
             <label>{t('salary.field.kpiBonus')}</label>
-            <input type="number" step="0.01" value={kpiBonus} onChange={(e) => setKpiBonus(e.target.value)} placeholder="0" />
+            <input className="crm-input" type="number" step="0.01" value={kpiBonus} onChange={(e) => setKpiBonus(e.target.value)} placeholder="0" />
           </div>
         </div>
 
@@ -265,15 +265,12 @@ export default function Salary() {
               </div>
               <div className="salary-confirm-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <input
+                  className="crm-input"
                   type="text"
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   placeholder={t('salary.field.commentPlaceholder')}
                   style={{
-                    padding: '12px 14px',
-                    border: '1px solid var(--border)',
-                    borderRadius: 10,
-                    fontSize: 14,
                     flex: '1 1 200px',
                     minWidth: 0,
                   }}
