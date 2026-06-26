@@ -4,7 +4,7 @@ import { PenaltyReason } from '@prisma/client';
 import { SettingsService } from '../settings/settings.service';
 import { tjStartOfDay, tjStartOfNextDay, tjStartOfMonth, tjStartOfNextMonth, tjLocalDay } from '../common/tj-time';
 
-const VALID_REASONS: PenaltyReason[] = ['LATE_ARRIVAL', 'ABSENCE', 'TASK_OVERDUE', 'CUSTOM'];
+const VALID_REASONS: PenaltyReason[] = ['LATE_ARRIVAL', 'LATE_FROM_LUNCH', 'ABSENCE', 'TASK_OVERDUE', 'CUSTOM'];
 
 const RATE_PER_LATE_MINUTE = 0.5; // $0.50 за минуту опоздания (legacy формула, для fallback)
 // ТЗ §3: «при опоздании на 10-15 минут штраф должен автоматически
@@ -194,6 +194,69 @@ export class PenaltiesService {
       created++;
     }
     return { created, excused, pending, scanned: entries.length };
+  }
+
+  /**
+   * Cron-задача: штрафы за позднее возвращение с обеда (lateLunchMinutes
+   * > LATE_THRESHOLD_MIN). Логика идентична LATE_ARRIVAL — та же шкала
+   * PenaltyRule, тот же fallback. Без excuse-механики (по ТЗ обеденные
+   * опоздания нельзя оправдать через формулу — это disциплинарка).
+   * Идемпотентность через флаг lateLunchPenaltyApplied.
+   */
+  async generateLunchLatePenaltiesForDate(targetDate: Date) {
+    const from = tjStartOfDay(targetDate);
+    const to = tjStartOfNextDay(targetDate);
+
+    const entries = await this.prisma.timeEntry.findMany({
+      where: {
+        clockIn: { gte: from, lt: to },
+        lateLunchMinutes: { gte: LATE_THRESHOLD_MIN },
+        lateLunchPenaltyApplied: false,
+      },
+      include: { user: { select: { id: true, fullName: true } } },
+    });
+
+    let created = 0;
+    for (const e of entries) {
+      let amount: number;
+      let detailsRule: string;
+      const rule = await this.settings.findPenaltyForLate(e.lateLunchMinutes);
+      if (rule) {
+        amount = rule.amount;
+        detailsRule = rule.comment
+          ? ` · правило «${rule.comment}»`
+          : ` · по правилу ${rule.minLateMinutes}-${rule.maxLateMinutes ?? '∞'} мин`;
+      } else {
+        // Fallback — та же база/инкремент, что и для утреннего опоздания.
+        const priorCount = await this.prisma.penalty.count({
+          where: {
+            userId: e.userId,
+            reason: 'LATE_FROM_LUNCH',
+            date: { gte: tjStartOfMonth(from), lt: tjStartOfNextMonth(from) },
+          },
+        });
+        amount = LATE_BASE_AMOUNT_TJS + priorCount * LATE_INCREMENT_TJS;
+        detailsRule = ` · ${priorCount + 1}-е в этом месяце`;
+      }
+
+      await this.prisma.$transaction([
+        this.prisma.penalty.create({
+          data: {
+            userId: e.userId,
+            reason: 'LATE_FROM_LUNCH',
+            amount,
+            details: `Позднее возвращение с обеда ${e.lateLunchMinutes} мин${detailsRule}`,
+            date: from,
+          },
+        }),
+        this.prisma.timeEntry.update({
+          where: { id: e.id },
+          data: { lateLunchPenaltyApplied: true },
+        }),
+      ]);
+      created++;
+    }
+    return { created, scanned: entries.length };
   }
 
   /** Сумма неучтённых штрафов за период (для зарплатного расчёта).

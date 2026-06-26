@@ -579,6 +579,12 @@ model TimeEntry {
   totalLunchMinutes Int  @default(0)
   // Опоздание относительно нормы (в минутах). Расчёт: clockIn - 09:00.
   lateMinutes       Int  @default(0)
+  // Опоздание после обеда (lunchIn - scheduled lunch end). Штраф
+  // считается отдельно по той же шкале PenaltyRule.
+  lateLunchMinutes  Int  @default(0)
+  // Признак, что штраф за позднее возвращение с обеда уже начислен
+  // (penalty record создан). Чтобы повторно не начислять при пересчёте.
+  lateLunchPenaltyApplied Boolean @default(false)
   // Переработка: всё что отработано сверх 8 часов (480 мин)
   overtimeMinutes   Int  @default(0)
   // Подтверждение присутствия на работе (геолокация / видео-кружок).
@@ -1000,7 +1006,8 @@ model Interaction {
 // PENALTIES — штрафы (ТЗ §3.9 «Нарушение → штраф»)
 // ============================================================
 enum PenaltyReason {
-  LATE_ARRIVAL    // опоздание
+  LATE_ARRIVAL    // опоздание утром (clockIn после scheduled start)
+  LATE_FROM_LUNCH // опоздание после обеда (lunchIn после scheduled lunch end)
   ABSENCE         // прогул
   TASK_OVERDUE    // просроченная задача
   CUSTOM          // ручной штраф админа

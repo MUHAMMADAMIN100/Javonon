@@ -4182,3 +4182,52 @@ textarea:focus {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* Settings tab bar — горизонтальный скролл на мобиле, чтобы названия
+   табов не ломались посимвольно («Гра/фик/раб/оты»). На десктопе
+   ничего не меняется — таб-бар не переполняется. */
+.settings-tabbar {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.settings-tabbar::-webkit-scrollbar {
+  height: 4px;
+}
+.settings-tabbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+/* Универсальные row в Settings (правила штрафа, кастомные роли,
+   тарифы бонусов). На мобиле кнопки переносятся под основной контент,
+   на десктопе — справа в ряд. */
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+.settings-row-main {
+  min-width: 0;
+  word-break: break-word;
+}
+.settings-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+@media (min-width: 600px) {
+  .settings-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .settings-row-main {
+    flex: 1 1 auto;
+  }
+  .settings-row-actions {
+    flex: 0 0 auto;
+  }
+}

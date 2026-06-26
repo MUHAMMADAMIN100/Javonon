@@ -572,6 +572,7 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== penalty reason enum =====
     'penalty.reason.LATE_ARRIVAL': 'Опоздание',
+    'penalty.reason.LATE_FROM_LUNCH': 'Опоздание с обеда',
     'penalty.reason.ABSENCE': 'Прогул',
     'penalty.reason.EARLY_LEAVE': 'Ранний уход',
     'penalty.reason.MANUAL': 'Ручной штраф',
@@ -1859,6 +1860,7 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== penalty reason enum =====
     'penalty.reason.LATE_ARRIVAL': 'Дер кардан',
+    'penalty.reason.LATE_FROM_LUNCH': 'Дер баргаштан аз хӯрок',
     'penalty.reason.ABSENCE': 'Ғоиб',
     'penalty.reason.EARLY_LEAVE': 'Барвақт рафтан',
     'penalty.reason.MANUAL': 'Ҷаримаи дастӣ',

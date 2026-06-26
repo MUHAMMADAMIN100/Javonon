@@ -235,12 +235,34 @@ export class TimeTrackingService {
     const now = new Date();
     const lunchMs = active.lunchOut ? now.getTime() - active.lunchOut.getTime() : 0;
     const lunchMin = Math.max(0, Math.round(lunchMs / 60000));
+
+    // ТЗ §3 — штраф за позднее возвращение с обеда.
+    // Берём расписание для weekday по clockIn (день не должен сменяться
+    // на обеде, но если вдруг — берём по clockIn — это его рабочий день).
+    // Если scheduled lunchEnd задан и lunchIn (now) > этого времени дня,
+    // считаем разницу в минутах. Сохраняем в lateLunchMinutes — штраф
+    // начислится через cron daily-penalty / клиентский clockOut.
+    let lateLunchMinutes = 0;
+    try {
+      const { weekday } = localDayAndMinutes(active.clockIn);
+      const sched = await this.settings.getEffectiveScheduleForUser(userId, weekday);
+      if (sched.isWorkday && sched.lunchEndMinute !== null) {
+        const { minutesFromMidnight: nowMin } = localDayAndMinutes(now);
+        const overdue = nowMin - sched.lunchEndMinute;
+        if (overdue > 0) lateLunchMinutes = overdue;
+      }
+    } catch {
+      // Если расписание недоступно — не блокируем lunchIn,
+      // штраф просто не начисляем.
+    }
+
     const upd = await this.prisma.timeEntry.update({
       where: { id: active.id },
       data: {
         status: TimeEntryStatus.WORKING,
         lunchIn: now,
         totalLunchMinutes: active.totalLunchMinutes + lunchMin,
+        lateLunchMinutes,
       },
     });
     this.realtime.emitStaff('attendance:updated', { userId, entryId: upd.id, action: 'lunchIn' });

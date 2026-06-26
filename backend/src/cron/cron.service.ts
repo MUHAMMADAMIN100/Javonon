@@ -29,6 +29,10 @@ export class CronService {
     const today = new Date();
     const result = await this.penalties.generateLatePenaltiesForDate(today);
     this.logger.log(`Created ${result.created} penalties from ${result.scanned} late entries`);
+    // По ТЗ — штраф за позднее возвращение с обеда. Тот же cron, тот же
+    // источник данных (TimeEntry), но другой признак (lateLunchMinutes).
+    const lunchResult = await this.penalties.generateLunchLatePenaltiesForDate(today);
+    this.logger.log(`Created ${lunchResult.created} lunch-late penalties from ${lunchResult.scanned} entries`);
   }
 
   /**

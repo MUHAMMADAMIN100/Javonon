@@ -57,12 +57,15 @@ export default function Settings() {
       </div>
 
       <div className="card" style={{ padding: 0 }}>
-        <div style={{
-          display: 'flex',
-          borderBottom: '1px solid var(--border)',
-          gap: 4,
-          padding: '8px 8px 0',
-        }}>
+        <div
+          className="settings-tabbar"
+          style={{
+            display: 'flex',
+            borderBottom: '1px solid var(--border)',
+            gap: 4,
+            padding: '8px 8px 0',
+          }}
+        >
           <TabButton active={tab === 'schedule'} onClick={() => setTab('schedule')} label={t('settings.tab.schedule')} />
           <TabButton active={tab === 'penalties'} onClick={() => setTab('penalties')} label={t('settings.tab.penalties')} />
           <TabButton active={tab === 'location'} onClick={() => setTab('location')} label={t('settings.tab.location')} />
@@ -95,6 +98,10 @@ function TabButton({ active, onClick, label }: { active: boolean; onClick: () =>
         fontWeight: active ? 600 : 500,
         color: active ? 'var(--text)' : 'var(--text-soft)',
         fontSize: 14,
+        // Запрет переноса текста по символам на узких экранах.
+        // На мобиле родитель .settings-tabbar скроллится горизонтально.
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}
     >
       {label}
@@ -176,18 +183,21 @@ function PenaltiesTab() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rules.length === 0 && <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('settings.penalties.empty')}</div>}
         {rules.map((r) => (
-          <div key={r.id} style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '8px 14px', border: '1px solid var(--border)', borderRadius: 8,
-            opacity: r.isActive ? 1 : 0.5,
-          }}>
-            <div>
+          <div
+            key={r.id}
+            className="settings-row"
+            style={{
+              padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 8,
+              opacity: r.isActive ? 1 : 0.5,
+            }}
+          >
+            <div className="settings-row-main">
               <div style={{ fontWeight: 500 }}>
                 {r.minLateMinutes}-{r.maxLateMinutes ?? '∞'} {t('common.minutes')} → <b>{r.amount} {r.currency}</b>
               </div>
               {r.comment && <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{r.comment}</div>}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="settings-row-actions">
               <button className="btn btn-sm btn-secondary" onClick={() => toggleActive(r)}>
                 {r.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
               </button>
@@ -365,13 +375,13 @@ function RolesTab() {
           {roles.map((r) => (
             <div
               key={r.id}
+              className="settings-row"
               style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 10,
-                opacity: r.isActive ? 1 : 0.5, gap: 12, flexWrap: 'wrap',
+                opacity: r.isActive ? 1 : 0.5,
               }}
             >
-              <div style={{ flex: 1, minWidth: 200 }}>
+              <div className="settings-row-main">
                 <div style={{ fontWeight: 600 }}>{r.name}</div>
                 {r.description && (
                   <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 2 }}>{r.description}</div>
@@ -380,7 +390,7 @@ function RolesTab() {
                   {r.permissions.length} · {r._count?.users ?? 0}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div className="settings-row-actions">
                 <button className="btn btn-sm btn-secondary" onClick={() => onToggle(r)}>
                   {r.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
                 </button>
@@ -847,13 +857,13 @@ function BonusTiersSection() {
         {tiers.map((tier) => (
           <div
             key={tier.id}
+            className="settings-row"
             style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '8px 14px', border: '1px solid var(--border)', borderRadius: 8,
+              padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 8,
               opacity: tier.isActive ? 1 : 0.5,
             }}
           >
-            <div>
+            <div className="settings-row-main">
               <div style={{ fontWeight: 500 }}>
                 {tier.minAmount.toLocaleString('ru-RU')} - {tier.maxAmount === null ? '∞' : tier.maxAmount.toLocaleString('ru-RU')} {tier.currency}
                 {' → '}
@@ -863,7 +873,7 @@ function BonusTiersSection() {
                 <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{tier.comment}</div>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="settings-row-actions">
               <button className="btn btn-sm btn-secondary" onClick={() => toggleActive(tier)}>
                 {tier.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
               </button>

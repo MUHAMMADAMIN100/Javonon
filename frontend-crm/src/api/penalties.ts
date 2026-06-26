@@ -1,9 +1,10 @@
 import { api } from './client';
 
-export type PenaltyReason = 'LATE_ARRIVAL' | 'ABSENCE' | 'TASK_OVERDUE' | 'CUSTOM';
+export type PenaltyReason = 'LATE_ARRIVAL' | 'LATE_FROM_LUNCH' | 'ABSENCE' | 'TASK_OVERDUE' | 'CUSTOM';
 
 export const PENALTY_REASON_LABEL: Record<PenaltyReason, string> = {
   LATE_ARRIVAL: 'Опоздание',
+  LATE_FROM_LUNCH: 'Опоздание с обеда',
   ABSENCE: 'Прогул',
   TASK_OVERDUE: 'Просроченная задача',
   CUSTOM: 'Прочее',
