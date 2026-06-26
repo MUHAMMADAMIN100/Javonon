@@ -71,6 +71,20 @@ export default function TimeTracker() {
   });
   const today = todayQuery.data ?? null;
 
+  // Если сотрудник опоздал с обеда и НЕ прислал причину — заставляем
+  // открыть модалку при загрузке страницы (даже если он перезагрузил
+  // вкладку, чтобы пропустить). Объяснение обязательно.
+  useEffect(() => {
+    if (
+      today &&
+      (today.lateLunchMinutes ?? 0) >= 10 &&
+      !today.lunchLateExcuseAt &&
+      !today.lateLunchPenaltyApplied
+    ) {
+      setShowLunchExcuseModal(true);
+    }
+  }, [today?.id, today?.lateLunchMinutes, today?.lunchLateExcuseAt, today?.lateLunchPenaltyApplied]);
+
   const historyQuery = useQuery<TimeEntry[]>({
     queryKey: historyKey,
     queryFn: () => getHistory({ take: 30 }),
@@ -747,7 +761,7 @@ function LunchExcuseModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={onCancel}
+      // Объяснение обязательно — клик по backdrop НЕ закрывает модалку.
     >
       <motion.div
         className="dialog-card"
@@ -761,7 +775,7 @@ function LunchExcuseModal({
           Объяснение опоздания с обеда
         </h3>
         <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 20 }}>
-          Опоздал с обеда на {entry.lateLunchMinutes ?? 0} мин. Если основатель одобрит причину — штраф не начислится.
+          Опоздал с обеда на {entry.lateLunchMinutes ?? 0} мин. Объяснение причины <b>обязательно</b>. Если основатель одобрит — штраф не начислится.
         </p>
 
         <textarea
@@ -786,8 +800,7 @@ function LunchExcuseModal({
           )}
         </div>
 
-        <div className="dialog-actions">
-          <button className="btn btn-secondary" onClick={onCancel} disabled={submitting}>Позже</button>
+        <div className="dialog-actions" style={{ justifyContent: 'flex-end' }}>
           <button className="btn btn-primary" onClick={submit} disabled={submitting}>
             {submitting ? 'Отправляем...' : 'Отправить'}
           </button>
