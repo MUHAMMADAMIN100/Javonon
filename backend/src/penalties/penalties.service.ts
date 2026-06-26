@@ -199,8 +199,13 @@ export class PenaltiesService {
   /**
    * Cron-задача: штрафы за позднее возвращение с обеда (lateLunchMinutes
    * > LATE_THRESHOLD_MIN). Логика идентична LATE_ARRIVAL — та же шкала
-   * PenaltyRule, тот же fallback. Без excuse-механики (по ТЗ обеденные
-   * опоздания нельзя оправдать через формулу — это disциплинарка).
+   * PenaltyRule, тот же fallback.
+   *
+   * Учёт excuse (по аналогии с утренним опозданием):
+   *   APPROVED — не штрафуем, помечаем applied=true
+   *   PENDING  — пропускаем, FOUNDER должен разобрать (applied=false)
+   *   REJECTED / null — штрафуем как обычно.
+   *
    * Идемпотентность через флаг lateLunchPenaltyApplied.
    */
   async generateLunchLatePenaltiesForDate(targetDate: Date) {
@@ -217,7 +222,24 @@ export class PenaltiesService {
     });
 
     let created = 0;
+    let excused = 0;
+    let pending = 0;
     for (const e of entries) {
+      const status = (e as any).lunchLateExcuseStatus as string | null;
+      if (status === 'APPROVED') {
+        await this.prisma.timeEntry.update({
+          where: { id: e.id },
+          data: { lateLunchPenaltyApplied: true },
+        });
+        excused++;
+        continue;
+      }
+      if (status === 'PENDING') {
+        // Ждём решения FOUNDER'а — следующий cron посмотрит снова.
+        pending++;
+        continue;
+      }
+
       let amount: number;
       let detailsRule: string;
       const rule = await this.settings.findPenaltyForLate(e.lateLunchMinutes);
@@ -245,7 +267,7 @@ export class PenaltiesService {
             userId: e.userId,
             reason: 'LATE_FROM_LUNCH',
             amount,
-            details: `Позднее возвращение с обеда ${e.lateLunchMinutes} мин${detailsRule}`,
+            details: `Позднее возвращение с обеда ${e.lateLunchMinutes} мин${detailsRule}${status === 'REJECTED' ? ' · причина отклонена' : ' · без оправдания'}`,
             date: from,
           },
         }),
@@ -256,7 +278,7 @@ export class PenaltiesService {
       ]);
       created++;
     }
-    return { created, scanned: entries.length };
+    return { created, excused, pending, scanned: entries.length };
   }
 
   /** Сумма неучтённых штрафов за период (для зарплатного расчёта).
@@ -292,9 +314,16 @@ export class PenaltiesService {
       where: {
         userId,
         clockIn: { gte: from, lte: to },
-        lateMinutes: { gte: LATE_THRESHOLD_MIN },
+        OR: [
+          { lateMinutes: { gte: LATE_THRESHOLD_MIN } },
+          { lateLunchMinutes: { gte: LATE_THRESHOLD_MIN } },
+        ],
       },
-      select: { clockIn: true, lateExcuseStatus: true },
+      select: {
+        clockIn: true,
+        lateExcuseStatus: true,
+        lunchLateExcuseStatus: true,
+      },
     });
     // Ключ — день в Asia/Dushanbe (penalty.date хранится setHours(0,0,0,0)
     // в локальной TZ сервера; entry.clockIn — реальный приход).
@@ -302,15 +331,19 @@ export class PenaltiesService {
     const STATUS_PRIORITY: Record<string, number> = {
       APPROVED: 3, PENDING: 2, REJECTED: 1,
     };
-    const byDay = new Map<string, string | null>();
-    for (const e of entries) {
-      const day = tjLocalDay(e.clockIn);
-      const cur = byDay.get(day) ?? null;
-      const next = e.lateExcuseStatus as string | null;
+    const arrivalByDay = new Map<string, string | null>();
+    const lunchByDay = new Map<string, string | null>();
+    const pickBest = (map: Map<string, string | null>, day: string, next: string | null) => {
+      const cur = map.get(day) ?? null;
       const curRank = cur ? STATUS_PRIORITY[cur] ?? 0 : 0;
       const nextRank = next ? STATUS_PRIORITY[next] ?? 0 : 0;
-      if (nextRank > curRank) byDay.set(day, next);
-      else if (!byDay.has(day)) byDay.set(day, next);
+      if (nextRank > curRank) map.set(day, next);
+      else if (!map.has(day)) map.set(day, next);
+    };
+    for (const e of entries) {
+      const day = tjLocalDay(e.clockIn);
+      pickBest(arrivalByDay, day, e.lateExcuseStatus as string | null);
+      pickBest(lunchByDay, day, e.lunchLateExcuseStatus as string | null);
     }
     let effective = 0;
     let pending = 0;
@@ -319,7 +352,9 @@ export class PenaltiesService {
     for (const p of penalties) {
       let excuseStatus: string | null = null;
       if (p.reason === 'LATE_ARRIVAL') {
-        excuseStatus = byDay.get(tjLocalDay(p.date)) ?? null;
+        excuseStatus = arrivalByDay.get(tjLocalDay(p.date)) ?? null;
+      } else if (p.reason === 'LATE_FROM_LUNCH') {
+        excuseStatus = lunchByDay.get(tjLocalDay(p.date)) ?? null;
       }
       if (excuseStatus === 'APPROVED') {
         excused += p.amount;

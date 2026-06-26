@@ -11,6 +11,7 @@ import {
   lunchOut as apiLunchOut,
   uploadTimeProof,
   submitLateExcuse,
+  submitLunchLateExcuse,
 } from '../api/time';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
@@ -59,6 +60,7 @@ export default function TimeTracker() {
 
   const [showClockInModal, setShowClockInModal] = useState(false);
   const [showExcuseModal, setShowExcuseModal] = useState(false);
+  const [showLunchExcuseModal, setShowLunchExcuseModal] = useState(false);
 
   const todayKey = keys.time.today();
   const historyKey = keys.time.history({ take: 30 });
@@ -148,7 +150,24 @@ export default function TimeTracker() {
     onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
   });
   const lunchOutMut = buildMut(apiLunchOut, { status: 'ON_LUNCH', lunchOut: new Date().toISOString() }, 'Ушли на обед');
-  const lunchInMut = buildMut(apiLunchIn, { status: 'WORKING', lunchIn: new Date().toISOString() }, 'Вернулись с обеда');
+  // lunchInMut — отдельный, чтобы поймать requiresLunchExcuse в ответе
+  // и открыть модалку объяснения если опоздание с обеда >= 10 мин.
+  const lunchInMut = useOptimisticMutation<any, void, TimeEntry | null>({
+    mutationFn: apiLunchIn,
+    queryKey: todayKey,
+    applyOptimistic: (cur) => {
+      if (!cur) return cur;
+      return { ...cur, status: 'WORKING', lunchIn: new Date().toISOString() } as TimeEntry;
+    },
+    invalidateAlso: [historyKey, keys.time.team()],
+    onSuccess: (data: any) => {
+      toast('Вернулись с обеда', 'success');
+      if (data?.requiresLunchExcuse && data?.id) {
+        setShowLunchExcuseModal(true);
+      }
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+  });
   const clockOutMut = buildMut(apiClockOut, { status: 'OFF', clockOut: new Date().toISOString() }, 'Рабочий день завершён');
 
   const loading = clockInMut.isPending || lunchOutMut.isPending || lunchInMut.isPending || clockOutMut.isPending;
@@ -454,6 +473,18 @@ export default function TimeTracker() {
             onError={(e) => toast(e, 'error')}
           />
         )}
+        {showLunchExcuseModal && today && (
+          <LunchExcuseModal
+            entry={today}
+            onCancel={() => setShowLunchExcuseModal(false)}
+            onDone={() => {
+              setShowLunchExcuseModal(false);
+              qc.invalidateQueries({ queryKey: todayKey });
+              toast(t('toast.sent'), 'success');
+            }}
+            onError={(e) => toast(e, 'error')}
+          />
+        )}
       </AnimatePresence>
     </>
   );
@@ -660,6 +691,103 @@ function ExcuseModal({
 
         <div className="dialog-actions">
           <button className="btn btn-secondary" onClick={onCancel} disabled={submitting}>Отмена</button>
+          <button className="btn btn-primary" onClick={submit} disabled={submitting}>
+            {submitting ? 'Отправляем...' : 'Отправить'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/** Объяснение опоздания с обеда. Аналогична ExcuseModal,
+ *  но шлёт на /time/:id/lunch-excuse. */
+function LunchExcuseModal({
+  entry,
+  onCancel,
+  onDone,
+  onError,
+}: {
+  entry: TimeEntry;
+  onCancel: () => void;
+  onDone: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    if (!reason.trim() && !file) {
+      onError('Укажи причину или приложи фото/видео');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      let excuseUrl: string | undefined;
+      if (file) {
+        const r = await uploadTimeProof(file);
+        excuseUrl = r.url;
+      }
+      await submitLunchLateExcuse(entry.id, {
+        excuseUrl,
+        excuseReason: reason.trim() || undefined,
+      });
+      onDone();
+    } catch (e: any) {
+      onError(e?.response?.data?.message || 'Ошибка');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      className="dialog-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onCancel}
+    >
+      <motion.div
+        className="dialog-card"
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 480 }}
+      >
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 8 }}>
+          Объяснение опоздания с обеда
+        </h3>
+        <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 20 }}>
+          Опоздал с обеда на {entry.lateLunchMinutes ?? 0} мин. Если основатель одобрит причину — штраф не начислится.
+        </p>
+
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Причина (минимум 5 символов)"
+          rows={3}
+          style={{ width: '100%', padding: 12, border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12, fontSize: 14, resize: 'vertical' }}
+        />
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>ФОТО / ВИДЕО (опционально)</div>
+          <input
+            type="file"
+            accept="image/*,video/*"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            style={{ width: '100%' }}
+          />
+          {file && (
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
+              ✓ {file.name}
+            </div>
+          )}
+        </div>
+
+        <div className="dialog-actions">
+          <button className="btn btn-secondary" onClick={onCancel} disabled={submitting}>Позже</button>
           <button className="btn btn-primary" onClick={submit} disabled={submitting}>
             {submitting ? 'Отправляем...' : 'Отправить'}
           </button>

@@ -42,4 +42,14 @@ export class ExcusesController {
   reject(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.reject(id, me.id);
   }
+
+  @Post(':id/approve-lunch')
+  approveLunch(@Param('id') id: string, @CurrentUser() me: any) {
+    return this.svc.approveLunch(id, me.id);
+  }
+
+  @Post(':id/reject-lunch')
+  rejectLunch(@Param('id') id: string, @CurrentUser() me: any) {
+    return this.svc.rejectLunch(id, me.id);
+  }
 }

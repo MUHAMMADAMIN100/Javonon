@@ -11,6 +11,8 @@ import {
   listExcuses,
   approveExcuse,
   rejectExcuse,
+  approveLunchExcuse,
+  rejectLunchExcuse,
   type ExcuseEntry,
   type ExcuseStatus,
 } from '../api/excuses';
@@ -87,7 +89,8 @@ function PendingTab() {
   useRealtimeEvent('excuse:reviewed', () => qc.invalidateQueries({ queryKey: ['excuses'] }));
 
   const approveMut = useMutation({
-    mutationFn: (id: string) => approveExcuse(id),
+    mutationFn: ({ id, kind }: { id: string; kind: 'arrival' | 'lunch' }) =>
+      kind === 'lunch' ? approveLunchExcuse(id) : approveExcuse(id),
     onSuccess: (data) => {
       toast(
         data.penaltiesRemoved > 0
@@ -101,7 +104,8 @@ function PendingTab() {
   });
 
   const rejectMut = useMutation({
-    mutationFn: (id: string) => rejectExcuse(id),
+    mutationFn: ({ id, kind }: { id: string; kind: 'arrival' | 'lunch' }) =>
+      kind === 'lunch' ? rejectLunchExcuse(id) : rejectExcuse(id),
     onSuccess: () => {
       toast('Причина отклонена, штраф остаётся', 'success');
       qc.invalidateQueries({ queryKey: ['excuses'] });
@@ -123,10 +127,10 @@ function PendingTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {items.map((e) => (
         <ExcuseCard
-          key={e.id}
+          key={`${e.id}-${e.kind}`}
           entry={e}
-          onApprove={() => approveMut.mutate(e.id)}
-          onReject={() => rejectMut.mutate(e.id)}
+          onApprove={() => approveMut.mutate({ id: e.id, kind: e.kind })}
+          onReject={() => rejectMut.mutate({ id: e.id, kind: e.kind })}
           busy={approveMut.isPending || rejectMut.isPending}
         />
       ))}
@@ -151,7 +155,7 @@ function HistoryTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {items.map((e) => (
-        <ExcuseCard key={e.id} entry={e} />
+        <ExcuseCard key={`${e.id}-${e.kind}`} entry={e} />
       ))}
     </div>
   );
@@ -169,7 +173,16 @@ function ExcuseCard({
   busy?: boolean;
 }) {
   const { t } = useT();
-  const status = entry.lateExcuseStatus || 'PENDING';
+  const isLunch = entry.kind === 'lunch';
+  // Поля выбираются в зависимости от типа объяснения
+  const status = (isLunch ? entry.lunchLateExcuseStatus : entry.lateExcuseStatus) || 'PENDING';
+  const reason = isLunch ? entry.lunchLateExcuseReason : entry.lateExcuseReason;
+  const url = isLunch ? entry.lunchLateExcuseUrl : entry.lateExcuseUrl;
+  const minutes = isLunch ? (entry.lateLunchMinutes ?? 0) : entry.lateMinutes;
+  const reviewedAt = isLunch ? entry.lunchLateExcuseReviewedAt : entry.lateExcuseReviewedAt;
+  const kindLabel = isLunch
+    ? (t('excuses.kind.lunch') !== 'excuses.kind.lunch' ? t('excuses.kind.lunch') : 'С обеда')
+    : (t('excuses.kind.arrival') !== 'excuses.kind.arrival' ? t('excuses.kind.arrival') : 'Утром');
   const isPending = status === 'PENDING';
   return (
     <motion.div
@@ -180,13 +193,28 @@ function ExcuseCard({
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         <div>
-          <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{entry.user.fullName}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <div style={{ fontWeight: 600, fontSize: 16 }}>{entry.user.fullName}</div>
+            <span
+              style={{
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: isLunch ? '#f59e0b22' : '#0ea5e922',
+                color: isLunch ? '#b45309' : '#0369a1',
+                fontSize: 11,
+                fontWeight: 600,
+                border: `1px solid ${isLunch ? '#f59e0b' : '#0ea5e9'}`,
+              }}
+            >
+              {kindLabel}
+            </span>
+          </div>
           <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{entry.user.email}</div>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
             {tjFormatDateTime(entry.clockIn)}
             {' · '}
             <span style={{ color: 'var(--primary-dark)', fontWeight: 600 }}>
-              {t('excuses.late')}: {entry.lateMinutes} {t('common.minutes')}
+              {t('excuses.late')}: {minutes} {t('common.minutes')}
             </span>
           </div>
         </div>
@@ -205,18 +233,18 @@ function ExcuseCard({
         </span>
       </div>
 
-      {entry.lateExcuseReason && (
+      {reason && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
             {t('excuses.reason')}
           </div>
-          <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{entry.lateExcuseReason}</div>
+          <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{reason}</div>
         </div>
       )}
 
-      {entry.lateExcuseUrl && (
+      {url && (
         <div style={{ marginBottom: 12 }}>
-          <a href={absUrl(entry.lateExcuseUrl)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
+          <a href={absUrl(url)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
             <Icon name="image" size={14} /> {t('common.open')}
           </a>
         </div>
@@ -233,9 +261,9 @@ function ExcuseCard({
         </div>
       )}
 
-      {!isPending && entry.lateExcuseReviewedAt && (
+      {!isPending && reviewedAt && (
         <div style={{ fontSize: 11, color: 'var(--text-soft)', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 6 }}>
-          {tjFormatFull(entry.lateExcuseReviewedAt)}
+          {tjFormatFull(reviewedAt)}
         </div>
       )}
     </motion.div>

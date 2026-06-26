@@ -2,6 +2,8 @@ import { api } from './client';
 
 export type ExcuseStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
+export type ExcuseKind = 'arrival' | 'lunch';
+
 export interface ExcuseEntry {
   id: string;
   userId: string;
@@ -14,6 +16,16 @@ export interface ExcuseEntry {
   lateExcuseReviewedAt: string | null;
   lateExcuseReviewedBy: string | null;
   latePenaltyApplied: boolean;
+  // Опоздание с обеда (если kind === 'lunch')
+  lateLunchMinutes?: number;
+  lunchLateExcuseUrl?: string | null;
+  lunchLateExcuseReason?: string | null;
+  lunchLateExcuseAt?: string | null;
+  lunchLateExcuseStatus?: ExcuseStatus | null;
+  lunchLateExcuseReviewedAt?: string | null;
+  lateLunchPenaltyApplied?: boolean;
+  // Discriminator — какой тип объяснения
+  kind: ExcuseKind;
   date: string;
   user: { id: string; fullName: string; role: string; email: string };
 }
@@ -29,3 +41,9 @@ export const approveExcuse = (id: string) =>
 
 export const rejectExcuse = (id: string) =>
   api.post<{ ok: true }>(`/excuses/${id}/reject`).then((r) => r.data);
+
+export const approveLunchExcuse = (id: string) =>
+  api.post<{ ok: true; penaltiesRemoved: number }>(`/excuses/${id}/approve-lunch`).then((r) => r.data);
+
+export const rejectLunchExcuse = (id: string) =>
+  api.post<{ ok: true }>(`/excuses/${id}/reject-lunch`).then((r) => r.data);

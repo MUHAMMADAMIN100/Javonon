@@ -585,6 +585,15 @@ model TimeEntry {
   // Признак, что штраф за позднее возвращение с обеда уже начислен
   // (penalty record создан). Чтобы повторно не начислять при пересчёте.
   lateLunchPenaltyApplied Boolean @default(false)
+  // Объяснение позднего возвращения с обеда (по аналогии с lateExcuse*).
+  // Сотрудник пишет причину в модалке при lunchIn если опоздание > порога.
+  // FOUNDER одобряет/отклоняет — APPROVED отменяет штраф.
+  lunchLateExcuseUrl        String?
+  lunchLateExcuseReason     String?
+  lunchLateExcuseAt         DateTime?
+  lunchLateExcuseStatus     ExcuseStatus?
+  lunchLateExcuseReviewedAt DateTime?
+  lunchLateExcuseReviewedBy String?
   // Переработка: всё что отработано сверх 8 часов (480 мин)
   overtimeMinutes   Int  @default(0)
   // Подтверждение присутствия на работе (геолокация / видео-кружок).

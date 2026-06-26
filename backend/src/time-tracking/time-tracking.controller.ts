@@ -127,6 +127,16 @@ export class TimeTrackingController {
     return this.svc.submitLateExcuse(me.id, id, body);
   }
 
+  /** Сотрудник присылает оправдание позднего возвращения с обеда. */
+  @Post(':id/lunch-excuse')
+  submitLunchExcuse(
+    @CurrentUser() me: any,
+    @Param('id') id: string,
+    @Body() body: { excuseUrl?: string; excuseReason?: string },
+  ) {
+    return this.svc.submitLunchLateExcuse(me.id, id, body);
+  }
+
   @Get('team')
   @UseGuards(RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')

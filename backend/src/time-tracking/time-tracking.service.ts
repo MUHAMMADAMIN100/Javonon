@@ -9,6 +9,11 @@ import { tjLocalDay, tjStartOfDay, tjStartOfNextDay } from '../common/tj-time';
 const OFFICE_START_HOUR = 9;
 const OFFICE_START_MIN = 0;
 
+// Порог опоздания, при котором требуется объяснение. Совпадает с
+// LATE_THRESHOLD_MIN в penalties.service — чтобы фронт открывал модалку
+// только тогда, когда штраф реально может быть начислен.
+const EXCUSE_THRESHOLD_MIN = 10;
+
 // КРИТИЧНО: timezone бизнеса. Railway/Docker контейнеры обычно в UTC,
 // а Душанбе на UTC+5. Без явного учёта зоны getDay()/setHours() работают
 // с UTC временем → штрафы за опоздание считаются неправильно (в пределах
@@ -212,6 +217,43 @@ export class TimeTrackingService {
     return updated;
   }
 
+  /**
+   * Объяснение позднего возвращения с обеда. Аналог submitLateExcuse,
+   * но для lateLunchMinutes. Если штраф уже начислен — поздно.
+   */
+  async submitLunchLateExcuse(userId: string, entryId: string, body: {
+    excuseUrl?: string;
+    excuseReason?: string;
+  }) {
+    const entry = await this.prisma.timeEntry.findUnique({ where: { id: entryId } });
+    if (!entry) throw new NotFoundException('Запись не найдена');
+    if (entry.userId !== userId) {
+      throw new BadRequestException('Это не ваша запись');
+    }
+    if (entry.lateLunchMinutes <= 0) {
+      throw new BadRequestException('Опоздания с обеда не было');
+    }
+    if (entry.lateLunchPenaltyApplied) {
+      throw new BadRequestException('Штраф уже начислен, оправдание поздно');
+    }
+    if (!body.excuseUrl && (!body.excuseReason || body.excuseReason.trim().length < 5)) {
+      throw new BadRequestException('Укажи причину (мин. 5 символов) или приложи фото/видео');
+    }
+    const updated = await this.prisma.timeEntry.update({
+      where: { id: entryId },
+      data: {
+        lunchLateExcuseUrl: body.excuseUrl || null,
+        lunchLateExcuseReason: body.excuseReason?.trim() || null,
+        lunchLateExcuseAt: new Date(),
+        lunchLateExcuseStatus: 'PENDING' as any,
+        lunchLateExcuseReviewedAt: null,
+        lunchLateExcuseReviewedBy: null,
+      },
+    });
+    this.realtime.emitStaff('excuse:new', { entryId, userId, kind: 'lunch' });
+    return updated;
+  }
+
   async lunchOut(userId: string) {
     const active = await this.getActive(userId);
     if (!active) throw new NotFoundException('Нет активной рабочей сессии');
@@ -266,7 +308,12 @@ export class TimeTrackingService {
       },
     });
     this.realtime.emitStaff('attendance:updated', { userId, entryId: upd.id, action: 'lunchIn' });
-    return upd;
+    // Возвращаем не только обновлённую запись, но и флаг — фронт по нему
+    // решает, открывать ли модалку объяснения.
+    return {
+      ...upd,
+      requiresLunchExcuse: lateLunchMinutes >= EXCUSE_THRESHOLD_MIN,
+    };
   }
 
   async clockOut(userId: string) {

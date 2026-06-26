@@ -25,9 +25,22 @@ export interface TimeEntry {
   lateExcuseStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | null;
   lateExcuseReviewedAt?: string | null;
   latePenaltyApplied?: boolean;
+  // Опоздание с обеда + объяснение (по аналогии с lateExcuse*).
+  lateLunchMinutes?: number;
+  lateLunchPenaltyApplied?: boolean;
+  lunchLateExcuseUrl?: string | null;
+  lunchLateExcuseReason?: string | null;
+  lunchLateExcuseAt?: string | null;
+  lunchLateExcuseStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+  lunchLateExcuseReviewedAt?: string | null;
   date: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Расширенный ответ lunchIn — добавлен флаг для фронта. */
+export interface LunchInResult extends TimeEntry {
+  requiresLunchExcuse: boolean;
 }
 
 export interface TeamMemberStatus extends TimeEntry {
@@ -42,7 +55,7 @@ export const clockIn = (body?: { lat?: number; lon?: number; proofUrl?: string }
   api.post<TimeEntry>('/time/clock-in', body || {}).then((r) => r.data);
 
 export const lunchOut = () => api.post<TimeEntry>('/time/lunch-out').then((r) => r.data);
-export const lunchIn = () => api.post<TimeEntry>('/time/lunch-in').then((r) => r.data);
+export const lunchIn = () => api.post<LunchInResult>('/time/lunch-in').then((r) => r.data);
 export const clockOut = () => api.post<TimeEntry>('/time/clock-out').then((r) => r.data);
 export const teamStatus = () => api.get<TeamMemberStatus[]>('/time/team').then((r) => r.data);
 
@@ -58,3 +71,6 @@ export const uploadTimeProof = (file: File) => {
 
 export const submitLateExcuse = (entryId: string, body: { excuseUrl?: string; excuseReason?: string }) =>
   api.post<TimeEntry>(`/time/${entryId}/excuse`, body).then((r) => r.data);
+
+export const submitLunchLateExcuse = (entryId: string, body: { excuseUrl?: string; excuseReason?: string }) =>
+  api.post<TimeEntry>(`/time/${entryId}/lunch-excuse`, body).then((r) => r.data);
