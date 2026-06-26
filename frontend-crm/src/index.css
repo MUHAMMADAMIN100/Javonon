@@ -4484,12 +4484,15 @@ input[type="checkbox"].crm-checkbox,
   border-top: 1px solid var(--border);
 }
 
-/* Mobile compact for crm-* controls — fix tall inputs on 320-425px.
-   ВАЖНО: тут !important потому что более ранние правила (.filters input,
-   media query с font-size: 16px !important и т.д.) перебивают эти стили
-   из-за порядка/специфичности. Без !important inputs/selects остаются
-   огромными карточками ~200px высоты на мобиле. */
-@media (max-width: 600px) {
+/* Mobile/tablet compact for crm-* controls — fix tall inputs on 320-1024px.
+   ВАЖНО: тут !important потому что:
+   1) Старые правила .filters input { flex: 1; min-width: 220px } перебивают
+   2) Inline-стиль flex: '1 1 200px' в Students.tsx в column-направлении
+      делает basis = 200px ВЫСОТОЙ → гигантские карточки
+   3) Без !important inputs/selects остаются огромными карточками 200-400px
+   Breakpoint 1024px чтобы покрыть мобильные + планшеты. На десктопе ≥1025px
+   filters обычно в строку и проблема не возникает. */
+@media (max-width: 1024px) {
   .crm-input,
   .crm-textarea,
   .crm-select,
