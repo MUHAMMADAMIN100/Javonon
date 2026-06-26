@@ -660,7 +660,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   border-radius: 8px; font-size: 14px; font-family: inherit;
   background: var(--bg-card);
 }
-.filters input { flex: 1; min-width: 200px; }
+.filters input:not([type="checkbox"]) { flex: 1; min-width: 200px; }
 
 /* Login — editorial split layout */
 .login-page {
@@ -1464,10 +1464,10 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 /* Touch-friendly input/select min-height на тач-экранах */
 @media (max-width: 900px) {
-  .form-group input,
+  .form-group input:not([type="checkbox"]):not([type="radio"]),
   .form-group select,
   .form-group textarea,
-  .filters input,
+  .filters input:not([type="checkbox"]):not([type="radio"]),
   .filters select {
     min-height: 44px; font-size: 15px;
   }
@@ -2322,7 +2322,7 @@ select.input-error {
   color: var(--text);
   transition: all .15s;
 }
-.filters input { flex: 1; min-width: 220px; }
+.filters input:not([type="checkbox"]) { flex: 1; min-width: 220px; }
 .filters input:focus, .filters select:focus {
   outline: none;
   border-color: var(--primary);
@@ -4501,14 +4501,21 @@ textarea:focus {
      чекбокс 200px-ной полосой. Принудительно гасим width/min-width/flex. */
   .crm-checkbox,
   .filters input.crm-checkbox,
-  .filters input[type="checkbox"].crm-checkbox {
+  .filters input[type="checkbox"].crm-checkbox,
+  .crm-checkbox-label > .crm-checkbox {
     width: 18px !important;
     height: 18px !important;
     min-width: 0 !important;
     max-width: 18px !important;
+    min-height: 0 !important;
+    max-height: 18px !important;
     flex: 0 0 18px !important;
+    flex-grow: 0 !important;
+    flex-shrink: 0 !important;
     padding: 0 !important;
     margin: 0 !important;
+    display: inline-block !important;
+    box-sizing: border-box !important;
   }
   .crm-checkbox-label,
   .filters .crm-checkbox-label {
