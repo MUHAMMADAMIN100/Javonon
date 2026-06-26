@@ -23,6 +23,7 @@ import { updateUser } from '../api/users';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
 import ScheduleEditor from '../components/ScheduleEditor';
+import CrmDatePicker from '../components/CrmDatePicker';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
@@ -504,13 +505,22 @@ function LabelInput({ label, value, onChange, type = 'text' }: any) {
   return (
     <div>
       <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
-      <input
-        className="crm-input"
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ width: '100%' }}
-      />
+      {type === 'date' ? (
+        <CrmDatePicker
+          className="crm-input"
+          value={value}
+          onChange={(v) => onChange(v)}
+          style={{ width: '100%' }}
+        />
+      ) : (
+        <input
+          className="crm-input"
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ width: '100%' }}
+        />
+      )}
     </div>
   );
 }

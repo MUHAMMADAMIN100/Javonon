@@ -5,6 +5,7 @@ import { listActivity, ACTIVITY_LABEL, type ActivityAction, type ActivityEntry }
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
+import CrmDatePicker from '../components/CrmDatePicker';
 import { useT } from '../lib/i18n';
 
 // Каждое действие — своя иконка + цвет (для визуального timeline'а).
@@ -132,8 +133,8 @@ export default function Activity() {
                 );
               })}
             </select>
-            <input className="crm-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            <input className="crm-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <CrmDatePicker className="crm-input" value={from} onChange={(v) => setFrom(v)} />
+            <CrmDatePicker className="crm-input" value={to} onChange={(v) => setTo(v)} />
           </div>
 
           {loading ? (

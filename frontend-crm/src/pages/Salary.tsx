@@ -19,6 +19,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { tjStartOfMonthStr, tjEndOfMonthStr, tjFormatDate } from '../lib/tjTime';
+import CrmDatePicker from '../components/CrmDatePicker';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -170,11 +171,11 @@ export default function Salary() {
           </div>
           <div className="form-group">
             <label>{t('salary.field.periodFrom')}</label>
-            <input className="crm-input" type="date" value={start} onChange={(e) => setRange({ start: e.target.value, end })} />
+            <CrmDatePicker className="crm-input" value={start} onChange={(v) => setRange({ start: v, end })} />
           </div>
           <div className="form-group">
             <label>{t('salary.field.periodTo')}</label>
-            <input className="crm-input" type="date" value={end} onChange={(e) => setRange({ start, end: e.target.value })} />
+            <CrmDatePicker className="crm-input" value={end} onChange={(v) => setRange({ start, end: v })} />
           </div>
           <div className="form-group">
             <label>{t('salary.field.kpiBonus')}</label>

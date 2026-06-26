@@ -16,6 +16,7 @@ import DirectionOptions from '../components/DirectionOptions';
 import ManagerBar from '../components/ManagerBar';
 import ApplicationFormSection from '../components/ApplicationFormSection';
 import BackButton from '../components/BackButton';
+import CrmDatePicker from '../components/CrmDatePicker';
 import Icon from '../Icon';
 import { motion } from 'framer-motion';
 import { listPipelines, moveApplicationStage } from '../api/sales';
@@ -491,11 +492,10 @@ export default function ApplicationDetail() {
                       </div>
                       <div className="form-group">
                         <label>{t('app.field.birthday')}</label>
-                        <input
+                        <CrmDatePicker
                           className="crm-input"
-                          type="date"
                           value={form.birthday || ''}
-                          onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                          onChange={(v) => setForm({ ...form, birthday: v })}
                         />
                       </div>
                     </div>

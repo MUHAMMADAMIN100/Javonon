@@ -28,6 +28,7 @@ import { financeTimeseries, type TimeseriesPoint } from '../api/finance';
 import { listPayments, confirmPayment, rejectPayment, type Payment, PAYMENT_METHOD_LABEL } from '../api/payments';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
+import CrmDatePicker from '../components/CrmDatePicker';
 import { tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
 
@@ -876,7 +877,7 @@ function TransactionForm({
           </div>
           <div className="form-group">
             <label>{t('common.date')}</label>
-            <input className="crm-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <CrmDatePicker className="crm-input" value={date} onChange={(v) => setDate(v)} />
           </div>
           {type === 'INCOME' && (
             <div className="form-group">

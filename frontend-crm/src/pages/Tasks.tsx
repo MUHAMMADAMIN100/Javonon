@@ -13,6 +13,7 @@ import { compose, hasErrors, maxLen, minLen, required, validateAll } from '../ut
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
+import CrmDatePicker from '../components/CrmDatePicker';
 import { isElevated, displayRoleLabel } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useTaskStatusLabel } from '../lib/labels';
@@ -240,11 +241,11 @@ export default function Tasks() {
               </div>
               <div className="form-group">
                 <label>{t('tasks.field.deadline')}</label>
-                <input
+                <CrmDatePicker
                   className="crm-input"
-                  type="datetime-local"
                   value={form.deadline}
-                  onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+                  onChange={(v) => setForm({ ...form, deadline: v })}
+                  showTime
                 />
               </div>
               <div className="form-actions">

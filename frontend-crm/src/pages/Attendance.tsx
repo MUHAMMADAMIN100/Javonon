@@ -8,6 +8,7 @@ import { listAttendance } from '../api/attendance';
 import { listUsers } from '../api/users';
 import { tjFormatTime, tjFormatDate, tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
+import CrmDatePicker from '../components/CrmDatePicker';
 
 function fmtTime(iso: string | null): string {
   // По ТЗ — время в зоне Asia/Dushanbe, а не браузера. Если FOUNDER
@@ -75,11 +76,11 @@ export default function Attendance() {
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label>{t('common.from')}</label>
-            <input className="crm-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <CrmDatePicker className="crm-input" value={from} onChange={(v) => setFrom(v)} />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label>{t('common.to')}</label>
-            <input className="crm-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <CrmDatePicker className="crm-input" value={to} onChange={(v) => setTo(v)} />
           </div>
           {(() => {
             // YYYY-MM-DD по Asia/Dushanbe — а не браузера/UTC. Без этого

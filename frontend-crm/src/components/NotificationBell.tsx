@@ -9,6 +9,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
+import CrmDatePicker from './CrmDatePicker';
 
 function notificationHref(n: Notification): string | null {
   const p = n.payload || {};
@@ -207,16 +208,14 @@ export default function NotificationBell() {
             </div>
 
             <div className="notif-filters">
-              <input
-                type="date"
+              <CrmDatePicker
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(v) => setFrom(v)}
                 placeholder={t('common.from')}
               />
-              <input
-                type="date"
+              <CrmDatePicker
                 value={to}
-                onChange={(e) => setTo(e.target.value)}
+                onChange={(v) => setTo(v)}
                 placeholder={t('common.until')}
               />
               <label className="notif-only-unread">

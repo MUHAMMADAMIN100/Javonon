@@ -19,6 +19,7 @@ import ApplicationFormSection from '../components/ApplicationFormSection';
 import ApplicationStatusStepper from '../components/ApplicationStatusStepper';
 import DirectionOptions from '../components/DirectionOptions';
 import BackButton from '../components/BackButton';
+import CrmDatePicker from '../components/CrmDatePicker';
 import Icon from '../Icon';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
 import { isElevated } from '../lib/roles';
@@ -478,11 +479,10 @@ export default function StudentDetail() {
                   </div>
                   <div className="form-group">
                     <label>{t('app.field.birthday')}</label>
-                    <input
+                    <CrmDatePicker
                       className="crm-input"
-                      type="date"
                       value={form.birthday || ''}
-                      onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                      onChange={(v) => setForm({ ...form, birthday: v })}
                     />
                   </div>
                 </div>

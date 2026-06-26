@@ -8,6 +8,7 @@ import Icon from '../Icon';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, phoneRule, required, validateAll } from '../utils/validators';
 import PhoneInput from '../components/PhoneInput';
 import BackButton from '../components/BackButton';
+import CrmDatePicker from '../components/CrmDatePicker';
 import { keys } from '../lib/queryKeys';
 import { useInvalidatingMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
@@ -205,11 +206,10 @@ export default function StudentNew() {
             </div>
             <div className="form-group">
               <label>{t('app.field.birthday')}</label>
-              <input
+              <CrmDatePicker
                 className="crm-input"
-                type="date"
                 value={birthday}
-                onChange={(e) => setBirthday(e.target.value)}
+                onChange={(v) => setBirthday(v)}
               />
             </div>
           </div>

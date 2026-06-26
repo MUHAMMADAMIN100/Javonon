@@ -12,6 +12,7 @@ import { useRealtime } from '../realtime';
 import { generateStudentsReport } from '../utils/studentsReport';
 import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
+import CrmDatePicker from '../components/CrmDatePicker';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
@@ -210,7 +211,7 @@ export default function Students() {
         </div>
       </div>
       <div className="card-body">
-        <div className="filters" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <div className="filters" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
           <input className="crm-input" style={{ flex: '1 1 200px' }} placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="crm-select" style={{ flex: '1 1 200px' }} value={direction} onChange={(e) => setDirection(e.target.value as any)}>
             <option value="">{t('app.filter.direction')}</option>
@@ -259,7 +260,7 @@ export default function Students() {
             </select>
           )}
           {/* По ТЗ: «база студентов — только оплатившие». Отдельная вкладка. */}
-          <label className="crm-checkbox-label" style={{ flex: '1 1 200px' }}>
+          <label className="crm-checkbox-label" style={{ flex: '1 1 200px', whiteSpace: 'nowrap', minHeight: 38 }}>
             <input
               type="checkbox"
               className="crm-checkbox"
@@ -394,22 +395,18 @@ export default function Students() {
               <div className="form-grid-2" style={{ textAlign: 'left', marginBottom: 20 }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label>{t('common.from')} *</label>
-                  <input
-                    type="date"
+                  <CrmDatePicker
                     value={reportFrom}
                     max={reportTo || undefined}
-                    onChange={(e) => setReportFrom(e.target.value)}
-                    required
+                    onChange={(v) => setReportFrom(v)}
                   />
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label>{t('common.until')} *</label>
-                  <input
-                    type="date"
+                  <CrmDatePicker
                     value={reportTo}
                     min={reportFrom || undefined}
-                    onChange={(e) => setReportTo(e.target.value)}
-                    required
+                    onChange={(v) => setReportTo(v)}
                   />
                 </div>
               </div>

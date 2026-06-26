@@ -4372,3 +4372,111 @@ textarea:focus {
 .ep-step.current .ep-dot * {
   color: white !important;
 }
+
+/* CrmDatePicker — beautiful date input replacing native browser date picker */
+.crm-datepicker-trigger {
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  width: 100%;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  box-sizing: border-box;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  gap: 8px;
+}
+.crm-datepicker-trigger:hover:not(:disabled) { border-color: var(--primary); }
+.crm-datepicker-trigger:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+.crm-datepicker-trigger:disabled {
+  background: var(--bg-soft);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.crm-datepicker-trigger.empty { color: var(--text-soft); }
+.crm-datepicker-popover {
+  position: absolute;
+  z-index: 999;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px -12px rgba(10,15,13,0.18);
+  padding: 12px;
+  border: 1px solid var(--border);
+  margin-top: 4px;
+}
+/* Style react-day-picker via global rdp-* classes */
+.rdp {
+  --rdp-accent-color: var(--primary);
+  --rdp-background-color: color-mix(in srgb, var(--primary) 14%, transparent);
+  margin: 0;
+}
+/* v10 uses rdp-selected / rdp-today; legacy v8 names kept for safety */
+.rdp-day_selected, .rdp-day_selected:hover,
+.rdp-selected .rdp-day_button,
+.rdp-day.rdp-selected .rdp-day_button {
+  background: var(--primary) !important;
+  color: white !important;
+  border-radius: 8px;
+}
+.rdp-day_today, .rdp-today .rdp-day_button {
+  font-weight: 700;
+  color: var(--primary);
+}
+.rdp-day:hover:not(.rdp-day_selected):not(.rdp-selected) .rdp-day_button,
+.rdp-day_button:hover:not([disabled]) {
+  background: var(--bg-soft);
+  border-radius: 8px;
+}
+.rdp-caption_label, .rdp-month_caption {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+.rdp-nav_button, .rdp-button_previous, .rdp-button_next {
+  color: var(--primary);
+  border-radius: 8px;
+}
+.rdp-head_cell, .rdp-weekday {
+  font-size: 11px;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.crm-datepicker-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  gap: 6px;
+}
+.crm-datepicker-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* Mobile compact for crm-* controls — fix tall inputs on 320-425px */
+@media (max-width: 600px) {
+  .crm-input, .crm-textarea, .crm-select, .crm-datepicker-trigger {
+    padding: 8px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+  .crm-checkbox { width: 18px; height: 18px; }
+  .crm-checkbox-label { font-size: 13px; gap: 6px; }
+  .crm-datepicker-popover { padding: 8px; border-radius: 10px; }
+}
