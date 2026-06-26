@@ -279,7 +279,7 @@ function LocationTab() {
         <Field label={t('settings.location.lng')}><input type="number" step="0.0000001" value={lng} onChange={(e) => setLng(e.target.value)} /></Field>
         <Field label={t('settings.location.radius')}><input type="number" value={radius} onChange={(e) => setRadius(e.target.value)} /></Field>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, gap: 8 }}>
+      <div className="settings-location-actions">
         <button className="btn btn-sm btn-secondary" onClick={detect}>{t('settings.location.detect')}</button>
         <button className="btn btn-primary" onClick={save} disabled={!lat || !lng}>{t('common.save')}</button>
       </div>

@@ -4231,3 +4231,27 @@ textarea:focus {
     flex: 0 0 auto;
   }
 }
+
+/* Кнопки таба «Гео-зона» (Использовать текущую / Сохранить) — на
+   узком экране одна не помещалась рядом с другой и обрезалась
+   справа. На мобиле — кнопки в столбик во всю ширину; на десктопе
+   как раньше — справа в ряд. */
+.settings-location-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.settings-location-actions .btn {
+  width: 100%;
+  white-space: nowrap;
+}
+@media (min-width: 600px) {
+  .settings-location-actions {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+  .settings-location-actions .btn {
+    width: auto;
+  }
+}
