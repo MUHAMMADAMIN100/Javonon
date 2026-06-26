@@ -4469,14 +4469,49 @@ textarea:focus {
   border-top: 1px solid var(--border);
 }
 
-/* Mobile compact for crm-* controls — fix tall inputs on 320-425px */
+/* Mobile compact for crm-* controls — fix tall inputs on 320-425px.
+   ВАЖНО: тут !important потому что более ранние правила (.filters input,
+   media query с font-size: 16px !important и т.д.) перебивают эти стили
+   из-за порядка/специфичности. Без !important inputs/selects остаются
+   огромными карточками ~200px высоты на мобиле. */
 @media (max-width: 600px) {
-  .crm-input, .crm-textarea, .crm-select, .crm-datepicker-trigger {
-    padding: 8px 12px;
-    font-size: 13px;
-    border-radius: 8px;
+  .crm-input,
+  .crm-textarea,
+  .crm-select,
+  .crm-datepicker-trigger,
+  .filters .crm-input,
+  .filters .crm-select,
+  .filters .crm-textarea,
+  .filters input.crm-input,
+  .filters select.crm-select {
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+    border-radius: 8px !important;
+    min-height: 0 !important;
+    height: 38px !important;
+    line-height: 1.2 !important;
+    box-sizing: border-box !important;
   }
-  .crm-checkbox { width: 18px; height: 18px; }
-  .crm-checkbox-label { font-size: 13px; gap: 6px; }
-  .crm-datepicker-popover { padding: 8px; border-radius: 10px; }
+  .crm-textarea,
+  .filters .crm-textarea {
+    height: auto !important;
+    min-height: 60px !important;
+  }
+  .crm-checkbox { width: 18px !important; height: 18px !important; }
+  .crm-checkbox-label { font-size: 13px !important; gap: 6px !important; min-height: 0 !important; }
+  .crm-datepicker-popover { padding: 8px !important; border-radius: 10px !important; }
+
+  /* .filters контейнер — стрелы должны быть в столбик и компактные */
+  .filters {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    padding: 10px !important;
+    margin-bottom: 12px !important;
+  }
+  .filters > * {
+    width: 100% !important;
+    flex: 0 0 auto !important;
+    max-width: 100% !important;
+  }
 }
