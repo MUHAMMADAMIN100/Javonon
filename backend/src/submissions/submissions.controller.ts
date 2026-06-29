@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -135,6 +136,15 @@ export class SubmissionsController {
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   changeStatus(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { status: SubmissionStatus }) {
     return this.svc.changeStatus(me, id, body.status);
+  }
+
+  /** Hard delete сделки — ТОЛЬКО FOUNDER. Удаляет связанные платежи
+   *  каскадом. APPROVED Transaction'ы НЕ трогаются (они уже в финансах).
+   *  Нужен для удаления тестовых/ошибочных сделок. */
+  @Delete(':id')
+  @Roles(Role.FOUNDER)
+  remove(@Param('id') id: string) {
+    return this.svc.remove(id);
   }
 
   /**

@@ -889,6 +889,24 @@ export class SubmissionsService {
     return updated;
   }
 
+  /**
+   * Hard delete сделки — только для FOUNDER. Удаляет SaleSubmission +
+   * каскадом её SubmissionPayment (onDelete: Cascade в schema).
+   * APPROVED Transaction'ы и Application НЕ удаляются — связи SetNull,
+   * они остаются в финансовой истории как есть.
+   * Нужен для удаления тестовых/ошибочных сделок.
+   */
+  async remove(submissionId: string) {
+    const submission = await this.prisma.saleSubmission.findUnique({
+      where: { id: submissionId },
+      select: { id: true },
+    });
+    if (!submission) throw new NotFoundException('Сделка не найдена');
+    await this.prisma.saleSubmission.delete({ where: { id: submissionId } });
+    this.realtime.emitStaff('submission:deleted', { submissionId });
+    return { ok: true };
+  }
+
   // ПРИМЕЧАНИЕ ПО БОНУСНОЙ БАЗЕ (актуально после фикса bug #22):
   // SalaryService.preview() считает бонусную базу из ДВУХ источников:
   //   1) prisma.submissionPayment.aggregate({ status: APPROVED,
