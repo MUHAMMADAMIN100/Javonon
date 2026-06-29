@@ -1,9 +1,11 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { JwtModule } from '@nestjs/jwt';
 import { join } from 'path';
+import { UploadsAuthMiddleware } from './common/uploads-auth.middleware';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -55,6 +57,12 @@ import { SmsIntegrationModule } from './integrations/sms/sms-integration.module'
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Локальный JwtModule только для UploadsAuthMiddleware (он не в AuthModule,
+    // т.к. middleware регистрируется на уровне AppModule). Секрет — тот же
+    // JWT_SECRET, без него не верифицируем подписи.
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || 'dev-only-fallback-do-not-use-in-prod',
+    }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), process.env.UPLOADS_DIR || './uploads'),
       serveRoot: '/uploads',
@@ -114,6 +122,18 @@ import { SmsIntegrationModule } from './integrations/sms/sms-integration.module'
   controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    UploadsAuthMiddleware,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Audit fix #11: вешаем JWT-check на /uploads/* ДО того как ServeStaticModule
+   * отдаст файл. Без этого паспорта/контракты/чеки раздавались любому со
+   * ссылкой — см. UploadsAuthMiddleware за подробностями.
+   */
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(UploadsAuthMiddleware)
+      .forRoutes({ path: 'uploads/*', method: RequestMethod.ALL });
+  }
+}

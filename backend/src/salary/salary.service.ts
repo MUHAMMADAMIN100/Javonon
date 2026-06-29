@@ -34,7 +34,9 @@ export class SalaryService {
   /**
    * Считает (без сохранения) зарплату сотрудника за период:
    *   - hours/minutes — берём из TimeEntry
-   *   - sales — сумма транзакций INCOME, у которых managerId = этот сотрудник, в периоде
+   *   - sales — сумма APPROVED SubmissionPayment, reviewedAt которых попал в период
+   *     (триггер начисления бонуса — момент одобрения FOUNDER'ом, а не дата получения
+   *     денег менеджером; см. ниже комментарий про bug #22)
    *   - bonus = sales × bonusPercent
    *   - penalty = lateMinutes × PENALTY_PER_LATE_MINUTE
    *   - net = base + bonus + kpi - penalty
@@ -59,15 +61,45 @@ export class SalaryService {
 
     const time = await this.timeSvc.summaryForUser(userId, periodStart, periodEnd);
 
-    const salesAgg = await this.prisma.transaction.aggregate({
+    // ИСТОЧНИК БОНУСНОЙ БАЗЫ — два разных «триггера»:
+    //
+    // 1) Платежи по сделкам (SubmissionPayment) — попадают в бонус по
+    //    reviewedAt (когда FOUNDER одобрил), а НЕ по paidAt (когда менеджер
+    //    принёс деньги). Это фикс bug #22 из audit:integration:
+    //    paidAt мог оказаться в уже закрытом (PAID) salary-периоде, и при
+    //    задержке одобрения бонус терялся бесследно (preview не пересчитывает
+    //    PAID-записи, а в новый период date<periodStart). Transaction.date
+    //    при этом по-прежнему = paidAt — это «факт прихода денег» для
+    //    финансовой отчётности; reviewedAt — «триггер начисления бонуса».
+    //
+    // 2) Ручные INCOME-транзакции (импорт / исторические данные /
+    //    операции без сделки) — попадают по date, как раньше. Их легко
+    //    отличить от платежей по сделкам по category != 'TUITION_PAYMENT'
+    //    (approvePayment всегда пишет category='TUITION_PAYMENT'); такой
+    //    фильтр гарантирует отсутствие двойного учёта с (1).
+    // Bug #25: после CANCEL сделки её APPROVED-платежи помечаются REJECTED
+    // и связанная INCOME-транзакция получает reversedAt — оба фильтра ниже
+    // исключают деньги отменённых сделок из бонусной базы автоматически.
+    const submissionSalesAgg = await this.prisma.submissionPayment.aggregate({
       where: {
-        managerId: userId,
-        type: 'INCOME',
-        date: { gte: periodStart, lte: periodEnd },
+        status: 'APPROVED',
+        reviewedAt: { gte: periodStart, lte: periodEnd },
+        submission: { managerId: userId, status: { not: 'CANCELLED' } },
       },
       _sum: { amount: true },
     });
-    const salesAmount = salesAgg._sum.amount || 0;
+    const manualSalesAgg = await this.prisma.transaction.aggregate({
+      where: {
+        managerId: userId,
+        type: 'INCOME',
+        category: { not: 'TUITION_PAYMENT' },
+        date: { gte: periodStart, lte: periodEnd },
+        reversedAt: null,
+      },
+      _sum: { amount: true },
+    });
+    const salesAmount =
+      (submissionSalesAgg._sum.amount || 0) + (manualSalesAgg._sum.amount || 0);
     // ТЗ-доработка: комиссия по тарифной сетке BonusTier (Настройки →
     // Зарплата). Flat-per-tier: сумма продаж попадает в этап, его
     // процент применяется ко всей сумме. Персональный bonusPercent у

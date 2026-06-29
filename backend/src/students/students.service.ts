@@ -8,6 +8,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isElevated } from '../auth/role-utils';
+import { CABINET_BY_DIRECTION } from '../common/cabinets';
 
 function generatePassword(length = 8): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -15,15 +16,6 @@ function generatePassword(length = 8): string {
   for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
   return out;
 }
-
-const CABINET_BY_DIRECTION: Record<Direction, number> = {
-  BACHELOR: 1,
-  MASTER: 2,
-  LANGUAGE: 3,
-  LANGUAGE_COLLEGE: 4,
-  LANGUAGE_BACHELOR: 5,
-  COLLEGE: 6,
-};
 
 const STUDENT_INCLUDE = {
   documents: true,
@@ -191,6 +183,9 @@ export class StudentsService {
     // По ТЗ: «база студентов — только оплатившие». Фильтр включается
     // как ?paid=true с фронтенда (отдельная вкладка/режим).
     paid?: boolean;
+    // BUG #16 (HIGH): typeahead-пикеры передают limit, чтобы не тянуть
+    // на сервер всю базу (1000+ студентов). Полный список — без limit.
+    limit?: number;
   }) {
     const where: Prisma.StudentWhereInput = {};
     if (filters.direction) where.direction = filters.direction;
@@ -244,10 +239,18 @@ export class StudentsService {
       });
     }
     if (and.length) where.AND = and;
+    // BUG #16 (HIGH): typeahead-пикер (SubmissionForm и пр.) передаёт
+    // limit, чтобы не тащить 1000+ студентов в браузер на каждый keystroke.
+    // Жёсткий потолок — 200 на любой limit, чтобы исключить злоупотребления.
+    const take =
+      typeof filters.limit === 'number' && filters.limit > 0
+        ? Math.min(filters.limit, 200)
+        : undefined;
     return this.prisma.student.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: STUDENT_INCLUDE,
+      ...(take ? { take } : {}),
     });
   }
 

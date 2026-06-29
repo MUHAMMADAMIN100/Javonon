@@ -18,15 +18,10 @@ import {
 } from '../api/excuses';
 import { tjFormatDateTime, tjFormatFull } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
-
-// Файлы лежат на backend (Railway), а не на фронте (Vercel). Без этого
-// префикса <a href="/uploads/..."> тыкается в Vercel и получает 404 /
-// пустую страницу. Снимаем суффикс `/api` если он есть в env.
-const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
-const absUrl = (u: string | null | undefined) => {
-  if (!u) return '';
-  return u.startsWith('http') ? u : `${API_BASE}${u}`;
-};
+// Файлы лежат на backend (Railway), а не на фронте (Vercel) — нужен
+// абсолютный URL. Audit fix #11: /uploads защищён JWT, токен подставляется
+// в query внутри absFileUrl().
+import { absFileUrl as absUrl } from '../lib/fileUrl';
 
 const STATUS_LABEL: Record<ExcuseStatus, string> = {
   PENDING: 'Ожидает',

@@ -137,6 +137,9 @@ export class UsersService {
         where: {
           managerId: id,
           type: 'INCOME',
+          // Bug #25: исключаем reversed INCOME (CANCEL сделки / ручной refund),
+          // иначе профиль показывает завышенные «продажи за месяц».
+          reversedAt: null,
           date: { gte: monthStart, lte: monthEnd },
         },
         _sum: { amount: true },
@@ -146,6 +149,7 @@ export class UsersService {
         where: {
           managerId: id,
           type: 'INCOME',
+          reversedAt: null,
           date: { gte: yearStart },
         },
         _sum: { amount: true },

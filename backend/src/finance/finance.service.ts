@@ -278,6 +278,11 @@ export class FinanceService {
       where: {
         type: 'INCOME',
         managerId: { not: null },
+        // Bug #25: ранжируем менеджеров по «живым» продажам —
+        // отменённые сделки (reversedAt != null) не должны попадать
+        // в топ, иначе менеджер «за счёт» отказников может всплыть выше
+        // реально работающих.
+        reversedAt: null,
         ...(opts.from || opts.to
           ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
           : {}),

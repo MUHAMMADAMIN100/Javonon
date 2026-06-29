@@ -70,6 +70,7 @@ export class StudentsController {
     @Query('mine') mine?: string,
     @Query('manager') manager?: string,
     @Query('paid') paid?: string,
+    @Query('limit') limit?: string,
   ) {
     // QA-fix #45/#48: безопасная валидация enum-фильтров и cabinet.
     const VALID_DIR = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
@@ -90,6 +91,15 @@ export class StudentsController {
       }
       cabinetN = n;
     }
+    // BUG #16: typeahead-пикер передаёт ?limit=50 — кэп на findMany.
+    let limitN: number | undefined;
+    if (limit !== undefined && limit !== '') {
+      const n = parseInt(limit, 10);
+      if (!Number.isFinite(n) || n < 1 || n > 200) {
+        throw new BadRequestException('limit должен быть числом от 1 до 200');
+      }
+      limitN = n;
+    }
     return this.students.findAll({
       direction: direction as Direction | undefined,
       status: status as StudentStatus | undefined,
@@ -101,6 +111,7 @@ export class StudentsController {
       currentUserRole: user?.role,
       currentUserRoles: user?.roles,
       paid: paid === 'true' ? true : paid === 'false' ? false : undefined,
+      limit: limitN,
     });
   }
 

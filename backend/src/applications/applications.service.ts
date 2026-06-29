@@ -13,15 +13,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
 import { SalesService } from '../sales/sales.service';
-
-const CABINET_BY_DIRECTION: Record<Direction, number> = {
-  BACHELOR: 1,
-  MASTER: 2,
-  LANGUAGE: 3,
-  LANGUAGE_COLLEGE: 4,
-  LANGUAGE_BACHELOR: 5,
-  COLLEGE: 6,
-};
+import { CABINET_BY_DIRECTION } from '../common/cabinets';
 
 const DIRECTION_LABEL: Record<Direction, string> = {
   BACHELOR: 'Бакалавриат',

@@ -700,6 +700,14 @@ model Transaction {
   // Метка для бонусной системы: уже учтена в SalaryRecord ?
   bonusApplied Boolean @default(false)
 
+  // Soft-delete для возвратов / отменённых сделок (bug #25 из audit:edge-cases).
+  // Когда SaleSubmission переходит в CANCELLED, оригинальная INCOME-транзакция
+  // помечается reversedAt=now() (для аудит-трейла остаётся, но исключается
+  // из salesAmount-агрегации в salary/kpi); параллельно создаётся обратная
+  // EXPENSE-транзакция (OTHER_EXPENSE) — чтобы finance dashboard (доход − расход)
+  // отражал реальный нетто.
+  reversedAt   DateTime?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -707,6 +715,7 @@ model Transaction {
   @@index([date])
   @@index([studentId])
   @@index([managerId])
+  @@index([reversedAt])
 }
 
 // ============================================================
@@ -1533,14 +1542,30 @@ model SaleSubmission {
   newStudentPhone    String?
   newStudentEmail    String?
   newStudentPassportUrl String?  // фото/PDF паспорта (Multer upload)
-  // Программа — обязательна.
-  programId     String
-  program       Program          @relation("ProgramSubmissions", fields: [programId], references: [id], onDelete: Restrict)
+  // Snapshot метаданных загруженного файла паспорта — заполняется при
+  // создании сделки из ответа /submissions/upload. Используется при
+  // APPROVE для создания Document с реальным mimeType/size/originalName
+  // (иначе в БД сохранится placeholder 'application/octet-stream'/0/'passport').
+  newStudentPassportMime         String?
+  newStudentPassportSize         Int?
+  newStudentPassportOriginalName String?
+  // Программа — обязательна на уровне сервиса (валидируется в
+  // SubmissionsService.create), но допускает null после удаления Program,
+  // чтобы история сделок сохранялась и каталог можно было чистить.
+  programId     String?
+  program       Program?         @relation("ProgramSubmissions", fields: [programId], references: [id], onDelete: SetNull)
   // Менеджер-создатель (для бонусной логики).
-  managerId     String
-  manager       User             @relation("SubmissionManager", fields: [managerId], references: [id], onDelete: Cascade)
+  managerId     String?
+  // Удалили сотрудника-менеджера → менеджер у сделки обнуляется, сделка и её
+  // одобренные платежи остаются, чтобы бухгалтерия не теряла финансовую историю
+  // (бонусы за прошлые периоды по-прежнему считаются по reviewedAt/amount).
+  manager       User?            @relation("SubmissionManager", fields: [managerId], references: [id], onDelete: SetNull)
   // Контракт — PDF/фото подписанного контракта.
   contractUrl   String
+  // Snapshot метаданных контракт-файла (см. комментарий выше про паспорт).
+  contractMime         String?
+  contractSize         Int?
+  contractOriginalName String?
   // Полная сумма контракта (для отслеживания «сколько ещё должен»).
   totalAmount   Float
   currency      String           @default("USD")

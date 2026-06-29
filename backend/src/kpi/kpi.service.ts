@@ -67,6 +67,10 @@ export class KpiService {
             where: {
               managerId: u.id,
               type: 'INCOME',
+              // Bug #25: исключаем INCOME-транзакции, помеченные как
+              // reversed (CANCEL сделки или ручной refund), иначе KPI
+              // показывает завышенный salesAmount по отменённым сделкам.
+              reversedAt: null,
               ...(dateFilter && { date: dateFilter }),
             },
             _sum: { amount: true },

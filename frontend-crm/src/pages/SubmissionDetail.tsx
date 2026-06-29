@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
+import { useRealtime } from '../realtime';
 import { useUI } from '../ui/Dialogs';
 import {
   getSubmission,
@@ -20,12 +21,7 @@ import {
 } from '../api/submissions';
 import Icon from '../Icon';
 import CrmDatePicker from '../components/CrmDatePicker';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
-const absUrl = (u: string | null | undefined) => {
-  if (!u) return '';
-  return u.startsWith('http') ? u : `${API_BASE}${u}`;
-};
+import { absFileUrl as absUrl } from '../lib/fileUrl';
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: '#0ea5e9',
@@ -81,7 +77,30 @@ export default function SubmissionDetail() {
     onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
   });
 
+  // Realtime: обновляем детальный экран при любых событиях по сделке/платежу.
+  // Инвалидируем и единичный ['submission', id], и список ['submissions'].
+  useRealtime({
+    'submission:new': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
+    'submission:payment-new': () => {
+      qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: ['submissions'] });
+    },
+    'submission:reviewed': () => {
+      qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: ['submissions'] });
+    },
+    'submission:approved': () => {
+      qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: ['submissions'] });
+    },
+    'submission:rejected': () => {
+      qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: ['submissions'] });
+    },
+  });
+
   const [showAddPayment, setShowAddPayment] = useState(false);
+  const [rejectPaymentId, setRejectPaymentId] = useState<string | null>(null);
 
   if (query.isLoading) return <div className="card" style={{ padding: 24 }}>Загружаем…</div>;
   if (!s) return <div className="card" style={{ padding: 24 }}>Сделка не найдена</div>;
@@ -91,11 +110,8 @@ export default function SubmissionDetail() {
   const remaining = Math.max(0, s.totalAmount - totalPaid);
   const isOwnSubmission = s.managerId === me?.id;
 
-  const onReject = async (paymentId: string) => {
-    const reason = window.prompt('Причина отклонения:');
-    if (reason && reason.trim()) {
-      rejectMut.mutate({ paymentId, reason: reason.trim() });
-    }
+  const onReject = (paymentId: string) => {
+    setRejectPaymentId(paymentId);
   };
 
   const onComplete = async () => {
@@ -202,7 +218,7 @@ export default function SubmissionDetail() {
             key={p.id}
             p={p}
             currency={s.currency}
-            canReview={founder && p.status === 'PENDING'}
+            canReview={founder && p.status === 'PENDING' && s.status === 'ACTIVE' && !isOwnSubmission}
             onApprove={() => approveMut.mutate(p.id)}
             onReject={() => onReject(p.id)}
             busy={approveMut.isPending || rejectMut.isPending}
@@ -219,6 +235,21 @@ export default function SubmissionDetail() {
             setShowAddPayment(false);
             qc.invalidateQueries({ queryKey: ['submission', id] });
             toast('Платёж добавлен', 'success');
+          }}
+        />
+      )}
+
+      {rejectPaymentId && (
+        <RejectReasonModal
+          busy={rejectMut.isPending}
+          onClose={() => {
+            if (!rejectMut.isPending) setRejectPaymentId(null);
+          }}
+          onSubmit={(reason) => {
+            rejectMut.mutate(
+              { paymentId: rejectPaymentId, reason },
+              { onSuccess: () => setRejectPaymentId(null) },
+            );
           }}
         />
       )}
@@ -335,7 +366,7 @@ function AddPaymentModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<SubmissionPaymentMethod>('TRANSFER');
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
@@ -368,13 +399,45 @@ function AddPaymentModal({
     mut.mutate();
   };
 
+  const isDirty = Boolean(
+    amount || receiptUrl || depositProofUrl || notes.trim() || nextDueDate || nextDueAmount,
+  );
+
+  const attemptClose = async () => {
+    if (mut.isPending) return;
+    if (!isDirty) {
+      onClose();
+      return;
+    }
+    const ok = await confirm({
+      title: 'Закрыть без сохранения?',
+      message: 'Введённые данные и прикреплённые файлы будут потеряны.',
+      confirmText: 'Закрыть',
+      cancelText: 'Продолжить ввод',
+      danger: true,
+    });
+    if (ok) onClose();
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        attemptClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty, mut.isPending]);
+
   return (
     <motion.div
       className="dialog-backdrop"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={onClose}
+      onClick={attemptClose}
     >
       <motion.div
         className="dialog-card"
@@ -426,7 +489,7 @@ function AddPaymentModal({
           </Field>
         </div>
         <div className="dialog-actions" style={{ justifyContent: 'flex-end' }}>
-          <button className="btn btn-secondary" onClick={onClose} disabled={mut.isPending}>Отмена</button>
+          <button className="btn btn-secondary" onClick={attemptClose} disabled={mut.isPending}>Отмена</button>
           <button className="btn btn-primary" onClick={onSubmit} disabled={mut.isPending}>
             {mut.isPending ? 'Отправляем…' : 'Добавить'}
           </button>
@@ -444,6 +507,96 @@ function Field({ label, children }: { label: string; children: any }) {
       </label>
       {children}
     </div>
+  );
+}
+
+const REJECT_REASON_MAX = 500;
+
+function RejectReasonModal({
+  busy, onClose, onSubmit,
+}: {
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (reason: string) => void;
+}) {
+  const { confirm } = useUI();
+  const [reason, setReason] = useState('');
+  const trimmed = reason.trim();
+  const isValid = trimmed.length > 0 && reason.length <= REJECT_REASON_MAX;
+
+  const handleSubmit = () => {
+    if (!isValid || busy) return;
+    onSubmit(trimmed);
+  };
+
+  const attemptClose = async () => {
+    if (busy) return;
+    if (!trimmed) {
+      onClose();
+      return;
+    }
+    const ok = await confirm({
+      title: 'Закрыть без отклонения?',
+      message: 'Введённая причина будет потеряна.',
+      confirmText: 'Закрыть',
+      cancelText: 'Продолжить ввод',
+      danger: true,
+    });
+    if (ok) onClose();
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        attemptClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, trimmed]);
+
+  return (
+    <motion.div
+      className="dialog-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={attemptClose}
+    >
+      <motion.div
+        className="dialog-card"
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 480, textAlign: 'left' }}
+      >
+        <h3 style={{ fontSize: 18, marginBottom: 12, textAlign: 'center' }}>Отклонить платёж</h3>
+        <Field label="Причина отклонения *">
+          <textarea
+            className="crm-textarea"
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value.slice(0, REJECT_REASON_MAX))}
+            maxLength={REJECT_REASON_MAX}
+            placeholder="Опишите, почему платёж отклонён"
+            autoFocus
+            disabled={busy}
+            style={{ resize: 'none', width: '100%' }}
+          />
+        </Field>
+        <div style={{ fontSize: 11, color: 'var(--text-soft)', textAlign: 'right', marginTop: 4 }}>
+          {reason.length} / {REJECT_REASON_MAX}
+        </div>
+        <div className="dialog-actions" style={{ justifyContent: 'flex-end' }}>
+          <button className="btn btn-secondary" onClick={attemptClose} disabled={busy}>Отмена</button>
+          <button className="btn btn-danger" onClick={handleSubmit} disabled={!isValid || busy}>
+            {busy ? 'Отклоняем…' : 'Отклонить'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

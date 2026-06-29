@@ -16,9 +16,10 @@ import { extname } from 'path';
 import { randomUUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { SubmissionsService } from './submissions.service';
-import { SubmissionStatus, SubmissionPaymentStatus } from '@prisma/client';
+import { Role, SubmissionStatus, SubmissionPaymentStatus } from '@prisma/client';
 
 // Те же типы файлов что и в time-tracking (паспорт/контракт/чек).
 const SUBMISSION_FILE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf']);
@@ -49,18 +50,21 @@ export class SubmissionsController {
 
   /** Менеджер создаёт новую сделку. */
   @Post()
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   create(@CurrentUser() me: any, @Body() body: any) {
     return this.svc.create(me.id, body);
   }
 
   /** Менеджер добавляет новый платёж в существующую сделку. */
   @Post(':id/payments')
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   addPayment(@CurrentUser() me: any, @Param('id') id: string, @Body() body: any) {
     return this.svc.addPayment(me.id, id, body);
   }
 
   /** Менеджер — список своих сделок. */
   @Get('mine')
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   listMine(@CurrentUser() me: any, @Query('status') status?: string) {
     const validStatus = status && ['ACTIVE', 'COMPLETED', 'CANCELLED'].includes(status)
       ? (status as SubmissionStatus)
@@ -68,19 +72,20 @@ export class SubmissionsController {
     return this.svc.listMine(me.id, { status: validStatus });
   }
 
-  /** Все сделки — для FOUNDER (или ADMIN). */
+  /** Все сделки — только для FOUNDER/ADMIN (PII сделок: контракты, паспорта, e-mail студентов). */
   @Get()
+  @Roles(Role.FOUNDER, Role.ADMIN)
   list(
-    @CurrentUser() me: any,
+    @CurrentUser() _me: any,
     @Query('status') status?: string,
     @Query('paymentStatus') paymentStatus?: string,
     @Query('managerId') managerId?: string,
     @Query('take') take?: string,
   ) {
-    if (!['FOUNDER', 'ADMIN'].includes(me.role)) {
-      // Не-FOUNDER видит только свои
-      return this.svc.listMine(me.id, {});
-    }
+    // Доступ ограничен @Roles(FOUNDER, ADMIN) на уровне декоратора —
+    // ACCOUNTANT/менеджеры до сюда не дойдут. Раньше здесь был fallback на
+    // listMine() для не-elevated, но он стал мёртвым кодом после
+    // ужесточения ролей в рамках audit:edge-cases bug #32.
     return this.svc.listAll({
       status: status && ['ACTIVE', 'COMPLETED', 'CANCELLED'].includes(status)
         ? (status as SubmissionStatus) : undefined,
@@ -91,40 +96,53 @@ export class SubmissionsController {
     });
   }
 
-  /** FOUNDER — pending платежи на одобрение. */
+  /** FOUNDER/ADMIN — pending платежи на одобрение. */
   @Get('pending-payments')
-  pending(@CurrentUser() me: any) {
-    if (!['FOUNDER', 'ADMIN'].includes(me.role)) {
-      throw new BadRequestException('Только FOUNDER может смотреть pending');
-    }
+  @Roles(Role.FOUNDER, Role.ADMIN)
+  pending() {
     return this.svc.listPendingPayments();
   }
 
+  /**
+   * Просмотр конкретной сделки. FOUNDER/ADMIN видят любую; SALES_MANAGER/
+   * CLIENT_MANAGER — только свою (фильтрация по managerId в сервисе).
+   * ACCOUNTANT убран намеренно — содержит PII студента (паспорт, e-mail).
+   */
   @Get(':id')
-  getOne(@Param('id') id: string) {
-    return this.svc.getOne(id);
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  getOne(@CurrentUser() me: any, @Param('id') id: string) {
+    return this.svc.getOne(me, id);
   }
 
   /** FOUNDER одобряет платёж — атомарно создаёт Student/Application/Transaction. */
   @Post('payments/:id/approve')
+  @Roles(Role.FOUNDER)
   approve(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.approvePayment(id, me.id);
   }
 
   /** FOUNDER отклоняет платёж с причиной. */
   @Post('payments/:id/reject')
+  @Roles(Role.FOUNDER)
   reject(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { reason: string }) {
     return this.svc.rejectPayment(id, me.id, body?.reason || '');
   }
 
   /** Менеджер меняет статус всей сделки (COMPLETED / CANCELLED). */
   @Post(':id/status')
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   changeStatus(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { status: SubmissionStatus }) {
     return this.svc.changeStatus(me.id, id, body.status);
   }
 
-  /** Загрузка файла (паспорт / контракт / чек / скрин депозита). */
+  /**
+   * Загрузка файла (паспорт / контракт / чек / скрин депозита).
+   * ACCOUNTANT убран из allowlist — у него нет права создавать submission,
+   * значит и грузить файлы под submission'ы он не должен (disk-fill риск,
+   * 50MB лимит). FOUNDER/ADMIN оставлены: могут редактировать чужие сделки.
+   */
   @Post('upload')
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: submissionFileStorage,

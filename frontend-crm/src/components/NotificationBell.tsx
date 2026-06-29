@@ -5,6 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listNotifications, markAllRead, markRead, unreadCount } from '../api/notifications';
 import type { Notification } from '../api/types';
 import { useRealtime } from '../realtime';
+import { useAuth } from '../store/auth';
+import { isFounder, isManager } from '../lib/roles';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useOptimisticMutation } from '../lib/optimistic';
@@ -49,6 +51,9 @@ export default function NotificationBell() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { t } = useT();
+  const me = useAuth((s) => s.user);
+  const founder = isFounder(me);
+  const manager = isManager(me);
   const [open, setOpen] = useState(false);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -97,6 +102,33 @@ export default function NotificationBell() {
           const href = notificationHref({ ...data, payload: data?.payload || {} } as any);
           if (href) navigate(href);
         });
+      }
+    },
+    // Submission-события: бэкенд эмитит submission:new всему staff (важно для FOUNDER —
+    // у него вкладка "На рассмотрении"), а submission:approved/rejected — конкретному
+    // менеджеру. Дёргаем счётчик уведомлений и подсказываем десктоп-нотификацией.
+    'submission:new': () => {
+      qc.invalidateQueries({ queryKey: keys.notifications.all });
+      if (founder) {
+        showBrowserNotif('Новая сделка', 'Поступила сделка на рассмотрение', () => navigate('/submissions?tab=pending'));
+      }
+    },
+    'submission:payment-new': () => {
+      qc.invalidateQueries({ queryKey: keys.notifications.all });
+      if (founder) {
+        showBrowserNotif('Новый платёж', 'Платёж ожидает одобрения', () => navigate('/submissions?tab=pending'));
+      }
+    },
+    'submission:approved': () => {
+      qc.invalidateQueries({ queryKey: keys.notifications.all });
+      if (manager) {
+        showBrowserNotif('Платёж одобрен', 'Ваш платёж по сделке одобрен', () => navigate('/submissions'));
+      }
+    },
+    'submission:rejected': () => {
+      qc.invalidateQueries({ queryKey: keys.notifications.all });
+      if (manager) {
+        showBrowserNotif('Платёж отклонён', 'Ваш платёж по сделке отклонён', () => navigate('/submissions'));
       }
     },
   });

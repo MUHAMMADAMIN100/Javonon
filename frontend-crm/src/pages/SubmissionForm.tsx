@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -16,6 +16,10 @@ import CrmDatePicker from '../components/CrmDatePicker';
 
 type Mode = 'existing' | 'new';
 
+// Метаданные загруженного файла из /submissions/upload — нужны бэку,
+// чтобы при APPROVE создать Document с правильным mime/size/originalName.
+type UploadMeta = { mime: string; size: number; originalName: string };
+
 export default function SubmissionForm() {
   const navigate = useNavigate();
   const { toast } = useUI();
@@ -24,14 +28,25 @@ export default function SubmissionForm() {
   const [mode, setMode] = useState<Mode>('existing');
   const [studentId, setStudentId] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
+  // BUG #16: debounce 300ms — иначе на каждый keystroke летит запрос
+  // findMany с полным include, что вешает сервер на 1000+ студентов.
+  const [debouncedStudentSearch, setDebouncedStudentSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedStudentSearch(studentSearch.trim()), 300);
+    return () => clearTimeout(t);
+  }, [studentSearch]);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [passportUrl, setPassportUrl] = useState('');
+  // Метаданные паспорта — отправляем на бэк, чтобы Document при APPROVE
+  // получил реальный mimeType/size/originalName, а не placeholder.
+  const [passportMeta, setPassportMeta] = useState<UploadMeta | null>(null);
 
   // Программа + контракт
   const [programId, setProgramId] = useState('');
   const [contractUrl, setContractUrl] = useState('');
+  const [contractMeta, setContractMeta] = useState<UploadMeta | null>(null);
   const [totalAmount, setTotalAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [notes, setNotes] = useState('');
@@ -39,17 +54,32 @@ export default function SubmissionForm() {
   // Первый платёж
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState<SubmissionPaymentMethod>('TRANSFER');
-  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [payDate, setPayDate] = useState(() => {
+    const today = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  });
   const [receiptUrl, setReceiptUrl] = useState('');
   const [depositProofUrl, setDepositProofUrl] = useState('');
   const [nextDueDate, setNextDueDate] = useState('');
   const [nextDueAmount, setNextDueAmount] = useState('');
 
+  // Счётчик активных загрузок файлов (защита от submit во время upload)
+  const [pendingUploads, setPendingUploads] = useState(0);
+  const onUploadingChange = (isUploading: boolean) => {
+    setPendingUploads((n) => Math.max(0, n + (isUploading ? 1 : -1)));
+  };
+
+  // BUG #16: enabled только при >= 2 символах + limit=50 — иначе на
+  // 1000+ студентов findMany с полным include вешает и сервер, и браузер.
   const studentsQuery = useQuery({
-    queryKey: ['students-search', studentSearch],
-    queryFn: () => listStudents({ search: studentSearch || undefined }),
-    enabled: mode === 'existing',
+    queryKey: ['students-search', debouncedStudentSearch],
+    queryFn: () =>
+      listStudents({ search: debouncedStudentSearch, limit: 50 }),
+    enabled: mode === 'existing' && debouncedStudentSearch.length >= 2,
   });
+  const studentOptions = studentsQuery.data || [];
+  const selectedStudent = studentOptions.find((s) => s.id === studentId);
   const programsQuery = useQuery({
     queryKey: ['programs-all'],
     queryFn: () => listPrograms(),
@@ -66,6 +96,7 @@ export default function SubmissionForm() {
 
   const onSubmit = () => {
     // Валидация
+    if (pendingUploads > 0) return toast('Дождитесь загрузки файлов', 'error');
     if (mode === 'existing' && !studentId) return toast('Выберите студента', 'error');
     if (mode === 'new' && newName.trim().length < 2) return toast('ФИО студента (мин 2 символа)', 'error');
     if (!programId) return toast('Выберите программу', 'error');
@@ -83,8 +114,16 @@ export default function SubmissionForm() {
       newStudentPhone: mode === 'new' ? newPhone.trim() : undefined,
       newStudentEmail: mode === 'new' ? newEmail.trim() : undefined,
       newStudentPassportUrl: mode === 'new' ? passportUrl || undefined : undefined,
+      // Метаданные паспорта (только для нового студента) — бэк сохранит их
+      // на SaleSubmission и подставит в Document при APPROVE.
+      newStudentPassportMime: mode === 'new' && passportUrl ? passportMeta?.mime : undefined,
+      newStudentPassportSize: mode === 'new' && passportUrl ? passportMeta?.size : undefined,
+      newStudentPassportOriginalName: mode === 'new' && passportUrl ? passportMeta?.originalName : undefined,
       programId,
       contractUrl,
+      contractMime: contractMeta?.mime,
+      contractSize: contractMeta?.size,
+      contractOriginalName: contractMeta?.originalName,
       totalAmount: ta,
       currency,
       notes: notes.trim() || undefined,
@@ -135,21 +174,91 @@ export default function SubmissionForm() {
           </div>
 
           {mode === 'existing' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input
-                className="crm-input"
-                placeholder="Поиск студента по ФИО / телефону / email"
-                value={studentSearch}
-                onChange={(e) => setStudentSearch(e.target.value)}
-              />
-              <select className="crm-select" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
-                <option value="">— выберите —</option>
-                {(studentsQuery.data || []).map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.fullName} {s.phones?.[0] ? `· ${s.phones[0]}` : ''}
-                  </option>
-                ))}
-              </select>
+            // BUG #16: typeahead вместо select с 1000+ option. Список
+            // подсказок появляется только когда введено >= 2 символа.
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}>
+              {selectedStudent ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="crm-input" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                    <strong>{selectedStudent.fullName}</strong>
+                    {selectedStudent.phones?.[0] ? (
+                      <span style={{ marginLeft: 8, color: 'var(--text-soft)' }}>
+                        · {selectedStudent.phones[0]}
+                      </span>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => {
+                      setStudentId('');
+                      setStudentSearch('');
+                    }}
+                  >
+                    Сменить
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    className="crm-input"
+                    placeholder="Поиск студента по ФИО / телефону / email (мин. 2 символа)"
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                  />
+                  {debouncedStudentSearch.length < 2 ? (
+                    <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
+                      Введите минимум 2 символа для поиска
+                    </div>
+                  ) : studentsQuery.isLoading ? (
+                    <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>Поиск…</div>
+                  ) : studentOptions.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>Ничего не найдено</div>
+                  ) : (
+                    <ul
+                      style={{
+                        listStyle: 'none',
+                        padding: 0,
+                        margin: 0,
+                        maxHeight: 240,
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-soft, #e5e7eb)',
+                        borderRadius: 6,
+                      }}
+                    >
+                      {studentOptions.map((s) => (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            onClick={() => setStudentId(s.id)}
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '8px 10px',
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid var(--border-soft, #f1f5f9)',
+                            }}
+                          >
+                            <strong>{s.fullName}</strong>
+                            {s.phones?.[0] ? (
+                              <span style={{ marginLeft: 8, color: 'var(--text-soft)' }}>
+                                · {s.phones[0]}
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      ))}
+                      {studentOptions.length >= 50 && (
+                        <li style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-soft)' }}>
+                          Показаны первые 50 — уточните запрос
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -165,7 +274,12 @@ export default function SubmissionForm() {
                 <input className="crm-input" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@example.com" />
               </Field>
               <Field label="Паспорт (фото/PDF)">
-                <FileUpload value={passportUrl} onChange={setPassportUrl} />
+                <FileUpload
+                  value={passportUrl}
+                  onChange={setPassportUrl}
+                  onMetaChange={setPassportMeta}
+                  onUploadingChange={onUploadingChange}
+                />
               </Field>
             </div>
           )}
@@ -185,7 +299,12 @@ export default function SubmissionForm() {
               </select>
             </Field>
             <Field label="Контракт (PDF/фото) *">
-              <FileUpload value={contractUrl} onChange={setContractUrl} />
+              <FileUpload
+                value={contractUrl}
+                onChange={setContractUrl}
+                onMetaChange={setContractMeta}
+                onUploadingChange={onUploadingChange}
+              />
             </Field>
             <Field label="Сумма контракта *">
               <input className="crm-input" type="number" min={0} step={50} value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="3000" />
@@ -220,17 +339,17 @@ export default function SubmissionForm() {
             </Field>
             {payMethod === 'TRANSFER' && (
               <Field label="Чек / скрин перевода *">
-                <FileUpload value={receiptUrl} onChange={setReceiptUrl} />
+                <FileUpload value={receiptUrl} onChange={setReceiptUrl} onUploadingChange={onUploadingChange} />
               </Field>
             )}
             {payMethod === 'CASH' && (
               <Field label="Скрин пополнения счёта *">
-                <FileUpload value={depositProofUrl} onChange={setDepositProofUrl} />
+                <FileUpload value={depositProofUrl} onChange={setDepositProofUrl} onUploadingChange={onUploadingChange} />
               </Field>
             )}
             {payMethod === 'OTHER' && (
               <Field label="Подтверждение">
-                <FileUpload value={receiptUrl} onChange={setReceiptUrl} />
+                <FileUpload value={receiptUrl} onChange={setReceiptUrl} onUploadingChange={onUploadingChange} />
               </Field>
             )}
             <Field label="Следующий платёж: дата">
@@ -257,8 +376,8 @@ export default function SubmissionForm() {
           <button className="btn btn-secondary" onClick={() => navigate('/submissions')} disabled={saving}>
             Отмена
           </button>
-          <button className="btn btn-primary" onClick={onSubmit} disabled={saving}>
-            {saving ? 'Отправляем…' : 'Отправить на одобрение'}
+          <button className="btn btn-primary" onClick={onSubmit} disabled={saving || pendingUploads > 0}>
+            {saving ? 'Отправляем…' : pendingUploads > 0 ? 'Загружаем файлы…' : 'Отправить на одобрение'}
           </button>
         </div>
       </motion.div>
@@ -286,20 +405,43 @@ function Field({ label, children }: { label: string; children: any }) {
   );
 }
 
-function FileUpload({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function FileUpload({
+  value,
+  onChange,
+  onMetaChange,
+  onUploadingChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  // Возвращаем mime/size/originalName наверх, чтобы родитель отправил
+  // их вместе с createSubmission — иначе Document при APPROVE сохранится
+  // с плейсхолдерами (octet-stream / size=0 / originalName='passport').
+  onMetaChange?: (meta: UploadMeta | null) => void;
+  onUploadingChange?: (uploading: boolean) => void;
+}) {
   const { toast } = useUI();
   const [uploading, setUploading] = useState(false);
   const handleFile = async (file: File | null) => {
     if (!file) return;
     setUploading(true);
+    onUploadingChange?.(true);
     try {
       const r = await uploadSubmissionFile(file);
       onChange(r.url);
+      // file.type — то, что определил браузер (MIME). Бэк ограничивает
+      // допустимые типы в submissionFileFilter; для file.type=='' (редкий
+      // случай для .heic в старых браузерах) подставляем octet-stream.
+      onMetaChange?.({
+        mime: file.type || 'application/octet-stream',
+        size: file.size,
+        originalName: r.originalName || file.name,
+      });
       toast('Файл загружен', 'success');
     } catch (e: any) {
       toast(e?.response?.data?.message || 'Ошибка загрузки', 'error');
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
     }
   };
   return (

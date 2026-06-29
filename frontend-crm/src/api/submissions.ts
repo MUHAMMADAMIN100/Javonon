@@ -32,9 +32,16 @@ export interface SaleSubmission {
   newStudentPhone: string | null;
   newStudentEmail: string | null;
   newStudentPassportUrl: string | null;
+  // Snapshot метаданных загруженных файлов (см. CreateSubmissionDto).
+  newStudentPassportMime: string | null;
+  newStudentPassportSize: number | null;
+  newStudentPassportOriginalName: string | null;
   programId: string;
   managerId: string;
   contractUrl: string;
+  contractMime: string | null;
+  contractSize: number | null;
+  contractOriginalName: string | null;
   totalAmount: number;
   currency: string;
   status: SubmissionStatus;
@@ -64,8 +71,17 @@ export interface CreateSubmissionDto {
   newStudentPhone?: string;
   newStudentEmail?: string;
   newStudentPassportUrl?: string;
+  // Метаданные паспорта (из ответа /submissions/upload). Бэкенд использует
+  // их при APPROVE для создания Document с реальным mimeType/size/originalName.
+  newStudentPassportMime?: string;
+  newStudentPassportSize?: number;
+  newStudentPassportOriginalName?: string;
   programId: string;
   contractUrl: string;
+  // Метаданные контракта (см. выше про паспорт).
+  contractMime?: string;
+  contractSize?: number;
+  contractOriginalName?: string;
   totalAmount: number;
   currency?: string;
   notes?: string;

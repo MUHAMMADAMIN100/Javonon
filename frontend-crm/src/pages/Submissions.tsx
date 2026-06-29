@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
+import { useRealtime } from '../realtime';
 import { useT } from '../lib/i18n';
 import {
   listMySubmissions,
@@ -16,12 +17,7 @@ import {
   PAYMENT_STATUS_LABEL,
 } from '../api/submissions';
 import Icon from '../Icon';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
-const absUrl = (u: string | null | undefined) => {
-  if (!u) return '';
-  return u.startsWith('http') ? u : `${API_BASE}${u}`;
-};
+import { absFileUrl as absUrl } from '../lib/fileUrl';
 
 const STATUS_COLOR: Record<SubmissionStatus, string> = {
   ACTIVE: '#0ea5e9',
@@ -39,9 +35,21 @@ export default function Submissions() {
   const me = useAuth((s) => s.user);
   const { t } = useT();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const founder = isFounder(me);
 
   const [tab, setTab] = useState<'mine' | 'pending' | 'all'>(founder ? 'pending' : 'mine');
+
+  // Realtime: бэкенд эмитит submission:new (staff), submission:payment-new (staff),
+  // submission:reviewed (staff), submission:approved/rejected (юзеру-менеджеру).
+  // Инвалидируем весь префикс ['submissions'] — он покрывает 'mine'/'all'/'pending'.
+  useRealtime({
+    'submission:new': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
+    'submission:payment-new': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
+    'submission:reviewed': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
+    'submission:approved': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
+    'submission:rejected': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
+  });
 
   return (
     <>
