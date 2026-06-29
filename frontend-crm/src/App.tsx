@@ -33,6 +33,9 @@ import Chat from './pages/Chat';
 import Lms from './pages/LMS';
 import Partners from './pages/Partners';
 import UserDetail, { MyProfile } from './pages/UserDetail';
+import Submissions from './pages/Submissions';
+import SubmissionForm from './pages/SubmissionForm';
+import SubmissionDetail from './pages/SubmissionDetail';
 import Loading from './components/Loading';
 
 export default function App() {
@@ -80,6 +83,9 @@ export default function App() {
         <Route path="/attendance" element={<Workday />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/salary" element={<Salary />} />
+        <Route path="/submissions" element={<Submissions />} />
+        <Route path="/submissions/new" element={<SubmissionForm />} />
+        <Route path="/submissions/:id" element={<SubmissionDetail />} />
         <Route path="/kpi" element={<Kpi />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/lms" element={<Lms />} />

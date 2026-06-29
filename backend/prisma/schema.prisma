@@ -184,6 +184,8 @@ model User {
   callLogs              CallLog[]     @relation("CallLogUser")
   offerSignatures       OfferSignature[]
   workSchedules         WorkSchedule[]
+  submissions           SaleSubmission[] @relation("SubmissionManager")
+  submissionPaymentReviews SubmissionPayment[] @relation("SubmissionPaymentReviewer")
 }
 
 // Документы сотрудника (паспорт, контракт, дипломы и т.п.). По
@@ -309,6 +311,8 @@ model Application {
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
+  submission       SaleSubmission?   @relation("SubmissionApplication")
+
   @@index([status])
   @@index([direction])
   @@index([managerId])
@@ -362,6 +366,7 @@ model Student {
   interactions Interaction[]
   payments     Payment[]
   callLogs     CallLog[]     @relation("CallLogStudent")
+  submissions  SaleSubmission[] @relation("StudentSubmissions")
 
   @@index([direction])
   @@index([cabinet])
@@ -465,6 +470,7 @@ model Program {
   scholarships ProgramScholarship[]
   documents    ProgramDocument[]
   comments     ProgramComment[]
+  submissions  SaleSubmission[] @relation("ProgramSubmissions")
 
   @@index([city])
   @@index([country])
@@ -1487,5 +1493,110 @@ model CustomRole {
   users       User[]
 
   @@index([isActive])
+}
+
+// ============================================================
+// SALE SUBMISSIONS — менеджер сам оформляет закрытую сделку
+// (студент + контракт + платежи), FOUNDER одобряет как 2FA.
+// После APPROVE первого платежа атомарно создаются Student
+// (если новый), Application, FinanceTransaction. Последующие
+// платежи добавляются к существующей Submission.
+// Бонус менеджера = sum(APPROVED payments за месяц) × bonusPercent.
+// ============================================================
+enum SubmissionStatus {
+  ACTIVE     // контракт открыт, могут добавляться платежи
+  COMPLETED  // оплачено полностью, закрыто менеджером
+  CANCELLED  // отменено (студент отказался / возврат)
+}
+
+enum SubmissionPaymentStatus {
+  PENDING    // менеджер прислал, ждёт одобрения FOUNDER
+  APPROVED   // FOUNDER сверил с реальным платежом → засчитано в доход + бонус
+  REJECTED   // FOUNDER отклонил (фейк/ошибка), менеджер должен переделать
+}
+
+enum SubmissionPaymentMethod {
+  TRANSFER   // банковский перевод на реквизиты компании
+  CASH       // наличкой, вечером пополняется на счёт + скрин пополнения
+  OTHER
+}
+
+model SaleSubmission {
+  id            String           @id @default(uuid())
+  // Студент: если studentId задан — существующий, иначе создаётся при
+  // первом APPROVE из полей snapshot ниже.
+  studentId     String?
+  student       Student?         @relation("StudentSubmissions", fields: [studentId], references: [id], onDelete: SetNull)
+  // Snapshot данных нового студента — заполняется если studentId null.
+  // После первого APPROVE сюда не пишем; ссылка на созданного — через studentId.
+  newStudentName     String?
+  newStudentPhone    String?
+  newStudentEmail    String?
+  newStudentPassportUrl String?  // фото/PDF паспорта (Multer upload)
+  // Программа — обязательна.
+  programId     String
+  program       Program          @relation("ProgramSubmissions", fields: [programId], references: [id], onDelete: Restrict)
+  // Менеджер-создатель (для бонусной логики).
+  managerId     String
+  manager       User             @relation("SubmissionManager", fields: [managerId], references: [id], onDelete: Cascade)
+  // Контракт — PDF/фото подписанного контракта.
+  contractUrl   String
+  // Полная сумма контракта (для отслеживания «сколько ещё должен»).
+  totalAmount   Float
+  currency      String           @default("USD")
+  // Статус всей сделки. ACTIVE пока есть открытые платежи или сумма не
+  // покрыта. Менеджер сам помечает COMPLETED когда оплачено всё, или
+  // CANCELLED при возврате/отказе.
+  status        SubmissionStatus @default(ACTIVE)
+  // Куда оформился (создаётся при APPROVE первого платежа).
+  applicationId String?          @unique
+  application   Application?     @relation("SubmissionApplication", fields: [applicationId], references: [id], onDelete: SetNull)
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  // Когда был APPROVED первый платёж (создались Student/Application).
+  firstApprovedAt DateTime?
+
+  payments      SubmissionPayment[]
+
+  @@index([managerId, createdAt])
+  @@index([status])
+  @@index([studentId])
+  @@index([programId])
+}
+
+model SubmissionPayment {
+  id              String                  @id @default(uuid())
+  submissionId    String
+  submission      SaleSubmission          @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  // Сколько фактически внёс этим траншем.
+  amount          Float
+  paymentMethod   SubmissionPaymentMethod @default(TRANSFER)
+  // Когда менеджер получил деньги.
+  paidAt          DateTime
+  // Чек/скриншот перевода — обязательно при TRANSFER.
+  receiptUrl      String?
+  // Если налом: вечером кладёт на счёт компании, прикладывает скрин
+  // банковской выписки или фото слипа.
+  depositProofUrl String?
+  // План следующего платежа (если контракт не закрыт полностью).
+  nextDueDate     DateTime?
+  nextDueAmount   Float?
+  notes           String?
+  status          SubmissionPaymentStatus @default(PENDING)
+  // FOUNDER одобрение / отклонение.
+  reviewedById    String?
+  reviewedBy      User?                   @relation("SubmissionPaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  rejectReason    String?
+  // Связанная финансовая транзакция (создаётся на APPROVE) — для
+  // дашборда доходов в Finance модуле.
+  financeTransactionId String? @unique
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([submissionId, paidAt])
+  @@index([status])
+  @@index([reviewedAt])
 }
 

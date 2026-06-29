@@ -120,6 +120,9 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
 
   // Finance
   const financeLinks: Array<{ to: string; icon: string; label: string }> = [];
+  // «Сделки» — менеджеры оформляют закрытых студентов; FOUNDER одобряет.
+  // Виден всем кто работает с продажами + всем elevated (FOUNDER/ADMIN).
+  financeLinks.push({ to: '/submissions', icon: 'handshake', label: t('sidebar.submissions') !== 'sidebar.submissions' ? t('sidebar.submissions') : 'Сделки' });
   if (show('finance:read', elevated)) financeLinks.push({ to: '/finance', icon: 'payments', label: t('sidebar.finance') });
   if (show('salary:read', elevated)) financeLinks.push({ to: '/salary', icon: 'paid', label: t('sidebar.salary') });
 
