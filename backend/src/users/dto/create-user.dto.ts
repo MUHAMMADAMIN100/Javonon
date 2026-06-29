@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { IsDateString, IsEmail, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { Role } from '@prisma/client';
 
@@ -39,4 +39,56 @@ export class CreateUserDto {
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
   customRoleId?: string | null;
+
+  // Опциональные HR/salary поля — FOUNDER может задать сразу при создании.
+  // Те же ограничения что в UpdateUserDto.
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  passportNo?: string;
+
+  @IsOptional()
+  @IsDateString()
+  hiredAt?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1_000_000)
+  baseSalary?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100_000)
+  hourlyRate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  bonusPercent?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  kpiTargetPct?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  kpiAutoStepPct?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(500)
+  kpiMaxPct?: number;
 }

@@ -128,11 +128,13 @@ export class SubmissionsController {
     return this.svc.rejectPayment(id, me.id, body?.reason || '');
   }
 
-  /** Менеджер меняет статус всей сделки (COMPLETED / CANCELLED). */
+  /** Менеджер меняет статус всей сделки (COMPLETED / CANCELLED).
+   *  FOUNDER может закрывать ЛЮБУЮ сделку (включая orphan когда
+   *  менеджер уволен и managerId стал null). */
   @Post(':id/status')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   changeStatus(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { status: SubmissionStatus }) {
-    return this.svc.changeStatus(me.id, id, body.status);
+    return this.svc.changeStatus(me, id, body.status);
   }
 
   /**

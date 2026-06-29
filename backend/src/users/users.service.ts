@@ -381,14 +381,30 @@ export class UsersService {
     }
 
     const password = await bcrypt.hash(rawPassword, 10);
+
+    // Принимаем salary/HR поля сразу при создании — иначе FOUNDER вынужден
+    // делать второй вызов PATCH /users/:id чтобы выставить bonusPercent,
+    // baseSalary, hourlyRate и т.п. Те же поля принимает update.
+    const data: any = {
+      email, password, fullName: dto.fullName, role: dto.role,
+      customRoleId,
+    };
+    if (dto.phone !== undefined) data.phone = dto.phone?.trim() || null;
+    if (dto.passportNo !== undefined) data.passportNo = dto.passportNo?.trim() || null;
+    if (dto.hiredAt !== undefined) data.hiredAt = dto.hiredAt ? new Date(dto.hiredAt) : null;
+    if (dto.baseSalary !== undefined) data.baseSalary = dto.baseSalary;
+    if (dto.hourlyRate !== undefined) data.hourlyRate = dto.hourlyRate;
+    if (dto.bonusPercent !== undefined) data.bonusPercent = dto.bonusPercent;
+    if (dto.kpiTargetPct !== undefined) data.kpiTargetPct = dto.kpiTargetPct;
+    if (dto.kpiAutoStepPct !== undefined) data.kpiAutoStepPct = dto.kpiAutoStepPct;
+    if (dto.kpiMaxPct !== undefined) data.kpiMaxPct = dto.kpiMaxPct;
+
     const user = await this.prisma.user.create({
-      data: {
-        email, password, fullName: dto.fullName, role: dto.role,
-        customRoleId,
-      },
+      data,
       select: {
         id: true, email: true, fullName: true, role: true, createdAt: true,
         customRoleId: true,
+        baseSalary: true, hourlyRate: true, bonusPercent: true,
         customRole: { select: { id: true, name: true, isActive: true } },
       },
     });

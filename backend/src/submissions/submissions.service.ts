@@ -771,7 +771,7 @@ export class SubmissionsService {
    * Bug #25 из audit:edge-cases: раньше CANCEL не откатывал ничего, и
    * деньги по отменённой сделке оставались в выручке и бонусной базе.
    */
-  async changeStatus(userId: string, submissionId: string, status: SubmissionStatus) {
+  async changeStatus(user: { id: string; role?: any; roles?: any }, submissionId: string, status: SubmissionStatus) {
     const submission = await this.prisma.saleSubmission.findUnique({
       where: { id: submissionId },
       include: {
@@ -787,10 +787,14 @@ export class SubmissionsService {
       },
     });
     if (!submission) throw new NotFoundException('Сделка не найдена');
-    // managerId может быть null, если исходный менеджер удалён (SetNull) —
-    // осиротевшую сделку никто не может закрывать/отменять.
-    if (submission.managerId === null || submission.managerId !== userId) {
-      throw new ForbiddenException('Это не ваша сделка');
+    // FOUNDER может закрывать любые сделки (включая orphan-сделки
+    // уволенных менеджеров где managerId стал null). Остальным —
+    // только свои собственные.
+    const isFounderUser = isFounder(user as UserWithRoles);
+    if (!isFounderUser) {
+      if (submission.managerId === null || submission.managerId !== user.id) {
+        throw new ForbiddenException('Это не ваша сделка');
+      }
     }
     if (status !== SubmissionStatus.COMPLETED && status !== SubmissionStatus.CANCELLED) {
       throw new BadRequestException('Можно ставить только COMPLETED или CANCELLED');
@@ -849,7 +853,7 @@ export class SubmissionsService {
                 date: reversedAt,
                 studentId: original.studentId,
                 managerId: original.managerId,
-                recordedById: userId,
+                recordedById: user.id,
                 comment: `Возврат по сделке #${shortId} (отмена менеджером)`,
                 // Reversal-EXPENSE — корректирующая запись; маркируем
                 // reversedAt, чтобы при возможном UN-CANCEL её не «отменить
