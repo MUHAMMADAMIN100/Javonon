@@ -166,9 +166,11 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
             style={{
               padding: '6px 12px',
               borderRadius: 999,
-              border: '1.5px solid var(--border)',
-              background: showFullTimeline ? 'var(--primary-light)' : 'transparent',
-              color: showFullTimeline ? 'var(--primary-dark)' : 'var(--text-soft)',
+              border: `1.5px solid ${showFullTimeline ? 'var(--primary-dark)' : 'var(--border)'}`,
+              // --primary-light = #1E5BB8 (тёмно-синий, не светлый),
+              // поэтому на active state текст ОБЯЗАТЕЛЬНО белый.
+              background: showFullTimeline ? 'var(--primary)' : 'transparent',
+              color: showFullTimeline ? '#fff' : 'var(--text-soft)',
               fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}
             title={t('interactions.fullTimeline')}

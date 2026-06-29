@@ -2492,7 +2492,7 @@ select.input-error {
 }
 .manager-slot.mine .manager-slot-head > .material-symbols-rounded {
   background: var(--primary);
-  color: var(--text);
+  color: #fff;
 }
 .manager-slot-label {
   font-family: var(--font-mono);
@@ -3003,7 +3003,7 @@ select.input-error {
 }
 .notif-item-read:hover {
   background: var(--primary);
-  color: var(--text);
+  color: #fff;
   border-color: var(--primary);
 }
 .notif-empty {

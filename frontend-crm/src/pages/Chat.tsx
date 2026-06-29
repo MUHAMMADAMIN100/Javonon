@@ -672,7 +672,9 @@ export default function Chat() {
                     <div style={{
                       width: 36, height: 36, borderRadius: '50%',
                       background: r.type === 'GENERAL' ? 'var(--text)' : 'var(--primary)',
-                      color: r.type === 'GENERAL' ? 'white' : 'var(--text)',
+                      // На обоих фонах текст белый — var(--text) и
+                      // var(--primary) оба тёмные.
+                      color: '#fff',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontFamily: 'var(--font-display)',
                       fontWeight: 600,
