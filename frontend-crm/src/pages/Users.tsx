@@ -186,9 +186,12 @@ export default function Users() {
                           style={{
                             padding: '3px 8px',
                             borderRadius: 999,
-                            background: 'var(--primary-light, #e0e7ff)',
-                            border: '1.5px solid var(--primary, #4f46e5)',
-                            color: 'var(--primary-dark, #4338ca)',
+                            // ВНИМАНИЕ: --primary-light в этой теме = #1E5BB8
+                            // (это тёмно-синий, не светлый!). Поэтому текст
+                            // ОБЯЗАТЕЛЬНО белый, иначе невидимо.
+                            background: 'var(--primary, #01368B)',
+                            border: '1.5px solid var(--primary-dark, #012457)',
+                            color: '#fff',
                             fontSize: 11,
                             fontWeight: 600,
                           }}
