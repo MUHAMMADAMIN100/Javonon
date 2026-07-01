@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -91,7 +91,21 @@ export default function SubmissionForm() {
       toast('Сделка отправлена на одобрение', 'success');
       navigate(`/submissions/${s.id}`);
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    // Порядок фоллбеков:
+    //   response.data.message  — читаемая ошибка от Nest (BadRequest, Forbidden)
+    //   response.status===403  — недостаточно прав (RolesGuard)
+    //   userMessage            — network/timeout из interceptor'а client.ts
+    //   generic                — «Ошибка отправки»
+    onError: (e: any) => {
+      const status = e?.response?.status;
+      const msg =
+        e?.response?.data?.message ||
+        (status === 403 ? 'Недостаточно прав для создания сделки' : null) ||
+        (status === 413 ? 'Файл слишком большой' : null) ||
+        e?.userMessage ||
+        'Не удалось отправить сделку. Попробуйте ещё раз.';
+      toast(msg, 'error');
+    },
   });
 
   const onSubmit = () => {
@@ -376,7 +390,13 @@ export default function SubmissionForm() {
           <button className="btn btn-secondary" onClick={() => navigate('/submissions')} disabled={saving}>
             Отмена
           </button>
-          <button className="btn btn-primary" onClick={onSubmit} disabled={saving || pendingUploads > 0}>
+          {/* BUG-fix: раньше кнопка была `disabled` при pendingUploads>0. Если
+              FileUpload размонтировался в середине загрузки (например, менеджер
+              переключил payMethod TRANSFER→CASH до окончания upload'а),
+              onUploadingChange(false) не вызывался и счётчик оставался >0 —
+              кнопка навсегда серая без объяснения. Теперь клик всегда доходит
+              до onSubmit, а тот покажет внятный toast если загрузка ещё идёт. */}
+          <button className="btn btn-primary" onClick={onSubmit} disabled={saving}>
             {saving ? 'Отправляем…' : pendingUploads > 0 ? 'Загружаем файлы…' : 'Отправить на одобрение'}
           </button>
         </div>
@@ -421,27 +441,47 @@ function FileUpload({
 }) {
   const { toast } = useUI();
   const [uploading, setUploading] = useState(false);
+  // Хранит, «отдали» ли мы наверх активный тик pendingUploads. Нужно чтобы:
+  // (а) если компонент размонтируется во время загрузки (например, менеджер
+  //     переключил payMethod TRANSFER→CASH и FileUpload с чеком исчез) — на
+  //     unmount вернуть счётчик в 0; иначе кнопка submit останется disabled.
+  // (б) не декрементить дважды, если finally уже отработал.
+  const uploadingRef = useRef(false);
+  useEffect(() => {
+    return () => {
+      if (uploadingRef.current) {
+        uploadingRef.current = false;
+        onUploadingChange?.(false);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const handleFile = async (file: File | null) => {
     if (!file) return;
     setUploading(true);
+    uploadingRef.current = true;
     onUploadingChange?.(true);
     try {
       const r = await uploadSubmissionFile(file);
       onChange(r.url);
-      // file.type — то, что определил браузер (MIME). Бэк ограничивает
-      // допустимые типы в submissionFileFilter; для file.type=='' (редкий
-      // случай для .heic в старых браузерах) подставляем octet-stream.
+      // Предпочитаем mimeType с сервера (submissions.controller.ts:upload
+      // теперь возвращает file.mimetype). Фоллбек — file.type из браузера;
+      // для file.type=='' (редкий случай для .heic в старых браузерах)
+      // подставляем octet-stream.
       onMetaChange?.({
-        mime: file.type || 'application/octet-stream',
-        size: file.size,
+        mime: r.mimeType || file.type || 'application/octet-stream',
+        size: r.size ?? file.size,
         originalName: r.originalName || file.name,
       });
       toast('Файл загружен', 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка загрузки', 'error');
+      toast(e?.response?.data?.message || e?.userMessage || 'Ошибка загрузки', 'error');
     } finally {
       setUploading(false);
-      onUploadingChange?.(false);
+      if (uploadingRef.current) {
+        uploadingRef.current = false;
+        onUploadingChange?.(false);
+      }
     }
   };
   return (

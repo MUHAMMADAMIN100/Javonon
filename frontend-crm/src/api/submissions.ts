@@ -133,8 +133,10 @@ export const changeSubmissionStatus = (id: string, status: SubmissionStatus) =>
 export const uploadSubmissionFile = (file: File) => {
   const fd = new FormData();
   fd.append('file', file);
+  // mimeType — с бэка (после валидации multer'ом), фронт использует его как
+  // источник истины для contractMime/newStudentPassportMime при createSubmission.
   return api
-    .post<{ url: string; originalName: string; size: number }>('/submissions/upload', fd, {
+    .post<{ url: string; originalName: string; mimeType: string; size: number }>('/submissions/upload', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     .then((r) => r.data);

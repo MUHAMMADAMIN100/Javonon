@@ -164,9 +164,14 @@ export class SubmissionsController {
   )
   upload(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Файл не загружен');
+    // Возвращаем mimeType с сервера (multer уже провалидировал его через
+    // submissionFileFilter). Раньше фронт брал mime только из File.type
+    // браузера — для .heic в старых браузерах он бывает пустой, и Document
+    // при APPROVE сохранялся с application/octet-stream.
     return {
       url: `/uploads/${file.filename}`,
       originalName: file.originalname,
+      mimeType: file.mimetype,
       size: file.size,
     };
   }
