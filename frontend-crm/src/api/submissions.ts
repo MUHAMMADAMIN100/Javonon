@@ -10,8 +10,8 @@ export interface SubmissionPayment {
   amount: number;
   paymentMethod: SubmissionPaymentMethod;
   paidAt: string;
-  receiptUrl: string | null;
-  depositProofUrl: string | null;
+  receiptUrls: string[];
+  depositProofUrls: string[];
   nextDueDate: string | null;
   nextDueAmount: number | null;
   notes: string | null;
@@ -31,17 +31,17 @@ export interface SaleSubmission {
   newStudentName: string | null;
   newStudentPhone: string | null;
   newStudentEmail: string | null;
-  newStudentPassportUrl: string | null;
+  newStudentPassportUrls: string[];
   // Snapshot метаданных загруженных файлов (см. CreateSubmissionDto).
-  newStudentPassportMime: string | null;
-  newStudentPassportSize: number | null;
-  newStudentPassportOriginalName: string | null;
+  newStudentPassportMimes: string[];
+  newStudentPassportSizes: number[];
+  newStudentPassportOriginalNames: string[];
   programId: string;
   managerId: string;
-  contractUrl: string;
-  contractMime: string | null;
-  contractSize: number | null;
-  contractOriginalName: string | null;
+  contractUrls: string[];
+  contractMimes: string[];
+  contractSizes: number[];
+  contractOriginalNames: string[];
   totalAmount: number;
   currency: string;
   status: SubmissionStatus;
@@ -70,18 +70,18 @@ export interface CreateSubmissionDto {
   newStudentName?: string;
   newStudentPhone?: string;
   newStudentEmail?: string;
-  newStudentPassportUrl?: string;
+  newStudentPassportUrls?: string[];
   // Метаданные паспорта (из ответа /submissions/upload). Бэкенд использует
   // их при APPROVE для создания Document с реальным mimeType/size/originalName.
-  newStudentPassportMime?: string;
-  newStudentPassportSize?: number;
-  newStudentPassportOriginalName?: string;
+  newStudentPassportMimes?: string[];
+  newStudentPassportSizes?: number[];
+  newStudentPassportOriginalNames?: string[];
   programId: string;
-  contractUrl: string;
+  contractUrls: string[];
   // Метаданные контракта (см. выше про паспорт).
-  contractMime?: string;
-  contractSize?: number;
-  contractOriginalName?: string;
+  contractMimes?: string[];
+  contractSizes?: number[];
+  contractOriginalNames?: string[];
   totalAmount: number;
   currency?: string;
   notes?: string;
@@ -92,8 +92,8 @@ export interface CreatePaymentDto {
   amount: number;
   paymentMethod?: SubmissionPaymentMethod;
   paidAt: string;
-  receiptUrl?: string;
-  depositProofUrl?: string;
+  receiptUrls?: string[];
+  depositProofUrls?: string[];
   nextDueDate?: string | null;
   nextDueAmount?: number | null;
   notes?: string;

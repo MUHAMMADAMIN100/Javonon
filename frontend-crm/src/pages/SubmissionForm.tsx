@@ -38,15 +38,15 @@ export default function SubmissionForm() {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [passportUrl, setPassportUrl] = useState('');
-  // Метаданные паспорта — отправляем на бэк, чтобы Document при APPROVE
-  // получил реальный mimeType/size/originalName, а не placeholder.
-  const [passportMeta, setPassportMeta] = useState<UploadMeta | null>(null);
+  // Массивы файлов паспорта (unlimited). Метаданные идут параллельным массивом
+  // той же длины — при APPROVE бэк сопоставляет их по индексу для Document.
+  const [passportUrls, setPassportUrls] = useState<string[]>([]);
+  const [passportMetas, setPassportMetas] = useState<UploadMeta[]>([]);
 
   // Программа + контракт
   const [programId, setProgramId] = useState('');
-  const [contractUrl, setContractUrl] = useState('');
-  const [contractMeta, setContractMeta] = useState<UploadMeta | null>(null);
+  const [contractUrls, setContractUrls] = useState<string[]>([]);
+  const [contractMetas, setContractMetas] = useState<UploadMeta[]>([]);
   const [totalAmount, setTotalAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [notes, setNotes] = useState('');
@@ -59,8 +59,10 @@ export default function SubmissionForm() {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
   });
-  const [receiptUrl, setReceiptUrl] = useState('');
-  const [depositProofUrl, setDepositProofUrl] = useState('');
+  const [receiptUrls, setReceiptUrls] = useState<string[]>([]);
+  const [receiptMetas, setReceiptMetas] = useState<UploadMeta[]>([]);
+  const [depositProofUrls, setDepositProofUrls] = useState<string[]>([]);
+  const [depositProofMetas, setDepositProofMetas] = useState<UploadMeta[]>([]);
   const [nextDueDate, setNextDueDate] = useState('');
   const [nextDueAmount, setNextDueAmount] = useState('');
 
@@ -114,30 +116,33 @@ export default function SubmissionForm() {
     if (mode === 'existing' && !studentId) return toast('Выберите студента', 'error');
     if (mode === 'new' && newName.trim().length < 2) return toast('ФИО студента (мин 2 символа)', 'error');
     if (!programId) return toast('Выберите программу', 'error');
-    if (!contractUrl) return toast('Загрузите контракт', 'error');
+    if (contractUrls.length === 0) return toast('Загрузите хотя бы 1 файл контракта', 'error');
     const ta = parseFloat(totalAmount);
     if (!isFinite(ta) || ta <= 0) return toast('Сумма контракта должна быть > 0', 'error');
     const pa = parseFloat(payAmount);
     if (!isFinite(pa) || pa <= 0) return toast('Сумма платежа должна быть > 0', 'error');
-    if (payMethod === 'TRANSFER' && !receiptUrl) return toast('Прикрепите чек перевода', 'error');
-    if (payMethod === 'CASH' && !depositProofUrl) return toast('Прикрепите скрин пополнения счёта', 'error');
+    if (payMethod === 'TRANSFER' && receiptUrls.length === 0) return toast('Прикрепите чек перевода', 'error');
+    if (payMethod === 'CASH' && depositProofUrls.length === 0) return toast('Прикрепите скрин пополнения счёта', 'error');
 
     createMut.mutate({
       studentId: mode === 'existing' ? studentId : null,
       newStudentName: mode === 'new' ? newName.trim() : undefined,
       newStudentPhone: mode === 'new' ? newPhone.trim() : undefined,
       newStudentEmail: mode === 'new' ? newEmail.trim() : undefined,
-      newStudentPassportUrl: mode === 'new' ? passportUrl || undefined : undefined,
-      // Метаданные паспорта (только для нового студента) — бэк сохранит их
-      // на SaleSubmission и подставит в Document при APPROVE.
-      newStudentPassportMime: mode === 'new' && passportUrl ? passportMeta?.mime : undefined,
-      newStudentPassportSize: mode === 'new' && passportUrl ? passportMeta?.size : undefined,
-      newStudentPassportOriginalName: mode === 'new' && passportUrl ? passportMeta?.originalName : undefined,
+      // Массивы паспорта (только для нового студента). Бэк сохранит их
+      // на SaleSubmission и подставит в Document'ы при APPROVE.
+      newStudentPassportUrls: mode === 'new' && passportUrls.length > 0 ? passportUrls : undefined,
+      newStudentPassportMimes: mode === 'new' && passportUrls.length > 0
+        ? passportMetas.map((m) => m.mime) : undefined,
+      newStudentPassportSizes: mode === 'new' && passportUrls.length > 0
+        ? passportMetas.map((m) => m.size) : undefined,
+      newStudentPassportOriginalNames: mode === 'new' && passportUrls.length > 0
+        ? passportMetas.map((m) => m.originalName) : undefined,
       programId,
-      contractUrl,
-      contractMime: contractMeta?.mime,
-      contractSize: contractMeta?.size,
-      contractOriginalName: contractMeta?.originalName,
+      contractUrls,
+      contractMimes: contractMetas.map((m) => m.mime),
+      contractSizes: contractMetas.map((m) => m.size),
+      contractOriginalNames: contractMetas.map((m) => m.originalName),
       totalAmount: ta,
       currency,
       notes: notes.trim() || undefined,
@@ -145,8 +150,8 @@ export default function SubmissionForm() {
         amount: pa,
         paymentMethod: payMethod,
         paidAt: payDate,
-        receiptUrl: receiptUrl || undefined,
-        depositProofUrl: depositProofUrl || undefined,
+        receiptUrls: receiptUrls.length > 0 ? receiptUrls : undefined,
+        depositProofUrls: depositProofUrls.length > 0 ? depositProofUrls : undefined,
         nextDueDate: nextDueDate || null,
         nextDueAmount: nextDueAmount ? parseFloat(nextDueAmount) : null,
       },
@@ -288,10 +293,11 @@ export default function SubmissionForm() {
                 <input className="crm-input" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@example.com" />
               </Field>
               <Field label="Паспорт (фото/PDF)">
-                <FileUpload
-                  value={passportUrl}
-                  onChange={setPassportUrl}
-                  onMetaChange={setPassportMeta}
+                <MultiFileUpload
+                  values={passportUrls}
+                  metas={passportMetas}
+                  onChange={(u, m) => { setPassportUrls(u); setPassportMetas(m); }}
+                  accept="image/*,application/pdf"
                   onUploadingChange={onUploadingChange}
                 />
               </Field>
@@ -313,10 +319,11 @@ export default function SubmissionForm() {
               </select>
             </Field>
             <Field label="Контракт (PDF/фото) *">
-              <FileUpload
-                value={contractUrl}
-                onChange={setContractUrl}
-                onMetaChange={setContractMeta}
+              <MultiFileUpload
+                values={contractUrls}
+                metas={contractMetas}
+                onChange={(u, m) => { setContractUrls(u); setContractMetas(m); }}
+                accept="image/*,application/pdf"
                 onUploadingChange={onUploadingChange}
               />
             </Field>
@@ -353,17 +360,35 @@ export default function SubmissionForm() {
             </Field>
             {payMethod === 'TRANSFER' && (
               <Field label="Чек / скрин перевода *">
-                <FileUpload value={receiptUrl} onChange={setReceiptUrl} onUploadingChange={onUploadingChange} />
+                <MultiFileUpload
+                  values={receiptUrls}
+                  metas={receiptMetas}
+                  onChange={(u, m) => { setReceiptUrls(u); setReceiptMetas(m); }}
+                  accept="image/*,application/pdf"
+                  onUploadingChange={onUploadingChange}
+                />
               </Field>
             )}
             {payMethod === 'CASH' && (
               <Field label="Скрин пополнения счёта *">
-                <FileUpload value={depositProofUrl} onChange={setDepositProofUrl} onUploadingChange={onUploadingChange} />
+                <MultiFileUpload
+                  values={depositProofUrls}
+                  metas={depositProofMetas}
+                  onChange={(u, m) => { setDepositProofUrls(u); setDepositProofMetas(m); }}
+                  accept="image/*,application/pdf"
+                  onUploadingChange={onUploadingChange}
+                />
               </Field>
             )}
             {payMethod === 'OTHER' && (
               <Field label="Подтверждение">
-                <FileUpload value={receiptUrl} onChange={setReceiptUrl} onUploadingChange={onUploadingChange} />
+                <MultiFileUpload
+                  values={receiptUrls}
+                  metas={receiptMetas}
+                  onChange={(u, m) => { setReceiptUrls(u); setReceiptMetas(m); }}
+                  accept="image/*,application/pdf"
+                  onUploadingChange={onUploadingChange}
+                />
               </Field>
             )}
             <Field label="Следующий платёж: дата">
@@ -425,6 +450,221 @@ function Field({ label, children }: { label: string; children: any }) {
   );
 }
 
+// Мульти-файловый uploader. Поддерживает:
+//   1) выбор нескольких файлов за раз (input multiple)
+//   2) итеративное добавление через кнопку «+ Добавить ещё»
+//   3) удаление по одному через × рядом с каждой строкой
+// Лимитов на количество нет; ограничение на размер (50MB/файл) — на бэке
+// (multer в submissions.controller.ts:upload). Пока идёт batch upload,
+// компонент держит один тик pendingUploads (родитель считает активные
+// загрузки и блокирует сабмит). На unmount тик возвращается в 0.
+function MultiFileUpload({
+  values,
+  metas,
+  onChange,
+  accept,
+  onUploadingChange,
+}: {
+  values: string[];
+  metas: UploadMeta[];
+  onChange: (urls: string[], metas: UploadMeta[]) => void;
+  accept?: string;
+  onUploadingChange?: (uploading: boolean) => void;
+}) {
+  const { toast } = useUI();
+  const [uploading, setUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const addInputRef = useRef<HTMLInputElement | null>(null);
+  // Держит ли компонент активный тик pendingUploads. На unmount возвращаем
+  // тик в 0 (иначе счётчик застрянет и кнопка сабмита будет вечно «Загружаем…»).
+  const uploadingRef = useRef(false);
+  useEffect(() => {
+    return () => {
+      if (uploadingRef.current) {
+        uploadingRef.current = false;
+        onUploadingChange?.(false);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    setUploading(true);
+    if (!uploadingRef.current) {
+      uploadingRef.current = true;
+      onUploadingChange?.(true);
+    }
+    const newUrls: string[] = [];
+    const newMetas: UploadMeta[] = [];
+    let failed = 0;
+    try {
+      for (const file of files) {
+        try {
+          const r = await uploadSubmissionFile(file);
+          newUrls.push(r.url);
+          // Предпочитаем mimeType с сервера (submissions.controller.ts:upload
+          // возвращает file.mimetype после multer-валидации). Фоллбек — file.type
+          // из браузера; для file.type=='' (редкий .heic в старых браузерах)
+          // подставляем octet-stream.
+          newMetas.push({
+            mime: r.mimeType || file.type || 'application/octet-stream',
+            size: r.size ?? file.size,
+            originalName: r.originalName || file.name,
+          });
+        } catch (e: any) {
+          failed++;
+          toast(e?.response?.data?.message || e?.userMessage || `Ошибка загрузки: ${file.name}`, 'error');
+        }
+      }
+      if (newUrls.length > 0) {
+        onChange([...values, ...newUrls], [...metas, ...newMetas]);
+        if (failed === 0) toast(`Загружено файлов: ${newUrls.length}`, 'success');
+      }
+    } finally {
+      setUploading(false);
+      if (uploadingRef.current) {
+        uploadingRef.current = false;
+        onUploadingChange?.(false);
+      }
+      // Сбрасываем value у input'ов чтобы можно было выбрать те же файлы
+      // повторно (иначе onChange не сработает на идентичный FileList).
+      if (inputRef.current) inputRef.current.value = '';
+      if (addInputRef.current) addInputRef.current.value = '';
+    }
+  };
+
+  const removeAt = (idx: number) => {
+    const nextUrls = values.filter((_, i) => i !== idx);
+    const nextMetas = metas.filter((_, i) => i !== idx);
+    onChange(nextUrls, nextMetas);
+  };
+
+  const isImage = (url: string, mime?: string) => {
+    if (mime && mime.startsWith('image/')) return true;
+    return /\.(jpg|jpeg|png|webp|heic|gif|bmp)$/i.test(url);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {values.length > 0 && (
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {values.map((url, i) => {
+            const meta = metas[i];
+            const img = isImage(url, meta?.mime);
+            return (
+              <li
+                key={`${url}-${i}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '4px 6px',
+                  border: '1px solid var(--border-soft, #e5e7eb)',
+                  borderRadius: 6,
+                  fontSize: 12,
+                }}
+              >
+                {img ? (
+                  <img
+                    src={url}
+                    alt=""
+                    style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
+                  />
+                ) : (
+                  <span
+                    style={{
+                      width: 32,
+                      height: 32,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--surface-2, #f1f5f9)',
+                      borderRadius: 4,
+                      flexShrink: 0,
+                      color: 'var(--primary-dark)',
+                    }}
+                  >
+                    <Icon name="picture_as_pdf" size={18} />
+                  </span>
+                )}
+                <span
+                  style={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    color: 'var(--text-soft)',
+                  }}
+                  title={meta?.originalName || url}
+                >
+                  {meta?.originalName || url.split('/').pop()}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeAt(i)}
+                  disabled={uploading}
+                  aria-label="Удалить файл"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: uploading ? 'not-allowed' : 'pointer',
+                    color: 'var(--danger, #dc2626)',
+                    fontSize: 16,
+                    lineHeight: 1,
+                    padding: '2px 6px',
+                  }}
+                >
+                  ×
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept={accept}
+        onChange={(e) => handleFiles(e.target.files)}
+        disabled={uploading}
+        style={{ fontSize: 13 }}
+      />
+      {/* Скрытый input для повторного добавления батча — доступ через кнопку. */}
+      <input
+        ref={addInputRef}
+        type="file"
+        multiple
+        accept={accept}
+        onChange={(e) => handleFiles(e.target.files)}
+        disabled={uploading}
+        style={{ display: 'none' }}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          type="button"
+          className="btn btn-sm btn-secondary"
+          onClick={() => addInputRef.current?.click()}
+          disabled={uploading}
+        >
+          + Добавить ещё
+        </button>
+        {uploading && <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>Загружаем…</span>}
+        {!uploading && values.length > 0 && (
+          <span style={{ fontSize: 12, color: 'var(--primary-dark)' }}>
+            <Icon name="check_circle" size={14} /> Файлов: {values.length}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Компонент одиночной загрузки — оставлен для обратной совместимости
+// с другими экранами (не удалять). В этой форме больше не используется:
+// все поля переведены на MultiFileUpload.
 function FileUpload({
   value,
   onChange,

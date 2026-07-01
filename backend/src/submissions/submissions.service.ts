@@ -68,19 +68,19 @@ interface CreateSubmissionDto {
   newStudentName?: string;
   newStudentPhone?: string;
   newStudentEmail?: string;
-  newStudentPassportUrl?: string;
-  // Метаданные файла паспорта (из ответа /submissions/upload). Нужны чтобы
+  newStudentPassportUrls?: string[];
+  // Метаданные файлов паспорта (из ответа /submissions/upload). Нужны чтобы
   // при APPROVE создать Document с реальным mimeType/size/originalName,
   // а не плейсхолдером application/octet-stream/0/'passport'.
-  newStudentPassportMime?: string;
-  newStudentPassportSize?: number;
-  newStudentPassportOriginalName?: string;
+  newStudentPassportMimes?: string[];
+  newStudentPassportSizes?: number[];
+  newStudentPassportOriginalNames?: string[];
   programId: string;
-  contractUrl: string;
-  // Метаданные файла контракта (см. выше про паспорт).
-  contractMime?: string;
-  contractSize?: number;
-  contractOriginalName?: string;
+  contractUrls?: string[];
+  // Метаданные файлов контракта (см. выше про паспорт).
+  contractMimes?: string[];
+  contractSizes?: number[];
+  contractOriginalNames?: string[];
   totalAmount: number;
   currency?: string;
   notes?: string;
@@ -92,8 +92,8 @@ interface CreatePaymentDto {
   amount: number;
   paymentMethod?: SubmissionPaymentMethod;
   paidAt: string | Date;
-  receiptUrl?: string;
-  depositProofUrl?: string;
+  receiptUrls?: string[];
+  depositProofUrls?: string[];
   nextDueDate?: string | Date | null;
   nextDueAmount?: number | null;
   notes?: string;
@@ -113,7 +113,9 @@ export class SubmissionsService {
    */
   async create(managerId: string, dto: CreateSubmissionDto) {
     if (!dto.programId) throw new BadRequestException('Программа обязательна');
-    if (!dto.contractUrl) throw new BadRequestException('Контракт обязателен');
+    if (!Array.isArray(dto.contractUrls) || dto.contractUrls.length === 0) {
+      throw new BadRequestException('Загрузите минимум 1 файл контракта');
+    }
     if (typeof dto.totalAmount !== 'number' || !isFinite(dto.totalAmount) || dto.totalAmount <= 0) {
       throw new BadRequestException('Сумма контракта должна быть > 0');
     }
@@ -149,32 +151,62 @@ export class SubmissionsService {
       }
     }
 
-    // Snapshot метаданных паспорта — пишем только если есть сам файл и
-    // менеджер передал нового студента (для existing-студента snapshot = null).
-    const hasPassport = !dto.studentId && !!dto.newStudentPassportUrl;
-    const passportMime = hasPassport ? (dto.newStudentPassportMime?.trim() || null) : null;
-    const passportSize = hasPassport && Number.isFinite(dto.newStudentPassportSize as number)
-      ? Math.max(0, Math.trunc(dto.newStudentPassportSize as number))
-      : null;
-    const passportOriginalName = hasPassport ? (dto.newStudentPassportOriginalName?.trim() || null) : null;
+    // Snapshot метаданных паспорта — пишем только если есть хотя бы один файл
+    // и менеджер передал нового студента (для existing-студента snapshot = []).
+    const hasPassport = !dto.studentId
+      && Array.isArray(dto.newStudentPassportUrls)
+      && dto.newStudentPassportUrls.length > 0;
+    const passportUrls: string[] = hasPassport ? (dto.newStudentPassportUrls as string[]) : [];
+    const passportMimes: string[] = hasPassport && Array.isArray(dto.newStudentPassportMimes)
+      ? dto.newStudentPassportMimes.map((m) => (typeof m === 'string' ? m.trim() : ''))
+      : [];
+    const passportSizes: number[] = hasPassport && Array.isArray(dto.newStudentPassportSizes)
+      ? dto.newStudentPassportSizes.map((n) =>
+          Number.isFinite(n as number) ? Math.max(0, Math.trunc(n as number)) : 0,
+        )
+      : [];
+    const passportOriginalNames: string[] = hasPassport && Array.isArray(dto.newStudentPassportOriginalNames)
+      ? dto.newStudentPassportOriginalNames.map((s) => (typeof s === 'string' ? s.trim() : ''))
+      : [];
 
-    const ctrMime = dto.contractMime?.trim() || null;
-    const ctrSize = Number.isFinite(dto.contractSize as number)
-      ? Math.max(0, Math.trunc(dto.contractSize as number))
-      : null;
-    const ctrOriginalName = dto.contractOriginalName?.trim() || null;
+    const ctrUrls: string[] = dto.contractUrls;
+    const ctrMimes: string[] = Array.isArray(dto.contractMimes)
+      ? dto.contractMimes.map((m) => (typeof m === 'string' ? m.trim() : ''))
+      : [];
+    const ctrSizes: number[] = Array.isArray(dto.contractSizes)
+      ? dto.contractSizes.map((n) =>
+          Number.isFinite(n as number) ? Math.max(0, Math.trunc(n as number)) : 0,
+        )
+      : [];
+    const ctrOriginalNames: string[] = Array.isArray(dto.contractOriginalNames)
+      ? dto.contractOriginalNames.map((s) => (typeof s === 'string' ? s.trim() : ''))
+      : [];
+
+    // Валидация файлов первого платежа: TRANSFER требует минимум 1 чек,
+    // CASH — минимум 1 скрин пополнения.
+    const firstMethod = p.paymentMethod || SubmissionPaymentMethod.TRANSFER;
+    const firstReceiptUrls: string[] = Array.isArray(p.receiptUrls) ? p.receiptUrls : [];
+    const firstDepositProofUrls: string[] = Array.isArray(p.depositProofUrls) ? p.depositProofUrls : [];
+    if (firstMethod === SubmissionPaymentMethod.TRANSFER && firstReceiptUrls.length === 0) {
+      throw new BadRequestException('Загрузите минимум 1 чек перевода');
+    }
+    if (firstMethod === SubmissionPaymentMethod.CASH && firstDepositProofUrls.length === 0) {
+      throw new BadRequestException('Загрузите минимум 1 скрин пополнения счёта');
+    }
 
     // Идемпотентность: защита от двойного клика «Создать» и retry на
     // network timeout. Без этой проверки create() выполнится 2 раза и
     // создаст 2 SaleSubmission + 2 PENDING-платежа; после APPROVE обоих
     // получится 2 Application + 2 Transaction = удвоенный доход и бонус.
     // Если тот же менеджер за последние 60с уже создал submission с тем же
-    // contractUrl + programId + totalAmount — возвращаем существующую запись.
+    // набором contractUrls + programId + totalAmount — возвращаем существующую запись.
+    // contractUrls: { equals: ... } матчит по массиву (порядок важен, но клиент
+    // строит массив детерминированно из ответов /upload).
     const DUPLICATE_WINDOW_MS = 60_000;
     const existing = await this.prisma.saleSubmission.findFirst({
       where: {
         managerId,
-        contractUrl: dto.contractUrl,
+        contractUrls: { equals: ctrUrls },
         programId: dto.programId,
         totalAmount: dto.totalAmount,
         createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
@@ -194,15 +226,15 @@ export class SubmissionsService {
         newStudentName: dto.studentId ? null : (dto.newStudentName?.trim() || null),
         newStudentPhone: dto.studentId ? null : (dto.newStudentPhone?.trim() || null),
         newStudentEmail: dto.studentId ? null : (dto.newStudentEmail?.trim()?.toLowerCase() || null),
-        newStudentPassportUrl: dto.studentId ? null : (dto.newStudentPassportUrl || null),
-        newStudentPassportMime: passportMime,
-        newStudentPassportSize: passportSize,
-        newStudentPassportOriginalName: passportOriginalName,
+        newStudentPassportUrls: passportUrls,
+        newStudentPassportMimes: passportMimes,
+        newStudentPassportSizes: passportSizes,
+        newStudentPassportOriginalNames: passportOriginalNames,
         programId: dto.programId,
-        contractUrl: dto.contractUrl,
-        contractMime: ctrMime,
-        contractSize: ctrSize,
-        contractOriginalName: ctrOriginalName,
+        contractUrls: ctrUrls,
+        contractMimes: ctrMimes,
+        contractSizes: ctrSizes,
+        contractOriginalNames: ctrOriginalNames,
         totalAmount: dto.totalAmount,
         currency: dto.currency || 'USD',
         notes: dto.notes?.trim() || null,
@@ -210,10 +242,10 @@ export class SubmissionsService {
         payments: {
           create: {
             amount: p.amount,
-            paymentMethod: p.paymentMethod || SubmissionPaymentMethod.TRANSFER,
+            paymentMethod: firstMethod,
             paidAt,
-            receiptUrl: p.receiptUrl || null,
-            depositProofUrl: p.depositProofUrl || null,
+            receiptUrls: firstReceiptUrls,
+            depositProofUrls: firstDepositProofUrls,
             nextDueDate,
             nextDueAmount: p.nextDueAmount ?? null,
             notes: p.notes?.trim() || null,
@@ -259,14 +291,24 @@ export class SubmissionsService {
       }
     }
 
+    const method = dto.paymentMethod || SubmissionPaymentMethod.TRANSFER;
+    const addReceiptUrls: string[] = Array.isArray(dto.receiptUrls) ? dto.receiptUrls : [];
+    const addDepositProofUrls: string[] = Array.isArray(dto.depositProofUrls) ? dto.depositProofUrls : [];
+    if (method === SubmissionPaymentMethod.TRANSFER && addReceiptUrls.length === 0) {
+      throw new BadRequestException('Загрузите минимум 1 чек перевода');
+    }
+    if (method === SubmissionPaymentMethod.CASH && addDepositProofUrls.length === 0) {
+      throw new BadRequestException('Загрузите минимум 1 скрин пополнения счёта');
+    }
+
     const payment = await this.prisma.submissionPayment.create({
       data: {
         submissionId,
         amount: dto.amount,
-        paymentMethod: dto.paymentMethod || SubmissionPaymentMethod.TRANSFER,
+        paymentMethod: method,
         paidAt,
-        receiptUrl: dto.receiptUrl || null,
-        depositProofUrl: dto.depositProofUrl || null,
+        receiptUrls: addReceiptUrls,
+        depositProofUrls: addDepositProofUrls,
         nextDueDate,
         nextDueAmount: dto.nextDueAmount ?? null,
         notes: dto.notes?.trim() || null,
@@ -564,21 +606,26 @@ export class SubmissionsService {
           studentId = newStudent.id;
           studentCredentials = { email: newStudent.email, password: plainPassword! };
 
-          // Если был загружен паспорт — создаём Document. Метаданные
-          // (originalName/mimeType/size) берём из snapshot, сохранённого на
-          // create() из ответа /submissions/upload. Если по какой-то причине
-          // их нет (legacy-сделки до миграции) — fallback на безопасные
-          // дефолты, чтобы не падать.
-          if (submission.newStudentPassportUrl) {
-            const fallbackFilename = submission.newStudentPassportUrl.split('/').pop() || 'passport';
+          // Если были загружены паспорта — создаём по Document на каждый файл.
+          // Метаданные (originalName/mimeType/size) берём из snapshot,
+          // сохранённого на create() из ответа /submissions/upload. Если по
+          // какой-то причине их нет (legacy/недозаполненные массивы) —
+          // fallback на безопасные дефолты, чтобы не падать.
+          const passportUrls = submission.newStudentPassportUrls || [];
+          const passportOriginalNames = submission.newStudentPassportOriginalNames || [];
+          const passportMimes = submission.newStudentPassportMimes || [];
+          const passportSizes = submission.newStudentPassportSizes || [];
+          for (let i = 0; i < passportUrls.length; i++) {
+            const url = passportUrls[i];
+            const fallbackFilename = url.split('/').pop() || 'passport';
             await tx.document.create({
               data: {
                 studentId: newStudent.id,
                 filename: fallbackFilename,
-                originalName: submission.newStudentPassportOriginalName || fallbackFilename,
-                mimeType: submission.newStudentPassportMime || 'application/octet-stream',
-                size: submission.newStudentPassportSize ?? 0,
-                url: submission.newStudentPassportUrl,
+                originalName: passportOriginalNames[i] || fallbackFilename,
+                mimeType: passportMimes[i] || 'application/octet-stream',
+                size: passportSizes[i] ?? 0,
+                url,
                 type: 'PASSPORT',
               },
             });
@@ -631,20 +678,27 @@ export class SubmissionsService {
         });
         applicationId = newApp.id;
 
-        // Контракт — добавляем как документ студента. Метаданные берём из
-        // snapshot, сохранённого при create() (см. комментарий про паспорт).
-        const contractFallbackFilename = submission.contractUrl.split('/').pop() || 'contract';
-        await tx.document.create({
-          data: {
-            studentId: studentId,
-            filename: contractFallbackFilename,
-            originalName: submission.contractOriginalName || contractFallbackFilename,
-            mimeType: submission.contractMime || 'application/octet-stream',
-            size: submission.contractSize ?? 0,
-            url: submission.contractUrl,
-            type: 'CONTRACT',
-          },
-        });
+        // Контракты — добавляем по Document на каждый файл. Метаданные берём
+        // из snapshot, сохранённого при create() (см. комментарий про паспорт).
+        const contractUrls = submission.contractUrls || [];
+        const contractOriginalNames = submission.contractOriginalNames || [];
+        const contractMimes = submission.contractMimes || [];
+        const contractSizes = submission.contractSizes || [];
+        for (let i = 0; i < contractUrls.length; i++) {
+          const url = contractUrls[i];
+          const contractFallbackFilename = url.split('/').pop() || 'contract';
+          await tx.document.create({
+            data: {
+              studentId: studentId,
+              filename: contractFallbackFilename,
+              originalName: contractOriginalNames[i] || contractFallbackFilename,
+              mimeType: contractMimes[i] || 'application/octet-stream',
+              size: contractSizes[i] ?? 0,
+              url,
+              type: 'CONTRACT',
+            },
+          });
+        }
       }
 
       // Создаём финансовую транзакцию (доход).

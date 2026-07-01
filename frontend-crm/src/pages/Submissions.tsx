@@ -255,14 +255,26 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
               {new Date(p.paidAt).toLocaleDateString('ru-RU')}
             </div>
           </div>
-          {p.receiptUrl && (
-            <a href={absUrl(p.receiptUrl)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="btn btn-sm btn-secondary">
-              <Icon name="image" size={14} /> Чек
+          {p.receiptUrls.length > 0 && (
+            <a
+              href={absUrl(p.receiptUrls[0])}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="btn btn-sm btn-secondary"
+            >
+              <Icon name="image" size={14} /> Чек{p.receiptUrls.length > 1 ? ` (${p.receiptUrls.length})` : ''}
             </a>
           )}
-          {p.depositProofUrl && (
-            <a href={absUrl(p.depositProofUrl)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="btn btn-sm btn-secondary">
-              <Icon name="image" size={14} /> Депозит
+          {p.depositProofUrls.length > 0 && (
+            <a
+              href={absUrl(p.depositProofUrls[0])}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="btn btn-sm btn-secondary"
+            >
+              <Icon name="image" size={14} /> Депозит{p.depositProofUrls.length > 1 ? ` (${p.depositProofUrls.length})` : ''}
             </a>
           )}
         </div>

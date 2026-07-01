@@ -1541,14 +1541,14 @@ model SaleSubmission {
   newStudentName     String?
   newStudentPhone    String?
   newStudentEmail    String?
-  newStudentPassportUrl String?  // фото/PDF паспорта (Multer upload)
-  // Snapshot метаданных загруженного файла паспорта — заполняется при
+  newStudentPassportUrls String[] @default([])  // фото/PDF паспорта (Multer upload)
+  // Snapshot метаданных загруженных файлов паспорта — заполняется при
   // создании сделки из ответа /submissions/upload. Используется при
   // APPROVE для создания Document с реальным mimeType/size/originalName
   // (иначе в БД сохранится placeholder 'application/octet-stream'/0/'passport').
-  newStudentPassportMime         String?
-  newStudentPassportSize         Int?
-  newStudentPassportOriginalName String?
+  newStudentPassportMimes         String[] @default([])
+  newStudentPassportSizes         Int[]    @default([])
+  newStudentPassportOriginalNames String[] @default([])
   // Программа — обязательна на уровне сервиса (валидируется в
   // SubmissionsService.create), но допускает null после удаления Program,
   // чтобы история сделок сохранялась и каталог можно было чистить.
@@ -1561,11 +1561,11 @@ model SaleSubmission {
   // (бонусы за прошлые периоды по-прежнему считаются по reviewedAt/amount).
   manager       User?            @relation("SubmissionManager", fields: [managerId], references: [id], onDelete: SetNull)
   // Контракт — PDF/фото подписанного контракта.
-  contractUrl   String
-  // Snapshot метаданных контракт-файла (см. комментарий выше про паспорт).
-  contractMime         String?
-  contractSize         Int?
-  contractOriginalName String?
+  contractUrls   String[] @default([])
+  // Snapshot метаданных контракт-файлов (см. комментарий выше про паспорт).
+  contractMimes         String[] @default([])
+  contractSizes         Int[]    @default([])
+  contractOriginalNames String[] @default([])
   // Полная сумма контракта (для отслеживания «сколько ещё должен»).
   totalAmount   Float
   currency      String           @default("USD")
@@ -1600,10 +1600,10 @@ model SubmissionPayment {
   // Когда менеджер получил деньги.
   paidAt          DateTime
   // Чек/скриншот перевода — обязательно при TRANSFER.
-  receiptUrl      String?
+  receiptUrls      String[] @default([])
   // Если налом: вечером кладёт на счёт компании, прикладывает скрин
   // банковской выписки или фото слипа.
-  depositProofUrl String?
+  depositProofUrls String[] @default([])
   // План следующего платежа (если контракт не закрыт полностью).
   nextDueDate     DateTime?
   nextDueAmount   Float?

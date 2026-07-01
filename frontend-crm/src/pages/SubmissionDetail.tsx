@@ -176,16 +176,28 @@ export default function SubmissionDetail() {
 
         {/* Файлы — паспорт + контракт */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          {s.contractUrl && (
-            <a href={absUrl(s.contractUrl)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
-              <Icon name="description" size={14} /> Контракт
+          {s.contractUrls?.map((u, i) => (
+            <a
+              key={`contract-${i}`}
+              href={absUrl(u)}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-sm btn-secondary"
+            >
+              <Icon name="description" size={14} /> Контракт{s.contractUrls.length > 1 ? ` ${i + 1}` : ''}
             </a>
-          )}
-          {s.newStudentPassportUrl && (
-            <a href={absUrl(s.newStudentPassportUrl)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
-              <Icon name="badge" size={14} /> Паспорт
+          ))}
+          {s.newStudentPassportUrls?.map((u, i) => (
+            <a
+              key={`passport-${i}`}
+              href={absUrl(u)}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-sm btn-secondary"
+            >
+              <Icon name="badge" size={14} /> Паспорт{s.newStudentPassportUrls.length > 1 ? ` ${i + 1}` : ''}
             </a>
-          )}
+          ))}
         </div>
 
         {s.notes && (
@@ -313,16 +325,28 @@ function PaymentRow({
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-        {p.receiptUrl && (
-          <a href={absUrl(p.receiptUrl)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
-            <Icon name="image" size={14} /> Чек
+        {p.receiptUrls?.map((u, i) => (
+          <a
+            key={`receipt-${i}`}
+            href={absUrl(u)}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-sm btn-secondary"
+          >
+            <Icon name="image" size={14} /> Чек{p.receiptUrls.length > 1 ? ` ${i + 1}` : ''}
           </a>
-        )}
-        {p.depositProofUrl && (
-          <a href={absUrl(p.depositProofUrl)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
-            <Icon name="image" size={14} /> Депозит
+        ))}
+        {p.depositProofUrls?.map((u, i) => (
+          <a
+            key={`deposit-${i}`}
+            href={absUrl(u)}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-sm btn-secondary"
+          >
+            <Icon name="image" size={14} /> Депозит{p.depositProofUrls.length > 1 ? ` ${i + 1}` : ''}
           </a>
-        )}
+        ))}
       </div>
 
       {p.nextDueDate && (
@@ -370,8 +394,8 @@ function AddPaymentModal({
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<SubmissionPaymentMethod>('TRANSFER');
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
-  const [receiptUrl, setReceiptUrl] = useState('');
-  const [depositProofUrl, setDepositProofUrl] = useState('');
+  const [receiptUrls, setReceiptUrls] = useState<string[]>([]);
+  const [depositProofUrls, setDepositProofUrls] = useState<string[]>([]);
   const [nextDueDate, setNextDueDate] = useState('');
   const [nextDueAmount, setNextDueAmount] = useState('');
   const [notes, setNotes] = useState('');
@@ -381,8 +405,8 @@ function AddPaymentModal({
       amount: parseFloat(amount),
       paymentMethod: method,
       paidAt,
-      receiptUrl: receiptUrl || undefined,
-      depositProofUrl: depositProofUrl || undefined,
+      receiptUrls: receiptUrls.length ? receiptUrls : undefined,
+      depositProofUrls: depositProofUrls.length ? depositProofUrls : undefined,
       nextDueDate: nextDueDate || null,
       nextDueAmount: nextDueAmount ? parseFloat(nextDueAmount) : null,
       notes: notes.trim() || undefined,
@@ -394,13 +418,13 @@ function AddPaymentModal({
   const onSubmit = () => {
     const a = parseFloat(amount);
     if (!isFinite(a) || a <= 0) return toast('Сумма должна быть > 0', 'error');
-    if (method === 'TRANSFER' && !receiptUrl) return toast('Прикрепите чек', 'error');
-    if (method === 'CASH' && !depositProofUrl) return toast('Прикрепите скрин пополнения', 'error');
+    if (method === 'TRANSFER' && receiptUrls.length === 0) return toast('Прикрепите чек', 'error');
+    if (method === 'CASH' && depositProofUrls.length === 0) return toast('Прикрепите скрин пополнения', 'error');
     mut.mutate();
   };
 
   const isDirty = Boolean(
-    amount || receiptUrl || depositProofUrl || notes.trim() || nextDueDate || nextDueAmount,
+    amount || receiptUrls.length || depositProofUrls.length || notes.trim() || nextDueDate || nextDueAmount,
   );
 
   const attemptClose = async () => {
@@ -463,17 +487,17 @@ function AddPaymentModal({
           </Field>
           {method === 'TRANSFER' && (
             <Field label="Чек *">
-              <UploadInline value={receiptUrl} onChange={setReceiptUrl} />
+              <UploadInlineMulti values={receiptUrls} onChange={setReceiptUrls} />
             </Field>
           )}
           {method === 'CASH' && (
             <Field label="Скрин пополнения *">
-              <UploadInline value={depositProofUrl} onChange={setDepositProofUrl} />
+              <UploadInlineMulti values={depositProofUrls} onChange={setDepositProofUrls} />
             </Field>
           )}
           {method === 'OTHER' && (
             <Field label="Подтверждение">
-              <UploadInline value={receiptUrl} onChange={setReceiptUrl} />
+              <UploadInlineMulti values={receiptUrls} onChange={setReceiptUrls} />
             </Field>
           )}
           <Field label="Следующий платёж: дата">
@@ -600,25 +624,75 @@ function RejectReasonModal({
   );
 }
 
-function UploadInline({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function UploadInlineMulti({ values, onChange }: { values: string[]; onChange: (v: string[]) => void }) {
   const { toast } = useUI();
   const [uploading, setUploading] = useState(false);
-  const handle = async (file: File | null) => {
-    if (!file) return;
+  const handle = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
     setUploading(true);
     try {
-      const r = await uploadSubmissionFile(file);
-      onChange(r.url);
+      const uploaded: string[] = [];
+      for (const f of Array.from(files)) {
+        const r = await uploadSubmissionFile(f);
+        uploaded.push(r.url);
+      }
+      onChange([...values, ...uploaded]);
     } catch (e: any) {
       toast(e?.response?.data?.message || 'Ошибка', 'error');
     } finally {
       setUploading(false);
     }
   };
+  const removeAt = (i: number) => {
+    onChange(values.filter((_, idx) => idx !== i));
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <input type="file" accept="image/*,application/pdf" disabled={uploading} onChange={(e) => handle(e.target.files?.[0] || null)} style={{ fontSize: 12 }} />
-      {value && <span style={{ fontSize: 11, color: 'var(--primary-dark)' }}>✓ загружено</span>}
+      <input
+        type="file"
+        accept="image/*,application/pdf"
+        multiple
+        disabled={uploading}
+        onChange={(e) => {
+          void handle(e.target.files);
+          e.target.value = '';
+        }}
+        style={{ fontSize: 12 }}
+      />
+      {values.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {values.map((_, i) => (
+            <span
+              key={i}
+              style={{
+                fontSize: 11,
+                color: 'var(--primary-dark)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              ✓ файл {i + 1}
+              <button
+                type="button"
+                onClick={() => removeAt(i)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-soft)',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontSize: 12,
+                  lineHeight: 1,
+                }}
+                aria-label="Удалить"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
