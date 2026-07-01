@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UploadedFile,
@@ -129,6 +130,20 @@ export class SubmissionsController {
     return this.svc.rejectPayment(id, me.id, body?.reason || '');
   }
 
+  /** FOUNDER редактирует платёж (amount/method/paidAt/файлы/notes). */
+  @Patch('payments/:id')
+  @Roles(Role.FOUNDER)
+  updatePayment(@CurrentUser() me: any, @Param('id') id: string, @Body() body: any) {
+    return this.svc.updatePayment(me, id, body);
+  }
+
+  /** FOUNDER удаляет платёж (с реверсом Transaction при APPROVED). */
+  @Delete('payments/:id')
+  @Roles(Role.FOUNDER)
+  deletePayment(@CurrentUser() me: any, @Param('id') id: string) {
+    return this.svc.deletePayment(me, id);
+  }
+
   /** Менеджер меняет статус всей сделки (COMPLETED / CANCELLED).
    *  FOUNDER может закрывать ЛЮБУЮ сделку (включая orphan когда
    *  менеджер уволен и managerId стал null). */
@@ -136,6 +151,14 @@ export class SubmissionsController {
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   changeStatus(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { status: SubmissionStatus }) {
     return this.svc.changeStatus(me, id, body.status);
+  }
+
+  /** FOUNDER редактирует сделку (контракт-файлы/сумма/валюта/notes + до
+   *  первого одобрения — snapshot нового студента и programId). */
+  @Patch(':id')
+  @Roles(Role.FOUNDER)
+  updateSubmission(@CurrentUser() me: any, @Param('id') id: string, @Body() body: any) {
+    return this.svc.updateSubmission(me, id, body);
   }
 
   /** Hard delete сделки — ТОЛЬКО FOUNDER. Удаляет связанные платежи

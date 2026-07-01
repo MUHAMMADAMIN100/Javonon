@@ -99,6 +99,36 @@ export interface CreatePaymentDto {
   notes?: string;
 }
 
+export interface UpdateSubmissionDto {
+  contractUrls?: string[];
+  contractMimes?: string[];
+  contractSizes?: number[];
+  contractOriginalNames?: string[];
+  totalAmount?: number;
+  currency?: string;
+  notes?: string | null;
+  studentId?: string | null;
+  newStudentName?: string | null;
+  newStudentPhone?: string | null;
+  newStudentEmail?: string | null;
+  newStudentPassportUrls?: string[];
+  newStudentPassportMimes?: string[];
+  newStudentPassportSizes?: number[];
+  newStudentPassportOriginalNames?: string[];
+  programId?: string;
+}
+
+export interface UpdatePaymentDto {
+  amount?: number;
+  paymentMethod?: SubmissionPaymentMethod;
+  paidAt?: string;
+  receiptUrls?: string[];
+  depositProofUrls?: string[];
+  nextDueDate?: string | null;
+  nextDueAmount?: number | null;
+  notes?: string | null;
+}
+
 export const createSubmission = (data: CreateSubmissionDto) =>
   api.post<SaleSubmission>('/submissions', data).then((r) => r.data);
 
@@ -129,6 +159,18 @@ export const rejectPayment = (id: string, reason: string) =>
 
 export const changeSubmissionStatus = (id: string, status: SubmissionStatus) =>
   api.post<SaleSubmission>(`/submissions/${id}/status`, { status }).then((r) => r.data);
+
+export const updateSubmission = (id: string, data: UpdateSubmissionDto) =>
+  api.patch<SaleSubmission>(`/submissions/${id}`, data).then((r) => r.data);
+
+export const updatePayment = (id: string, data: UpdatePaymentDto) =>
+  api.patch<SubmissionPayment>(`/submissions/payments/${id}`, data).then((r) => r.data);
+
+export const deletePayment = (id: string) =>
+  api.delete<{ ok: true; reversed: boolean }>(`/submissions/payments/${id}`).then((r) => r.data);
+
+export const deleteSubmission = (id: string) =>
+  api.delete<{ ok: true }>(`/submissions/${id}`).then((r) => r.data);
 
 export const uploadSubmissionFile = (file: File) => {
   const fd = new FormData();

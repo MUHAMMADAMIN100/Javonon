@@ -961,6 +961,373 @@ export class SubmissionsService {
     return { ok: true };
   }
 
+  /**
+   * FOUNDER редактирует сделку. Всегда можно менять контракт-файлы,
+   * totalAmount, currency, notes. Поля, привязанные к уже созданному
+   * Student/Application (studentId, newStudent*, programId), становятся
+   * "замороженными" после firstApprovedAt — если фронт всё же прислал
+   * их, silently ignore (не бросаем 400, чтобы не ломать UI).
+   * Обёртка в $transaction не нужна: одиночный update.
+   */
+  async updateSubmission(
+    user: (UserWithRoles & { id: string }) | null | undefined,
+    submissionId: string,
+    dto: {
+      contractUrls?: string[];
+      contractMimes?: string[];
+      contractSizes?: number[];
+      contractOriginalNames?: string[];
+      totalAmount?: number;
+      currency?: string;
+      notes?: string | null;
+      studentId?: string | null;
+      newStudentName?: string | null;
+      newStudentPhone?: string | null;
+      newStudentEmail?: string | null;
+      newStudentPassportUrls?: string[];
+      newStudentPassportMimes?: string[];
+      newStudentPassportSizes?: number[];
+      newStudentPassportOriginalNames?: string[];
+      programId?: string;
+    },
+  ) {
+    if (!user || !isFounder(user)) {
+      throw new ForbiddenException('Только основатель может редактировать сделку');
+    }
+    const submission = await this.prisma.saleSubmission.findUnique({
+      where: { id: submissionId },
+      select: { id: true, firstApprovedAt: true },
+    });
+    if (!submission) throw new NotFoundException('Сделка не найдена');
+
+    const data: any = {};
+
+    // Всегда редактируемые поля.
+    if (dto.contractUrls !== undefined) {
+      if (!Array.isArray(dto.contractUrls) || dto.contractUrls.length === 0) {
+        throw new BadRequestException('Загрузите минимум 1 файл контракта');
+      }
+      data.contractUrls = dto.contractUrls;
+    }
+    if (dto.contractMimes !== undefined) {
+      data.contractMimes = Array.isArray(dto.contractMimes)
+        ? dto.contractMimes.map((m) => (typeof m === 'string' ? m.trim() : ''))
+        : [];
+    }
+    if (dto.contractSizes !== undefined) {
+      data.contractSizes = Array.isArray(dto.contractSizes)
+        ? dto.contractSizes.map((n) =>
+            Number.isFinite(n as number) ? Math.max(0, Math.trunc(n as number)) : 0,
+          )
+        : [];
+    }
+    if (dto.contractOriginalNames !== undefined) {
+      data.contractOriginalNames = Array.isArray(dto.contractOriginalNames)
+        ? dto.contractOriginalNames.map((s) => (typeof s === 'string' ? s.trim() : ''))
+        : [];
+    }
+    if (dto.totalAmount !== undefined) {
+      if (
+        typeof dto.totalAmount !== 'number' ||
+        !isFinite(dto.totalAmount) ||
+        dto.totalAmount <= 0
+      ) {
+        throw new BadRequestException('Сумма контракта должна быть > 0');
+      }
+      data.totalAmount = dto.totalAmount;
+    }
+    if (dto.currency !== undefined) {
+      data.currency = dto.currency || 'USD';
+    }
+    if (dto.notes !== undefined) {
+      data.notes = dto.notes ? String(dto.notes).trim() || null : null;
+    }
+
+    // Поля, замораживаемые после первого одобрения: если Student/Application
+    // уже созданы, менять studentId/snapshot/programId нельзя — иначе
+    // разъедутся FK на Transaction/Application. Silently ignore, чтобы
+    // фронт мог слать один и тот же payload для draft и после-approve.
+    const frozen = !!submission.firstApprovedAt;
+    if (!frozen) {
+      if (dto.studentId !== undefined) data.studentId = dto.studentId || null;
+      if (dto.newStudentName !== undefined) {
+        data.newStudentName = dto.newStudentName
+          ? String(dto.newStudentName).trim() || null
+          : null;
+      }
+      if (dto.newStudentPhone !== undefined) {
+        data.newStudentPhone = dto.newStudentPhone
+          ? String(dto.newStudentPhone).trim() || null
+          : null;
+      }
+      if (dto.newStudentEmail !== undefined) {
+        data.newStudentEmail = dto.newStudentEmail
+          ? String(dto.newStudentEmail).trim().toLowerCase() || null
+          : null;
+      }
+      if (dto.newStudentPassportUrls !== undefined) {
+        data.newStudentPassportUrls = Array.isArray(dto.newStudentPassportUrls)
+          ? dto.newStudentPassportUrls
+          : [];
+      }
+      if (dto.newStudentPassportMimes !== undefined) {
+        data.newStudentPassportMimes = Array.isArray(dto.newStudentPassportMimes)
+          ? dto.newStudentPassportMimes.map((m) => (typeof m === 'string' ? m.trim() : ''))
+          : [];
+      }
+      if (dto.newStudentPassportSizes !== undefined) {
+        data.newStudentPassportSizes = Array.isArray(dto.newStudentPassportSizes)
+          ? dto.newStudentPassportSizes.map((n) =>
+              Number.isFinite(n as number) ? Math.max(0, Math.trunc(n as number)) : 0,
+            )
+          : [];
+      }
+      if (dto.newStudentPassportOriginalNames !== undefined) {
+        data.newStudentPassportOriginalNames = Array.isArray(dto.newStudentPassportOriginalNames)
+          ? dto.newStudentPassportOriginalNames.map((s) => (typeof s === 'string' ? s.trim() : ''))
+          : [];
+      }
+      if (dto.programId !== undefined && dto.programId) {
+        const program = await this.prisma.program.findUnique({
+          where: { id: dto.programId },
+        });
+        if (!program) throw new NotFoundException('Программа не найдена');
+        data.programId = dto.programId;
+      }
+    }
+
+    const updated = await this.prisma.saleSubmission.update({
+      where: { id: submissionId },
+      data,
+      include: {
+        program: { select: { id: true, name: true, university: true } },
+        student: { select: { id: true, fullName: true } },
+        manager: { select: { id: true, fullName: true, role: true } },
+        payments: { orderBy: { paidAt: 'desc' } },
+      },
+    });
+    this.realtime.emitStaff('submission:updated', { submissionId });
+    return updated;
+  }
+
+  /**
+   * FOUNDER редактирует платёж. Если платёж APPROVED и есть привязанная
+   * Transaction — обновляем её amount/date атомарно в одной $transaction.
+   * REJECTED редактировать нельзя. PENDING — просто update без Transaction.
+   */
+  async updatePayment(
+    user: (UserWithRoles & { id: string }) | null | undefined,
+    paymentId: string,
+    dto: {
+      amount?: number;
+      paymentMethod?: SubmissionPaymentMethod;
+      paidAt?: string | Date;
+      receiptUrls?: string[];
+      depositProofUrls?: string[];
+      nextDueDate?: string | Date | null;
+      nextDueAmount?: number | null;
+      notes?: string | null;
+    },
+  ) {
+    if (!user || !isFounder(user)) {
+      throw new ForbiddenException('Только основатель может редактировать платёж');
+    }
+    const payment = await this.prisma.submissionPayment.findUnique({
+      where: { id: paymentId },
+      include: {
+        submission: { select: { id: true, currency: true } },
+      },
+    });
+    if (!payment) throw new NotFoundException('Платёж не найден');
+    if (payment.status === SubmissionPaymentStatus.REJECTED) {
+      throw new BadRequestException('Отклонённый платёж нельзя редактировать');
+    }
+
+    const data: any = {};
+
+    if (dto.amount !== undefined) {
+      if (typeof dto.amount !== 'number' || !isFinite(dto.amount) || dto.amount <= 0) {
+        throw new BadRequestException('Сумма платежа должна быть > 0');
+      }
+      data.amount = dto.amount;
+    }
+
+    let newPaidAt: Date | undefined;
+    if (dto.paidAt !== undefined) {
+      newPaidAt = parseClientDate(dto.paidAt as any);
+      if (isNaN(newPaidAt.getTime())) {
+        throw new BadRequestException('Некорректная дата платежа (paidAt)');
+      }
+      data.paidAt = newPaidAt;
+    }
+
+    // Валидация метода/файлов — как в create/addPayment: если меняем метод
+    // или файлы, эффективный набор (новый метод + новые/старые файлы) должен
+    // содержать соответствующие URL'ы.
+    const effectiveMethod = dto.paymentMethod || payment.paymentMethod;
+    const effectiveReceiptUrls = dto.receiptUrls !== undefined
+      ? (Array.isArray(dto.receiptUrls) ? dto.receiptUrls : [])
+      : payment.receiptUrls;
+    const effectiveDepositProofUrls = dto.depositProofUrls !== undefined
+      ? (Array.isArray(dto.depositProofUrls) ? dto.depositProofUrls : [])
+      : payment.depositProofUrls;
+    if (
+      effectiveMethod === SubmissionPaymentMethod.TRANSFER &&
+      effectiveReceiptUrls.length === 0
+    ) {
+      throw new BadRequestException('Загрузите минимум 1 чек перевода');
+    }
+    if (
+      effectiveMethod === SubmissionPaymentMethod.CASH &&
+      effectiveDepositProofUrls.length === 0
+    ) {
+      throw new BadRequestException('Загрузите минимум 1 скрин пополнения счёта');
+    }
+    if (dto.paymentMethod !== undefined) data.paymentMethod = effectiveMethod;
+    if (dto.receiptUrls !== undefined) data.receiptUrls = effectiveReceiptUrls;
+    if (dto.depositProofUrls !== undefined) data.depositProofUrls = effectiveDepositProofUrls;
+
+    if (dto.nextDueDate !== undefined) {
+      if (dto.nextDueDate === null) {
+        data.nextDueDate = null;
+      } else {
+        const nd = parseClientDate(dto.nextDueDate as any);
+        if (isNaN(nd.getTime())) {
+          throw new BadRequestException('Некорректная дата следующего платежа');
+        }
+        data.nextDueDate = nd;
+      }
+    }
+    if (dto.nextDueAmount !== undefined) data.nextDueAmount = dto.nextDueAmount ?? null;
+    if (dto.notes !== undefined) {
+      data.notes = dto.notes ? String(dto.notes).trim() || null : null;
+    }
+
+    // APPROVED + есть Transaction → синхронизируем финансовую запись, чтобы
+    // дашборд доходов и бонусная база остались согласованы с payment.
+    const needSyncFinance =
+      payment.status === SubmissionPaymentStatus.APPROVED &&
+      !!payment.financeTransactionId &&
+      (data.amount !== undefined || data.paidAt !== undefined);
+
+    if (needSyncFinance) {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const financeUpdate: any = {};
+        if (data.amount !== undefined) financeUpdate.amount = data.amount;
+        if (data.paidAt !== undefined) financeUpdate.date = data.paidAt;
+        await tx.transaction.update({
+          where: { id: payment.financeTransactionId! },
+          data: financeUpdate,
+        });
+        return tx.submissionPayment.update({
+          where: { id: paymentId },
+          data,
+        });
+      });
+      this.realtime.emitStaff('submission:payment-updated', {
+        submissionId: payment.submissionId,
+        paymentId,
+      });
+      return updated;
+    }
+
+    const updated = await this.prisma.submissionPayment.update({
+      where: { id: paymentId },
+      data,
+    });
+    this.realtime.emitStaff('submission:payment-updated', {
+      submissionId: payment.submissionId,
+      paymentId,
+    });
+    return updated;
+  }
+
+  /**
+   * FOUNDER удаляет платёж. Если это ЕДИНСТВЕННЫЙ платёж — throw (нельзя
+   * оставлять сделку без платежей; для полного удаления есть DELETE /:id).
+   * Если платёж был APPROVED и есть linked Transaction — реверсим по
+   * паттерну changeStatus: original.reversedAt=now + create обратной
+   * EXPENSE-транзакции, чтобы finance dashboard и бонусная база
+   * скорректировались. Затем удаляем сам SubmissionPayment.
+   */
+  async deletePayment(
+    user: (UserWithRoles & { id: string }) | null | undefined,
+    paymentId: string,
+  ) {
+    if (!user || !isFounder(user)) {
+      throw new ForbiddenException('Только основатель может удалять платёж');
+    }
+    const payment = await this.prisma.submissionPayment.findUnique({
+      where: { id: paymentId },
+      include: {
+        submission: {
+          select: {
+            id: true,
+            _count: { select: { payments: true } },
+          },
+        },
+      },
+    });
+    if (!payment) throw new NotFoundException('Платёж не найден');
+    if (payment.submission._count.payments <= 1) {
+      throw new BadRequestException(
+        'Это единственный платёж сделки — удаляйте всю сделку через DELETE /submissions/:id',
+      );
+    }
+
+    const wasApproved = payment.status === SubmissionPaymentStatus.APPROVED;
+    const submissionId = payment.submissionId;
+    const shortId = submissionId.slice(0, 8);
+    const reversedAt = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      // Реверс финансовой записи по паттерну changeStatus (CANCEL-ветка).
+      if (wasApproved && payment.financeTransactionId) {
+        const original = await tx.transaction.findUnique({
+          where: { id: payment.financeTransactionId },
+          select: {
+            amount: true,
+            currency: true,
+            studentId: true,
+            managerId: true,
+            reversedAt: true,
+          },
+        });
+        if (original && !original.reversedAt) {
+          await tx.transaction.update({
+            where: { id: payment.financeTransactionId },
+            data: { reversedAt },
+          });
+          await tx.transaction.create({
+            data: {
+              type: 'EXPENSE',
+              category: 'OTHER_EXPENSE',
+              amount: original.amount,
+              currency: original.currency,
+              // Дата возврата = сегодня, чтобы возврат попал в текущий
+              // финансовый период (см. комментарий в changeStatus).
+              date: reversedAt,
+              studentId: original.studentId,
+              managerId: original.managerId,
+              recordedById: user.id,
+              comment: `Возврат по сделке #${shortId} (удаление платежа основателем)`,
+              reversedAt,
+            },
+          });
+        }
+      }
+      // Удаляем сам платёж.
+      await tx.submissionPayment.delete({ where: { id: paymentId } });
+    });
+
+    this.realtime.emitStaff('submission:payment-deleted', {
+      submissionId,
+      paymentId,
+      reversed: wasApproved,
+    });
+    return { ok: true, reversed: wasApproved };
+  }
+
   // ПРИМЕЧАНИЕ ПО БОНУСНОЙ БАЗЕ (актуально после фикса bug #22):
   // SalaryService.preview() считает бонусную базу из ДВУХ источников:
   //   1) prisma.submissionPayment.aggregate({ status: APPROVED,
