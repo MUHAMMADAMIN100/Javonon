@@ -83,6 +83,7 @@ export class SubmissionsController {
     @Query('paymentStatus') paymentStatus?: string,
     @Query('managerId') managerId?: string,
     @Query('take') take?: string,
+    @Query('firstApproved') firstApproved?: string,
   ) {
     // Доступ ограничен @Roles(FOUNDER, ADMIN) на уровне декоратора —
     // ACCOUNTANT/менеджеры до сюда не дойдут. Раньше здесь был fallback на
@@ -95,6 +96,7 @@ export class SubmissionsController {
         ? (paymentStatus as SubmissionPaymentStatus) : undefined,
       managerId: managerId || undefined,
       take: take ? parseInt(take, 10) : undefined,
+      firstApproved: firstApproved === 'true' || firstApproved === '1' ? true : undefined,
     });
   }
 

@@ -38,7 +38,7 @@ export default function Submissions() {
   const qc = useQueryClient();
   const founder = isFounder(me);
 
-  const [tab, setTab] = useState<'mine' | 'pending' | 'all'>(founder ? 'pending' : 'mine');
+  const [tab, setTab] = useState<'mine' | 'pending' | 'all' | 'approved'>(founder ? 'pending' : 'mine');
 
   // Realtime: бэкенд эмитит submission:new (staff), submission:payment-new (staff),
   // submission:reviewed (staff), submission:approved/rejected (юзеру-менеджеру).
@@ -76,6 +76,12 @@ export default function Submissions() {
               На рассмотрении
             </button>
             <button
+              className={`btn btn-sm ${tab === 'approved' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setTab('approved')}
+            >
+              Одобренные
+            </button>
+            <button
               className={`btn btn-sm ${tab === 'all' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setTab('all')}
             >
@@ -91,6 +97,7 @@ export default function Submissions() {
 
       {tab === 'mine' && <MySubmissions />}
       {tab === 'pending' && <PendingPayments />}
+      {tab === 'approved' && <ApprovedSubmissions />}
       {tab === 'all' && <AllSubmissions />}
     </>
   );
@@ -115,6 +122,21 @@ function AllSubmissions() {
   if (query.isLoading) return <Loading />;
   const items = query.data || [];
   if (items.length === 0) return <Empty>Сделок пока нет.</Empty>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {items.map((s) => <SubmissionCard key={s.id} s={s} showManager />)}
+    </div>
+  );
+}
+
+function ApprovedSubmissions() {
+  const query = useQuery({
+    queryKey: ['submissions', 'approved'],
+    queryFn: () => listAllSubmissions({ firstApproved: true, take: 200 }),
+  });
+  if (query.isLoading) return <Loading />;
+  const items = query.data || [];
+  if (items.length === 0) return <Empty>Одобренных сделок пока нет.</Empty>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {items.map((s) => <SubmissionCard key={s.id} s={s} showManager />)}

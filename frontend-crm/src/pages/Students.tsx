@@ -16,7 +16,7 @@ import CrmDatePicker from '../components/CrmDatePicker';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
-import { isElevated } from '../lib/roles';
+import { isElevated, isFounder } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useApplicationStatusLabel } from '../lib/labels';
 
@@ -47,6 +47,7 @@ export default function Students() {
   const [cabinet, setCabinet] = useState('');
   const [manager, setManager] = useState<string>('');
   const isAdmin = isElevated(me);
+  const founder = isFounder(me);
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
   // Отдельная вкладка «база студентов» по ТЗ — отображаются только
   // оплатившие (есть хотя бы одна TUITION_PAYMENT транзакция).
@@ -200,14 +201,16 @@ export default function Students() {
             <Icon name="description" size={16} style={{ marginRight: 4 }} />
             Отчёт Word
           </motion.button>
-          <motion.button
-            className="btn btn-primary"
-            onClick={() => navigate('/students/new')}
-            whileHover={{ scale: 1.05, y: -2 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            + {t('studentNew.title')}
-          </motion.button>
+          {!founder && (
+            <motion.button
+              className="btn btn-primary"
+              onClick={() => navigate('/students/new')}
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              + {t('studentNew.title')}
+            </motion.button>
+          )}
         </div>
       </div>
       <div className="card-body">

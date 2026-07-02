@@ -778,7 +778,7 @@ function EditSubmissionModal({
 
   const [contractUrls, setContractUrls] = useState<string[]>(submission.contractUrls || []);
   const [totalAmount, setTotalAmount] = useState<string>(String(submission.totalAmount ?? ''));
-  const [currency, setCurrency] = useState<string>(submission.currency || 'USD');
+  const [currency, setCurrency] = useState<string>(submission.currency || 'TJS');
   const [notes, setNotes] = useState<string>(submission.notes || '');
   const [newStudentName, setNewStudentName] = useState<string>(submission.newStudentName || '');
   const [newStudentPhone, setNewStudentPhone] = useState<string>(submission.newStudentPhone || '');
@@ -889,11 +889,8 @@ function EditSubmissionModal({
           </Field>
           <Field label="Валюта">
             <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              <option value="TJS">TJS (сомони)</option>
               <option value="USD">USD</option>
-              <option value="UZS">UZS</option>
-              <option value="CNY">CNY</option>
-              <option value="EUR">EUR</option>
-              <option value="RUB">RUB</option>
             </select>
           </Field>
         </div>

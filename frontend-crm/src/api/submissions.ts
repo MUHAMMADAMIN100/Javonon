@@ -143,6 +143,7 @@ export const listAllSubmissions = (params?: {
   paymentStatus?: SubmissionPaymentStatus;
   managerId?: string;
   take?: number;
+  firstApproved?: boolean;
 }) => api.get<SaleSubmission[]>('/submissions', { params }).then((r) => r.data);
 
 export const listPendingPayments = () =>

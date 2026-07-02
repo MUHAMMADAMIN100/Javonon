@@ -48,7 +48,7 @@ export default function SubmissionForm() {
   const [contractUrls, setContractUrls] = useState<string[]>([]);
   const [contractMetas, setContractMetas] = useState<UploadMeta[]>([]);
   const [totalAmount, setTotalAmount] = useState('');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('TJS');
   const [notes, setNotes] = useState('');
 
   // Первый платёж
@@ -332,11 +332,8 @@ export default function SubmissionForm() {
             </Field>
             <Field label="Валюта">
               <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                <option value="TJS">TJS (сомони)</option>
                 <option value="USD">USD</option>
-                <option value="TJS">TJS</option>
-                <option value="CNY">CNY</option>
-                <option value="RUB">RUB</option>
-                <option value="EUR">EUR</option>
               </select>
             </Field>
           </div>

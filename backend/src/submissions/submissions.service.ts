@@ -3,7 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { hasRole, isFounder, UserWithRoles } from '../auth/role-utils';
-import { SubmissionStatus, SubmissionPaymentStatus, SubmissionPaymentMethod } from '@prisma/client';
+import { SubmissionStatus, SubmissionPaymentStatus, SubmissionPaymentMethod, Prisma } from '@prisma/client';
 import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
 
 /**
@@ -341,12 +341,16 @@ export class SubmissionsService {
     paymentStatus?: SubmissionPaymentStatus;
     managerId?: string;
     take?: number;
+    firstApproved?: boolean;
   } = {}) {
     const where: any = {};
     if (opts.status) where.status = opts.status;
     if (opts.managerId) where.managerId = opts.managerId;
     if (opts.paymentStatus) {
       where.payments = { some: { status: opts.paymentStatus } };
+    }
+    if (opts.firstApproved) {
+      where.firstApprovedAt = { not: null };
     }
     return this.prisma.saleSubmission.findMany({
       where,
@@ -495,6 +499,34 @@ export class SubmissionsService {
 
     const isFirstApproval = !submission.firstApprovedAt;
 
+    // CRITICAL FIX #4 (Internal Server Error at approve): pre-check уникальности
+    // email студента ДО входа в $transaction. Student.email имеет @unique в
+    // schema.prisma; если снапшот newStudentEmail совпадает с уже существующим
+    // студентом (тот был создан из другой сделки, из StudentsService.create,
+    // из partner-auth, или из этой же сделки в прошлой попытке одобрения,
+    // упавшей на середине), tx.student.create внутри $transaction кидает
+    // PrismaClientKnownRequestError code=P2002 target=['email']. Без глобального
+    // exception-фильтра NestJS превращает необработанное исключение в bare
+    // HTTP 500 без тела/stack — ровно то, что видел пользователь.
+    //
+    // Ловим кейс заранее и отвечаем 400 с понятным сообщением, чтобы FOUNDER
+    // мог принять решение: привязать сделку к существующему студенту через
+    // studentId или очистить email в snapshot. Проверка вне транзакции ОК —
+    // остаточную race (кто-то создал студента с этим email между этой проверкой
+    // и tx.student.create) ловит try/catch на P2002 ниже.
+    if (isFirstApproval && !submission.studentId && submission.newStudentEmail) {
+      const dup = await this.prisma.student.findUnique({
+        where: { email: submission.newStudentEmail },
+        select: { id: true, fullName: true },
+      });
+      if (dup) {
+        throw new BadRequestException(
+          `Студент с email ${submission.newStudentEmail} уже существует (${dup.fullName}). ` +
+            `Привяжите сделку к существующему студенту (studentId) или очистите email в snapshot сделки.`,
+        );
+      }
+    }
+
     // Bug #31 (HIGH): plain-пароль нового студента, который вернём FOUNDER'у
     // вместе с email'ом — чтобы менеджер передал клиенту для входа в LMS/
     // payments. null означает «креды отдавать не надо» (студент уже
@@ -536,7 +568,15 @@ export class SubmissionsService {
     // ... WHERE firstApprovedAt IS NULL — только тот, у кого count===1,
     // идёт в ветку создания.
     const reviewedAt = new Date();
-    const upd = await this.prisma.$transaction(async (tx) => {
+    // CRITICAL FIX #4: маппим P2002 (unique constraint), проскочивший pre-check
+    // выше в результате race (студент создан параллельно между findUnique и
+    // student.create внутри tx), в 400 BadRequestException. Без этого клиент
+    // получает bare HTTP 500 из-за отсутствия глобального Prisma exception filter.
+    // Также маппим P2003 (FK) — если programId вдруг удалили между read и tx.
+    // Остальные ошибки пробрасываем без изменений — NestJS сам покажет 500.
+    let upd: Awaited<ReturnType<typeof this.prisma.submissionPayment.update>>;
+    try {
+      upd = await this.prisma.$transaction(async (tx) => {
       // Bug #26 (CRITICAL): pessimistic lock на SaleSubmission — первая
       // операция в транзакции. Сериализует параллельные approve'ы по
       // РАЗНЫМ платежам одной сделки: пока эта транзакция держит lock,
@@ -742,6 +782,33 @@ export class SubmissionsService {
         data: { financeTransactionId: finTx.id },
       });
     });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        // P2002 — unique constraint violation. В нашем случае — Student.email
+        // (единственный @unique @unique в тех моделях, что тут создаём).
+        // Если pre-check выше не поймал (race с параллельным созданием
+        // студента) — превращаем в 400, чтобы клиент увидел причину, а не 500.
+        if (err.code === 'P2002') {
+          const target = Array.isArray(err.meta?.target)
+            ? (err.meta!.target as string[]).join(', ')
+            : String(err.meta?.target ?? 'уникальное поле');
+          throw new BadRequestException(
+            `Конфликт уникальности при создании студента (${target}). ` +
+              `Вероятно, студент с этим email уже создан параллельно. ` +
+              `Обновите страницу и привяжите сделку к существующему студенту.`,
+          );
+        }
+        // P2003 — FK constraint (например, programId удалили между read и tx).
+        if (err.code === 'P2003') {
+          throw new BadRequestException(
+            'Связанная запись (программа/менеджер) была удалена во время одобрения. Попробуйте ещё раз.',
+          );
+        }
+      }
+      // Остальные ошибки — включая BadRequestException из CAS «Платёж уже
+      // разобран» и InternalServerErrorException из invariant-guard — пробрасываем как есть.
+      throw err;
+    }
 
     // managerId может быть null, если менеджер удалён — тогда персонального
     // уведомления некому слать, только staff-каналу.
