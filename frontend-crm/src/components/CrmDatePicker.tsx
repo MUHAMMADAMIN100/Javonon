@@ -77,10 +77,20 @@ export default function CrmDatePicker({
 
   const close = useCallback(() => setOpen(false), []);
 
-  const computeCoords = useCallback(() => {
+  const computeCoords = useCallback((): boolean => {
     const trigger = triggerRef.current;
-    if (!trigger) return;
+    if (!trigger) return false;
     const rect = trigger.getBoundingClientRect();
+
+    // If trigger is fully off-screen, signal caller to close.
+    if (
+      rect.bottom < 0 ||
+      rect.top > window.innerHeight ||
+      rect.right < 0 ||
+      rect.left > window.innerWidth
+    ) {
+      return false;
+    }
 
     let popoverWidth = DEFAULT_POPOVER_WIDTH;
     let left: number;
@@ -102,24 +112,29 @@ export default function CrmDatePicker({
       : rect.bottom + 4;
 
     setCoords({ top, left, width: popoverWidth });
+    return true;
   }, []);
 
   useLayoutEffect(() => {
     if (!open) return;
-    computeCoords();
-  }, [open, computeCoords]);
+    if (!computeCoords()) close();
+  }, [open, computeCoords, close]);
 
   useEffect(() => {
     if (!open) return;
-    const onScroll = () => close();
-    const onResize = () => close();
-    window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('resize', onResize);
+    const onScrollOrResize = () => {
+      // Reposition on scroll/resize so the popover stays anchored to the
+      // trigger — including when scrolling inside a modal that contains it.
+      // Only close if the trigger has moved fully off-screen.
+      if (!computeCoords()) close();
     };
-  }, [open, close]);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
+    };
+  }, [open, close, computeCoords]);
 
   useEffect(() => {
     if (!open) return;

@@ -1153,7 +1153,7 @@ function DocEditButton({
             border: '1px solid var(--border)',
             borderRadius: 10,
             boxShadow: '0 8px 22px rgba(0,0,0,0.1)',
-            zIndex: 9999,
+            zIndex: 5000,
           }}
         >
           <div className="form-group" style={{ marginBottom: 8 }}>
