@@ -1915,8 +1915,10 @@ select.input-error {
   .dialog-actions { flex-direction: column-reverse; }
   .dialog-actions .btn { width: 100%; }
 
-  /* Тосты */
-  .toast-stack { top: 10px; right: 10px; left: 10px; }
+  /* Тосты. bottom: auto — иначе вместе с базовым bottom:24px контейнер
+     растягивался top→bottom на весь экран и (без pointer-events:none)
+     перекрывал всю страницу. Оставляем тост-полосу сверху по контенту. */
+  .toast-stack { top: 10px; right: 10px; left: 10px; bottom: auto; }
   .toast { min-width: 0; max-width: 100%; }
 
   /* Notification panel — fixed с отступом от краёв (см. ниже @media 600 rule) */
@@ -2899,8 +2901,17 @@ select.input-error {
   bottom: 24px; right: 24px;
   display: flex; flex-direction: column; gap: 10px;
   z-index: 2000;
+  /* КРИТИЧНО: контейнер тостов не должен перехватывать тапы/клики.
+     Иначе (особенно на мобиле, где правило @720px растягивало его во
+     весь экран через top+left+right+bottom) он ловил все касания и по
+     форме логина/кнопкам было невозможно попасть. Указатель проходит
+     насквозь через контейнер; кликабельны только сами .toast ниже. */
+  pointer-events: none;
 }
 .toast {
+  /* Сами тосты — снова кликабельны (родитель .toast-stack отключил
+     pointer-events, чтобы не блокировать страницу). */
+  pointer-events: auto;
   background: var(--text);
   color: white;
   padding: 14px 18px;
