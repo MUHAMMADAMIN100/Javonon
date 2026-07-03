@@ -4420,14 +4420,16 @@ input[type="checkbox"].crm-checkbox,
 }
 .crm-datepicker-trigger.empty { color: var(--text-soft); }
 .crm-datepicker-popover {
-  position: absolute;
-  z-index: 999;
+  position: fixed;
+  z-index: 9999;
   background: white;
   border-radius: 14px;
   box-shadow: 0 16px 40px -12px rgba(10,15,13,0.18);
   padding: 12px;
   border: 1px solid var(--border);
-  margin-top: 4px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
 }
 /* Style react-day-picker via global rdp-* classes */
 .rdp {

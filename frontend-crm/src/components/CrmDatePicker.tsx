@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/style.css';
 import { format, parse, isValid } from 'date-fns';
@@ -15,6 +16,9 @@ type Props = {
   min?: string;
   max?: string;
 };
+
+const POPOVER_HEIGHT = 380;
+const DEFAULT_POPOVER_WIDTH = 300;
 
 function parseValue(value: string, showTime?: boolean): { date: Date | undefined; time: string } {
   if (!value) return { date: undefined, time: '' };
@@ -45,7 +49,13 @@ export default function CrmDatePicker({
 }: Props) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: DEFAULT_POPOVER_WIDTH,
+  });
 
   const { date: selectedDate, time } = useMemo(() => parseValue(value, showTime), [value, showTime]);
   const [timeValue, setTimeValue] = useState<string>(time || '');
@@ -67,14 +77,57 @@ export default function CrmDatePicker({
 
   const close = useCallback(() => setOpen(false), []);
 
+  const computeCoords = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+
+    let popoverWidth = DEFAULT_POPOVER_WIDTH;
+    let left: number;
+    if (window.innerWidth < 340) {
+      popoverWidth = window.innerWidth - 16;
+      left = 8;
+    } else {
+      left = Math.min(
+        Math.max(8, rect.left),
+        window.innerWidth - popoverWidth - 8,
+      );
+    }
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const flipUp = spaceBelow < POPOVER_HEIGHT && spaceAbove > spaceBelow;
+    const top = flipUp
+      ? Math.max(8, rect.top - POPOVER_HEIGHT - 4)
+      : rect.bottom + 4;
+
+    setCoords({ top, left, width: popoverWidth });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    computeCoords();
+  }, [open, computeCoords]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = () => close();
+    const onResize = () => close();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [open, close]);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (
-        wrapperRef.current && !wrapperRef.current.contains(target) &&
-        popoverRef.current && !popoverRef.current.contains(target)
-      ) {
+      const clickedTrigger = triggerRef.current && triggerRef.current.contains(target);
+      const clickedPopover = popoverRef.current && popoverRef.current.contains(target);
+      if (!clickedTrigger && !clickedPopover) {
         close();
       }
     };
@@ -132,6 +185,65 @@ export default function CrmDatePicker({
 
   const isEmpty = !value || !selectedDate;
 
+  const popover = open ? createPortal(
+    <div
+      ref={popoverRef}
+      className="crm-datepicker-popover"
+      role="dialog"
+      style={{
+        position: 'fixed',
+        top: coords.top,
+        left: coords.left,
+        zIndex: 9999,
+        width: coords.width,
+      }}
+    >
+      <DayPicker
+        mode="single"
+        selected={selectedDate}
+        onSelect={handleSelect}
+        locale={ru}
+        weekStartsOn={1}
+        showOutsideDays
+        startMonth={minDate}
+        endMonth={maxDate}
+        disabled={(minDate || maxDate) ? [
+          ...(minDate ? [{ before: minDate }] : []),
+          ...(maxDate ? [{ after: maxDate }] : []),
+        ] : undefined}
+      />
+      {showTime && (
+        <div className="crm-datepicker-time">
+          <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>Время:</span>
+          <input
+            type="time"
+            className="crm-input"
+            style={{ padding: '6px 10px', fontSize: 13, width: 'auto' }}
+            value={timeValue}
+            onChange={handleTimeChange}
+          />
+        </div>
+      )}
+      <div className="crm-datepicker-actions">
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={handleToday}
+        >
+          Сегодня
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={handleClear}
+        >
+          Очистить
+        </button>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
   return (
     <div
       ref={wrapperRef}
@@ -139,6 +251,7 @@ export default function CrmDatePicker({
       style={{ position: 'relative', ...(style || {}) }}
     >
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)}
@@ -165,53 +278,7 @@ export default function CrmDatePicker({
           <line x1="3" y1="10" x2="21" y2="10"></line>
         </svg>
       </button>
-
-      {open && (
-        <div ref={popoverRef} className="crm-datepicker-popover" role="dialog">
-          <DayPicker
-            mode="single"
-            selected={selectedDate}
-            onSelect={handleSelect}
-            locale={ru}
-            weekStartsOn={1}
-            showOutsideDays
-            startMonth={minDate}
-            endMonth={maxDate}
-            disabled={(minDate || maxDate) ? [
-              ...(minDate ? [{ before: minDate }] : []),
-              ...(maxDate ? [{ after: maxDate }] : []),
-            ] : undefined}
-          />
-          {showTime && (
-            <div className="crm-datepicker-time">
-              <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>Время:</span>
-              <input
-                type="time"
-                className="crm-input"
-                style={{ padding: '6px 10px', fontSize: 13, width: 'auto' }}
-                value={timeValue}
-                onChange={handleTimeChange}
-              />
-            </div>
-          )}
-          <div className="crm-datepicker-actions">
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={handleToday}
-            >
-              Сегодня
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={handleClear}
-            >
-              Очистить
-            </button>
-          </div>
-        </div>
-      )}
+      {popover}
     </div>
   );
 }

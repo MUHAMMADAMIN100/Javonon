@@ -153,7 +153,12 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
     border: `1px solid ${error ? 'var(--danger, #dc2626)' : 'var(--border, #e5e7eb)'}`,
     borderRadius: 8,
     background: error ? '#fef2f2' : '#fff',
-    overflow: 'hidden',
+    // NOTE: no `overflow: hidden` here — the country picker `.phone-dropdown`
+    // is `position: absolute; top: calc(100% + 4px)` and lives outside the
+    // wrapper's box, so clipping the wrapper would hide the entire flag/country
+    // list. Border-radius clipping is not needed since children are inputs,
+    // not images/media that would bleed past rounded corners.
+    isolation: 'isolate',
   };
   const btnStyle: React.CSSProperties = {
     flex: '0 0 auto',

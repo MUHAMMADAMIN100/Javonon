@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -1045,6 +1046,69 @@ function DocEditButton({
   const [comment, setComment] = useState(doc.comment || '');
   const [saving, setSaving] = useState(false);
 
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const POPOVER_WIDTH = 280;
+  const POPOVER_MAX_HEIGHT = 260;
+  const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  const close = useCallback(() => setOpen(false), []);
+
+  const computeCoords = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    // Right-align the popover to the trigger, then clamp inside the viewport.
+    const desiredLeft = rect.right - POPOVER_WIDTH;
+    const left = Math.min(
+      Math.max(8, desiredLeft),
+      Math.max(8, window.innerWidth - POPOVER_WIDTH - 8),
+    );
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const flipUp = spaceBelow < POPOVER_MAX_HEIGHT && spaceAbove > spaceBelow;
+    const top = flipUp
+      ? Math.max(8, rect.top - POPOVER_MAX_HEIGHT - 4)
+      : rect.bottom + 4;
+    setCoords({ top, left });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    computeCoords();
+  }, [open, computeCoords]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = () => close();
+    const onResize = () => close();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [open, close]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const clickedTrigger = triggerRef.current && triggerRef.current.contains(target);
+      const clickedPopover = popoverRef.current && popoverRef.current.contains(target);
+      if (!clickedTrigger && !clickedPopover) close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, close]);
+
   const save = async () => {
     setSaving(true);
     try {
@@ -1063,48 +1127,59 @@ function DocEditButton({
     }
   };
 
-  if (!open) {
-    return (
-      <button className="btn btn-sm btn-secondary" onClick={() => setOpen(true)} title="Изменить тип / комментарий">
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        className="btn btn-sm btn-secondary"
+        onClick={() => setOpen((o) => !o)}
+        title="Изменить тип / комментарий"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      >
         Изменить
       </button>
-    );
-  }
-
-  return (
-    <div style={{
-      position: 'absolute',
-      right: 24,
-      marginTop: 8,
-      background: 'white',
-      padding: 12,
-      border: '1px solid var(--border)',
-      borderRadius: 10,
-      boxShadow: '0 8px 22px rgba(0,0,0,0.1)',
-      zIndex: 100,
-      minWidth: 280,
-    }}>
-      <div className="form-group" style={{ marginBottom: 8 }}>
-        <label>Тип</label>
-        <select className="crm-select" value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
-          <option value="PASSPORT">Паспорт</option>
-          <option value="PHOTO">Фотография</option>
-          <option value="CONTRACT">Контракт</option>
-          <option value="DIPLOMA">Диплом</option>
-          <option value="OFFER">Оферта</option>
-          <option value="OTHER">Прочее</option>
-        </select>
-      </div>
-      <div className="form-group" style={{ marginBottom: 8 }}>
-        <label>Комментарий</label>
-        <input className="crm-input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="—" />
-      </div>
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>Отмена</button>
-        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
-          {saving ? 'Сохраняем…' : 'Сохранить'}
-        </button>
-      </div>
-    </div>
+      {open && createPortal(
+        <div
+          ref={popoverRef}
+          role="dialog"
+          style={{
+            position: 'fixed',
+            top: coords.top,
+            left: coords.left,
+            width: POPOVER_WIDTH,
+            background: 'white',
+            padding: 12,
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            boxShadow: '0 8px 22px rgba(0,0,0,0.1)',
+            zIndex: 9999,
+          }}
+        >
+          <div className="form-group" style={{ marginBottom: 8 }}>
+            <label>Тип</label>
+            <select className="crm-select" value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
+              <option value="PASSPORT">Паспорт</option>
+              <option value="PHOTO">Фотография</option>
+              <option value="CONTRACT">Контракт</option>
+              <option value="DIPLOMA">Диплом</option>
+              <option value="OFFER">Оферта</option>
+              <option value="OTHER">Прочее</option>
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 8 }}>
+            <label>Комментарий</label>
+            <input className="crm-input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="—" />
+          </div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>Отмена</button>
+            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+              {saving ? 'Сохраняем…' : 'Сохранить'}
+            </button>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
