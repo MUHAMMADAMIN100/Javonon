@@ -316,11 +316,11 @@ export default function SubmissionDetail() {
             onApprove={() => approveMut.mutate(p.id)}
             onReject={() => onReject(p.id)}
             busy={approveMut.isPending || rejectMut.isPending}
-            /* Управление платежом:
-               - FOUNDER — всегда (все статусы, все сделки)
-               - Owner — только PENDING своей ACTIVE сделки (APPROVED/REJECTED
-                 менять/удалять могут только FOUNDER, т.к. затрагивают доход) */
-            canManage={founder || (isOwnSubmission && p.status === 'PENDING' && s.status === 'ACTIVE')}
+            /* Управление платежом — только FOUNDER.
+               Менеджер добавляет платежи, но менять/удалять уже отправленные
+               (даже свои PENDING) не может: одобрение/отклонение — прерогатива
+               FOUNDER, а APPROVED затрагивают доход. */
+            canManage={founder}
             /* Удаление только FOUNDER — реверс Transaction для APPROVED —
                бухгалтерская операция */
             canDelete={founder}
@@ -362,6 +362,7 @@ export default function SubmissionDetail() {
       {showEditSubmission && (
         <EditSubmissionModal
           submission={s}
+          founder={founder}
           onClose={() => setShowEditSubmission(false)}
           onSuccess={() => {
             setShowEditSubmission(false);
@@ -779,15 +780,20 @@ function RejectReasonModal({
 }
 
 /**
- * FOUNDER-only модалка редактирования сделки.
+ * Модалка редактирования сделки.
+ * Доступна и FOUNDER, и менеджеру-владельцу (см. блок кнопок выше), но
+ * денежные поля (сумма контракта / валюта) может менять только FOUNDER —
+ * бэк реджектит их у менеджера, фронт заранее прячет инпуты и не шлёт
+ * значения в payload.
  * После firstApprovedAt поля студента/программы «заморожены» — бэк молча
  * игнорит их (см. submissions.service.ts:updateSubmission), но UX явно
  * дизейблит инпуты с подсказкой, чтобы FOUNDER понимал почему.
  */
 function EditSubmissionModal({
-  submission, onClose, onSuccess,
+  submission, founder, onClose, onSuccess,
 }: {
   submission: SaleSubmission;
+  founder: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -816,10 +822,14 @@ function EditSubmissionModal({
     mutationFn: () => {
       const dto: UpdateSubmissionDto = {
         contractUrls,
-        totalAmount: parseFloat(totalAmount),
-        currency,
         notes: notes.trim() || null,
       };
+      // Деньги может менять только FOUNDER — даже если state как-то заполнен,
+      // не шлём их в payload (бэк реджектит, но чистим уже здесь).
+      if (founder) {
+        dto.totalAmount = parseFloat(totalAmount);
+        dto.currency = currency;
+      }
       if (!frozen) {
         dto.newStudentName = newStudentName.trim() || null;
         dto.newStudentPhone = newStudentPhone.trim() || null;
@@ -834,8 +844,11 @@ function EditSubmissionModal({
   });
 
   const onSubmit = () => {
-    const a = parseFloat(totalAmount);
-    if (!isFinite(a) || a <= 0) return toast('Сумма контракта должна быть > 0', 'error');
+    // Валидация суммы — только там, где её реально шлём (FOUNDER).
+    if (founder) {
+      const a = parseFloat(totalAmount);
+      if (!isFinite(a) || a <= 0) return toast('Сумма контракта должна быть > 0', 'error');
+    }
     if (contractUrls.length === 0) return toast('Загрузите минимум 1 файл контракта', 'error');
     mut.mutate();
   };
@@ -895,22 +908,65 @@ function EditSubmissionModal({
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
-          <Field label="Сумма контракта *">
-            <input
-              className="crm-input"
-              type="number"
-              min={0}
-              step={50}
-              value={totalAmount}
-              onChange={(e) => setTotalAmount(e.target.value)}
-            />
-          </Field>
-          <Field label="Валюта">
-            <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              <option value="TJS">TJS (сомони)</option>
-              <option value="USD">USD</option>
-            </select>
-          </Field>
+          {founder ? (
+            <>
+              <Field label="Сумма контракта *">
+                <input
+                  className="crm-input"
+                  type="number"
+                  min={0}
+                  step={50}
+                  value={totalAmount}
+                  onChange={(e) => setTotalAmount(e.target.value)}
+                />
+              </Field>
+              <Field label="Валюта">
+                <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                  <option value="TJS">TJS (сомони)</option>
+                  <option value="USD">USD</option>
+                </select>
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Сумма контракта">
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 600,
+                    fontSize: 14,
+                    padding: '8px 10px',
+                    background: 'var(--bg-soft)',
+                    borderRadius: 6,
+                    color: 'var(--text)',
+                  }}
+                >
+                  {submission.totalAmount.toLocaleString('ru-RU')}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
+                  Меняет только основатель
+                </div>
+              </Field>
+              <Field label="Валюта">
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 600,
+                    fontSize: 14,
+                    padding: '8px 10px',
+                    background: 'var(--bg-soft)',
+                    borderRadius: 6,
+                    color: 'var(--text)',
+                  }}
+                >
+                  {submission.currency}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
+                  Меняет только основатель
+                </div>
+              </Field>
+            </>
+          )}
         </div>
 
         <div style={{ marginTop: 10 }}>

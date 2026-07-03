@@ -118,22 +118,33 @@ export class CronService {
     const now = new Date();
     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-    // 1) Напомнить за 24 часа до дедлайна (один раз)
+    // 1) Напомнить за 24 часа до дедлайна (один раз).
+    // Уведомляем всех assignees[] (M2M) + controller. assignedToId — legacy,
+    // используем как fallback если M2M пусто (старые данные до миграции).
     const upcoming = await this.prisma.task.findMany({
       where: {
         status: { in: ['TODO', 'IN_PROGRESS'] },
         deadline: { lte: in24h, gt: now },
         deadlineReminderSent: false,
       },
-      include: { assignedTo: { select: { id: true, fullName: true } } },
+      include: {
+        assignees: { select: { id: true } },
+        controller: { select: { id: true } },
+      },
     });
     for (const t of upcoming) {
-      await this.notifications.notifyUser(t.assignedToId, {
-        type: 'TASK_DEADLINE_SOON',
-        title: '⏳ Дедлайн через 24 часа',
-        message: `«${t.title}» — закрой или попроси перенос.`,
-        payload: { taskId: t.id, deadline: t.deadline },
-      });
+      const recipientIds = new Set<string>();
+      for (const a of t.assignees) recipientIds.add(a.id);
+      if (t.assignedToId) recipientIds.add(t.assignedToId);
+      if (t.controllerId) recipientIds.add(t.controllerId);
+      for (const uid of recipientIds) {
+        await this.notifications.notifyUser(uid, {
+          type: 'TASK_DEADLINE_SOON',
+          title: '⏳ Дедлайн через 24 часа',
+          message: `«${t.title}» — закрой или попроси перенос.`,
+          payload: { taskId: t.id, deadline: t.deadline },
+        });
+      }
       await this.prisma.task.update({
         where: { id: t.id },
         data: { deadlineReminderSent: true },
@@ -147,14 +158,29 @@ export class CronService {
         deadline: { lt: now },
         overdueNotified: false,
       },
+      include: {
+        assignees: { select: { id: true } },
+        controller: { select: { id: true } },
+      },
     });
     for (const t of overdue) {
-      await this.notifications.notifyUser(t.assignedToId, {
-        type: 'TASK_OVERDUE',
-        title: '🔴 Задача просрочена',
-        message: `«${t.title}» — дедлайн прошёл. Применён штраф $${TASK_OVERDUE_PENALTY_USD}.`,
-        payload: { taskId: t.id, deadline: t.deadline },
-      });
+      // Штраф — только реальным исполнителям (assignees[] + legacy fallback).
+      // Контролёр не штрафуется, только уведомляется.
+      const penaltyIds = new Set<string>();
+      for (const a of t.assignees) penaltyIds.add(a.id);
+      if (t.assignedToId) penaltyIds.add(t.assignedToId);
+
+      const notifyIds = new Set<string>(penaltyIds);
+      if (t.controllerId) notifyIds.add(t.controllerId);
+
+      for (const uid of notifyIds) {
+        await this.notifications.notifyUser(uid, {
+          type: 'TASK_OVERDUE',
+          title: '🔴 Задача просрочена',
+          message: `«${t.title}» — дедлайн прошёл. Применён штраф $${TASK_OVERDUE_PENALTY_USD}.`,
+          payload: { taskId: t.id, deadline: t.deadline },
+        });
+      }
       // Уведомляем и админов
       await this.notifications.notifyAdmins({
         type: 'TASK_OVERDUE_ADMIN',
@@ -162,12 +188,14 @@ export class CronService {
         message: `«${t.title}»`,
         payload: { taskId: t.id, assignedToId: t.assignedToId },
       });
-      // ТЗ §3.9: «Нарушение → штраф». Создаём Penalty для нарушителя.
-      await this.penalties.createManual(t.assignedToId, {
-        reason: 'TASK_OVERDUE',
-        amount: TASK_OVERDUE_PENALTY_USD,
-        details: `Просроченная задача: «${t.title}»`,
-      });
+      // ТЗ §3.9: «Нарушение → штраф». Создаём Penalty каждому исполнителю.
+      for (const uid of penaltyIds) {
+        await this.penalties.createManual(uid, {
+          reason: 'TASK_OVERDUE',
+          amount: TASK_OVERDUE_PENALTY_USD,
+          details: `Просроченная задача: «${t.title}»`,
+        });
+      }
       await this.prisma.task.update({
         where: { id: t.id },
         data: { overdueNotified: true },
@@ -189,16 +217,25 @@ export class CronService {
         status: { in: ['TODO', 'IN_PROGRESS'] },
         updatedAt: { lt: threeDaysAgo },
       },
-      include: { assignedTo: { select: { id: true, fullName: true } } },
+      include: {
+        assignees: { select: { id: true } },
+        controller: { select: { id: true } },
+      },
     });
 
     for (const t of stale) {
-      await this.notifications.notifyUser(t.assignedToId, {
-        type: 'TASK_REMINDER',
-        title: '📋 Задача висит уже 3+ дня',
-        message: `«${t.title}» — обнови статус или закрой.`,
-        payload: { taskId: t.id },
-      });
+      const recipientIds = new Set<string>();
+      for (const a of t.assignees) recipientIds.add(a.id);
+      if (t.assignedToId) recipientIds.add(t.assignedToId);
+      if (t.controllerId) recipientIds.add(t.controllerId);
+      for (const uid of recipientIds) {
+        await this.notifications.notifyUser(uid, {
+          type: 'TASK_REMINDER',
+          title: '📋 Задача висит уже 3+ дня',
+          message: `«${t.title}» — обнови статус или закрой.`,
+          payload: { taskId: t.id },
+        });
+      }
     }
   }
 

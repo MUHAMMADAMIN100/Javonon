@@ -1100,6 +1100,28 @@ export class SubmissionsService {
       throw new ForbiddenException('Это не ваша сделка');
     }
 
+    // Task 2: money/program поля может менять ТОЛЬКО FOUNDER.
+    // Раньше SALES_MANAGER (владелец сделки) мог передавать totalAmount /
+    // currency в PATCH до firstApprovedAt — это позволяло менеджеру
+    // задним числом раздуть сумму контракта и накрутить бонусную базу
+    // (после APPROVE идёт в Transaction.amount). programId тоже блокируем
+    // для не-FOUNDER всегда (не только после firstApprovedAt), чтобы
+    // менеджер не мог подменить программу на более дорогую/выгодную по
+    // проценту бонуса. Бросаем 403 с понятным сообщением, чтобы UI мог
+    // показать причину — предпочтительнее silent-ignore, при котором
+    // менеджер думает, что изменение прошло.
+    if (!founderUser) {
+      if (
+        dto.totalAmount !== undefined ||
+        dto.currency !== undefined ||
+        dto.programId !== undefined
+      ) {
+        throw new ForbiddenException(
+          'Сумму и валюту может менять только основатель',
+        );
+      }
+    }
+
     const data: any = {};
 
     // Всегда редактируемые поля.
@@ -1243,9 +1265,14 @@ export class SubmissionsService {
    * Редактирование платежа.
    * - FOUNDER — любой платёж (PENDING/APPROVED, REJECTED нельзя).
    *   APPROVED: связанная Transaction обновляется атомарно в $transaction.
-   * - Менеджер (owner submission'а) — только PENDING платежи своих сделок.
-   *   APPROVED недоступны — они уже создали Transaction, менять сумму/дату
-   *   может только FOUNDER (это бухгалтерская операция).
+   *
+   * Task 2: SALES_MANAGER больше НЕ может редактировать платежи, даже свои
+   * PENDING. Раньше owner-manager мог менять amount/paidAt на PENDING —
+   * это позволяло раздуть сумму после того, как FOUNDER согласовал сделку
+   * устно, а затем «поправить» цифру перед APPROVE. Платежи — это деньги,
+   * и любые правки должны идти через FOUNDER'а (аудит + подпись). Если
+   * менеджер ошибся при создании PENDING-платежа, FOUNDER либо REJECT'ит
+   * его (менеджер создаст новый), либо правит сам.
    */
   async updatePayment(
     user: (UserWithRoles & { id: string }) | null | undefined,
@@ -1262,6 +1289,13 @@ export class SubmissionsService {
     },
   ) {
     if (!user) throw new ForbiddenException('Не авторизован');
+    // Task 2: FOUNDER-only. Owner-PENDING ветка удалена — менеджеры больше
+    // не могут править суммы/даты/файлы платежей ни при каком статусе.
+    if (!isFounder(user)) {
+      throw new ForbiddenException(
+        'Платежи может редактировать только основатель',
+      );
+    }
     const payment = await this.prisma.submissionPayment.findUnique({
       where: { id: paymentId },
       include: {
@@ -1271,23 +1305,6 @@ export class SubmissionsService {
     if (!payment) throw new NotFoundException('Платёж не найден');
     if (payment.status === SubmissionPaymentStatus.REJECTED) {
       throw new BadRequestException('Отклонённый платёж нельзя редактировать');
-    }
-
-    // Ownership + status matrix:
-    //   FOUNDER — всё разрешено (кроме REJECTED, отсечено выше)
-    //   Owner PENDING — разрешено
-    //   Owner APPROVED — 403 (менять доход/бонус может только FOUNDER)
-    //   Не-owner не-FOUNDER — 403
-    const founderUser = isFounder(user);
-    if (!founderUser) {
-      if (payment.submission.managerId !== user.id) {
-        throw new ForbiddenException('Это не ваш платёж');
-      }
-      if (payment.status === SubmissionPaymentStatus.APPROVED) {
-        throw new ForbiddenException(
-          'Одобренный платёж может редактировать только основатель',
-        );
-      }
     }
 
     const data: any = {};

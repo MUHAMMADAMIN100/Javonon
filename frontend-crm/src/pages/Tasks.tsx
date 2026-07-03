@@ -31,7 +31,15 @@ export default function Tasks() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', assignedToId: '', deadline: '' });
+  const [form, setForm] = useState<{
+    title: string;
+    description: string;
+    assigneeIds: string[];
+    controllerId: string;
+    deadline: string;
+  }>({ title: '', description: '', assigneeIds: [], controllerId: '', deadline: '' });
+  // Отдельный selector для «добавить исполнителя» — сам список хранится в form.assigneeIds.
+  const [assigneePicker, setAssigneePicker] = useState('');
 
   // Дебаунс поиска: 300ms — чтобы не дёргать сервер на каждое нажатие.
   useEffect(() => {
@@ -67,7 +75,8 @@ export default function Tasks() {
     invalidate: [keys.tasks.all, keys.tasks.stats()],
     onSuccess: () => {
       toast('Задача создана. Сотрудник получит email и уведомление.', 'success');
-      setForm({ title: '', description: '', assignedToId: '', deadline: '' });
+      setForm({ title: '', description: '', assigneeIds: [], controllerId: '', deadline: '' });
+      setAssigneePicker('');
       setCreating(false);
     },
     onError: (err: any) => toast(err?.response?.data?.message || 'Ошибка создания', 'error'),
@@ -93,14 +102,15 @@ export default function Tasks() {
   });
 
   const formErrors = validateAll(
-    { title: form.title, description: form.description, assignedToId: form.assignedToId },
+    { title: form.title, description: form.description },
     {
       title: compose(required('Введите заголовок'), minLen(3, 'Минимум 3 символа'), maxLen(200)),
       description: compose(required('Опишите задачу'), minLen(5, 'Минимум 5 символов'), maxLen(2000)),
-      assignedToId: required('Выберите сотрудника'),
     },
   );
-  const formInvalid = hasErrors(formErrors);
+  // assigneeIds валидируем отдельно: массив, а validateAll работает со строками.
+  const assigneesError = form.assigneeIds.length === 0 ? 'Выберите хотя бы одного сотрудника' : '';
+  const formInvalid = hasErrors(formErrors) || !!assigneesError;
 
   const onCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,10 +121,20 @@ export default function Tasks() {
     createMut.mutate({
       title: form.title.trim(),
       description: form.description.trim(),
-      assignedToId: form.assignedToId,
+      assigneeIds: form.assigneeIds,
+      controllerId: form.controllerId || null,
       deadline: form.deadline || undefined,
     });
   };
+  const addAssignee = (id: string) => {
+    if (!id || form.assigneeIds.includes(id)) return;
+    setForm((f) => ({ ...f, assigneeIds: [...f.assigneeIds, id] }));
+    setAssigneePicker('');
+  };
+  const removeAssignee = (id: string) => {
+    setForm((f) => ({ ...f, assigneeIds: f.assigneeIds.filter((x) => x !== id) }));
+  };
+  const userById = (id: string) => users.find((u) => u.id === id);
   const submitting = createMut.isPending;
 
   const setStatus = (t: Task, next: TaskStatus) => {
@@ -224,14 +244,80 @@ export default function Tasks() {
                 {formErrors.description && <div className="form-error-text">{formErrors.description}</div>}
               </div>
               <div className="form-group">
-                <label>Назначить сотрудника</label>
+                <label>Назначить сотрудников *</label>
+                {form.assigneeIds.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 6,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {form.assigneeIds.map((id) => {
+                      const u = userById(id);
+                      return (
+                        <span
+                          key={id}
+                          className="badge badge-info"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '4px 8px',
+                            borderRadius: 999,
+                          }}
+                        >
+                          <Icon name="person" size={12} />
+                          {u ? u.fullName : id}
+                          <button
+                            type="button"
+                            onClick={() => removeAssignee(id)}
+                            aria-label="Убрать"
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: 0,
+                              display: 'inline-flex',
+                              color: 'inherit',
+                            }}
+                          >
+                            <Icon name="close" size={14} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                <select
+                  className={`crm-select${assigneesError ? ' input-error' : ''}`}
+                  value={assigneePicker}
+                  onChange={(e) => addAssignee(e.target.value)}
+                >
+                  <option value="">
+                    {form.assigneeIds.length === 0
+                      ? '— Выберите сотрудника —'
+                      : '+ Добавить ещё сотрудника'}
+                  </option>
+                  {users
+                    .filter((u) => !form.assigneeIds.includes(u.id))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.fullName} · {displayRoleLabel(u as any)}
+                      </option>
+                    ))}
+                </select>
+                {assigneesError && <div className="form-error-text">{assigneesError}</div>}
+              </div>
+              <div className="form-group">
+                <label>Контролёр задачи</label>
                 <select
                   className="crm-select"
-                  value={form.assignedToId}
-                  onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}
-                  required
+                  value={form.controllerId}
+                  onChange={(e) => setForm({ ...form, controllerId: e.target.value })}
                 >
-                  <option value="">— Выберите сотрудника —</option>
+                  <option value="">Выберите контролёра (необязательно)</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.fullName} · {displayRoleLabel(u as any)}
@@ -252,7 +338,11 @@ export default function Tasks() {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => { setCreating(false); setForm({ title: '', description: '', assignedToId: '', deadline: '' }); }}
+                  onClick={() => {
+                    setCreating(false);
+                    setForm({ title: '', description: '', assigneeIds: [], controllerId: '', deadline: '' });
+                    setAssigneePicker('');
+                  }}
                 >
                   {t('common.cancel')}
                 </button>
@@ -286,8 +376,9 @@ export default function Tasks() {
               variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
             >
               {items.map((task) => {
-                const isOwner = task.assignedToId === me?.id;
-                const canChange = isAdmin || isOwner;
+                const isAssignee = !!me && task.assigneeIds?.includes(me.id);
+                const isController = !!me && task.controllerId === me.id;
+                const canChange = isAdmin || isAssignee || isController;
                 const statuses: { value: TaskStatus; icon: string; label: string }[] = [
                   { value: 'TODO', icon: 'radio_button_unchecked', label: t('task.status.TODO') },
                   { value: 'IN_PROGRESS', icon: 'autorenew', label: t('task.status.IN_PROGRESS') },
@@ -308,10 +399,24 @@ export default function Tasks() {
                       <div className="task-desc">{task.description}</div>
                       <div className="task-meta">
                         <span className={`badge ${TASK_STATUS_BADGE[task.status]}`}>{taskStatusLabel(task.status)}</span>
-                        <span className="task-meta-item">
-                          <Icon name="person" size={14} />
-                          {task.assignedTo?.fullName || '—'}
-                        </span>
+                        {(task.assignees && task.assignees.length > 0) ? (
+                          task.assignees.map((a) => (
+                            <span key={a.id} className="task-meta-item">
+                              <Icon name="person" size={14} />
+                              {a.fullName}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="task-meta-item">
+                            <Icon name="person" size={14} />—
+                          </span>
+                        )}
+                        {task.controller && (
+                          <span className="task-meta-item" title="Контролёр задачи">
+                            <Icon name="verified_user" size={14} />
+                            Контролёр: {task.controller.fullName}
+                          </span>
+                        )}
                         {task.createdBy && (
                           <span className="task-meta-item">
                             <Icon name="edit" size={14} />

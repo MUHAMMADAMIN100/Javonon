@@ -13,6 +13,7 @@ export default function Login() {
   const { t } = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
@@ -33,7 +34,7 @@ export default function Login() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email.trim(), password.trim());
+      await login(email.trim(), password.trim(), rememberMe);
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Не удалось войти');
@@ -142,6 +143,17 @@ export default function Login() {
             autoComplete="current-password"
           />
           {showErr('password') && <div className="form-error-text">{errors.password}</div>}
+        </div>
+        <div className="form-group" style={{ marginTop: -4 }}>
+          <label className="crm-checkbox-label" style={{ cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              className="crm-checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />
+            <span>Запомнить меня</span>
+          </label>
         </div>
         <motion.button
           type="submit"

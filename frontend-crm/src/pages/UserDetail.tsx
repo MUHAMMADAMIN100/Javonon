@@ -23,7 +23,6 @@ import { listCustomRoles, setUserCustomRole, type CustomRole } from '../api/cust
 import { updateUser } from '../api/users';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
-import ScheduleEditor from '../components/ScheduleEditor';
 import CrmDatePicker from '../components/CrmDatePicker';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
@@ -130,16 +129,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         </div>
       </section>
 
-      {/* Индивидуальный график работы — FOUNDER задаёт лично для этого сотрудника
-          (по ТЗ §3 «изменять график работы менеджеров»). */}
-      {isFounder(meStore) && (
-        <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
-            {t('userDetail.section.schedule')}
-          </h3>
-          <ScheduleEditor userId={realId} />
-        </section>
-      )}
+      {/* График работы теперь всегда общий для компании — редактируется
+          в Настройки → График работы. Индивидуальный ScheduleEditor убран,
+          чтобы FOUNDER не мог случайно рассинхронизировать сотрудников. */}
 
       {/* Текущий месяц — фактика */}
       <section className="card" style={{ padding: 22, marginBottom: 14 }}>

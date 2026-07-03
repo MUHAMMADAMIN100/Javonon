@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { TaskStatus } from '@prisma/client';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -26,9 +27,20 @@ export class TasksController {
     @CurrentUser() user: any,
     @Query('mine') mine?: string,
     @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('assigneeId') assigneeId?: string,
+    @Query('controllerId') controllerId?: string,
   ) {
     if (search && search.length > 200) {
       throw new BadRequestException('Поисковая строка слишком длинная');
+    }
+    // Валидация status — enum TaskStatus, чтобы не пропустить мусор в prisma.
+    let statusFilter: TaskStatus | undefined;
+    if (status) {
+      if (!Object.values(TaskStatus).includes(status as TaskStatus)) {
+        throw new BadRequestException('Некорректный status');
+      }
+      statusFilter = status as TaskStatus;
     }
     return this.tasks.findAll({
       mine: mine === 'true',
@@ -38,7 +50,10 @@ export class TasksController {
       // иначе secondary-ADMIN видел бы только свои задачи а не все.
       roles: user.roles,
       search,
-    } as any);
+      status: statusFilter,
+      assigneeId: assigneeId || undefined,
+      controllerId: controllerId || undefined,
+    });
   }
 
   @Get('stats')

@@ -180,6 +180,12 @@ export interface Notification {
 
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 
+export interface TaskUserSummary {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -188,10 +194,15 @@ export interface Task {
   deadline: string | null;
   deadlineReminderSent?: boolean;
   overdueNotified?: boolean;
-  assignedToId: string;
-  assignedTo?: { id: string; fullName: string; email: string };
+  /** Список ID исполнителей — может быть несколько сотрудников на одну задачу. */
+  assigneeIds: string[];
+  /** Развёрнутые данные исполнителей (для отрисовки без доп. запросов). */
+  assignees: TaskUserSummary[];
+  /** Контролёр задачи — опциональный, проверяет выполнение. */
+  controllerId: string | null;
+  controller?: TaskUserSummary | null;
   createdById: string | null;
-  createdBy?: { id: string; fullName: string; email: string } | null;
+  createdBy?: TaskUserSummary | null;
   createdAt: string;
   updatedAt: string;
 }

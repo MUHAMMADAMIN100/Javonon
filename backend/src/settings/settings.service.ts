@@ -387,9 +387,21 @@ export class SettingsService {
 
   /**
    * Эффективный график на конкретный день для конкретного сотрудника.
-   * Логика: личный (userId=userId) → если не задан, компанийский default
-   * (userId=null) → если и того нет, хардкодный fallback (09:00-18:00,
-   * обед 12:00-13:00, будний день).
+   *
+   * TASK 4 (изменение политики): теперь ВСЕГДА используется компанийский
+   * дефолт (userId=null). Личные графики (userId=<uuid>) намеренно
+   * ИГНОРИРУЮТСЯ — даже если строки в WorkSchedule для конкретного
+   * пользователя остались от предыдущей версии, они считаются мёртвыми
+   * данными и не влияют на clockIn / расчёт часов. Это упрощает
+   * администрирование: FOUNDER настраивает один график на всю компанию,
+   * без исключений для отдельных сотрудников.
+   *
+   * Логика: компанийский default (userId=null) → если не задан, хардкодный
+   * fallback (09:00-18:00, обед 12:00-13:00, будний день).
+   *
+   * Записи с userId != null не удаляются физически — они просто
+   * не читаются. Если в будущем понадобится вернуть персональные
+   * графики, достаточно восстановить lookup выше.
    *
    * Это сердце привязки графиков из ТЗ §3 к реальной фиксации lateMinutes
    * в time-tracking — без этого графики хранятся в БД но никак не влияют
@@ -402,19 +414,11 @@ export class SettingsService {
     lunchStartMinute: number | null;
     lunchEndMinute: number | null;
   }> {
-    // findUnique с compound (userId, weekday) работает для не-null userId.
-    const personal = await this.prisma.workSchedule.findFirst({
-      where: { userId, weekday },
-    });
-    if (personal) {
-      return {
-        isWorkday: personal.isWorkday,
-        startMinute: personal.startMinute,
-        endMinute: personal.endMinute,
-        lunchStartMinute: personal.lunchStartMinute,
-        lunchEndMinute: personal.lunchEndMinute,
-      };
-    }
+    // TASK 4: personal lookup удалён намеренно. Параметр userId остаётся в
+    // сигнатуре ради обратной совместимости с вызывающим кодом
+    // (time-tracking, salary preview) и на случай возврата персональных
+    // графиков позже.
+    void userId;
     // КРИТИЧНО: для null userId (компанийского дефолта) Prisma findUnique
     // с null в compound unique возвращает null даже если запись есть.
     // Поэтому ОБЯЗАТЕЛЬНО findFirst({userId: null}) — иначе компанийский

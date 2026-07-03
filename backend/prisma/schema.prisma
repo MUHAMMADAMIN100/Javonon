@@ -163,7 +163,15 @@ model User {
   managedChinaApplications Application[] @relation("ApplicationChinaManager")
   managedStudents          Student[]     @relation("StudentManager")
   managedChinaStudents     Student[]     @relation("StudentChinaManager")
-  assignedTasks            Task[]        @relation("TaskAssignee")
+  // LEGACY single-assignee back-reference. Kept temporarily for backward-compat
+  // (older queries/reads that expect a single assignedToId). New code uses the
+  // M2M `assignedTasks` (relation "TaskAssignees") below. Drop this after all
+  // callsites migrated to assignees[].
+  legacyAssignedTasks      Task[]        @relation("TaskAssignee")
+  // Новый M2M: список задач, где юзер стоит в assignees[].
+  assignedTasks            Task[]        @relation("TaskAssignees")
+  // Задачи, где юзер — контролёр (следит за выполнением, но не исполнитель).
+  controlledTasks          Task[]        @relation("TaskController")
   createdTasks             Task[]        @relation("TaskCreator")
 
   timeEntries        TimeEntry[]
@@ -405,14 +413,28 @@ model Task {
   deadlineReminderSent Boolean @default(false)
   // Cron уже отправил уведомление о просрочке.
   overdueNotified      Boolean @default(false)
-  assignedToId String
-  assignedTo   User       @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: Cascade)
+  // LEGACY: одиночный исполнитель. Сделан nullable + onDelete SetNull, чтобы
+  // миграция была не деструктивной (данные не теряются при удалении юзера,
+  // старые задачи с одним исполнителем продолжают работать). Новый код
+  // должен писать в assignees[] (M2M). Значение assignedToId продолжаем
+  // держать как «первый ассайни» для обратной совместимости с UI/queries,
+  // ожидающими одиночное поле. Дропнем в отдельной миграции позже.
+  assignedToId String?
+  assignedTo   User?      @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  // Новый M2M: несколько исполнителей на одну задачу. Prisma создаст
+  // неявную junction-таблицу _TaskAssignees(A=Task.id, B=User.id).
+  assignees    User[]     @relation("TaskAssignees")
+  // Контролёр — наблюдатель за задачей (может быть FOUNDER/руководитель отдела).
+  // Не исполнитель; получает уведомления о статусе, не считается в KPI-нагрузке.
+  controllerId String?
+  controller   User?      @relation("TaskController", fields: [controllerId], references: [id], onDelete: SetNull)
   createdById  String?
   createdBy    User?      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@index([assignedToId])
+  @@index([controllerId])
   @@index([status])
   @@index([deadline])
 }

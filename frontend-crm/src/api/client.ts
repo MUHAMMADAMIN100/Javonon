@@ -8,7 +8,9 @@ const baseURL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001
 export const api = axios.create({ baseURL, timeout: 60_000 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('javonon_token');
+  // «Запомнить меня»: если чекбокс был снят, токен лежит в sessionStorage
+  // и умрёт вместе с вкладкой. localStorage — приоритет (постоянная сессия).
+  const token = localStorage.getItem('javonon_token') || sessionStorage.getItem('javonon_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -17,7 +19,9 @@ api.interceptors.response.use(
   (r) => r,
   (err) => {
     if (err.response?.status === 401) {
+      // Чистим оба хранилища — не знаем, откуда пришёл невалидный токен.
       localStorage.removeItem('javonon_token');
+      sessionStorage.removeItem('javonon_token');
       // Учитываем basename CRM (/admin) — после basename идёт /login
       const loginPath = '/admin/login';
       if (!location.pathname.endsWith('/login')) {

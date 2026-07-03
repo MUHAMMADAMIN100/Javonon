@@ -6,7 +6,7 @@ import { connectRealtime, disconnectRealtime } from '../realtime';
 interface AuthState {
   user: User | null;
   initialized: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   logout: () => void;
   init: () => Promise<void>;
 }
@@ -30,21 +30,35 @@ export const useAuth = create<AuthState>((set) => ({
   user: null,
   initialized: false,
 
-  async login(email, password) {
+  async login(email, password, rememberMe = true) {
     const { token, user } = await apiLogin(email, password);
-    localStorage.setItem('javonon_token', token);
+    // «Запомнить меня»: localStorage переживает закрытие вкладки/браузера.
+    // Без галочки — sessionStorage, чтобы токен умер вместе с вкладкой
+    // (важно для чужих/общих компов). Чистим противоположный сторедж, чтобы
+    // при повторном логине с другим чекбоксом не остался «зомби»-токен.
+    if (rememberMe) {
+      localStorage.setItem('javonon_token', token);
+      sessionStorage.removeItem('javonon_token');
+    } else {
+      sessionStorage.setItem('javonon_token', token);
+      localStorage.removeItem('javonon_token');
+    }
     connectRealtime(token);
     set({ user });
   },
 
   logout() {
+    // Чистим ОБА хранилища — куда бы токен ни был положен при login().
     localStorage.removeItem('javonon_token');
+    sessionStorage.removeItem('javonon_token');
     disconnectRealtime();
     set({ user: null });
   },
 
   async init() {
-    const token = localStorage.getItem('javonon_token');
+    // localStorage → приоритет (постоянная сессия), затем sessionStorage
+    // (сессионный токен для конкретной вкладки).
+    const token = localStorage.getItem('javonon_token') || sessionStorage.getItem('javonon_token');
     if (!token) { set({ initialized: true }); return; }
 
     // QA-fix: сразу выставляем minimal user из JWT, чтобы UI имел me.id
@@ -76,6 +90,7 @@ export const useAuth = create<AuthState>((set) => ({
       // на каждом cold-start Railway.
       if (status === 401) {
         localStorage.removeItem('javonon_token');
+        sessionStorage.removeItem('javonon_token');
         set({ user: null, initialized: true });
       } else {
         set({ initialized: true });
