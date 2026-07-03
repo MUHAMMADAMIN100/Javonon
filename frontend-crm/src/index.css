@@ -4408,17 +4408,53 @@ input[type="checkbox"].crm-checkbox,
   background: white;
   border-radius: 14px;
   box-shadow: 0 16px 40px -12px rgba(10,15,13,0.18);
-  padding: 12px;
+  padding: 14px 12px 12px;
   border: 1px solid var(--border);
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 16px);
-  overflow: auto;
+  /* overflow: hidden — цифры больше не должны иметь горизонтальный скролл;
+     react-day-picker размещаем ровно во внутреннюю ширину. */
+  overflow: hidden;
+  box-sizing: border-box;
 }
-/* Style react-day-picker via global rdp-* classes */
+/* Style react-day-picker via global rdp-* classes.
+   Прижимаем таблицу к ширине контейнера (width:100%) и центрируем её —
+   иначе дни правого столбца упираются в правую границу popover'а
+   и появляется горизонтальный скролл. */
 .rdp {
   --rdp-accent-color: var(--primary);
   --rdp-background-color: color-mix(in srgb, var(--primary) 14%, transparent);
+  --rdp-cell-size: 36px;
+  --rdp-day-width: 36px;
+  --rdp-day-height: 36px;
   margin: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.rdp-months, .rdp-month {
+  width: 100%;
+}
+.rdp-table, .rdp-month_grid {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: separate;
+  border-spacing: 2px;
+  table-layout: fixed;
+}
+.rdp-cell, .rdp-day, .rdp-day_button {
+  width: 36px;
+  height: 36px;
+  min-width: 0;
+  max-width: 36px;
+  padding: 0;
+  font-size: 13px;
+  text-align: center;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+.rdp-day_button {
+  border-radius: 8px;
 }
 /* v10 uses rdp-selected / rdp-today; legacy v8 names kept for safety */
 .rdp-day_selected, .rdp-day_selected:hover,
@@ -4441,16 +4477,20 @@ input[type="checkbox"].crm-checkbox,
   font-weight: 600;
   font-size: 14px;
   color: var(--text);
+  padding: 0 4px;
 }
-.rdp-nav_button, .rdp-button_previous, .rdp-button_next {
+.rdp-nav, .rdp-nav_button, .rdp-button_previous, .rdp-button_next {
   color: var(--primary);
   border-radius: 8px;
 }
 .rdp-head_cell, .rdp-weekday {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-soft);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
+  padding: 6px 0;
+  width: 36px;
+  max-width: 36px;
 }
 .crm-datepicker-actions {
   display: flex;

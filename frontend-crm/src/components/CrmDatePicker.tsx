@@ -18,7 +18,9 @@ type Props = {
 };
 
 const POPOVER_HEIGHT = 380;
-const DEFAULT_POPOVER_WIDTH = 300;
+// 320px: 7 колонок × 36px + 6 × 2px spacing + 2×12px padding = 300px
+// содержимого + запас 20px чтобы цифры не липли к правой границе.
+const DEFAULT_POPOVER_WIDTH = 320;
 
 function parseValue(value: string, showTime?: boolean): { date: Date | undefined; time: string } {
   if (!value) return { date: undefined, time: '' };
