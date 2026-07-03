@@ -268,8 +268,12 @@ export default function SubmissionDetail() {
           </div>
         )}
 
-        {/* FOUNDER: редактирование и удаление сделки (доступно на любом статусе). */}
-        {founder && (
+        {/* Кнопки редактирования/удаления:
+            - «Редактировать сделку»: FOUNDER всегда; менеджер-владелец только
+              для своей сделки (в service заморожены studentId/newStudent/programId
+              после первого APPROVE)
+            - «Удалить сделку»: только FOUNDER (destructive; менеджер идёт к нему) */}
+        {(founder || isOwnSubmission) && (
           <div
             style={{
               display: 'flex',
@@ -287,13 +291,15 @@ export default function SubmissionDetail() {
             >
               <Icon name="edit" size={14} /> Редактировать сделку
             </button>
-            <button
-              className="btn btn-sm btn-danger"
-              onClick={onDeleteSubmission}
-              disabled={deleteSubmissionMut.isPending}
-            >
-              <Icon name="delete" size={14} /> {deleteSubmissionMut.isPending ? 'Удаляем…' : 'Удалить сделку'}
-            </button>
+            {founder && (
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={onDeleteSubmission}
+                disabled={deleteSubmissionMut.isPending}
+              >
+                <Icon name="delete" size={14} /> {deleteSubmissionMut.isPending ? 'Удаляем…' : 'Удалить сделку'}
+              </button>
+            )}
           </div>
         )}
       </motion.div>
@@ -310,7 +316,14 @@ export default function SubmissionDetail() {
             onApprove={() => approveMut.mutate(p.id)}
             onReject={() => onReject(p.id)}
             busy={approveMut.isPending || rejectMut.isPending}
-            canManage={founder}
+            /* Управление платежом:
+               - FOUNDER — всегда (все статусы, все сделки)
+               - Owner — только PENDING своей ACTIVE сделки (APPROVED/REJECTED
+                 менять/удалять могут только FOUNDER, т.к. затрагивают доход) */
+            canManage={founder || (isOwnSubmission && p.status === 'PENDING' && s.status === 'ACTIVE')}
+            /* Удаление только FOUNDER — реверс Transaction для APPROVED —
+               бухгалтерская операция */
+            canDelete={founder}
             onEdit={() => setEditPaymentId(p.id)}
             onDelete={() => onDeletePayment(p)}
             manageBusy={deletePaymentMut.isPending}
@@ -396,7 +409,7 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
 
 function PaymentRow({
   p, currency, canReview, onApprove, onReject, busy,
-  canManage, onEdit, onDelete, manageBusy,
+  canManage, canDelete, onEdit, onDelete, manageBusy,
 }: {
   p: SubmissionPayment;
   currency: string;
@@ -405,6 +418,7 @@ function PaymentRow({
   onReject: () => void;
   busy: boolean;
   canManage: boolean;
+  canDelete: boolean;
   onEdit: () => void;
   onDelete: () => void;
   manageBusy: boolean;
@@ -495,23 +509,27 @@ function PaymentRow({
         </div>
       )}
 
-      {canManage && (
+      {(canManage || canDelete) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 10 }}>
-          <button
-            className="btn btn-sm btn-secondary"
-            onClick={onEdit}
-            disabled={manageBusy || p.status === 'REJECTED'}
-            title={p.status === 'REJECTED' ? 'Отклонённый платёж редактировать нельзя' : undefined}
-          >
-            <Icon name="edit" size={14} /> Редактировать
-          </button>
-          <button
-            className="btn btn-sm btn-danger"
-            onClick={onDelete}
-            disabled={manageBusy}
-          >
-            <Icon name="delete" size={14} /> Удалить
-          </button>
+          {canManage && (
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={onEdit}
+              disabled={manageBusy || p.status === 'REJECTED'}
+              title={p.status === 'REJECTED' ? 'Отклонённый платёж редактировать нельзя' : undefined}
+            >
+              <Icon name="edit" size={14} /> Редактировать
+            </button>
+          )}
+          {canDelete && (
+            <button
+              className="btn btn-sm btn-danger"
+              onClick={onDelete}
+              disabled={manageBusy}
+            >
+              <Icon name="delete" size={14} /> Удалить
+            </button>
+          )}
         </div>
       )}
     </motion.div>

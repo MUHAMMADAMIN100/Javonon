@@ -126,6 +126,11 @@ export default function SubmissionForm() {
 
     createMut.mutate({
       studentId: mode === 'existing' ? studentId : null,
+      // Если existing и email введён — обновляем Student.email на бэке
+      // (проверка уникальности + update перед созданием submission).
+      existingStudentEmail: mode === 'existing' && newEmail.trim()
+        ? newEmail.trim()
+        : undefined,
       newStudentName: mode === 'new' ? newName.trim() : undefined,
       newStudentPhone: mode === 'new' ? newPhone.trim() : undefined,
       newStudentEmail: mode === 'new' ? newEmail.trim() : undefined,
@@ -278,6 +283,24 @@ export default function SubmissionForm() {
                   )}
                 </>
               )}
+            </div>
+          )}
+
+          {/* Email — всегда видимое поле:
+             - existing: обновляет email существующего студента (уникальность
+               проверяется на бэке)
+             - new: обычный email нового студента (как раньше) */}
+          {mode === 'existing' && (
+            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              <Field label={selectedStudent?.email ? 'Email (обновит текущий)' : 'Email студента'}>
+                <input
+                  className="crm-input"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder={selectedStudent?.email || 'name@example.com'}
+                />
+              </Field>
             </div>
           )}
 

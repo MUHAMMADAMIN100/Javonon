@@ -132,9 +132,12 @@ export class SubmissionsController {
     return this.svc.rejectPayment(id, me.id, body?.reason || '');
   }
 
-  /** FOUNDER редактирует платёж (amount/method/paidAt/файлы/notes). */
+  /** Редактирование платежа.
+   *  - FOUNDER — любые платежи любой сделки, любой статус.
+   *  - Менеджер (SALES_MANAGER / CLIENT_MANAGER / ADMIN) — только PENDING
+   *    платежи своих сделок (ownership + status check в service). */
   @Patch('payments/:id')
-  @Roles(Role.FOUNDER)
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   updatePayment(@CurrentUser() me: any, @Param('id') id: string, @Body() body: any) {
     return this.svc.updatePayment(me, id, body);
   }
@@ -155,10 +158,13 @@ export class SubmissionsController {
     return this.svc.changeStatus(me, id, body.status);
   }
 
-  /** FOUNDER редактирует сделку (контракт-файлы/сумма/валюта/notes + до
-   *  первого одобрения — snapshot нового студента и programId). */
+  /** Редактирование сделки.
+   *  - FOUNDER — любые сделки, любые поля.
+   *  - Менеджер (SALES_MANAGER/CLIENT_MANAGER/ADMIN) — только свои сделки
+   *    (ownership check в service). После первого APPROVE менеджер уже не
+   *    может менять studentId, newStudent-snapshot или programId (заморожено). */
   @Patch(':id')
-  @Roles(Role.FOUNDER)
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   updateSubmission(@CurrentUser() me: any, @Param('id') id: string, @Body() body: any) {
     return this.svc.updateSubmission(me, id, body);
   }

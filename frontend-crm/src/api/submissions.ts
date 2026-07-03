@@ -67,6 +67,8 @@ export interface PendingPayment extends SubmissionPayment {
 
 export interface CreateSubmissionDto {
   studentId?: string | null;
+  // Обновить email существующего студента при create (уникальность на бэке).
+  existingStudentEmail?: string;
   newStudentName?: string;
   newStudentPhone?: string;
   newStudentEmail?: string;
@@ -116,6 +118,9 @@ export interface UpdateSubmissionDto {
   newStudentPassportSizes?: number[];
   newStudentPassportOriginalNames?: string[];
   programId?: string;
+  // Обновить email существующего студента (когда submission привязана к
+  // Student, а не к snapshot нового). Валидация уникальности email на бэке.
+  existingStudentEmail?: string | null;
 }
 
 export interface UpdatePaymentDto {

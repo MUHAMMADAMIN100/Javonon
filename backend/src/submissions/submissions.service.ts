@@ -64,6 +64,10 @@ function parseClientDate(value: string | Date): Date {
 
 interface CreateSubmissionDto {
   studentId?: string | null;
+  // Если studentId ЗАДАН (existing student) и менеджер прислал этот email —
+  // обновим Student.email атомарно после проверки уникальности. Для нового
+  // студента идёт в newStudentEmail (snapshot до APPROVE).
+  existingStudentEmail?: string | null;
   // если studentId не задан — обязательно новый студент:
   newStudentName?: string;
   newStudentPhone?: string;
@@ -129,6 +133,28 @@ export class SubmissionsService {
     } else {
       const exists = await this.prisma.student.findUnique({ where: { id: dto.studentId } });
       if (!exists) throw new NotFoundException('Студент не найден');
+      // Если менеджер прислал новый email для существующего студента —
+      // обновляем Student.email с проверкой уникальности.
+      if (dto.existingStudentEmail !== undefined) {
+        const emailRaw = dto.existingStudentEmail
+          ? String(dto.existingStudentEmail).trim().toLowerCase()
+          : null;
+        if (emailRaw && emailRaw !== exists.email) {
+          const busy = await this.prisma.student.findFirst({
+            where: { email: emailRaw, id: { not: dto.studentId } },
+            select: { id: true },
+          });
+          if (busy) {
+            throw new BadRequestException(
+              'Email уже используется другим студентом',
+            );
+          }
+          await this.prisma.student.update({
+            where: { id: dto.studentId },
+            data: { email: emailRaw },
+          });
+        }
+      }
     }
 
     const program = await this.prisma.program.findUnique({ where: { id: dto.programId } });
@@ -1056,16 +1082,23 @@ export class SubmissionsService {
       newStudentPassportSizes?: number[];
       newStudentPassportOriginalNames?: string[];
       programId?: string;
+      // Обновить email существующего студента (когда studentId уже связан).
+      // Только для не-frozen сделки. Проверка уникальности email в БД.
+      existingStudentEmail?: string | null;
     },
   ) {
-    if (!user || !isFounder(user)) {
-      throw new ForbiddenException('Только основатель может редактировать сделку');
-    }
+    if (!user) throw new ForbiddenException('Не авторизован');
     const submission = await this.prisma.saleSubmission.findUnique({
       where: { id: submissionId },
-      select: { id: true, firstApprovedAt: true },
+      select: { id: true, firstApprovedAt: true, managerId: true, studentId: true },
     });
     if (!submission) throw new NotFoundException('Сделка не найдена');
+
+    // Ownership: FOUNDER может любую, менеджер — только свою.
+    const founderUser = isFounder(user);
+    if (!founderUser && submission.managerId !== user.id) {
+      throw new ForbiddenException('Это не ваша сделка');
+    }
 
     const data: any = {};
 
@@ -1163,6 +1196,35 @@ export class SubmissionsService {
       }
     }
 
+    // Обновление email существующего студента (если сделка привязана к
+    // Student и менеджер прислал новый email). Работает и до, и после
+    // APPROVE — email студента не блокирующее поле. Проверка уникальности
+    // email в БД перед update — иначе Prisma бросит 500 при конфликте.
+    if (
+      dto.existingStudentEmail !== undefined &&
+      submission.studentId // только если связан с существующим студентом
+    ) {
+      const emailRaw = dto.existingStudentEmail
+        ? String(dto.existingStudentEmail).trim().toLowerCase()
+        : null;
+      if (emailRaw) {
+        // Проверка уникальности: если этот email уже у другого Student — 409.
+        const busy = await this.prisma.student.findFirst({
+          where: { email: emailRaw, id: { not: submission.studentId } },
+          select: { id: true },
+        });
+        if (busy) {
+          throw new BadRequestException(
+            'Email уже используется другим студентом',
+          );
+        }
+      }
+      await this.prisma.student.update({
+        where: { id: submission.studentId },
+        data: { email: emailRaw },
+      });
+    }
+
     const updated = await this.prisma.saleSubmission.update({
       where: { id: submissionId },
       data,
@@ -1178,9 +1240,12 @@ export class SubmissionsService {
   }
 
   /**
-   * FOUNDER редактирует платёж. Если платёж APPROVED и есть привязанная
-   * Transaction — обновляем её amount/date атомарно в одной $transaction.
-   * REJECTED редактировать нельзя. PENDING — просто update без Transaction.
+   * Редактирование платежа.
+   * - FOUNDER — любой платёж (PENDING/APPROVED, REJECTED нельзя).
+   *   APPROVED: связанная Transaction обновляется атомарно в $transaction.
+   * - Менеджер (owner submission'а) — только PENDING платежи своих сделок.
+   *   APPROVED недоступны — они уже создали Transaction, менять сумму/дату
+   *   может только FOUNDER (это бухгалтерская операция).
    */
   async updatePayment(
     user: (UserWithRoles & { id: string }) | null | undefined,
@@ -1196,18 +1261,33 @@ export class SubmissionsService {
       notes?: string | null;
     },
   ) {
-    if (!user || !isFounder(user)) {
-      throw new ForbiddenException('Только основатель может редактировать платёж');
-    }
+    if (!user) throw new ForbiddenException('Не авторизован');
     const payment = await this.prisma.submissionPayment.findUnique({
       where: { id: paymentId },
       include: {
-        submission: { select: { id: true, currency: true } },
+        submission: { select: { id: true, currency: true, managerId: true } },
       },
     });
     if (!payment) throw new NotFoundException('Платёж не найден');
     if (payment.status === SubmissionPaymentStatus.REJECTED) {
       throw new BadRequestException('Отклонённый платёж нельзя редактировать');
+    }
+
+    // Ownership + status matrix:
+    //   FOUNDER — всё разрешено (кроме REJECTED, отсечено выше)
+    //   Owner PENDING — разрешено
+    //   Owner APPROVED — 403 (менять доход/бонус может только FOUNDER)
+    //   Не-owner не-FOUNDER — 403
+    const founderUser = isFounder(user);
+    if (!founderUser) {
+      if (payment.submission.managerId !== user.id) {
+        throw new ForbiddenException('Это не ваш платёж');
+      }
+      if (payment.status === SubmissionPaymentStatus.APPROVED) {
+        throw new ForbiddenException(
+          'Одобренный платёж может редактировать только основатель',
+        );
+      }
     }
 
     const data: any = {};
