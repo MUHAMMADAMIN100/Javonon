@@ -338,7 +338,7 @@ export default function Tasks() {
                         </span>
                       </div>
 
-                      <div className="task-status-switch" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                      <div className="task-status-switch">
                         {statuses.map((s) => (
                           <button
                             key={s.value}
@@ -346,10 +346,9 @@ export default function Tasks() {
                             onClick={() => canChange && setStatus(task, s.value)}
                             disabled={!canChange}
                             title={s.label}
-                            style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
                           >
                             <Icon name={s.icon} size={16} />
-                            <span style={{ whiteSpace: 'nowrap' }}>{s.label}</span>
+                            <span>{s.label}</span>
                           </button>
                         ))}
                       </div>

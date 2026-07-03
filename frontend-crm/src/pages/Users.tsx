@@ -185,7 +185,7 @@ export default function Users() {
                         <span
                           style={{
                             padding: '3px 8px',
-                            borderRadius: 999,
+                            borderRadius: 10,
                             // ВНИМАНИЕ: --primary-light в этой теме = #1E5BB8
                             // (это тёмно-синий, не светлый!). Поэтому текст
                             // ОБЯЗАТЕЛЬНО белый, иначе невидимо.
@@ -194,6 +194,9 @@ export default function Users() {
                             color: '#fff',
                             fontSize: 11,
                             fontWeight: 600,
+                            maxWidth: '100%',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere',
                           }}
                           title={t('userDetail.field.customRole')}
                         >

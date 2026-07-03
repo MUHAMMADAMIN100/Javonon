@@ -444,6 +444,7 @@ export default function Programs() {
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                       background: '#dcfce7', color: '#15803d', borderRadius: 999,
                       padding: '3px 10px', fontSize: 12, fontWeight: 600, marginTop: 6,
+                      maxWidth: '100%', overflowWrap: 'anywhere', wordBreak: 'break-word',
                     }}>
                       🎓 Грант{p.grantDetails ? ` · ${p.grantDetails}` : ''}
                     </div>

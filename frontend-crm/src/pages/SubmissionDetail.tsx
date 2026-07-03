@@ -189,7 +189,7 @@ export default function SubmissionDetail() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Сделка</div>
-            <h2 style={{ fontSize: 24, fontWeight: 600, margin: '4px 0' }}>{studentName}</h2>
+            <h2 style={{ fontSize: 24, fontWeight: 600, margin: '4px 0', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{studentName}</h2>
             <div style={{ fontSize: 14, color: 'var(--text-soft)' }}>
               {s.program?.name} · {s.program?.university}
             </div>
@@ -485,7 +485,7 @@ function PaymentRow({
       )}
 
       {canReview && (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 10 }}>
           <button className="btn btn-sm btn-danger" onClick={onReject} disabled={busy}>
             <Icon name="close" size={14} /> Отклонить
           </button>
@@ -496,7 +496,7 @@ function PaymentRow({
       )}
 
       {canManage && (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 10 }}>
           <button
             className="btn btn-sm btn-secondary"
             onClick={onEdit}

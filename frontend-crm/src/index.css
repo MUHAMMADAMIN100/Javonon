@@ -503,6 +503,22 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .card-body { padding: 24px; }
 
+/* === GLOBAL CARD SAFETY NET (always-on) ===
+   Без этого длинные email/URL/JWT/пароли рвут layout карточек:
+   flex/grid дети не сжимаются ниже content-size (min-width: 0 fix),
+   а длинные слова не переносятся (overflow-wrap: anywhere fix). */
+.card, .bento-card, .stu-card, .ep-card, .task-card {
+  min-width: 0;
+  max-width: 100%;
+}
+.card *, .bento-card *, .stu-card *, .ep-card *, .task-card * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
+}
+/* Material Symbols защищены keep-all в базовом правиле (68-69) —
+   ligature-имена типа `location_on` останутся целыми. */
+
 /* Stats — large numbers, mono labels */
 .stats-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -904,17 +920,35 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .task-meta-item .material-symbols-rounded { color: var(--text-light); }
 .task-delete-btn { flex-shrink: 0; align-self: flex-start; }
 
+/* Single-row horizontal scroll: nowrap + overflow-x:auto со скрытой полосой.
+   Почему не flex-wrap: wrap — при flex-basis:0 сумма гипотетических размеров = 0,
+   что всегда ≤ ширины контейнера, поэтому перенос не срабатывает и все кнопки
+   ложатся в одну строку с минимальной шириной по контенту. А inline-flex не
+   гарантированно тянется на всю ширину карточки в потоке — контейнер мог
+   «пухнуть» шире родителя. Здесь: display:flex + max-width:100% удерживают
+   свитч в границах карточки, overflow-x:auto даёт нативный тач-скролл, если
+   ярлыки всё-таки не помещаются на очень узких экранах. */
 .task-status-switch {
-  display: inline-flex; gap: 4px; margin-top: 12px;
+  display: flex; gap: 4px; margin-top: 12px;
   padding: 4px; background: var(--bg);
   border: 1px solid var(--border); border-radius: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  max-width: 100%; box-sizing: border-box; min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.task-status-switch::-webkit-scrollbar { display: none; }
 .task-status-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 10px; border-radius: 7px;
   font-size: 12px; font-weight: 500;
   color: var(--text-soft); transition: all 0.2s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.task-status-btn > span {
+  white-space: nowrap;
 }
 .task-status-btn:hover:not(:disabled):not(.active) { color: var(--text); background: rgba(0,0,0,0.04); }
 .task-status-btn.active.task-status-todo { background: var(--info); color: white; }
@@ -1601,11 +1635,27 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .doc-slot { padding: 12px; }
 
   /* Задачи */
-  .task-item { flex-direction: column; }
+  .task-item { flex-direction: column; align-items: stretch; padding: 14px; }
   .task-status-switch { width: 100%; }
-  .task-status-btn { flex: 1; justify-content: center; }
-  .task-status-btn span { font-size: 11px; }
+  /* NB: без flex:1 — это боролось бы с nowrap + flex-shrink:0 у кнопок
+     (см. базовый стиль). При переполнении включается горизонтальный скролл. */
+  .task-status-btn { justify-content: center; }
+  .task-status-btn > span { font-size: 11px; }
   .task-delete-btn { align-self: flex-end; }
+}
+
+/* Tasks: очень узкие экраны (320–425px) — компактные статус-кнопки,
+   чтобы «К выполнению / В работе / Выполнено» не вылезали за карточку */
+@media (max-width: 425px) {
+  .task-item { padding: 12px; gap: 10px; }
+  .task-status-switch { padding: 3px; gap: 3px; margin-top: 10px; }
+  .task-status-btn { padding: 5px 6px; gap: 4px; border-radius: 6px; }
+  .task-status-btn > span { font-size: 10px; }
+  .task-status-btn .material-symbols-rounded { font-size: 14px !important; }
+}
+@media (max-width: 360px) {
+  .task-status-btn { padding: 5px 4px; gap: 3px; }
+  .task-status-btn > span { font-size: 9px; letter-spacing: -0.2px; }
 }
 
 /* --- 6h fix: всё ниже до второго `@media (max-width: 720px)` блока на
@@ -3490,16 +3540,9 @@ textarea:focus {
   .app-layout { width: 100%; max-width: 100%; overflow-x: hidden; }
   .main { width: 100%; max-width: 100%; min-width: 0; overflow-x: hidden; }
   .content { max-width: 100%; min-width: 0; }
-  /* Любая bento/grid карточка не должна выпирать */
-  .bento, .bento-card, .card {
-    min-width: 0;
-    max-width: 100%;
-  }
-  /* Длинные слова/email/URL не растягивают layout */
-  .card *, .bento-card * {
-    word-wrap: break-word;
-    overflow-wrap: anywhere;
-  }
+  /* Любая bento/grid карточка не должна выпирать (safety-net на
+     карточках теперь глобальный — см. блок после .card-body) */
+  .bento { min-width: 0; max-width: 100%; }
 }
 
 /* CRM dashboard bento на телефоне — 1 col, компактнее */
@@ -3612,17 +3655,9 @@ textarea:focus {
   .filters > * { width: 100% !important; min-width: 0 !important; max-width: 100%; }
   .filters input, .filters select { font-size: 16px !important; }
 
-  /* --- Длинные слова (email, ID) ломаются в карточках --- */
-  .card *, .bento-card *, .stu-card *, .ep-card * {
-    overflow-wrap: anywhere;
-    word-wrap: break-word;
-    min-width: 0;
-  }
-  /* …но НЕ иконки (.material-symbols-rounded уже выше с keep-all) */
-  .material-symbols-rounded {
-    overflow-wrap: normal !important;
-    word-break: keep-all !important;
-  }
+  /* Длинные слова (email, ID) в карточках защищены глобальным
+     safety-net блоком после .card-body — здесь дублировать не нужно.
+     Иконки .material-symbols-rounded имеют keep-all в базовом правиле. */
 
   /* --- Чат на узком — header компактный --- */
   .chat-thread-header { padding: 12px 14px !important; gap: 8px !important; }

@@ -916,7 +916,7 @@ export default function Chat() {
                             {m.replyTo.author?.fullName || t('chat.message')}
                           </div>
                           <div style={{
-                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280,
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
                           }}>
                             {m.replyTo.deletedAt ? 'удалённое сообщение' : (m.replyTo.text || (m.replyTo.attachments?.length ? '📎 Вложение' : ''))}
                           </div>
@@ -953,6 +953,7 @@ export default function Chat() {
                                   alt={a.originalName}
                                   onClick={() => { try { window.open(url, '_blank'); } catch { setLightbox(url); } }}
                                   style={{
+                                    width: '100%',
                                     maxWidth: 280,
                                     maxHeight: 280,
                                     borderRadius: 12,
@@ -969,12 +970,12 @@ export default function Chat() {
                                   key={ai}
                                   src={url}
                                   controls
-                                  style={{ maxWidth: 320, maxHeight: 320, borderRadius: 10 }}
+                                  style={{ width: '100%', maxWidth: 320, maxHeight: 320, borderRadius: 10 }}
                                 />
                               );
                             }
                             if (isAud) {
-                              return <audio key={ai} src={url} controls style={{ width: 280 }} />;
+                              return <audio key={ai} src={url} controls style={{ width: '100%', maxWidth: 280 }} />;
                             }
                             // file card
                             return (
@@ -1265,15 +1266,16 @@ export default function Chat() {
             style={{
               position: 'fixed',
               top: Math.min(contextMenu.y, window.innerHeight - 380),
-              left: Math.min(contextMenu.x, window.innerWidth - 240),
+              left: Math.max(12, Math.min(contextMenu.x, window.innerWidth - 240)),
               background: 'white', borderRadius: 14, padding: 8,
               boxShadow: '0 16px 40px rgba(0,0,0,0.18)',
               zIndex: 9998, minWidth: 220,
+              maxWidth: 'calc(100vw - 24px)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Quick reactions row */}
-            <div style={{ display: 'flex', gap: 4, padding: '4px 6px 8px', borderBottom: '1px solid var(--border-soft)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '4px 6px 8px', borderBottom: '1px solid var(--border-soft)' }}>
               {QUICK_REACTIONS.map((emoji) => (
                 <button
                   key={emoji}

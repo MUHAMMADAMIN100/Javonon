@@ -257,11 +257,13 @@ export default function Salary() {
                 }}>{t('salary.cell.net').toUpperCase()}</div>
                 <div style={{
                   fontFamily: 'var(--font-display)',
-                  fontSize: 56,
+                  fontSize: 'clamp(28px, 10vw, 56px)',
                   fontWeight: 500,
                   letterSpacing: '-0.04em',
                   lineHeight: 1,
                   color: 'var(--primary-dark)',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere',
                 }}>{fmtMoney(preview.netAmount, preview.currency)}</div>
               </div>
               <div className="salary-confirm-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
