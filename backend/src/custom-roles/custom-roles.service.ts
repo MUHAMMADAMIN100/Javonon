@@ -1,10 +1,11 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { isValidPermission, PERMISSION_CATALOG } from '../auth/permissions';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @Injectable()
 export class CustomRolesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private realtime: RealtimeGateway) {}
 
   catalog() {
     return PERMISSION_CATALOG;
@@ -28,9 +29,11 @@ export class CustomRolesService {
     const exists = await this.prisma.customRole.findUnique({ where: { name } });
     if (exists) throw new ConflictException('Роль с таким названием уже существует');
 
-    return this.prisma.customRole.create({
+    const role = await this.prisma.customRole.create({
       data: { name, description, permissions: perms },
     });
+    this.realtime.emitStaff('customRole:new', { id: role.id, name: role.name });
+    return role;
   }
 
   async update(id: string, dto: { name?: string; description?: string; permissions?: string[]; isActive?: boolean }) {
@@ -59,7 +62,9 @@ export class CustomRolesService {
     if (dto.isActive !== undefined) {
       data.isActive = !!dto.isActive;
     }
-    return this.prisma.customRole.update({ where: { id }, data });
+    const updated = await this.prisma.customRole.update({ where: { id }, data });
+    this.realtime.emitStaff('customRole:updated', { id });
+    return updated;
   }
 
   async remove(id: string) {
@@ -74,6 +79,7 @@ export class CustomRolesService {
       );
     }
     await this.prisma.customRole.delete({ where: { id } });
+    this.realtime.emitStaff('customRole:deleted', { id });
     return { ok: true };
   }
 }

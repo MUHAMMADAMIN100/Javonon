@@ -33,6 +33,8 @@ import {
 } from '../api/customRoles';
 import ScheduleEditor from '../components/ScheduleEditor';
 import { useT } from '../lib/i18n';
+import { useRealtime } from '../realtime';
+import { me as apiMe } from '../api/auth';
 
 type Tab = 'schedule' | 'penalties' | 'location' | 'roles' | 'salary';
 
@@ -298,10 +300,30 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ===== Roles & Permissions (кастомные роли) =====
 
+/**
+ * Порядок отображения групп в редакторе кастомных ролей (Task 4).
+ * Порядок групп зафиксирован здесь на фронте, чтобы UI не «дёргался»,
+ * если в backend PERMISSION_CATALOG кто-то поменяет местами записи.
+ * Ключи должны совпадать с `PermissionDef.group` из бэкенда
+ * (backend/src/auth/permissions.ts). «Система» = раздел «Настройки».
+ */
+const PERMISSION_GROUP_ORDER: string[] = [
+  'CRM',
+  'Связь',
+  'Продажи',
+  'Финансы',
+  'Аналитика',
+  'HR',
+  'Обучение',
+  'Партнёры',
+  'Система',
+];
+
 function RolesTab() {
   const { toast, confirm } = useUI();
   const { t } = useT();
   const qc = useQueryClient();
+  const me = useAuth((s) => s.user);
   const catalogQuery = useQuery({
     queryKey: ['custom-roles', 'catalog'],
     queryFn: listPermissionsCatalog,
@@ -315,6 +337,41 @@ function RolesTab() {
 
   const [editing, setEditing] = useState<CustomRole | null>(null);
   const [creating, setCreating] = useState(false);
+
+  /**
+   * Realtime: сервер шлёт `customRole:*` события в staff-room. Обновление
+   * списка кастомных ролей здесь даёт FOUNDER-у мгновенный фидбек — как
+   * только он сохранил изменения, страница ре-рендерится с новым списком
+   * (без ручного refresh). Одновременно, если у самого текущего юзера
+   * назначена именно эта кастомная роль — рефрешим /auth/me, чтобы
+   * `user.customRole.permissions` и `user.permissions` подтянулись сразу,
+   * без релогина. Именно это позволяет target-юзеру «увидеть» новое право
+   * в реальном времени — Sidebar/ProtectedRoute перечитают hasPermission
+   * и покажут разделы, к которым доступ только что открылся.
+   */
+  useRealtime({
+    'customRole:new': () => {
+      qc.invalidateQueries({ queryKey: ['custom-roles'] });
+    },
+    'customRole:updated': async (payload: { id?: string; userId?: string }) => {
+      qc.invalidateQueries({ queryKey: ['custom-roles'] });
+      // Если моя кастомная роль обновилась — подхватываем свежие permissions.
+      const affectsMe =
+        (payload?.id && me?.customRole?.id === payload.id) ||
+        (payload?.userId && me?.id === payload.userId);
+      if (affectsMe) {
+        try {
+          const fresh = await apiMe();
+          useAuth.setState({ user: fresh });
+        } catch {
+          // networking/500 — тихо игнорируем, следующая навигация подтянет.
+        }
+      }
+    },
+    'customRole:deleted': () => {
+      qc.invalidateQueries({ queryKey: ['custom-roles'] });
+    },
+  });
 
   const onDelete = async (r: CustomRole) => {
     const ok = await confirm({
@@ -424,13 +481,32 @@ function RoleForm({
   const [perms, setPerms] = useState<Set<string>>(new Set(initial?.permissions ?? []));
   const [saving, setSaving] = useState(false);
 
+  /**
+   * Группируем permissions по секции сайдбара + сортируем группы по
+   * PERMISSION_GROUP_ORDER — чтобы порядок групп в UI («CRM → Связь →
+   * Финансы → Аналитика → HR → Обучение → Партнёры → Настройки»)
+   * не зависел от порядка записей в backend PERMISSION_CATALOG.
+   * Внутри группы сохраняем порядок, полученный от бэка (там уже
+   * логически: read → create → update → delete → доп. actions).
+   */
   const grouped = useMemo(() => {
     const map = new Map<string, PermissionDef[]>();
     for (const p of catalog) {
       if (!map.has(p.group)) map.set(p.group, []);
       map.get(p.group)!.push(p);
     }
-    return Array.from(map.entries());
+    const entries = Array.from(map.entries());
+    entries.sort(([a], [b]) => {
+      const ia = PERMISSION_GROUP_ORDER.indexOf(a);
+      const ib = PERMISSION_GROUP_ORDER.indexOf(b);
+      // Неизвестные группы (если backend добавит новую раньше фронта)
+      // уводим в конец, но сохраняем стабильный алфавитный порядок.
+      if (ia === -1 && ib === -1) return a.localeCompare(b);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+    return entries;
   }, [catalog]);
 
   const toggle = (key: string) => {

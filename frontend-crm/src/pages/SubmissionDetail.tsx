@@ -813,9 +813,10 @@ function EditSubmissionModal({
   const programsQ = useQuery({
     queryKey: ['programs', 'edit-submission'],
     queryFn: () => listPrograms(),
-    // programs подтягиваем только если поле доступно — экономим запрос
-    // на «замороженных» сделках.
-    enabled: !frozen,
+    // programs подтягиваем только если поле реально редактируемо —
+    // экономим запрос на «замороженных» сделках и у не-FOUNDER
+    // (у которого select теперь read-only, «Меняет только основатель»).
+    enabled: !frozen && founder,
   });
 
   const mut = useMutation({
@@ -835,7 +836,12 @@ function EditSubmissionModal({
         dto.newStudentPhone = newStudentPhone.trim() || null;
         dto.newStudentEmail = newStudentEmail.trim() || null;
         dto.newStudentPassportUrls = newStudentPassportUrls;
-        if (programId) dto.programId = programId;
+        // programId — только FOUNDER (как и totalAmount/currency).
+        // Раньше слали безусловно, из-за чего у менеджера notes-only
+        // правка ловила 403 на бэке. Бэкенд теперь silent-ignore'ит эти
+        // поля, но шлём только когда реально может измениться — экономим
+        // байты и делаем payload честнее.
+        if (founder && programId) dto.programId = programId;
       }
       return updateSubmission(submission.id, dto);
     },
@@ -1025,13 +1031,19 @@ function EditSubmissionModal({
                 className="crm-select"
                 value={programId}
                 onChange={(e) => setProgramId(e.target.value)}
-                disabled={frozen}
-                title={frozen ? 'Заморожено (студент/заявка уже созданы)' : undefined}
+                disabled={frozen || !founder}
+                title={
+                  frozen
+                    ? 'Заморожено (студент/заявка уже созданы)'
+                    : !founder
+                      ? 'Меняет только основатель'
+                      : undefined
+                }
               >
-                {frozen && submission.program && (
+                {(frozen || !founder) && submission.program && (
                   <option value={submission.programId}>{submission.program.name} · {submission.program.university}</option>
                 )}
-                {!frozen && programsQ.data?.map((p) => (
+                {!frozen && founder && programsQ.data?.map((p) => (
                   <option key={p.id} value={p.id}>{p.name} · {p.university}</option>
                 ))}
               </select>

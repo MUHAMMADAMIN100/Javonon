@@ -9,6 +9,7 @@ import Icon from '../Icon';
 import { useRealtimeEvent } from '../realtime';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
+import { me as apiMe } from '../api/auth';
 import { useT } from '../lib/i18n';
 
 const TITLE_ROUTES: Array<{ path: string; eyebrow: string; titleKey: string }> = [
@@ -38,6 +39,7 @@ export default function Layout() {
   const { toast } = useUI();
   const { t } = useT();
   const logout = useAuth((s) => s.logout);
+  const me = useAuth((s) => s.user);
   const route = TITLE_ROUTES.find((r) => loc.pathname.startsWith(r.path));
   const meta = route
     ? { eyebrow: route.eyebrow, title: t(route.titleKey) }
@@ -56,6 +58,26 @@ export default function Layout() {
   useRealtimeEvent('user:deleted', () => {
     toast(t('layout.accountDeleted'), 'error');
     setTimeout(() => logout(), 3000);
+  });
+
+  // Task 4: FOUNDER расширил permissions моей кастомной роли — backend шлёт
+  // `customRole:updated` в staff-room. Здесь (в Layout — работает на любой
+  // странице, а не только на /settings) подтягиваем свежий /auth/me, чтобы
+  // Sidebar/ProtectedRoute перечитали `user.permissions` и открытые разделы
+  // появились без релогина. Логика: если payload.id совпадает с моей
+  // customRole.id — обновляемся; иначе игнорируем событие (это чужая роль).
+  useRealtimeEvent('customRole:updated', async (payload: { id?: string; userId?: string }) => {
+    const affectsMe =
+      (payload?.id && me?.customRole?.id === payload.id) ||
+      (payload?.userId && me?.id === payload.userId);
+    if (!affectsMe) return;
+    try {
+      const fresh = await apiMe();
+      useAuth.setState({ user: fresh });
+    } catch {
+      // Тихо игнорируем — cold-start Railway/network. Следующая навигация
+      // подтянет /auth/me, а RolesGuard на бэке уже видит новые permissions.
+    }
   });
 
   // Close mobile drawer on route change

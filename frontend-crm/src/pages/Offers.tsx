@@ -17,6 +17,7 @@ import {
 } from '../api/offers';
 import { type Role } from '../api/types';
 import { useRoleLabel } from '../lib/labels';
+import { useRealtime } from '../realtime';
 
 // Все 5 ТЗ-ролей + «общая» (для legacy fallback). Каждая роль может
 // иметь свою активную оферту с уникальными принципами работы.
@@ -42,6 +43,15 @@ export default function Offers() {
   const [creating, setCreating] = useState(false);
   const [signaturesOf, setSignaturesOf] = useState<OfferTemplate | null>(null);
   const [tab, setTab] = useState<Role | null>(null);
+
+  // Табы включают кастомные роли (список читается из ['custom-roles']).
+  // Когда FOUNDER создаёт/меняет/удаляет роль в Settings — надо
+  // авто-обновить эту вкладку без перезагрузки страницы.
+  useRealtime({
+    'customRole:new': () => qc.invalidateQueries({ queryKey: ['custom-roles'] }),
+    'customRole:updated': () => qc.invalidateQueries({ queryKey: ['custom-roles'] }),
+    'customRole:deleted': () => qc.invalidateQueries({ queryKey: ['custom-roles'] }),
+  });
 
   if (!isElevated(me)) {
     return <div className="card" style={{ padding: 28 }}>{t('common.accessDenied')}</div>;
@@ -275,7 +285,37 @@ function OfferCard({
             </button>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {!editing && (
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={async () => {
+                // Copy offer content to clipboard. Fallback via textarea для
+                // старых браузеров и небезопасных контекстов (http без TLS).
+                try {
+                  if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(offer.content);
+                  } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = offer.content;
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                  }
+                  toast('Скопировано', 'success');
+                } catch {
+                  toast(t('toast.error'), 'error');
+                }
+              }}
+              title="Скопировать текст оферты"
+            >
+              <Icon name="content_copy" size={14} /> Копировать
+            </button>
+          )}
           {canEdit && !editing && (
             <button className="btn btn-sm btn-secondary" onClick={() => setEditing(true)}>
               <Icon name="edit" size={14} /> {t('common.edit')}

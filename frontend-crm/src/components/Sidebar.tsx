@@ -133,7 +133,9 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   if (!hasCustomRole && elevated) adminLinks.push({ to: '/offers', icon: 'description', label: t('sidebar.offers') });
   if (show('lms:read', elevated)) adminLinks.push({ to: '/lms', icon: 'menu_book', label: t('sidebar.lms') });
   if (show('partners:read', elevated)) adminLinks.push({ to: '/partners', icon: 'handshake', label: t('sidebar.partners') });
-  if (show('activity:read', elevated)) adminLinks.push({ to: '/activity', icon: 'history', label: t('sidebar.activity') });
+  // Аудит-лог — единолично у FOUNDER (см. Activity.tsx: страница блокируется
+  // для всех, кроме FOUNDER). ADMIN/ACCOUNTANT сюда не пускаем даже в сайдбар.
+  if (show('activity:read', isFounder)) adminLinks.push({ to: '/activity', icon: 'history', label: t('sidebar.activity') });
   if (show('users:read', elevated)) adminLinks.push({ to: '/users', icon: 'group', label: t('sidebar.users') });
   if (isFounder) {
     adminLinks.push({ to: '/settings', icon: 'settings', label: t('sidebar.settings') });

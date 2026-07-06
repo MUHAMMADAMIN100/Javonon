@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listActivity, ACTIVITY_LABEL, type ActivityAction, type ActivityEntry } from '../api/activity';
 import { useRealtime } from '../realtime';
+import { useAuth } from '../store/auth';
+import { isFounder } from '../lib/roles';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
 import CrmDatePicker from '../components/CrmDatePicker';
@@ -41,6 +43,13 @@ function groupByDay(items: ActivityEntry[]) {
 
 export default function Activity() {
   const { t } = useT();
+  const me = useAuth((s) => s.user);
+  // Журнал действий — только для FOUNDER (единолично контролирует аудит-лог
+  // по ТЗ §3.4). ADMIN/ACCOUNTANT видят пункт в сайдбаре скрытым, а прямой
+  // переход по /activity здесь блокируется явной карточкой-отказом.
+  if (!isFounder(me)) {
+    return <div className="card" style={{ padding: 28 }}>Доступ только для основателя.</div>;
+  }
   const qc = useQueryClient();
   const [action, setAction] = useState<ActivityAction | ''>('');
   const [from, setFrom] = useState('');

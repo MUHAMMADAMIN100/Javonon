@@ -1100,26 +1100,19 @@ export class SubmissionsService {
       throw new ForbiddenException('Это не ваша сделка');
     }
 
-    // Task 2: money/program поля может менять ТОЛЬКО FOUNDER.
-    // Раньше SALES_MANAGER (владелец сделки) мог передавать totalAmount /
-    // currency в PATCH до firstApprovedAt — это позволяло менеджеру
-    // задним числом раздуть сумму контракта и накрутить бонусную базу
-    // (после APPROVE идёт в Transaction.amount). programId тоже блокируем
-    // для не-FOUNDER всегда (не только после firstApprovedAt), чтобы
-    // менеджер не мог подменить программу на более дорогую/выгодную по
-    // проценту бонуса. Бросаем 403 с понятным сообщением, чтобы UI мог
-    // показать причину — предпочтительнее silent-ignore, при котором
-    // менеджер думает, что изменение прошло.
+    // Money и program-link для не-FOUNDER — silent-ignore, не 403.
+    // SALES_MANAGER (владелец сделки) не должен уметь менять totalAmount /
+    // currency (защита от накрутки бонусной базы через Transaction.amount)
+    // и programId (защита от подмены на программу с более выгодным %
+    // бонуса). Раньше кидали ForbiddenException — но фронтовая
+    // EditSubmissionModal безусловно шлёт programId для незамороженной
+    // сделки, поэтому даже «notes-only» правка от менеджера ловила 403.
+    // Ownership и так проверена выше; просто вычищаем эти поля из dto,
+    // чтобы блоки присвоения в data ниже их не подхватили.
     if (!founderUser) {
-      if (
-        dto.totalAmount !== undefined ||
-        dto.currency !== undefined ||
-        dto.programId !== undefined
-      ) {
-        throw new ForbiddenException(
-          'Сумму и валюту может менять только основатель',
-        );
-      }
+      delete dto.totalAmount;
+      delete dto.currency;
+      delete dto.programId;
     }
 
     const data: any = {};
