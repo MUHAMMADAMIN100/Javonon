@@ -20,9 +20,9 @@ enum Role {
 }
 
 enum TimeEntryStatus {
-  WORKING       // clocked in, not on lunch
-  ON_LUNCH      // на обеде
-  OFF           // закончил день
+  WORKING // clocked in, not on lunch
+  ON_LUNCH // на обеде
+  OFF // закончил день
 }
 
 // Статус одобрения причины опоздания основателем.
@@ -39,15 +39,15 @@ enum TransactionType {
 }
 
 enum TransactionCategory {
-  TUITION_PAYMENT   // оплата от студента (доход)
-  ADDITIONAL_FEE    // доплата (доход)
-  SALARY            // зарплата сотруднику (расход)
-  RENT              // аренда (расход)
-  UTILITIES         // коммуналка
-  MARKETING         // маркетинг
-  OFFICE            // офисные расходы
-  MISC_EXPENSE      // Доп-Расходы (мелкие/нерегулярные)
-  TARGETED_ADS      // Таргет-реклама (Instagram/Facebook — отличается от общего MARKETING)
+  TUITION_PAYMENT // оплата от студента (доход)
+  ADDITIONAL_FEE // доплата (доход)
+  SALARY // зарплата сотруднику (расход)
+  RENT // аренда (расход)
+  UTILITIES // коммуналка
+  MARKETING // маркетинг
+  OFFICE // офисные расходы
+  MISC_EXPENSE // Доп-Расходы (мелкие/нерегулярные)
+  TARGETED_ADS // Таргет-реклама (Instagram/Facebook — отличается от общего MARKETING)
   OTHER_INCOME
   OTHER_EXPENSE
 }
@@ -68,8 +68,8 @@ enum Direction {
 
 enum ApplicationStatus {
   NEW
-  IN_PROGRESS      // legacy → DOCS_REVIEW
-  COMPLETED        // legacy → ENROLLED
+  IN_PROGRESS // legacy → DOCS_REVIEW
+  COMPLETED // legacy → ENROLLED
   DOCS_REVIEW
   DOCS_SUBMITTED
   PRE_ADMISSION
@@ -114,88 +114,88 @@ enum ContactChannel {
 // Используются клиентским менеджером для отслеживания прогресса
 // введения студента в курс.
 enum OnboardingStage {
-  WELCOME           // приветствие
-  DOCS_COLLECTED    // собраны документы
-  CABINET_OPENED    // открыт личный кабинет
-  ACADEMY_INTRO     // ознакомление с программой
-  ACTIVE            // в активной работе
+  WELCOME // приветствие
+  DOCS_COLLECTED // собраны документы
+  CABINET_OPENED // открыт личный кабинет
+  ACADEMY_INTRO // ознакомление с программой
+  ACTIVE // в активной работе
 }
 
 model User {
-  id         String   @id @default(uuid())
-  email      String   @unique
-  password   String
-  fullName   String
+  id                 String      @id @default(uuid())
+  email              String      @unique
+  password           String
+  fullName           String
   // Основная роль — для UI/исторических проверок.
-  role       Role     @default(SALES_MANAGER)
+  role               Role        @default(SALES_MANAGER)
   // Дополнительные роли (один человек может быть, например, и ADMIN, и ACCOUNTANT
   // одновременно). Основатель раздаёт через POST /users/:id/roles. Проверка
   // в RolesGuard учитывает оба поля.
-  roles      Role[]   @default([])
+  roles              Role[]      @default([])
   // Для зарплатной логики: фиксированная ежемесячная ставка (или почасовая)
-  baseSalary Float?   @default(0)
-  hourlyRate Float?   @default(0)
+  baseSalary         Float?      @default(0)
+  hourlyRate         Float?      @default(0)
   // Процент от продажи клиента, привязанного к этому менеджеру (бонусный %).
   // Если > 0 — перебивает тарифную сетку BonusTier (ручной override
   // для отдельных сотрудников). 0 (по умолч.) = считаем по сетке.
-  bonusPercent Float? @default(0)
+  bonusPercent       Float?      @default(0)
   // Множитель оплаты за переработку (overtimeMinutes × hourlyRate × multiplier).
   // По умолчанию 1.5 — стандартная мировая практика «полтора часа за час».
-  overtimeMultiplier Float? @default(1.5)
+  overtimeMultiplier Float?      @default(1.5)
   // Кастомная роль (FOUNDER создаёт через /settings → Роли).
   // null = работает только по базовым ролям (role + roles[]).
   // Если задана — пермиссии custom-роли ДОБАВЛЯЮТСЯ к базовым.
-  customRoleId String?
-  customRole   CustomRole? @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
+  customRoleId       String?
+  customRole         CustomRole? @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
   // Доп. поля для HR-профиля (паспорт, телефон, дата приёма на работу)
-  phone         String?
-  passportNo    String?
-  hiredAt       DateTime?
+  phone              String?
+  passportNo         String?
+  hiredAt            DateTime?
   // Цель по плану продаж в % от общего количества лидов (например 1.0 = 1%)
-  kpiTargetPct  Float?  @default(1)
+  kpiTargetPct       Float?      @default(1)
   // Авто-повышение KPI: каждый месяц kpiTargetPct растёт на этот шаг (% пунктов).
   // 0 = выключено. Ограничено сверху kpiMaxPct.
-  kpiAutoStepPct Float? @default(0)
-  kpiMaxPct      Float? @default(3)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  kpiAutoStepPct     Float?      @default(0)
+  kpiMaxPct          Float?      @default(3)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
-  notifications      Notification[]
-  managedApplications      Application[] @relation("ApplicationManager")
-  managedChinaApplications Application[] @relation("ApplicationChinaManager")
-  managedStudents          Student[]     @relation("StudentManager")
-  managedChinaStudents     Student[]     @relation("StudentChinaManager")
+  notifications            Notification[]
+  managedApplications      Application[]  @relation("ApplicationManager")
+  managedChinaApplications Application[]  @relation("ApplicationChinaManager")
+  managedStudents          Student[]      @relation("StudentManager")
+  managedChinaStudents     Student[]      @relation("StudentChinaManager")
   // LEGACY single-assignee back-reference. Kept temporarily for backward-compat
   // (older queries/reads that expect a single assignedToId). New code uses the
   // M2M `assignedTasks` (relation "TaskAssignees") below. Drop this after all
   // callsites migrated to assignees[].
-  legacyAssignedTasks      Task[]        @relation("TaskAssignee")
+  legacyAssignedTasks      Task[]         @relation("TaskAssignee")
   // Новый M2M: список задач, где юзер стоит в assignees[].
-  assignedTasks            Task[]        @relation("TaskAssignees")
+  assignedTasks            Task[]         @relation("TaskAssignees")
   // Задачи, где юзер — контролёр (следит за выполнением, но не исполнитель).
-  controlledTasks          Task[]        @relation("TaskController")
-  createdTasks             Task[]        @relation("TaskCreator")
+  controlledTasks          Task[]         @relation("TaskController")
+  createdTasks             Task[]         @relation("TaskCreator")
 
-  timeEntries        TimeEntry[]
-  transactionsAsManager Transaction[] @relation("TransactionManager")
-  recordedTransactions  Transaction[] @relation("TransactionRecorder")
-  transactionsPaidVia   Transaction[] @relation("TransactionPaidVia")
-  salaryRecords         SalaryRecord[]
-  dailyReports          DailyReport[]
-  chatMessages          ChatMessage[] @relation("ChatMessageAuthor")
-  chatReactions         ChatReaction[] @relation("ChatReactionUser")
-  chatMemberships       ChatMember[]
-  authoredCourses       Course[]      @relation("CourseAuthor")
-  interactionsAuthored  Interaction[] @relation("InteractionAuthor")
-  penalties             Penalty[]
-  paymentsConfirmed     Payment[]     @relation("PaymentConfirmedBy")
-  documents             UserDocument[]
-  accessGrantsReceived  DataAccessGrant[] @relation("AccessGrantee")
-  accessGrantsToMe      DataAccessGrant[] @relation("AccessTarget")
-  callLogs              CallLog[]     @relation("CallLogUser")
-  offerSignatures       OfferSignature[]
-  workSchedules         WorkSchedule[]
-  submissions           SaleSubmission[] @relation("SubmissionManager")
+  timeEntries              TimeEntry[]
+  transactionsAsManager    Transaction[]       @relation("TransactionManager")
+  recordedTransactions     Transaction[]       @relation("TransactionRecorder")
+  transactionsPaidVia      Transaction[]       @relation("TransactionPaidVia")
+  salaryRecords            SalaryRecord[]
+  dailyReports             DailyReport[]
+  chatMessages             ChatMessage[]       @relation("ChatMessageAuthor")
+  chatReactions            ChatReaction[]      @relation("ChatReactionUser")
+  chatMemberships          ChatMember[]
+  authoredCourses          Course[]            @relation("CourseAuthor")
+  interactionsAuthored     Interaction[]       @relation("InteractionAuthor")
+  penalties                Penalty[]
+  paymentsConfirmed        Payment[]           @relation("PaymentConfirmedBy")
+  documents                UserDocument[]
+  accessGrantsReceived     DataAccessGrant[]   @relation("AccessGrantee")
+  accessGrantsToMe         DataAccessGrant[]   @relation("AccessTarget")
+  callLogs                 CallLog[]           @relation("CallLogUser")
+  offerSignatures          OfferSignature[]
+  workSchedules            WorkSchedule[]
+  submissions              SaleSubmission[]    @relation("SubmissionManager")
   submissionPaymentReviews SubmissionPayment[] @relation("SubmissionPaymentReviewer")
 }
 
@@ -203,10 +203,10 @@ model User {
 // аналогии со студенческими Document. Cascade-delete при удалении User.
 enum UserDocumentType {
   PASSPORT
-  PHOTO        // фото для профиля/HR
+  PHOTO // фото для профиля/HR
   CONTRACT
   DIPLOMA
-  OFFER        // подписанная копия оферты (если сохраняем PDF)
+  OFFER // подписанная копия оферты (если сохраняем PDF)
   OTHER
 }
 
@@ -218,7 +218,7 @@ enum UserDocumentType {
 model OfferTemplate {
   id        String   @id @default(uuid())
   title     String   @default("Оферта сотрудника")
-  content   String   // markdown / plain text
+  content   String // markdown / plain text
   version   Int      @default(1)
   isActive  Boolean  @default(true)
   // Для какой роли эта оферта. null = «общая» (legacy fallback,
@@ -237,12 +237,12 @@ model OfferTemplate {
 // меняется — это аудит-лог согласия. Уникальная пара (userId, offerId)
 // — повторно подписать ту же версию нельзя.
 model OfferSignature {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   offerId   String
   offer     OfferTemplate @relation(fields: [offerId], references: [id], onDelete: Cascade)
-  signedAt  DateTime @default(now())
+  signedAt  DateTime      @default(now())
   ip        String?
   userAgent String?
 
@@ -251,15 +251,15 @@ model OfferSignature {
 }
 
 model UserDocument {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      UserDocumentType
-  url       String
+  id           String           @id @default(uuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         UserDocumentType
+  url          String
   originalName String?
-  size      Int?
-  comment   String?
-  createdAt DateTime @default(now())
+  size         Int?
+  comment      String?
+  createdAt    DateTime         @default(now())
 
   @@index([userId, type])
 }
@@ -285,44 +285,44 @@ enum ApplicationSource {
 }
 
 model Application {
-  id         String            @id @default(uuid())
-  fullName   String
-  phone      String
+  id                    String            @id @default(uuid())
+  fullName              String
+  phone                 String
   // Доп. телефон (мать/отец/контактное лицо) — по ТЗ.
-  secondaryPhone String?
+  secondaryPhone        String?
   // Подпись доп. контакта: "Отец", "Мать" и т.п.
   secondaryContactLabel String?
-  email      String?
+  email                 String?
   // Предпочтительный канал связи с клиентом.
-  preferredChannel ContactChannel?
-  direction  Direction
-  comment    String?
-  source     ApplicationSource @default(LANDING_FORM)
-  status     ApplicationStatus @default(NEW)
-  studentId  String?
+  preferredChannel      ContactChannel?
+  direction             Direction
+  comment               String?
+  source                ApplicationSource @default(LANDING_FORM)
+  status                ApplicationStatus @default(NEW)
+  studentId             String?
   // student → SetNull-семантика по сути не задана, потому что removed применяется в коде вручную.
-  student    Student?          @relation(fields: [studentId], references: [id])
-  managerId       String?
+  student               Student?          @relation(fields: [studentId], references: [id])
+  managerId             String?
   // Удалили сотрудника-менеджера TJ → менеджер у заявки обнуляется, заявка остаётся.
-  manager         User?             @relation("ApplicationManager", fields: [managerId], references: [id], onDelete: SetNull)
-  chinaManagerId  String?
+  manager               User?             @relation("ApplicationManager", fields: [managerId], references: [id], onDelete: SetNull)
+  chinaManagerId        String?
   // Аналогично для китайского менеджера.
-  chinaManager    User?             @relation("ApplicationChinaManager", fields: [chinaManagerId], references: [id], onDelete: SetNull)
-  programId       String?
+  chinaManager          User?             @relation("ApplicationChinaManager", fields: [chinaManagerId], references: [id], onDelete: SetNull)
+  programId             String?
   // Удалили программу → у заявки programId становится null.
-  program         Program?          @relation(fields: [programId], references: [id], onDelete: SetNull)
+  program               Program?          @relation(fields: [programId], references: [id], onDelete: SetNull)
   // Воронка продаж (Pipeline) + текущий этап воронки. Это «параллельное»
   // отслеживание поверх ApplicationStatus enum — статус остаётся
   // высокоуровневым бакетом (NEW/DOCS_REVIEW/...), а pipelineStageId —
   // тонкий настраиваемый шаг внутри выбранной воронки.
-  pipelineId       String?
-  pipeline         Pipeline?         @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
-  pipelineStageId  String?
-  pipelineStage    PipelineStage?    @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  pipelineId            String?
+  pipeline              Pipeline?         @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
+  pipelineStageId       String?
+  pipelineStage         PipelineStage?    @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
-  submission       SaleSubmission?   @relation("SubmissionApplication")
+  submission SaleSubmission? @relation("SubmissionApplication")
 
   @@index([status])
   @@index([direction])
@@ -332,52 +332,52 @@ model Application {
 }
 
 model Student {
-  id           String        @id @default(uuid())
-  fullName     String
+  id               String          @id @default(uuid())
+  fullName         String
   // День рождения — для авто-поздравления (cron birthdayGreetings).
-  birthday     DateTime?
+  birthday         DateTime?
   // Все телефоны: phones[0] — основной, phones[1+] — дополнительные.
-  phones       String[]      @default([])
+  phones           String[]        @default([])
   // Подписи к phones: ["сам", "Отец", "Мать"]. Длина может отличаться
   // от phones — недостающие позиции считаются пустыми.
-  phoneLabels  String[]      @default([])
+  phoneLabels      String[]        @default([])
   // Предпочтительный канал связи (ТЗ: WhatsApp / Телефон).
   preferredChannel ContactChannel?
   // QA-fix #43: уникальный email — параллельные регистрации создавали N дублей,
   // forgot-password/login находили только первого через findFirst.
   // Multiple null-email'ов разрешены (Prisma allows multiple NULLs).
-  email           String?    @unique
-  password        String?
+  email            String?         @unique
+  password         String?
   /// Версия токена для инвалидации старых JWT после смены пароля.
   /// Инкрементируется в regeneratePassword/changePassword. Старые токены
   /// (с прежним tokenVersion) отбрасываются StudentJwtStrategy. Без этого
   /// после reset пароля старый JWT жил ещё 7 дней — sec audit fix.
-  tokenVersion    Int        @default(0)
-  applicationForm Json?
-  photoUrl        String?
-  direction    Direction
-  cabinet      Int
-  status       StudentStatus @default(ACTIVE)
-  onboardingStage OnboardingStage @default(WELCOME)
-  comment      String?
-  managerId         String?
-  manager           User?         @relation("StudentManager", fields: [managerId], references: [id], onDelete: SetNull)
-  chinaManagerId    String?
-  chinaManager      User?         @relation("StudentChinaManager", fields: [chinaManagerId], references: [id], onDelete: SetNull)
-  programId         String?
-  program           Program?      @relation(fields: [programId], references: [id], onDelete: SetNull)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  tokenVersion     Int             @default(0)
+  applicationForm  Json?
+  photoUrl         String?
+  direction        Direction
+  cabinet          Int
+  status           StudentStatus   @default(ACTIVE)
+  onboardingStage  OnboardingStage @default(WELCOME)
+  comment          String?
+  managerId        String?
+  manager          User?           @relation("StudentManager", fields: [managerId], references: [id], onDelete: SetNull)
+  chinaManagerId   String?
+  chinaManager     User?           @relation("StudentChinaManager", fields: [chinaManagerId], references: [id], onDelete: SetNull)
+  programId        String?
+  program          Program?        @relation(fields: [programId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  documents    Document[]
-  applications Application[]
-  transactions Transaction[]
-  enrollments  Enrollment[]
+  documents      Document[]
+  applications   Application[]
+  transactions   Transaction[]
+  enrollments    Enrollment[]
   lessonProgress LessonProgress[]
-  interactions Interaction[]
-  payments     Payment[]
-  callLogs     CallLog[]     @relation("CallLogStudent")
-  submissions  SaleSubmission[] @relation("StudentSubmissions")
+  interactions   Interaction[]
+  payments       Payment[]
+  callLogs       CallLog[]        @relation("CallLogStudent")
+  submissions    SaleSubmission[] @relation("StudentSubmissions")
 
   @@index([direction])
   @@index([cabinet])
@@ -391,50 +391,50 @@ model Student {
 // При удалении студента документы каскадно удаляются (Cascade) — это сейчас
 // единственная Cascade-связь в схеме. Заявки и менеджеры используют SetNull.
 model Document {
-  id         String   @id @default(uuid())
-  studentId  String
-  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  filename   String
+  id           String   @id @default(uuid())
+  studentId    String
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  filename     String
   originalName String
-  mimeType   String
-  size       Int
-  url        String
-  type       String   @default("OTHER")
-  createdAt  DateTime @default(now())
+  mimeType     String
+  size         Int
+  url          String
+  type         String   @default("OTHER")
+  createdAt    DateTime @default(now())
 
   @@index([studentId, type])
 }
 
 model Task {
-  id           String     @id @default(uuid())
-  title        String
-  description  String
-  status       TaskStatus @default(TODO)
+  id                   String     @id @default(uuid())
+  title                String
+  description          String
+  status               TaskStatus @default(TODO)
   // Дедлайн задачи (ТЗ §3.7). Null = без дедлайна.
-  deadline     DateTime?
+  deadline             DateTime?
   // Cron уже отправил напоминание (за 24ч до дедлайна) — чтобы не спамить.
-  deadlineReminderSent Boolean @default(false)
+  deadlineReminderSent Boolean    @default(false)
   // Cron уже отправил уведомление о просрочке.
-  overdueNotified      Boolean @default(false)
+  overdueNotified      Boolean    @default(false)
   // LEGACY: одиночный исполнитель. Сделан nullable + onDelete SetNull, чтобы
   // миграция была не деструктивной (данные не теряются при удалении юзера,
   // старые задачи с одним исполнителем продолжают работать). Новый код
   // должен писать в assignees[] (M2M). Значение assignedToId продолжаем
   // держать как «первый ассайни» для обратной совместимости с UI/queries,
   // ожидающими одиночное поле. Дропнем в отдельной миграции позже.
-  assignedToId String?
-  assignedTo   User?      @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId         String?
+  assignedTo           User?      @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   // Новый M2M: несколько исполнителей на одну задачу. Prisma создаст
   // неявную junction-таблицу _TaskAssignees(A=Task.id, B=User.id).
-  assignees    User[]     @relation("TaskAssignees")
+  assignees            User[]     @relation("TaskAssignees")
   // Контролёр — наблюдатель за задачей (может быть FOUNDER/руководитель отдела).
   // Не исполнитель; получает уведомления о статусе, не считается в KPI-нагрузке.
-  controllerId String?
-  controller   User?      @relation("TaskController", fields: [controllerId], references: [id], onDelete: SetNull)
-  createdById  String?
-  createdBy    User?      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  controllerId         String?
+  controller           User?      @relation("TaskController", fields: [controllerId], references: [id], onDelete: SetNull)
+  createdById          String?
+  createdBy            User?      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
   @@index([assignedToId])
   @@index([controllerId])
@@ -443,59 +443,59 @@ model Task {
 }
 
 model Program {
-  id                 String    @id @default(uuid())
-  name               String
-  university         String
-  city               String
-  major              String
-  direction          Direction
-  cost               Float
-  currency           String    @default("CNY")
-  duration           String?
-  language           String?
-  description        String?
-  imageUrl           String?
+  id                   String    @id @default(uuid())
+  name                 String
+  university           String
+  city                 String
+  major                String
+  direction            Direction
+  cost                 Float
+  currency             String    @default("CNY")
+  duration             String?
+  language             String?
+  description          String?
+  imageUrl             String?
   /// Дополнительные фото программы для галереи (до 5-7 шт., ТЗ-доработка п.4).
   /// imageUrl остаётся как primary (обложка); imageUrls — все, включая её.
-  imageUrls          String[] @default([])
+  imageUrls            String[]  @default([])
   /// Академические направления / специальности тегами (ТЗ-доработка п.6).
   /// Например ["Machine Learning", "Data Science", "Computer Vision"].
-  disciplines        String[] @default([])
+  disciplines          String[]  @default([])
   /// Страна (для группировки/фильтра на странице программ, ТЗ-доработка п.9).
   /// Отдельно от city — у одного университета может быть несколько кампусов.
-  country            String?
+  country              String?
   /// Ссылка на официальный сайт университета (ТЗ-доработка).
   /// На карточке/детальной показывается кнопкой «🌐 Официальный сайт».
   universityWebsiteUrl String?
-  published          Boolean   @default(true)
-  telegramMessageId  Int?
-  telegramHasPhoto   Boolean   @default(false)
+  published            Boolean   @default(true)
+  telegramMessageId    Int?
+  telegramHasPhoto     Boolean   @default(false)
 
   // === Расширенные поля для каталога (требование доработок) ===
   // Требуемый уровень английского (IELTS 6.0 / HSK 4 / без требований и т.п.)
-  englishLevel       String?
+  englishLevel        String?
   // Есть ли грант/стипендия
-  hasGrant           Boolean   @default(false)
+  hasGrant            Boolean @default(false)
   // Что покрывает грант (обучение / проживание / стипендия) — свободный текст
-  grantDetails       String?
+  grantDetails        String?
   // Уровень английского для получения гранта (если отличается)
-  grantEnglishLevel  String?
+  grantEnglishLevel   String?
   // Средний проходной балл (текст — может быть GPA, % или баллы)
-  avgAdmissionScore  String?
+  avgAdmissionScore   String?
   // Окно подачи документов / дедлайны
   applicationDeadline String?
   // Сколько раз в год можно подавать (intakes)
-  intakesPerYear     Int?
+  intakesPerYear      Int?
 
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   applications Application[]
   students     Student[]
   scholarships ProgramScholarship[]
   documents    ProgramDocument[]
   comments     ProgramComment[]
-  submissions  SaleSubmission[] @relation("ProgramSubmissions")
+  submissions  SaleSubmission[]     @relation("ProgramSubmissions")
 
   @@index([city])
   @@index([country])
@@ -511,10 +511,10 @@ model ProgramDocument {
   id           String   @id @default(uuid())
   programId    String
   program      Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
-  name         String   // отображаемое название
-  url          String   // /uploads/...
-  size         Int?     // байты, опц.
-  uploadedById String?  // FK не делаем — историю не теряем при удалении юзера
+  name         String // отображаемое название
+  url          String // /uploads/...
+  size         Int? // байты, опц.
+  uploadedById String? // FK не делаем — историю не теряем при удалении юзера
   createdAt    DateTime @default(now())
 
   @@index([programId])
@@ -523,14 +523,14 @@ model ProgramDocument {
 /// Внутренние комментарии админов к программе (ТЗ-доработка п.7).
 /// Видны только сотрудникам (CRM), не показываются на лендинге.
 model ProgramComment {
-  id        String   @id @default(uuid())
-  programId String
-  program   Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
-  authorId  String   // FK не делаем для сохранения истории
-  authorName String  // снэпшот имени на момент создания
-  text      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  authorId   String // FK не делаем для сохранения истории
+  authorName String // снэпшот имени на момент создания
+  text       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([programId, createdAt])
 }
@@ -543,13 +543,13 @@ model ProgramScholarship {
   id           String   @id @default(uuid())
   programId    String
   program      Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
-  name         String   // "CSC Scholarship"
-  coverage     String?  // "Полное" / "Частичное"
-  amount       String?  // "5 000 USD в год" — свободный текст
-  includes     String?  // "Обучение, проживание, питание"
-  requirements String?  // "GPA 3.5+, IELTS 6.0"
-  deadline     String?  // "1 марта" — свободный текст
-  link         String?  // https://...
+  name         String // "CSC Scholarship"
+  coverage     String? // "Полное" / "Частичное"
+  amount       String? // "5 000 USD в год" — свободный текст
+  includes     String? // "Обучение, проживание, питание"
+  requirements String? // "GPA 3.5+, IELTS 6.0"
+  deadline     String? // "1 марта" — свободный текст
+  link         String? // https://...
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -557,15 +557,15 @@ model ProgramScholarship {
 }
 
 model Notification {
-  id         String   @id @default(uuid())
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type       String   // "APPLICATION_NEW", "APPLICATION_DELAY", etc.
-  title      String
-  message    String
-  payload    Json?
-  read       Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // "APPLICATION_NEW", "APPLICATION_DELAY", etc.
+  title     String
+  message   String
+  payload   Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
 
   @@index([userId, read])
   @@index([createdAt])
@@ -575,11 +575,11 @@ model ActivityLog {
   id          String   @id @default(uuid())
   actorId     String?
   actorName   String
-  actorRole   String   // ADMIN | EMPLOYEE
-  action      String   // "STATUS_CHANGE" | "STUDENT_UPDATE" | "MANAGER_CHANGE" | "STUDENT_CREATE" | "STUDENT_DELETE"
+  actorRole   String // ADMIN | EMPLOYEE
+  action      String // "STATUS_CHANGE" | "STUDENT_UPDATE" | "MANAGER_CHANGE" | "STUDENT_CREATE" | "STUDENT_DELETE"
   studentId   String?
   studentName String?
-  details     String   // human-readable: "Статус: NEW → DOCS_REVIEW", "Менеджер TJ: A → B"
+  details     String // human-readable: "Статус: NEW → DOCS_REVIEW", "Менеджер TJ: A → B"
   payload     Json?
   createdAt   DateTime @default(now())
 
@@ -597,25 +597,25 @@ model ActivityLog {
 // "Вернулся" → WORKING (lunchIn установлен, totalLunchMinutes пересчитан).
 // "Закончил день" → OFF (clockOut установлен, totalMinutes пересчитан).
 model TimeEntry {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status      TimeEntryStatus @default(WORKING)
-  clockIn     DateTime
-  lunchOut    DateTime?
-  lunchIn     DateTime?
-  clockOut    DateTime?
+  id                        String          @id @default(uuid())
+  userId                    String
+  user                      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status                    TimeEntryStatus @default(WORKING)
+  clockIn                   DateTime
+  lunchOut                  DateTime?
+  lunchIn                   DateTime?
+  clockOut                  DateTime?
   // Кэш отработанных минут — пересчитывается при clockOut
-  totalMinutes      Int  @default(0)
-  totalLunchMinutes Int  @default(0)
+  totalMinutes              Int             @default(0)
+  totalLunchMinutes         Int             @default(0)
   // Опоздание относительно нормы (в минутах). Расчёт: clockIn - 09:00.
-  lateMinutes       Int  @default(0)
+  lateMinutes               Int             @default(0)
   // Опоздание после обеда (lunchIn - scheduled lunch end). Штраф
   // считается отдельно по той же шкале PenaltyRule.
-  lateLunchMinutes  Int  @default(0)
+  lateLunchMinutes          Int             @default(0)
   // Признак, что штраф за позднее возвращение с обеда уже начислен
   // (penalty record создан). Чтобы повторно не начислять при пересчёте.
-  lateLunchPenaltyApplied Boolean @default(false)
+  lateLunchPenaltyApplied   Boolean         @default(false)
   // Объяснение позднего возвращения с обеда (по аналогии с lateExcuse*).
   // Сотрудник пишет причину в модалке при lunchIn если опоздание > порога.
   // FOUNDER одобряет/отклоняет — APPROVED отменяет штраф.
@@ -626,30 +626,30 @@ model TimeEntry {
   lunchLateExcuseReviewedAt DateTime?
   lunchLateExcuseReviewedBy String?
   // Переработка: всё что отработано сверх 8 часов (480 мин)
-  overtimeMinutes   Int  @default(0)
+  overtimeMinutes           Int             @default(0)
   // Подтверждение присутствия на работе (геолокация / видео-кружок).
   // Хотя бы одно должно быть заполнено при clock-in.
-  clockInLat        Float?
-  clockInLon        Float?
-  clockInProofUrl   String?  // video/photo URL
+  clockInLat                Float?
+  clockInLon                Float?
+  clockInProofUrl           String? // video/photo URL
   // Объяснение опоздания (если lateMinutes > порог). Если пусто
   // и опоздание сверх порога — Cron начислит штраф.
-  lateExcuseUrl     String?
-  lateExcuseReason  String?
-  lateExcuseAt      DateTime?
+  lateExcuseUrl             String?
+  lateExcuseReason          String?
+  lateExcuseAt              DateTime?
   // Статус причины опоздания (требует одобрения основателя по ТЗ).
   // PENDING — ждёт одобрения. APPROVED — основатель одобрил, штраф
   // не списывается / уже отменён. REJECTED — отклонил, штраф остаётся.
   // null — причина не прислана, обычное опоздание.
-  lateExcuseStatus  ExcuseStatus?
-  lateExcuseReviewedAt DateTime?
-  lateExcuseReviewedBy String?
+  lateExcuseStatus          ExcuseStatus?
+  lateExcuseReviewedAt      DateTime?
+  lateExcuseReviewedBy      String?
   // Помечается true когда Cron уже создал штраф за это опоздание
   // (защита от дублей при перезапуске Cron).
-  latePenaltyApplied Boolean @default(false)
-  date        DateTime @default(now()) @db.Date  // дата сессии для удобной группировки
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  latePenaltyApplied        Boolean         @default(false)
+  date                      DateTime        @default(now()) @db.Date // дата сессии для удобной группировки
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
 
   @@index([userId, date])
   @@index([status])
@@ -667,11 +667,11 @@ model TimeEntry {
 // recordedById — кто внёс транзакцию (бухгалтер или админ).
 // Способ оплаты (для расширенной финансовой записи)
 enum PaymentChannel {
-  ALIF_MOBILE    // АлифМобайл
-  CASH           // наличные
-  BANK_TRANSFER  // банковский перевод
-  CARD           // картой
-  CRYPTO         // криптовалюта
+  ALIF_MOBILE // АлифМобайл
+  CASH // наличные
+  BANK_TRANSFER // банковский перевод
+  CARD // картой
+  CRYPTO // криптовалюта
   OTHER
 }
 
@@ -679,53 +679,53 @@ enum PaymentChannel {
 enum PaymentKind {
   FULL
   PREPAYMENT
-  ADDITIONAL       // доплата по старому клиенту
+  ADDITIONAL // доплата по старому клиенту
   OWNER_INVESTMENT // вложение собственника в компанию (не от клиента)
 }
 
 // Подтверждение расхода (для исходящих)
 enum ReceiptKind {
-  RECEIPT       // обычный чек/счёт-фактура
-  CASH_PHOTO    // фотография наличных (вместо чека)
-  REASON_ONLY   // только причина (без фото) — допустимо в редких случаях
+  RECEIPT // обычный чек/счёт-фактура
+  CASH_PHOTO // фотография наличных (вместо чека)
+  REASON_ONLY // только причина (без фото) — допустимо в редких случаях
 }
 
 // Источник дохода (для INCOME): новый клиент vs апселл существующему vs прочее
 enum IncomeSource {
-  NEW_CLIENT       // Новый клиент — с нуля закрыл впервые
-  UP_SALE          // Апселл существующему клиенту
-  OTHER            // Прочее / неопределённо
+  NEW_CLIENT // Новый клиент — с нуля закрыл впервые
+  UP_SALE // Апселл существующему клиенту
+  OTHER // Прочее / неопределённо
 }
 
 // Продуктовая категория (enum-версия productCategory) для Google Sheet-parity
 enum ProductCategory {
-  CONTRACT         // Основной контракт по программе (обучение за рубежом)
-  MASTERCLASS      // Мастер-класс
-  ACADEMY          // Академия (языковой курс/подготовка)
-  OTHER            // Другое
+  CONTRACT // Основной контракт по программе (обучение за рубежом)
+  MASTERCLASS // Мастер-класс
+  ACADEMY // Академия (языковой курс/подготовка)
+  OTHER // Другое
 }
 
 // Фаза оплаты дохода: предоплата vs полная
 enum PaymentPhaseStatus {
-  PREPAID          // Перед оплата (предоплата)
-  FULL             // Полная оплата
+  PREPAID // Перед оплата (предоплата)
+  FULL // Полная оплата
 }
 
 model Transaction {
-  id          String   @id @default(uuid())
-  type        TransactionType
-  category    TransactionCategory
-  amount      Float
-  currency    String   @default("TJS")
-  comment     String?
-  date        DateTime @default(now())
+  id       String              @id @default(uuid())
+  type     TransactionType
+  category TransactionCategory
+  amount   Float
+  currency String              @default("TJS")
+  comment  String?
+  date     DateTime            @default(now())
 
-  studentId   String?
-  student     Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  managerId   String?
-  manager     User?    @relation("TransactionManager", fields: [managerId], references: [id], onDelete: SetNull)
+  studentId    String?
+  student      Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  managerId    String?
+  manager      User?    @relation("TransactionManager", fields: [managerId], references: [id], onDelete: SetNull)
   recordedById String?
-  recordedBy  User?    @relation("TransactionRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  recordedBy   User?    @relation("TransactionRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
 
   // === Расширения для финансового модуля ===
   // Способ оплаты — Алиф / наличные / банк / карта / крипто
@@ -758,7 +758,7 @@ model Transaction {
   paymentPhase        PaymentPhaseStatus?
   // Через чью карту прошёл расход (для type=EXPENSE)
   paidViaId           String?
-  paidVia             User?    @relation("TransactionPaidVia", fields: [paidViaId], references: [id], onDelete: SetNull)
+  paidVia             User?               @relation("TransactionPaidVia", fields: [paidViaId], references: [id], onDelete: SetNull)
 
   // Метка для бонусной системы: уже учтена в SalaryRecord ?
   bonusApplied Boolean @default(false)
@@ -769,10 +769,10 @@ model Transaction {
   // из salesAmount-агрегации в salary/kpi); параллельно создаётся обратная
   // EXPENSE-транзакция (OTHER_EXPENSE) — чтобы finance dashboard (доход − расход)
   // отражал реальный нетто.
-  reversedAt   DateTime?
+  reversedAt DateTime?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([type, category])
   @@index([date])
@@ -791,31 +791,31 @@ model Transaction {
 // kpiBonus — ручной бонус, который проставляет ADMIN.
 // netAmount = baseSalary + bonusAmount + kpiBonus.
 model SalaryRecord {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   periodStart DateTime
   periodEnd   DateTime
 
-  workedMinutes Int      @default(0)   // отработано за период
-  lateMinutes   Int      @default(0)   // суммарное опоздание
-  overtimeMinutes Int    @default(0)   // суммарная переработка (ТЗ-доработка)
-  baseAmount    Float    @default(0)   // базовая ставка за период
-  salesAmount   Float    @default(0)   // сумма продаж клиентов менеджера
-  bonusAmount   Float    @default(0)   // baseSalesAmount × bonusPercent
-  overtimePay   Float    @default(0)   // оплата переработки (ТЗ-доработка)
-  kpiBonus      Float    @default(0)   // ручной бонус
-  penalties     Float    @default(0)   // штрафы (за опоздания и т.п.)
-  netAmount     Float    @default(0)   // итог к выплате
-  currency      String   @default("TJS")
+  workedMinutes   Int    @default(0) // отработано за период
+  lateMinutes     Int    @default(0) // суммарное опоздание
+  overtimeMinutes Int    @default(0) // суммарная переработка (ТЗ-доработка)
+  baseAmount      Float  @default(0) // базовая ставка за период
+  salesAmount     Float  @default(0) // сумма продаж клиентов менеджера
+  bonusAmount     Float  @default(0) // baseSalesAmount × bonusPercent
+  overtimePay     Float  @default(0) // оплата переработки (ТЗ-доработка)
+  kpiBonus        Float  @default(0) // ручной бонус
+  penalties       Float  @default(0) // штрафы (за опоздания и т.п.)
+  netAmount       Float  @default(0) // итог к выплате
+  currency        String @default("TJS")
 
-  status      SalaryStatus @default(DRAFT)
-  paidAt      DateTime?
-  comment     String?
+  status  SalaryStatus @default(DRAFT)
+  paidAt  DateTime?
+  comment String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, periodStart])
   @@index([status])
@@ -827,23 +827,23 @@ model SalaryRecord {
 // Сотрудник раз в день записывает: количество звонков, число встреч, активность.
 // Эти данные дополняют автоматически собираемые KPI.
 model DailyReport {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date          DateTime @db.Date
-  callsCount    Int      @default(0)
-  meetingsCount Int      @default(0)
-  applicationsContacted Int @default(0)
+  id                    String   @id @default(uuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date                  DateTime @db.Date
+  callsCount            Int      @default(0)
+  meetingsCount         Int      @default(0)
+  applicationsContacted Int      @default(0)
   // ТЗ §3.6: сотрудник заполняет количество и сумму продаж
-  salesCount    Int      @default(0)
-  salesAmount   Float    @default(0)
+  salesCount            Int      @default(0)
+  salesAmount           Float    @default(0)
   // Консультации отдела продаж — оффлайн (в офисе) и онлайн
-  offlineConsultations Int @default(0)
-  onlineConsultations  Int @default(0)
-  activitySummary String? // что сделал за день (свободный текст)
-  challenges    String?  // блокеры/проблемы
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  offlineConsultations  Int      @default(0)
+  onlineConsultations   Int      @default(0)
+  activitySummary       String? // что сделал за день (свободный текст)
+  challenges            String? // блокеры/проблемы
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@unique([userId, date])
   @@index([date])
@@ -855,16 +855,16 @@ model DailyReport {
 // разрешить кому-то видеть досье конкретного сотрудника.
 // ==========================================================
 model DataAccessGrant {
-  id            String   @id @default(uuid())
+  id           String   @id @default(uuid())
   // Кому выдан доступ
-  grantedToId   String
-  grantedTo     User     @relation("AccessGrantee", fields: [grantedToId], references: [id], onDelete: Cascade)
+  grantedToId  String
+  grantedTo    User     @relation("AccessGrantee", fields: [grantedToId], references: [id], onDelete: Cascade)
   // Чьи данные можно смотреть
-  targetUserId  String
-  targetUser    User     @relation("AccessTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  targetUserId String
+  targetUser   User     @relation("AccessTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
   // Кто выдал (для аудита)
-  grantedById   String?
-  createdAt     DateTime @default(now())
+  grantedById  String?
+  createdAt    DateTime @default(now())
 
   @@unique([grantedToId, targetUserId])
   @@index([grantedToId])
@@ -881,31 +881,31 @@ enum CallDirection {
 }
 
 enum CallOutcome {
-  ANSWERED       // дозвонился, поговорили
-  NO_ANSWER      // не ответили
-  BUSY           // занято
-  CALLBACK       // договорились перезвонить
-  CONVERTED      // привело к продаже/заявке
+  ANSWERED // дозвонился, поговорили
+  NO_ANSWER // не ответили
+  BUSY // занято
+  CALLBACK // договорились перезвонить
+  CONVERTED // привело к продаже/заявке
 }
 
 model CallLog {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation("CallLogUser", fields: [userId], references: [id], onDelete: Cascade)
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation("CallLogUser", fields: [userId], references: [id], onDelete: Cascade)
   // Кому звонили
-  clientName     String
-  clientPhone    String?
-  studentId      String?
-  student        Student? @relation("CallLogStudent", fields: [studentId], references: [id], onDelete: SetNull)
-  direction      CallDirection @default(OUTGOING)
-  outcome        CallOutcome   @default(ANSWERED)
+  clientName      String
+  clientPhone     String?
+  studentId       String?
+  student         Student?      @relation("CallLogStudent", fields: [studentId], references: [id], onDelete: SetNull)
+  direction       CallDirection @default(OUTGOING)
+  outcome         CallOutcome   @default(ANSWERED)
   // Длительность разговора в секундах (время на линии)
-  durationSeconds Int     @default(0)
-  notes          String?
+  durationSeconds Int           @default(0)
+  notes           String?
   // URL записи разговора (если есть)
-  recordingUrl   String?
-  occurredAt     DateTime @default(now())
-  createdAt      DateTime @default(now())
+  recordingUrl    String?
+  occurredAt      DateTime      @default(now())
+  createdAt       DateTime      @default(now())
 
   @@index([userId, occurredAt])
   @@index([studentId])
@@ -915,45 +915,45 @@ model CallLog {
 // CHAT — внутренний чат компании (ТЗ §3.8)
 // ============================================================
 enum ChatRoomType {
-  GENERAL    // общий чат компании
-  TEAM       // командный чат (для группы сотрудников)
-  DIRECT     // личный 1-на-1
+  GENERAL // общий чат компании
+  TEAM // командный чат (для группы сотрудников)
+  DIRECT // личный 1-на-1
 }
 
 model ChatRoom {
-  id          String       @id @default(uuid())
-  type        ChatRoomType
-  title       String?      // для TEAM/DIRECT — имя комнаты
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  members     ChatMember[]
-  messages    ChatMessage[]
+  id        String        @id @default(uuid())
+  type      ChatRoomType
+  title     String? // для TEAM/DIRECT — имя комнаты
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  members   ChatMember[]
+  messages  ChatMessage[]
 
   @@index([type])
 }
 
 model ChatMember {
-  id        String   @id @default(uuid())
-  roomId    String
-  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid())
+  roomId     String
+  room       ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastReadAt DateTime?
-  joinedAt  DateTime @default(now())
+  joinedAt   DateTime  @default(now())
 
   @@unique([roomId, userId])
   @@index([userId])
 }
 
 model ChatMessage {
-  id         String   @id @default(uuid())
-  roomId     String
-  room       ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  authorId   String
-  author     User     @relation("ChatMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  text       String
+  id              String         @id @default(uuid())
+  roomId          String
+  room            ChatRoom       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  authorId        String
+  author          User           @relation("ChatMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  text            String
   // Список упомянутых userId (для @mentions)
-  mentionsIds String[] @default([])
+  mentionsIds     String[]       @default([])
   // ТЗ §3.8 + Telegram-style features:
   // attachments — массив объектов { url, filename, originalName, mimeType, size }.
   // replyToId — id сообщения, на которое отвечает (для quote-блока).
@@ -962,16 +962,16 @@ model ChatMessage {
   // forwardedFromId — id оригинала (если переслано).
   attachments     Json?
   replyToId       String?
-  replyTo         ChatMessage?  @relation("ChatMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies         ChatMessage[] @relation("ChatMessageReply")
+  replyTo         ChatMessage?   @relation("ChatMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies         ChatMessage[]  @relation("ChatMessageReply")
   forwardedFromId String?
-  forwardedFrom   ChatMessage?  @relation("ChatMessageForward", fields: [forwardedFromId], references: [id], onDelete: SetNull)
-  forwards        ChatMessage[] @relation("ChatMessageForward")
-  isPinned        Boolean       @default(false)
+  forwardedFrom   ChatMessage?   @relation("ChatMessageForward", fields: [forwardedFromId], references: [id], onDelete: SetNull)
+  forwards        ChatMessage[]  @relation("ChatMessageForward")
+  isPinned        Boolean        @default(false)
   deletedAt       DateTime?
   reactions       ChatReaction[]
-  createdAt  DateTime @default(now())
-  editedAt   DateTime?
+  createdAt       DateTime       @default(now())
+  editedAt        DateTime?
 
   @@index([roomId, createdAt])
   @@index([authorId])
@@ -987,7 +987,7 @@ model ChatReaction {
   message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
   userId    String
   user      User        @relation("ChatReactionUser", fields: [userId], references: [id], onDelete: Cascade)
-  emoji     String      // например "❤️", "👍" — стандартные unicode emojis
+  emoji     String // например "❤️", "👍" — стандартные unicode emojis
   createdAt DateTime    @default(now())
 
   @@unique([messageId, userId, emoji])
@@ -1014,28 +1014,28 @@ model Course {
 }
 
 model Lesson {
-  id          String   @id @default(uuid())
-  courseId    String
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  title       String
-  content     String?  // Markdown / rich text
-  videoUrl    String?
+  id            String           @id @default(uuid())
+  courseId      String
+  course        Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title         String
+  content       String? // Markdown / rich text
+  videoUrl      String?
   attachmentUrl String?
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  progress    LessonProgress[]
+  order         Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  progress      LessonProgress[]
 
   @@index([courseId, order])
 }
 
 model Enrollment {
-  id         String   @id @default(uuid())
-  courseId   String
-  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  studentId  String
-  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  enrolledAt DateTime @default(now())
+  id          String    @id @default(uuid())
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  enrolledAt  DateTime  @default(now())
   completedAt DateTime?
 
   @@unique([courseId, studentId])
@@ -1043,14 +1043,14 @@ model Enrollment {
 }
 
 model LessonProgress {
-  id         String   @id @default(uuid())
-  lessonId   String
-  lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  studentId  String
-  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  completed  Boolean  @default(false)
+  id          String    @id @default(uuid())
+  lessonId    String
+  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  completed   Boolean   @default(false)
   completedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@unique([lessonId, studentId])
   @@index([studentId])
@@ -1060,30 +1060,30 @@ model LessonProgress {
 // INTERACTIONS — журнал общения с клиентом (ТЗ §3.2 «История взаимодействий», §3.3 «История общения»)
 // ============================================================
 enum InteractionType {
-  CALL       // звонок
-  EMAIL      // email-переписка
-  MEETING    // встреча
-  NOTE       // заметка менеджера
-  SMS        // sms
-  TELEGRAM   // переписка в TG
-  WHATSAPP   // переписка в WA
+  CALL // звонок
+  EMAIL // email-переписка
+  MEETING // встреча
+  NOTE // заметка менеджера
+  SMS // sms
+  TELEGRAM // переписка в TG
+  WHATSAPP // переписка в WA
 }
 
 model Interaction {
-  id         String          @id @default(uuid())
-  studentId  String
-  student    Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  authorId   String?
-  author     User?           @relation("InteractionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-  type       InteractionType
-  summary    String          // краткое описание ("обсудили дедлайны", "клиент перезвонит во вторник")
-  details    String?         // длинная заметка
+  id               String          @id @default(uuid())
+  studentId        String
+  student          Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  authorId         String?
+  author           User?           @relation("InteractionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  type             InteractionType
+  summary          String // краткое описание ("обсудили дедлайны", "клиент перезвонит во вторник")
+  details          String? // длинная заметка
   // Студент видит запись, если visibleToStudent=true (по умолчанию true,
   // менеджер может пометить как "внутреннюю", не показывая клиенту).
-  visibleToStudent Boolean   @default(true)
-  occurredAt DateTime        @default(now())
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  visibleToStudent Boolean         @default(true)
+  occurredAt       DateTime        @default(now())
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   @@index([studentId, occurredAt])
   @@index([authorId])
@@ -1094,11 +1094,11 @@ model Interaction {
 // PENALTIES — штрафы (ТЗ §3.9 «Нарушение → штраф»)
 // ============================================================
 enum PenaltyReason {
-  LATE_ARRIVAL    // опоздание утром (clockIn после scheduled start)
+  LATE_ARRIVAL // опоздание утром (clockIn после scheduled start)
   LATE_FROM_LUNCH // опоздание после обеда (lunchIn после scheduled lunch end)
-  ABSENCE         // прогул
-  TASK_OVERDUE    // просроченная задача
-  CUSTOM          // ручной штраф админа
+  ABSENCE // прогул
+  TASK_OVERDUE // просроченная задача
+  CUSTOM // ручной штраф админа
 }
 
 model Penalty {
@@ -1106,8 +1106,8 @@ model Penalty {
   userId    String
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   reason    PenaltyReason
-  amount    Float         // в USD
-  details   String        // human-readable: "Опоздание 25 мин"
+  amount    Float // в USD
+  details   String // human-readable: "Опоздание 25 мин"
   date      DateTime      @default(now()) @db.Date
   // Учтён ли штраф в зарплатном расчёте (SalaryRecord)
   applied   Boolean       @default(false)
@@ -1125,10 +1125,10 @@ model Penalty {
 // фактической суммой и методом → автоматически создаётся Transaction
 // (INCOME / TUITION_PAYMENT) и Payment переводится в CONFIRMED.
 enum PaymentStatus {
-  PENDING       // клиент инициировал, ждёт подтверждения бухгалтера
-  CONFIRMED     // бухгалтер подтвердил, транзакция создана
-  REJECTED      // бухгалтер отклонил
-  CANCELLED     // клиент отменил
+  PENDING // клиент инициировал, ждёт подтверждения бухгалтера
+  CONFIRMED // бухгалтер подтвердил, транзакция создана
+  REJECTED // бухгалтер отклонил
+  CANCELLED // клиент отменил
 }
 
 enum PaymentMethod {
@@ -1140,23 +1140,23 @@ enum PaymentMethod {
 }
 
 model Payment {
-  id           String         @id @default(uuid())
-  studentId    String
-  student      Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  amount       Float
-  currency     String         @default("TJS")
-  method       PaymentMethod  @default(BANK_TRANSFER)
-  status       PaymentStatus  @default(PENDING)
-  comment      String?
-  receiptUrl   String?
+  id            String        @id @default(uuid())
+  studentId     String
+  student       Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  amount        Float
+  currency      String        @default("TJS")
+  method        PaymentMethod @default(BANK_TRANSFER)
+  status        PaymentStatus @default(PENDING)
+  comment       String?
+  receiptUrl    String?
   // Кто подтвердил
   confirmedById String?
   confirmedBy   User?         @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
   confirmedAt   DateTime?
   // Транзакция, созданная при подтверждении
   transactionId String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   @@index([studentId, status])
   @@index([status])
@@ -1170,15 +1170,15 @@ model Payment {
 
 enum PartnerStatus {
   ACTIVE
-  SUSPENDED   // временно отключён админом
-  BANNED      // окончательно
+  SUSPENDED // временно отключён админом
+  BANNED // окончательно
 }
 
 enum CommissionStatus {
-  PENDING     // начислено, но ещё не выплачено
-  APPROVED    // одобрено к выплате
-  PAID        // выплачено
-  REVERSED    // отменено (если был refund)
+  PENDING // начислено, но ещё не выплачено
+  APPROVED // одобрено к выплате
+  PAID // выплачено
+  REVERSED // отменено (если был refund)
 }
 
 enum PartnerPayoutStatus {
@@ -1188,37 +1188,37 @@ enum PartnerPayoutStatus {
 }
 
 model Partner {
-  id              String   @id @default(uuid())
-  email           String   @unique
-  password        String   // bcrypt hash
-  fullName        String
-  phone           String?
+  id       String  @id @default(uuid())
+  email    String  @unique
+  password String // bcrypt hash
+  fullName String
+  phone    String?
 
   // Уникальный реферальный код (для URL ?ref=CODE и t.me/bot?start=CODE).
   // Генерируется при регистрации. Должен быть коротким и URL-safe.
-  referralCode    String   @unique
+  referralCode String @unique
 
   // Связка с Telegram аккаунтом (когда партнёр сам подключил бот).
-  telegramId      String?  @unique
-  telegramHandle  String?
+  telegramId     String? @unique
+  telegramHandle String?
 
   // Финансы — балансы хранятся в копейках/центах (Int) для точности.
   // Размер комиссии — % от суммы платежа клиента, привязанного к этому
   // партнёру. По умолчанию 30%, админ может поднять/опустить индивидуально.
-  commissionPct   Int      @default(30)    // % (0-100)
-  balanceCents    Int      @default(0)     // доступно к выплате
-  totalEarnedCents Int     @default(0)     // всего заработал (lifetime)
-  totalPaidCents  Int      @default(0)     // всего выплачено
+  commissionPct    Int @default(30) // % (0-100)
+  balanceCents     Int @default(0) // доступно к выплате
+  totalEarnedCents Int @default(0) // всего заработал (lifetime)
+  totalPaidCents   Int @default(0) // всего выплачено
 
-  status          PartnerStatus @default(ACTIVE)
+  status PartnerStatus @default(ACTIVE)
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  clicks          ReferralClick[]
-  attributions    ReferralAttribution[]
-  commissions     Commission[]
-  payouts         PartnerPayout[]
+  clicks       ReferralClick[]
+  attributions ReferralAttribution[]
+  commissions  Commission[]
+  payouts      PartnerPayout[]
 
   @@index([status])
   @@index([referralCode])
@@ -1226,12 +1226,12 @@ model Partner {
 
 // Лог кликов по реферальной ссылке. Источник статистики "переходов".
 model ReferralClick {
-  id          String   @id @default(uuid())
-  partnerId   String
-  partner     Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   // Куда привёл клик: SITE | BOT. Бот = ?start=CODE в Telegram.
-  source      String   @default("SITE")
+  source      String  @default("SITE")
   // Track referer/UA/IP (для антифрода и аналитики)
   ip          String?
   userAgent   String?
@@ -1240,7 +1240,7 @@ model ReferralClick {
   // пользователь не накручивал клики по F5.
   fingerprint String?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([partnerId, createdAt])
   @@index([fingerprint])
@@ -1250,20 +1250,20 @@ model ReferralClick {
 // (регистрация студента/заявка с лендинга/Telegram /start).
 // При оплате читается чтобы определить кого премировать.
 model ReferralAttribution {
-  id          String   @id @default(uuid())
-  partnerId   String
-  partner     Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   // Один из этих идентификаторов клиента:
-  studentId   String?
-  applicationId String?
-  telegramUserId String?  // для оплат через бот
-  emailHint   String?     // fallback
+  studentId      String?
+  applicationId  String?
+  telegramUserId String? // для оплат через бот
+  emailHint      String? // fallback
 
-  source      String   @default("SITE")  // SITE | BOT
-  createdAt   DateTime @default(now())
+  source    String    @default("SITE") // SITE | BOT
+  createdAt DateTime  @default(now())
   // TTL — атрибуция действительна 90 дней по умолчанию.
-  expiresAt   DateTime?
+  expiresAt DateTime?
 
   @@index([partnerId, createdAt])
   @@index([studentId])
@@ -1273,27 +1273,27 @@ model ReferralAttribution {
 
 // Начисление партнёру по факту успешной оплаты клиента.
 model Commission {
-  id            String   @id @default(uuid())
-  partnerId     String
-  partner       Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   // Источник: одна из этих связок
-  paymentId     String?   // студенческий Payment
-  transactionId String?   // финансовая Transaction
+  paymentId     String? // студенческий Payment
+  transactionId String? // финансовая Transaction
 
-  amountCents   Int       // итоговое начисление (в копейках/центах)
-  baseAmountCents Int     // сумма платежа, с которой считалось
-  percent       Int       // % на момент начисления (фриз)
-  currency      String    @default("TJS")
-  note          String?
+  amountCents     Int // итоговое начисление (в копейках/центах)
+  baseAmountCents Int // сумма платежа, с которой считалось
+  percent         Int // % на момент начисления (фриз)
+  currency        String  @default("TJS")
+  note            String?
 
-  status        CommissionStatus @default(PENDING)
-  approvedAt    DateTime?
-  paidAt        DateTime?
-  reversedAt    DateTime?
+  status     CommissionStatus @default(PENDING)
+  approvedAt DateTime?
+  paidAt     DateTime?
+  reversedAt DateTime?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([partnerId, status])
   @@index([paymentId])
@@ -1303,18 +1303,18 @@ model Commission {
 
 // Запрос/выплата средств партнёру.
 model PartnerPayout {
-  id          String   @id @default(uuid())
-  partnerId   String
-  partner     Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   amountCents Int
-  currency    String   @default("TJS")
-  method      String?  // CARD/CRYPTO/CASH/OTHER
-  details     String?  // реквизиты которые партнёр прислал
+  currency    String  @default("TJS")
+  method      String? // CARD/CRYPTO/CASH/OTHER
+  details     String? // реквизиты которые партнёр прислал
   note        String?
 
   status      PartnerPayoutStatus @default(REQUESTED)
-  requestedAt DateTime @default(now())
+  requestedAt DateTime            @default(now())
   paidAt      DateTime?
   rejectedAt  DateTime?
 
@@ -1325,25 +1325,25 @@ model PartnerPayout {
 // Сессия пользователя Telegram-бота — храним привязку telegramUserId к
 // реферальному коду (для атрибуции) + текущее состояние воронки.
 model BotSession {
-  id           String   @id @default(uuid())
-  telegramUserId String @unique
+  id               String  @id @default(uuid())
+  telegramUserId   String  @unique
   telegramUsername String?
-  firstName    String?
-  lastName     String?
+  firstName        String?
+  lastName         String?
 
   // К какому партнёру привязан этот пользователь (по /start=CODE)
   partnerCode  String?
   // Состояние воронки (для прогрева): 0..N — текущий шаг
-  funnelStep   Int      @default(0)
+  funnelStep   Int       @default(0)
   // Купил ли уже доступ
-  hasPurchased Boolean  @default(false)
+  hasPurchased Boolean   @default(false)
   purchasedAt  DateTime?
 
   // Когда последний раз отправляли follow-up
-  lastNudgeAt  DateTime?
+  lastNudgeAt DateTime?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([partnerCode])
   @@index([hasPurchased])
@@ -1356,17 +1356,17 @@ model BotSession {
 // переопределение для каждого дня. Время в минутах от полуночи (0-1439).
 // FOUNDER редактирует свой и чужие графики (по ТЗ).
 model WorkSchedule {
-  id                String   @id @default(uuid())
-  userId            String?
-  user              User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  weekday           Weekday
-  isWorkday         Boolean  @default(true)
-  startMinute       Int      @default(540)   // 09:00
-  endMinute         Int      @default(1080)  // 18:00
-  lunchStartMinute  Int?     @default(720)   // 12:00
-  lunchEndMinute    Int?     @default(780)   // 13:00
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String   @id @default(uuid())
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekday          Weekday
+  isWorkday        Boolean  @default(true)
+  startMinute      Int      @default(540) // 09:00
+  endMinute        Int      @default(1080) // 18:00
+  lunchStartMinute Int?     @default(720) // 12:00
+  lunchEndMinute   Int?     @default(780) // 13:00
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([userId, weekday])
   @@index([userId])
@@ -1377,15 +1377,15 @@ model WorkSchedule {
 // в минутах попадает в первое правило, где minLateMinutes <= late <
 // maxLateMinutes (или maxLateMinutes = null = бесконечность).
 model PenaltyRule {
-  id              String   @id @default(uuid())
-  minLateMinutes  Int      // нижняя граница (включительно)
-  maxLateMinutes  Int?     // верхняя граница (исключительно). null = ∞.
-  amount          Float
-  currency        String   @default("TJS")
-  isActive        Boolean  @default(true)
-  comment         String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  minLateMinutes Int // нижняя граница (включительно)
+  maxLateMinutes Int? // верхняя граница (исключительно). null = ∞.
+  amount         Float
+  currency       String   @default("TJS")
+  isActive       Boolean  @default(true)
+  comment        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([isActive, minLateMinutes])
 }
@@ -1398,16 +1398,16 @@ model PenaltyRule {
 /// процент этого этапа. Если у юзера выставлен персональный
 /// bonusPercent > 0, он перебивает сетку.
 model BonusTier {
-  id           String   @id @default(uuid())
-  minAmount    Float    // нижняя граница (включительно)
-  maxAmount    Float?   // верхняя граница (исключительно). null = ∞
-  percent      Float    // процент от продаж
-  currency     String   @default("TJS")
-  order        Int      @default(0)
-  isActive     Boolean  @default(true)
-  comment      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(uuid())
+  minAmount Float // нижняя граница (включительно)
+  maxAmount Float? // верхняя граница (исключительно). null = ∞
+  percent   Float // процент от продаж
+  currency  String   @default("TJS")
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([isActive, order])
   @@index([isActive, minAmount])
@@ -1417,14 +1417,14 @@ model BonusTier {
 // ТОЛЬКО внутри радиуса. Допускается несколько локаций (офис ТЖ, офис
 // в Душанбе и т.п.), но активная в момент времени только одна (isActive).
 model WorkLocation {
-  id            String   @id @default(uuid())
-  name          String   @default("Главный офис")
-  latitude      Float
-  longitude     Float
-  radiusMeters  Int      @default(150)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(uuid())
+  name         String   @default("Главный офис")
+  latitude     Float
+  longitude    Float
+  radiusMeters Int      @default(150)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([isActive])
 }
@@ -1456,21 +1456,21 @@ enum ExternalMessageStatus {
 // сообщений из CRM. Может быть привязано к клиенту (Application или
 // Student) — для построения единой ленты переписки в карточке клиента.
 model ExternalMessage {
-  id              String                    @id @default(uuid())
-  externalId      String?                   // id у внешнего провайдера
-  channel         ExternalMessageChannel
-  direction       ExternalMessageDirection
-  status          ExternalMessageStatus     @default(PENDING)
-  fromHandle      String?                   // e.g. +992...., @insta_user
-  toHandle        String?
-  content         String?                   // текст
-  mediaUrl        String?
-  applicationId   String?
-  studentId       String?
-  sentAt          DateTime?
-  receivedAt      DateTime?
-  rawPayload      Json?                     // полный payload от webhook'а
-  createdAt       DateTime                  @default(now())
+  id            String                   @id @default(uuid())
+  externalId    String? // id у внешнего провайдера
+  channel       ExternalMessageChannel
+  direction     ExternalMessageDirection
+  status        ExternalMessageStatus    @default(PENDING)
+  fromHandle    String? // e.g. +992...., @insta_user
+  toHandle      String?
+  content       String? // текст
+  mediaUrl      String?
+  applicationId String?
+  studentId     String?
+  sentAt        DateTime?
+  receivedAt    DateTime?
+  rawPayload    Json? // полный payload от webhook'а
+  createdAt     DateTime                 @default(now())
 
   @@index([channel, direction])
   @@index([applicationId])
@@ -1490,21 +1490,21 @@ enum MassMailStatus {
 }
 
 model MassMailCampaign {
-  id          String                  @id @default(uuid())
+  id          String                 @id @default(uuid())
   name        String
   channel     ExternalMessageChannel
   subject     String?
-  body        String                  // markdown / plain
-  audience    Json                    // {filter: 'all-leads' | 'paid-students' | ...}
-  status      MassMailStatus          @default(DRAFT)
-  sentCount   Int                     @default(0)
-  failedCount Int                     @default(0)
+  body        String // markdown / plain
+  audience    Json // {filter: 'all-leads' | 'paid-students' | ...}
+  status      MassMailStatus         @default(DRAFT)
+  sentCount   Int                    @default(0)
+  failedCount Int                    @default(0)
   scheduledAt DateTime?
   startedAt   DateTime?
   finishedAt  DateTime?
   createdById String?
-  createdAt   DateTime                @default(now())
-  updatedAt   DateTime                @updatedAt
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
 
   @@index([status])
 }
@@ -1515,15 +1515,15 @@ model MassMailCampaign {
 // бакалавриата, магистратуры, языковых курсов. isDefault указывает
 // воронку, в которую попадают новые лиды без явного выбора.
 model Pipeline {
-  id          String          @id @default(uuid())
-  name        String
-  description String?
-  isDefault   Boolean         @default(false)
-  isActive    Boolean         @default(true)
-  stages      PipelineStage[]
+  id           String          @id @default(uuid())
+  name         String
+  description  String?
+  isDefault    Boolean         @default(false)
+  isActive     Boolean         @default(true)
+  stages       PipelineStage[]
   applications Application[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
   @@index([isActive])
 }
@@ -1531,16 +1531,16 @@ model Pipeline {
 // Этап воронки. Порядок задаётся числом order. isClosingStage =
 // true означает «финальный успешный этап» (зачислен).
 model PipelineStage {
-  id              String   @id @default(uuid())
-  pipelineId      String
-  pipeline        Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  applications    Application[]
-  name            String
-  order           Int
-  color           String?  // hex для UI карточки
-  isClosingStage  Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String        @id @default(uuid())
+  pipelineId     String
+  pipeline       Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  applications   Application[]
+  name           String
+  order          Int
+  color          String? // hex для UI карточки
+  isClosingStage Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@unique([pipelineId, order])
   @@index([pipelineId])
@@ -1563,7 +1563,7 @@ model CustomRole {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  users       User[]
+  users User[]
 
   @@index([isActive])
 }
@@ -1577,76 +1577,76 @@ model CustomRole {
 // Бонус менеджера = sum(APPROVED payments за месяц) × bonusPercent.
 // ============================================================
 enum SubmissionStatus {
-  ACTIVE     // контракт открыт, могут добавляться платежи
-  COMPLETED  // оплачено полностью, закрыто менеджером
-  CANCELLED  // отменено (студент отказался / возврат)
+  ACTIVE // контракт открыт, могут добавляться платежи
+  COMPLETED // оплачено полностью, закрыто менеджером
+  CANCELLED // отменено (студент отказался / возврат)
 }
 
 enum SubmissionPaymentStatus {
-  PENDING    // менеджер прислал, ждёт одобрения FOUNDER
-  APPROVED   // FOUNDER сверил с реальным платежом → засчитано в доход + бонус
-  REJECTED   // FOUNDER отклонил (фейк/ошибка), менеджер должен переделать
+  PENDING // менеджер прислал, ждёт одобрения FOUNDER
+  APPROVED // FOUNDER сверил с реальным платежом → засчитано в доход + бонус
+  REJECTED // FOUNDER отклонил (фейк/ошибка), менеджер должен переделать
 }
 
 enum SubmissionPaymentMethod {
-  TRANSFER   // банковский перевод на реквизиты компании
-  CASH       // наличкой, вечером пополняется на счёт + скрин пополнения
+  TRANSFER // банковский перевод на реквизиты компании
+  CASH // наличкой, вечером пополняется на счёт + скрин пополнения
   OTHER
 }
 
 model SaleSubmission {
-  id            String           @id @default(uuid())
+  id                              String           @id @default(uuid())
   // Студент: если studentId задан — существующий, иначе создаётся при
   // первом APPROVE из полей snapshot ниже.
-  studentId     String?
-  student       Student?         @relation("StudentSubmissions", fields: [studentId], references: [id], onDelete: SetNull)
+  studentId                       String?
+  student                         Student?         @relation("StudentSubmissions", fields: [studentId], references: [id], onDelete: SetNull)
   // Snapshot данных нового студента — заполняется если studentId null.
   // После первого APPROVE сюда не пишем; ссылка на созданного — через studentId.
-  newStudentName     String?
-  newStudentPhone    String?
-  newStudentEmail    String?
-  newStudentPassportUrls String[] @default([])  // фото/PDF паспорта (Multer upload)
+  newStudentName                  String?
+  newStudentPhone                 String?
+  newStudentEmail                 String?
+  newStudentPassportUrls          String[]         @default([]) // фото/PDF паспорта (Multer upload)
   // Snapshot метаданных загруженных файлов паспорта — заполняется при
   // создании сделки из ответа /submissions/upload. Используется при
   // APPROVE для создания Document с реальным mimeType/size/originalName
   // (иначе в БД сохранится placeholder 'application/octet-stream'/0/'passport').
-  newStudentPassportMimes         String[] @default([])
-  newStudentPassportSizes         Int[]    @default([])
-  newStudentPassportOriginalNames String[] @default([])
+  newStudentPassportMimes         String[]         @default([])
+  newStudentPassportSizes         Int[]            @default([])
+  newStudentPassportOriginalNames String[]         @default([])
   // Программа — обязательна на уровне сервиса (валидируется в
   // SubmissionsService.create), но допускает null после удаления Program,
   // чтобы история сделок сохранялась и каталог можно было чистить.
-  programId     String?
-  program       Program?         @relation("ProgramSubmissions", fields: [programId], references: [id], onDelete: SetNull)
+  programId                       String?
+  program                         Program?         @relation("ProgramSubmissions", fields: [programId], references: [id], onDelete: SetNull)
   // Менеджер-создатель (для бонусной логики).
-  managerId     String?
+  managerId                       String?
   // Удалили сотрудника-менеджера → менеджер у сделки обнуляется, сделка и её
   // одобренные платежи остаются, чтобы бухгалтерия не теряла финансовую историю
   // (бонусы за прошлые периоды по-прежнему считаются по reviewedAt/amount).
-  manager       User?            @relation("SubmissionManager", fields: [managerId], references: [id], onDelete: SetNull)
+  manager                         User?            @relation("SubmissionManager", fields: [managerId], references: [id], onDelete: SetNull)
   // Контракт — PDF/фото подписанного контракта.
-  contractUrls   String[] @default([])
+  contractUrls                    String[]         @default([])
   // Snapshot метаданных контракт-файлов (см. комментарий выше про паспорт).
-  contractMimes         String[] @default([])
-  contractSizes         Int[]    @default([])
-  contractOriginalNames String[] @default([])
+  contractMimes                   String[]         @default([])
+  contractSizes                   Int[]            @default([])
+  contractOriginalNames           String[]         @default([])
   // Полная сумма контракта (для отслеживания «сколько ещё должен»).
-  totalAmount   Float
-  currency      String           @default("USD")
+  totalAmount                     Float
+  currency                        String           @default("USD")
   // Статус всей сделки. ACTIVE пока есть открытые платежи или сумма не
   // покрыта. Менеджер сам помечает COMPLETED когда оплачено всё, или
   // CANCELLED при возврате/отказе.
-  status        SubmissionStatus @default(ACTIVE)
+  status                          SubmissionStatus @default(ACTIVE)
   // Куда оформился (создаётся при APPROVE первого платежа).
-  applicationId String?          @unique
-  application   Application?     @relation("SubmissionApplication", fields: [applicationId], references: [id], onDelete: SetNull)
-  notes         String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  applicationId                   String?          @unique
+  application                     Application?     @relation("SubmissionApplication", fields: [applicationId], references: [id], onDelete: SetNull)
+  notes                           String?
+  createdAt                       DateTime         @default(now())
+  updatedAt                       DateTime         @updatedAt
   // Когда был APPROVED первый платёж (создались Student/Application).
-  firstApprovedAt DateTime?
+  firstApprovedAt                 DateTime?
 
-  payments      SubmissionPayment[]
+  payments SubmissionPayment[]
 
   @@index([managerId, createdAt])
   @@index([status])
@@ -1655,37 +1655,70 @@ model SaleSubmission {
 }
 
 model SubmissionPayment {
-  id              String                  @id @default(uuid())
-  submissionId    String
-  submission      SaleSubmission          @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  id                   String                  @id @default(uuid())
+  submissionId         String
+  submission           SaleSubmission          @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   // Сколько фактически внёс этим траншем.
-  amount          Float
-  paymentMethod   SubmissionPaymentMethod @default(TRANSFER)
+  amount               Float
+  paymentMethod        SubmissionPaymentMethod @default(TRANSFER)
   // Когда менеджер получил деньги.
-  paidAt          DateTime
+  paidAt               DateTime
   // Чек/скриншот перевода — обязательно при TRANSFER.
-  receiptUrls      String[] @default([])
+  receiptUrls          String[]                @default([])
   // Если налом: вечером кладёт на счёт компании, прикладывает скрин
   // банковской выписки или фото слипа.
-  depositProofUrls String[] @default([])
+  depositProofUrls     String[]                @default([])
   // План следующего платежа (если контракт не закрыт полностью).
-  nextDueDate     DateTime?
-  nextDueAmount   Float?
-  notes           String?
-  status          SubmissionPaymentStatus @default(PENDING)
+  nextDueDate          DateTime?
+  nextDueAmount        Float?
+  notes                String?
+  status               SubmissionPaymentStatus @default(PENDING)
   // FOUNDER одобрение / отклонение.
-  reviewedById    String?
-  reviewedBy      User?                   @relation("SubmissionPaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt      DateTime?
-  rejectReason    String?
+  reviewedById         String?
+  reviewedBy           User?                   @relation("SubmissionPaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt           DateTime?
+  rejectReason         String?
   // Связанная финансовая транзакция (создаётся на APPROVE) — для
   // дашборда доходов в Finance модуле.
-  financeTransactionId String? @unique
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  financeTransactionId String?                 @unique
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   @@index([submissionId, paidAt])
   @@index([status])
   @@index([reviewedAt])
 }
 
+// Audit fix (HIGH, multi-replica rate-limit inflation + reset-on-deploy):
+// Дефолтный @nestjs/throttler хранит бакеты в in-memory Map внутри
+// ThrottlerStorageService. На Railway при scale=N реплик каждая держит свою
+// собственную мапу, поэтому реальный лимит для пользователя = declared × N
+// (LB раскидывает запросы round-robin по подам). Anti-bonus-inflation guard
+// на POST /finance/transactions (20/min) на 3 подах превращается в 60/min.
+// Плюс любой redeploy обнуляет счётчики → brute-force protection на
+// POST /student-auth/login и POST /applications/public обнуляется на каждом
+// push'е. Стандартное решение — Redis-backed storage, но Redis-клиента в
+// проекте нет и добавлять новую dep нельзя. Поэтому шарим бакеты через
+// уже существующий Postgres (см. src/common/throttler-prisma.storage.ts).
+//
+// Один row = одно активное окно бакета для (throttlerName × tracker).
+// `key` — sha256 из throttler.guard.generateKey, поэтому 64 hex-символа
+// (короткое @id без @db.VarChar достаточно, Postgres хранит эффективно).
+// `throttlerName` не участвует в логике (сам key уже уникален per throttler),
+// хранится для диагностики / метрик.
+model ThrottleHit {
+  key           String    @id
+  throttlerName String
+  totalHits     Int       @default(0)
+  // Конец текущего окна TTL. После него счётчик сбрасывается на следующем
+  // hit'е того же ключа. Для GC мёртвых окон делаем opportunistic cleanup
+  // изнутри increment() (см. storage), отдельный cron не заводим.
+  expiresAt     DateTime
+  // Если превысили limit — тут время до разблокировки. NULL = не заблокирован.
+  // Может быть > expiresAt: длинный blockDuration переживает окно.
+  blockedUntil  DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  @@index([expiresAt])
+  @@index([blockedUntil])
+}

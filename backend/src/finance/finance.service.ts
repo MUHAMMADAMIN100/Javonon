@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
+  NotFoundException,
   Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,6 +22,7 @@ import {
   TransactionType,
 } from '@prisma/client';
 import { MANAGER_ROLES, hasRole } from '../auth/role-utils';
+import { tjLocalDay, tjYMD } from '../common/tj-time';
 
 /**
  * Actor context for create(): id + флаг elevated. Elevated (FOUNDER/ADMIN/
@@ -340,6 +343,36 @@ export class FinanceService {
       }
       dto.currency = c;
     }
+    // === Invariant: TUITION_PAYMENT принадлежит только SubmissionPayment-потоку.
+    // Аудит HIGH (Finance vs Salary divergence): finance.breakdown группирует
+    // Transaction «как есть», а salary.preview суммирует SubmissionPayment
+    // (APPROVED) + Transaction (INCOME с category != TUITION_PAYMENT). Если
+    // сюда пропустить ручную транзакцию с category=TUITION_PAYMENT (legacy-
+    // импорт, «фикс пропущенного платежа», AI-чат «студент оплатил ...»),
+    // то Finance учтёт её в бонусной атрибуции менеджера, а Salary — нет:
+    // manualSalesAgg исключит по фильтру category, submissionSalesAgg не
+    // увидит (SubmissionPayment-строки для неё не существует). Итог —
+    // менеджер видит доход в /finance breakdown, но не получает бонус.
+    //
+    // Canonical writer'ы TUITION_PAYMENT-строк — `submissions.service.ts::
+    // approvePayment` и `payments.service.ts::approvePayment` (оба идут в
+    // prisma.transaction.create напрямую, в рамках $transaction с
+    // SubmissionPayment, минуя этот сервис). Публичные точки входа (HTTP
+    // POST /finance/transactions и chat-AI парсер, оба идут через
+    // this.create) обязаны использовать SubmissionPayment-поток, а не
+    // писать TUITION_PAYMENT вручную.
+    //
+    // Блок применим ко ВСЕМ caller'ам, включая elevated (FOUNDER/ADMIN/
+    // ACCOUNTANT). Легитимный исторический импорт делается напрямую через
+    // prisma в миграции/скрипте, а не через API. См. salary.service.ts
+    // (комментарий про manualSalesAgg) — там ссылка на этот инвариант.
+    if (dto.category === 'TUITION_PAYMENT') {
+      throw new BadRequestException(
+        'Категория TUITION_PAYMENT зарезервирована для подтверждения платежей по сделкам ' +
+        '(SubmissionPayment → approvePayment). Оформи оплату через заявку/сделку, ' +
+        'иначе бонус менеджера не начислится (финансовая сводка учтёт, а зарплата — нет).',
+      );
+    }
     // Date validation. Помимо базовой проверки NaN (иначе Prisma бросал бы
     // 500 на write) — bounds: не-elevated caller ограничен окном today±3
     // суток, а INCOME в будущем блочим для всех. См. audit HIGH
@@ -556,12 +589,20 @@ export class FinanceService {
         paidVia: { select: { id: true, fullName: true } },
       },
     });
-    // WS-нотификация staff-комнате: у второго пользователя, у которого
+    // WS-нотификация finance-staff-комнате: у второго пользователя, у которого
     // /finance открыт в соседней вкладке, список/summary обновятся сразу
     // — без polling и без hard-refresh. Держим emit ПОСЛЕ commit — если
     // Prisma бросит, клиент получит 4xx/5xx и никаких «фантомных»
     // событий в UI не всплывёт.
-    this.realtime.emitStaff('transaction:new', { transaction: created });
+    //
+    // SEC (HIGH): раньше здесь был emitStaff → payload с amount, payerName,
+    // comment, managerId, receiptUrl уходил ВСЕМ staff, включая
+    // SALES_MANAGER/CLIENT_MANAGER, которым GET /finance/* даёт 403.
+    // Любой менеджер с DevTools мог `socket.on('transaction:new', console.log)`
+    // и стримить чужие продажи/расходы/бонусы. emitFinanceStaff ограничивает
+    // доставку теми же ролями, что и REST-guard контроллера (FOUNDER/ADMIN/
+    // ACCOUNTANT — см. realtime.gateway.ts FINANCE_ROLES).
+    this.realtime.emitFinanceStaff('transaction:new', { transaction: created });
     // ActivityLog. Аудит HIGH: без этой записи INCOME/EXPENSE не всплывает
     // на /activity, и FOUNDER не может по UI ответить «кто создал
     // транзакцию X, когда». Best-effort — падение аудита не должно
@@ -621,11 +662,45 @@ export class FinanceService {
         managerId: true,
         studentId: true,
         reversedAt: true,
+        // Receipt/enum поля нужны для Q4 fix: (а) при flip'е type в
+        // EXPENSE мы валидируем «есть ли effective чек» с учётом того,
+        // что чек мог быть уже приложен ДО патча (только type меняется);
+        // (б) semantic-invariant nulling (INCOME → paidViaId=null,
+        // EXPENSE → incomeSource/paymentPhase=null) применяется к
+        // ЭФФЕКТИВНОМУ post-patch типу, поэтому знать текущие значения
+        // необходимо, чтобы понять, надо ли вообще писать null (иначе
+        // Prisma.update дёрнется на всех записях без причины).
+        receiptKind: true,
+        receiptUrl: true,
+        noReceiptReason: true,
+        incomeSource: true,
+        paymentPhase: true,
+        paidViaId: true,
         manager: { select: { id: true, fullName: true } },
       },
     });
     if (!before) {
       throw new BadRequestException('Транзакция не найдена');
+    }
+
+    // === Q4 fix (universal reversedAt type-change guard). ================
+    // Раньше блокировка type-change на отменённой (reversedAt != null)
+    // записи стояла только внутри `if (!caller.isElevated)` — а бонусные
+    // агрегаты (topManagers/salary) фильтруют reversedAt на уровне SQL,
+    // но НЕ пересчитывают тип строки. Если ADMIN «раз-отменит» EXPENSE
+    // флипом в INCOME (или наоборот), reversedAt останется прежним, а
+    // строка молча сменит семантику для любого live-агрегата, который
+    // reversedAt не фильтрует (аудит, бухгалтерская выгрузка). Легитимный
+    // сценарий — сначала «раз-отменить» через отдельный action, затем
+    // менять тип; смешивать эти два действия в одном PATCH нельзя.
+    if (
+      before.reversedAt &&
+      patch.type !== undefined &&
+      patch.type !== before.type
+    ) {
+      throw new ForbiddenException(
+        'Нельзя менять тип отменённой транзакции',
+      );
     }
 
     // === Role-aware guard (parity fix с create()). ===============
@@ -648,23 +723,49 @@ export class FinanceService {
     // историческая правка/reattribution их прерогатива.
     if (!caller.isElevated) {
       const existing = before;
-      // Уже приписана другому менеджеру → не пускаем даже смотреть.
-      // Иначе даже без явного patch.managerId рядовой юзер мог инфлировать
-      // amount/currency чужой записи, и salary/kpi чужого менеджера ехали
-      // бы вверх (или искажались вниз).
-      if (existing.managerId && existing.managerId !== caller.id) {
+      // Требуем ПОЛОЖИТЕЛЬНОЕ владение: managerId должен явно совпадать
+      // с caller.id. Раньше здесь стоял `existing.managerId && ...` —
+      // short-circuit на NULL пропускал orphan-записи (INCOME без
+      // attribution: bulk-import, забытый managerId у ADMIN, legacy).
+      // В связке с нормализацией `patch.managerId = caller.id` ниже это
+      // давало вектор bonus-inflation: рядовой менеджер PATCH'ем на
+      // orphan-INCOME (даже пустым, с `managerId: null` или просто
+      // тронув comment вместе с managerId) переписывал managerId на
+      // себя, и topManagers/salary засчитывали чужую/ничейную сумму
+      // в его бонус. Reopening того самого self-attribute вектора,
+      // который create() уже закрыл. Отклоняем ОБА случая: и «чужой
+      // владелец», и «нет владельца» (orphan). Захват orphan'ов —
+      // прерогатива elevated (FOUNDER/ADMIN/ACCOUNTANT).
+      if (existing.managerId !== caller.id) {
         throw new ForbiddenException(
           'Нельзя редактировать транзакцию чужого менеджера',
         );
       }
-      // Reversed (soft-deleted) → не даём менять сумму/тип. Иначе
-      // отменённая продажа снова становится «большой» строкой, а
-      // reversedAt остаётся — salary/topManagers их фильтруют, но
-      // любой live-агрегат по всей таблице (аудит, бухгалтерия)
-      // получит фиктивный inflated hit.
-      if (existing.reversedAt && (patch.amount !== undefined || patch.type !== undefined)) {
+      // Reversed (soft-deleted) → не даём менять сумму. Иначе отменённая
+      // продажа снова становится «большой» строкой, а reversedAt
+      // остаётся — salary/topManagers её фильтруют, но любой live-агрегат
+      // по всей таблице (аудит, бухгалтерия) получит фиктивный inflated
+      // hit. Type-change на reversed уже блочен УНИВЕРСАЛЬНО выше
+      // (Q4 fix), здесь дублировать не надо.
+      if (existing.reversedAt && patch.amount !== undefined) {
         throw new ForbiddenException(
-          'Отменённую транзакцию нельзя менять по сумме или типу',
+          'Отменённую транзакцию нельзя менять по сумме',
+        );
+      }
+      // === Q4 fix (non-elevated не может флипнуть type). ================
+      // create() под non-elevated жёстко self-attribute'ит managerId. Если
+      // здесь пустить менеджера менять type, вектор такой: берётся любая
+      // компанийская EXPENSE (rent/utilities, managerId=null), Q2 hole
+      // разрешает reassign managerId на self, Q4 hole разрешает flip в
+      // INCOME. Итог — фейковая выручка на бонус-счёте себя, без чека,
+      // с наследованным «мусорным» incomeSource/paymentPhase от EXPENSE.
+      // Легитимная правка типа — прерогатива бухгалтерии; если менеджер
+      // проставил тип криво при создании, пусть перезалит через
+      // ACCOUNTANT (или отменит и создаст заново — в его 3-суточном
+      // окне это ок).
+      if (patch.type !== undefined && patch.type !== before.type) {
+        throw new ForbiddenException(
+          'Менеджер не может менять тип транзакции',
         );
       }
       // managerId в патче: любая цель кроме self — отказ (симметрично
@@ -721,6 +822,22 @@ export class FinanceService {
         throw new BadRequestException(`currency должен быть один из: ${[...VALID_CURRENCIES].join(', ')}`);
       }
       patch.currency = c;
+    }
+    // Инвариант TUITION_PAYMENT (см. одноимённый комментарий в create()).
+    // PATCH-flip category=OTHER_INCOME → TUITION_PAYMENT воспроизводит ту же
+    // Finance/Salary дивергенцию: строка становится невидимой для
+    // salary.manualSalesAgg (фильтр category != TUITION_PAYMENT), но по-
+    // прежнему видна в finance.breakdown/byManager. Отдельно разрешаем
+    // no-op (patch.category === before.category === 'TUITION_PAYMENT'):
+    // canonical writer'ы (submissions/payments approvePayment) пишут строку
+    // с этой категорией напрямую через prisma, и PATCH таких строк по
+    // другим полям (comment/receiptUrl) должен продолжать работать без
+    // случайного 400 при "верни как было" из UI.
+    if (patch.category === 'TUITION_PAYMENT' && before.category !== 'TUITION_PAYMENT') {
+      throw new BadRequestException(
+        'Категория TUITION_PAYMENT зарезервирована для платежей по сделкам (SubmissionPayment). ' +
+        'Ручная смена категории на TUITION_PAYMENT приведёт к расхождению финансов и зарплат.',
+      );
     }
     if (patch.date !== undefined && patch.date !== null) {
       // Bounds-check на дату патча — окно ±3 суток для не-elevated и
@@ -816,6 +933,68 @@ export class FinanceService {
       }
     }
 
+    // === Q4 fix (type-flip receipt validation, parity с create()). =====
+    // Если PATCH меняет type И новый тип = EXPENSE — прогоняем ту же
+    // проверку чека, что create() применяет при создании EXPENSE
+    // (receiptKind обязателен; REASON_ONLY требует noReceiptReason ≥ 5
+    // символов; иначе receiptUrl обязателен). «Эффективное» значение
+    // берём из patch (если поле в патче) или из before-снимка (если нет)
+    // — иначе пришлось бы требовать перезаливки чека даже при чистом
+    // type-flip'е на записи, у которой чек уже приложен.
+    //
+    // Флипу FROM EXPENSE → INCOME отдельная валидация не нужна: create()
+    // никак не ограничивает INCOME по чеку.
+    const typeChanged =
+      patch.type !== undefined && patch.type !== before.type;
+    if (typeChanged && patch.type === 'EXPENSE') {
+      const effReceiptKind =
+        patch.receiptKind !== undefined ? patch.receiptKind : before.receiptKind;
+      const effReceiptUrl =
+        patch.receiptUrl !== undefined ? patch.receiptUrl : before.receiptUrl;
+      const effNoReceiptReason =
+        patch.noReceiptReason !== undefined
+          ? patch.noReceiptReason
+          : before.noReceiptReason;
+      if (!effReceiptKind) {
+        throw new BadRequestException(
+          'Для расхода обязательно подтверждение: чек, фото наличных или причина',
+        );
+      }
+      if (effReceiptKind === 'REASON_ONLY') {
+        if (!effNoReceiptReason || effNoReceiptReason.trim().length < 5) {
+          throw new BadRequestException(
+            'Укажи причину отсутствия чека (мин. 5 символов)',
+          );
+        }
+      } else {
+        // RECEIPT / CASH_PHOTO — нужен URL прикреплённой фотки
+        if (!effReceiptUrl) {
+          throw new BadRequestException('Загрузи фото чека или наличных');
+        }
+      }
+    }
+
+    // === Q4 fix (semantic field-nulling по эффективному типу). ==========
+    // create() гарантирует инвариант: EXPENSE не носит incomeSource /
+    // paymentPhase, INCOME не носит paidViaId. Без этого блока PATCH
+    // молча оставлял бы предыдущие значения при type-flip'е (или писал
+    // несовместимые поля из патча) — а `topManagers` / `incomeSources`
+    // группируют по incomeSource, и EXPENSE с ненулевым incomeSource
+    // подмешивалась бы в аналитику доходов. Форсим null на пост-патч
+    // тип, spread'им ПОСЛЕ явных patch-полей ниже, чтобы перебить их.
+    const effectiveType: TransactionType =
+      (patch.type ?? before.type) as TransactionType;
+    const isIncomeEff = effectiveType === 'INCOME';
+    const isExpenseEff = effectiveType === 'EXPENSE';
+    const semanticNullPatch: {
+      incomeSource?: null;
+      paymentPhase?: null;
+      paidViaId?: null;
+    } = {
+      ...(isExpenseEff && { incomeSource: null, paymentPhase: null }),
+      ...(isIncomeEff && { paidViaId: null }),
+    };
+
     const updated = await this.prisma.transaction.update({
       where: { id },
       data: {
@@ -838,18 +1017,30 @@ export class FinanceService {
         ...productCategoryEnumDataPatch,
         ...(paymentPhasePatch !== undefined && { paymentPhase: paymentPhasePatch }),
         ...(paidViaIdPatch !== undefined && { paidViaId: paidViaIdPatch }),
+        // Semantic invariant win: перебивает любые patch-поля выше,
+        // если они несовместимы с эффективным типом (см. create()
+        // строки 547-550 — ровно та же логика).
+        ...semanticNullPatch,
       },
       include: {
         student: { select: { id: true, fullName: true } },
         manager: { select: { id: true, fullName: true } },
       },
     });
-    // WS-нотификация staff-комнате: тот же сценарий, что в create() —
+    // WS-нотификация finance-staff-комнате: тот же сценарий, что в create() —
     // FOUNDER держит /finance открытой в другой вкладке, ACCOUNTANT
     // правит amount/managerId/date, FOUNDER видит правку без ручного
     // refetch. Emit ПОСЛЕ commit'а — на ошибке Prisma событие не
     // всплывёт и клиент получит 4xx/5xx.
-    this.realtime.emitStaff('transaction:updated', { transaction: updated });
+    //
+    // SEC (HIGH): emitFinanceStaff вместо emitStaff — payload содержит новые
+    // amount/managerId/comment/payerName. SALES_MANAGER/CLIENT_MANAGER
+    // не имеют HTTP-доступа к PATCH /finance/transactions/:id (см. @Roles
+    // на finance.controller.ts), поэтому и WS-события об этих правках им
+    // видеть нельзя — иначе через `socket.on('transaction:updated', ...)`
+    // менеджер бы читал чужие правки, включая переприписки managerId
+    // (bonus reassignments).
+    this.realtime.emitFinanceStaff('transaction:updated', { transaction: updated });
 
     // === Аудит правок транзакции (CRITICAL fix). =========================
     // Всё, что ниже — best-effort .catch(). Мы уже закоммитили правку в
@@ -1155,7 +1346,35 @@ export class FinanceService {
     // DELETE ходит через контроллер с реальным actor'ом — actorRole
     // попадает в ActivityLog для аудита.
     caller: FinanceActor = { id: '', isElevated: true },
+    // === Recovery-safe delete (audit HIGH, «hard-delete no recovery»). ===
+    // По умолчанию remove() теперь делает SOFT-delete: помечает исходную
+    // запись `reversedAt=new Date()` (не удаляя её физически) и добивает
+    // зеркальной корректирующей записью противоположного типа —
+    // ровно тот же pattern, что уже используется в
+    // submissions.service.ts::changeStatus(CANCEL). Соответственно:
+    //  • ошибочный клик Delete на 1_000_000 TJS INCOME больше не стирает
+    //    receiptUrl / comment / payerName / incomeSource / paymentPhase /
+    //    productCategory / paidViaId / date — их можно восстановить одним
+    //    PATCH `reversedAt=null` + UPDATE зеркальной строки;
+    //  • bonusApplied / salary-consistency — см. отдельный state-guard
+    //    ниже, блокируем даже soft-delete по умолчанию;
+    //  • финансовый дашборд (сумма income − expense) остаётся сбалансирован
+    //    zeркальной записью, а bonus-агрегаты (salary/topManagers/breakdown)
+    //    исключают reversedAt по SQL — INCOME из бонусной базы уходит.
+    //
+    // hardDelete=true — только для FOUNDER-ветки в контроллере (роль
+    // проверяется на controller-layer, здесь просто исполняется физическое
+    // удаление ПОСЛЕ orphan-check). Нужен для «санитарной» чистки древних
+    // reversal-цепочек, которые уже не имеют бизнес-смысла.
+    //
+    // overrideBonusApplied=true — снимает конкретно bonusApplied-guard.
+    // Требует elevated (проверяется в контроллере). Используется, когда
+    // бухгалтер уже вручную откатил SalaryRecord и хочет отменить исходную
+    // INCOME (иначе Conflict остановит его на автомате).
+    options: { hardDelete?: boolean; overrideBonusApplied?: boolean } = {},
   ) {
+    const hardDelete = options.hardDelete === true;
+    const overrideBonusApplied = options.overrideBonusApplied === true;
     // Снимок до удаления — Prisma.delete вернёт запись, но с
     // relation'ами получить её потом уже нельзя (строки в БД нет),
     // а ActivityLog хочет studentName + человекочитаемые details.
@@ -1164,37 +1383,282 @@ export class FinanceService {
       where: { id },
       include: { student: { select: { id: true, fullName: true } } },
     });
-    const deleted = await this.prisma.transaction.delete({ where: { id } });
-    // WS-нотификация staff-комнате: у второго пользователя, у которого
-    // /finance открыт, строка исчезнет из списка сразу. Полезный payload —
-    // просто id (фронту нужен именно он, чтобы выкинуть запись из cache).
-    // Emit ПОСЛЕ commit'а: если строки уже не было и Prisma бросит P2025,
-    // никаких «фантомных» delete-событий в UI не всплывёт.
-    this.realtime.emitStaff('transaction:deleted', { id, transaction: deleted });
-    // ActivityLog: FINANCE_DELETE. Best-effort — падение аудита не
-    // должно откатывать сам delete (запись уже нет, ре-play не сделаешь).
-    // Если existing до delete не удалось прочитать (гонка), логируем
-    // минимальный след — иначе полностью потерять аудит удаления хуже,
-    // чем неполный след.
+
+    // Единая NotFound-нормализация: раньше existence-check жил ТОЛЬКО
+    // внутри `!caller.isElevated` — elevated с несуществующим id проваливался
+    // в prisma.transaction.delete и получал raw P2025 (500 бухгалтеру).
+    // Плюс без этого early-return дальнейшие безусловные state-guard'ы
+    // (bonusApplied / reversedAt) не смогут безопасно разыменовать existing.
+    if (!existing) {
+      throw new NotFoundException('Транзакция не найдена');
+    }
+
+    // === Role-aware guard (parity fix с update()). =======================
+    // Аудит HIGH (Q5): раньше remove() шёл сразу в prisma.transaction.delete
+    // без проверки owner'а/роли. Пока контроллер прикрыт классовым
+    // @Roles('ADMIN','ACCOUNTANT') это маскирует дыру, но:
+    //  (а) стоит однажды добавить SALES_MANAGER в @Roles (или открыть DELETE
+    //      через кастомный permission finance:write — вектор, о котором
+    //      предупреждает комментарий в update() выше) — и любой менеджер
+    //      сможет удалить чужую INCOME-запись, сбивая бонус коллеге, без
+    //      явного следа мотива;
+    //  (б) остаётся асимметрия с update(), у которого guard есть — а более
+    //      разрушительный delete идёт голым. Defense-in-depth: тот же чек
+    //      здесь, до любой мутации.
+    // Owner-check остаётся role-gated: elevated (FOUNDER/ADMIN/ACCOUNTANT)
+    // работают с чужими записями по определению (историческая правка —
+    // их прерогатива). Data-integrity state-guard'ы (bonusApplied,
+    // reversedAt) вынесены НИЖЕ и применяются ко всем ролям.
+    if (!caller.isElevated) {
+      // Owner = кто-то из двух: либо attributed manager, либо recorder.
+      // Требуем хотя бы одно совпадение с caller.id — null-managerId
+      // (не приписанная) запись, которую внёс сам caller, всё равно его.
+      const ownedAsManager =
+        existing.managerId != null && existing.managerId === caller.id;
+      const ownedAsRecorder =
+        existing.recordedById != null && existing.recordedById === caller.id;
+      if (!ownedAsManager && !ownedAsRecorder) {
+        throw new ForbiddenException('Нельзя удалять чужую транзакцию');
+      }
+      // Non-elevated никогда не могут hard-delete — даже с флагом. Контроллер
+      // это тоже проверяет (FOUNDER-only), но дублируем на service-уровне
+      // на случай, если DELETE позовут не из finance.controller (chat/ai).
+      if (hardDelete) {
+        throw new ForbiddenException(
+          'Физическое удаление доступно только FOUNDER; используйте soft-delete',
+        );
+      }
+      // Аналогично overrideBonusApplied — только elevated.
+      if (overrideBonusApplied) {
+        throw new ForbiddenException(
+          'Обход блокировки bonusApplied доступен только elevated (FOUNDER/ADMIN/ACCOUNTANT)',
+        );
+      }
+    }
+
+    // === Data-integrity state guards (audit HIGH, Q4 + Q5). ==============
+    // Q4 — bonusApplied=true: SalaryRecord уже подтянул эту INCOME в
+    // salesAmount и, вероятно, выплата уже прошла. Soft-delete тоже опасен —
+    // bonus-агрегаты фильтруют reversedAt=null, поэтому при следующем
+    // пересчёте salary этой INCOME там уже не будет, а выплаченный бонус
+    // останется как «висящий». Разрешаем только с явным
+    // overrideBonusApplied=true (elevated) — обычно после ручного отката
+    // SalaryRecord бухгалтером.
+    if (existing.bonusApplied && !overrideBonusApplied) {
+      throw new ConflictException(
+        'Транзакция уже учтена в зарплате. Откатите SalaryRecord и повторите с overrideBonusApplied=true, либо используйте reverse-flow.',
+      );
+    }
+    // Q5 — reversedAt != null: строка уже soft-deleted (либо через
+    // submission CANCEL, либо предыдущим soft-remove). Повторный soft-delete
+    // создал бы дубль mirror-EXPENSE и раздул netProfit-корректировку в
+    // текущем периоде. Hard-delete по reversedAt-строке стирает единственный
+    // след самой отмены. В обоих случаях — блок.
+    if (existing.reversedAt) {
+      throw new ConflictException(
+        hardDelete
+          ? 'Транзакция уже отменена (reversedAt) — hard-delete разрушит аудит-трейл самой отмены'
+          : 'Транзакция уже отменена (reversedAt) — повторный soft-delete создаст дубль зеркальной записи',
+      );
+    }
+
+    // === Orphan-reference guard (audit CRITICAL). =========================
+    // SubmissionPayment.financeTransactionId / Payment.transactionId /
+    // Commission.transactionId — исторически plain String без @relation
+    // (см. schema.prisma:1683, 1157, 1282). Prisma в этом случае НЕ
+    // каскадит и НЕ валидирует ссылку на удаление — а зависимые ветки
+    // логики читают её позже как «живую»:
+    //   • submissions.service.ts changeStatus CANCEL — если Transaction
+    //     удалён, findUnique возвращает null → reversal INCOME для
+    //     SaleSubmission и создание mirror-REFUND EXPENSE тихо не
+    //     срабатывают. Bonus/salary base остаётся раздутой, netProfit
+    //     занижен (сам INCOME row тоже удалён);
+    //   • submissions.service.ts updatePayment paidAt/amount sync —
+    //     tx.transaction.update({ where: { id: <удалённый> } }) бросает
+    //     P2025 → 500 бухгалтеру, SubmissionPayment остаётся рассинхрон;
+    //   • partners/referrals.service.ts — использует Commission.transactionId
+    //     как ключ дедупликации; удалённая транзакция превращает ключ в
+    //     ссылку в никуда, следующее approve может выплатить партнёру
+    //     повторно.
+    //
+    // Для hard-delete — жёсткий блок (row исчезает, ссылки становятся
+    // dangling). Для soft-delete — тоже блок: даже если row остаётся,
+    // прямой delete в обход submission-CANCEL оставляет SubmissionPayment
+    // в статусе APPROVED, ссылающимся на reversedAt-строку. Правильный
+    // путь отмены сделки со связями — SaleSubmission CANCEL, который сам
+    // проставит reversedAt + REJECTED + зеркальную EXPENSE согласованно.
+    const [linkedSubPayment, linkedPayment, linkedCommission] =
+      await Promise.all([
+        this.prisma.submissionPayment.findFirst({
+          where: { financeTransactionId: id },
+          select: { id: true, submissionId: true },
+        }),
+        this.prisma.payment.findFirst({
+          where: { transactionId: id },
+          select: { id: true, studentId: true },
+        }),
+        this.prisma.commission.findFirst({
+          where: { transactionId: id },
+          select: { id: true, partnerId: true },
+        }),
+      ]);
+    if (linkedSubPayment || linkedPayment || linkedCommission) {
+      const refs: string[] = [];
+      if (linkedSubPayment) {
+        refs.push(
+          `SubmissionPayment ${linkedSubPayment.id} (заявка ${linkedSubPayment.submissionId})`,
+        );
+      }
+      if (linkedPayment) {
+        refs.push(
+          `Payment ${linkedPayment.id} (студент ${linkedPayment.studentId})`,
+        );
+      }
+      if (linkedCommission) {
+        refs.push(
+          `Commission ${linkedCommission.id} (партнёр ${linkedCommission.partnerId})`,
+        );
+      }
+      throw new ConflictException(
+        'Нельзя удалить транзакцию: на неё ссылаются ' +
+          refs.join(', ') +
+          '. Отмените исходную операцию (SaleSubmission CANCEL / возврат платежа), это создаст обратную запись и освободит ссылку.',
+      );
+    }
+
+    // === Hard-delete branch (FOUNDER-only, elevated confirmation). ========
+    // Дошли сюда — все guard'ы прошли, orphan-ссылок нет, FOUNDER явно
+    // попросил физическое удаление. Это последняя ветка, где prisma.delete
+    // остался легитимен: «санитарная» чистка исторических строк без
+    // бизнес-эффекта. Все остальные сценарии — через soft-delete ниже.
+    if (hardDelete) {
+      const deleted = await this.prisma.transaction.delete({ where: { id } });
+      // WS-нотификация finance-staff-комнате: у второго пользователя, у которого
+      // /finance открыт, строка исчезнет из списка сразу. Полезный payload —
+      // просто id (фронту нужен именно он, чтобы выкинуть запись из cache).
+      //
+      // SEC (HIGH): emitFinanceStaff вместо emitStaff — раньше в payload
+      // уходил весь `deleted` объект (amount, payerName, comment, managerId,
+      // receiptUrl). SALES_MANAGER/CLIENT_MANAGER не могут DELETE через HTTP
+      // (finance.controller.ts @Roles ADMIN/ACCOUNTANT), поэтому и знать о
+      // содержимом удалённых строк им нельзя. Комната 'finance-staff' держит
+      // WS-канал в тех же ролях-границах, что и REST.
+      this.realtime.emitFinanceStaff('transaction:deleted', { id, transaction: deleted });
+      this.activity
+        .log({
+          actorId: caller.id || null,
+          actorRole: caller.role || 'SYSTEM',
+          action: 'FINANCE_DELETE',
+          studentId: existing.studentId ?? null,
+          studentName: existing.student?.fullName ?? null,
+          details: this.formatTxDetails(existing) + ' [HARD DELETE]',
+          payload: {
+            transactionId: id,
+            managerId: existing.managerId ?? null,
+            amount: existing.amount,
+            currency: existing.currency,
+            category: existing.category,
+            type: existing.type,
+            hardDelete: true,
+            overrideBonusApplied,
+          },
+        })
+        .catch(() => undefined);
+      return deleted;
+    }
+
+    // === Soft-delete branch (default, recovery-safe). =====================
+    // Тот же pattern, что submissions.service.ts::changeStatus(CANCEL):
+    //   (1) исходная строка → reversedAt=now (не удаляем);
+    //   (2) зеркальная запись противоположного типа с тем же amount/currency
+    //       и reversedAt=now — «парная корректировка» для отчётов, которые
+    //       reversedAt не фильтруют (сырой ledger, бухгалтерская выгрузка).
+    // Всё внутри prisma.$transaction — либо оба апдейта, либо ни одного,
+    // чтобы не оставить «половинное» состояние (только reversedAt без
+    // зеркала = дисбаланс netProfit; только зеркало без reversedAt =
+    // дубль в бонусной базе).
+    const reversedAt = new Date();
+    const mirrorType: TransactionType =
+      existing.type === 'INCOME' ? 'EXPENSE' : 'INCOME';
+    // Категория зеркала — «OTHER_*»: соответствует schema TransactionCategory.
+    // Совпадает с тем, что делает submissions CANCEL (OTHER_EXPENSE) — так
+    // reports/breakdown не увидят вспышку в «профильной» категории.
+    const mirrorCategory: TransactionCategory =
+      existing.type === 'INCOME' ? 'OTHER_EXPENSE' : 'OTHER_INCOME';
+    const shortId = existing.id.slice(0, 8);
+
+    const { reversed, mirror } = await this.prisma.$transaction(async (tx) => {
+      const reversedRow = await tx.transaction.update({
+        where: { id },
+        data: { reversedAt },
+      });
+      const mirrorRow = await tx.transaction.create({
+        data: {
+          type: mirrorType,
+          category: mirrorCategory,
+          amount: existing.amount,
+          currency: existing.currency,
+          // Дата зеркала = сегодня, чтобы корректировка попала в текущий
+          // финансовый период, а не задним числом в уже закрытый месяц
+          // (иначе ретро-сдвиг netProfit предыдущих отчётов).
+          date: reversedAt,
+          studentId: existing.studentId,
+          managerId: existing.managerId,
+          // recordedBy — кто инициировал отмену. Может быть null для
+          // внутренних вызывающих (chat/ai) без caller.id — schema поле
+          // nullable, это допустимо.
+          recordedById: caller.id || null,
+          comment: `Отмена транзакции #${shortId} (soft-delete)`,
+          // Reversal-запись — корректирующая; маркируем reversedAt тоже,
+          // чтобы (а) при возможном UN-CANCEL её не «отменить повторно»,
+          // (б) отчёты могли отличить её как pair-entry, (в) bonus-агрегаты
+          // (фильтруют reversedAt=null) её не подхватили как «настоящий»
+          // доход/расход менеджера.
+          reversedAt,
+        },
+      });
+      return { reversed: reversedRow, mirror: mirrorRow };
+    });
+
+    // WS-нотификации finance-staff-комнате. Emit ПОСЛЕ commit'а $transaction,
+    // чтобы при роллбэке в UI не всплыли фантомы. Emit'им ОБЕ строки:
+    //  • transaction:updated — исходная получила reversedAt, UI должен
+    //    показать её как «отменена» (перечёркнутой);
+    //  • transaction:new — зеркальная строка появилась в списке как
+    //    корректирующая запись.
+    // Фронт (Finance.tsx) слушает и то и другое → schedule invalidate.
+    this.realtime.emitFinanceStaff('transaction:updated', { transaction: reversed });
+    this.realtime.emitFinanceStaff('transaction:new', { transaction: mirror });
+
+    // ActivityLog: FINANCE_DELETE. Best-effort — падение аудита не должно
+    // откатывать сам soft-delete. Сохраняем ссылку на mirror.id, чтобы
+    // при разборе инцидента можно было найти обе строки.
     this.activity
       .log({
         actorId: caller.id || null,
         actorRole: caller.role || 'SYSTEM',
         action: 'FINANCE_DELETE',
-        studentId: existing?.studentId ?? deleted.studentId ?? null,
-        studentName: existing?.student?.fullName ?? null,
-        details: this.formatTxDetails(existing ?? deleted),
+        studentId: existing.studentId ?? null,
+        studentName: existing.student?.fullName ?? null,
+        details:
+          this.formatTxDetails(existing) +
+          ` [SOFT DELETE → mirror ${mirror.id.slice(0, 8)}]`,
         payload: {
           transactionId: id,
-          managerId: existing?.managerId ?? deleted.managerId ?? null,
-          amount: (existing ?? deleted).amount,
-          currency: (existing ?? deleted).currency,
-          category: (existing ?? deleted).category,
-          type: (existing ?? deleted).type,
+          mirrorTransactionId: mirror.id,
+          managerId: existing.managerId ?? null,
+          amount: existing.amount,
+          currency: existing.currency,
+          category: existing.category,
+          type: existing.type,
+          softDelete: true,
+          overrideBonusApplied,
+          reversedAt: reversedAt.toISOString(),
         },
       })
       .catch(() => undefined);
-    return deleted;
+
+    return reversed;
   }
 
   /**
@@ -1205,11 +1669,40 @@ export class FinanceService {
    *  - byExpenseCategory — EXPENSE разбитый по TransactionCategory
    * Отменённые (reversedAt != null) исключаем, чтобы структура не искажалась
    * отказниками — та же логика, что в topManagers.
+   *
+   * === BONUS-RECONCILE FIX (audit CRITICAL, follow-up bug #22) ===========
+   * Ранее byManager/byIncomeSource считали ВСЮ INCOME по Transaction.date,
+   * а salary.preview — TUITION_PAYMENT-приход по SubmissionPayment.reviewedAt
+   * (bug #22 фикс, см. salary.service.ts:112). Одна и та же продажа с
+   * paidAt в одном периоде и reviewedAt в следующем попадала в разные
+   * месяцы у двух отчётов: FOUNDER видел в /finance/breakdown у Amir'а
+   * 15 000 TJS в ноябре, а в квитке зарплаты — 10 000 TJS. Разницу
+   * невозможно было отследить без ручной сверки платежей.
+   *
+   * Fix: разбиваем INCOME на два куска (те же, что использует salary):
+   *   1) TUITION_PAYMENT-транзакции — берём через SubmissionPayment
+   *      .reviewedAt-период (тот же якорь, что даёт бонус). Так суммарный
+   *      byManager amount === salary.preview.salesAmount для одного
+   *      менеджера/периода.
+   *   2) Ручные INCOME (category != TUITION_PAYMENT) — по Transaction
+   *      .date, как раньше. У них нет SubmissionPayment.reviewedAt,
+   *      триггер начисления = сам факт транзакции.
+   *
+   * byExpenseCategory остаётся по Transaction.date — расходы к
+   * SubmissionPayment не привязаны, триггер всегда сам факт транзакции.
+   *
+   * Двойной парити-якорь с salary: TUITION_PAYMENT-транзакции с
+   * reversedAt != null исключаем даже если payment ещё status=APPROVED
+   * (случай ручной корректировки без CANCEL сделки). См. ANCHOR-PARITY-FIX
+   * в salary.service.ts.
    */
   async breakdown(opts: { from?: Date; to?: Date }) {
     this.validateRange(opts);
     const dateRange = opts.from || opts.to
       ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+      : {};
+    const reviewedRange = opts.from || opts.to
+      ? { reviewedAt: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
       : {};
     const liveWhere = { ...dateRange, reversedAt: null } as const;
     // Fix (audit — currency mixing, CRITICAL): все три groupBy
@@ -1220,34 +1713,88 @@ export class FinanceService {
     // показать баннер «в периоде были ещё платежи в USD/EUR».
     const tjsWhere = { ...liveWhere, currency: REPORTING_CURRENCY } as const;
 
-    const [bySrc, byMgr, byCat, mgrList, nonTjs] = await Promise.all([
-      this.prisma.transaction.groupBy({
-        by: ['incomeSource'],
-        where: { ...tjsWhere, type: 'INCOME' },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['managerId'],
-        where: { ...tjsWhere, type: 'INCOME', managerId: { not: null } },
-        _sum: { amount: true },
-        _count: true,
-        orderBy: { _sum: { amount: 'desc' } },
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['category'],
-        where: { ...tjsWhere, type: 'EXPENSE' },
-        _sum: { amount: true },
-        _count: true,
-        orderBy: { _sum: { amount: 'desc' } },
-      }),
-      // Единичный дозапрос за именами менеджеров — findMany быстрее чем
-      // N отдельных `include`, а groupBy relation'ы не поддерживает.
-      this.prisma.user.findMany({
-        select: { id: true, fullName: true, email: true },
-      }),
-      this.nonTjsTotals(liveWhere),
-    ]);
+    // Шаг 1: собираем финансовые транзакции, порождённые SubmissionPayment
+    // одобрениями, попавшими в период по reviewedAt (тот же скоуп, что
+    // salary — TJS-сделки, не CANCELLED). Prisma не даёт back-relation
+    // Transaction → SubmissionPayment (в schema.prisma только @unique-FK),
+    // поэтому идём в 2 шага: сначала payment-ids → tx-ids, потом
+    // groupBy по Transaction c `id in (...)`.
+    const reviewedPayments = await this.prisma.submissionPayment.findMany({
+      where: {
+        status: 'APPROVED',
+        ...reviewedRange,
+        submission: {
+          currency: REPORTING_CURRENCY,
+          status: { not: 'CANCELLED' },
+        },
+        financeTransactionId: { not: null },
+      },
+      select: { financeTransactionId: true },
+    });
+    const reviewedTxIds = reviewedPayments
+      .map((p) => p.financeTransactionId)
+      .filter((id): id is string => id !== null);
+
+    // Where-фильтр «tuition-транзакции, попавшие в период по reviewedAt».
+    // reversedAt: null — второй якорь parity с salary (см. заголовок).
+    // Пустой набор id → Prisma вернёт 0 строк без ошибки.
+    const submissionSourcedWhere = {
+      id: { in: reviewedTxIds },
+      reversedAt: null,
+      type: 'INCOME' as const,
+      currency: REPORTING_CURRENCY,
+    };
+
+    // Ручной INCOME — старый date-based фильтр, но с исключением
+    // TUITION_PAYMENT (эти теперь считаются через reviewedAt-ветку выше,
+    // чтобы не задвоить). По инварианту, ручное создание Transaction с
+    // category=TUITION_PAYMENT запрещено, но фильтр — defense-in-depth.
+    const manualIncomeWhere = {
+      ...tjsWhere,
+      type: 'INCOME' as const,
+      category: { not: 'TUITION_PAYMENT' as const },
+    };
+
+    const [bySrcManual, bySrcSub, byMgrManual, byMgrSub, byCat, mgrList, nonTjs] =
+      await Promise.all([
+        this.prisma.transaction.groupBy({
+          by: ['incomeSource'],
+          where: manualIncomeWhere,
+          _sum: { amount: true },
+          _count: true,
+        }),
+        this.prisma.transaction.groupBy({
+          by: ['incomeSource'],
+          where: submissionSourcedWhere,
+          _sum: { amount: true },
+          _count: true,
+        }),
+        this.prisma.transaction.groupBy({
+          by: ['managerId'],
+          where: { ...manualIncomeWhere, managerId: { not: null } },
+          _sum: { amount: true },
+          _count: true,
+        }),
+        this.prisma.transaction.groupBy({
+          by: ['managerId'],
+          where: { ...submissionSourcedWhere, managerId: { not: null } },
+          _sum: { amount: true },
+          _count: true,
+        }),
+        this.prisma.transaction.groupBy({
+          by: ['category'],
+          where: { ...tjsWhere, type: 'EXPENSE' },
+          _sum: { amount: true },
+          _count: true,
+          orderBy: { _sum: { amount: 'desc' } },
+        }),
+        // Единичный дозапрос за именами менеджеров — findMany быстрее чем
+        // N отдельных `include`, а groupBy relation'ы не поддерживает.
+        this.prisma.user.findMany({
+          select: { id: true, fullName: true, email: true },
+        }),
+        this.nonTjsTotals(liveWhere),
+      ]);
 
     const INCOME_SRC_LABEL: Record<string, string> = {
       NEW_CLIENT: 'Новый клиент',
@@ -1257,19 +1804,45 @@ export class FinanceService {
     };
     const userMap = new Map(mgrList.map((u) => [u.id, u]));
 
+    // Мёрж двух источников INCOME по incomeSource. Ключ null → '_none'
+    // при выводе, но в Map держим null, чтобы не спутать с валидным enum.
+    const srcMap = new Map<string | null, { amount: number; count: number }>();
+    for (const g of [...bySrcManual, ...bySrcSub]) {
+      const key = g.incomeSource ?? null;
+      const cur = srcMap.get(key) ?? { amount: 0, count: 0 };
+      cur.amount += g._sum.amount || 0;
+      cur.count += g._count;
+      srcMap.set(key, cur);
+    }
+    // Тот же мёрж для byManager. Если один менеджер имеет и ручной, и
+    // submission-приход в периоде — суммируем; иначе была бы дубль-строка.
+    const mgrMap = new Map<string, { amount: number; count: number }>();
+    for (const g of [...byMgrManual, ...byMgrSub]) {
+      if (!g.managerId) continue; // managerId filter выше уже режет null
+      const cur = mgrMap.get(g.managerId) ?? { amount: 0, count: 0 };
+      cur.amount += g._sum.amount || 0;
+      cur.count += g._count;
+      mgrMap.set(g.managerId, cur);
+    }
+
     return {
-      byIncomeSource: bySrc.map((g) => ({
-        source: g.incomeSource || '_none',
-        label: INCOME_SRC_LABEL[g.incomeSource || '_none'] || g.incomeSource,
-        amount: g._sum.amount || 0,
-        count: g._count,
+      byIncomeSource: Array.from(srcMap.entries()).map(([source, v]) => ({
+        source: source ?? '_none',
+        label: INCOME_SRC_LABEL[source ?? '_none'] ?? source,
+        amount: v.amount,
+        count: v.count,
       })),
-      byManager: byMgr.map((g) => ({
-        managerId: g.managerId,
-        manager: userMap.get(g.managerId!) || { id: g.managerId, fullName: 'Без менеджера' },
-        amount: g._sum.amount || 0,
-        count: g._count,
-      })),
+      // Сортировка desc по amount — перенесена из orderBy в in-memory
+      // после мёржа. Прежний Prisma orderBy отсортировал бы каждый кусок
+      // отдельно и после сложения порядок разъехался бы.
+      byManager: Array.from(mgrMap.entries())
+        .sort((a, b) => b[1].amount - a[1].amount)
+        .map(([managerId, v]) => ({
+          managerId,
+          manager: userMap.get(managerId) || { id: managerId, fullName: 'Без менеджера' },
+          amount: v.amount,
+          count: v.count,
+        })),
       byExpenseCategory: byCat.map((g) => ({
         category: g.category,
         amount: g._sum.amount || 0,
@@ -1277,6 +1850,15 @@ export class FinanceService {
       })),
       currency: REPORTING_CURRENCY,
       nonTjsTotals: nonTjs,
+      // Метадата якоря — фронт может показать подсказку бухгалтеру:
+      // «tuition-приход учтён по дате одобрения FOUNDER'ом (совпадает с
+      // датой начисления бонуса зарплаты); ручной INCOME — по дате
+      // самой транзакции». Помогает при сверке с /salary/preview,
+      // если менеджер спрашивает «почему разные числа?».
+      incomeAnchor: {
+        tuition: 'submissionPayment.reviewedAt',
+        manual: 'transaction.date',
+      },
     };
   }
 
@@ -1403,15 +1985,24 @@ export class FinanceService {
 
 function bucketKey(d: Date, bucket: 'day' | 'week' | 'month'): string {
   const dt = new Date(d);
+  // Fix (Q7 — TZ leak): раньше bucket считался в UTC, из-за чего транзакции
+  // между 00:00–04:59 TJT падали в предыдущие сутки/неделю/месяц (например,
+  // 2026-02-01T02:00 TJT = 2026-01-31T21:00Z → уходило в январь). Все ключи
+  // должны считаться в Asia/Dushanbe — как и остальные периодические границы
+  // (см. common/tj-time.ts).
   if (bucket === 'day') {
-    return dt.toISOString().slice(0, 10);
+    return tjLocalDay(dt);
   }
+  const { y, m, d: dd } = tjYMD(dt);
   if (bucket === 'month') {
-    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
+    return `${y}-${String(m).padStart(2, '0')}`;
   }
-  // week — ISO week (понедельник как старт)
-  const day = dt.getUTCDay() || 7;
-  const monday = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate() - day + 1));
+  // week — ISO week (понедельник как старт) от TJ-локальной календарной даты.
+  // Берём (y,m,d) в TJT и обращаемся с ним как с чистой датой через UTC-якорь,
+  // чтобы арифметика дней не «поехала» из-за UTC-vs-TJT.
+  const anchor = new Date(Date.UTC(y, m - 1, dd));
+  const day = anchor.getUTCDay() || 7;
+  const monday = new Date(Date.UTC(y, m - 1, dd - day + 1));
   return monday.toISOString().slice(0, 10);
 }
 

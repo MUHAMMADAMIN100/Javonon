@@ -372,15 +372,59 @@ export class FinanceController {
   }
 
   @Delete('transactions/:id')
-  remove(@Param('id') id: string, @CurrentUser() me: any) {
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() me: any,
+    // hardDelete=true — физическое удаление (prisma.delete), необратимо.
+    // Только FOUNDER, только после успешного orphan-check в сервисе. По
+    // умолчанию remove() делает soft-delete (reversedAt + зеркальная
+    // корректирующая запись) — восстановимо PATCH'ем, аудит-трейл целый.
+    // Repro из аудита («бухгалтер по ошибке кликнул Delete на 1_000_000
+    // TJS INCOME»): без флага исходная строка остаётся в БД, а зеркальный
+    // EXPENSE компенсирует её на дашборде.
+    //
+    // overrideBonusApplied=true — снимает block при bonusApplied=true.
+    // Только для elevated (FOUNDER/ADMIN/ACCOUNTANT). Используется, когда
+    // бухгалтер УЖЕ вручную откатил соответствующий SalaryRecord и хочет
+    // отменить исходную INCOME (иначе Conflict).
+    //
+    // Query-параметры (а не body), потому что DELETE с телом плохо
+    // переваривается разными HTTP-клиентами и фронт наш (finance.ts)
+    // уже отправляет обычный DELETE без body. Флаги — опциональные,
+    // отсутствие = безопасный default (soft-delete, guard включён).
+    @Query('hardDelete') hardDeleteQ?: string,
+    @Query('overrideBonusApplied') overrideBonusAppliedQ?: string,
+  ) {
+    const hardDelete = hardDeleteQ === 'true' || hardDeleteQ === '1';
+    const overrideBonusApplied =
+      overrideBonusAppliedQ === 'true' || overrideBonusAppliedQ === '1';
+
+    // Роль-guard на contoller-layer — до сервисной валидации. Дублируется
+    // в service.remove() (тот же чек), но здесь отвечаем 403 сразу,
+    // а не после лишнего findUnique.
+    if (hardDelete && !hasRole(me, 'FOUNDER')) {
+      throw new ForbiddenException(
+        'Физическое удаление (hardDelete=true) доступно только FOUNDER. Используйте обычный DELETE (soft-delete) — исходная запись сохранится, добавится зеркальная корректирующая.',
+      );
+    }
+    if (overrideBonusApplied && !isElevated(me)) {
+      throw new ForbiddenException(
+        'Флаг overrideBonusApplied доступен только FOUNDER/ADMIN/ACCOUNTANT',
+      );
+    }
+
     // Передаём actor, чтобы FINANCE_DELETE в ActivityLog содержал имя
     // и роль удалившего. Без этого FOUNDER увидел бы факт удаления
     // только через emit + мог только грепом по логам искать автора.
-    return this.svc.remove(id, {
-      id: me.id,
-      role: me?.role,
-      isElevated: isElevated(me),
-    });
+    return this.svc.remove(
+      id,
+      {
+        id: me.id,
+        role: me?.role,
+        isElevated: isElevated(me),
+      },
+      { hardDelete, overrideBonusApplied },
+    );
   }
 
   @Get('summary')

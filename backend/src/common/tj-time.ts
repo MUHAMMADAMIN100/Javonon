@@ -78,18 +78,31 @@ export function tjEndOfDay(d: Date = new Date()): Date {
   return new Date(tjStartOfNextDay(d).getTime() - 1);
 }
 
+/** Есть ли у ISO-строки явный маркер таймзоны в конце (`Z` или `±HH[:]MM`).
+ *  Нужно, чтобы «наивные» datetime-local строки вида `2026-06-16T14:30`
+ *  НЕ уходили в `new Date(input)` — иначе они интерпретируются в TZ
+ *  процесса (UTC на Railway) и «съезжают» на 5 часов относительно TJT. */
+function hasExplicitTimezone(input: string): boolean {
+  return /(Z|[+-]\d{2}:?\d{2})$/i.test(input);
+}
+
 /** Парсинг YYYY-MM-DD пришедшего из UI как полночи Asia/Dushanbe.
  *  Раньше `new Date('2026-06-16')` давало UTC-полночь, в Душанбе уже
  *  05:00 → день показывался криво при фильтре «с какой по какую». */
 export function tjParseLocalDate(input: string): Date {
-  // Допускаем уже полную ISO-строку с временем (если UI кладёт T...).
-  if (/T\d/.test(input)) return new Date(input);
+  // Уже полная ISO-строка с явным offset/Z — доверяем ей.
+  if (hasExplicitTimezone(input)) return new Date(input);
+  // Есть время, но без таймзоны (например, `<input type="datetime-local">`
+  // отдаёт `2026-06-16T14:30`) — считаем это временем в TJT, а не в UTC.
+  if (/T\d/.test(input)) return new Date(`${input}+05:00`);
   return new Date(`${input}T00:00:00+05:00`);
 }
 
 /** Парсинг конца периода: 23:59:59.999 ТJT для указанного YYYY-MM-DD. */
 export function tjParseLocalDateEnd(input: string): Date {
-  if (/T\d/.test(input)) return new Date(input);
+  if (hasExplicitTimezone(input)) return new Date(input);
+  // Наивный datetime-local — уважаем указанное пользователем время, но в TJT.
+  if (/T\d/.test(input)) return new Date(`${input}+05:00`);
   return new Date(`${input}T23:59:59.999+05:00`);
 }
 

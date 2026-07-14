@@ -49,6 +49,15 @@ export interface SalaryPreview {
   /** Какой этап тарифной сетки применился (если bonusPercent не override). */
   bonusTierId?: string | null;
   bonusTierComment?: string | null;
+  /**
+   * Разбивка не-TJS продаж (по коду валюты → сумма в исходной валюте).
+   * НЕ входят в salesAmount / bonusAmount / netAmount — это
+   * информационный breakdown для бухгалтера: видно, что USD/EUR/CNY/RUB
+   * активность в периоде была, но требует ручной обработки (или
+   * FX-конвертации до APPROVE). Пустой объект / undefined — период
+   * чисто в TJS.
+   */
+  nonTjsSales?: Record<string, number>;
 }
 
 export const listSalaries = (params?: { userId?: string; from?: string; to?: string }) =>

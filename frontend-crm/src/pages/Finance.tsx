@@ -37,6 +37,10 @@ import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../l
 import CrmDatePicker from '../components/CrmDatePicker';
 import { tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
+import { useRealtime } from '../realtime';
+import { useAuth } from '../store/auth';
+import { hasRole, isElevated } from '../lib/roles';
+import { hasPermission } from '../lib/permissions';
 
 function fmtMoney(n: number, currency = 'TJS'): string {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -139,6 +143,63 @@ export default function Finance() {
   const { t } = useT();
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
+  // === Role/permission gating (audit HIGH — SALES_MANAGER на /finance) ===
+  // До фикса каждая кнопка/форма рендерилась безусловно: SALES_MANAGER,
+  // которому FOUNDER дал `finance:read` (кастомная роль «Наблюдатель за
+  // выручкой»), или который просто набрал /finance в адресной строке,
+  // видел UI как FOUNDER — DELETE-иконку, форму EXPENSE, подтверждение
+  // клиентских платежей — и каждая мутация оборачивалась в 403 от backend.
+  // Зеркалим backend-политику (finance.controller.ts, payments.controller.ts,
+  // finance.service.ts::create/remove) прямо в UI, чтобы не давать
+  // недоступные действия визуально.
+  const me = useAuth((s) => s.user);
+  // Собственный id — используется как self-attribute-fallback для
+  // managerId non-elevated пользователей: backend всё равно перезапишет
+  // managerId на caller.id (finance.service.ts), а UI явно показывает
+  // «оформляю на себя», чтобы SALES_MANAGER не удивлялся, что строчка
+  // ушла на его имя вместо чужого менеджера, привязанного к заявке.
+  const mySelfId = me?.id ?? '';
+  // FOUNDER / ADMIN / ACCOUNTANT — полный доступ к финмодулю.
+  const elevated = isElevated(me);
+  // Кастомная роль (Настройки → Роли) в backend RolesGuard ЗАМЕНЯЕТ базу
+  // (см. roles.guard.ts skipBaseRole). Держим тот же флаг, чтобы
+  // SALES_MANAGER с custom-role «Наблюдатель» (только finance:read) не
+  // получал по base-role доступ к POST /finance/transactions.
+  const hasCustomRole = !!(me?.customRoleId);
+  const managerBaseRole = hasRole(me, 'SALES_MANAGER', 'CLIENT_MANAGER');
+  // POST /finance/transactions: @Roles('ADMIN','ACCOUNTANT','SALES_MANAGER',
+  // 'CLIENT_MANAGER'). custom-role пропускает по явному permission.
+  const canCreateTx =
+    elevated ||
+    (!hasCustomRole && managerBaseRole) ||
+    hasPermission(me, 'finance:create', 'finance:write');
+  // DELETE /finance/transactions/:id — @Roles('ADMIN','ACCOUNTANT') на
+  // контроллере (finance.controller.ts:223+374). custom-role может открыть
+  // явным `finance:delete`/`finance:write`.
+  const canDeleteTx =
+    elevated || hasPermission(me, 'finance:delete', 'finance:write');
+  // POST /payments/:id/confirm|reject — @Roles('ADMIN','ACCOUNTANT') на
+  // контроллере (payments.controller.ts:13). Бухгалтерская мутация уровня
+  // FOUNDER, custom-role сюда сознательно не пускаем без явного расширения
+  // backend — иначе SALES_MANAGER с `finance:read` увидит клиентские
+  // «поступления в кассу» и сможет подтвердить чужие деньги.
+  const canReviewPayments = elevated;
+  // AI-add — раньше был доступен всем ролям и мог создать EXPENSE (модель
+  // сама решает тип по фразе). Non-elevated тогда молча ловил 403 после
+  // распознавания. Раз EXPENSE запрещён, оставляем AI-quick-entry только
+  // elevated: у них семантика «быстро набросать любой тип», у менеджера —
+  // явная форма INCOME.
+  const canUseAiAdd = elevated;
+  // POST /finance/transactions на backend: type=EXPENSE разрешён только
+  // FOUNDER / ADMIN / ACCOUNTANT (finance.controller.ts:291). Раньше форма
+  // «Новая транзакция» показывала EXPENSE всем: SALES_MANAGER выбирал
+  // «Расход», заполнял всё, uploadReceipt POST'ил файл на диск,
+  // createTransaction возвращал 403 → orphan-файл в /uploads/ + непонятный
+  // Russian toast. Гейтим по роли на клиенте: hide-option (a) — самый
+  // чистый вариант, менеджер даже не видит EXPENSE, поэтому не может
+  // случайно потянуть файл на диск. Backend-проверка остаётся источником
+  // истины (см. finance.controller.ts).
+  const canExpense = hasRole(me, 'FOUNDER', 'ADMIN', 'ACCOUNTANT');
   const [filterType, setFilterType] = useState<TransactionType | ''>('');
   const [filterIncomeSource, setFilterIncomeSource] = useState<IncomeSource | ''>('');
   const [filterProductEnum, setFilterProductEnum] = useState<ProductCategoryEnum | ''>('');
@@ -280,6 +341,65 @@ export default function Finance() {
     qc.invalidateQueries({ queryKey: keys.finance.all });
     qc.invalidateQueries({ queryKey: keys.payments.all });
   };
+
+  // Realtime: подписываемся на WS-события из finance/payments/submissions
+  // сервисов и invalidate'им соответствующие queryKeys. Backend эмитит эти
+  // события в `staff`-комнату (см. finance.service.ts:566, 863, 1223 и
+  // payments.service.ts:78, 158-159, submissions.service.ts:1065, 1308).
+  //
+  // Ранее Finance.tsx не подписывался ни на одно из них, из-за чего
+  // FOUNDER + ACCOUNTANT, одновременно работающие с /finance, видели
+  // stale summary/breakdown/topManagers до hard reload — именно тот
+  // сценарий, ради которого backend WS-emit'ы были добавлены.
+  //
+  // Debounce: серия быстрых POST'ов (импорт, массовые операции) может
+  // прилететь плотным потоком; каждый invalidate триггерит перезапрос
+  // тяжёлых aggregate-эндпоинтов (summary/breakdown/topManagers/
+  // distribution). Собираем инвалидации в 400ms-окно, чтобы не долбить
+  // backend по 5+ раз в секунду. Ref-flags удерживают, какие бакеты
+  // нужно инвалидировать по итогу окна.
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingInvalidateRef = useRef<{ finance: boolean; payments: boolean }>({
+    finance: false,
+    payments: false,
+  });
+  const scheduleInvalidate = (buckets: { finance?: boolean; payments?: boolean }) => {
+    if (buckets.finance) pendingInvalidateRef.current.finance = true;
+    if (buckets.payments) pendingInvalidateRef.current.payments = true;
+    if (invalidateTimerRef.current) return;
+    invalidateTimerRef.current = setTimeout(() => {
+      invalidateTimerRef.current = null;
+      const flags = pendingInvalidateRef.current;
+      pendingInvalidateRef.current = { finance: false, payments: false };
+      if (flags.finance) qc.invalidateQueries({ queryKey: keys.finance.all });
+      if (flags.payments) qc.invalidateQueries({ queryKey: keys.payments.all });
+    }, 400);
+  };
+  useEffect(() => {
+    return () => {
+      if (invalidateTimerRef.current) {
+        clearTimeout(invalidateTimerRef.current);
+        invalidateTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useRealtime({
+    // Транзакции: любое изменение — списка, summary, breakdown, timeseries,
+    // topManagers, distribution, income-sources, income-by-product зависят
+    // от финансовых данных, поэтому инвалидируем всё дерево finance.
+    'transaction:new': () => scheduleInvalidate({ finance: true }),
+    'transaction:updated': () => scheduleInvalidate({ finance: true }),
+    'transaction:deleted': () => scheduleInvalidate({ finance: true }),
+    // Рефанд по TUITION_PAYMENT создаёт reverse-пару транзакций и
+    // пересчитывает баланс студента — те же aggregate'ы уходят в stale.
+    'transaction:reversed': () => scheduleInvalidate({ finance: true }),
+    // Payments: приход новой заявки и её подтверждение должны обновить
+    // и список PENDING (payments.list), и pending-виджет + summary
+    // (payments confirmed => появляется новая транзакция в finance).
+    'payment:pending': () => scheduleInvalidate({ payments: true, finance: true }),
+    'payment:confirmed': () => scheduleInvalidate({ payments: true, finance: true }),
+  });
 
   // Confirm payment — оптимистично убираем из PENDING-списка.
   const confirmPayMut = useOptimisticMutation<Payment, Payment, Payment[]>({
@@ -513,7 +633,13 @@ export default function Finance() {
         </div>
       )}
 
-      {/* AI quick add */}
+      {/* AI quick add — только elevated (FOUNDER/ADMIN/ACCOUNTANT).
+          Модель распознавания сама решает, INCOME это или EXPENSE, а
+          POST /finance/transactions блокирует EXPENSE для менеджеров
+          (finance.controller.ts:291). Раньше SALES_MANAGER писал
+          «купили бумагу 200» → форма отправляла EXPENSE → 403 + generic
+          error toast без объяснения, что EXPENSE ему запрещён. */}
+      {canUseAiAdd && (
       <motion.form
         onSubmit={onAi}
         initial={{ opacity: 0, y: 16 }}
@@ -583,6 +709,7 @@ export default function Finance() {
           {aiBusy ? t('common.saving') : t('common.add')} <Icon name="arrow_outward" size={14} />
         </button>
       </motion.form>
+      )}
 
       {/* Revenue chart (timeseries) */}
       {series.length > 0 && (
@@ -737,8 +864,14 @@ export default function Finance() {
         </div>
       )}
 
-      {/* Заявки на оплату от клиентов (от студентов) — ждут подтверждения бухгалтера */}
-      {paymentRequests.length > 0 && (
+      {/* Заявки на оплату от клиентов (от студентов) — ждут подтверждения
+          бухгалтера. Backend: POST /payments/:id/confirm|reject доступны
+          только ADMIN/ACCOUNTANT/FOUNDER (payments.controller.ts:13). До
+          фикса блок рендерился всем ролям, у SALES_MANAGER с finance:read
+          «висели» кнопки confirm/reject, которые упирались в 403 —
+          вводило в заблуждение и открывало доступ к чужим клиентским
+          суммам. Прячем блок целиком для не-elevated ролей. */}
+      {canReviewPayments && paymentRequests.length > 0 && (
         <div style={{ marginBottom: 32 }}>
           <div className="crm-section-head">
             <span className="crm-section-eyebrow" style={{ color: 'var(--primary-dark)' }}>{t('eyebrow.paymentRequests')}</span>
@@ -830,21 +963,37 @@ export default function Finance() {
                     </td>
                     <td>{app.manager?.fullName || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
                     <td>
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => {
-                          setShowForm(true);
-                          // Pre-select student in form via state below
-                          setPreselectedStudent({
-                            studentId: app.studentId,
-                            managerId: app.managerId,
-                            amount: app.program?.cost,
-                            currency: app.program?.currency,
-                          });
-                        }}
-                      >
-                        {t('finance.recordPayment')}
-                      </button>
+                      {/* «Внести оплату» открывает ту же TransactionForm.
+                          Гейтим по canCreateTx (кто в принципе имеет право
+                          на POST). Для менеджера без finance:create кнопка
+                          скрыта — иначе он попадал бы в форму, из которой
+                          всё равно ничего не смог бы отправить.
+                          Дополнительно: не-elevated менеджер может внести
+                          оплату только по своему студенту (backend
+                          ownership-check в finance.service.create). Если
+                          заявка чужого менеджера — кнопка скрыта, чтобы
+                          не порождать «случайный клик → 403 по чужому
+                          студенту». */}
+                      {canCreateTx && (elevated || !app.managerId || app.managerId === mySelfId) && (
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => {
+                            setShowForm(true);
+                            // Pre-select student in form via state below.
+                            // Для non-elevated backend перепишет managerId
+                            // на caller.id независимо от значения ниже,
+                            // но передаём осмысленный default для elevated.
+                            setPreselectedStudent({
+                              studentId: app.studentId,
+                              managerId: elevated ? app.managerId : mySelfId,
+                              amount: app.program?.cost,
+                              currency: app.program?.currency,
+                            });
+                          }}
+                        >
+                          {t('finance.recordPayment')}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -938,9 +1087,16 @@ export default function Finance() {
           </>
         )}
         <div style={{ flex: 1 }} />
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-          <Icon name="add" size={18} /> {t('finance.newTransaction')}
-        </button>
+        {/* «Новая транзакция» — гейт по backend @Roles на POST
+            /finance/transactions (ADMIN/ACCOUNTANT/SALES_MANAGER/CLIENT_MANAGER)
+            + custom-role permission `finance:create`/`finance:write`. Раньше
+            SALES_MANAGER с `finance:read` из custom-роли видел кнопку,
+            открывал форму, заполнял и получал 403 на первом клике. */}
+        {canCreateTx && (
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+            <Icon name="add" size={18} /> {t('finance.newTransaction')}
+          </button>
+        )}
       </div>
 
       <AnimatePresence>
@@ -949,6 +1105,7 @@ export default function Finance() {
             students={students}
             users={users}
             preselect={preselectedStudent}
+            canExpense={canExpense}
             onClose={() => { setShowForm(false); setPreselectedStudent(null); }}
             onCreated={() => {
               setShowForm(false);
@@ -1001,9 +1158,11 @@ export default function Finance() {
                 </td>
                 <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{tx.comment || '—'}</td>
                 <td>
-                  <button className="btn btn-sm btn-danger" onClick={() => onDelete(tx)}>
-                    <Icon name="delete" size={14} />
-                  </button>
+                  {canDeleteTx && (
+                    <button className="btn btn-sm btn-danger" onClick={() => onDelete(tx)}>
+                      <Icon name="delete" size={14} />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -1064,23 +1223,48 @@ function TransactionForm({
   students,
   users,
   preselect,
+  canExpense,
   onClose,
   onCreated,
 }: {
   students: any[];
   users: any[];
   preselect: any;
+  // Разрешено ли пользователю выбирать EXPENSE. Backend режет POST
+  // /finance/transactions с type=EXPENSE для не-FOUNDER/ADMIN/ACCOUNTANT
+  // (finance.controller.ts:291) — форма должна повторять этот контракт,
+  // иначе SALES_MANAGER выбирает «Расход», грузит файл через uploadReceipt
+  // и получает 403 при createTransaction. Файл остаётся orphan'ом в
+  // /uploads/, пользователь видит непонятный error toast.
+  canExpense: boolean;
   onClose: () => void;
   onCreated: () => void;
 }) {
   const { toast } = useUI();
   const { t } = useT();
+  // Current actor: нужно, чтобы для не-elevated ролей (SALES_MANAGER /
+  // CLIENT_MANAGER) заблокировать выбор чужого managerId. Backend всё равно
+  // форсит `managerId = caller.id` для менеджеров (finance.service.ts,
+  // ветка `else` в блоке ниже line ~479) — но раньше UI показывал полный
+  // список пользователей в <select>, менеджер мог выбрать «Босса», форма
+  // молча уходила с его выбором, а бекенд перезаписывал на self. С точки
+  // зрения оператора это выглядело как data-loss: «я оформил продажу на
+  // Ивана, а строчка в леджере на моём имени». Теперь блокируем выбор на
+  // клиенте, чтобы UI совпадал с фактическим поведением backend'а.
+  const me = useAuth((s) => s.user);
+  const elevated = isElevated(me);
   const [type, setType] = useState<TransactionType>('INCOME');
   const [category, setCategory] = useState<TransactionCategory>('TUITION_PAYMENT');
   const [amount, setAmount] = useState<string>(preselect?.amount ? String(preselect.amount) : '');
   const [currency, setCurrency] = useState(preselect?.currency || 'TJS');
   const [studentId, setStudentId] = useState<string>(preselect?.studentId || '');
-  const [managerId, setManagerId] = useState<string>(preselect?.managerId || '');
+  const [managerId, setManagerId] = useState<string>(() => {
+    // Для не-elevated: preselect?.managerId (напр., пришёл из карточки
+    // студента с чужим владельцем) игнорируем и сразу форсим self —
+    // тогда UI показывает то же, что запишет backend.
+    if (!elevated && me?.id) return me.id;
+    return preselect?.managerId || '';
+  });
   const [comment, setComment] = useState('');
   // Сегодня — по Asia/Dushanbe (toISOString даёт UTC-день, что после 19:00
   // ТJT уже завтра по UTC и форма открывалась бы с завтрашним числом).
@@ -1119,6 +1303,20 @@ function TransactionForm({
   const needsManager = (t: TransactionType, c: TransactionCategory): boolean =>
     t === 'INCOME' || (t === 'EXPENSE' && c === 'SALARY');
 
+  // Реcинк managerId → me.id для не-elevated при каждом переключении
+  // type/category, потому что handlers `setType`/`setCategory` в блоках
+  // выше делают `setManagerId('')` при любом переключении (сброс двойной
+  // семантики managerId между INCOME-manager и SALARY-employee). Без этого
+  // effect'а после переключения на не-показывающую select категорию
+  // и обратно value осталось бы пустым, а backend всё равно записал бы
+  // self — UI снова расходился бы с фактом. Effect делает форс явным и
+  // видимым в disabled-select (см. ниже).
+  useEffect(() => {
+    if (elevated || !me?.id) return;
+    if (!needsManager(type, category)) return;
+    setManagerId((prev) => (prev === me.id ? prev : me.id));
+  }, [elevated, me?.id, type, category]);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Синхронный re-entry guard. Проверяем в самом верху, чтобы второй
@@ -1131,6 +1329,16 @@ function TransactionForm({
     if (inFlight.current) return;
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) {
+      toast(t('toast.error'), 'error');
+      return;
+    }
+    // Role-guard: EXPENSE запрещён backend'ом для не-elevated ролей
+    // (finance.controller.ts:291 → 403). Ловим ДО uploadReceipt, чтобы
+    // не оставить orphan-файл в /uploads/ при последующем 403 на
+    // createTransaction. В нормальном UI EXPENSE-опция уже спрятана
+    // (см. type-select выше), но double-check страхует от гонки, когда
+    // роль пользователя поменялась между открытием формы и submit'ом.
+    if (type === 'EXPENSE' && !canExpense) {
       toast(t('toast.error'), 'error');
       return;
     }
@@ -1148,9 +1356,15 @@ function TransactionForm({
     inFlight.current = true;
     setSubmitting(true);
     try {
-      // Сначала загружаем чек (если есть)
+      // Сначала загружаем чек (если есть). Upload идёт ТОЛЬКО в EXPENSE-
+      // ветке и только после role-guard выше — если пользователь без прав
+      // на EXPENSE как-то дотащил форму до submit, мы уже вышли и файл
+      // не полетит на диск. Оставшиеся failure-modes (network / backend
+      // validation после успешного upload) редки и требуют отдельной
+      // POST-then-PATCH архитектуры; сейчас PATCH тоже elevated-only, так
+      // что до этого шага без прав на EXPENSE в норме не дойти.
       let receiptUrl: string | undefined;
-      if (receiptFile) {
+      if (receiptFile && type === 'EXPENSE') {
         setUploadingReceipt(true);
         const m = await import('../api/finance');
         const uploaded = await m.uploadReceipt(receiptFile);
@@ -1237,8 +1451,16 @@ function TransactionForm({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div className="form-group">
             <label>{t('common.type')}</label>
-            <select className="crm-select" value={type} onChange={(e) => {
-              const tt = e.target.value as TransactionType;
+            <select
+              className="crm-select"
+              value={type}
+              onChange={(e) => {
+              const raw = e.target.value as TransactionType;
+              // Defensive: если EXPENSE-option как-то попал в select для
+              // не-elevated (например, кастомная сборка / devtools), молча
+              // игнорируем — форма остаётся на INCOME, чтобы вниз не пошёл
+              // ни один EXPENSE-only stateful path (upload/поля чека).
+              const tt: TransactionType = raw === 'EXPENSE' && !canExpense ? 'INCOME' : raw;
               const nextCategory: TransactionCategory = tt === 'INCOME' ? 'TUITION_PAYMENT' : 'SALARY';
               setType(tt);
               setCategory(nextCategory);
@@ -1269,7 +1491,15 @@ function TransactionForm({
               }
             }}>
               <option value="INCOME">{t('finance.income')}</option>
-              <option value="EXPENSE">{t('finance.expense')}</option>
+              {/* EXPENSE скрываем для не-elevated ролей: backend всё равно
+                  вернёт 403 (finance.controller.ts:291), а до 403 успевает
+                  отработать uploadReceipt → orphan-файл в /uploads/.
+                  Прячем option полностью, а не disable — с disabled
+                  пользователь всё равно спрашивал бы «почему нельзя»,
+                  а видимая-но-мёртвая опция читается как баг. */}
+              {canExpense && (
+                <option value="EXPENSE">{t('finance.expense')}</option>
+              )}
             </select>
           </div>
           <div className="form-group">
@@ -1323,23 +1553,67 @@ function TransactionForm({
           {(type === 'EXPENSE' && category === 'SALARY') && (
             <div className="form-group">
               <label>{t('salary.field.employee')}</label>
-              <select className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-                <option value="">—</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.fullName}</option>
-                ))}
-              </select>
+              {elevated ? (
+                <select className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+                  <option value="">—</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.fullName}</option>
+                  ))}
+                </select>
+              ) : (
+                <>
+                  {/* Non-elevated: backend всё равно форсит caller.id
+                      (finance.service.ts, non-elevated ветка). Показываем
+                      disabled-select с собой, чтобы UI не врал про свободу
+                      выбора и оператор понимал, что запись пойдёт на него. */}
+                  <select
+                    className="crm-select"
+                    value={me?.id ?? ''}
+                    disabled
+                    aria-disabled="true"
+                    title="Зарплата автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT."
+                  >
+                    <option value={me?.id ?? ''}>{me?.fullName || me?.email || '—'}</option>
+                  </select>
+                  <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4, letterSpacing: '0.02em' }}>
+                    Автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT.
+                  </div>
+                </>
+              )}
             </div>
           )}
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.col.manager')}</label>
-              <select className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-                <option value="">—</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.fullName}</option>
-                ))}
-              </select>
+              {elevated ? (
+                <select className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+                  <option value="">—</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.fullName}</option>
+                  ))}
+                </select>
+              ) : (
+                <>
+                  {/* Non-elevated: см. комментарий у employee-select выше.
+                      Backend перезаписывает managerId на caller.id независимо
+                      от переданного значения — раньше UI показывал полный
+                      список, менеджер выбирал коллегу, форма молча уходила,
+                      а строка ledger'а сохранялась на его имени. Data-loss с
+                      точки зрения оператора. Теперь select только для чтения. */}
+                  <select
+                    className="crm-select"
+                    value={me?.id ?? ''}
+                    disabled
+                    aria-disabled="true"
+                    title="Продажа автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT."
+                  >
+                    <option value={me?.id ?? ''}>{me?.fullName || me?.email || '—'}</option>
+                  </select>
+                  <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4, letterSpacing: '0.02em' }}>
+                    Продажа автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT.
+                  </div>
+                </>
+              )}
             </div>
           )}
           <div className="form-group">

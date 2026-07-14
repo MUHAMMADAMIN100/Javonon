@@ -6,7 +6,19 @@ export type ActivityAction =
   | 'STUDENT_CREATE'
   | 'STUDENT_DELETE'
   | 'MANAGER_CHANGE'
-  | 'PROGRAM_CHANGE';
+  | 'PROGRAM_CHANGE'
+  | 'DOCUMENT_UPLOAD'
+  | 'DOCUMENT_DELETE'
+  // Finance audit trail — синхронизировано с backend/src/activity/activity.service.ts.
+  // Без этих action'ов /activity никогда не показывал финансовые события:
+  // dropdown-фильтр строится из ACTIVITY_LABEL, а карточка события берёт заголовок
+  // из ACTIVITY_LABEL[e.action] — для finance-строк это возвращало undefined.
+  | 'FINANCE_CREATE'
+  | 'FINANCE_UPDATE'
+  | 'FINANCE_DELETE'
+  | 'TRANSACTION_MANAGER_CHANGE'
+  | 'PAYMENT_APPROVED'
+  | 'PAYMENT_REFUND';
 
 export interface ActivityEntry {
   id: string;
@@ -40,4 +52,12 @@ export const ACTIVITY_LABEL: Record<ActivityAction, string> = {
   STUDENT_DELETE: 'Удаление студента',
   MANAGER_CHANGE: 'Смена менеджера',
   PROGRAM_CHANGE: 'Изменение программы',
+  DOCUMENT_UPLOAD: 'Загрузка документа',
+  DOCUMENT_DELETE: 'Удаление документа',
+  FINANCE_CREATE: 'Финансы: создание',
+  FINANCE_UPDATE: 'Финансы: изменение',
+  FINANCE_DELETE: 'Финансы: удаление',
+  TRANSACTION_MANAGER_CHANGE: 'Смена менеджера транзакции',
+  PAYMENT_APPROVED: 'Одобрение платежа',
+  PAYMENT_REFUND: 'Возврат платежа',
 };

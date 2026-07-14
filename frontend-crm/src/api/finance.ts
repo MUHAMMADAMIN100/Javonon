@@ -308,6 +308,19 @@ export interface FinanceBreakdown {
   currency: string;
   /** Отброшенные из основного агрегата суммы в иных валютах. */
   nonTjsTotals: NonTjsTotals;
+  /**
+   * Метадата якоря дат для INCOME-разрезов. Помогает UI объяснить
+   * бухгалтеру расхождение между /finance/breakdown byManager и
+   * /salary/preview salesAmount: tuition-приход (SubmissionPayment)
+   * теперь учитывается в тот же период, в который FOUNDER одобрил
+   * платёж (reviewedAt) — совпадает с моментом начисления бонуса
+   * зарплаты. Ручной INCOME по-прежнему — по дате самой транзакции.
+   * Поле опциональное — старые версии бэка его не отдают.
+   */
+  incomeAnchor?: {
+    tuition: string; // 'submissionPayment.reviewedAt'
+    manual: string; // 'transaction.date'
+  };
 }
 export type FinancePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
 export const financeBreakdown = (params?: {

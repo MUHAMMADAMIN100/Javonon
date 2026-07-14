@@ -1053,16 +1053,25 @@ export class SubmissionsService {
       this.realtime.emitUser(submission.managerId, 'submission:approved', { paymentId, submissionId: submission.id });
     }
     this.realtime.emitStaff('submission:reviewed', { paymentId, status: 'APPROVED' });
-    // Дополнительно вбрасываем `transaction:new` в staff-канал: TUITION_PAYMENT
-    // строка ТОЛЬКО ЧТО появилась в Transaction-таблице (INCOME по студенту),
-    // и Finance UI у другого пользователя должен показать её сразу — без
-    // polling и hard-refresh. `submission:*` события намеренно оставляем как
-    // есть: они адресованы страницам сделок, а Finance UI на них не
-    // подписан (см. отдельный fix в FinanceService.create/update/remove).
+    // Дополнительно вбрасываем `transaction:new` в finance-staff-канал:
+    // TUITION_PAYMENT строка ТОЛЬКО ЧТО появилась в Transaction-таблице
+    // (INCOME по студенту), и Finance UI у другого пользователя должен
+    // показать её сразу — без polling и hard-refresh. `submission:*`
+    // события намеренно оставляем как есть: они адресованы страницам
+    // сделок, а Finance UI на них не подписан (см. отдельный fix в
+    // FinanceService.create/update/remove).
     // finTxForEmit=null означает, что transaction откатился (см. try/catch
     // выше) — тогда emit не идёт, чтобы UI не показал фантомную строку.
+    //
+    // SEC (HIGH): emitFinanceStaff вместо emitStaff — payload содержит
+    // полный transaction (amount, studentId, managerId, comment).
+    // SALES_MANAGER/CLIENT_MANAGER не имеют доступа к GET /finance/*, поэтому
+    // и WS-эмит с ledger-содержимым им отправлять нельзя — иначе через
+    // `socket.on('transaction:new', ...)` менеджер бы стримил все
+    // подтверждённые оплаты по чужим студентам (см. finance.service.ts
+    // такой же fix для прямых POST/PATCH/DELETE финансовых операций).
     if (finTxForEmit) {
-      this.realtime.emitStaff('transaction:new', { transaction: finTxForEmit });
+      this.realtime.emitFinanceStaff('transaction:new', { transaction: finTxForEmit });
     }
     // Bug #31 (HIGH): на первый APPROVE возвращаем plain-пароль нового
     // студента, чтобы FOUNDER (UI /pending-payments) показал его менеджеру,
@@ -1305,7 +1314,13 @@ export class SubmissionsService {
           },
         })
         .catch(() => undefined);
-      this.realtime.emitStaff('transaction:reversed', {
+      // SEC (HIGH): emitFinanceStaff вместо emitStaff. Payload сам по себе
+      // содержит только IDs (без сумм/комментариев), но событие подписывает
+      // Finance UI (см. frontend-crm/src/pages/Finance.tsx) и триггерит
+      // invalidate финансовых query-keys — SALES_MANAGER/CLIENT_MANAGER
+      // не должны даже знать о факте рефанда чужой сделки, поэтому канал
+      // тоже сужен до FINANCE_ROLES (см. realtime.gateway.ts).
+      this.realtime.emitFinanceStaff('transaction:reversed', {
         originalTransactionId: r.originalTxId,
         refundTransactionId: r.refundTxId,
         submissionId,

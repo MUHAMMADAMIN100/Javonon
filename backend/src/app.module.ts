@@ -7,8 +7,10 @@ import { JwtModule } from '@nestjs/jwt';
 import { join } from 'path';
 import { UploadsAuthMiddleware } from './common/uploads-auth.middleware';
 import { UserThrottlerGuard } from './common/user-throttler.guard';
+import { PrismaThrottlerStorage } from './common/throttler-prisma.storage';
 
 import { PrismaModule } from './prisma/prisma.module';
+import { PrismaService } from './prisma/prisma.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ApplicationsModule } from './applications/applications.module';
@@ -74,9 +76,23 @@ import { SmsIntegrationModule } from './integrations/sms/sms-integration.module'
     // Трекер — UserThrottlerGuard (см. ниже в providers): бакет per-user.id,
     // а не per-IP. Иначе весь офис за NAT делит один 20/min бакет и валит
     // друг друга в 429 — anti-bonus-inflation goal не работал.
-    ThrottlerModule.forRoot([
-      { name: 'default', ttl: 60_000, limit: 60 },
-    ]),
+    //
+    // Storage — PrismaThrottlerStorage. Дефолтный in-memory Map жил per-pod,
+    // поэтому на Railway с scale > 1 реальный лимит = declared × N (LB
+    // раскидывает round-robin), а каждый redeploy обнулял brute-force
+    // счётчики. Postgres-backed storage делит бакеты между всеми репликами и
+    // переживает рестарты — см. src/common/throttler-prisma.storage.ts.
+    // forRootAsync нужен, чтобы получить PrismaService из DI до передачи
+    // ThrottlerModule (PrismaModule @Global, но inject через imports надёжнее
+    // относительно порядка резолвинга модулей в Nest).
+    ThrottlerModule.forRootAsync({
+      imports: [PrismaModule],
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => ({
+        throttlers: [{ name: 'default', ttl: 60_000, limit: 60 }],
+        storage: new PrismaThrottlerStorage(prisma),
+      }),
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,

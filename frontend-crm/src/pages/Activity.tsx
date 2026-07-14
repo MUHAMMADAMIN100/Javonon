@@ -12,12 +12,22 @@ import { useT } from '../lib/i18n';
 
 // Каждое действие — своя иконка + цвет (для визуального timeline'а).
 const ACTION_VISUAL: Record<ActivityAction, { icon: string; color: string; bg: string }> = {
-  STATUS_CHANGE:  { icon: 'sync_alt',       color: '#1e5bb8', bg: '#e8f0fb' },
-  STUDENT_UPDATE: { icon: 'edit',           color: '#b45309', bg: '#fef3c7' },
-  STUDENT_CREATE: { icon: 'person_add',     color: '#15803d', bg: '#dcfce7' },
-  STUDENT_DELETE: { icon: 'person_remove',  color: '#b91c1c', bg: '#fee2e2' },
-  MANAGER_CHANGE: { icon: 'manage_accounts',color: '#7c3aed', bg: '#ede9fe' },
-  PROGRAM_CHANGE: { icon: 'menu_book',      color: '#0891b2', bg: '#cffafe' },
+  STATUS_CHANGE:  { icon: 'sync_alt',        color: '#1e5bb8', bg: '#e8f0fb' },
+  STUDENT_UPDATE: { icon: 'edit',            color: '#b45309', bg: '#fef3c7' },
+  STUDENT_CREATE: { icon: 'person_add',      color: '#15803d', bg: '#dcfce7' },
+  STUDENT_DELETE: { icon: 'person_remove',   color: '#b91c1c', bg: '#fee2e2' },
+  MANAGER_CHANGE: { icon: 'manage_accounts', color: '#7c3aed', bg: '#ede9fe' },
+  PROGRAM_CHANGE: { icon: 'menu_book',       color: '#0891b2', bg: '#cffafe' },
+  DOCUMENT_UPLOAD: { icon: 'upload_file',    color: '#0369a1', bg: '#e0f2fe' },
+  DOCUMENT_DELETE: { icon: 'delete',         color: '#b91c1c', bg: '#fee2e2' },
+  // Финансы: зелёный/янтарный/красный по create/update/delete —
+  // визуально согласуется со Sales/Finance страницами (income/expense/void).
+  FINANCE_CREATE: { icon: 'payments',        color: '#047857', bg: '#d1fae5' },
+  FINANCE_UPDATE: { icon: 'edit_note',       color: '#a16207', bg: '#fef9c3' },
+  FINANCE_DELETE: { icon: 'money_off',       color: '#991b1b', bg: '#fee2e2' },
+  TRANSACTION_MANAGER_CHANGE: { icon: 'swap_horiz', color: '#6d28d9', bg: '#ede9fe' },
+  PAYMENT_APPROVED: { icon: 'verified',      color: '#166534', bg: '#dcfce7' },
+  PAYMENT_REFUND:  { icon: 'undo',           color: '#c2410c', bg: '#ffedd5' },
 };
 const FALLBACK_VISUAL = { icon: 'bolt', color: '#64748b', bg: '#f1f5f9' };
 

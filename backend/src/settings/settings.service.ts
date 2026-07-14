@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Weekday } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { tjParseLocalDate, tjWeekday, tjYMD } from '../common/tj-time';
 
 const WEEKDAYS: Weekday[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
@@ -465,9 +466,14 @@ export class SettingsService {
     workdays: number;
     totalMinutes: number;
   }> {
-    const year = month.getFullYear();
-    const monthIdx = month.getMonth(); // 0-11
-    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+    // Считаем календарь по Asia/Dushanbe: Railway живёт в UTC, поэтому
+    // month.getFullYear()/getMonth()/new Date(y, m, day) промахиваются мимо
+    // месяца на границе суток TJT (напр. 03:00 TJT 1 фев = 22:00 UTC 31 янв
+    // → JanuaryHours вместо FebruaryHours). tjYMD возвращает m в 1..12.
+    const { y, m } = tjYMD(month);
+    // Date.UTC(y, m, 0) с m в 1..12 даёт последний день месяца m (day=0
+    // отматывает на предыдущий месяц). getUTCDate — чтобы не смешивать TZ.
+    const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
     // JS Date.getDay(): 0=Sun, 1=Mon, ..., 6=Sat
     const JS_TO_WEEKDAY: Record<number, Weekday> = {
       0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
@@ -482,9 +488,13 @@ export class SettingsService {
     }>();
     let totalMinutes = 0;
     let workdays = 0;
+    const mm = String(m).padStart(2, '0');
     for (let day = 1; day <= daysInMonth; day++) {
-      const d = new Date(year, monthIdx, day);
-      const wk = JS_TO_WEEKDAY[d.getDay()];
+      const dd = String(day).padStart(2, '0');
+      // Полночь TJT конкретного календарного дня — чтобы weekday считался
+      // в календаре Душанбе, а не UTC.
+      const d = tjParseLocalDate(`${y}-${mm}-${dd}`);
+      const wk = JS_TO_WEEKDAY[tjWeekday(d)];
       let sched = cache.get(wk);
       if (!sched) {
         sched = await this.getEffectiveScheduleForUser(userId, wk);

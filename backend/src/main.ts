@@ -18,6 +18,28 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
 
+  // Trust proxy — КРИТИЧНО для rate-limiting за reverse proxy (Railway/Vercel/
+  // любой L7 балансер). Без этого Express считает req.ip = IP ближайшего hop'а
+  // (балансера), и throttler (см. user-throttler.guard.ts, ключ `ip:${req.ip}`)
+  // сваливает ВСЕ анонимные запросы со всего интернета в один bucket:
+  //   • атакующий выжигает 10/15min лимит POST /auth/login → блокирует
+  //     легитимных пользователей;
+  //   • распределённый brute-force вообще не тормозится, потому что per-real-IP
+  //     метрики нет.
+  // TRUST_PROXY можно переопределить через env (например '2' если несколько
+  // hop'ов). По умолчанию '1' — Railway/Vercel/большинство PaaS дают ровно
+  // один прокси-хоп перед приложением. Значение парсится Express'ом:
+  // число = сколько hop'ов доверять, строка = список подсетей, 'true'/'false' =
+  // trust all / none.
+  const trustProxyRaw = config.get<string>('TRUST_PROXY') ?? '1';
+  const trustProxy: number | string | boolean = (() => {
+    if (trustProxyRaw === 'true') return true;
+    if (trustProxyRaw === 'false') return false;
+    const n = Number(trustProxyRaw);
+    return Number.isFinite(n) && Number.isInteger(n) && n >= 0 ? n : trustProxyRaw;
+  })();
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxy);
+
   // 1MB — generous для plain-JSON (auth payloads ≤ 1KB, DTOs <10KB,
   // student-form-update теперь capped at 100KB). Multer-uploads идут
   // отдельным multipart-парсером со своими per-route limits и не задеты.

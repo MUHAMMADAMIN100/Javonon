@@ -208,9 +208,14 @@ export default function Salary() {
                 label={`${t('salary.cell.bonus')} · ${preview.bonusPercent}%`}
                 value={fmtMoney(preview.bonusAmount)}
                 sub={
-                  preview.bonusTierId
+                  (preview.bonusTierId
                     ? `Этап${preview.bonusTierComment ? ` «${preview.bonusTierComment}»` : ''} · ${fmtMoney(preview.salesAmount)}`
-                    : `Продажи: ${fmtMoney(preview.salesAmount)}`
+                    : `Продажи: ${fmtMoney(preview.salesAmount)}`) +
+                  (preview.nonTjsSales && Object.keys(preview.nonTjsSales).length > 0
+                    ? ` · +${Object.entries(preview.nonTjsSales)
+                        .map(([cur, sum]) => fmtMoney(sum, cur))
+                        .join(' · +')} (не в бонусе)`
+                    : '')
                 }
               />
               <PreviewCell label="KPI" value={fmtMoney(preview.kpiBonus)} />

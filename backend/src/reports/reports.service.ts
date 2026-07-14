@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { tjStartOfDay } from '../common/tj-time';
 
 @Injectable()
 export class ReportsService {
@@ -18,8 +19,11 @@ export class ReportsService {
       challenges?: string;
     },
   ) {
-    const day = new Date(date);
-    day.setUTCHours(0, 0, 0, 0);
+    // Anchor day-key to Asia/Dushanbe midnight so this path collides on the same
+    // userId_date row that daily-reports.service (also tjStartOfDay) upserts.
+    // Using setUTCHours(0) here would produce 00:00Z = 05:00 TJT and split the
+    // same TJT-day into two anchors, breaking the unique constraint.
+    const day = tjStartOfDay(date);
     return this.prisma.dailyReport.upsert({
       where: { userId_date: { userId, date: day } },
       update: {
@@ -60,8 +64,8 @@ export class ReportsService {
   }
 
   async todayForUser(userId: string) {
-    const day = new Date();
-    day.setUTCHours(0, 0, 0, 0);
+    // Same anchor as upsertDaily / daily-reports.service — Asia/Dushanbe midnight.
+    const day = tjStartOfDay(new Date());
     return this.prisma.dailyReport.findUnique({
       where: { userId_date: { userId, date: day } },
     });
