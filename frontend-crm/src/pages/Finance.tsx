@@ -318,6 +318,32 @@ export default function Finance() {
   });
   const breakdown = breakdownQuery.data;
 
+  // Drill-down фокус для 3 пирогов (источник / менеджер / категория) —
+  // клик по сектору открывает панель со списком транзакций этого среза
+  // за тот же bdRange. Смена периода сбрасывает фокус, чтобы не
+  // остаться с несуществующим срезом. Пирог и его фокус — 1:1.
+  const [pieFocus, setPieFocus] = useState<PieFocus | null>(null);
+  useEffect(() => {
+    setPieFocus(null);
+  }, [bdRange.from, bdRange.to, bdPeriod]);
+  const togglePieFocus = (next: PieFocus) => {
+    setPieFocus((cur) =>
+      cur &&
+      cur.chart === next.chart &&
+      cur.keys.length === next.keys.length &&
+      cur.keys.every((k, i) => k === next.keys[i])
+        ? null
+        : next,
+    );
+  };
+
+  // Drill-down фокус для revenue-графика — клик по точке (неделя)
+  // открывает панель с транзакциями этой недели.
+  const [weekFocus, setWeekFocus] = useState<TimeseriesPoint | null>(null);
+  const toggleWeekFocus = (p: TimeseriesPoint) => {
+    setWeekFocus((cur) => (cur && cur.key === p.key ? null : p));
+  };
+
   const paymentsKey = keys.payments.list({ status: 'PENDING' });
   const paymentsQuery = useQuery({
     queryKey: paymentsKey,
@@ -537,19 +563,28 @@ export default function Finance() {
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap: 16,
-        marginBottom: 32,
+        marginBottom: 16,
       }}>
         <PieCard
           eyebrow="INCOME · BY SOURCE"
           title="Источник дохода"
           items={rollupPieSlices(
             breakdown?.byIncomeSource,
-            (s) => ({ label: s.label, value: s.amount, count: s.count }),
+            (s) => ({ label: s.label, value: s.amount, count: s.count, key: s.source }),
             'Прочее',
           )}
           currency={breakdown?.currency ?? 'TJS'}
           nonTjsTotals={breakdown?.nonTjsTotals}
           nonTjsKind="income"
+          onSliceClick={(slice) =>
+            togglePieFocus({
+              chart: 'source',
+              keys: slice.keys ?? [],
+              label: slice.label,
+              color: slice.color,
+            })
+          }
+          focusedKey={pieFocus?.chart === 'source' ? pieFocus.keys[0] ?? null : null}
         />
         <PieCard
           eyebrow="INCOME · BY MANAGER"
@@ -560,12 +595,22 @@ export default function Finance() {
               label: m.manager?.fullName || 'Без менеджера',
               value: m.amount,
               count: m.count,
+              key: m.managerId ?? '_none',
             }),
             'Прочие менеджеры',
           )}
           currency={breakdown?.currency ?? 'TJS'}
           nonTjsTotals={breakdown?.nonTjsTotals}
           nonTjsKind="income"
+          onSliceClick={(slice) =>
+            togglePieFocus({
+              chart: 'manager',
+              keys: slice.keys ?? [],
+              label: slice.label,
+              color: slice.color,
+            })
+          }
+          focusedKey={pieFocus?.chart === 'manager' ? pieFocus.keys[0] ?? null : null}
         />
         <PieCard
           eyebrow="EXPENSE · BY CATEGORY"
@@ -578,14 +623,38 @@ export default function Finance() {
                 String(c.category),
               value: c.amount,
               count: c.count,
+              key: String(c.category),
             }),
             'Прочие категории',
           )}
           currency={breakdown?.currency ?? 'TJS'}
           nonTjsTotals={breakdown?.nonTjsTotals}
           nonTjsKind="expense"
+          onSliceClick={(slice) =>
+            togglePieFocus({
+              chart: 'expense',
+              keys: slice.keys ?? [],
+              label: slice.label,
+              color: slice.color,
+            })
+          }
+          focusedKey={pieFocus?.chart === 'expense' ? pieFocus.keys[0] ?? null : null}
         />
       </div>
+
+      {/* Drill-down панель под пирогами — рендерим только когда есть
+          активный focus. AnimatePresence + motion.div в самой панели
+          обеспечивают fade+slide при появлении/исчезновении. */}
+      <AnimatePresence>
+        {pieFocus && (
+          <BreakdownDetailPanel
+            key={`${pieFocus.chart}:${pieFocus.keys.join(',')}`}
+            focus={pieFocus}
+            range={bdRange}
+            onClose={() => setPieFocus(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Bento с финансовой сводкой */}
       {summary && (
@@ -728,9 +797,22 @@ export default function Finance() {
             letterSpacing: '-0.02em',
             marginBottom: 24,
           }}>{t('finance.chart.title')}</h3>
-          <RevenueChart points={series} />
+          <RevenueChart
+            points={series}
+            onPointClick={(p) => toggleWeekFocus(p)}
+            focusedKey={weekFocus?.key ?? null}
+          />
         </div>
       )}
+      <AnimatePresence>
+        {weekFocus && (
+          <WeekDetailPanel
+            key={weekFocus.key}
+            point={weekFocus}
+            onClose={() => setWeekFocus(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Распределение 70/20/10 + Топ менеджеров */}
       {distribution && (
@@ -1796,7 +1878,19 @@ function RadioBtn({ label, active, onClick }: { label: string; active: boolean; 
 // ============================================================
 // Revenue chart — pure SVG, dual line (income / expense) + profit area
 // ============================================================
-function RevenueChart({ points }: { points: TimeseriesPoint[] }) {
+function RevenueChart({
+  points,
+  onPointClick,
+  focusedKey,
+}: {
+  points: TimeseriesPoint[];
+  /** Клик по точке (или по невидимой hit-zone столбца недели) — открывает
+      панель с транзакциями этой недели. Undefined → chart read-only. */
+  onPointClick?: (point: TimeseriesPoint, index: number) => void;
+  /** Ключ сфокусированной точки (`TimeseriesPoint.key`). Совпавшая точка
+      увеличивается + вертикальная маркер-линия. */
+  focusedKey?: string | null;
+}) {
   const width = 800;
   const height = 220;
   const padding = { top: 16, right: 16, bottom: 28, left: 50 };
@@ -1815,6 +1909,13 @@ function RevenueChart({ points }: { points: TimeseriesPoint[] }) {
   const incomePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(p.income)}`).join(' ');
   const expensePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(p.expense)}`).join(' ');
   const profitArea = `M ${x(0)} ${y(0)} ${points.map((p, i) => `L ${x(i)} ${y(Math.max(0, p.profit))}`).join(' ')} L ${x(points.length - 1)} ${y(0)} Z`;
+
+  const clickable = !!onPointClick;
+  const focusedIndex = focusedKey != null ? points.findIndex((p) => p.key === focusedKey) : -1;
+  // Ширина невидимой hit-zone на каждую точку — половина шага (или весь
+  // shape если точек мало). Так курсор попадает мимо кружка, но всё
+  // равно выбирает нужную неделю.
+  const hitHalf = Math.max(xStep / 2, 12);
 
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -1843,6 +1944,20 @@ function RevenueChart({ points }: { points: TimeseriesPoint[] }) {
           </g>
         ))}
 
+        {/* Focus marker: вертикальная линия через сфокусированную точку */}
+        {focusedIndex >= 0 && (
+          <line
+            x1={x(focusedIndex)}
+            x2={x(focusedIndex)}
+            y1={padding.top}
+            y2={padding.top + innerH}
+            stroke="var(--primary)"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            opacity={0.5}
+          />
+        )}
+
         {/* Profit area (emerald-soft) */}
         <path d={profitArea} fill="rgba(1, 54, 139,0.12)" />
 
@@ -1852,24 +1967,59 @@ function RevenueChart({ points }: { points: TimeseriesPoint[] }) {
         <path d={expensePath} stroke="var(--danger)" strokeWidth={2} fill="none" strokeDasharray="4 4" />
 
         {/* Points + x-axis labels */}
-        {points.map((p, i) => (
-          <g key={p.key}>
-            <circle cx={x(i)} cy={y(p.income)} r={3} fill="var(--primary)" />
-            <circle cx={x(i)} cy={y(p.expense)} r={2.5} fill="var(--danger)" />
-            {(i % Math.max(1, Math.ceil(points.length / 8)) === 0 || i === points.length - 1) && (
-              <text
-                x={x(i)}
-                y={padding.top + innerH + 16}
-                fontFamily="var(--font-mono)"
-                fontSize="9"
-                fill="var(--text-light)"
-                textAnchor="middle"
-              >
-                {p.key.slice(5)}
-              </text>
-            )}
-          </g>
-        ))}
+        {points.map((p, i) => {
+          const focused = i === focusedIndex;
+          return (
+            <g key={p.key}>
+              <circle
+                cx={x(i)}
+                cy={y(p.income)}
+                r={focused ? 6 : 3}
+                fill="var(--primary)"
+                stroke={focused ? 'var(--surface, #fff)' : 'none'}
+                strokeWidth={focused ? 2 : 0}
+                style={{ transition: 'r 0.15s ease' }}
+              />
+              <circle
+                cx={x(i)}
+                cy={y(p.expense)}
+                r={focused ? 5 : 2.5}
+                fill="var(--danger)"
+                stroke={focused ? 'var(--surface, #fff)' : 'none'}
+                strokeWidth={focused ? 2 : 0}
+                style={{ transition: 'r 0.15s ease' }}
+              />
+              {(i % Math.max(1, Math.ceil(points.length / 8)) === 0 || i === points.length - 1) && (
+                <text
+                  x={x(i)}
+                  y={padding.top + innerH + 16}
+                  fontFamily="var(--font-mono)"
+                  fontSize="9"
+                  fill="var(--text-light)"
+                  textAnchor="middle"
+                >
+                  {p.key.slice(5)}
+                </text>
+              )}
+              {/* Невидимая hit-zone: удобнее чем целить в 3px-кружок. */}
+              {clickable && (
+                <rect
+                  x={x(i) - hitHalf}
+                  y={padding.top}
+                  width={hitHalf * 2}
+                  height={innerH}
+                  fill="transparent"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => onPointClick!(p, i)}
+                >
+                  <title>
+                    {p.key} · доход {p.income.toLocaleString('ru-RU')} · расход {p.expense.toLocaleString('ru-RU')}
+                  </title>
+                </rect>
+              )}
+            </g>
+          );
+        })}
       </svg>
       <div style={{
         display: 'flex',
@@ -1944,6 +2094,14 @@ interface PieSlice {
   value: number;
   count?: number;
   color: string;
+  /**
+   * Ключ(и) исходных строк, свёрнутых в этот сектор. Массив нужен для
+   * агрегированного сектора «Прочее», куда попадает всё, что не влезло
+   * в топ-9. Одиночный сектор → массив длиной 1. Пустой массив (или
+   * undefined) → сектор не кликабельный (нет исходной сущности для
+   * drill-down, например «Нет данных»).
+   */
+  keys?: string[];
 }
 
 // 9 визуально различных цветов для отдельных секторов пирога.
@@ -1976,7 +2134,7 @@ const PIE_MAX_SLICES = PIE_COLORS.length; // сколько уникально-�
 // клиенте, чтобы не менять контракт эндпоинта.
 function rollupPieSlices<T>(
   rows: readonly T[] | undefined,
-  toItem: (row: T) => { label: string; value: number; count?: number },
+  toItem: (row: T) => { label: string; value: number; count?: number; key?: string },
   otherLabel: string,
 ): PieSlice[] {
   const mapped = (rows ?? [])
@@ -1984,7 +2142,11 @@ function rollupPieSlices<T>(
     .filter((it) => it.value > 0)
     .sort((a, b) => b.value - a.value);
   if (mapped.length <= PIE_MAX_SLICES) {
-    return mapped.map((it, i) => ({ ...it, color: PIE_COLORS[i] }));
+    return mapped.map((it, i) => ({
+      ...it,
+      color: PIE_COLORS[i],
+      keys: it.key ? [it.key] : [],
+    }));
   }
   const top = mapped.slice(0, PIE_MAX_SLICES - 1);
   const rest = mapped.slice(PIE_MAX_SLICES - 1);
@@ -1996,17 +2158,52 @@ function rollupPieSlices<T>(
     // имели counts (иначе получим бессмысленный «· 0» в легенде).
     ...(restCount > 0 ? { count: restCount } : {}),
     color: PIE_OTHER_COLOR,
+    // Массив ключей всех свёрнутых записей → drill-down по сектору «Прочее»
+    // показывает объединённый список всех «мелких» источников/менеджеров/
+    // категорий, что дороже, чем игнорирование клика (пользователь редко
+    // помнит, что именно попало в этот бакет).
+    keys: rest.map((it) => it.key).filter((k): k is string => typeof k === 'string' && k.length > 0),
   };
   return [
-    ...top.map((it, i) => ({ ...it, color: PIE_COLORS[i] })),
+    ...top.map((it, i) => ({
+      ...it,
+      color: PIE_COLORS[i],
+      keys: it.key ? [it.key] : [],
+    })),
     other,
   ];
 }
 
-function PieChart({ items, size = 200 }: { items: PieSlice[]; size?: number }) {
+function PieChart({
+  items,
+  size = 200,
+  onSliceClick,
+  focusedKey,
+}: {
+  items: PieSlice[];
+  size?: number;
+  /**
+   * Клик по сектору (или по «единственному 100%» кругу). Undefined =
+   * диаграмма read-only, cursor остаётся default. Сектор без keys
+   * (например rollup «Прочее» без исходных ключей или синтетический
+   * «Нет данных»-сектор) НЕ вызывает handler — фильтровать нечего.
+   */
+  onSliceClick?: (slice: PieSlice, index: number) => void;
+  /**
+   * Идентификатор сфокусированного сектора (первый ключ из slice.keys).
+   * Совпавший сектор «выпрыгивает» из центра на 8px по биссектрисе,
+   * остальные приглушаются до opacity 0.28. Null → нет фокуса.
+   */
+  focusedKey?: string | null;
+}) {
   const total = items.reduce((s, x) => s + x.value, 0);
-  const cx = size / 2;
-  const cy = size / 2;
+  // Отступ для «выпрыгивающего» сектора: рисуем svg на 16px больше, чем
+  // circle, чтобы pop-out не обрезался viewBox'ом.
+  const OFFSET = 8;
+  const pad = OFFSET + 2;
+  const svgSize = size + pad * 2;
+  const cx = svgSize / 2;
+  const cy = svgSize / 2;
   const r = size / 2 - 4;
 
   if (total <= 0) {
@@ -2030,39 +2227,85 @@ function PieChart({ items, size = 200 }: { items: PieSlice[]; size?: number }) {
     );
   }
 
+  const sliceKey = (it: PieSlice): string | null =>
+    it.keys && it.keys.length > 0 ? it.keys[0] : null;
+  const isFocused = (it: PieSlice): boolean => {
+    if (focusedKey == null) return false;
+    return !!it.keys && it.keys.includes(focusedKey);
+  };
+  const hasFocus = focusedKey != null && items.some((it) => isFocused(it));
+
   const nonZero = items.filter((it) => it.value > 0);
   // Единственный сектор (100%): SVG arc с одинаковыми start/end рисует пустоту,
   // поэтому рисуем сплошной круг.
   if (nonZero.length === 1) {
+    const only = nonZero[0];
+    const clickable = !!onSliceClick && !!only.keys && only.keys.length > 0;
     return (
-      <svg width={size} height={size} style={{ display: 'block', margin: '0 auto' }}>
-        <circle cx={cx} cy={cy} r={r} fill={nonZero[0].color} />
+      <svg width={svgSize} height={svgSize} style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}>
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill={only.color}
+          style={{ cursor: clickable ? 'pointer' : 'default' }}
+          onClick={() => {
+            if (clickable) onSliceClick!(only, 0);
+          }}
+        />
       </svg>
     );
   }
 
   let cumulative = 0;
   return (
-    <svg width={size} height={size} style={{ display: 'block', margin: '0 auto' }}>
+    <svg
+      width={svgSize}
+      height={svgSize}
+      style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}
+    >
       {items.map((it, i) => {
         if (it.value <= 0) return null;
         const startAngle = (cumulative / total) * Math.PI * 2 - Math.PI / 2;
         cumulative += it.value;
         const endAngle = (cumulative / total) * Math.PI * 2 - Math.PI / 2;
+        const midAngle = (startAngle + endAngle) / 2;
         const largeArc = it.value / total > 0.5 ? 1 : 0;
         const x1 = cx + r * Math.cos(startAngle);
         const y1 = cy + r * Math.sin(startAngle);
         const x2 = cx + r * Math.cos(endAngle);
         const y2 = cy + r * Math.sin(endAngle);
         const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+        const focused = isFocused(it);
+        const dimmed = hasFocus && !focused;
+        const clickable = !!onSliceClick && !!it.keys && it.keys.length > 0;
+        // Pop-out на 8px по биссектрисе сектора: transform-origin у SVG-элемента
+        // это (0, 0) документа, поэтому pop = translate в direction биссектрисы.
+        const tx = focused ? OFFSET * Math.cos(midAngle) : 0;
+        const ty = focused ? OFFSET * Math.sin(midAngle) : 0;
         return (
           <path
-            key={`${it.label}-${i}`}
+            key={`${sliceKey(it) ?? it.label}-${i}`}
             d={d}
             fill={it.color}
             stroke="var(--surface, #fff)"
             strokeWidth={1}
-          />
+            style={{
+              opacity: dimmed ? 0.28 : 1,
+              transform: `translate(${tx}px, ${ty}px)`,
+              transition: 'opacity 0.18s ease, transform 0.18s ease',
+              cursor: clickable ? 'pointer' : 'default',
+            }}
+            onClick={() => {
+              if (clickable) onSliceClick!(it, i);
+            }}
+          >
+            {clickable && (
+              <title>
+                {it.label} — {it.value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
+              </title>
+            )}
+          </path>
         );
       })}
     </svg>
@@ -2076,6 +2319,8 @@ function PieCard({
   currency = 'TJS',
   nonTjsTotals,
   nonTjsKind,
+  onSliceClick,
+  focusedKey,
 }: {
   eyebrow: string;
   title: string;
@@ -2089,6 +2334,11 @@ function PieCard({
       `income` для доходных разрезов, `expense` для расходных; без значения
       показываем и то и другое. */
   nonTjsKind?: 'income' | 'expense';
+  /** Клик по сектору или строке легенды. Undefined = read-only pie. */
+  onSliceClick?: (slice: PieSlice) => void;
+  /** Ключ сфокусированного сектора (из slice.keys[0]) — влияет и на pie,
+      и на подсветку строки легенды. */
+  focusedKey?: string | null;
 }) {
   const total = items.reduce((s, x) => s + x.value, 0);
   return (
@@ -2112,7 +2362,12 @@ function PieCard({
         letterSpacing: '-0.02em', marginBottom: 16,
       }}>{title}</h3>
       <NonTjsStrip totals={nonTjsTotals} kind={nonTjsKind} />
-      <PieChart items={items} size={200} />
+      <PieChart
+        items={items}
+        size={200}
+        onSliceClick={onSliceClick}
+        focusedKey={focusedKey ?? null}
+      />
       <div style={{
         marginTop: 16,
         fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
@@ -2128,12 +2383,23 @@ function PieCard({
         )}
         {items.map((it, i) => {
           const pct = total > 0 ? (it.value / total) * 100 : 0;
+          const clickable = !!onSliceClick && !!it.keys && it.keys.length > 0;
+          const focused = focusedKey != null && !!it.keys && it.keys.includes(focusedKey);
+          const dimmed = focusedKey != null && !focused;
           return (
             <div
               key={`${it.label}-${i}`}
+              onClick={clickable ? () => onSliceClick!(it) : undefined}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 fontSize: 13,
+                cursor: clickable ? 'pointer' : 'default',
+                padding: '4px 6px',
+                margin: '0 -6px',
+                borderRadius: 6,
+                background: focused ? 'var(--bg-soft, rgba(59,130,246,0.08))' : 'transparent',
+                opacity: dimmed ? 0.55 : 1,
+                transition: 'background 0.15s ease, opacity 0.15s ease',
               }}
             >
               <span style={{
@@ -2177,5 +2443,353 @@ function DistRow({ label, pct, amount, color }: { label: string; pct: number; am
         <div style={{ height: '100%', width: `${pct}%`, background: color }} />
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// Drill-down панели: клик по сектору пирога / точке revenue-графика
+// открывает панель со списком транзакций, попадающих в этот срез.
+// Логика фильтрации на клиенте: backend GET /finance/transactions
+// принимает только type/category/managerId/from/to (не incomeSource),
+// поэтому мы фильтруем по incomeSource на фронте. Роллап-сектор
+// «Прочее» — массив ключей, объединяем предикатом-any.
+// ============================================================
+
+export type PieChartKind = 'source' | 'manager' | 'expense';
+export interface PieFocus {
+  chart: PieChartKind;
+  /** Ключи исходных строк, свёрнутых в этот сектор (для одиночного — [key]). */
+  keys: string[];
+  label: string;
+  color: string;
+}
+
+function focusEyebrow(kind: PieChartKind): string {
+  if (kind === 'source') return 'FOCUS · ИСТОЧНИК';
+  if (kind === 'manager') return 'FOCUS · МЕНЕДЖЕР';
+  return 'FOCUS · КАТЕГОРИЯ РАСХОДА';
+}
+
+function BreakdownDetailPanel({
+  focus,
+  range,
+  onClose,
+}: {
+  focus: PieFocus;
+  range: { from?: string; to?: string };
+  onClose: () => void;
+}) {
+  const isExpense = focus.chart === 'expense';
+  // Server-side pre-filter: если один ключ И это managerId/category —
+  // отдаём фильтр бэку, чтоб уменьшить объём. Для чувствительных
+  // фильтров (incomeSource / null-managerId / rollup «Прочее») тянем
+  // весь INCOME/EXPENSE периода и фильтруем на клиенте.
+  const params = useMemo(() => {
+    const p: Parameters<typeof listTransactions>[0] = {
+      type: isExpense ? 'EXPENSE' : 'INCOME',
+      take: 500,
+      ...(range.from && { from: range.from }),
+      ...(range.to && { to: range.to }),
+    };
+    if (focus.chart === 'manager' && focus.keys.length === 1 && focus.keys[0] !== '_none') {
+      p.managerId = focus.keys[0];
+    } else if (focus.chart === 'expense' && focus.keys.length === 1) {
+      p.category = focus.keys[0] as TransactionCategory;
+    }
+    return p;
+  }, [focus, range, isExpense]);
+
+  const detailQuery = useQuery({
+    queryKey: ['finance', 'drilldown', focus.chart, focus.keys.join(','), range.from ?? '', range.to ?? ''],
+    queryFn: () => listTransactions(params),
+  });
+
+  const filtered = useMemo(() => {
+    const rows = detailQuery.data ?? [];
+    if (focus.keys.length === 0) return rows;
+    return rows.filter((tx) => {
+      if (focus.chart === 'source') {
+        return focus.keys.some((k) =>
+          k === '_none' ? tx.incomeSource == null : tx.incomeSource === k,
+        );
+      }
+      if (focus.chart === 'manager') {
+        return focus.keys.some((k) =>
+          k === '_none' ? tx.managerId == null : tx.managerId === k,
+        );
+      }
+      return focus.keys.some((k) => tx.category === k);
+    });
+  }, [detailQuery.data, focus]);
+
+  const total = filtered.reduce((s, tx) => s + tx.amount, 0);
+  // Единая отчётная валюта — та, в которой оформлена первая транзакция
+  // выборки (после client-filter). Если пусто — TJS дефолтом.
+  const displayCurrency = filtered[0]?.currency || 'TJS';
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      className="card"
+      style={{
+        padding: 24,
+        marginBottom: 32,
+        borderTop: `3px solid ${focus.color}`,
+      }}
+    >
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: 12, marginBottom: 12, flexWrap: 'wrap',
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
+            color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 4,
+          }}>
+            {focusEyebrow(focus.chart)}
+          </div>
+          <h3 style={{
+            fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
+            letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{
+              width: 12, height: 12, borderRadius: 3, background: focus.color,
+              display: 'inline-block',
+            }} />
+            {focus.label}
+          </h3>
+        </div>
+        <button
+          className="btn"
+          onClick={onClose}
+          aria-label="Сбросить фокус"
+          title="Сбросить фокус"
+          style={{ padding: '6px 10px' }}
+        >
+          <Icon name="close" size={14} /> Сбросить
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+            color: 'var(--text-soft)', textTransform: 'uppercase',
+          }}>Транзакций</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500 }}>
+            {filtered.length}
+          </div>
+        </div>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+            color: 'var(--text-soft)', textTransform: 'uppercase',
+          }}>Сумма</div>
+          <div style={{
+            fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500,
+            color: isExpense ? 'var(--danger)' : focus.color,
+          }}>
+            {isExpense ? '−' : '+'}{fmtMoney(total, displayCurrency)}
+          </div>
+        </div>
+      </div>
+
+      {detailQuery.isLoading && (
+        <div style={{ color: 'var(--text-soft)', fontSize: 13, padding: 12 }}>Загрузка...</div>
+      )}
+      {!detailQuery.isLoading && filtered.length === 0 && (
+        <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 16 }}>
+          Транзакций не найдено в этом срезе.
+        </div>
+      )}
+      {filtered.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {filtered.slice(0, 100).map((tx) => (
+            <DrilldownRow key={tx.id} tx={tx} hideManager={focus.chart === 'manager'} />
+          ))}
+          {filtered.length > 100 && (
+            <div style={{
+              color: 'var(--text-soft)', fontSize: 12, textAlign: 'center', marginTop: 8,
+            }}>
+              Показано 100 из {filtered.length}. Сузьте период для полного списка.
+            </div>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function DrilldownRow({ tx, hideManager }: { tx: Transaction; hideManager?: boolean }) {
+  const isExpense = tx.type === 'EXPENSE';
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '100px 130px 1fr auto',
+        alignItems: 'center',
+        gap: 12,
+        padding: '8px 10px',
+        borderBottom: '1px solid var(--border-soft, rgba(0,0,0,0.06))',
+        fontSize: 13,
+      }}
+    >
+      <div style={{ color: 'var(--text-soft)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+        {fmtDate(tx.date)}
+      </div>
+      <div style={{
+        fontWeight: 600, whiteSpace: 'nowrap',
+        color: isExpense ? 'var(--danger)' : 'var(--primary-dark)',
+      }}>
+        {isExpense ? '−' : '+'}{fmtMoney(tx.amount, tx.currency)}
+      </div>
+      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ color: 'var(--text-soft)', fontSize: 12, marginRight: 6 }}>
+          {TRANSACTION_CATEGORY_LABEL[tx.category] || tx.category}
+        </span>
+        {tx.comment ? tx.comment : (tx.student?.fullName || tx.payerName || '')}
+      </div>
+      {!hideManager && (
+        <div style={{ color: 'var(--text-soft)', fontSize: 12, whiteSpace: 'nowrap' }}>
+          {tx.manager?.fullName ?? '—'}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Диапазон недели по key из TimeseriesPoint (backend возвращает
+// начало-недели в 'YYYY-MM-DD'). Конец — start + 7 дней (exclusive).
+function weekRangeFromPoint(point: TimeseriesPoint): { from: string; to: string } {
+  const start = new Date(point.key + 'T00:00:00');
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  return { from: start.toISOString(), to: end.toISOString() };
+}
+
+function WeekDetailPanel({
+  point,
+  onClose,
+}: {
+  point: TimeseriesPoint;
+  onClose: () => void;
+}) {
+  const range = useMemo(() => weekRangeFromPoint(point), [point]);
+  const detailQuery = useQuery({
+    queryKey: ['finance', 'week-drilldown', point.key],
+    queryFn: () => listTransactions({ from: range.from, to: range.to, take: 500 }),
+  });
+  const txs = detailQuery.data ?? [];
+  const incomeSum = txs.filter((t) => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
+  const expenseSum = txs.filter((t) => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
+  const displayCurrency = txs[0]?.currency || 'TJS';
+
+  const endLabel = new Date(range.to);
+  endLabel.setDate(endLabel.getDate() - 1);
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      className="card"
+      style={{ padding: 24, marginBottom: 24, borderTop: '3px solid var(--primary)' }}
+    >
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: 12, marginBottom: 12, flexWrap: 'wrap',
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
+            color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 4,
+          }}>FOCUS · НЕДЕЛЯ</div>
+          <h3 style={{
+            fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
+            letterSpacing: '-0.02em',
+          }}>
+            {fmtDate(range.from)} — {fmtDate(endLabel.toISOString())}
+          </h3>
+        </div>
+        <button
+          className="btn"
+          onClick={onClose}
+          aria-label="Сбросить фокус"
+          title="Сбросить фокус"
+          style={{ padding: '6px 10px' }}
+        >
+          <Icon name="close" size={14} /> Сбросить
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+            color: 'var(--text-soft)', textTransform: 'uppercase',
+          }}>Доход</div>
+          <div style={{
+            fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
+            color: 'var(--primary-dark)',
+          }}>+{fmtMoney(incomeSum, displayCurrency)}</div>
+        </div>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+            color: 'var(--text-soft)', textTransform: 'uppercase',
+          }}>Расход</div>
+          <div style={{
+            fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
+            color: 'var(--danger)',
+          }}>−{fmtMoney(expenseSum, displayCurrency)}</div>
+        </div>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+            color: 'var(--text-soft)', textTransform: 'uppercase',
+          }}>Прибыль</div>
+          <div style={{
+            fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
+            color: incomeSum - expenseSum >= 0 ? '#15803d' : '#b91c1c',
+          }}>{fmtMoney(incomeSum - expenseSum, displayCurrency)}</div>
+        </div>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+            color: 'var(--text-soft)', textTransform: 'uppercase',
+          }}>Транзакций</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500 }}>
+            {txs.length}
+          </div>
+        </div>
+      </div>
+
+      {detailQuery.isLoading && (
+        <div style={{ color: 'var(--text-soft)', fontSize: 13, padding: 12 }}>Загрузка...</div>
+      )}
+      {!detailQuery.isLoading && txs.length === 0 && (
+        <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 16 }}>
+          Транзакций в этой неделе не найдено.
+        </div>
+      )}
+      {txs.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {txs.slice(0, 100).map((tx) => (
+            <DrilldownRow key={tx.id} tx={tx} />
+          ))}
+          {txs.length > 100 && (
+            <div style={{
+              color: 'var(--text-soft)', fontSize: 12, textAlign: 'center', marginTop: 8,
+            }}>
+              Показано 100 из {txs.length}.
+            </div>
+          )}
+        </div>
+      )}
+    </motion.div>
   );
 }
