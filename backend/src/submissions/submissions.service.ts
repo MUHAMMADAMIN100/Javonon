@@ -584,10 +584,15 @@ export class SubmissionsService {
     //   раньше не покупал/подавал заявку — считаем NEW_CLIENT (фактически
     //   первое обращение через воронку продаж).
     //
-    // paymentPhase: FULL если сумма платежа равна totalAmount сделки (клиент
-    //   оплатил всё сразу); иначе PREPAID (предоплата / частичный платёж).
-    //   Простое строгое сравнение — суммы в domain'е обычно целые доллары;
-    //   если понадобится tolerance для округлений, поднимем через epsilon.
+    // paymentPhase: FULL если КУМУЛЯТИВНАЯ сумма APPROVED-платежей по сделке
+    //   (включая текущий, только что переведённый в APPROVED через CAS в tx
+    //   ниже) достигла totalAmount — контракт закрыт этим траншем; иначе
+    //   PREPAID (сделка ещё не покрыта). Вычисление ПЕРЕНЕСЕНО ВНУТРЬ
+    //   транзакции (см. `paymentPhase` рядом с tx.transaction.create ниже) —
+    //   раньше сравнение шло по одному текущему платежу и любая рассрочка
+    //   навсегда оставалась PREPAID, недосчитывая закрытые контракты в
+    //   аналитике. Epsilon 0.01 закрывает возможные float-огрехи (schema —
+    //   Float для amount/totalAmount).
     const productCategoryEnum: ProductCategory = ProductCategory.CONTRACT;
 
     let incomeSource: IncomeSource;
@@ -599,17 +604,40 @@ export class SubmissionsService {
       // (исключая текущую) и Application'ы, не привязанные к текущей сделке
       // (submission null или другой). Prisma NOT + relation-filter корректно
       // включает записи с null-relation.
+      //
+      // Audit (HIGH): не считаем CANCELLED submissions и submissions, где
+      // ни один платёж не был одобрен (firstApprovedAt = null). Иначе
+      // отменённая ранее сделка (реверс Transaction, дохода не было) флипнет
+      // incomeSource в UP_SALE, хотя фактически это первая успешная покупка
+      // клиента. Аналогично, «черновая» ACTIVE-сделка без одобренных платежей
+      // не должна считаться историей продаж.
+      //
+      // priorApplications: исключаем заявки, чей SaleSubmission = CANCELLED
+      // или ещё не одобрен. Заявки БЕЗ submission (leads из LANDING_FORM
+      // и т.п.) сохраняем — они действительно означают прошлый контакт с
+      // компанией и оправдывают UP_SALE-классификацию.
       const [otherSubmissions, priorApplications] = await Promise.all([
         this.prisma.saleSubmission.count({
           where: {
             studentId: submission.studentId,
             id: { not: submission.id },
+            status: { not: SubmissionStatus.CANCELLED },
+            firstApprovedAt: { not: null },
           },
         }),
         this.prisma.application.count({
           where: {
             studentId: submission.studentId,
-            NOT: { submission: { id: submission.id } },
+            // Каждый NOT — независимая негация; массивная форма NOT в Prisma
+            // семантически неоднозначна между версиями, поэтому оборачиваем в
+            // явный AND-of-NOTs. Relation-filter (submission: { ... }) не
+            // матчит записи с null-submission → NOT такого фильтра включает
+            // Application без сделки (законные leads из LANDING_FORM).
+            AND: [
+              { NOT: { submission: { id: submission.id } } },
+              { NOT: { submission: { status: SubmissionStatus.CANCELLED } } },
+              { NOT: { submission: { firstApprovedAt: null } } },
+            ],
           },
         }),
       ]);
@@ -618,11 +646,6 @@ export class SubmissionsService {
           ? IncomeSource.UP_SALE
           : IncomeSource.NEW_CLIENT;
     }
-
-    const paymentPhase: PaymentPhaseStatus =
-      payment.amount === submission.totalAmount
-        ? PaymentPhaseStatus.FULL
-        : PaymentPhaseStatus.PREPAID;
 
     // Bug #24 (HIGH): все мутации одобрения — в одной транзакции, чтобы
     // при сбое в середине (P2003/P2002 на email Student, FK на programId,
@@ -830,6 +853,36 @@ export class SubmissionsService {
           });
         }
       }
+
+      // Bug (HIGH, audit): paymentPhase считаем ПО КУМУЛЯТИВНОЙ сумме
+      // APPROVED-платежей сделки, а не по одному текущему транзу.
+      //   - Aggregate идёт через `tx.` — читаем ТУ ЖЕ транзакцию, куда
+      //     CAS выше уже перевёл текущий payment в APPROVED, поэтому его
+      //     amount уже включён в _sum.
+      //   - Pessimistic lock FOR UPDATE на SaleSubmission (в начале tx)
+      //     сериализует параллельные approve по разным платежам одной
+      //     сделки, поэтому «догоняющая» approve увидит консистентный сум.
+      //   - Раньше `payment.amount === submission.totalAmount` возвращал
+      //     FULL только на single-shot оплате всей суммы; любая рассрочка
+      //     (3000 + 2000 при totalAmount=5000) навсегда оставалась PREPAID
+      //     и аналитика недосчитывала закрытые контракты.
+      //   - Epsilon 0.01 закрывает возможные float-огрехи: schema хранит
+      //     amount/totalAmount как Float; если суммы уйдут в центы,
+      //     3000.00 + 1999.999999 == 4999.999999 не должно давать PREPAID
+      //     на закрытии контракта 5000.
+      const approvedAgg = await tx.submissionPayment.aggregate({
+        where: {
+          submissionId: submission.id,
+          status: SubmissionPaymentStatus.APPROVED,
+        },
+        _sum: { amount: true },
+      });
+      const approvedSoFar = approvedAgg._sum.amount ?? 0;
+      const PAYMENT_PHASE_EPSILON = 0.01;
+      const paymentPhase: PaymentPhaseStatus =
+        approvedSoFar >= submission.totalAmount - PAYMENT_PHASE_EPSILON
+          ? PaymentPhaseStatus.FULL
+          : PaymentPhaseStatus.PREPAID;
 
       // Создаём финансовую транзакцию (доход).
       // date = payment.paidAt намеренно: это финансовый «факт прихода денег»,

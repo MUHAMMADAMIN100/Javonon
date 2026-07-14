@@ -326,34 +326,39 @@ export default function Finance() {
         <PieCard
           eyebrow="INCOME · BY SOURCE"
           title="Источник дохода"
-          items={(breakdown?.byIncomeSource ?? []).map((s, i) => ({
-            label: s.label,
-            value: s.amount,
-            count: s.count,
-            color: PIE_COLORS[i % PIE_COLORS.length],
-          }))}
+          items={rollupPieSlices(
+            breakdown?.byIncomeSource,
+            (s) => ({ label: s.label, value: s.amount, count: s.count }),
+            'Прочее',
+          )}
         />
         <PieCard
           eyebrow="INCOME · BY MANAGER"
           title="Клиенты (менеджеры)"
-          items={(breakdown?.byManager ?? []).map((m, i) => ({
-            label: m.manager?.fullName || 'Без менеджера',
-            value: m.amount,
-            count: m.count,
-            color: PIE_COLORS[i % PIE_COLORS.length],
-          }))}
+          items={rollupPieSlices(
+            breakdown?.byManager,
+            (m) => ({
+              label: m.manager?.fullName || 'Без менеджера',
+              value: m.amount,
+              count: m.count,
+            }),
+            'Прочие менеджеры',
+          )}
         />
         <PieCard
           eyebrow="EXPENSE · BY CATEGORY"
           title="Категория расходов"
-          items={(breakdown?.byExpenseCategory ?? []).map((c, i) => ({
-            label:
-              TRANSACTION_CATEGORY_LABEL[c.category as TransactionCategory] ||
-              String(c.category),
-            value: c.amount,
-            count: c.count,
-            color: PIE_COLORS[i % PIE_COLORS.length],
-          }))}
+          items={rollupPieSlices(
+            breakdown?.byExpenseCategory,
+            (c) => ({
+              label:
+                TRANSACTION_CATEGORY_LABEL[c.category as TransactionCategory] ||
+                String(c.category),
+              value: c.amount,
+              count: c.count,
+            }),
+            'Прочие категории',
+          )}
         />
       </div>
 
@@ -1444,6 +1449,17 @@ function BarList({ items, colors }: {
 // ненулевого сектора (100%) — рисуем full circle, иначе degenerate arc не
 // закрашивается.
 // ============================================================
+interface PieSlice {
+  label: string;
+  value: number;
+  count?: number;
+  color: string;
+}
+
+// 9 визуально различных цветов для отдельных секторов пирога.
+// Slate вынесен в `PIE_OTHER_COLOR` — им закрашивается агрегированный
+// «Прочее»-бакет из `rollupPieSlices`, чтобы этот сектор читался как
+// собирательный, а не как ещё одна категория.
 const PIE_COLORS = [
   '#3b82f6', // blue
   '#f59e0b', // amber
@@ -1453,15 +1469,48 @@ const PIE_COLORS = [
   '#06b6d4', // cyan
   '#f97316', // orange
   '#ec4899', // pink
-  '#64748b', // slate
   '#84cc16', // lime
 ];
+const PIE_OTHER_COLOR = '#64748b'; // slate — агрегированный «Прочее»-бакет
+const PIE_MAX_SLICES = PIE_COLORS.length; // сколько уникально-цветных секторов рисуем до roll-up
 
-interface PieSlice {
-  label: string;
-  value: number;
-  count?: number;
-  color: string;
+// Backend-ручки byIncomeSource / byManager / byExpenseCategory не ограничены
+// сверху (в отличие от `financeTopManagers`, у которой явный `limit`).
+// Прямое `PIE_COLORS[i % PIE_COLORS.length]` при >9 записях начинало красить
+// соседние сектора одним и тем же цветом (например 10-й и 1-й — одинаково
+// синие), из-за чего два сектора визуально сливались в один и легенда
+// содержала два идентичных цветных чипа. Плюс >10 секторов в пироге
+// нечитаемы даже с уникальными цветами. Поэтому сортируем по величине,
+// оставляем топ-9 с уникальными цветами и сворачиваем остальное в один
+// slate-сектор «Прочее» — эквивалент backend-cap-а, реализованный на
+// клиенте, чтобы не менять контракт эндпоинта.
+function rollupPieSlices<T>(
+  rows: readonly T[] | undefined,
+  toItem: (row: T) => { label: string; value: number; count?: number },
+  otherLabel: string,
+): PieSlice[] {
+  const mapped = (rows ?? [])
+    .map(toItem)
+    .filter((it) => it.value > 0)
+    .sort((a, b) => b.value - a.value);
+  if (mapped.length <= PIE_MAX_SLICES) {
+    return mapped.map((it, i) => ({ ...it, color: PIE_COLORS[i] }));
+  }
+  const top = mapped.slice(0, PIE_MAX_SLICES - 1);
+  const rest = mapped.slice(PIE_MAX_SLICES - 1);
+  const restCount = rest.reduce((s, it) => s + (it.count ?? 0), 0);
+  const other: PieSlice = {
+    label: otherLabel,
+    value: rest.reduce((s, it) => s + it.value, 0),
+    // `count` опционален у PieSlice: сохраняем его, только если исходные записи
+    // имели counts (иначе получим бессмысленный «· 0» в легенде).
+    ...(restCount > 0 ? { count: restCount } : {}),
+    color: PIE_OTHER_COLOR,
+  };
+  return [
+    ...top.map((it, i) => ({ ...it, color: PIE_COLORS[i] })),
+    other,
+  ];
 }
 
 function PieChart({ items, size = 200 }: { items: PieSlice[]; size?: number }) {

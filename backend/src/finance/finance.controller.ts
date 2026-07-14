@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Logger, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -7,8 +8,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { hasRole } from '../auth/role-utils';
+import { hasRole, isElevated } from '../auth/role-utils';
 import { FinanceService, CreateTransactionDto } from './finance.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { TransactionCategory, TransactionType } from '@prisma/client';
 
 // Receipts: только изображения и PDF. Whitelist расширений и MIME —
@@ -43,10 +46,26 @@ const VALID_TX_CATEGORIES: TransactionCategory[] = [
   'TUITION_PAYMENT', 'ADDITIONAL_FEE', 'SALARY', 'RENT', 'UTILITIES',
   'MARKETING', 'OFFICE', 'OTHER_INCOME', 'OTHER_EXPENSE',
 ];
-function parseDate(v: string | undefined, name: string): Date | undefined {
+// endOfDayIfDateOnly=true — если пришла date-only строка "YYYY-MM-DD"
+// (её присылает <input type="date"> и наш календарный пикер), поднимаем
+// её до конца суток 23:59:59.999 UTC. Иначе `new Date("2026-01-31")`
+// даёт 2026-01-31T00:00:00Z, а фильтр `date <= to` молча выкидывает всё
+// с этой даты после полуночи UTC — целый последний день пропадал из
+// summary/breakdown/timeseries/etc. Bug: менеджер смотрит на пирог и не
+// видит платёж, зарегистрированный сегодня днём. Использовать true
+// только для «правой» границы диапазона (to). Для `from` фактическое
+// 00:00 — это как раз то, что нужно.
+function parseDate(
+  v: string | undefined,
+  name: string,
+  endOfDayIfDateOnly = false,
+): Date | undefined {
   if (!v) return undefined;
   const d = new Date(v);
   if (isNaN(d.getTime())) throw new BadRequestException(`${name}: некорректная дата`);
+  if (endOfDayIfDateOnly && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    d.setUTCHours(23, 59, 59, 999);
+  }
   return d;
 }
 function parseTake(v: string | undefined): number | undefined {
@@ -68,7 +87,7 @@ function resolveRange(
   to: string | undefined,
 ): { from?: Date; to?: Date } {
   const explicitFrom = parseDate(from, 'from');
-  const explicitTo = parseDate(to, 'to');
+  const explicitTo = parseDate(to, 'to', true);
   if (explicitFrom || explicitTo) {
     return { from: explicitFrom, to: explicitTo };
   }
@@ -101,11 +120,32 @@ function resolveRange(
   return { from: start, to: now };
 }
 
+// Порог алерта: если один recordedById создал больше N INCOME строк
+// за короткое окно — уведомляем админов. Меньше жёсткого throttle
+// (20/мин), но выше нормального ручного потока (менеджер физически
+// не заносит 10 продаж за 5 минут). Ловит распределённый спам
+// «под throttle» и bonus-inflation через украденный токен. Значения
+// параметризованы, чтобы бухгалтерия могла отрегулировать без пересборки.
+const INCOME_SPAM_WINDOW_MS = parseInt(
+  process.env.FINANCE_SPAM_WINDOW_MS || String(5 * 60_000),
+  10,
+);
+const INCOME_SPAM_THRESHOLD = parseInt(
+  process.env.FINANCE_SPAM_THRESHOLD || '10',
+  10,
+);
+
 @Controller('finance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'ACCOUNTANT')
 export class FinanceController {
-  constructor(private svc: FinanceService) {}
+  private readonly logger = new Logger(FinanceController.name);
+
+  constructor(
+    private svc: FinanceService,
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   @Get('transactions')
   list(
@@ -129,7 +169,7 @@ export class FinanceController {
       studentId,
       managerId,
       from: parseDate(from, 'from'),
-      to: parseDate(to, 'to'),
+      to: parseDate(to, 'to', true),
       take: parseTake(take),
     });
   }
@@ -139,18 +179,91 @@ export class FinanceController {
   // студента). Расход по-прежнему — только FOUNDER / ADMIN / ACCOUNTANT,
   // чтобы менеджер не мог фиктивной EXPENSE подрезать чистую прибыль
   // (а значит и премии). FOUNDER имеет неявный доступ через RolesGuard.
+  //
+  // Sec: жёсткий throttle 20/мин перекрывает глобальный 60/мин из
+  // AppModule. Без него менеджер (или украденный менеджерский токен)
+  // мог за минуту накидать десятки INCOME строк по 1_000_000 и
+  // перекосить topManagers / salary-engine на миллионы. Дополнительно
+  // после каждой созданной INCOME строки считаем плотность записей
+  // этого recordedById в скользящем окне — если превышен порог, ловим
+  // распределённый спам «под лимит» и уведомляем админов.
   @Post('transactions')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles('ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER')
-  create(@Body() dto: CreateTransactionDto, @CurrentUser() me: any) {
+  async create(@Body() dto: CreateTransactionDto, @CurrentUser() me: any) {
     if (dto?.type === 'EXPENSE' && !hasRole(me, 'FOUNDER', 'ADMIN', 'ACCOUNTANT')) {
       throw new ForbiddenException('Только ADMIN / ACCOUNTANT / FOUNDER могут вносить расходы');
     }
-    return this.svc.create(dto, me.id);
+    // Audit-fix: передаём actor с реальным флагом isElevated, чтобы сервис
+    // мог форсить self-attribute для менеджеров (иначе SALES_MANAGER мог
+    // бы указать любой managerId в dto — bonus inflation).
+    const tx = await this.svc.create(dto, me.id, {
+      id: me.id,
+      isElevated: isElevated(me),
+    });
+    // Спам-детектор для INCOME. fire-and-forget: даже если ветка алерта
+    // упадёт, ответ клиенту не должен ломаться. Ошибки логируем — иначе
+    // silent .catch() «съел» бы всё.
+    if (dto?.type === 'INCOME') {
+      this.checkIncomeSpam(me.id).catch((err) =>
+        this.logger.error(`spam-check failed: ${err?.message || err}`),
+      );
+    }
+    return tx;
   }
 
+  /**
+   * Считает INCOME записи текущего recordedById за скользящее окно.
+   * Если превышен порог — уведомляет ADMIN/ACCOUNTANT и пишет в лог.
+   */
+  private async checkIncomeSpam(recordedById: string): Promise<void> {
+    const since = new Date(Date.now() - INCOME_SPAM_WINDOW_MS);
+    const count = await this.prisma.transaction.count({
+      where: {
+        recordedById,
+        type: 'INCOME',
+        createdAt: { gte: since },
+      },
+    });
+    if (count < INCOME_SPAM_THRESHOLD) return;
+    const windowMin = Math.round(INCOME_SPAM_WINDOW_MS / 60_000);
+    this.logger.warn(
+      `INCOME spam suspected: recordedById=${recordedById} wrote ${count} rows in last ${windowMin}m`,
+    );
+    // Уведомляем только админов, а не всех сотрудников — чтобы не спамить
+    // менеджерский чат. notifyAdmins уже покрывает ACCOUNTANT.
+    try {
+      await this.notifications.notifyAdmins({
+        type: 'FINANCE_INCOME_SPAM',
+        title: 'Подозрение на спам INCOME-записей',
+        message: `Пользователь ${recordedById} создал ${count} INCOME-транзакций за ${windowMin} мин. Проверьте bonus-инфляцию.`,
+        payload: { recordedById, count, windowMin },
+      });
+    } catch (err: any) {
+      // Не критично — throttle уже удержал основной удар. Просто в лог.
+      this.logger.error(`notifyAdmins failed: ${err?.message || err}`);
+    }
+  }
+
+  // Тот же throttle что и на POST — PATCH тоже спамится: атакующий
+  // может репутационно раздувать amount у уже существующих строк,
+  // не создавая новые. 20 правок/мин на пользователя.
   @Patch('transactions/:id')
-  update(@Param('id') id: string, @Body() patch: Partial<CreateTransactionDto>) {
-    return this.svc.update(id, patch);
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  update(
+    @Param('id') id: string,
+    @Body() patch: Partial<CreateTransactionDto>,
+    @CurrentUser() me: any,
+  ) {
+    // Передаём actor, чтобы service мог enforce'ить date-bounds
+    // (INCOME не может быть в будущем; менеджерам — ±3 суток).
+    // Сейчас PATCH доступен только ADMIN/ACCOUNTANT (см. Roles на
+    // контроллере), но передаём actor честно — если PATCH когда-то
+    // откроют менеджерам, окно уже будет работать.
+    return this.svc.update(id, patch, {
+      id: me.id,
+      isElevated: isElevated(me),
+    });
   }
 
   @Delete('transactions/:id')
@@ -162,7 +275,7 @@ export class FinanceController {
   summary(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.summary({
       from: parseDate(from, 'from'),
-      to: parseDate(to, 'to'),
+      to: parseDate(to, 'to', true),
     });
   }
 
@@ -170,7 +283,7 @@ export class FinanceController {
   byCategory(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.byCategory({
       from: parseDate(from, 'from'),
-      to: parseDate(to, 'to'),
+      to: parseDate(to, 'to', true),
     });
   }
 
@@ -190,7 +303,7 @@ export class FinanceController {
     }
     return this.svc.timeseries({
       from: parseDate(from, 'from'),
-      to: parseDate(to, 'to'),
+      to: parseDate(to, 'to', true),
       bucket,
     });
   }
@@ -200,7 +313,7 @@ export class FinanceController {
   distribution(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.distribution({
       from: parseDate(from, 'from'),
-      to: parseDate(to, 'to'),
+      to: parseDate(to, 'to', true),
     });
   }
 
@@ -213,7 +326,7 @@ export class FinanceController {
   ) {
     return this.svc.topManagers({
       from: parseDate(from, 'from'),
-      to: parseDate(to, 'to'),
+      to: parseDate(to, 'to', true),
       limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
@@ -223,7 +336,7 @@ export class FinanceController {
   incomeSources(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.incomeSources({
       from: parseDate(from, 'from'),
-      to: parseDate(to, 'to'),
+      to: parseDate(to, 'to', true),
     });
   }
 
@@ -232,7 +345,7 @@ export class FinanceController {
   incomeByProduct(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.incomeByProduct({
       from: parseDate(from, 'from'),
-      to: parseDate(to, 'to'),
+      to: parseDate(to, 'to', true),
     });
   }
 
@@ -255,8 +368,13 @@ export class FinanceController {
   /**
    * Загрузка чека/фото наличных. Возвращает URL для прикрепления
    * к транзакции при последующем POST /transactions.
+   *
+   * Sec: throttle 20 uploads/мин. Без него можно spam'ить 20MB файлы
+   * и забить диск, плюс генерировать URL для прикрепления к спамным
+   * INCOME строкам (маскирует фиктивные записи как «с чеком»).
    */
   @Post('receipts')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: receiptStorage,
