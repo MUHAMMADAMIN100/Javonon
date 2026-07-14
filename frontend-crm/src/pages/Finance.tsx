@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -21,6 +21,7 @@ import {
   FinanceBreakdown,
   FinanceSummary,
   IncomeSource,
+  NonTjsTotals,
   ProductCategoryEnum,
   PaymentPhaseStatus,
 } from '../api/finance';
@@ -43,6 +44,95 @@ function fmtMoney(n: number, currency = 'TJS'): string {
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Компактная строка вида «В ПЕРИОДЕ ТАКЖЕ · USD +5 000 / −200 · EUR +200».
+ * Показываем под KPI/над пирогами когда backend вернул `nonTjsTotals` с
+ * ненулевыми суммами. Мотивация: backend считает все агрегаты только в
+ * TJS, но фиксирует валютные транзакции периода отдельно — бухгалтер
+ * должен видеть, что USD/EUR активность была, иначе дашборд молча
+ * «прячет» реальную выручку (см. commit-audit по currency mixing).
+ *
+ * `kind` фильтрует, что показывать: для income-пирогов не нужно тащить
+ * валютные расходы, для expense-пирога — наоборот. Без `kind` (например
+ * под netProfit-KPI) показываем и то и другое, чтобы дать полную картину.
+ */
+function NonTjsStrip({
+  totals,
+  color = 'var(--text-soft)',
+  kind,
+}: {
+  totals?: NonTjsTotals | null;
+  color?: string;
+  kind?: 'income' | 'expense';
+}) {
+  if (!totals) return null;
+  const entries = Object.entries(totals);
+  if (entries.length === 0) return null;
+
+  const parts: string[] = [];
+  for (const [cur, bucket] of entries) {
+    const bits: string[] = [];
+    if ((!kind || kind === 'income') && bucket.income > 0) {
+      bits.push(`+${fmtMoney(bucket.income, cur)}`);
+    }
+    if ((!kind || kind === 'expense') && bucket.expense > 0) {
+      bits.push(`−${fmtMoney(bucket.expense, cur)}`);
+    }
+    if (bits.length > 0) parts.push(`${cur} ${bits.join(' / ')}`);
+  }
+  if (parts.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        marginTop: 8,
+        marginBottom: 8,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+        letterSpacing: '0.08em',
+        color,
+        textTransform: 'uppercase',
+      }}
+      title="Валютные транзакции в периоде — обрабатываются бухгалтером вручную, не входят в TJS-агрегаты выше"
+    >
+      В периоде также · {parts.join(' · ')}
+    </div>
+  );
+}
+
+/**
+ * Маленький бэйдж «BASE · TJS» рядом с eyebrow пирога/ранжирования.
+ *
+ * Мотивация: агрегаты дашборда считаются только в одной валюте
+ * (`REPORTING_CURRENCY` на backend), но раньше UI никак не сообщал, в чём
+ * именно считает — и пользователь смотрел на пустой пирог или неполный
+ * «ТОП» без понимания, что USD/EUR-транзакции просто отфильтрованы (см.
+ * audit HIGH — «pie charts silently hide currency-based bias»). Бэйдж
+ * ставим справа от eyebrow, tooltip раскрывает причину.
+ */
+function CurrencyBadge({ currency }: { currency: string }) {
+  return (
+    <span
+      title={`Все суммы посчитаны в ${currency}. Транзакции в других валютах не входят в этот разрез — см. подсказку «В ПЕРИОДЕ ТАКЖЕ» если такие суммы есть.`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '2px 6px',
+        border: '1px solid var(--border)',
+        borderRadius: 4,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.1em',
+        color: 'var(--text-soft)',
+        textTransform: 'uppercase',
+        lineHeight: 1.2,
+      }}
+    >
+      BASE · {currency}
+    </span>
+  );
 }
 
 export default function Finance() {
@@ -114,7 +204,13 @@ export default function Finance() {
       return m.financeTopManagers({ from: monthStart, limit: 10 });
     },
   });
-  const topManagers = topManagersQuery.data ?? [];
+  // Backend теперь отдаёт объект { managers, currency, nonTjsTotals } (вместо
+  // плоского массива), чтобы UI мог показать бэйдж базовой валюты и
+  // подсказку про «в периоде были ещё продажи в USD/EUR» — см. audit HIGH
+  // «pie charts silently hide currency-based bias».
+  const topManagers = topManagersQuery.data?.managers ?? [];
+  const topManagersCurrency = topManagersQuery.data?.currency ?? 'TJS';
+  const topManagersNonTjs = topManagersQuery.data?.nonTjsTotals;
 
   const incomeSourcesQuery = useQuery({
     queryKey: ['finance', 'income-sources', monthStart],
@@ -331,6 +427,9 @@ export default function Finance() {
             (s) => ({ label: s.label, value: s.amount, count: s.count }),
             'Прочее',
           )}
+          currency={breakdown?.currency ?? 'TJS'}
+          nonTjsTotals={breakdown?.nonTjsTotals}
+          nonTjsKind="income"
         />
         <PieCard
           eyebrow="INCOME · BY MANAGER"
@@ -344,6 +443,9 @@ export default function Finance() {
             }),
             'Прочие менеджеры',
           )}
+          currency={breakdown?.currency ?? 'TJS'}
+          nonTjsTotals={breakdown?.nonTjsTotals}
+          nonTjsKind="income"
         />
         <PieCard
           eyebrow="EXPENSE · BY CATEGORY"
@@ -359,6 +461,9 @@ export default function Finance() {
             }),
             'Прочие категории',
           )}
+          currency={breakdown?.currency ?? 'TJS'}
+          nonTjsTotals={breakdown?.nonTjsTotals}
+          nonTjsKind="expense"
         />
       </div>
 
@@ -391,6 +496,14 @@ export default function Finance() {
               }}>
                 {t('dashboard.finance.netProfit')}
               </div>
+              {/* Бухгалтерский баннер: суммы в USD/EUR/CNY/RUB не входят в
+                  KPI выше (backend считает всё в TJS), но были в периоде и
+                  ждут ручной обработки. Пустой `nonTjsTotals` → баннер
+                  не рисуется. */}
+              <NonTjsStrip
+                totals={summary.nonTjsTotals}
+                color="rgba(255,255,255,0.72)"
+              />
             </div>
           </motion.div>
 
@@ -499,7 +612,11 @@ export default function Finance() {
             <div style={{
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
               color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
-            }}>DISTRIBUTION · 70/20/10</div>
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            }}>
+              <span>DISTRIBUTION · 70/20/10</span>
+              <CurrencyBadge currency={distribution.currency ?? 'TJS'} />
+            </div>
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
               {t('finance.dist.title')}
             </h3>
@@ -508,19 +625,36 @@ export default function Finance() {
                 {distribution.net.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
               </b>
             </div>
+            {/* Валютная активность за тот же период (не входит в 70/20/10 —
+                backend распределяет только TJS-net-profit). */}
+            <NonTjsStrip totals={distribution.nonTjsTotals} />
             <DistRow label={t('finance.dist.business')} pct={70} amount={distribution.distribution.business} color="#3b82f6" />
             <DistRow label={t('finance.dist.debts')} pct={20} amount={distribution.distribution.debts} color="#f59e0b" />
             <DistRow label={t('finance.dist.reserve')} pct={10} amount={distribution.distribution.reserve} color="#10b981" />
           </div>
 
           <div className="card" style={{ padding: 24 }}>
+            {/* Currency-бэйдж на eyebrow: раньше пользователь видел
+                ранжирование в «безразмерных числах» и не понимал, что оно
+                посчитано только по TJS-INCOME. Менеджер с USD-only-продажами
+                молча выпадал из «ТОП» — бэйдж делает базу расчёта явной,
+                а `NonTjsStrip` ниже показывает, что валютная активность
+                была. */}
             <div style={{
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
               color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
-            }}>TOP MANAGERS · MONTH</div>
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            }}>
+              <span>TOP MANAGERS · MONTH</span>
+              <CurrencyBadge currency={topManagersCurrency} />
+            </div>
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
               {t('finance.topManagers.title')}
             </h3>
+            {/* Ранжирование считается только по TJS-INCOME — валютные
+                продажи «выпадают» из топ-листа. Показываем их отдельно,
+                чтобы менеджеры с USD-only-выручкой не терялись молча. */}
+            <NonTjsStrip totals={topManagersNonTjs} kind="income" />
             {topManagers.length === 0 ? (
               <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 24 }}>
                 {t('common.empty')}
@@ -560,10 +694,18 @@ export default function Finance() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 32 }}>
           {incomeSources.length > 0 && (
             <div className="card" style={{ padding: 24 }}>
+              {/* Backend отдаёт только TJS-агрегаты (см. incomeSources в
+                  finance.service.ts). Бэйдж «BASE · TJS» напоминает
+                  пользователю, что валютная активность в этот разрез не
+                  попадает. */}
               <div style={{
                 fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
                 color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
-              }}>INCOME SOURCES · MONTH</div>
+                display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+              }}>
+                <span>INCOME SOURCES · MONTH</span>
+                <CurrencyBadge currency="TJS" />
+              </div>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
                 Источники <em style={{ fontFamily: 'Times New Roman, Georgia, serif' }}>дохода.</em>
               </h3>
@@ -578,7 +720,11 @@ export default function Finance() {
               <div style={{
                 fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
                 color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
-              }}>BY PRODUCT · MONTH</div>
+                display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+              }}>
+                <span>BY PRODUCT · MONTH</span>
+                <CurrencyBadge currency="TJS" />
+              </div>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
                 {t('finance.byProduct')}
               </h3>
@@ -940,6 +1086,14 @@ function TransactionForm({
   // ТJT уже завтра по UTC и форма открывалась бы с завтрашним числом).
   const [date, setDate] = useState(tjToday());
   const [submitting, setSubmitting] = useState(false);
+  // Синхронный guard от повторной отправки: `setSubmitting(true)` применяется
+  // только на следующем React-render, поэтому двойной клик по «Сохранить»
+  // (или Enter×2) в пределах одного тика видит `submitting=false` в обоих
+  // обработчиках и оба уходят в `await createTransaction(dto)` → дубль-POST
+  // и дубль-строка в ledger. `disabled` у кнопки срабатывает только после
+  // flush render'а, между двумя синхронными click-обработчиками этого не
+  // происходит. `useRef` меняется синхронно и закрывает окно гонки.
+  const inFlight = useRef(false);
 
   // Расширенные поля для финансового модуля
   const [paymentChannel, setPaymentChannel] = useState<string>('CASH');
@@ -958,8 +1112,23 @@ function TransactionForm({
 
   const cats = type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
+  // managerId имеет двойную семантику: (INCOME → менеджер-получатель клиента)
+  // и (EXPENSE + SALARY → сотрудник-получатель зарплаты). Поле разделяет
+  // одну state-переменную, поэтому нужен явный guard, чтобы id одной роли
+  // не «протёк» в транзакцию другой роли при переключении type/category.
+  const needsManager = (t: TransactionType, c: TransactionCategory): boolean =>
+    t === 'INCOME' || (t === 'EXPENSE' && c === 'SALARY');
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Синхронный re-entry guard. Проверяем в самом верху, чтобы второй
+    // одновременный клик по «Сохранить» (или Enter×2 в одном тике) вышел
+    // раньше, чем стартует второй `createTransaction`. Устанавливаем флаг
+    // *после* синхронной валидации — иначе неуспешная валидация оставила бы
+    // флаг взведённым навсегда, и форма стала бы неотправляемой. JS однопо-
+    // точный: между валидацией и первым `await` другой обработчик не
+    // вклинится, поэтому окно гонки закрывается до первого микро-таска.
+    if (inFlight.current) return;
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) {
       toast(t('toast.error'), 'error');
@@ -976,6 +1145,7 @@ function TransactionForm({
         return;
       }
     }
+    inFlight.current = true;
     setSubmitting(true);
     try {
       // Сначала загружаем чек (если есть)
@@ -995,12 +1165,23 @@ function TransactionForm({
         currency,
         comment: comment.trim() || undefined,
         date,
-        studentId: studentId || null,
-        managerId: managerId || null,
+        // Студент прикрепляется только к INCOME-транзакции. Селект «Студент»
+        // рендерится лишь при type === 'INCOME', поэтому при переключении на
+        // EXPENSE ранее выбранный studentId остался бы «висеть» в state и
+        // ушёл бы на бэкенд как невидимая связка EXPENSE↔студент. Guard
+        // страхует onChange-сброс на случай будущих регрессий.
+        studentId: type === 'INCOME' ? (studentId || null) : null,
+        // Строгий guard: managerId уходит только если для текущей пары
+        // (type, category) в форме реально отрисован соответствующий
+        // селект (менеджер / сотрудник). Иначе поле выкидывается из DTO,
+        // чтобы «зависший» id из прежнего режима не попал на бэкенд.
+        ...(needsManager(type, category) && managerId
+          ? { managerId }
+          : { managerId: null }),
         paymentChannel: paymentChannel as any,
         ...(type === 'INCOME' && { paymentKind: paymentKind as any }),
         ...(type === 'INCOME' && productCategory && { productCategory }),
-        ...(payerName.trim() && { payerName: payerName.trim() }),
+        ...(type === 'INCOME' && payerName.trim() && { payerName: payerName.trim() }),
         // === Google Sheet parity — новые enum-поля ===
         ...(type === 'INCOME' && incomeSource && { incomeSource }),
         ...(type === 'INCOME' && productCategoryEnum && { productCategoryEnum }),
@@ -1018,6 +1199,7 @@ function TransactionForm({
     } catch (e: any) {
       toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
       setUploadingReceipt(false);
     }
@@ -1057,8 +1239,34 @@ function TransactionForm({
             <label>{t('common.type')}</label>
             <select className="crm-select" value={type} onChange={(e) => {
               const tt = e.target.value as TransactionType;
+              const nextCategory: TransactionCategory = tt === 'INCOME' ? 'TUITION_PAYMENT' : 'SALARY';
               setType(tt);
-              setCategory(tt === 'INCOME' ? 'TUITION_PAYMENT' : 'SALARY');
+              setCategory(nextCategory);
+              // managerId держит одно значение для двух совершенно разных
+              // ролей (менеджер клиента при INCOME / сотрудник-получатель
+              // зарплаты при EXPENSE+SALARY). При смене type роль всегда
+              // меняется, даже если новая пара тоже показывает какой-то
+              // селект — INCOME-менеджер не должен «превратиться» в
+              // получателя зарплаты (или наоборот) без явного выбора.
+              // Поэтому сбрасываем безусловно на любое переключение type.
+              setManagerId('');
+              if (tt === 'EXPENSE') {
+                // Сбрасываем поля, доступные только в INCOME-ветке. Иначе
+                // состояние ранее заполненной формы (например, studentId,
+                // выбранный до переключения) утечёт в EXPENSE-payload.
+                setStudentId('');
+                setPayerName('');
+                setProductCategory('');
+                setIncomeSource('');
+                setProductCategoryEnum('');
+                setPaymentPhase('');
+              } else {
+                // Симметрично чистим состояние EXPENSE-ветки при возврате.
+                setPaidViaId('');
+                setReceiptKind('RECEIPT');
+                setNoReceiptReason('');
+                setReceiptFile(null);
+              }
             }}>
               <option value="INCOME">{t('finance.income')}</option>
               <option value="EXPENSE">{t('finance.expense')}</option>
@@ -1066,7 +1274,15 @@ function TransactionForm({
           </div>
           <div className="form-group">
             <label>{t('finance.col.category')}</label>
-            <select className="crm-select" value={category} onChange={(e) => setCategory(e.target.value as TransactionCategory)}>
+            <select className="crm-select" value={category} onChange={(e) => {
+              const nextCategory = e.target.value as TransactionCategory;
+              setCategory(nextCategory);
+              // Внутри EXPENSE только SALARY показывает employee-селект
+              // (managerId). При смене категории с SALARY на любую другую
+              // (OFFICE_RENT, UTILITIES и т.д.) очищаем managerId, чтобы
+              // выбранный ранее сотрудник не привязался к аренде/коммуналке.
+              if (!needsManager(type, nextCategory)) setManagerId('');
+            }}>
               {cats.map((c) => {
                 // Пробуем i18n-ключ (RU/TJ), иначе — русский label из finance.ts.
                 const trKey = `finance.cat.${c}`;
@@ -1584,23 +1800,44 @@ function PieCard({
   title,
   items,
   currency = 'TJS',
+  nonTjsTotals,
+  nonTjsKind,
 }: {
   eyebrow: string;
   title: string;
   items: PieSlice[];
   currency?: string;
+  /** Валютные суммы за тот же период, не попавшие в пирог (TJS-only).
+      Рендерим над диаграммой, чтобы бухгалтер видел, что USD/EUR активность
+      была, и обработал её вручную. */
+  nonTjsTotals?: NonTjsTotals | null;
+  /** Тип пирога — фильтрует, какие суммы показать в баннере.
+      `income` для доходных разрезов, `expense` для расходных; без значения
+      показываем и то и другое. */
+  nonTjsKind?: 'income' | 'expense';
 }) {
   const total = items.reduce((s, x) => s + x.value, 0);
   return (
     <div className="card" style={{ padding: 24 }}>
+      {/* Eyebrow с бэйджем базовой валюты. Раньше `currency` был только
+          пропом и нигде не отображался — пользователь видел «нет данных» на
+          пирогах и не понимал, что суммы отфильтрованы по TJS (валютные
+          продажи молча выпадают, см. audit HIGH «pie charts hide currency
+          bias»). Бэйдж делает базу расчёта явной, tooltip объясняет
+          обработку прочих валют. */}
       <div style={{
         fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
         color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
-      }}>{eyebrow}</div>
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+      }}>
+        <span>{eyebrow}</span>
+        <CurrencyBadge currency={currency} />
+      </div>
       <h3 style={{
         fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500,
         letterSpacing: '-0.02em', marginBottom: 16,
       }}>{title}</h3>
+      <NonTjsStrip totals={nonTjsTotals} kind={nonTjsKind} />
       <PieChart items={items} size={200} />
       <div style={{
         marginTop: 16,

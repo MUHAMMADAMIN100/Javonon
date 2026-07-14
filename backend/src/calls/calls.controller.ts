@@ -13,10 +13,21 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { CallsService, CreateCallDto } from './calls.service';
 import { isElevated } from '../auth/role-utils';
+import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
-function parseDate(v?: string): Date | undefined {
+/** Парс начала периода: YYYY-MM-DD как полночь Asia/Dushanbe. */
+function parseFrom(v?: string): Date | undefined {
   if (!v) return undefined;
-  const d = new Date(v);
+  const d = tjParseLocalDate(v);
+  if (isNaN(d.getTime())) throw new BadRequestException('Некорректная дата');
+  return d;
+}
+
+/** Парс конца периода: YYYY-MM-DD как 23:59:59.999 Asia/Dushanbe
+ *  (иначе последний день выпадает из выборки — см. finance/attendance). */
+function parseTo(v?: string): Date | undefined {
+  if (!v) return undefined;
+  const d = tjParseLocalDateEnd(v);
   if (isNaN(d.getTime())) throw new BadRequestException('Некорректная дата');
   return d;
 }
@@ -48,8 +59,8 @@ export class CallsController {
       mine === 'true' || !elevated ? me.id : userId || undefined;
     return this.svc.list({
       userId: effectiveUserId,
-      from: parseDate(from),
-      to: parseDate(to),
+      from: parseFrom(from),
+      to: parseTo(to),
     });
   }
 
@@ -60,7 +71,7 @@ export class CallsController {
     if (!isElevated(me)) {
       throw new BadRequestException('Статистика доступна только администрации');
     }
-    return this.svc.stats({ from: parseDate(from), to: parseDate(to) });
+    return this.svc.stats({ from: parseFrom(from), to: parseTo(to) });
   }
 
   @Delete(':id')

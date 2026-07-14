@@ -130,12 +130,34 @@ export interface Transaction {
   recordedBy?: { id: string; fullName: string; role?: string } | null;
 }
 
+/**
+ * Сводка по «не-TJS» валютам за тот же период, что и основной агрегат.
+ * Backend считает все KPI/пироги в TJS (единая отчётная валюта), а суммы
+ * в USD/EUR/CNY/RUB и т.п. отдаёт отдельно — чтобы бухгалтер видел, что
+ * валютная выручка была, и обработал её вручную (FX-конвертации на
+ * write-time пока нет). Пустой объект = период чисто в сомони.
+ *
+ * Ключ — ISO-код валюты (`USD`, `EUR`, ...); значение — split по
+ * доход/расход и количеству транзакций каждого типа.
+ */
+export interface NonTjsBucket {
+  income: number;
+  expense: number;
+  incomeCount: number;
+  expenseCount: number;
+}
+export type NonTjsTotals = Record<string, NonTjsBucket>;
+
 export interface FinanceSummary {
   totalIncome: number;
   totalExpense: number;
   netProfit: number;
   incomeCount: number;
   expenseCount: number;
+  /** Валюта, в которой посчитаны все KPI выше (обычно `TJS`). */
+  currency: string;
+  /** Отброшенные из основного агрегата суммы в иных валютах. */
+  nonTjsTotals: NonTjsTotals;
 }
 
 export interface CreateTransactionDto {
@@ -208,6 +230,10 @@ export interface FinanceDistribution {
   expense: number;
   net: number;
   distribution: { business: number; debts: number; reserve: number };
+  /** Валюта, в которой посчитано распределение (обычно `TJS`). */
+  currency: string;
+  /** Отброшенные из основного агрегата суммы в иных валютах. */
+  nonTjsTotals: NonTjsTotals;
 }
 export const financeDistribution = (params?: { from?: string; to?: string }) =>
   api.get<FinanceDistribution>('/finance/distribution', { params }).then((r) => r.data);
@@ -217,8 +243,27 @@ export interface TopManager {
   amount: number;
   count: number;
 }
+/**
+ * Ответ /finance/top-managers.
+ *
+ * Ранжирование считается только по TJS-INCOME (единая отчётная валюта,
+ * см. `REPORTING_CURRENCY` на backend). Раньше эндпоинт возвращал плоский
+ * `TopManager[]`, и менеджер, чьи продажи были только в USD/EUR/CNY/RUB,
+ * молча пропадал из «ТОП» — фронт не получал никакого сигнала, что валютная
+ * активность в периоде вообще была. Теперь возвращаем структуру, идентичную
+ * `breakdown`/`summary`/`distribution`: `managers` — сам ранжированный
+ * список, `currency` — база расчёта, `nonTjsTotals` — суммы по прочим
+ * валютам (может быть пустой объект, если период чисто в сомони).
+ */
+export interface TopManagersResponse {
+  managers: TopManager[];
+  /** Валюта, в которой посчитано ранжирование (обычно `TJS`). */
+  currency: string;
+  /** Не-TJS выручка с назначенным менеджером за тот же период. */
+  nonTjsTotals: NonTjsTotals;
+}
 export const financeTopManagers = (params?: { from?: string; to?: string; limit?: number }) =>
-  api.get<TopManager[]>('/finance/top-managers', { params }).then((r) => r.data);
+  api.get<TopManagersResponse>('/finance/top-managers', { params }).then((r) => r.data);
 
 // Разрез доходов по источнику (для эндпоинта /finance/income-sources).
 // Переименовано из IncomeSource → IncomeSourceStat, потому что имя IncomeSource
@@ -259,6 +304,10 @@ export interface FinanceBreakdown {
     amount: number;
     count: number;
   }>;
+  /** Валюта, в которой посчитаны все три разреза (обычно `TJS`). */
+  currency: string;
+  /** Отброшенные из основного агрегата суммы в иных валютах. */
+  nonTjsTotals: NonTjsTotals;
 }
 export type FinancePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
 export const financeBreakdown = (params?: {

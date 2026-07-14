@@ -1,11 +1,12 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { join } from 'path';
 import { UploadsAuthMiddleware } from './common/uploads-auth.middleware';
+import { UserThrottlerGuard } from './common/user-throttler.guard';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -70,6 +71,9 @@ import { SmsIntegrationModule } from './integrations/sms/sms-integration.module'
     // Глобальные rate-limits. Точечные более жёсткие лимиты — через @Throttle()
     // на конкретных публичных эндпоинтах (POST /applications/public,
     // POST /student-auth/login).
+    // Трекер — UserThrottlerGuard (см. ниже в providers): бакет per-user.id,
+    // а не per-IP. Иначе весь офис за NAT делит один 20/min бакет и валит
+    // друг друга в 429 — anti-bonus-inflation goal не работал.
     ThrottlerModule.forRoot([
       { name: 'default', ttl: 60_000, limit: 60 },
     ]),
@@ -121,7 +125,10 @@ import { SmsIntegrationModule } from './integrations/sms/sms-integration.module'
   ],
   controllers: [HealthController],
   providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Per-user rate-limit (см. UserThrottlerGuard). Стоковый ThrottlerGuard
+    // трекал по req.ip и в офисе за NAT/CGNAT валил всех менеджеров в один
+    // бакет — заменён.
+    { provide: APP_GUARD, useClass: UserThrottlerGuard },
     UploadsAuthMiddleware,
   ],
 })

@@ -10,6 +10,21 @@ import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 // 5 дней × 8 часов × ~4 недели ≈ 160 часов.
 const STANDARD_MONTH_HOURS = 160;
 
+// Единая отчётная валюта модуля зарплат. Должна совпадать с
+// REPORTING_CURRENCY из finance.service.ts — иначе финансовый и
+// зарплатный модуль расходятся: finance считает выручку только в TJS,
+// а зарплата брала бонусную базу из смешанных валют.
+// Bonus-inflation-fix (продолжение aff8b00): SubmissionPayment.amount
+// и Transaction.amount складывались без фильтра по валюте, а результат
+// умножался на bonusPercent (или искался в BonusTier, где пороги в TJS)
+// и писался в SalaryRecord.bonusAmount с currency='TJS'. Один USD 5000
+// контракт превращался в «5000 TJS» бонусной базы (в ~11 раз меньше
+// корректной, либо в неверный tier). Т.к. SaleSubmission.currency
+// @default("USD"), это фактически ломало каждую свежую сделку.
+// SubmissionPayment не имеет собственного currency-поля, поэтому
+// фильтруем через relation `submission.currency`.
+const SALARY_REPORTING_CURRENCY = 'TJS';
+
 @Injectable()
 export class SalaryService {
   constructor(
@@ -80,11 +95,26 @@ export class SalaryService {
     // Bug #25: после CANCEL сделки её APPROVED-платежи помечаются REJECTED
     // и связанная INCOME-транзакция получает reversedAt — оба фильтра ниже
     // исключают деньги отменённых сделок из бонусной базы автоматически.
+    //
+    // BONUS-INFLATION-FIX (продолжение aff8b00): обе агрегации ниже —
+    // TJS-only. Раньше суммы в USD/EUR/CNY/RUB складывались с TJS как
+    // безразмерное число, а bonusAmount писался в SalaryRecord с
+    // currency='TJS' (см. код ниже) — то есть USD 5000 приносили менеджеру
+    // ~11× меньше корректного бонуса или падали не в тот BonusTier
+    // (пороги задаются в TJS через Settings). Пока нет FX-конвертации
+    // на write-time, не-TJS суммы исключаем из бонусной базы — та же
+    // политика, что в finance.service.ts (REPORTING_CURRENCY=TJS).
+    // SubmissionPayment.amount не имеет собственной валюты — она у
+    // родителя SaleSubmission (default USD), фильтруем через relation.
     const submissionSalesAgg = await this.prisma.submissionPayment.aggregate({
       where: {
         status: 'APPROVED',
         reviewedAt: { gte: periodStart, lte: periodEnd },
-        submission: { managerId: userId, status: { not: 'CANCELLED' } },
+        submission: {
+          managerId: userId,
+          status: { not: 'CANCELLED' },
+          currency: SALARY_REPORTING_CURRENCY,
+        },
       },
       _sum: { amount: true },
     });
@@ -95,6 +125,7 @@ export class SalaryService {
         category: { not: 'TUITION_PAYMENT' },
         date: { gte: periodStart, lte: periodEnd },
         reversedAt: null,
+        currency: SALARY_REPORTING_CURRENCY,
       },
       _sum: { amount: true },
     });
@@ -177,7 +208,12 @@ export class SalaryService {
       penaltiesPending: round(eff.pending),
       penaltiesExcused: round(eff.excused),
       netAmount: round(net),
-      currency: 'TJS',
+      // currency соответствует SALARY_REPORTING_CURRENCY: и baseAmount,
+      // и bonusAmount, и penalties сейчас считаются как TJS-суммы
+      // (bonusAmount — потому что бонусная база фильтруется по TJS выше,
+      // baseSalary/hourlyRate у User фактически TJS). Меняем константу
+      // здесь — меняем и фильтры выше.
+      currency: SALARY_REPORTING_CURRENCY,
     };
   }
 

@@ -113,3 +113,22 @@ export function tjStartOfNextMonth(d: Date = new Date()): Date {
 export function tjEndOfMonth(d: Date = new Date()): Date {
   return new Date(tjStartOfNextMonth(d).getTime() - 1);
 }
+
+/** Начало года Asia/Dushanbe (1 января 00:00 TJT). Используем tjYMD, а
+ *  НЕ `Date.setFullYear` — последний оперирует в TZ процесса (UTC на
+ *  Railway) и на границах месяца/года «съезжает» на 5 часов. */
+export function tjStartOfYear(d: Date = new Date()): Date {
+  const { y } = tjYMD(d);
+  return new Date(`${y}-01-01T00:00:00+05:00`);
+}
+
+/** Эксклюзивный верх — 1 января следующего года Asia/Dushanbe. */
+export function tjStartOfNextYear(d: Date = new Date()): Date {
+  const { y } = tjYMD(d);
+  return new Date(`${y + 1}-01-01T00:00:00+05:00`);
+}
+
+/** Конец года Asia/Dushanbe (31 декабря 23:59:59.999 TJT). */
+export function tjEndOfYear(d: Date = new Date()): Date {
+  return new Date(tjStartOfNextYear(d).getTime() - 1);
+}

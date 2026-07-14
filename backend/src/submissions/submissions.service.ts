@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, InternalServerErro
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { ActivityService } from '../activity/activity.service';
 import { hasRole, isFounder, UserWithRoles } from '../auth/role-utils';
 import {
   SubmissionStatus,
@@ -116,6 +117,13 @@ export class SubmissionsService {
   constructor(
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
+    // ActivityService для audit-trail финансовых мутаций (approvePayment /
+    // changeStatus refund). Раньше SubmissionsService создавал Transaction
+    // напрямую в $transaction, но не писал ни строчки в ActivityLog — FOUNDER
+    // не мог связать сырую строку Transaction в дашборде с решением об
+    // одобрении/отмене. ActivityModule помечен @Global(), поэтому в
+    // submissions.module.ts дополнительный import не нужен.
+    private activity: ActivityService,
   ) {}
 
   /**
@@ -688,6 +696,24 @@ export class SubmissionsService {
     // Также маппим P2003 (FK) — если programId вдруг удалили между read и tx.
     // Остальные ошибки пробрасываем без изменений — NestJS сам покажет 500.
     let upd: Awaited<ReturnType<typeof this.prisma.submissionPayment.update>>;
+    // Хостинг в outer scope — нужно после COMMIT'а написать audit-запись в
+    // ActivityLog и эмитнуть `transaction:new` в staff-канал; сами
+    // переменные создаются внутри $transaction (finTx.id — после
+    // tx.transaction.create; studentId — после гонок за первое одобрение
+    // и/или подхватывания снапшота проигравшим). Пишем в переменные под
+    // самый конец callback'а, так что при роллбэке они останутся null и
+    // пост-коммитная секция ниже НЕ триггернет ложное уведомление.
+    let finTxIdForAudit: string | null = null;
+    let studentIdForAudit: string | null = null;
+    let finTxAmountForAudit: number | null = null;
+    // Полный finTx для пост-коммитного emit'а `transaction:new` в staff.
+    // Раньше approvePayment писал в БД финансовую строку категории
+    // TUITION_PAYMENT, но НЕ уведомлял /finance подписчиков — соседняя
+    // вкладка FOUNDER'а видела новый доход только на ручной refetch.
+    // Пишем ПОСЛЕ tx.transaction.create внутри callback'а; читаем СНАРУЖИ
+    // только если transaction COMMIT'ился (в противном случае переменная
+    // останется null и emit пропустится — никаких «фантомных» строк в UI).
+    let finTxForEmit: Awaited<ReturnType<typeof this.prisma.transaction.create>> | null = null;
     try {
       upd = await this.prisma.$transaction(async (tx) => {
       // Bug #26 (CRITICAL): pessimistic lock на SaleSubmission — первая
@@ -891,14 +917,37 @@ export class SubmissionsService {
       // агрегирует бонус по SubmissionPayment.reviewedAt — иначе при задержке
       // одобрения FOUNDER'ом бонус мог попасть в уже закрытый зарплатный период
       // и потеряться (preview не пересчитывает PAID-записи).
+      //
+      // Bug (CRITICAL, audit — currency-mixing follow-up): раньше писали
+      // `currency: submission.currency`, а SaleSubmission.currency @default("USD")
+      // (schema.prisma:1635). После fix'а currency-mixing в FinanceService все
+      // агрегаты (summary/breakdown/distribution/topManagers/incomeSources/
+      // incomeByProduct/byCategory/timeseries) фильтруются по
+      // REPORTING_CURRENCY = 'TJS'. Итог: одобренные контрактные приходы (по
+      // умолчанию USD) силентно ВЫПАДАЛИ из всех дашбордов бухгалтера —
+      // netProfit, пироги источников/менеджеров/продуктов, revenue chart,
+      // распределение 70/20/10 показывали ~0 несмотря на реальные продажи.
+      // Пока нет FX-конвертации на write-time, единственный вариант, при
+      // котором reporting stack видит платёж — писать
+      // Transaction.currency = 'TJS', а исходную валюту сделки сохранять
+      // текстом в comment для последующего аудита/ручной пересборки. Long-term
+      // fix — подставить сюда rate × amount (FX на дату одобрения); тогда
+      // строчка ниже станет `currency: 'TJS', amount: payment.amount * rate`.
+      const REPORTING_CURRENCY = 'TJS';
+      const originalCurrency = (submission.currency || REPORTING_CURRENCY).toUpperCase();
+      const commentBase = `Платёж по сделке #${submission.id.slice(0, 8)} (${program.name})`;
+      const finTxComment =
+        originalCurrency === REPORTING_CURRENCY
+          ? commentBase
+          : `${commentBase} — исходная валюта сделки: ${originalCurrency} ${payment.amount} (FX не применён)`;
       const finTx = await tx.transaction.create({
         data: {
           type: 'INCOME',
           category: 'TUITION_PAYMENT',
           amount: payment.amount,
-          currency: submission.currency,
+          currency: REPORTING_CURRENCY,
           date: payment.paidAt,
-          comment: `Платёж по сделке #${submission.id.slice(0, 8)} (${program.name})`,
+          comment: finTxComment,
           studentId: studentId,
           managerId: submission.managerId,
           recordedById: reviewerId,
@@ -924,10 +973,18 @@ export class SubmissionsService {
       // reviewedById/reviewedAt уже выставлены CAS-апдейтом в начале
       // транзакции (см. Bug #6 выше); финальный апдейт добивает только
       // FK на FinanceTransaction.
-      return tx.submissionPayment.update({
+      const updated = await tx.submissionPayment.update({
         where: { id: paymentId },
         data: { financeTransactionId: finTx.id },
       });
+      // Захватываем id-шники для пост-коммитного audit-лога (см. блок
+      // после try/catch). Если транзакция откатится — эти переменные так и
+      // останутся null, ложного лога не будет.
+      finTxIdForAudit = finTx.id;
+      studentIdForAudit = studentId;
+      finTxAmountForAudit = payment.amount;
+      finTxForEmit = finTx;
+      return updated;
     });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -957,12 +1014,56 @@ export class SubmissionsService {
       throw err;
     }
 
+    // Audit-trail для FOUNDER: только сейчас (после COMMIT'а) фиксируем, что
+    // approvePayment создал строку INCOME в Transaction. Без этой записи
+    // /activity показывал только submission:approved-notification, а сырую
+    // строку Transaction — только в дашборде доходов, никак с ней не связывая.
+    // catch(() => undefined) — best-effort: провал ActivityLog.create не
+    // должен отменять уже закоммиченное одобрение платежа (транзакция БД
+    // уже прошла, откатить её отсюда нельзя).
+    const originalCurrencyForAudit = (submission.currency || 'TJS').toUpperCase();
+    if (finTxIdForAudit && finTxAmountForAudit !== null) {
+      this.activity
+        .log({
+          actorId: reviewerId,
+          actorRole: 'FOUNDER',
+          action: 'PAYMENT_APPROVED',
+          studentId: studentIdForAudit,
+          details:
+            `Одобрен платёж #${paymentId.slice(0, 8)}: +${finTxAmountForAudit} ` +
+            `${originalCurrencyForAudit} (${program.name})`,
+          payload: {
+            transactionId: finTxIdForAudit,
+            submissionId: submission.id,
+            paymentId,
+            managerId: submission.managerId,
+            amount: finTxAmountForAudit,
+            currency: originalCurrencyForAudit,
+          },
+        })
+        .catch(() => undefined);
+      // Realtime-эмит `transaction:new` идёт ниже (см. блок с finTxForEmit).
+      // Держим их в одной точке, чтобы Finance UI не получил два одинаковых
+      // события подряд и не сделал двойной refetch.
+    }
+
     // managerId может быть null, если менеджер удалён — тогда персонального
     // уведомления некому слать, только staff-каналу.
     if (submission.managerId) {
       this.realtime.emitUser(submission.managerId, 'submission:approved', { paymentId, submissionId: submission.id });
     }
     this.realtime.emitStaff('submission:reviewed', { paymentId, status: 'APPROVED' });
+    // Дополнительно вбрасываем `transaction:new` в staff-канал: TUITION_PAYMENT
+    // строка ТОЛЬКО ЧТО появилась в Transaction-таблице (INCOME по студенту),
+    // и Finance UI у другого пользователя должен показать её сразу — без
+    // polling и hard-refresh. `submission:*` события намеренно оставляем как
+    // есть: они адресованы страницам сделок, а Finance UI на них не
+    // подписан (см. отдельный fix в FinanceService.create/update/remove).
+    // finTxForEmit=null означает, что transaction откатился (см. try/catch
+    // выше) — тогда emit не идёт, чтобы UI не показал фантомную строку.
+    if (finTxForEmit) {
+      this.realtime.emitStaff('transaction:new', { transaction: finTxForEmit });
+    }
     // Bug #31 (HIGH): на первый APPROVE возвращаем plain-пароль нового
     // студента, чтобы FOUNDER (UI /pending-payments) показал его менеджеру,
     // а тот передал клиенту. На последующие approve'ы (studentCredentials =
@@ -1085,6 +1186,21 @@ export class SubmissionsService {
     const reversedAt = new Date();
     const shortId = submission.id.slice(0, 8);
 
+    // Собираем метаданные каждого рефанда прямо внутри $transaction, чтобы
+    // после COMMIT'а прогнать по ним ActivityService.log и `transaction:reversed`
+    // эмиты. Раньше эти EXPENSE-строки появлялись в БД без единой записи
+    // в ActivityLog — FOUNDER не мог связать «почему возник EXPENSE
+    // OTHER_EXPENSE с recordedById=X на дату Y» с конкретной отменой сделки.
+    const refundAuditPayloads: Array<{
+      paymentId: string;
+      originalTxId: string;
+      refundTxId: string;
+      amount: number;
+      currency: string;
+      studentId: string | null;
+      managerId: string | null;
+    }> = [];
+
     const updated = await this.prisma.$transaction(async (tx) => {
       for (const p of approvedPayments) {
         // (1) оригинальный INCOME → reversedAt (исключение из бонусной базы).
@@ -1109,7 +1225,7 @@ export class SubmissionsService {
               data: { reversedAt },
             });
             // (2) обратная EXPENSE для finance dashboard.
-            await tx.transaction.create({
+            const refundTx = await tx.transaction.create({
               data: {
                 type: 'EXPENSE',
                 category: 'OTHER_EXPENSE',
@@ -1129,6 +1245,19 @@ export class SubmissionsService {
                 reversedAt,
               },
             });
+            // Захватываем данные для пост-коммитного audit-лога — сам лог
+            // и realtime-эмит идут ПОСЛЕ выхода из $transaction, чтобы при
+            // роллбэке не оставить фантомную запись в ActivityLog о рефанде,
+            // которого фактически не было.
+            refundAuditPayloads.push({
+              paymentId: p.id,
+              originalTxId: p.financeTransactionId,
+              refundTxId: refundTx.id,
+              amount: original.amount,
+              currency: original.currency,
+              studentId: original.studentId,
+              managerId: original.managerId,
+            });
           }
         }
         // (3) платёж → REJECTED, чтобы UI не показывал «одобрено» по
@@ -1147,6 +1276,42 @@ export class SubmissionsService {
         data: { status },
       });
     });
+
+    // Audit-trail и realtime-эмит по каждому реверсированному платежу —
+    // только после COMMIT'а. catch(() => undefined) на .log() — best-effort:
+    // сбой в ActivityService не должен отменять уже закоммиченный CANCEL.
+    // Один `activity:new` на рефанд + один `transaction:reversed` на пару
+    // (original INCOME + refund EXPENSE) — Finance-страница слушает и
+    // рефетчит листинг/агрегаты сразу же.
+    const actorRoleForAudit = isFounderUser ? 'FOUNDER' : 'MANAGER';
+    for (const r of refundAuditPayloads) {
+      this.activity
+        .log({
+          actorId: user.id,
+          actorRole: actorRoleForAudit,
+          action: 'PAYMENT_REFUND',
+          studentId: r.studentId,
+          details:
+            `Возврат по сделке #${shortId}: -${r.amount} ${r.currency} ` +
+            `(платёж #${r.paymentId.slice(0, 8)})`,
+          payload: {
+            submissionId,
+            paymentId: r.paymentId,
+            originalTransactionId: r.originalTxId,
+            refundTransactionId: r.refundTxId,
+            amount: r.amount,
+            currency: r.currency,
+            managerId: r.managerId,
+          },
+        })
+        .catch(() => undefined);
+      this.realtime.emitStaff('transaction:reversed', {
+        originalTransactionId: r.originalTxId,
+        refundTransactionId: r.refundTxId,
+        submissionId,
+        paymentId: r.paymentId,
+      });
+    }
 
     // Уведомляем FOUNDER-канал: бухгалтерия должна видеть рефанд сразу.
     this.realtime.emitStaff('submission:cancelled', {

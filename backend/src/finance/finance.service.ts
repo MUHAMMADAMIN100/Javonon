@@ -3,8 +3,12 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { ActivityService } from '../activity/activity.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   IncomeSource,
   PaymentChannel,
@@ -22,8 +26,13 @@ import { MANAGER_ROLES, hasRole } from '../auth/role-utils';
  * ACCOUNTANT) могут ставить любой managerId; менеджеры (SALES_MANAGER/
  * CLIENT_MANAGER) — только self-attribute. Флаг считает вызывающий
  * (controller через isElevated(me)) — сервису не нужно знать про AuthUser.
+ *
+ * `role` — опционально: если передан, попадает в ActivityLog.actorRole,
+ * чтобы FOUNDER мог фильтровать /activity по роли ("покажи все
+ * FINANCE_CREATE от SALES_MANAGER"). Не required — внутренние вызывающие
+ * (chat/ai) могут не знать роль; в этом случае пишем 'SYSTEM'.
  */
-export type FinanceActor = { id: string; isElevated: boolean };
+export type FinanceActor = { id: string; isElevated: boolean; role?: string };
 
 /**
  * Окно, в пределах которого рядовой менеджер может ставить дату
@@ -202,7 +211,44 @@ export type NonTjsTotals = Record<string, NonTjsBucket>;
 @Injectable()
 export class FinanceService {
   private readonly logger = new Logger(FinanceService.name);
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    // RealtimeGateway — для WS-нотификаций staff-комнате после
+    // create/update/remove. Без этого /finance у другого пользователя
+    // (FOUNDER + ACCOUNTANT в month-close параллельно) остаётся stale
+    // до ручного refetch: `submission:*`/`payment:*` события идут в
+    // свои страницы, а Finance UI им не подписан. См. FinanceModule.
+    private realtime: RealtimeGateway,
+    // ActivityService — аудит транзакций. Без записи в ActivityLog каждая
+    // INCOME/EXPENSE молча уходит в БД, а FOUNDER на /activity видит только
+    // движение по заявкам и документам. См. audit HIGH — «POST
+    // /finance/transactions writes no ActivityLog». Логируем best-effort:
+    // .catch(() => undefined), чтобы падение аудита не откатило запись
+    // транзакции (пользователь бы дважды кликнул «Сохранить» и получил
+    // две строки в БД). Тот же pattern использует applications.service.
+    private activity: ActivityService,
+    // NotificationsService — @Optional, потому что внутренние тесты /
+    // chat/ai могут пойти без модуля. Используется для оповещения staff
+    // о переприписке менеджера-получателя на транзакции (audit CRITICAL:
+    // без этого «проигравший» менеджер узнаёт о потере бонуса только по
+    // квитку зарплаты). Тот же pattern (notifyAllStaff) в applications.
+    @Optional() private notifications?: NotificationsService,
+  ) {}
+
+  /**
+   * Форматирует сумму + валюту + категорию для details ActivityLog —
+   * компактно и достаточно для быстрого узнавания в /activity без
+   * открытия payload. Отдельная функция, чтобы create/update/remove
+   * форматировали одинаково.
+   */
+  private formatTxDetails(tx: {
+    type: TransactionType;
+    amount: number;
+    currency: string;
+    category: TransactionCategory;
+  }): string {
+    return `${tx.type} ${tx.amount} ${tx.currency} (${tx.category})`;
+  }
 
   /**
    * Считает суммы по не-TJS валютам за период. Возвращает {USD:{income,
@@ -480,7 +526,7 @@ export class FinanceService {
       productCategoryEnumFinal = enumForProductCategoryLabel(rawProductCategory);
     }
 
-    return this.prisma.transaction.create({
+    const created = await this.prisma.transaction.create({
       data: {
         type: dto.type,
         category: dto.category,
@@ -510,6 +556,36 @@ export class FinanceService {
         paidVia: { select: { id: true, fullName: true } },
       },
     });
+    // WS-нотификация staff-комнате: у второго пользователя, у которого
+    // /finance открыт в соседней вкладке, список/summary обновятся сразу
+    // — без polling и без hard-refresh. Держим emit ПОСЛЕ commit — если
+    // Prisma бросит, клиент получит 4xx/5xx и никаких «фантомных»
+    // событий в UI не всплывёт.
+    this.realtime.emitStaff('transaction:new', { transaction: created });
+    // ActivityLog. Аудит HIGH: без этой записи INCOME/EXPENSE не всплывает
+    // на /activity, и FOUNDER не может по UI ответить «кто создал
+    // транзакцию X, когда». Best-effort — падение аудита не должно
+    // откатывать транзакцию (см. комментарий у this.activity в
+    // конструкторе). actorRole берём из caller.role, если контроллер его
+    // передал; иначе 'SYSTEM' (внутренние вызывающие типа chat/ai).
+    this.activity
+      .log({
+        actorId: recordedById,
+        actorRole: caller.role || 'SYSTEM',
+        action: 'FINANCE_CREATE',
+        studentId: created.studentId,
+        studentName: created.student?.fullName ?? null,
+        details: this.formatTxDetails(created),
+        payload: {
+          transactionId: created.id,
+          managerId: created.managerId,
+          category: created.category,
+          amount: created.amount,
+          currency: created.currency,
+        },
+      })
+      .catch(() => undefined);
+    return created;
   }
 
   async update(
@@ -523,6 +599,110 @@ export class FinanceService {
     // откроют менеджерам.
     caller: FinanceActor = { id: '', isElevated: true },
   ) {
+    // === Snapshot BEFORE-состояния для audit-log (CRITICAL fix). ==========
+    // Аудит CRITICAL: без before-снимка PATCH /finance/transactions/:id
+    // тихо переписывал managerId (получателя бонуса), amount и date. У
+    // «проигравшего» менеджера пропадала атрибуция без ActivityLog-записи —
+    // бонус-споры невозможно было расследовать. Забираем нужные поля один
+    // раз, реюзаем для (а) guard'а non-elevated ниже, (б) date-validation,
+    // (в) diff-log после успешного update.
+    //
+    // include manager для fullName до правки — иначе после update Prisma
+    // вернёт уже новое имя, и в details попадёт «B → B» (мусор).
+    const before = await this.prisma.transaction.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        currency: true,
+        category: true,
+        date: true,
+        managerId: true,
+        studentId: true,
+        reversedAt: true,
+        manager: { select: { id: true, fullName: true } },
+      },
+    });
+    if (!before) {
+      throw new BadRequestException('Транзакция не найдена');
+    }
+
+    // === Role-aware guard (parity fix с create()). ===============
+    // Аудит HIGH: раньше update() писал patch.managerId/studentId в БД
+    // verbatim. Пока PATCH висит под @Roles('ADMIN','ACCOUNTANT') это
+    // маскирует дыру, но: (а) контроллер уже планирует пустить сюда
+    // менеджеров (комментарий в finance.controller.ts перед update()),
+    // (б) кастомная роль с permission finance:write доходит до PATCH
+    // через RolesGuard, минуя жёсткий @Roles. В обоих случаях менеджер
+    // мог бы: 1) PATCH'ем переписать managerId любой исторической
+    // INCOME-записи на себя (реплей bonus-inflation вектора, который
+    // create() уже закрыл self-attribute'ом); 2) привязать транзакцию
+    // к чужому студенту (искажение статистики + возможный обход
+    // ownership-check'а create()); 3) поднять amount у уже отменённой
+    // (reversedAt != null) записи — soft-delete не должен размораживать
+    // stale-кредит в bonus-подсчёте.
+    //
+    // Все три вектора закрываем ЗДЕСЬ, до любой prisma.update. Elevated
+    // (FOUNDER/ADMIN/ACCOUNTANT) — как и в create() — исключение:
+    // историческая правка/reattribution их прерогатива.
+    if (!caller.isElevated) {
+      const existing = before;
+      // Уже приписана другому менеджеру → не пускаем даже смотреть.
+      // Иначе даже без явного patch.managerId рядовой юзер мог инфлировать
+      // amount/currency чужой записи, и salary/kpi чужого менеджера ехали
+      // бы вверх (или искажались вниз).
+      if (existing.managerId && existing.managerId !== caller.id) {
+        throw new ForbiddenException(
+          'Нельзя редактировать транзакцию чужого менеджера',
+        );
+      }
+      // Reversed (soft-deleted) → не даём менять сумму/тип. Иначе
+      // отменённая продажа снова становится «большой» строкой, а
+      // reversedAt остаётся — salary/topManagers их фильтруют, но
+      // любой live-агрегат по всей таблице (аудит, бухгалтерия)
+      // получит фиктивный inflated hit.
+      if (existing.reversedAt && (patch.amount !== undefined || patch.type !== undefined)) {
+        throw new ForbiddenException(
+          'Отменённую транзакцию нельзя менять по сумме или типу',
+        );
+      }
+      // managerId в патче: любая цель кроме self — отказ (симметрично
+      // create() ветке non-elevated: managerId = caller.id, без вариантов).
+      // Не молча перезаписываем — если фронт целится в чужого, это скорее
+      // всего сознательный обход, отвечаем 403 честно.
+      if (patch.managerId !== undefined) {
+        const target = patch.managerId || null;
+        if (target && target !== caller.id) {
+          throw new ForbiddenException(
+            'Менеджер не может переприписать транзакцию на другого пользователя',
+          );
+        }
+        // null или self → нормализуем в self (create() тоже форсит self).
+        patch.managerId = caller.id;
+      }
+      // studentId в патче: тот же ownership-check что и в create()
+      // (finance.service.ts:402-415). Без него менеджер мог перевесить
+      // существующую транзакцию на чужого студента и тем самым:
+      // – испортить студенческую статистику владельцу;
+      // – (в связке с бонусами по студенту) переиграть attribution
+      //   после факта.
+      if (patch.studentId !== undefined && patch.studentId) {
+        const stu = await this.prisma.student.findUnique({
+          where: { id: patch.studentId },
+          select: { managerId: true },
+        });
+        if (!stu) {
+          throw new BadRequestException('studentId: студент не найден');
+        }
+        if (stu.managerId !== caller.id) {
+          throw new ForbiddenException(
+            'Нельзя привязывать транзакцию к чужому студенту',
+          );
+        }
+      }
+    }
+
     // Те же проверки что в create. Раньше update тупо форвардил patch
     // в Prisma — currency/comment/receiptUrl/etc обходили все защиты,
     // которые я добавил в create. Делаем те же check'и.
@@ -545,16 +725,10 @@ export class FinanceService {
     if (patch.date !== undefined && patch.date !== null) {
       // Bounds-check на дату патча — окно ±3 суток для не-elevated и
       // «нет будущего» для INCOME. Тип берём из patch.type, если он в
-      // патче, иначе — из существующей записи (иначе PATCH мог бы
-      // передвинуть INCOME в будущее без указания type).
-      let effectiveType: TransactionType | null | undefined = patch.type;
-      if (effectiveType === undefined) {
-        const existing = await this.prisma.transaction.findUnique({
-          where: { id },
-          select: { type: true },
-        });
-        effectiveType = existing?.type ?? null;
-      }
+      // патче, иначе — из уже полученного `before` (второй findUnique
+      // не нужен — snapshot собран в начале update()).
+      const effectiveType: TransactionType | null | undefined =
+        patch.type ?? before.type ?? null;
       validateTransactionDate(patch.date, effectiveType, caller);
     }
     const checkText = (val: string | undefined | null, field: string, maxLen: number) => {
@@ -642,7 +816,7 @@ export class FinanceService {
       }
     }
 
-    return this.prisma.transaction.update({
+    const updated = await this.prisma.transaction.update({
       where: { id },
       data: {
         ...(patch.type && { type: patch.type }),
@@ -665,7 +839,139 @@ export class FinanceService {
         ...(paymentPhasePatch !== undefined && { paymentPhase: paymentPhasePatch }),
         ...(paidViaIdPatch !== undefined && { paidViaId: paidViaIdPatch }),
       },
+      include: {
+        student: { select: { id: true, fullName: true } },
+        manager: { select: { id: true, fullName: true } },
+      },
     });
+    // WS-нотификация staff-комнате: тот же сценарий, что в create() —
+    // FOUNDER держит /finance открытой в другой вкладке, ACCOUNTANT
+    // правит amount/managerId/date, FOUNDER видит правку без ручного
+    // refetch. Emit ПОСЛЕ commit'а — на ошибке Prisma событие не
+    // всплывёт и клиент получит 4xx/5xx.
+    this.realtime.emitStaff('transaction:updated', { transaction: updated });
+
+    // === Аудит правок транзакции (CRITICAL fix). =========================
+    // Всё, что ниже — best-effort .catch(). Мы уже закоммитили правку в
+    // БД; если аудит-запись упадёт, откатывать транзакцию поздно
+    // (пользователь бы кликнул «Сохранить» ещё раз и получил дубль).
+    // Логируем то, что важно для расследования бонус-споров:
+    //  * TRANSACTION_MANAGER_CHANGE — сдвиг получателя атрибуции (кто-то
+    //    у кого-то отнял бонус). Отдельный action, чтобы FOUNDER мог одним
+    //    фильтром /activity?action=TRANSACTION_MANAGER_CHANGE увидеть все
+    //    переприписки за месяц.
+    //  * FINANCE_UPDATE — общий след правки на случай, когда изменились
+    //    amount / date (тоже влияют на bonus period + threshold), но не
+    //    менеджер. Пишем его если diff есть хоть по одному важному полю.
+    const actorId = caller.id || '';
+    const actorRole = caller.role || 'SYSTEM';
+    const managerChanged =
+      patch.managerId !== undefined &&
+      (before.managerId ?? null) !== (updated.managerId ?? null);
+    const amountChanged =
+      patch.amount !== undefined && before.amount !== updated.amount;
+    const dateChanged =
+      patch.date !== undefined && before.date.getTime() !== updated.date.getTime();
+
+    if (managerChanged) {
+      const beforeName = before.manager?.fullName || (before.managerId ? before.managerId.slice(0, 8) : '—');
+      const afterName = updated.manager?.fullName || (updated.managerId ? updated.managerId.slice(0, 8) : '—');
+      const txLabel = updated.id.slice(0, 8);
+      const details =
+        `Транзакция ${txLabel}: менеджер ${beforeName} → ${afterName}, ` +
+        `сумма ${updated.amount} ${updated.currency}`;
+      this.activity
+        .log({
+          actorId: actorId || null,
+          actorRole,
+          action: 'TRANSACTION_MANAGER_CHANGE',
+          studentId: updated.studentId,
+          studentName: updated.student?.fullName ?? null,
+          details,
+          payload: {
+            transactionId: updated.id,
+            before: {
+              managerId: before.managerId,
+              managerName: before.manager?.fullName ?? null,
+              amount: before.amount,
+              currency: before.currency,
+              date: before.date,
+            },
+            after: {
+              managerId: updated.managerId,
+              managerName: updated.manager?.fullName ?? null,
+              amount: updated.amount,
+              currency: updated.currency,
+              date: updated.date,
+            },
+          },
+        })
+        .catch(() => undefined);
+
+      // Уведомляем staff (в т.ч. «проигравшего» и «выигравшего» менеджера)
+      // о том, что атрибуция сдвинулась. Без этого проигравший узнавал
+      // о потере бонуса только по квитку зарплаты — репутационный риск для
+      // финотдела. Тот же pattern (notifyAllStaff) в applications.service
+      // при MANAGER_CHANGE. Best-effort.
+      if (this.notifications) {
+        this.notifications
+          .notifyAllStaff({
+            type: 'TRANSACTION_MANAGER_CHANGE',
+            title: 'Менеджер транзакции изменён',
+            message: details,
+            payload: {
+              transactionId: updated.id,
+              beforeManagerId: before.managerId,
+              afterManagerId: updated.managerId,
+              amount: updated.amount,
+              currency: updated.currency,
+              studentId: updated.studentId,
+            },
+          })
+          .catch(() => undefined);
+      }
+    }
+
+    // Общий FINANCE_UPDATE — пишем если хоть одно bonus-relevant поле
+    // (amount / date) изменилось. Managerchange уже покрыт отдельным
+    // action выше, поэтому здесь пропускаем, если ТОЛЬКО он и изменился
+    // (иначе получится две записи об одном и том же для FOUNDER'а).
+    if (amountChanged || dateChanged) {
+      const parts: string[] = [];
+      if (amountChanged) {
+        parts.push(`сумма ${before.amount} ${before.currency} → ${updated.amount} ${updated.currency}`);
+      }
+      if (dateChanged) {
+        parts.push(`дата ${before.date.toISOString()} → ${updated.date.toISOString()}`);
+      }
+      this.activity
+        .log({
+          actorId: actorId || null,
+          actorRole,
+          action: 'FINANCE_UPDATE',
+          studentId: updated.studentId,
+          studentName: updated.student?.fullName ?? null,
+          details: `Транзакция ${updated.id.slice(0, 8)}: ${parts.join('; ')}`,
+          payload: {
+            transactionId: updated.id,
+            before: {
+              amount: before.amount,
+              currency: before.currency,
+              date: before.date,
+            },
+            after: {
+              amount: updated.amount,
+              currency: updated.currency,
+              date: updated.date,
+            },
+            managerId: updated.managerId,
+            patch,
+          },
+        })
+        .catch(() => undefined);
+    }
+
+    return updated;
   }
 
   /**
@@ -725,37 +1031,59 @@ export class FinanceService {
     // Fix (audit — currency mixing): ранжируем по TJS-суммам, иначе
     // менеджер, закрывший 1 контракт в USD, оказывался выше того, кто
     // сделал 5 контрактов в TJS (USD 5000 суммируется как 5000 TJS).
-    const grouped = await this.prisma.transaction.groupBy({
-      by: ['managerId'],
-      where: {
-        type: 'INCOME',
-        managerId: { not: null },
-        currency: REPORTING_CURRENCY,
-        // Bug #25: ранжируем менеджеров по «живым» продажам —
-        // отменённые сделки (reversedAt != null) не должны попадать
-        // в топ, иначе менеджер «за счёт» отказников может всплыть выше
-        // реально работающих.
-        reversedAt: null,
-        ...(opts.from || opts.to
-          ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
-          : {}),
-      },
-      _sum: { amount: true },
-      _count: true,
-      orderBy: { _sum: { amount: 'desc' } },
-      take: limit,
-    });
+    //
+    // Follow-up: ранжирование ведётся только по TJS-INCOME, но менеджер
+    // с USD-only продажами полностью пропадал из «ТОП»-списка — фронт не
+    // получал никакого сигнала, что валютная активность в периоде была.
+    // Возвращаем `nonTjsTotals` (как в breakdown/summary/distribution),
+    // чтобы UI мог показать бэйдж «BASE · TJS» и подсказку про USD/EUR.
+    const dateRange =
+      opts.from || opts.to
+        ? {
+            date: {
+              ...(opts.from && { gte: opts.from }),
+              ...(opts.to && { lte: opts.to }),
+            },
+          }
+        : {};
+    // Bug #25: ранжируем менеджеров по «живым» продажам —
+    // отменённые сделки (reversedAt != null) не должны попадать
+    // в топ, иначе менеджер «за счёт» отказников может всплыть выше
+    // реально работающих.
+    const liveIncomeWhere = {
+      ...dateRange,
+      reversedAt: null,
+      type: 'INCOME' as const,
+      managerId: { not: null },
+    };
+    const [grouped, nonTjs] = await Promise.all([
+      this.prisma.transaction.groupBy({
+        by: ['managerId'],
+        where: { ...liveIncomeWhere, currency: REPORTING_CURRENCY },
+        _sum: { amount: true },
+        _count: true,
+        orderBy: { _sum: { amount: 'desc' } },
+        take: limit,
+      }),
+      // Скоуп — тот же (live INCOME с назначенным менеджером). Так
+      // бухгалтер видит USD/EUR-продажи, отсутствующие в ранжировании.
+      this.nonTjsTotals(liveIncomeWhere),
+    ]);
     const managerIds = grouped.map((g) => g.managerId!).filter(Boolean);
     const users = await this.prisma.user.findMany({
       where: { id: { in: managerIds } },
       select: { id: true, fullName: true, email: true },
     });
     const userMap = new Map(users.map((u) => [u.id, u]));
-    return grouped.map((g) => ({
-      manager: userMap.get(g.managerId!) || { id: g.managerId, fullName: 'Без менеджера' },
-      amount: g._sum.amount || 0,
-      count: g._count,
-    }));
+    return {
+      managers: grouped.map((g) => ({
+        manager: userMap.get(g.managerId!) || { id: g.managerId, fullName: 'Без менеджера' },
+        amount: g._sum.amount || 0,
+        count: g._count,
+      })),
+      currency: REPORTING_CURRENCY,
+      nonTjsTotals: nonTjs,
+    };
   }
 
   /**
@@ -820,8 +1148,53 @@ export class FinanceService {
       .sort((a, b) => b.amount - a.amount);
   }
 
-  async remove(id: string) {
-    return this.prisma.transaction.delete({ where: { id } });
+  async remove(
+    id: string,
+    // caller — тот же контракт что в create()/update(). Default: elevated,
+    // чтобы внутренние вызывающие (тесты, чат-бот) не ломались. Публичный
+    // DELETE ходит через контроллер с реальным actor'ом — actorRole
+    // попадает в ActivityLog для аудита.
+    caller: FinanceActor = { id: '', isElevated: true },
+  ) {
+    // Снимок до удаления — Prisma.delete вернёт запись, но с
+    // relation'ами получить её потом уже нельзя (строки в БД нет),
+    // а ActivityLog хочет studentName + человекочитаемые details.
+    // Один findUnique дешевле, чем аудит с голым id.
+    const existing = await this.prisma.transaction.findUnique({
+      where: { id },
+      include: { student: { select: { id: true, fullName: true } } },
+    });
+    const deleted = await this.prisma.transaction.delete({ where: { id } });
+    // WS-нотификация staff-комнате: у второго пользователя, у которого
+    // /finance открыт, строка исчезнет из списка сразу. Полезный payload —
+    // просто id (фронту нужен именно он, чтобы выкинуть запись из cache).
+    // Emit ПОСЛЕ commit'а: если строки уже не было и Prisma бросит P2025,
+    // никаких «фантомных» delete-событий в UI не всплывёт.
+    this.realtime.emitStaff('transaction:deleted', { id, transaction: deleted });
+    // ActivityLog: FINANCE_DELETE. Best-effort — падение аудита не
+    // должно откатывать сам delete (запись уже нет, ре-play не сделаешь).
+    // Если existing до delete не удалось прочитать (гонка), логируем
+    // минимальный след — иначе полностью потерять аудит удаления хуже,
+    // чем неполный след.
+    this.activity
+      .log({
+        actorId: caller.id || null,
+        actorRole: caller.role || 'SYSTEM',
+        action: 'FINANCE_DELETE',
+        studentId: existing?.studentId ?? deleted.studentId ?? null,
+        studentName: existing?.student?.fullName ?? null,
+        details: this.formatTxDetails(existing ?? deleted),
+        payload: {
+          transactionId: id,
+          managerId: existing?.managerId ?? deleted.managerId ?? null,
+          amount: (existing ?? deleted).amount,
+          currency: (existing ?? deleted).currency,
+          category: (existing ?? deleted).category,
+          type: (existing ?? deleted).type,
+        },
+      })
+      .catch(() => undefined);
+    return deleted;
   }
 
   /**

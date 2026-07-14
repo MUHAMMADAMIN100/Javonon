@@ -10,7 +10,31 @@ export type ActivityAction =
   | 'MANAGER_CHANGE'
   | 'PROGRAM_CHANGE'
   | 'DOCUMENT_UPLOAD'
-  | 'DOCUMENT_DELETE';
+  | 'DOCUMENT_DELETE'
+  // Finance audit trail: без этих action'ов POST/PATCH/DELETE
+  // /finance/transactions не оставляли следа в /activity — FOUNDER не мог
+  // ответить «кто создал/поменял/удалил транзакцию X, когда». См. audit HIGH
+  // (finance.service.ts create/update/remove).
+  | 'FINANCE_CREATE'
+  | 'FINANCE_UPDATE'
+  | 'FINANCE_DELETE'
+  // Отдельный action для смены менеджера-получателя атрибуции у существующей
+  // транзакции — управляет бонусами, поэтому логируется отдельно от общего
+  // FINANCE_UPDATE, чтобы FOUNDER мог быстро найти именно эти изменения.
+  | 'TRANSACTION_MANAGER_CHANGE'
+  // approvePayment / changeStatus(CANCELLED) в SubmissionsService пишут
+  // Transaction(INCOME/EXPENSE) внутри $transaction. Раньше эти строки
+  // появлялись в БД без единой записи в ActivityLog — FOUNDER мог видеть
+  // только сырой Transaction row с recordedById=reviewer и никак не мог
+  // проследить, что INCOME был порождён approvePayment(paymentId=…) или
+  // что EXPENSE — это авто-возврат по отменённой сделке.
+  //   PAYMENT_APPROVED — approvePayment создал INCOME (TUITION_PAYMENT)
+  //     по одобренному SubmissionPayment.
+  //   PAYMENT_REFUND — changeStatus(CANCELLED) реверснул APPROVED-платёж:
+  //     оригинальный INCOME помечен reversedAt + создан парный EXPENSE
+  //     (OTHER_EXPENSE) как корректирующая запись.
+  | 'PAYMENT_APPROVED'
+  | 'PAYMENT_REFUND';
 
 @Injectable()
 export class ActivityService {

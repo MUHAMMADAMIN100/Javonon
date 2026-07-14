@@ -13,6 +13,16 @@ import { FinanceService, CreateTransactionDto } from './finance.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionCategory, TransactionType } from '@prisma/client';
+import {
+  tjStartOfMonth,
+  tjEndOfMonth,
+  tjStartOfYear,
+  tjEndOfYear,
+  tjParseLocalDate,
+  tjParseLocalDateEnd,
+  tjStartOfDay,
+  tjYMD,
+} from '../common/tj-time';
 
 // Receipts: только изображения и PDF. Whitelist расширений и MIME —
 // раньше можно было загрузить .exe/.html/.php (потенциальный XSS если
@@ -46,26 +56,34 @@ const VALID_TX_CATEGORIES: TransactionCategory[] = [
   'TUITION_PAYMENT', 'ADDITIONAL_FEE', 'SALARY', 'RENT', 'UTILITIES',
   'MARKETING', 'OFFICE', 'OTHER_INCOME', 'OTHER_EXPENSE',
 ];
-// endOfDayIfDateOnly=true — если пришла date-only строка "YYYY-MM-DD"
-// (её присылает <input type="date"> и наш календарный пикер), поднимаем
-// её до конца суток 23:59:59.999 UTC. Иначе `new Date("2026-01-31")`
-// даёт 2026-01-31T00:00:00Z, а фильтр `date <= to` молча выкидывает всё
-// с этой даты после полуночи UTC — целый последний день пропадал из
+// endOfDay=true — если пришла date-only строка "YYYY-MM-DD" (её присылает
+// <input type="date"> и наш календарный пикер), поднимаем её до конца
+// суток 23:59:59.999 Asia/Dushanbe. Иначе `new Date("2026-01-31")` даёт
+// 2026-01-31T00:00:00Z, а фильтр `date <= to` молча выкидывает всё с
+// этой даты после полуночи UTC — целый последний день пропадал из
 // summary/breakdown/timeseries/etc. Bug: менеджер смотрит на пирог и не
-// видит платёж, зарегистрированный сегодня днём. Использовать true
-// только для «правой» границы диапазона (to). Для `from` фактическое
-// 00:00 — это как раз то, что нужно.
+// видит платёж, зарегистрированный сегодня днём.
+//
+// TZ-fix (issue #4): раньше здесь стоял `new Date(v) + setUTCHours(23,…)`,
+// что давало границу по UTC-суткам. Из-за offset UTC+5 в Душанбе
+// «2026-01-31» на самом деле начинается в 19:00 UTC 30-го числа, поэтому
+// фильтр с UTC-границами обрезал последние 5 часов суток TJT в каждом
+// периоде — все finance-эндпоинты (summary/byCategory/timeseries/
+// distribution/top-managers/income-*/transactions) давали цифры,
+// расходящиеся на несколько часов реальных операций. Единый парсер
+// через tjParseLocalDate/tjParseLocalDateEnd делает границы согласованными
+// с остальным бэкендом (reports, salary, attendance, kpi и т.д.).
+//
+// Использовать endOfDay=true только для «правой» границы диапазона (to).
+// Для `from` фактическое 00:00 TJT — это как раз то, что нужно.
 function parseDate(
   v: string | undefined,
   name: string,
-  endOfDayIfDateOnly = false,
+  endOfDay = false,
 ): Date | undefined {
   if (!v) return undefined;
-  const d = new Date(v);
+  const d = endOfDay ? tjParseLocalDateEnd(v) : tjParseLocalDate(v);
   if (isNaN(d.getTime())) throw new BadRequestException(`${name}: некорректная дата`);
-  if (endOfDayIfDateOnly && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
-    d.setUTCHours(23, 59, 59, 999);
-  }
   return d;
 }
 function parseTake(v: string | undefined): number | undefined {
@@ -80,15 +98,46 @@ function parseTake(v: string | undefined): number | undefined {
 // Резолвим ?period=X в конкретный интервал {from, to}. Явные from/to
 // (если пришли валидные) перебивают period — календарный пикер важнее
 // пресетов. `all` возвращает пустой объект (без границ).
+//
+// TZ-fix: явные границы парсим tjParseLocalDate / tjParseLocalDateEnd —
+// иначе `new Date('2026-01-31')` даёт UTC-полночь и «крадёт» первые
+// 5 часов дня в Душанбе (`from` теряет утро, `to` тянет за собой первые
+// 5 часов следующих суток). Остальные controllers (attendance / kpi /
+// reports / salary / time-tracking / penalties / daily-reports) уже
+// используют этот путь — здесь приводим в соответствие.
 const VALID_PERIODS = new Set(['day', 'week', 'month', 'quarter', 'year', 'all']);
 function resolveRange(
   period: string | undefined,
   from: string | undefined,
   to: string | undefined,
 ): { from?: Date; to?: Date } {
-  const explicitFrom = parseDate(from, 'from');
-  const explicitTo = parseDate(to, 'to', true);
-  if (explicitFrom || explicitTo) {
+  // Пустая строка (?from=&to=2026-01-31) должна означать «не задано»,
+  // а не «валидная граница undefined» — поэтому нормализуем сначала.
+  const rawFrom = from && from.trim() !== '' ? from.trim() : undefined;
+  const rawTo = to && to.trim() !== '' ? to.trim() : undefined;
+  if (rawFrom || rawTo) {
+    let explicitFrom: Date | undefined;
+    let explicitTo: Date | undefined;
+    if (rawFrom) {
+      explicitFrom = tjParseLocalDate(rawFrom);
+      if (isNaN(explicitFrom.getTime())) {
+        throw new BadRequestException('from: некорректная дата');
+      }
+    }
+    if (rawTo) {
+      explicitTo = tjParseLocalDateEnd(rawTo);
+      if (isNaN(explicitTo.getTime())) {
+        throw new BadRequestException('to: некорректная дата');
+      }
+    }
+    // Если пришёл только `from` — верхнюю границу закрываем «сейчас»,
+    // чтобы поведение было консистентно с period-веткой (там всегда
+    // возвращаются обе границы). Без этого Prisma получала бы {gte: X}
+    // без верхнего предела — молча включаются будущие даты, если
+    // менеджер по ошибке поставил их в форме создания транзакции.
+    if (explicitFrom && !explicitTo) {
+      explicitTo = new Date();
+    }
     return { from: explicitFrom, to: explicitTo };
   }
   const p = (period || 'month').toLowerCase();
@@ -99,24 +148,58 @@ function resolveRange(
   }
   if (p === 'all') return {};
   const now = new Date();
-  const start = new Date(now);
-  switch (p) {
-    case 'day':
-      start.setHours(0, 0, 0, 0);
-      break;
-    case 'week':
-      start.setDate(now.getDate() - 7);
-      break;
-    case 'month':
-      start.setMonth(now.getMonth() - 1);
-      break;
-    case 'quarter':
-      start.setMonth(now.getMonth() - 3);
-      break;
-    case 'year':
-      start.setFullYear(now.getFullYear() - 1);
-      break;
+  // period=month / period=year — это КАЛЕНДАРНЫЙ месяц/год Asia/Dushanbe,
+  // а не скользящее «-30/-365 дней». Ранее использовались
+  // Date.prototype.setMonth / setFullYear, что давало сразу два бага:
+  //  (1) операции работают в TZ процесса (Railway = UTC) → все границы
+  //      съезжают на 5 часов относительно ожиданий FOUNDER'а;
+  //  (2) у setMonth есть month-length overflow — 31 марта минус месяц
+  //      даёт «3 марта», а не «начало февраля».
+  // На 14 июля отчёт «за месяц» молча включал половину июня и терял
+  // последние две недели июля.
+  if (p === 'month') {
+    return { from: tjStartOfMonth(now), to: tjEndOfMonth(now) };
   }
+  if (p === 'year') {
+    return { from: tjStartOfYear(now), to: tjEndOfYear(now) };
+  }
+  // day / week / quarter — базой берём полночь Asia/Dushanbe, а не
+  // «сейчас в TZ процесса». Раньше здесь работали `Date.prototype.setDate` /
+  // `setMonth` на объекте, склонированном из `now`; они оперируют в TZ
+  // процесса (Railway = UTC), поэтому:
+  //   • `day` в 00:30 субботы TJT (= 19:30 пятницы UTC) возвращал начало
+  //     пятницы UTC = ~05:00 пятницы TJT, теряя ночные продажи;
+  //   • `week` / `quarter` уносили нижнюю границу на 5 часов относительно
+  //     полуночи Душанбе — в срез попадал «хвост» прошлых суток.
+  // Sec: сутки в Asia/Dushanbe всегда 24ч (UTC+5, без DST), поэтому
+  // `week` — это `todayStart - 7 * 24h` (fixed-offset arithmetic — не
+  // трогаем `setDate`, чтобы не проваливаться в UTC-семантику снова).
+  // Для `quarter` арифметику ведём по Y/M/D wall-clock через tjYMD:
+  // `setMonth` в UTC-Date переносит 31 мая на «1 марта» из-за
+  // month-length overflow, а нам нужна дата начала квартала на
+  // календаре Душанбе (с клэмпом дня по длине целевого месяца).
+  const todayStart = tjStartOfDay(now);
+  let start: Date = todayStart;
+  if (p === 'week') {
+    start = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else if (p === 'quarter') {
+    const { y, m, d } = tjYMD(now);
+    let qy = y;
+    let qm = m - 3;
+    while (qm < 1) {
+      qm += 12;
+      qy -= 1;
+    }
+    // Клэмп дня по длине целевого месяца — Date.UTC(y, m_1based, 0) даёт
+    // последний день месяца m (без риска пересечения DST, т.к. считаем
+    // сугубо календарь). Иначе «31 мая → -3 мес» = «3 марта».
+    const dim = new Date(Date.UTC(qy, qm, 0)).getUTCDate();
+    const qd = Math.min(d, dim);
+    const mm = String(qm).padStart(2, '0');
+    const dd = String(qd).padStart(2, '0');
+    start = new Date(`${qy}-${mm}-${dd}T00:00:00+05:00`);
+  }
+  // 'day' → start остаётся todayStart (полночь TJT).
   return { from: start, to: now };
 }
 
@@ -187,6 +270,20 @@ export class FinanceController {
   // после каждой созданной INCOME строки считаем плотность записей
   // этого recordedById в скользящем окне — если превышен порог, ловим
   // распределённый спам «под лимит» и уведомляем админов.
+  //
+  // NB: FOUNDER / ADMIN / ACCOUNTANT throttle НЕ касается — см.
+  // UserThrottlerGuard.shouldSkip. Это парная фикса к тому, что
+  // finance.service.ts отдельно снимает окно дат ±3 суток для elevated
+  // ролей (закрытие месяца, импорт истории из старых Google-таблиц):
+  // если бы 20/min лимит применялся и к ним, date-window exemption
+  // становился бесполезен — 5000-строчный импорт занимал бы 4+ часа
+  // babysitting'а 429-loop'а. Bonus-inflation guard сохраняется,
+  // потому что SALES_MANAGER / CLIENT_MANAGER не elevated.
+  //
+  // Per-user, а не per-IP: см. common/user-throttler.guard.ts — глобально
+  // ThrottlerGuard заменён на UserThrottlerGuard, который трекает по
+  // req.user.id. Иначе весь офис за NAT делил бы один бакет и первые 20
+  // транзакций подряд от кого угодно клали бы всех остальных.
   @Post('transactions')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles('ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER')
@@ -197,8 +294,11 @@ export class FinanceController {
     // Audit-fix: передаём actor с реальным флагом isElevated, чтобы сервис
     // мог форсить self-attribute для менеджеров (иначе SALES_MANAGER мог
     // бы указать любой managerId в dto — bonus inflation).
+    // `role` пробрасываем в ActivityLog.actorRole — без неё FOUNDER не мог
+    // отфильтровать /activity по «FINANCE_CREATE от SALES_MANAGER».
     const tx = await this.svc.create(dto, me.id, {
       id: me.id,
+      role: me?.role,
       isElevated: isElevated(me),
     });
     // Спам-детектор для INCOME. fire-and-forget: даже если ветка алерта
@@ -247,7 +347,8 @@ export class FinanceController {
 
   // Тот же throttle что и на POST — PATCH тоже спамится: атакующий
   // может репутационно раздувать amount у уже существующих строк,
-  // не создавая новые. 20 правок/мин на пользователя.
+  // не создавая новые. 20 правок/мин на пользователя (per-user
+  // обеспечивает UserThrottlerGuard в AppModule; см. коммент на POST).
   @Patch('transactions/:id')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   update(
@@ -260,15 +361,26 @@ export class FinanceController {
     // Сейчас PATCH доступен только ADMIN/ACCOUNTANT (см. Roles на
     // контроллере), но передаём actor честно — если PATCH когда-то
     // откроют менеджерам, окно уже будет работать.
+    // `role` — для ActivityLog.actorRole (FINANCE_UPDATE /
+    // TRANSACTION_MANAGER_CHANGE), без него FOUNDER не мог бы фильтровать
+    // /activity по роли автора правки.
     return this.svc.update(id, patch, {
       id: me.id,
+      role: me?.role,
       isElevated: isElevated(me),
     });
   }
 
   @Delete('transactions/:id')
-  remove(@Param('id') id: string) {
-    return this.svc.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() me: any) {
+    // Передаём actor, чтобы FINANCE_DELETE в ActivityLog содержал имя
+    // и роль удалившего. Без этого FOUNDER увидел бы факт удаления
+    // только через emit + мог только грепом по логам искать автора.
+    return this.svc.remove(id, {
+      id: me.id,
+      role: me?.role,
+      isElevated: isElevated(me),
+    });
   }
 
   @Get('summary')
