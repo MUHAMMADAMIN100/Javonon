@@ -3,7 +3,15 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { hasRole, isFounder, UserWithRoles } from '../auth/role-utils';
-import { SubmissionStatus, SubmissionPaymentStatus, SubmissionPaymentMethod, Prisma } from '@prisma/client';
+import {
+  SubmissionStatus,
+  SubmissionPaymentStatus,
+  SubmissionPaymentMethod,
+  Prisma,
+  IncomeSource,
+  ProductCategory,
+  PaymentPhaseStatus,
+} from '@prisma/client';
 import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
 
 /**
@@ -560,6 +568,62 @@ export class SubmissionsService {
     // это не первый approve, и Student создан в прошлый раз).
     let studentCredentials: { email: string | null; password: string } | null = null;
 
+    // Google Sheet-parity поля для будущей Transaction (INCOME).
+    //
+    // productCategoryEnum: у submission-платежей это ВСЕГДА CONTRACT — сделка
+    //   всегда представляет основной контракт по программе (обучение за
+    //   рубежом); мастер-классы/академия оформляются другими сервисами и
+    //   пишут свои значения productCategoryEnum напрямую.
+    //
+    // incomeSource: NEW_CLIENT если сделка создана из snapshot (нет
+    //   pre-существующего Student, submission.studentId=null) — значит клиент
+    //   впервые попал в систему через эту сделку. UP_SALE если submission.studentId
+    //   был задан заранее И у этого студента уже есть другие SaleSubmission
+    //   или Application (не считая привязанной к текущей сделке) — значит это
+    //   апселл существующему клиенту. Если существующий Student ни разу
+    //   раньше не покупал/подавал заявку — считаем NEW_CLIENT (фактически
+    //   первое обращение через воронку продаж).
+    //
+    // paymentPhase: FULL если сумма платежа равна totalAmount сделки (клиент
+    //   оплатил всё сразу); иначе PREPAID (предоплата / частичный платёж).
+    //   Простое строгое сравнение — суммы в domain'е обычно целые доллары;
+    //   если понадобится tolerance для округлений, поднимем через epsilon.
+    const productCategoryEnum: ProductCategory = ProductCategory.CONTRACT;
+
+    let incomeSource: IncomeSource;
+    if (!submission.studentId) {
+      // Snapshot-student: клиент попал в систему через эту сделку впервые.
+      incomeSource = IncomeSource.NEW_CLIENT;
+    } else {
+      // Existing student: проверяем историю. Считаем ДРУГИЕ SaleSubmission
+      // (исключая текущую) и Application'ы, не привязанные к текущей сделке
+      // (submission null или другой). Prisma NOT + relation-filter корректно
+      // включает записи с null-relation.
+      const [otherSubmissions, priorApplications] = await Promise.all([
+        this.prisma.saleSubmission.count({
+          where: {
+            studentId: submission.studentId,
+            id: { not: submission.id },
+          },
+        }),
+        this.prisma.application.count({
+          where: {
+            studentId: submission.studentId,
+            NOT: { submission: { id: submission.id } },
+          },
+        }),
+      ]);
+      incomeSource =
+        otherSubmissions > 0 || priorApplications > 0
+          ? IncomeSource.UP_SALE
+          : IncomeSource.NEW_CLIENT;
+    }
+
+    const paymentPhase: PaymentPhaseStatus =
+      payment.amount === submission.totalAmount
+        ? PaymentPhaseStatus.FULL
+        : PaymentPhaseStatus.PREPAID;
+
     // Bug #24 (HIGH): все мутации одобрения — в одной транзакции, чтобы
     // при сбое в середине (P2003/P2002 на email Student, FK на programId,
     // и т.п.) не остаться с частично созданным Student без Application/
@@ -785,6 +849,10 @@ export class SubmissionsService {
           studentId: studentId,
           managerId: submission.managerId,
           recordedById: reviewerId,
+          // Google Sheet-parity: подробнее см. блок вычислений выше.
+          productCategoryEnum,
+          incomeSource,
+          paymentPhase,
         },
       });
 

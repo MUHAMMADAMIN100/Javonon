@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { hasRole } from '../auth/role-utils';
 import { FinanceService, CreateTransactionDto } from './finance.service';
 import { TransactionCategory, TransactionType } from '@prisma/client';
 
@@ -57,6 +58,49 @@ function parseTake(v: string | undefined): number | undefined {
   return n;
 }
 
+// Резолвим ?period=X в конкретный интервал {from, to}. Явные from/to
+// (если пришли валидные) перебивают period — календарный пикер важнее
+// пресетов. `all` возвращает пустой объект (без границ).
+const VALID_PERIODS = new Set(['day', 'week', 'month', 'quarter', 'year', 'all']);
+function resolveRange(
+  period: string | undefined,
+  from: string | undefined,
+  to: string | undefined,
+): { from?: Date; to?: Date } {
+  const explicitFrom = parseDate(from, 'from');
+  const explicitTo = parseDate(to, 'to');
+  if (explicitFrom || explicitTo) {
+    return { from: explicitFrom, to: explicitTo };
+  }
+  const p = (period || 'month').toLowerCase();
+  if (!VALID_PERIODS.has(p)) {
+    throw new BadRequestException(
+      `period: должно быть одно из [${[...VALID_PERIODS].join(', ')}]`,
+    );
+  }
+  if (p === 'all') return {};
+  const now = new Date();
+  const start = new Date(now);
+  switch (p) {
+    case 'day':
+      start.setHours(0, 0, 0, 0);
+      break;
+    case 'week':
+      start.setDate(now.getDate() - 7);
+      break;
+    case 'month':
+      start.setMonth(now.getMonth() - 1);
+      break;
+    case 'quarter':
+      start.setMonth(now.getMonth() - 3);
+      break;
+    case 'year':
+      start.setFullYear(now.getFullYear() - 1);
+      break;
+  }
+  return { from: start, to: now };
+}
+
 @Controller('finance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'ACCOUNTANT')
@@ -90,8 +134,17 @@ export class FinanceController {
     });
   }
 
+  // POST /finance/transactions — доход менеджеры могут вносить сами
+  // (SALES_MANAGER закрывает продажу, CLIENT_MANAGER берёт доплату у
+  // студента). Расход по-прежнему — только FOUNDER / ADMIN / ACCOUNTANT,
+  // чтобы менеджер не мог фиктивной EXPENSE подрезать чистую прибыль
+  // (а значит и премии). FOUNDER имеет неявный доступ через RolesGuard.
   @Post('transactions')
+  @Roles('ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER')
   create(@Body() dto: CreateTransactionDto, @CurrentUser() me: any) {
+    if (dto?.type === 'EXPENSE' && !hasRole(me, 'FOUNDER', 'ADMIN', 'ACCOUNTANT')) {
+      throw new ForbiddenException('Только ADMIN / ACCOUNTANT / FOUNDER могут вносить расходы');
+    }
     return this.svc.create(dto, me.id);
   }
 
@@ -181,6 +234,22 @@ export class FinanceController {
       from: parseDate(from, 'from'),
       to: parseDate(to, 'to'),
     });
+  }
+
+  /**
+   * Три разреза (источник дохода / менеджер / категория расходов) одним
+   * запросом. `period` — day | week | month | quarter | year | all
+   * (по-умолчанию month). Опционально можно передать явные from/to,
+   * которые перекроют period — удобно для календарного пикера.
+   */
+  @Get('breakdown')
+  breakdown(
+    @Query('period') period?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const range = resolveRange(period, from, to);
+    return this.svc.breakdown(range);
   }
 
   /**

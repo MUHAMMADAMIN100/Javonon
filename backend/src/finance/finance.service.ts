@@ -1,8 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  IncomeSource,
   PaymentChannel,
   PaymentKind,
+  PaymentPhaseStatus,
+  ProductCategory,
   ReceiptKind,
   TransactionCategory,
   TransactionType,
@@ -25,6 +28,32 @@ export interface CreateTransactionDto {
   receiptUrl?: string | null;
   receiptKind?: ReceiptKind | null;
   noReceiptReason?: string | null;
+  // === Google Sheet parity — новые поля ===
+  incomeSource?: IncomeSource | null;
+  productCategoryEnum?: ProductCategory | null;
+  paymentPhase?: PaymentPhaseStatus | null;
+  paidViaId?: string | null;
+}
+
+// Валидация значения против enum-объекта, экспортируемого prisma-client-js
+// (в рантайме это `{ NEW_CLIENT: 'NEW_CLIENT', ... }`). Возвращает
+// нормализованное значение или бросает BadRequestException. Раньше мы
+// клали `dto.incomeSource` в Prisma «как есть» — если фронт пришлёт
+// `"new_client"` (lowercase) или опечатку, Prisma бросала 500. Теперь
+// это 400 с понятным сообщением.
+function validateEnum<T extends Record<string, string>>(
+  enumObj: T,
+  value: unknown,
+  field: string,
+): T[keyof T] | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const allowed = Object.values(enumObj) as string[];
+  if (typeof value !== 'string' || !allowed.includes(value)) {
+    throw new BadRequestException(
+      `${field}: должно быть одно из [${allowed.join(', ')}]`,
+    );
+  }
+  return value as T[keyof T];
 }
 
 @Injectable()
@@ -140,6 +169,43 @@ export class FinanceService {
       managerId = stu?.managerId ?? null;
     }
 
+    // Google Sheet parity — валидируем новые enum-поля против Prisma-типов.
+    // Прежде чем писать в БД: если фронт прислал мусор, отвечаем 400 а не 500.
+    const incomeSource = validateEnum(IncomeSource, dto.incomeSource, 'incomeSource');
+    const productCategoryEnum = validateEnum(
+      ProductCategory,
+      dto.productCategoryEnum,
+      'productCategoryEnum',
+    );
+    const paymentPhase = validateEnum(
+      PaymentPhaseStatus,
+      dto.paymentPhase,
+      'paymentPhase',
+    );
+
+    // paidViaId — FK на User. Не enum, но: пустая строка → null,
+    // проверяем существование, иначе Prisma бросит P2003 (500).
+    let paidViaId: string | null = null;
+    if (dto.paidViaId) {
+      const uid = String(dto.paidViaId).trim();
+      if (uid) {
+        const u = await this.prisma.user.findUnique({
+          where: { id: uid },
+          select: { id: true },
+        });
+        if (!u) throw new BadRequestException('paidViaId: пользователь не найден');
+        paidViaId = u.id;
+      }
+    }
+
+    // Семантика полей по type:
+    //  * incomeSource / paymentPhase — только для INCOME
+    //  * paidViaId — только для EXPENSE
+    // Если фронт прислал не по типу — тихо игнорируем (не бросаем),
+    // чтобы не ломать существующие клиенты, которые могут прислать оба.
+    const isIncome = dto.type === 'INCOME';
+    const isExpense = dto.type === 'EXPENSE';
+
     return this.prisma.transaction.create({
       data: {
         type: dto.type,
@@ -158,11 +224,16 @@ export class FinanceService {
         receiptUrl: dto.receiptUrl || null,
         receiptKind: dto.receiptKind || null,
         noReceiptReason: dto.noReceiptReason?.trim() || null,
+        incomeSource: isIncome ? (incomeSource ?? null) : null,
+        productCategoryEnum: productCategoryEnum ?? null,
+        paymentPhase: isIncome ? (paymentPhase ?? null) : null,
+        paidViaId: isExpense ? paidViaId : null,
       },
       include: {
         student: { select: { id: true, fullName: true } },
         manager: { select: { id: true, fullName: true } },
         recordedBy: { select: { id: true, fullName: true } },
+        paidVia: { select: { id: true, fullName: true } },
       },
     });
   }
@@ -207,6 +278,46 @@ export class FinanceService {
       }
       patch.receiptUrl = u;
     }
+
+    // Google Sheet parity — валидация новых enum-полей на patch тоже,
+    // иначе PATCH обошёл бы проверку и Prisma опять ловила бы 500.
+    let incomeSourcePatch: IncomeSource | null | undefined;
+    if (patch.incomeSource !== undefined) {
+      incomeSourcePatch = patch.incomeSource === null
+        ? null
+        : validateEnum(IncomeSource, patch.incomeSource, 'incomeSource') ?? null;
+    }
+    let productCategoryEnumPatch: ProductCategory | null | undefined;
+    if (patch.productCategoryEnum !== undefined) {
+      productCategoryEnumPatch = patch.productCategoryEnum === null
+        ? null
+        : validateEnum(ProductCategory, patch.productCategoryEnum, 'productCategoryEnum') ?? null;
+    }
+    let paymentPhasePatch: PaymentPhaseStatus | null | undefined;
+    if (patch.paymentPhase !== undefined) {
+      paymentPhasePatch = patch.paymentPhase === null
+        ? null
+        : validateEnum(PaymentPhaseStatus, patch.paymentPhase, 'paymentPhase') ?? null;
+    }
+    let paidViaIdPatch: string | null | undefined;
+    if (patch.paidViaId !== undefined) {
+      if (!patch.paidViaId) {
+        paidViaIdPatch = null;
+      } else {
+        const uid = String(patch.paidViaId).trim();
+        if (!uid) {
+          paidViaIdPatch = null;
+        } else {
+          const u = await this.prisma.user.findUnique({
+            where: { id: uid },
+            select: { id: true },
+          });
+          if (!u) throw new BadRequestException('paidViaId: пользователь не найден');
+          paidViaIdPatch = u.id;
+        }
+      }
+    }
+
     return this.prisma.transaction.update({
       where: { id },
       data: {
@@ -225,6 +336,10 @@ export class FinanceService {
         ...(patch.receiptUrl !== undefined && { receiptUrl: patch.receiptUrl }),
         ...(patch.receiptKind !== undefined && { receiptKind: patch.receiptKind }),
         ...(patch.noReceiptReason !== undefined && { noReceiptReason: patch.noReceiptReason?.trim() || null }),
+        ...(incomeSourcePatch !== undefined && { incomeSource: incomeSourcePatch }),
+        ...(productCategoryEnumPatch !== undefined && { productCategoryEnum: productCategoryEnumPatch }),
+        ...(paymentPhasePatch !== undefined && { paymentPhase: paymentPhasePatch }),
+        ...(paidViaIdPatch !== undefined && { paidViaId: paidViaIdPatch }),
       },
     });
   }
@@ -362,6 +477,79 @@ export class FinanceService {
 
   async remove(id: string) {
     return this.prisma.transaction.delete({ where: { id } });
+  }
+
+  /**
+   * Единый эндпоинт-агрегат для аналитической страницы «структура доходов
+   * и расходов». Возвращает три параллельных разреза за один период:
+   *  - byIncomeSource — INCOME разбитый по `incomeSource` (NEW_CLIENT / UP_SALE / OTHER)
+   *  - byManager      — INCOME разбитый по менеджеру (кто сколько принёс)
+   *  - byExpenseCategory — EXPENSE разбитый по TransactionCategory
+   * Отменённые (reversedAt != null) исключаем, чтобы структура не искажалась
+   * отказниками — та же логика, что в topManagers.
+   */
+  async breakdown(opts: { from?: Date; to?: Date }) {
+    this.validateRange(opts);
+    const dateRange = opts.from || opts.to
+      ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+      : {};
+    const liveWhere = { ...dateRange, reversedAt: null } as const;
+
+    const [bySrc, byMgr, byCat, mgrList] = await Promise.all([
+      this.prisma.transaction.groupBy({
+        by: ['incomeSource'],
+        where: { ...liveWhere, type: 'INCOME' },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['managerId'],
+        where: { ...liveWhere, type: 'INCOME', managerId: { not: null } },
+        _sum: { amount: true },
+        _count: true,
+        orderBy: { _sum: { amount: 'desc' } },
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['category'],
+        where: { ...liveWhere, type: 'EXPENSE' },
+        _sum: { amount: true },
+        _count: true,
+        orderBy: { _sum: { amount: 'desc' } },
+      }),
+      // Единичный дозапрос за именами менеджеров — findMany быстрее чем
+      // N отдельных `include`, а groupBy relation'ы не поддерживает.
+      this.prisma.user.findMany({
+        select: { id: true, fullName: true, email: true },
+      }),
+    ]);
+
+    const INCOME_SRC_LABEL: Record<string, string> = {
+      NEW_CLIENT: 'Новый клиент',
+      UP_SALE: 'Апселл',
+      OTHER: 'Прочее',
+      _none: 'Без указания',
+    };
+    const userMap = new Map(mgrList.map((u) => [u.id, u]));
+
+    return {
+      byIncomeSource: bySrc.map((g) => ({
+        source: g.incomeSource || '_none',
+        label: INCOME_SRC_LABEL[g.incomeSource || '_none'] || g.incomeSource,
+        amount: g._sum.amount || 0,
+        count: g._count,
+      })),
+      byManager: byMgr.map((g) => ({
+        managerId: g.managerId,
+        manager: userMap.get(g.managerId!) || { id: g.managerId, fullName: 'Без менеджера' },
+        amount: g._sum.amount || 0,
+        count: g._count,
+      })),
+      byExpenseCategory: byCat.map((g) => ({
+        category: g.category,
+        amount: g._sum.amount || 0,
+        count: g._count,
+      })),
+    };
   }
 
   private validateRange(opts: { from?: Date; to?: Date }) {

@@ -1073,8 +1073,25 @@ const DICT: Record<Lang, Record<string, string>> = {
     'finance.cat.UTILITIES': 'Коммуналка',
     'finance.cat.MARKETING': 'Маркетинг',
     'finance.cat.OFFICE': 'Офис',
+    'finance.cat.MISC_EXPENSE': 'Доп-Расходы',
+    'finance.cat.TARGETED_ADS': 'Target (реклама)',
     'finance.cat.OTHER_INCOME': 'Прочий доход',
     'finance.cat.OTHER_EXPENSE': 'Прочий расход',
+
+    // ===== finance — Google Sheet parity: источник / продукт / фаза оплаты =====
+    'finance.field.incomeSource': 'Источник',
+    'finance.field.productEnum': 'Продукт',
+    'finance.field.paymentPhase': 'Статус оплаты',
+    'finance.field.paidVia': 'Через',
+    'finance.source.NEW_CLIENT': 'Новый клиент',
+    'finance.source.UP_SALE': 'Up-Sale',
+    'finance.source.OTHER': 'Другое',
+    'finance.productEnum.CONTRACT': 'Контракт',
+    'finance.productEnum.MASTERCLASS': 'Мастер-Класс',
+    'finance.productEnum.ACADEMY': 'Академия',
+    'finance.productEnum.OTHER': 'Другое',
+    'finance.phase.PREPAID': 'Перед оплата',
+    'finance.phase.FULL': 'Полная оплата',
 
     // ===== settings tabs =====
     'settings.penalties.title': 'Правила штрафов за опоздание',
@@ -2365,8 +2382,25 @@ const DICT: Record<Lang, Record<string, string>> = {
     'finance.cat.UTILITIES': 'Хадамоти коммуналӣ',
     'finance.cat.MARKETING': 'Маркетинг',
     'finance.cat.OFFICE': 'Офис',
+    'finance.cat.MISC_EXPENSE': 'Хароҷоти иловагӣ',
+    'finance.cat.TARGETED_ADS': 'Target (реклама)',
     'finance.cat.OTHER_INCOME': 'Даромади дигар',
     'finance.cat.OTHER_EXPENSE': 'Хароҷоти дигар',
+
+    // ===== finance — Google Sheet parity: сарчашма / маҳсулот / фазаи пардохт =====
+    'finance.field.incomeSource': 'Сарчашма',
+    'finance.field.productEnum': 'Маҳсулот',
+    'finance.field.paymentPhase': 'Ҳолати пардохт',
+    'finance.field.paidVia': 'Тавассути',
+    'finance.source.NEW_CLIENT': 'Мизоҷи нав',
+    'finance.source.UP_SALE': 'Up-Sale',
+    'finance.source.OTHER': 'Дигар',
+    'finance.productEnum.CONTRACT': 'Шартнома',
+    'finance.productEnum.MASTERCLASS': 'Мастер-Класс',
+    'finance.productEnum.ACADEMY': 'Академия',
+    'finance.productEnum.OTHER': 'Дигар',
+    'finance.phase.PREPAID': 'Пешпардохт',
+    'finance.phase.FULL': 'Пардохти пурра',
 
     // ===== settings tabs =====
     'settings.penalties.title': 'Қоидаҳои ҷаримаҳо барои дер омадан',

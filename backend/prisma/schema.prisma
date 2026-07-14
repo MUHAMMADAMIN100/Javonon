@@ -46,6 +46,8 @@ enum TransactionCategory {
   UTILITIES         // коммуналка
   MARKETING         // маркетинг
   OFFICE            // офисные расходы
+  MISC_EXPENSE      // Доп-Расходы (мелкие/нерегулярные)
+  TARGETED_ADS      // Таргет-реклама (Instagram/Facebook — отличается от общего MARKETING)
   OTHER_INCOME
   OTHER_EXPENSE
 }
@@ -177,6 +179,7 @@ model User {
   timeEntries        TimeEntry[]
   transactionsAsManager Transaction[] @relation("TransactionManager")
   recordedTransactions  Transaction[] @relation("TransactionRecorder")
+  transactionsPaidVia   Transaction[] @relation("TransactionPaidVia")
   salaryRecords         SalaryRecord[]
   dailyReports          DailyReport[]
   chatMessages          ChatMessage[] @relation("ChatMessageAuthor")
@@ -687,6 +690,27 @@ enum ReceiptKind {
   REASON_ONLY   // только причина (без фото) — допустимо в редких случаях
 }
 
+// Источник дохода (для INCOME): новый клиент vs апселл существующему vs прочее
+enum IncomeSource {
+  NEW_CLIENT       // Новый клиент — с нуля закрыл впервые
+  UP_SALE          // Апселл существующему клиенту
+  OTHER            // Прочее / неопределённо
+}
+
+// Продуктовая категория (enum-версия productCategory) для Google Sheet-parity
+enum ProductCategory {
+  CONTRACT         // Основной контракт по программе (обучение за рубежом)
+  MASTERCLASS      // Мастер-класс
+  ACADEMY          // Академия (языковой курс/подготовка)
+  OTHER            // Другое
+}
+
+// Фаза оплаты дохода: предоплата vs полная
+enum PaymentPhaseStatus {
+  PREPAID          // Перед оплата (предоплата)
+  FULL             // Полная оплата
+}
+
 model Transaction {
   id          String   @id @default(uuid())
   type        TransactionType
@@ -719,6 +743,18 @@ model Transaction {
   // Причина отсутствия чека (если receiptKind = REASON_ONLY)
   noReceiptReason String?
 
+  // === Google Sheet parity ===
+  // Источник дохода (только для type=INCOME): новый клиент / апселл / прочее
+  incomeSource        IncomeSource?
+  // Enum-версия productCategory (существующее String-поле сохраняется для
+  // обратной совместимости со старыми записями; новые пишут сюда).
+  productCategoryEnum ProductCategory?
+  // Фаза оплаты (только для type=INCOME): предоплата или полная
+  paymentPhase        PaymentPhaseStatus?
+  // Через чью карту прошёл расход (для type=EXPENSE)
+  paidViaId           String?
+  paidVia             User?    @relation("TransactionPaidVia", fields: [paidViaId], references: [id], onDelete: SetNull)
+
   // Метка для бонусной системы: уже учтена в SalaryRecord ?
   bonusApplied Boolean @default(false)
 
@@ -737,6 +773,7 @@ model Transaction {
   @@index([date])
   @@index([studentId])
   @@index([managerId])
+  @@index([paidViaId])
   @@index([reversedAt])
 }
 

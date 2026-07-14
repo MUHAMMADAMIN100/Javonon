@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -17,7 +17,12 @@ import {
   pendingPayments,
   financeIncomeSources,
   financeIncomeByProduct,
+  financeBreakdown,
+  FinanceBreakdown,
   FinanceSummary,
+  IncomeSource,
+  ProductCategoryEnum,
+  PaymentPhaseStatus,
 } from '../api/finance';
 import { listStudents } from '../api/students';
 import { listUsers } from '../api/users';
@@ -45,6 +50,9 @@ export default function Finance() {
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const [filterType, setFilterType] = useState<TransactionType | ''>('');
+  const [filterIncomeSource, setFilterIncomeSource] = useState<IncomeSource | ''>('');
+  const [filterProductEnum, setFilterProductEnum] = useState<ProductCategoryEnum | ''>('');
+  const [filterPaymentPhase, setFilterPaymentPhase] = useState<PaymentPhaseStatus | ''>('');
   const [showForm, setShowForm] = useState(false);
   const [aiInput, setAiInput] = useState('');
 
@@ -53,7 +61,22 @@ export default function Finance() {
     queryKey: txKey,
     queryFn: () => listTransactions(filterType ? { type: filterType, take: 200 } : { take: 200 }),
   });
-  const transactions = txQuery.data ?? [];
+  const allTransactions = txQuery.data ?? [];
+  // Клиентская доп-фильтрация по новым Google-Sheet-parity полям
+  // (backend их пока не принимает как ?query-параметры — фильтруем
+  // локально). Активно только когда пользователь ставит хоть один
+  // из фильтров источник/продукт/фаза.
+  const transactions = useMemo(() => {
+    if (!filterIncomeSource && !filterProductEnum && !filterPaymentPhase) {
+      return allTransactions;
+    }
+    return allTransactions.filter((tx) => {
+      if (filterIncomeSource && tx.incomeSource !== filterIncomeSource) return false;
+      if (filterProductEnum && tx.productCategoryEnum !== filterProductEnum) return false;
+      if (filterPaymentPhase && tx.paymentPhase !== filterPaymentPhase) return false;
+      return true;
+    });
+  }, [allTransactions, filterIncomeSource, filterProductEnum, filterPaymentPhase]);
 
   const summaryQuery = useQuery({
     queryKey: keys.finance.summary(),
@@ -104,6 +127,39 @@ export default function Finance() {
     queryFn: () => financeIncomeByProduct({ from: monthStart }),
   });
   const incomeByProduct = incomeByProductQuery.data ?? [];
+
+  // === Dashboard breakdown (3 pie charts): source / manager / expense category
+  // за выбранный период (This month / Last month / Custom range). Диапазон
+  // считаем на фронте и передаём явные from/to — так «This month» это
+  // календарный месяц, а не «последние 30 дней» (что backend вернул бы для
+  // period=month).
+  type BreakdownPeriod = 'THIS_MONTH' | 'LAST_MONTH' | 'CUSTOM';
+  const [bdPeriod, setBdPeriod] = useState<BreakdownPeriod>('THIS_MONTH');
+  const [bdFrom, setBdFrom] = useState<string>('');
+  const [bdTo, setBdTo] = useState<string>('');
+
+  const bdRange = useMemo<{ from?: string; to?: string }>(() => {
+    const now = new Date();
+    if (bdPeriod === 'THIS_MONTH') {
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: from.toISOString() };
+    }
+    if (bdPeriod === 'LAST_MONTH') {
+      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const to = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: from.toISOString(), to: to.toISOString() };
+    }
+    return {
+      ...(bdFrom && { from: new Date(bdFrom).toISOString() }),
+      ...(bdTo && { to: new Date(bdTo).toISOString() }),
+    };
+  }, [bdPeriod, bdFrom, bdTo]);
+
+  const breakdownQuery = useQuery({
+    queryKey: keys.finance.breakdown(bdRange),
+    queryFn: () => financeBreakdown(bdRange),
+  });
+  const breakdown = breakdownQuery.data;
 
   const paymentsKey = keys.payments.list({ status: 'PENDING' });
   const paymentsQuery = useQuery({
@@ -215,6 +271,90 @@ export default function Finance() {
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">{t('eyebrow.finance08')}</span>
         <h2 className="crm-section-title">{t('finance.title')}</h2>
+      </div>
+
+      {/* === Дашборд: 3 пироговые диаграммы (источник дохода / менеджеры /
+          категория расходов) с переключателем периода. Данные — единый
+          агрегат /finance/breakdown. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        flexWrap: 'wrap', marginBottom: 12,
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
+          color: 'var(--primary-dark)', textTransform: 'uppercase',
+        }}>
+          BREAKDOWN · PERIOD
+        </div>
+        <div className="pagination-controls" style={{ padding: 4 }}>
+          <button
+            className={bdPeriod === 'THIS_MONTH' ? 'active' : ''}
+            onClick={() => setBdPeriod('THIS_MONTH')}
+          >
+            This month
+          </button>
+          <button
+            className={bdPeriod === 'LAST_MONTH' ? 'active' : ''}
+            onClick={() => setBdPeriod('LAST_MONTH')}
+          >
+            Last month
+          </button>
+          <button
+            className={bdPeriod === 'CUSTOM' ? 'active' : ''}
+            onClick={() => setBdPeriod('CUSTOM')}
+          >
+            Custom range
+          </button>
+        </div>
+        {bdPeriod === 'CUSTOM' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <CrmDatePicker className="crm-input" value={bdFrom} onChange={(v) => setBdFrom(v)} />
+            <span style={{ color: 'var(--text-soft)' }}>—</span>
+            <CrmDatePicker className="crm-input" value={bdTo} onChange={(v) => setBdTo(v)} />
+          </div>
+        )}
+        {breakdownQuery.isFetching && (
+          <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>...</span>
+        )}
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+        gap: 16,
+        marginBottom: 32,
+      }}>
+        <PieCard
+          eyebrow="INCOME · BY SOURCE"
+          title="Источник дохода"
+          items={(breakdown?.byIncomeSource ?? []).map((s, i) => ({
+            label: s.label,
+            value: s.amount,
+            count: s.count,
+            color: PIE_COLORS[i % PIE_COLORS.length],
+          }))}
+        />
+        <PieCard
+          eyebrow="INCOME · BY MANAGER"
+          title="Клиенты (менеджеры)"
+          items={(breakdown?.byManager ?? []).map((m, i) => ({
+            label: m.manager?.fullName || 'Без менеджера',
+            value: m.amount,
+            count: m.count,
+            color: PIE_COLORS[i % PIE_COLORS.length],
+          }))}
+        />
+        <PieCard
+          eyebrow="EXPENSE · BY CATEGORY"
+          title="Категория расходов"
+          items={(breakdown?.byExpenseCategory ?? []).map((c, i) => ({
+            label:
+              TRANSACTION_CATEGORY_LABEL[c.category as TransactionCategory] ||
+              String(c.category),
+            value: c.amount,
+            count: c.count,
+            color: PIE_COLORS[i % PIE_COLORS.length],
+          }))}
+        />
       </div>
 
       {/* Bento с финансовой сводкой */}
@@ -569,7 +709,7 @@ export default function Finance() {
         <h2 className="crm-section-title">{t('finance.ledger')}</h2>
       </div>
 
-      <div className="filters" style={{ alignItems: 'center' }}>
+      <div className="filters" style={{ alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <div className="pagination-controls" style={{ padding: 4 }}>
           <button
             className={!filterType ? 'active' : ''}
@@ -590,6 +730,62 @@ export default function Finance() {
             {t('finance.expense')}
           </button>
         </div>
+        {/* Доп-фильтры для INCOME (источник / продукт / фаза оплаты).
+            Показываем всегда когда фильтр не EXPENSE — для «Все» они тоже
+            имеют смысл (пустые значения = «не выбрано»). */}
+        {filterType !== 'EXPENSE' && (
+          <>
+            <select
+              className="crm-select"
+              value={filterIncomeSource}
+              onChange={(e) => setFilterIncomeSource(e.target.value as IncomeSource | '')}
+              style={{ minWidth: 160 }}
+              aria-label={t('finance.field.incomeSource')}
+            >
+              <option value="">{t('finance.field.incomeSource')}: {t('common.all')}</option>
+              <option value="NEW_CLIENT">{t('finance.source.NEW_CLIENT')}</option>
+              <option value="UP_SALE">{t('finance.source.UP_SALE')}</option>
+              <option value="OTHER">{t('finance.source.OTHER')}</option>
+            </select>
+            <select
+              className="crm-select"
+              value={filterProductEnum}
+              onChange={(e) => setFilterProductEnum(e.target.value as ProductCategoryEnum | '')}
+              style={{ minWidth: 160 }}
+              aria-label={t('finance.field.productEnum')}
+            >
+              <option value="">{t('finance.field.productEnum')}: {t('common.all')}</option>
+              <option value="CONTRACT">{t('finance.productEnum.CONTRACT')}</option>
+              <option value="MASTERCLASS">{t('finance.productEnum.MASTERCLASS')}</option>
+              <option value="ACADEMY">{t('finance.productEnum.ACADEMY')}</option>
+              <option value="OTHER">{t('finance.productEnum.OTHER')}</option>
+            </select>
+            <select
+              className="crm-select"
+              value={filterPaymentPhase}
+              onChange={(e) => setFilterPaymentPhase(e.target.value as PaymentPhaseStatus | '')}
+              style={{ minWidth: 160 }}
+              aria-label={t('finance.field.paymentPhase')}
+            >
+              <option value="">{t('finance.field.paymentPhase')}: {t('common.all')}</option>
+              <option value="PREPAID">{t('finance.phase.PREPAID')}</option>
+              <option value="FULL">{t('finance.phase.FULL')}</option>
+            </select>
+            {(filterIncomeSource || filterProductEnum || filterPaymentPhase) && (
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={() => {
+                  setFilterIncomeSource('');
+                  setFilterProductEnum('');
+                  setFilterPaymentPhase('');
+                }}
+              >
+                <Icon name="close" size={14} /> {t('common.reset')}
+              </button>
+            )}
+          </>
+        )}
         <div style={{ flex: 1 }} />
         <button className="btn btn-primary" onClick={() => setShowForm(true)}>
           <Icon name="add" size={18} /> {t('finance.newTransaction')}
@@ -749,6 +945,11 @@ function TransactionForm({
   const [noReceiptReason, setNoReceiptReason] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  // Google Sheet parity — новые enum-поля
+  const [incomeSource, setIncomeSource] = useState<IncomeSource | ''>('');
+  const [productCategoryEnum, setProductCategoryEnum] = useState<ProductCategoryEnum | ''>('');
+  const [paymentPhase, setPaymentPhase] = useState<PaymentPhaseStatus | ''>('');
+  const [paidViaId, setPaidViaId] = useState<string>('');
 
   const cats = type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
@@ -795,6 +996,11 @@ function TransactionForm({
         ...(type === 'INCOME' && { paymentKind: paymentKind as any }),
         ...(type === 'INCOME' && productCategory && { productCategory }),
         ...(payerName.trim() && { payerName: payerName.trim() }),
+        // === Google Sheet parity — новые enum-поля ===
+        ...(type === 'INCOME' && incomeSource && { incomeSource }),
+        ...(type === 'INCOME' && productCategoryEnum && { productCategoryEnum }),
+        ...(type === 'INCOME' && paymentPhase && { paymentPhase }),
+        ...(type === 'EXPENSE' && paidViaId && { paidViaId }),
         ...(type === 'EXPENSE' && {
           receiptKind: receiptKind as any,
           receiptUrl,
@@ -856,9 +1062,12 @@ function TransactionForm({
           <div className="form-group">
             <label>{t('finance.col.category')}</label>
             <select className="crm-select" value={category} onChange={(e) => setCategory(e.target.value as TransactionCategory)}>
-              {cats.map((c) => (
-                <option key={c} value={c}>{TRANSACTION_CATEGORY_LABEL[c]}</option>
-              ))}
+              {cats.map((c) => {
+                // Пробуем i18n-ключ (RU/TJ), иначе — русский label из finance.ts.
+                const trKey = `finance.cat.${c}`;
+                const label = t(trKey) !== trKey ? t(trKey) : TRANSACTION_CATEGORY_LABEL[c];
+                return <option key={c} value={c}>{label}</option>;
+              })}
             </select>
           </div>
           <div className="form-group">
@@ -941,6 +1150,68 @@ function TransactionForm({
                 <option value="">—</option>
                 {PRODUCT_CATEGORIES.map((p) => (
                   <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {/* === Google Sheet parity — INCOME dropdowns === */}
+          {type === 'INCOME' && (
+            <div className="form-group">
+              <label>{t('finance.field.incomeSource')}</label>
+              <select
+                className="crm-select"
+                value={incomeSource}
+                onChange={(e) => setIncomeSource(e.target.value as IncomeSource | '')}
+              >
+                <option value="">—</option>
+                <option value="NEW_CLIENT">{t('finance.source.NEW_CLIENT')}</option>
+                <option value="UP_SALE">{t('finance.source.UP_SALE')}</option>
+                <option value="OTHER">{t('finance.source.OTHER')}</option>
+              </select>
+            </div>
+          )}
+          {type === 'INCOME' && (
+            <div className="form-group">
+              <label>{t('finance.field.productEnum')}</label>
+              <select
+                className="crm-select"
+                value={productCategoryEnum}
+                onChange={(e) => setProductCategoryEnum(e.target.value as ProductCategoryEnum | '')}
+              >
+                <option value="">—</option>
+                <option value="CONTRACT">{t('finance.productEnum.CONTRACT')}</option>
+                <option value="MASTERCLASS">{t('finance.productEnum.MASTERCLASS')}</option>
+                <option value="ACADEMY">{t('finance.productEnum.ACADEMY')}</option>
+                <option value="OTHER">{t('finance.productEnum.OTHER')}</option>
+              </select>
+            </div>
+          )}
+          {type === 'INCOME' && (
+            <div className="form-group">
+              <label>{t('finance.field.paymentPhase')}</label>
+              <select
+                className="crm-select"
+                value={paymentPhase}
+                onChange={(e) => setPaymentPhase(e.target.value as PaymentPhaseStatus | '')}
+              >
+                <option value="">—</option>
+                <option value="PREPAID">{t('finance.phase.PREPAID')}</option>
+                <option value="FULL">{t('finance.phase.FULL')}</option>
+              </select>
+            </div>
+          )}
+          {/* === EXPENSE: через кого прошёл расход === */}
+          {type === 'EXPENSE' && (
+            <div className="form-group">
+              <label>{t('finance.field.paidVia')}</label>
+              <select
+                className="crm-select"
+                value={paidViaId}
+                onChange={(e) => setPaidViaId(e.target.value)}
+              >
+                <option value="">—</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.fullName}</option>
                 ))}
               </select>
             </div>
@@ -1161,6 +1432,172 @@ function BarList({ items, colors }: {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ============================================================
+// Pie chart — pure inline SVG, никаких внешних либ (recharts не тянем ради
+// одной страницы, бандл важнее). Формула стандартная: cx/cy = center,
+// путь = M cx cy → L первая точка → A radius radius 0 largeArc 1 вторая
+// точка → Z. largeArc = 1 если сектор > 180°. Если данные состоят из одного
+// ненулевого сектора (100%) — рисуем full circle, иначе degenerate arc не
+// закрашивается.
+// ============================================================
+const PIE_COLORS = [
+  '#3b82f6', // blue
+  '#f59e0b', // amber
+  '#10b981', // emerald
+  '#8b5cf6', // violet
+  '#ef4444', // red
+  '#06b6d4', // cyan
+  '#f97316', // orange
+  '#ec4899', // pink
+  '#64748b', // slate
+  '#84cc16', // lime
+];
+
+interface PieSlice {
+  label: string;
+  value: number;
+  count?: number;
+  color: string;
+}
+
+function PieChart({ items, size = 200 }: { items: PieSlice[]; size?: number }) {
+  const total = items.reduce((s, x) => s + x.value, 0);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size / 2 - 4;
+
+  if (total <= 0) {
+    return (
+      <div
+        style={{
+          width: size,
+          height: size,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: '1px dashed var(--border)',
+          borderRadius: '50%',
+          color: 'var(--text-soft)',
+          fontSize: 12,
+          margin: '0 auto',
+        }}
+      >
+        Нет данных
+      </div>
+    );
+  }
+
+  const nonZero = items.filter((it) => it.value > 0);
+  // Единственный сектор (100%): SVG arc с одинаковыми start/end рисует пустоту,
+  // поэтому рисуем сплошной круг.
+  if (nonZero.length === 1) {
+    return (
+      <svg width={size} height={size} style={{ display: 'block', margin: '0 auto' }}>
+        <circle cx={cx} cy={cy} r={r} fill={nonZero[0].color} />
+      </svg>
+    );
+  }
+
+  let cumulative = 0;
+  return (
+    <svg width={size} height={size} style={{ display: 'block', margin: '0 auto' }}>
+      {items.map((it, i) => {
+        if (it.value <= 0) return null;
+        const startAngle = (cumulative / total) * Math.PI * 2 - Math.PI / 2;
+        cumulative += it.value;
+        const endAngle = (cumulative / total) * Math.PI * 2 - Math.PI / 2;
+        const largeArc = it.value / total > 0.5 ? 1 : 0;
+        const x1 = cx + r * Math.cos(startAngle);
+        const y1 = cy + r * Math.sin(startAngle);
+        const x2 = cx + r * Math.cos(endAngle);
+        const y2 = cy + r * Math.sin(endAngle);
+        const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+        return (
+          <path
+            key={`${it.label}-${i}`}
+            d={d}
+            fill={it.color}
+            stroke="var(--surface, #fff)"
+            strokeWidth={1}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+function PieCard({
+  eyebrow,
+  title,
+  items,
+  currency = 'TJS',
+}: {
+  eyebrow: string;
+  title: string;
+  items: PieSlice[];
+  currency?: string;
+}) {
+  const total = items.reduce((s, x) => s + x.value, 0);
+  return (
+    <div className="card" style={{ padding: 24 }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+        color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
+      }}>{eyebrow}</div>
+      <h3 style={{
+        fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500,
+        letterSpacing: '-0.02em', marginBottom: 16,
+      }}>{title}</h3>
+      <PieChart items={items} size={200} />
+      <div style={{
+        marginTop: 16,
+        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+        color: 'var(--text-soft)', textAlign: 'center',
+      }}>
+        TOTAL · {fmtMoney(total, currency)}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+        {items.length === 0 && (
+          <div style={{ color: 'var(--text-soft)', fontSize: 12, textAlign: 'center' }}>
+            Нет данных за период
+          </div>
+        )}
+        {items.map((it, i) => {
+          const pct = total > 0 ? (it.value / total) * 100 : 0;
+          return (
+            <div
+              key={`${it.label}-${i}`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 13,
+              }}
+            >
+              <span style={{
+                width: 10, height: 10, borderRadius: 2,
+                background: it.color, flexShrink: 0,
+              }} />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {it.label}
+                {typeof it.count === 'number' && (
+                  <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11 }}>
+                    · {it.count}
+                  </span>
+                )}
+              </span>
+              <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {pct.toFixed(0)}%
+                <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11, fontWeight: 400 }}>
+                  {fmtMoney(it.value, currency)}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

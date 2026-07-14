@@ -36,6 +36,7 @@ export const keys = {
     summary: (p: Record<string, unknown> = {}) => ['finance', 'summary', p] as const,
     byCategory: (p: Record<string, unknown> = {}) => ['finance', 'byCategory', p] as const,
     timeseries: (p: Record<string, unknown> = {}) => ['finance', 'timeseries', p] as const,
+    breakdown: (p: Record<string, unknown> = {}) => ['finance', 'breakdown', p] as const,
     pending: () => ['finance', 'pending'] as const,
   },
   salary: {
