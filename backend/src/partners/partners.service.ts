@@ -340,6 +340,212 @@ export class PartnersService {
     });
   }
 
+  /**
+   * Хэлпер: подтягивает связанные Application/Student к атрибуциям.
+   * ReferralAttribution хранит только studentId/applicationId как String? —
+   * без FK-relation в Prisma-схеме, поэтому include не работает, делаем
+   * batch-fetch с in-запросами.
+   */
+  private async hydrateAttributions(
+    attrs: Array<{
+      id: string;
+      createdAt: Date;
+      source: string;
+      studentId: string | null;
+      applicationId: string | null;
+      telegramUserId: string | null;
+      emailHint: string | null;
+    }>,
+  ) {
+    const appIds = attrs
+      .map((a) => a.applicationId)
+      .filter((x): x is string => !!x);
+    const studentIds = attrs
+      .map((a) => a.studentId)
+      .filter((x): x is string => !!x);
+
+    const applications = appIds.length
+      ? await this.prisma.application.findMany({
+          where: { id: { in: appIds } },
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+            email: true,
+            direction: true,
+            status: true,
+            createdAt: true,
+          },
+        })
+      : [];
+    const students = studentIds.length
+      ? await this.prisma.student.findMany({
+          where: { id: { in: studentIds } },
+          select: {
+            id: true,
+            fullName: true,
+            phones: true,
+            email: true,
+          },
+        })
+      : [];
+
+    const appMap = new Map(applications.map((a) => [a.id, a]));
+    const studentMap = new Map(students.map((s) => [s.id, s]));
+
+    return attrs.map((a) => {
+      let student:
+        | { id: string; fullName: string; phone: string | null; email: string | null }
+        | null = null;
+      if (a.studentId) {
+        const s = studentMap.get(a.studentId);
+        if (s) {
+          student = {
+            id: s.id,
+            fullName: s.fullName,
+            phone: s.phones && s.phones.length > 0 ? s.phones[0] : null,
+            email: s.email,
+          };
+        }
+      }
+      return {
+        id: a.id,
+        createdAt: a.createdAt,
+        source: a.source,
+        application: a.applicationId ? appMap.get(a.applicationId) || null : null,
+        student,
+        telegramUserId: a.telegramUserId,
+        emailHint: a.emailHint,
+      };
+    });
+  }
+
+  /**
+   * Полная карточка партнёра для админ-панели: базовые поля, реферальная
+   * ссылка (тот же env-fallback, что и в adminCreate — через buildReferralUrl),
+   * агрегированная статистика (счётчики) и последние 20 кликов + 10
+   * атрибуций для превью в шапке.
+   */
+  async adminGetOne(id: string) {
+    const partner = await this.prisma.partner.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        referralCode: true,
+        commissionPct: true,
+        status: true,
+        balanceCents: true,
+        totalEarnedCents: true,
+        totalPaidCents: true,
+        createdAt: true,
+        updatedAt: true,
+        telegramHandle: true,
+        telegramId: true,
+      },
+    });
+    if (!partner) throw new NotFoundException('Партнёр не найден');
+
+    const [
+      clicksCount,
+      attributionsCount,
+      commissionsCount,
+      payoutsCount,
+      recentClicks,
+      recentAttributionsRaw,
+    ] = await Promise.all([
+      this.prisma.referralClick.count({ where: { partnerId: id } }),
+      this.prisma.referralAttribution.count({ where: { partnerId: id } }),
+      this.prisma.commission.count({ where: { partnerId: id } }),
+      this.prisma.partnerPayout.count({ where: { partnerId: id } }),
+      this.prisma.referralClick.findMany({
+        where: { partnerId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          createdAt: true,
+          source: true,
+          ip: true,
+          userAgent: true,
+          referer: true,
+        },
+      }),
+      this.prisma.referralAttribution.findMany({
+        where: { partnerId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          createdAt: true,
+          source: true,
+          studentId: true,
+          applicationId: true,
+          telegramUserId: true,
+          emailHint: true,
+        },
+      }),
+    ]);
+
+    const recentAttributions = await this.hydrateAttributions(
+      recentAttributionsRaw,
+    );
+
+    return {
+      partner,
+      referralUrl: this.buildReferralUrl(partner.referralCode),
+      stats: {
+        clicksCount,
+        attributionsCount,
+        commissionsCount,
+        payoutsCount,
+      },
+      recentClicks,
+      recentAttributions,
+    };
+  }
+
+  /**
+   * Пагинированный список атрибуций конкретного партнёра. take clamped
+   * контроллером; здесь просто forward. Возвращаем total чтобы UI мог
+   * отрисовать пагинацию, и hasMore для infinite scroll.
+   */
+  async adminGetAttributions(id: string, take: number, skip: number) {
+    const partner = await this.prisma.partner.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!partner) throw new NotFoundException('Партнёр не найден');
+
+    const [rawItems, total] = await Promise.all([
+      this.prisma.referralAttribution.findMany({
+        where: { partnerId: id },
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+        select: {
+          id: true,
+          createdAt: true,
+          source: true,
+          studentId: true,
+          applicationId: true,
+          telegramUserId: true,
+          emailHint: true,
+        },
+      }),
+      this.prisma.referralAttribution.count({ where: { partnerId: id } }),
+    ]);
+
+    const items = await this.hydrateAttributions(rawItems);
+    return {
+      items,
+      total,
+      hasMore: skip + items.length < total,
+    };
+  }
+
   async adminMarkCommissionPaid(id: string) {
     return this.prisma.$transaction(async (tx) => {
       const c = await tx.commission.findUnique({ where: { id } });
@@ -362,8 +568,11 @@ export class PartnersService {
     });
   }
 
-  async adminListPayouts() {
+  async adminListPayouts(params?: { partnerId?: string }) {
     return this.prisma.partnerPayout.findMany({
+      where: {
+        ...(params?.partnerId && { partnerId: params.partnerId }),
+      },
       orderBy: { requestedAt: 'desc' },
       take: 500,
       include: {

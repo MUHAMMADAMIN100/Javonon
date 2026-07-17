@@ -107,8 +107,8 @@ export class AdminPartnersController {
   }
 
   @Get('payouts/list')
-  payouts() {
-    return this.svc.adminListPayouts();
+  payouts(@Query('partnerId') partnerId?: string) {
+    return this.svc.adminListPayouts({ partnerId });
   }
 
   @Post('payouts/:id/pay')
@@ -119,5 +119,45 @@ export class AdminPartnersController {
   @Post('payouts/:id/reject')
   payoutReject(@Param('id') id: string) {
     return this.svc.adminMarkPayout(id, 'rejected');
+  }
+
+  /**
+   * Карточка партнёра. Роли — FOUNDER/ADMIN (тот же паттерн, что и у
+   * POST/DELETE — ACCOUNTANT (class-default) сюда не пускаем).
+   *
+   * ВАЖНО: :id-роуты объявлены ПОСЛЕ commissions/* и payouts/* литералов
+   * специально — чтобы Nest не поймал GET /commissions или /payouts как
+   * :id=commissions/payouts. (Строго говоря, `:id` матчит только один
+   * сегмент, поэтому /commissions/list не пересекается, но безопаснее
+   * держать порядок.)
+   */
+  @Get(':id')
+  @Roles('FOUNDER', 'ADMIN')
+  adminGetOne(@Param('id') id: string) {
+    return this.svc.adminGetOne(id);
+  }
+
+  /**
+   * Пагинированный список атрибуций конкретного партнёра.
+   * take: clamped 1..100 (default 20). skip: >=0 (default 0).
+   */
+  @Get(':id/attributions')
+  @Roles('FOUNDER', 'ADMIN')
+  adminGetAttributions(
+    @Param('id') id: string,
+    @Query('take') take?: string,
+    @Query('skip') skip?: string,
+  ) {
+    const rawTake = Number(take);
+    const rawSkip = Number(skip);
+    const takeNum = Math.min(
+      Math.max(Number.isFinite(rawTake) && rawTake > 0 ? Math.floor(rawTake) : 20, 1),
+      100,
+    );
+    const skipNum = Math.max(
+      Number.isFinite(rawSkip) && rawSkip > 0 ? Math.floor(rawSkip) : 0,
+      0,
+    );
+    return this.svc.adminGetAttributions(id, takeNum, skipNum);
   }
 }

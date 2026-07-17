@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -111,6 +112,7 @@ function buildReferralUrl(code: string): string {
 
 function PartnersList() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { toast, confirm } = useUI();
   const { t } = useT();
   const { data: partners = [], isLoading } = useQuery({
@@ -241,8 +243,27 @@ function PartnersList() {
               </tr>
             </thead>
             <tbody>
-              {partners.map((p) => (
-                <tr key={p.id}>
+              {partners.map((p) => {
+                const stop = (fn: () => void) => (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  fn();
+                };
+                return (
+                <tr
+                  key={p.id}
+                  onClick={() => navigate(`/partners/${p.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      navigate(`/partners/${p.id}`);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  style={{ cursor: 'pointer' }}
+                  className="row-clickable"
+                  aria-label={`${p.fullName} — ${p.email}`}
+                >
                   <td data-label="Имя">{p.fullName}</td>
                   <td data-label="Email">{p.email}</td>
                   <td data-label="Код"><code>{p.referralCode}</code></td>
@@ -259,31 +280,31 @@ function PartnersList() {
                       color: p.status === 'ACTIVE' ? '#15803d' : p.status === 'SUSPENDED' ? '#b45309' : '#b91c1c',
                     }}>{t(`partners.status.${p.status}`)}</span>
                   </td>
-                  <td data-label="Действия">
+                  <td data-label="Действия" onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       <button
                         className="btn btn-sm btn-secondary"
-                        onClick={() => copyRow(p)}
+                        onClick={stop(() => copyRow(p))}
                         title={t('partners.share.copy')}
                       >
                         <Icon name="content_copy" size={14} />
                       </button>
                       <button
                         className="btn btn-sm btn-secondary"
-                        onClick={() => openShareFor(p)}
+                        onClick={stop(() => openShareFor(p))}
                         title={t('partners.share.title')}
                       >
                         <Icon name="link" size={14} />
                       </button>
-                      <button className="btn btn-sm btn-secondary" onClick={() => updatePct(p.id, p.commissionPct)}>%</button>
+                      <button className="btn btn-sm btn-secondary" onClick={stop(() => updatePct(p.id, p.commissionPct))}>%</button>
                       {p.status === 'ACTIVE' ? (
-                        <button className="btn btn-sm btn-secondary" onClick={() => updateStatus(p.id, 'SUSPENDED')}>⏸</button>
+                        <button className="btn btn-sm btn-secondary" onClick={stop(() => updateStatus(p.id, 'SUSPENDED'))}>⏸</button>
                       ) : (
-                        <button className="btn btn-sm btn-secondary" onClick={() => updateStatus(p.id, 'ACTIVE')}>▶</button>
+                        <button className="btn btn-sm btn-secondary" onClick={stop(() => updateStatus(p.id, 'ACTIVE'))}>▶</button>
                       )}
                       <button
                         className="btn btn-sm btn-danger"
-                        onClick={() => removePartner(p)}
+                        onClick={stop(() => removePartner(p))}
                         title={t('common.delete')}
                       >
                         <Icon name="delete" size={14} />
@@ -291,7 +312,8 @@ function PartnersList() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

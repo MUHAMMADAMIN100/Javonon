@@ -32,6 +32,7 @@ import Attendance from './pages/Attendance';
 import Chat from './pages/Chat';
 import Lms from './pages/LMS';
 import Partners from './pages/Partners';
+import PartnerDetail from './pages/PartnerDetail';
 import UserDetail, { MyProfile } from './pages/UserDetail';
 import Submissions from './pages/Submissions';
 import SubmissionForm from './pages/SubmissionForm';
@@ -90,6 +91,7 @@ export default function App() {
         <Route path="/chat" element={<Chat />} />
         <Route path="/lms" element={<Lms />} />
         <Route path="/partners" element={<Partners />} />
+        <Route path="/partners/:id" element={<PartnerDetail />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

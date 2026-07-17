@@ -12,9 +12,63 @@ export interface Partner {
   totalPaidCents: number;
   status: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
   telegramHandle?: string | null;
+  telegramId?: string | null;
   createdAt: string;
   updatedAt?: string;
   _count?: { clicks: number; attributions: number; commissions: number };
+}
+
+export interface PartnerStats {
+  clicksCount: number;
+  attributionsCount: number;
+  commissionsCount: number;
+  payoutsCount: number;
+}
+
+export interface PartnerAttribution {
+  id: string;
+  createdAt: string;
+  source?: string | null;
+  application?: {
+    id: string;
+    fullName: string;
+    phone: string;
+    email?: string | null;
+    direction: string;
+    status: string;
+    createdAt: string;
+  } | null;
+  student?: {
+    id: string;
+    fullName: string;
+    phone?: string | null;
+    email?: string | null;
+  } | null;
+  telegramUserId?: string | null;
+  emailHint?: string | null;
+}
+
+export interface PartnerClick {
+  id: string;
+  createdAt: string;
+  source?: string | null;
+  ip?: string | null;
+  userAgent?: string | null;
+  referer?: string | null;
+}
+
+export interface PartnerDetailResponse {
+  partner: Partner;
+  referralUrl: string;
+  stats: PartnerStats;
+  recentClicks: PartnerClick[];
+  recentAttributions: PartnerAttribution[];
+}
+
+export interface PartnerAttributionsResponse {
+  items: PartnerAttribution[];
+  total: number;
+  hasMore: boolean;
 }
 
 export interface AdminCreatePartnerDto {
@@ -95,8 +149,20 @@ export const adminListCommissions = (params?: {
 export const adminMarkCommissionPaid = (id: string) =>
   api.post<AdminCommission>(`/admin/partners/commissions/${id}/pay`).then((r) => r.data);
 
-export const adminListPayouts = () =>
-  api.get<AdminPayout[]>('/admin/partners/payouts/list').then((r) => r.data);
+export const adminListPayouts = (params?: { partnerId?: string }) =>
+  api.get<AdminPayout[]>('/admin/partners/payouts/list', { params })
+    .then((r) => r.data);
+
+export const adminGetPartner = (id: string) =>
+  api.get<PartnerDetailResponse>(`/admin/partners/${id}`).then((r) => r.data);
+
+export const adminGetPartnerAttributions = (
+  id: string,
+  params?: { take?: number; skip?: number },
+) =>
+  api
+    .get<PartnerAttributionsResponse>(`/admin/partners/${id}/attributions`, { params })
+    .then((r) => r.data);
 
 export const adminPayoutPay = (id: string) =>
   api.post<AdminPayout>(`/admin/partners/payouts/${id}/pay`).then((r) => r.data);
