@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
-import { ApplicationStatus, Direction, Prisma, Role } from '@prisma/client';
+import { ApplicationSource, ApplicationStatus, Direction, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
@@ -197,6 +197,7 @@ export class ApplicationsService {
     search?: string;
     mine?: boolean;
     managerUserId?: string;
+    source?: ApplicationSource;
     currentUserId?: string;
     currentUserRole?: Role;
     currentUserRoles?: Role[];
@@ -205,6 +206,7 @@ export class ApplicationsService {
     const and: Prisma.ApplicationWhereInput[] = [];
     if (filters.status) where.status = filters.status;
     if (filters.direction) where.direction = filters.direction;
+    if (filters.source) where.source = filters.source;
     // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только свои
     // заявки. FOUNDER/ADMIN/ACCOUNTANT — все, если только не запросили mine.
     const elevated = isElevated({

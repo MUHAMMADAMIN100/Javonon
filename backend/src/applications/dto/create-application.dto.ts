@@ -5,6 +5,9 @@ import { ContactChannel, Direction, ApplicationSource } from '@prisma/client';
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 // QA-fix: имя без HTML-тегов (XSS) — fullName попадает в email-шаблоны и Telegram.
 const NO_HTML_RE = /^[^<>]*$/;
+// Реферальный код партнёра: 4–16 буквенно-цифровых, регистр не важен
+// (нормализуется в ReferralsService через .trim().toUpperCase()).
+const REF_CODE_RE = /^[A-Z0-9]{4,16}$/i;
 
 export class CreateApplicationDto {
   @IsString()
@@ -57,4 +60,17 @@ export class CreateApplicationDto {
   @IsOptional()
   @IsEnum(ApplicationSource)
   source?: ApplicationSource;
+
+  // Реферальный код партнёра из query-параметра ?ref= на лендинге.
+  // ВАЖНО: должно быть decorated-полем DTO, иначе глобальный
+  // ValidationPipe({ whitelist: true }) в main.ts срежет его до того,
+  // как ApplicationsService успеет вызвать ReferralsService.attribute().
+  // Раньше был intersection-type в контроллере (CreateApplicationDto &
+  // { ref?: string }) — intersection-типы не имеют runtime-метаданных,
+  // и class-transformer их не видит. Результат: реферальная атрибуция
+  // с лендинга не работала 100% времени.
+  @IsOptional()
+  @IsString()
+  @Matches(REF_CODE_RE, { message: 'ref: 4–16 буквенно-цифровых символов' })
+  ref?: string;
 }

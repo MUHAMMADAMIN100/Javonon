@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { submitApplication, type Direction, DIRECTION_LABEL, type ContactChannel } from '../api';
+import { getReferral } from '../referral';
 import Icon from '../Icon';
 import PhoneInput, { COUNTRIES } from './PhoneInput';
 
@@ -127,6 +128,13 @@ export default function ApplicationForm() {
         email: email.trim() || undefined,
         direction,
         comment: comment.trim() || undefined,
+        // Реферальный код партнёра (TTL-aware чтение из localStorage).
+        // Без этого ReferralsService.attribute() на бэке не запускается
+        // и комиссия партнёру не начисляется. clearReferral() НЕ вызываем:
+        // TTL сам покроет истечение, а повторная заявка того же клиента
+        // внутри TTL должна атрибутироваться тому же партнёру
+        // (dedupe на уровне Attribution в backend).
+        ref: getReferral() || undefined,
       });
       setSuccess(true);
       try {

@@ -34,6 +34,64 @@ export type ApplicationStatus =
   | 'IN_PROGRESS'
   | 'COMPLETED';
 
+// Источник заявки — соответствует Prisma enum ApplicationSource
+// (backend/prisma/schema.prisma). Значения обязаны совпадать с БД, иначе
+// backend вернёт 400 «Неизвестный источник».
+export type ApplicationSource =
+  | 'LANDING_FORM'
+  | 'SELF_REGISTRATION'
+  | 'REFERRAL'
+  | 'INSTAGRAM'
+  | 'TELEGRAM'
+  | 'GOOGLE_ADS'
+  | 'TIKTOK'
+  | 'WORD_OF_MOUTH'
+  | 'EVENT'
+  | 'OTHER';
+
+export const APPLICATION_SOURCES: ApplicationSource[] = [
+  'LANDING_FORM',
+  'SELF_REGISTRATION',
+  'REFERRAL',
+  'INSTAGRAM',
+  'TELEGRAM',
+  'GOOGLE_ADS',
+  'TIKTOK',
+  'WORD_OF_MOUTH',
+  'EVENT',
+  'OTHER',
+];
+
+export const SOURCE_LABEL: Record<ApplicationSource, string> = {
+  LANDING_FORM: 'Сайт',
+  SELF_REGISTRATION: 'Самозапись',
+  REFERRAL: 'Реферал',
+  INSTAGRAM: 'Instagram',
+  TELEGRAM: 'Telegram',
+  GOOGLE_ADS: 'Google Ads',
+  TIKTOK: 'TikTok',
+  WORD_OF_MOUTH: 'Сарафан',
+  EVENT: 'Мероприятие',
+  OTHER: 'Другое',
+};
+
+// Разные цвета — чтобы источник считывался глазом за долю секунды
+// в таблице из десятков заявок. Совпадают с общими badge-*
+// классами приложения; для источников, у которых нет прямого
+// цвета, используем inline background в компоненте (см. Applications.tsx).
+export const SOURCE_BADGE: Record<ApplicationSource, string> = {
+  LANDING_FORM: 'badge-info',
+  SELF_REGISTRATION: 'badge-success',
+  REFERRAL: 'badge-warning',
+  INSTAGRAM: 'badge-instagram',
+  TELEGRAM: 'badge-telegram',
+  GOOGLE_ADS: 'badge-google',
+  TIKTOK: 'badge-tiktok',
+  WORD_OF_MOUTH: 'badge-gray',
+  EVENT: 'badge-event',
+  OTHER: 'badge-gray',
+};
+
 export const APPLICATION_STAGES: ApplicationStatus[] = [
   'NEW',
   'DOCS_REVIEW',
@@ -92,6 +150,7 @@ export interface Application {
   direction: Direction;
   comment: string | null;
   status: ApplicationStatus;
+  source: ApplicationSource;
   studentId: string | null;
   student?: Student | null;
   managerId: string | null;

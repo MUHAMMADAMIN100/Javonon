@@ -1,14 +1,79 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { AdminPartnerCreateDto } from './dto/admin-partner.dto';
+
+// Без I/O/0/1 — чтобы код не путался в письме, звонке, скриншоте.
+// 32 символа = ровно 5 бит на позицию.
+const REF_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+// Пароль для авто-генерации: A-Z без I/O + a-z без i/l/o + цифры без 0/1.
+const PW_ALPHABET =
+  'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
 
 @Injectable()
 export class PartnersService {
   constructor(private prisma: PrismaService) {}
+
+  /** 6-символьный ref-код из безопасного алфавита (без I, O, 0, 1). */
+  private genReferralCode(): string {
+    // crypto.randomInt — CSPRNG (Node built-in). Math.random (V8 xorshift128+)
+    // допускает state-recovery по нескольким выходам → предсказуемые коды
+    // и, что важнее, предсказуемые авто-пароли из того же process.
+    let out = '';
+    for (let i = 0; i < 6; i++) {
+      out += REF_ALPHABET[randomInt(REF_ALPHABET.length)];
+    }
+    return out;
+  }
+
+  /** До 5 попыток на коллизию unique-constraint. */
+  private async createUniqueReferralCode(): Promise<string> {
+    for (let i = 0; i < 5; i++) {
+      const code = this.genReferralCode();
+      const exists = await this.prisma.partner.findUnique({
+        where: { referralCode: code },
+      });
+      if (!exists) return code;
+    }
+    throw new InternalServerErrorException(
+      'Не удалось сгенерировать уникальный ref-код после 5 попыток',
+    );
+  }
+
+  private genPassword(len = 12): string {
+    // Обязательно CSPRNG: этот пароль возвращается FOUNDER/ADMIN и
+    // напрямую используется для bcrypt.hash. Math.random в V8 —
+    // xorshift128+, state восстанавливается из ~5 последовательных
+    // выходов, что позволило бы предсказать пароли других партнёров,
+    // созданных из того же процесса.
+    let out = '';
+    for (let i = 0; i < len; i++) {
+      out += PW_ALPHABET[randomInt(PW_ALPHABET.length)];
+    }
+    return out;
+  }
+
+  private buildReferralUrl(code: string): string {
+    const base = (
+      process.env.LANDING_URL ||
+      process.env.PUBLIC_LANDING_URL ||
+      'https://javonon.com'
+    ).replace(/\/+$/, '');
+    return `${base}/?ref=${code}`;
+  }
+
+  private toPublicPartner(p: any) {
+    const { password, ...rest } = p;
+    return rest;
+  }
 
   /** Дашборд партнёра: ссылка, статистика воронки, баланс. */
   async dashboard(partnerId: string) {
@@ -149,6 +214,96 @@ export class PartnersService {
         },
       },
     });
+  }
+
+  /**
+   * FOUNDER/ADMIN создаёт партнёра вручную. Пароль опциональный — если
+   * не задан, backend генерирует 12-char alnum и возвращает plainPassword
+   * ОДИН РАЗ в ответе. Хэш сохраняется через bcrypt (10 раундов —
+   * согласовано с partner-auth.service.ts).
+   */
+  async adminCreate(dto: AdminPartnerCreateDto) {
+    // DTO уже нормализовал email/fullName/phone/password через @Transform.
+    const email = dto.email;
+    const fullName = dto.fullName;
+    const phone = dto.phone || null;
+    const commissionPct =
+      typeof dto.commissionPct === 'number'
+        ? Math.max(0, Math.min(100, Math.floor(dto.commissionPct)))
+        : 30;
+
+    // Ранняя проверка — чтобы отдать 409 без бесполезной работы по
+    // хэшу пароля и генерации ref-кода.
+    const existing = await this.prisma.partner.findUnique({ where: { email } });
+    if (existing) throw new ConflictException('Email уже зарегистрирован');
+
+    let plainPassword: string | undefined;
+    let rawPassword = dto.password;
+    if (!rawPassword) {
+      plainPassword = this.genPassword(12);
+      rawPassword = plainPassword;
+    }
+    const passwordHash = await bcrypt.hash(rawPassword, 10);
+    const referralCode = await this.createUniqueReferralCode();
+
+    let partner;
+    try {
+      partner = await this.prisma.partner.create({
+        data: {
+          email,
+          password: passwordHash,
+          fullName,
+          phone,
+          referralCode,
+          commissionPct,
+        },
+      });
+    } catch (e: any) {
+      // Race: параллельный adminCreate с тем же email проскочил ранний check.
+      if (e?.code === 'P2002') {
+        const target: string[] = e?.meta?.target || [];
+        if (target.includes('email')) {
+          throw new ConflictException('Email уже зарегистрирован');
+        }
+        // Гонка по referralCode — крайне маловероятна, но не будем врать.
+        throw new InternalServerErrorException(
+          'Конфликт уникальности при создании партнёра — повтори попытку',
+        );
+      }
+      throw e;
+    }
+
+    return {
+      partner: this.toPublicPartner(partner),
+      referralUrl: this.buildReferralUrl(partner.referralCode),
+      ...(plainPassword ? { plainPassword } : {}),
+    };
+  }
+
+  /**
+   * Удаление партнёра. Если есть история (Commission или ReferralAttribution) —
+   * soft delete (status=BANNED), чтобы сохранить audit trail для будущих
+   * споров по бонусам. Иначе — hard delete (Cascade по FK на schema).
+   */
+  async adminDelete(id: string) {
+    const partner = await this.prisma.partner.findUnique({ where: { id } });
+    if (!partner) throw new NotFoundException('Партнёр не найден');
+
+    const [commissionsCount, attributionsCount] = await Promise.all([
+      this.prisma.commission.count({ where: { partnerId: id } }),
+      this.prisma.referralAttribution.count({ where: { partnerId: id } }),
+    ]);
+
+    if (commissionsCount > 0 || attributionsCount > 0) {
+      const updated = await this.prisma.partner.update({
+        where: { id },
+        data: { status: 'BANNED' },
+      });
+      return { softDeleted: true, partner: this.toPublicPartner(updated) };
+    }
+
+    await this.prisma.partner.delete({ where: { id } });
+    return { hardDeleted: true, id };
   }
 
   async adminUpdate(id: string, patch: {

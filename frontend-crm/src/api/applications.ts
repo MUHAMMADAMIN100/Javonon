@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { Application, ApplicationStatus, Direction, Student } from './types';
+import type { Application, ApplicationSource, ApplicationStatus, Direction, Student } from './types';
 
 export interface AppFilters {
   status?: ApplicationStatus;
@@ -8,6 +8,8 @@ export interface AppFilters {
   mine?: boolean;
   /** Фильтр по конкретному менеджеру (TJ или CN) — userId */
   manager?: string;
+  /** Источник заявки — сайт, Instagram, реферал и т.д. */
+  source?: ApplicationSource;
 }
 
 export async function listApplications(filters: AppFilters = {}) {

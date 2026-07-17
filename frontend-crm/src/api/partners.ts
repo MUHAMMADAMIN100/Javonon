@@ -13,7 +13,30 @@ export interface Partner {
   status: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
   telegramHandle?: string | null;
   createdAt: string;
+  updatedAt?: string;
   _count?: { clicks: number; attributions: number; commissions: number };
+}
+
+export interface AdminCreatePartnerDto {
+  fullName: string;
+  email: string;
+  phone?: string;
+  password?: string;
+  commissionPct?: number;
+}
+
+export interface AdminCreatePartnerResponse {
+  partner: Partner;
+  referralUrl: string;
+  /** Present only when the backend auto-generated the password. Shown ONCE in UI. */
+  plainPassword?: string;
+}
+
+export interface AdminDeletePartnerResponse {
+  softDeleted?: boolean;
+  hardDeleted?: boolean;
+  partner?: Partner;
+  id?: string;
 }
 
 export interface AdminCommission {
@@ -48,6 +71,12 @@ export interface AdminPayout {
 
 export const adminListPartners = () =>
   api.get<Partner[]>('/admin/partners').then((r) => r.data);
+
+export const adminCreatePartner = (dto: AdminCreatePartnerDto) =>
+  api.post<AdminCreatePartnerResponse>('/partners/admin', dto).then((r) => r.data);
+
+export const adminDeletePartner = (id: string) =>
+  api.delete<AdminDeletePartnerResponse>(`/partners/admin/${id}`).then((r) => r.data);
 
 export const adminUpdatePartner = (id: string, patch: {
   commissionPct?: number;

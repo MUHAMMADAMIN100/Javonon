@@ -2347,6 +2347,14 @@ select.input-error {
 .badge-danger { color: #b91c1c; border-color: rgba(239,68,68,0.3); background: #fef2f2; }
 .badge-gray { color: var(--text-soft); border-color: var(--border); background: var(--bg-soft); }
 
+/* Источник заявки — цвета совпадают с брендами каналов,
+   чтобы глаз узнавал их без чтения текста в таблице. */
+.badge-instagram { color: #c1358a; border-color: rgba(193,53,138,0.28); background: #fdf2f8; }
+.badge-telegram  { color: #1e6fa6; border-color: rgba(30,111,166,0.28); background: #eff8ff; }
+.badge-google    { color: #b45309; border-color: rgba(180,83,9,0.28);   background: #fff7ed; }
+.badge-tiktok    { color: #111827; border-color: rgba(17,24,39,0.28);   background: #f3f4f6; }
+.badge-event     { color: #7c3aed; border-color: rgba(124,58,237,0.28); background: #f5f3ff; }
+
 /* ---------- FILTERS row ---------- */
 .filters {
   display: flex; gap: 10px; flex-wrap: wrap;

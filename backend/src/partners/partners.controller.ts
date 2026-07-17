@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -14,6 +15,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { PartnerJwtGuard } from './partner-jwt.guard';
 import { PartnersService } from './partners.service';
+import { AdminPartnerCreateDto } from './dto/admin-partner.dto';
 
 @Controller('partner')
 @UseGuards(PartnerJwtGuard)
@@ -57,6 +59,26 @@ export class AdminPartnersController {
   @Get()
   list() {
     return this.svc.adminList();
+  }
+
+  /**
+   * FOUNDER-side создание партнёра. Роли переопределяем на FOUNDER/ADMIN —
+   * ACCOUNTANT (class-level default) сюда пускать не должны.
+   */
+  @Post()
+  @Roles('FOUNDER', 'ADMIN')
+  adminCreate(@Body() body: AdminPartnerCreateDto) {
+    return this.svc.adminCreate(body);
+  }
+
+  /**
+   * Удаление партнёра. Soft, если есть Commission/ReferralAttribution;
+   * иначе hard. Роли — FOUNDER/ADMIN (ACCOUNTANT не может удалять партнёров).
+   */
+  @Delete(':id')
+  @Roles('FOUNDER', 'ADMIN')
+  adminDelete(@Param('id') id: string) {
+    return this.svc.adminDelete(id);
   }
 
   @Patch(':id')

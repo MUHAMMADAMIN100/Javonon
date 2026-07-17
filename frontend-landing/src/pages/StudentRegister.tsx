@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { studentRegister, getToken } from '../studentApi';
+import { getReferral } from '../referral';
 import Icon from '../Icon';
 import PasswordInput from '../components/PasswordInput';
 import PhoneInput, { COUNTRIES } from '../components/PhoneInput';
@@ -61,6 +62,10 @@ export default function StudentRegister() {
         phone: phone.trim(),
         password,
         direction,
+        // Реферальный код партнёра (TTL-aware). Без него бэк не запустит
+        // ReferralsService.attribute() и партнёр не получит комиссию.
+        // clearReferral() не вызываем — TTL сам обработает истечение.
+        ref: getReferral() || undefined,
       });
       navigate('/cabinet');
     } catch (err: any) {

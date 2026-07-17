@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listApplications } from '../api/applications';
 import { listUsers } from '../api/users';
-import type { ApplicationStatus, Direction } from '../api/types';
-import { STATUS_BADGE } from '../api/types';
+import type { ApplicationSource, ApplicationStatus, Direction } from '../api/types';
+import { APPLICATION_SOURCES, SOURCE_BADGE, SOURCE_LABEL, STATUS_BADGE } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
@@ -41,6 +41,7 @@ export default function Applications() {
   const [status, setStatus] = useState<ApplicationStatus | ''>('');
   const [direction, setDirection] = useState<Direction | ''>('');
   const [manager, setManager] = useState<string>('');
+  const [source, setSource] = useState<ApplicationSource | ''>('');
   const isAdmin = isElevated(me);
   // Менеджер видит только свои заявки; админ может переключать.
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
@@ -54,7 +55,7 @@ export default function Applications() {
   // Сбросить страницу при смене фильтров.
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, status, direction, scope, manager]);
+  }, [debouncedSearch, status, direction, scope, manager, source]);
 
   const filters = {
     search: debouncedSearch || undefined,
@@ -62,6 +63,7 @@ export default function Applications() {
     direction: direction || undefined,
     mine: scope === 'mine',
     manager: manager || undefined,
+    source: source || undefined,
   };
 
   const appsQuery = useQuery({
@@ -149,6 +151,33 @@ export default function Applications() {
             <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
           </select>
+          <select
+            className="crm-select"
+            value={source}
+            onChange={(e) => setSource(e.target.value as ApplicationSource | '')}
+            title="Источник"
+          >
+            <option value="">Источник — все</option>
+            {APPLICATION_SOURCES.map((s) => (
+              <option key={s} value={s}>{SOURCE_LABEL[s]}</option>
+            ))}
+          </select>
+          {(search || status || direction || manager || source) && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setSearch('');
+                setStatus('');
+                setDirection('');
+                setManager('');
+                setSource('');
+              }}
+              title={t('common.reset')}
+            >
+              <Icon name="close" size={14} /> {t('common.reset')}
+            </button>
+          )}
         </div>
 
         <AnimatePresence mode="wait">
@@ -164,7 +193,7 @@ export default function Applications() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>{t('app.field.fullName')}</th><th>{t('app.field.phone')}</th><th>{t('app.field.direction')}</th><th>{t('app.field.manager')}</th><th>{t('common.status')}</th><th>{t('reports.col.date')}</th>
+                    <th>{t('app.field.fullName')}</th><th>{t('app.field.phone')}</th><th>{t('app.field.direction')}</th><th>{t('app.field.manager')}</th><th>Источник</th><th>{t('common.status')}</th><th>{t('reports.col.date')}</th>
                   </tr>
                 </thead>
                 <motion.tbody
@@ -209,6 +238,14 @@ export default function Applications() {
                             )}
                           </div>
                         </div>
+                      </td>
+                      <td>
+                        {/* fallback OTHER — если бэкенд когда-нибудь пришлёт заявку
+                            без source (миграционные данные, dev-фикстуры), не
+                            крашимся undefined-badge, а показываем нейтральный. */}
+                        <span className={`badge ${SOURCE_BADGE[a.source ?? 'OTHER']}`}>
+                          {SOURCE_LABEL[a.source ?? 'OTHER']}
+                        </span>
                       </td>
                       <td><span className={`badge ${STATUS_BADGE[a.status]}`}>{statusLabel(a.status)}</span></td>
                       <td>{new Date(a.createdAt).toLocaleDateString('ru-RU')}</td>
