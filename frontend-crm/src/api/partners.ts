@@ -73,10 +73,10 @@ export const adminListPartners = () =>
   api.get<Partner[]>('/admin/partners').then((r) => r.data);
 
 export const adminCreatePartner = (dto: AdminCreatePartnerDto) =>
-  api.post<AdminCreatePartnerResponse>('/partners/admin', dto).then((r) => r.data);
+  api.post<AdminCreatePartnerResponse>('/admin/partners', dto).then((r) => r.data);
 
 export const adminDeletePartner = (id: string) =>
-  api.delete<AdminDeletePartnerResponse>(`/partners/admin/${id}`).then((r) => r.data);
+  api.delete<AdminDeletePartnerResponse>(`/admin/partners/${id}`).then((r) => r.data);
 
 export const adminUpdatePartner = (id: string, patch: {
   commissionPct?: number;
