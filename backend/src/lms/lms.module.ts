@@ -16,7 +16,9 @@ import { StudentJwtGuard } from '../student-auth/student-jwt.guard';
         secret:
           config.get<string>('STUDENT_JWT_SECRET') ||
           config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN') || '7d' },
+        // См. комментарий в student-auth.module.ts — используем
+        // отдельный STUDENT_JWT_EXPIRES_IN, а не общий JWT_EXPIRES_IN.
+        signOptions: { expiresIn: config.get<string>('STUDENT_JWT_EXPIRES_IN') || '7d' },
       }),
     }),
   ],

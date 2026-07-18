@@ -15,7 +15,11 @@ import { JwtStrategy } from './jwt.strategy';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN') || '7d' },
+        // NB: намеренно НЕ читаем общий JWT_EXPIRES_IN — он раньше был одной
+        // «глобальной ручкой» на все три аудитории (staff/student/partner) и
+        // прод пинил её в 7d, из-за чего дефолт кода никогда не применялся.
+        // Теперь у каждой аудитории свой env; здесь — только для сотрудников CRM.
+        signOptions: { expiresIn: config.get<string>('STAFF_JWT_EXPIRES_IN') || '30d' },
       }),
     }),
   ],

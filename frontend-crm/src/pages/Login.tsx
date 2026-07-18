@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../store/auth';
+import { useAuth, TokenStorageError } from '../store/auth';
 import { compose, email as emailRule, hasErrors, minLen, required, validateAll } from '../utils/validators';
 import PasswordInput from '../components/PasswordInput';
 import Icon from '../Icon';
@@ -13,7 +13,6 @@ export default function Login() {
   const { t } = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
@@ -34,10 +33,22 @@ export default function Login() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email.trim(), password.trim(), rememberMe);
+      // Staff/founder auth is always persistent — the store writes the
+      // token straight to localStorage (see store/auth.ts writeToken()).
+      await login(email.trim(), password.trim());
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Не удалось войти');
+      // TokenStorageError = credentials were fine, but the browser refused
+      // to persist the session (QuotaExceededError / private mode / storage
+      // disabled). Surface an actionable message instead of the generic
+      // «Не удалось войти» so the manager knows to unblock site storage
+      // rather than retyping the password. See store/auth.ts login() for
+      // the stuck-login-loop this prevents.
+      if (err instanceof TokenStorageError) {
+        setError(err.message);
+      } else {
+        setError(err.response?.data?.message || 'Не удалось войти');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -143,17 +154,6 @@ export default function Login() {
             autoComplete="current-password"
           />
           {showErr('password') && <div className="form-error-text">{errors.password}</div>}
-        </div>
-        <div className="form-group" style={{ marginTop: -4 }}>
-          <label className="crm-checkbox-label" style={{ cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              className="crm-checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-            />
-            <span>Запомнить меня</span>
-          </label>
         </div>
         <motion.button
           type="submit"

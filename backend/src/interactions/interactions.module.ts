@@ -14,7 +14,10 @@ import { StudentJwtGuard } from '../student-auth/student-jwt.guard';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('STUDENT_JWT_SECRET') || config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN') || '7d' },
+        // Отдельная ручка для студенческих токенов — не читаем общий
+        // JWT_EXPIRES_IN, чтобы прод-значение (7d) не подтягивалось
+        // случайно и не совпадало со staff/partner аудиториями.
+        signOptions: { expiresIn: config.get<string>('STUDENT_JWT_EXPIRES_IN') || '7d' },
       }),
     }),
   ],

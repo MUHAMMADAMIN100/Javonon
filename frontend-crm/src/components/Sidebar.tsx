@@ -77,10 +77,73 @@ interface SidebarProps {
 
 export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = {}) {
   const user = useAuth((s) => s.user);
+  const hydrated = useAuth((s) => s.hydrated);
   const logout = useAuth((s) => s.logout);
   const { t } = useT();
   const [pwdOpen, setPwdOpen] = useState(false);
   const initials = user?.fullName?.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '?';
+
+  // Bootstrap didn't finish /auth/me (Railway cold-start 5xx / timeout).
+  // `user` may hold only a minimal JWT-claims stub — fullName='', no
+  // permissions, no customRole, role defaulting to SALES_MANAGER. Computing
+  // the menu off that stub silently downgrades a FOUNDER into the
+  // SALES_MANAGER menu (loses /settings, /users, /finance, etc.) and
+  // renders a custom-role user against the wrong base role. Show a
+  // skeleton until the full user lands or logout is chosen — see
+  // AuthState.hydrated doc in store/auth.ts.
+  if (!hydrated) {
+    return (
+      <motion.aside
+        className={`sidebar${mobileOpen ? ' mobile-open' : ''}`}
+        initial={{ x: -80, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="sidebar-logo">
+          <img src="/javonon-logo.svg" alt="Javonon" className="sidebar-brand-img" />
+        </div>
+        <div className="sidebar-nav" aria-busy="true" aria-label={t('common.loading')}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <motion.div
+              key={i}
+              animate={{ opacity: [0.35, 0.75, 0.35] }}
+              transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.08 }}
+              style={{
+                height: 36,
+                margin: '6px 10px',
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.08)',
+              }}
+            />
+          ))}
+        </div>
+        <div className="sidebar-user">
+          <div className="user-avatar" style={{ background: 'rgba(255,255,255,0.08)' }} />
+          <div className="user-info">
+            <motion.div
+              animate={{ opacity: [0.35, 0.75, 0.35] }}
+              transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ height: 12, width: '70%', borderRadius: 4, background: 'rgba(255,255,255,0.1)' }}
+            />
+            <motion.div
+              animate={{ opacity: [0.35, 0.75, 0.35] }}
+              transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+              style={{ marginTop: 6, height: 10, width: '45%', borderRadius: 4, background: 'rgba(255,255,255,0.08)' }}
+            />
+          </div>
+          {/* Logout is still reachable so a user stuck behind a long backend
+              outage can bail out — no menu-shape decisions needed for it. */}
+          <button
+            className="logout-btn"
+            onClick={logout}
+            title={t('auth.logout')}
+          >
+            <Icon name="logout" size={20} />
+          </button>
+        </div>
+      </motion.aside>
+    );
+  }
 
   // FOUNDER неявно везде. ADMIN/ACCOUNTANT — равные «elevated» по ТЗ.
   // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) видят рабочие зоны (заявки,

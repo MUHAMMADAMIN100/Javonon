@@ -24,7 +24,11 @@ import { PartnersModule } from '../partners/partners.module';
         secret:
           config.get<string>('STUDENT_JWT_SECRET') ||
           config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN') || '7d' },
+        // Раньше здесь читался общий JWT_EXPIRES_IN — та же ручка, что и
+        // у сотрудников CRM и партнёров. Прод пинил её в 7d, из-за чего
+        // код-дефолт 30d для staff/partner не срабатывал. Теперь у каждой
+        // аудитории свой env; для студентов дефолт остаётся 7d.
+        signOptions: { expiresIn: config.get<string>('STUDENT_JWT_EXPIRES_IN') || '7d' },
       }),
     }),
   ],

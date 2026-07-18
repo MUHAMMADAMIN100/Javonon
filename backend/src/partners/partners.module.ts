@@ -25,7 +25,9 @@ import { PartnerJwtGuard } from './partner-jwt.guard';
         secret:
           config.get<string>('PARTNER_JWT_SECRET') ||
           config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN') || '30d' },
+        // Отдельная ручка для партнёров — не читаем общий JWT_EXPIRES_IN
+        // (см. student-auth.module.ts). Должно совпадать с partner-auth.service.ts.
+        signOptions: { expiresIn: config.get<string>('PARTNER_JWT_EXPIRES_IN') || '30d' },
       }),
     }),
   ],

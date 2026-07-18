@@ -40,12 +40,15 @@ import SubmissionDetail from './pages/SubmissionDetail';
 import Loading from './components/Loading';
 
 export default function App() {
-  const init = useAuth((s) => s.init);
-  const initialized = useAuth((s) => s.initialized);
+  const bootstrap = useAuth((s) => s.bootstrap);
+  const ready = useAuth((s) => s.ready);
 
-  useEffect(() => { init(); }, [init]);
+  // On mount: read the persisted JWT, GET /auth/me, hydrate the auth store.
+  // While this is in-flight we render <Loading fullscreen /> so the user
+  // never sees a login flash on reload with a valid token.
+  useEffect(() => { bootstrap(); }, [bootstrap]);
 
-  if (!initialized) {
+  if (!ready) {
     return <Loading fullscreen />;
   }
 

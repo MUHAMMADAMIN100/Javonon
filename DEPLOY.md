@@ -44,7 +44,6 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 PORT=3001
 JWT_SECRET=<сгенерируй длинную случайную строку, минимум 64 символа>
 STUDENT_JWT_SECRET=<другая длинная случайная строка>
-JWT_EXPIRES_IN=7d
 CORS_ORIGINS=https://javonon.vercel.app,https://javonon-crm.vercel.app
 UPLOADS_DIR=./uploads
 MAX_FILE_SIZE=52428800
@@ -52,6 +51,8 @@ SEED_IF_EMPTY=1
 ```
 
 > **Совет:** для генерации секретов — `openssl rand -hex 32` или [randomkeygen.com](https://randomkeygen.com/).
+
+> **JWT TTL:** переменная `JWT_EXPIRES_IN` раньше была одной ручкой на все три аудитории и перекрывала код-дефолты. Теперь её быть не должно — **удали `JWT_EXPIRES_IN` из Railway Variables**, если она там осталась. Дефолты в коде: `staff → 30d`, `student → 7d`, `partner → 30d`. Чтобы явно переопределить — задай `STAFF_JWT_EXPIRES_IN`, `STUDENT_JWT_EXPIRES_IN` или `PARTNER_JWT_EXPIRES_IN` по-отдельности.
 
 5. **Settings → Networking → Generate Domain** → получишь URL вида `javonon-production.up.railway.app`
 6. Запиши этот URL — он понадобится для фронтов

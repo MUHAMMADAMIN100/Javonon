@@ -43,7 +43,13 @@ export class PartnerAuthService {
     );
     return this.jwt.signAsync(
       { sub: partner.id, email: partner.email, role: 'PARTNER' },
-      { secret, expiresIn: this.config.get<string>('JWT_EXPIRES_IN') || '30d' },
+      {
+        secret,
+        // Отдельная ручка для партнёров — см. partners.module.ts. Раньше
+        // тут читался общий JWT_EXPIRES_IN, который прод пинил в 7d
+        // и заменял код-дефолт 30d.
+        expiresIn: this.config.get<string>('PARTNER_JWT_EXPIRES_IN') || '30d',
+      },
     );
   }
 

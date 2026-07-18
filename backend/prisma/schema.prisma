@@ -157,10 +157,17 @@ model User {
   // 0 = выключено. Ограничено сверху kpiMaxPct.
   kpiAutoStepPct     Float?      @default(0)
   kpiMaxPct          Float?      @default(3)
+  // Активность аккаунта. false = сотрудник деактивирован (уволен/приостановлен):
+  // login отклоняется, а все живые JWT перестают проходить JwtStrategy.validate
+  // (см. проверку в jwt.strategy.ts). Даёт FOUNDER'у возможность немедленно
+  // отобрать доступ, не удаляя User (историю сохраняем). Отдельно от delete —
+  // потому что delete чревато потерей истории транзакций/задач/чата.
+  isActive           Boolean     @default(true)
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
   notifications            Notification[]
+  sessions                 Session[]
   managedApplications      Application[]  @relation("ApplicationManager")
   managedChinaApplications Application[]  @relation("ApplicationChinaManager")
   managedStudents          Student[]      @relation("StudentManager")
@@ -197,6 +204,30 @@ model User {
   workSchedules            WorkSchedule[]
   submissions              SaleSubmission[]    @relation("SubmissionManager")
   submissionPaymentReviews SubmissionPayment[] @relation("SubmissionPaymentReviewer")
+}
+
+// ============================================================
+// SESSIONS — серверная таблица сессий сотрудников для отзыва JWT.
+// ============================================================
+// Каждый успешный /auth/login создаёт row; в JWT кладётся payload.sid = Session.id.
+// JwtStrategy.validate проверяет что сессия существует и revokedAt IS NULL,
+// иначе токен отклоняется. Без этой модели уволенный сотрудник продолжал бы
+// иметь доступ до истечения JWT (до 30 дней), даже после удаления User row.
+//
+// FOUNDER может отозвать любую сессию (POST /auth/sessions/:id/revoke),
+// сотрудник — свою собственную (POST /auth/logout).
+model Session {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  // NULL = активна. Non-null = отозвана (login/logout/принудительно FOUNDER'ом).
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
+
+  @@index([userId, revokedAt])
+  @@index([revokedAt])
 }
 
 // Документы сотрудника (паспорт, контракт, дипломы и т.п.). По
