@@ -202,7 +202,10 @@ export class PartnersService {
         fullName: true,
         phone: true,
         referralCode: true,
+        // commissionPct оставлен для legacy-фронтов; canonical поле —
+        // commissionAmountCents (Variant A flat-rate).
         commissionPct: true,
+        commissionAmountCents: true,
         balanceCents: true,
         totalEarnedCents: true,
         totalPaidCents: true,
@@ -227,10 +230,14 @@ export class PartnersService {
     const email = dto.email;
     const fullName = dto.fullName;
     const phone = dto.phone || null;
-    const commissionPct =
-      typeof dto.commissionPct === 'number'
-        ? Math.max(0, Math.min(100, Math.floor(dto.commissionPct)))
-        : 30;
+    // Variant A flat-rate: сохраняем commissionAmountCents (TJS × 100).
+    // Дефолт 500 TJS если dto не задан. commissionPct из dto ПРИНИМАЕМ,
+    // но игнорируем (legacy).
+    const amountTjs =
+      typeof dto.commissionAmountTjs === 'number'
+        ? Math.max(0, Math.min(100000, Math.floor(dto.commissionAmountTjs)))
+        : 500;
+    const commissionAmountCents = amountTjs * 100;
 
     // Ранняя проверка — чтобы отдать 409 без бесполезной работы по
     // хэшу пароля и генерации ref-кода.
@@ -255,7 +262,7 @@ export class PartnersService {
           fullName,
           phone,
           referralCode,
-          commissionPct,
+          commissionAmountCents,
         },
       });
     } catch (e: any) {
@@ -307,15 +314,21 @@ export class PartnersService {
   }
 
   async adminUpdate(id: string, patch: {
+    // LEGACY: принимаем commissionPct для обратной совместимости старых
+    // клиентов, но НЕ пишем его в БД — расчёт перешёл на flat-rate.
     commissionPct?: number;
+    // Variant A: новая ставка в TJS (сервис переведёт в копейки).
+    commissionAmountTjs?: number;
     status?: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
     fullName?: string;
   }) {
     return this.prisma.partner.update({
       where: { id },
       data: {
-        ...(typeof patch.commissionPct === 'number' && {
-          commissionPct: Math.max(0, Math.min(100, patch.commissionPct)),
+        ...(typeof patch.commissionAmountTjs === 'number' && {
+          commissionAmountCents:
+            Math.max(0, Math.min(100000, Math.floor(patch.commissionAmountTjs))) *
+            100,
         }),
         ...(patch.status && { status: patch.status }),
         ...(patch.fullName && { fullName: patch.fullName }),
@@ -435,7 +448,10 @@ export class PartnersService {
         email: true,
         phone: true,
         referralCode: true,
+        // commissionPct — legacy, отдаём для обратной совместимости.
+        // commissionAmountCents — canonical (Variant A flat-rate).
         commissionPct: true,
+        commissionAmountCents: true,
         status: true,
         balanceCents: true,
         totalEarnedCents: true,

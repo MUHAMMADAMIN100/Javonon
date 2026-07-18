@@ -46,6 +46,9 @@ export interface PartnerDashboard {
     baseAmountCents: number;
     percent: number;
     currency: string;
+    /** Валюта baseAmountCents (валюта платежа клиента). Опционально —
+     *  legacy-записи без поля рендерятся через currency. */
+    baseCurrency?: string;
     status: 'PENDING' | 'APPROVED' | 'PAID' | 'REVERSED';
     note?: string | null;
     createdAt: string;

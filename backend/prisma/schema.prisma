@@ -1205,7 +1205,15 @@ model Partner {
   // Финансы — балансы хранятся в копейках/центах (Int) для точности.
   // Размер комиссии — % от суммы платежа клиента, привязанного к этому
   // партнёру. По умолчанию 30%, админ может поднять/опустить индивидуально.
-  commissionPct    Int @default(30) // % (0-100)
+  // LEGACY (Variant A flat-rate): commissionPct больше не используется в
+  // расчёте — оставлен для обратной совместимости данных (Railway safe).
+  // Формула перешла на commissionAmountCents (см. ниже).
+  commissionPct    Int @default(30) // % (0-100) — LEGACY, не читается
+  // Variant A: партнёр получает ФИКСИРОВАННУЮ сумму в TJS за КАЖДЫЙ
+  // успешный платёж привлечённого клиента. Если клиент платит в 3
+  // рассрочки — партнёр получает rate × 3. Хранится в копейках (100 = 1 TJS).
+  // Дефолт 50000 копеек = 500 TJS. FOUNDER выставляет per partner.
+  commissionAmountCents Int @default(50000)
   balanceCents     Int @default(0) // доступно к выплате
   totalEarnedCents Int @default(0) // всего заработал (lifetime)
   totalPaidCents   Int @default(0) // всего выплачено
@@ -1284,7 +1292,8 @@ model Commission {
   amountCents     Int // итоговое начисление (в копейках/центах)
   baseAmountCents Int // сумма платежа, с которой считалось
   percent         Int // % на момент начисления (фриз)
-  currency        String  @default("TJS")
+  currency        String  @default("TJS") // валюта начисления (amountCents) — flat-rate всегда TJS
+  baseCurrency    String  @default("TJS") // валюта платежа клиента (baseAmountCents) — USD/EUR/RUB/…
   note            String?
 
   status     CommissionStatus @default(PENDING)
@@ -1295,6 +1304,8 @@ model Commission {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([partnerId, paymentId])
+  @@unique([partnerId, transactionId])
   @@index([partnerId, status])
   @@index([paymentId])
   @@index([transactionId])

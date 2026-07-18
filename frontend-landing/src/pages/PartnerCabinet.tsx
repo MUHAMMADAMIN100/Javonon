@@ -213,7 +213,7 @@ export default function PartnerCabinet() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 500, fontSize: 15 }}>
                       {fmtMoney(c.amountCents, c.currency)} <span style={{ color: 'var(--ink-mute)', fontSize: 12 }}>
-                        ({c.percent}% от {fmtMoney(c.baseAmountCents, c.currency)})
+                        ({c.percent}% от {fmtMoney(c.baseAmountCents, c.baseCurrency ?? c.currency)})
                       </span>
                     </div>
                     {c.note && <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>{c.note}</div>}

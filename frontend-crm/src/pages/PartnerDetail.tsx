@@ -7,6 +7,7 @@ import {
   adminGetPartnerAttributions,
   adminListCommissions,
   adminListPayouts,
+  fmtCommissionRate,
   fmtMoneyCents,
   type PartnerAttribution,
 } from '../api/partners';
@@ -138,7 +139,9 @@ export default function PartnerDetail() {
                   <span><Icon name="chat" size={14} /> @{partner.telegramHandle.replace(/^@/, '')}</span>
                 )}
                 <span>
-                  <Icon name="key" size={14} /> <code>{partner.referralCode}</code> · {partner.commissionPct}%
+                  <Icon name="key" size={14} /> <code>{partner.referralCode}</code> ·{' '}
+                  {t('partners.detail.rate.label')}: {fmtCommissionRate(partner.commissionAmountCents)}{' '}
+                  {t('partners.detail.rate.perClient')}
                 </span>
               </div>
             </div>
@@ -476,7 +479,7 @@ function CommissionsTab({ partnerId }: { partnerId: string }) {
             <tr>
               <th>{t('partners.commission.col.createdAt')}</th>
               <th>{t('partners.commission.col.base')}</th>
-              <th>{t('partners.commission.col.percent')}</th>
+              <th>{t('partners.commission.col.rate')}</th>
               <th>{t('partners.commission.col.amount')}</th>
               <th>{t('partners.commission.col.status')}</th>
             </tr>
@@ -485,8 +488,12 @@ function CommissionsTab({ partnerId }: { partnerId: string }) {
             {items.map((c) => (
               <tr key={c.id}>
                 <td>{new Date(c.createdAt).toLocaleString('ru-RU')}</td>
-                <td>{fmtMoneyCents(c.baseAmountCents, c.currency)}</td>
-                <td>{c.percent}%</td>
+                <td>{fmtMoneyCents(c.baseAmountCents, c.baseCurrency ?? c.currency)}</td>
+                <td>
+                  {c.percent === 0
+                    ? `${t('partners.commission.rate.flat')} ${fmtMoneyCents(c.amountCents, c.currency)}`
+                    : `${c.percent}%`}
+                </td>
                 <td>
                   <b>{fmtMoneyCents(c.amountCents, c.currency)}</b>
                 </td>

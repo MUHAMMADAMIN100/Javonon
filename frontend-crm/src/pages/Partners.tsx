@@ -12,6 +12,7 @@ import {
   adminPayoutPay,
   adminPayoutReject,
   adminUpdatePartner,
+  fmtCommissionRate,
   fmtMoneyCents,
   type AdminCreatePartnerResponse,
   type Partner,
@@ -143,16 +144,20 @@ function PartnersList() {
     }
   };
 
-  const updatePct = async (id: string, current: number) => {
-    const raw = window.prompt(t('partners.col.commissionPct') + ' (0-100):', String(current));
+  const updateAmount = async (id: string, currentCents: number) => {
+    const currentTjs = Math.round((currentCents ?? 0) / 100);
+    const raw = window.prompt(
+      t('partners.col.commission.prompt') + ' (0–100000):',
+      String(currentTjs),
+    );
     if (raw == null) return;
-    const pct = parseInt(raw, 10);
-    if (isNaN(pct) || pct < 0 || pct > 100) {
+    const amountTjs = parseInt(raw, 10);
+    if (isNaN(amountTjs) || amountTjs < 0 || amountTjs > 100000) {
       toast(t('toast.error'), 'error');
       return;
     }
     try {
-      await adminUpdatePartner(id, { commissionPct: pct });
+      await adminUpdatePartner(id, { commissionAmountTjs: amountTjs });
       qc.invalidateQueries({ queryKey: ['admin', 'partners'] });
       toast(t('toast.updated'), 'success');
     } catch (e: any) {
@@ -234,7 +239,7 @@ function PartnersList() {
                 <th>{t('common.name')}</th>
                 <th>{t('partners.col.email')}</th>
                 <th>{t('partners.col.code')}</th>
-                <th>{t('partners.col.commissionPct')}</th>
+                <th>{t('partners.col.commission')}</th>
                 <th>{t('partners.col.referrals')}</th>
                 <th>{t('partners.col.balance')}</th>
                 <th>{t('partners.col.earned')}</th>
@@ -264,15 +269,15 @@ function PartnersList() {
                   className="row-clickable"
                   aria-label={`${p.fullName} — ${p.email}`}
                 >
-                  <td data-label="Имя">{p.fullName}</td>
-                  <td data-label="Email">{p.email}</td>
-                  <td data-label="Код"><code>{p.referralCode}</code></td>
-                  <td data-label="%">{p.commissionPct}%</td>
-                  <td data-label="Воронка">
+                  <td data-label={t('common.name')}>{p.fullName}</td>
+                  <td data-label={t('partners.col.email')}>{p.email}</td>
+                  <td data-label={t('partners.col.code')}><code>{p.referralCode}</code></td>
+                  <td data-label={t('partners.col.commission')}>{fmtCommissionRate(p.commissionAmountCents)}</td>
+                  <td data-label={t('partners.col.referrals')}>
                     {p._count?.clicks ?? 0} / {p._count?.attributions ?? 0} / {p._count?.commissions ?? 0}
                   </td>
-                  <td data-label="Баланс">{fmtMoneyCents(p.balanceCents)}</td>
-                  <td data-label="Заработано">{fmtMoneyCents(p.totalEarnedCents)}</td>
+                  <td data-label={t('partners.col.balance')}>{fmtMoneyCents(p.balanceCents)}</td>
+                  <td data-label={t('partners.col.earned')}>{fmtMoneyCents(p.totalEarnedCents)}</td>
                   <td>
                     <span style={{
                       fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
@@ -280,7 +285,7 @@ function PartnersList() {
                       color: p.status === 'ACTIVE' ? '#15803d' : p.status === 'SUSPENDED' ? '#b45309' : '#b91c1c',
                     }}>{t(`partners.status.${p.status}`)}</span>
                   </td>
-                  <td data-label="Действия" onClick={(e) => e.stopPropagation()}>
+                  <td data-label={t('common.actions')} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       <button
                         className="btn btn-sm btn-secondary"
@@ -296,7 +301,13 @@ function PartnersList() {
                       >
                         <Icon name="link" size={14} />
                       </button>
-                      <button className="btn btn-sm btn-secondary" onClick={stop(() => updatePct(p.id, p.commissionPct))}>%</button>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={stop(() => updateAmount(p.id, p.commissionAmountCents))}
+                        title={t('partners.col.commission.prompt')}
+                      >
+                        TJS
+                      </button>
                       {p.status === 'ACTIVE' ? (
                         <button className="btn btn-sm btn-secondary" onClick={stop(() => updateStatus(p.id, 'SUSPENDED'))}>⏸</button>
                       ) : (
@@ -349,7 +360,7 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [commissionPct, setCommissionPct] = useState(30);
+  const [commissionAmountTjs, setCommissionAmountTjs] = useState(500);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -358,7 +369,7 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
     setEmail('');
     setPhone('');
     setPassword('');
-    setCommissionPct(30);
+    setCommissionAmountTjs(500);
     setErr(null);
     setBusy(false);
   };
@@ -392,8 +403,12 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
       setErr(t('partners.add.err.password'));
       return;
     }
-    if (commissionPct < 0 || commissionPct > 100 || isNaN(commissionPct)) {
-      setErr(t('partners.add.err.commissionPct'));
+    if (
+      isNaN(commissionAmountTjs) ||
+      commissionAmountTjs < 0 ||
+      commissionAmountTjs > 100000
+    ) {
+      setErr(t('partners.add.err.commissionAmount'));
       return;
     }
     setBusy(true);
@@ -403,7 +418,7 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
         email: mail,
         phone: ph || undefined,
         password: pw || undefined,
-        commissionPct,
+        commissionAmountTjs,
       });
       toast(t('toast.created'), 'success');
       reset();
@@ -501,14 +516,15 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
               />
             </div>
             <div className="form-group" style={{ textAlign: 'left', marginBottom: 16 }}>
-              <label>{t('partners.col.commissionPct')} (0–100)</label>
+              <label>{t('partners.add.commissionAmount.label')} (0–100000)</label>
               <input
                 className="crm-input"
                 type="number"
                 min={0}
-                max={100}
-                value={commissionPct}
-                onChange={(e) => setCommissionPct(parseInt(e.target.value, 10))}
+                max={100000}
+                step={1}
+                value={commissionAmountTjs}
+                onChange={(e) => setCommissionAmountTjs(parseInt(e.target.value, 10))}
                 required
               />
             </div>
@@ -717,7 +733,7 @@ function CommissionsList() {
                 <th>{t('partners.commission.col.createdAt')}</th>
                 <th>{t('partners.tab.list')}</th>
                 <th>{t('partners.commission.col.base')}</th>
-                <th>{t('partners.commission.col.percent')}</th>
+                <th>{t('partners.commission.col.rate')}</th>
                 <th>{t('partners.commission.col.amount')}</th>
                 <th>{t('partners.commission.col.status')}</th>
                 <th></th>
@@ -728,8 +744,12 @@ function CommissionsList() {
                 <tr key={c.id}>
                   <td>{new Date(c.createdAt).toLocaleString('ru-RU')}</td>
                   <td>{c.partner?.fullName} <span style={{ color: 'var(--text-soft)', fontSize: 12 }}>({c.partner?.email})</span></td>
-                  <td>{fmtMoneyCents(c.baseAmountCents, c.currency)}</td>
-                  <td>{c.percent}%</td>
+                  <td>{fmtMoneyCents(c.baseAmountCents, c.baseCurrency ?? c.currency)}</td>
+                  <td>
+                    {c.percent === 0
+                      ? `${t('partners.commission.rate.flat')} ${fmtMoneyCents(c.amountCents, c.currency)}`
+                      : `${c.percent}%`}
+                  </td>
                   <td><b>{fmtMoneyCents(c.amountCents, c.currency)}</b></td>
                   <td>{t(`partners.commission.status.${c.status}`)}</td>
                   <td>

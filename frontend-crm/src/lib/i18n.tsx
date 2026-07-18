@@ -1291,6 +1291,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.payout.reject': 'Отклонить запрос?',
     'partners.commission.col.amount': 'Сумма',
     'partners.commission.col.percent': 'Процент',
+    // Flat-rate column: labelled "СТАВКА" instead of "%" — cell shows
+    // either a fixed TJS amount ("Фикс. 500.00 TJS") for new commissions
+    // where `percent === 0`, or the legacy "30%" for old %-based ones.
+    'partners.commission.col.rate': 'Ставка',
+    'partners.commission.rate.flat': 'Фикс.',
     'partners.commission.col.status': 'Статус',
     'partners.commission.col.createdAt': 'Дата',
     'partners.commission.status.PENDING': 'Ожидает',
@@ -1304,7 +1309,13 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.add.err.email': 'Некорректный email',
     'partners.add.err.phone': 'Телефон: от 5 до 20 символов',
     'partners.add.err.password': 'Пароль: минимум 8 символов',
+    // @deprecated legacy key — kept so no other page breaks. Superseded by
+    // partners.add.err.commissionAmount below.
     'partners.add.err.commissionPct': '% комиссии: 0–100',
+    'partners.add.commissionAmount.label': 'Сумма комиссии за клиента (TJS)',
+    'partners.add.err.commissionAmount': 'Сумма комиссии: 0–100000 TJS',
+    // Row-edit button prompt title, also used as button tooltip.
+    'partners.col.commission.prompt': 'Сумма комиссии (TJS)',
     'partners.add.err.duplicate': 'Партнёр с таким email уже существует',
     'partners.share.title': 'Ссылка партнёра',
     'partners.share.copy': 'Копировать',
@@ -1330,6 +1341,10 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.detail.attribution.type.hint': 'Email-подсказка',
     'partners.detail.empty.attributions': 'Пока никого не привёл',
     'partners.detail.empty.clicks': 'Кликов пока нет',
+    // PartnerDetail header/KPI: replaces the old "%" chip on the sub-header
+    // (renders as "Ставка: 500 TJS / клиент").
+    'partners.detail.rate.label': 'Ставка',
+    'partners.detail.rate.perClient': '/ клиент',
 
     // ===== massmail =====
     'massmail.field.name': 'Название кампании',
@@ -2633,6 +2648,10 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.payout.reject': 'Дархостро рад кунам?',
     'partners.commission.col.amount': 'Маблағ',
     'partners.commission.col.percent': 'Фоиз',
+    // Flat-rate column: for `percent === 0` rows we show "Устувор Xxx TJS",
+    // legacy %-based rows keep "30%".
+    'partners.commission.col.rate': 'Меъёр',
+    'partners.commission.rate.flat': 'Устувор',
     'partners.commission.col.status': 'Ҳолат',
     'partners.commission.col.createdAt': 'Сана',
     'partners.commission.status.PENDING': 'Интизор',
@@ -2646,7 +2665,12 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.add.err.email': 'Email нодуруст аст',
     'partners.add.err.phone': 'Телефон: аз 5 то 20 аломат',
     'partners.add.err.password': 'Рамз: ҳадди ақал 8 аломат',
+    // @deprecated legacy key — kept intact so no page breaks. Superseded by
+    // partners.add.err.commissionAmount below.
     'partners.add.err.commissionPct': '% комиссия: 0–100',
+    'partners.add.commissionAmount.label': 'Маблағи комиссия барои як мизоҷ (TJS)',
+    'partners.add.err.commissionAmount': 'Маблағи комиссия: 0–100000 TJS',
+    'partners.col.commission.prompt': 'Маблағи комиссия (TJS)',
     'partners.add.err.duplicate': 'Шарик бо ин email аллакай мавҷуд аст',
     'partners.share.title': 'Пайванди шарик',
     'partners.share.copy': 'Нусхабардорӣ',
@@ -2672,6 +2696,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.detail.attribution.type.hint': 'Ишораи email',
     'partners.detail.empty.attributions': 'Ҳанӯз касеро ҷалб накардааст',
     'partners.detail.empty.clicks': 'Ҳанӯз клик нест',
+    // PartnerDetail sub-header: renders "Меъёр: 500 TJS / мизоҷ".
+    'partners.detail.rate.label': 'Меъёр',
+    'partners.detail.rate.perClient': '/ мизоҷ',
 
     // ===== massmail =====
     'massmail.field.name': 'Номи маъракаи',

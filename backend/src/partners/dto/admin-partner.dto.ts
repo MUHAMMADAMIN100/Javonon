@@ -56,9 +56,22 @@ export class AdminPartnerCreateDto {
   @MaxLength(128)
   password?: string;
 
+  // LEGACY: принимается для обратной совместимости старых клиентов,
+  // но server-side игнорируется — расчёт перешёл на flat-rate
+  // (см. commissionAmountTjs ниже).
   @IsOptional()
   @IsInt({ message: 'commissionPct должен быть целым числом' })
   @Min(0)
   @Max(100)
   commissionPct?: number;
+
+  // Variant A flat-rate: фиксированная сумма в TJS (не в копейках), которую
+  // партнёр получает за КАЖДЫЙ успешный платёж клиента. 0 разрешён —
+  // партнёр остаётся ACTIVE, но временно ничего не получает.
+  // Сервис умножит на 100 при записи в commissionAmountCents.
+  @IsOptional()
+  @IsInt({ message: 'commissionAmountTjs должен быть целым числом' })
+  @Min(0)
+  @Max(100000)
+  commissionAmountTjs?: number;
 }
