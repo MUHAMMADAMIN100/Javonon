@@ -700,7 +700,8 @@ function BucketItemRow({
           title={t('common.delete')}
           style={{ padding: '2px 8px', fontSize: 11, whiteSpace: 'nowrap' }}
         >
-          {t('common.delete')}
+          <span className="revenue-item-delete-text">{t('common.delete')}</span>
+          <span className="revenue-item-delete-icon" aria-hidden="true">×</span>
         </button>
       </div>
     </div>

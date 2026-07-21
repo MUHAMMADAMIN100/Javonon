@@ -4682,11 +4682,18 @@ input[type="checkbox"].crm-checkbox:checked {
  * ============================================================
  * На узких экранах (<=480px) в строке статьи фиксированного фонда
  * не помещаются одновременно название + сумма + TJS + кнопка «Удалить»,
- * из-за чего название обрезалось до «Академ...», «Сертиф...» и т.д.
- * Решение: уменьшаем шрифты, ужимаем сумму, кнопка «Удалить» становится
- * компактной. Плюс сама строка уже настроена на flex-wrap — контролы
- * автоматически уходят на следующую строку под длинным именем.
+ * из-за чего название обрезалось и кнопка вываливалась за карточку.
+ *
+ * Решение:
+ *  - имя переносится на отдельную строку (flex 1 1 100%) с крупным
+ *    шрифтом 12/11 px — читается полностью «Академия (6 месяцев)»,
+ *    «Сертификат IELTS», «Подача документов».
+ *  - контролы (сумма + TJS + delete) уходят на нижнюю строку.
+ *  - на ≤480 кнопка «Удалить» превращается в «×» — экономит ~50 px.
+ *  - на ≤380 бэйдж TJS скрыт (валюта в контексте очевидна).
+ * По умолчанию (desktop) — обычная одна строка как раньше.
  */
+.revenue-item-delete-icon { display: none; }
 @media (max-width: 480px) {
   .revenue-item-row {
     gap: 6px !important;
@@ -4695,6 +4702,7 @@ input[type="checkbox"].crm-checkbox:checked {
   .revenue-item-name {
     flex: 1 1 100% !important;
     font-size: 12px !important;
+    padding: 3px 6px !important;
   }
   .revenue-item-amount {
     width: 78px !important;
@@ -4707,14 +4715,28 @@ input[type="checkbox"].crm-checkbox:checked {
   .revenue-item-delete {
     padding: 2px 6px !important;
     font-size: 10px !important;
+    min-width: 28px !important;
+  }
+  /* Иконка вместо «Удалить» — освобождаем ~50 px, кнопка перестаёт вываливаться. */
+  .revenue-item-delete-text { display: none; }
+  .revenue-item-delete-icon {
+    display: inline-block;
+    font-size: 16px;
+    line-height: 1;
+    font-weight: 600;
   }
 }
 @media (max-width: 380px) {
+  .revenue-item-name {
+    font-size: 11px !important;
+  }
   .revenue-item-amount {
     width: 68px !important;
+    font-size: 10px !important;
   }
+  /* На совсем узких прячем TJS — валюта в контексте фонда очевидна. */
+  .revenue-item-currency { display: none !important; }
   .revenue-item-delete {
     padding: 2px 5px !important;
-    font-size: 10px !important;
   }
 }
