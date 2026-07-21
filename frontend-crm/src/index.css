@@ -4676,3 +4676,45 @@ input[type="checkbox"].crm-checkbox:checked {
     max-width: calc(100vw - 32px);
   }
 }
+
+/* ============================================================
+ * RevenueSchemeEditor — mobile adapt
+ * ============================================================
+ * На узких экранах (<=480px) в строке статьи фиксированного фонда
+ * не помещаются одновременно название + сумма + TJS + кнопка «Удалить»,
+ * из-за чего название обрезалось до «Академ...», «Сертиф...» и т.д.
+ * Решение: уменьшаем шрифты, ужимаем сумму, кнопка «Удалить» становится
+ * компактной. Плюс сама строка уже настроена на flex-wrap — контролы
+ * автоматически уходят на следующую строку под длинным именем.
+ */
+@media (max-width: 480px) {
+  .revenue-item-row {
+    gap: 6px !important;
+    padding: 6px 6px !important;
+  }
+  .revenue-item-name {
+    flex: 1 1 100% !important;
+    font-size: 12px !important;
+  }
+  .revenue-item-amount {
+    width: 78px !important;
+    font-size: 11px !important;
+    padding: 3px 5px !important;
+  }
+  .revenue-item-currency {
+    font-size: 9px !important;
+  }
+  .revenue-item-delete {
+    padding: 2px 6px !important;
+    font-size: 10px !important;
+  }
+}
+@media (max-width: 380px) {
+  .revenue-item-amount {
+    width: 68px !important;
+  }
+  .revenue-item-delete {
+    padding: 2px 5px !important;
+    font-size: 10px !important;
+  }
+}

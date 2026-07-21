@@ -630,6 +630,7 @@ function BucketItemRow({
 
   return (
     <div
+      className="revenue-item-row"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -637,15 +638,18 @@ function BucketItemRow({
         padding: '6px 8px',
         background: 'var(--bg-soft)',
         borderRadius: 6,
+        flexWrap: 'wrap',
       }}
     >
       <input
         ref={nameInputRef}
+        className="revenue-item-name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         onBlur={commitName}
         style={{
-          flex: '1 1 160px',
+          flex: '1 1 140px',
+          minWidth: 0,
           padding: '4px 8px',
           border: '1px solid transparent',
           borderRadius: 4,
@@ -653,45 +657,52 @@ function BucketItemRow({
           fontSize: 13,
         }}
       />
-      {parentKind === 'FIXED_SUM' && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <input
-            ref={amountInputRef}
-            type="number"
-            min={0}
-            step={100}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            onBlur={commitAmount}
-            style={{
-              width: 110,
-              padding: '4px 8px',
-              border: '1px solid var(--border)',
-              borderRadius: 4,
-              fontFamily: 'var(--font-mono, monospace)',
-              textAlign: 'right',
-              fontSize: 13,
-            }}
-          />
-          <span
-            style={{
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: 10,
-              color: 'var(--text-soft)',
-              textTransform: 'uppercase',
-            }}
-          >
-            TJS
-          </span>
-        </div>
-      )}
-      <button
-        className="btn btn-sm btn-danger"
-        onClick={handleDelete}
-        style={{ padding: '2px 8px', fontSize: 11 }}
-      >
-        {t('common.delete')}
-      </button>
+      <div className="revenue-item-controls" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+        {parentKind === 'FIXED_SUM' && (
+          <>
+            <input
+              ref={amountInputRef}
+              className="revenue-item-amount"
+              type="number"
+              min={0}
+              step={100}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              onBlur={commitAmount}
+              style={{
+                width: 90,
+                minWidth: 60,
+                padding: '4px 6px',
+                border: '1px solid var(--border)',
+                borderRadius: 4,
+                fontFamily: 'var(--font-mono, monospace)',
+                textAlign: 'right',
+                fontSize: 12,
+              }}
+            />
+            <span
+              className="revenue-item-currency"
+              style={{
+                fontFamily: 'var(--font-mono, monospace)',
+                fontSize: 10,
+                color: 'var(--text-soft)',
+                textTransform: 'uppercase',
+              }}
+            >
+              TJS
+            </span>
+          </>
+        )}
+        <button
+          className="btn btn-sm btn-danger revenue-item-delete"
+          onClick={handleDelete}
+          aria-label={t('common.delete')}
+          title={t('common.delete')}
+          style={{ padding: '2px 8px', fontSize: 11, whiteSpace: 'nowrap' }}
+        >
+          {t('common.delete')}
+        </button>
+      </div>
     </div>
   );
 }
