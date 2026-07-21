@@ -56,6 +56,7 @@ import { TelephonyModule } from './integrations/telephony/telephony.module';
 import { MassmailModule } from './integrations/massmail/massmail.module';
 import { InboxModule } from './integrations/inbox/inbox.module';
 import { SmsIntegrationModule } from './integrations/sms/sms-integration.module';
+import { RevenueSchemeModule } from './revenue-scheme/revenue-scheme.module';
 
 @Module({
   imports: [
@@ -138,6 +139,7 @@ import { SmsIntegrationModule } from './integrations/sms/sms-integration.module'
     MassmailModule,
     InboxModule,
     SmsIntegrationModule,
+    RevenueSchemeModule,
   ],
   controllers: [HealthController],
   providers: [

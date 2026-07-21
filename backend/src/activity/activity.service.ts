@@ -34,7 +34,22 @@ export type ActivityAction =
   //     оригинальный INCOME помечен reversedAt + создан парный EXPENSE
   //     (OTHER_EXPENSE) как корректирующая запись.
   | 'PAYMENT_APPROVED'
-  | 'PAYMENT_REFUND';
+  | 'PAYMENT_REFUND'
+  // Revenue-scheme audit trail: до этих action'ов POST /admin/revenue-scheme/*
+  // (включая reset, который сносит весь Фонд оплаты труда с именованными
+  // зарплатами) не оставлял ни строки в ActivityLog. Если бы FOUNDER-токен
+  // утёк или сам FOUNDER случайно нажал Reset — /activity показывал бы
+  // пустоту, а восстанавливать пришлось бы из Postgres WAL. Схема
+  // распределения дороже одной Transaction: она драйвит distribution() и
+  // раскладку ФОТ, поэтому логируем каждую мутацию с before-payload для
+  // UPDATE/DELETE/RESET, чтобы ревьюер видел, какое значение стояло до.
+  | 'REVENUE_SCHEME_RESET'
+  | 'REVENUE_BUCKET_CREATE'
+  | 'REVENUE_BUCKET_UPDATE'
+  | 'REVENUE_BUCKET_DELETE'
+  | 'REVENUE_ITEM_CREATE'
+  | 'REVENUE_ITEM_UPDATE'
+  | 'REVENUE_ITEM_DELETE';
 
 @Injectable()
 export class ActivityService {

@@ -814,33 +814,10 @@ export default function Finance() {
         )}
       </AnimatePresence>
 
-      {/* Распределение 70/20/10 + Топ менеджеров */}
+      {/* Распределение по активной FOUNDER-редактируемой схеме + Топ менеджеров */}
       {distribution && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 32 }}>
-          <div className="card" style={{ padding: 24 }}>
-            <div style={{
-              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
-              color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
-              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-            }}>
-              <span>DISTRIBUTION · 70/20/10</span>
-              <CurrencyBadge currency={distribution.currency ?? 'TJS'} />
-            </div>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
-              {t('finance.dist.title')}
-            </h3>
-            <div style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12 }}>
-              <b style={{ color: distribution.net >= 0 ? '#15803d' : '#b91c1c' }}>
-                {distribution.net.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
-              </b>
-            </div>
-            {/* Валютная активность за тот же период (не входит в 70/20/10 —
-                backend распределяет только TJS-net-profit). */}
-            <NonTjsStrip totals={distribution.nonTjsTotals} />
-            <DistRow label={t('finance.dist.business')} pct={70} amount={distribution.distribution.business} color="#3b82f6" />
-            <DistRow label={t('finance.dist.debts')} pct={20} amount={distribution.distribution.debts} color="#f59e0b" />
-            <DistRow label={t('finance.dist.reserve')} pct={10} amount={distribution.distribution.reserve} color="#10b981" />
-          </div>
+          <RevenueDistributionCard breakdown={distribution} />
 
           <div className="card" style={{ padding: 24 }}>
             {/* Currency-бэйдж на eyebrow: раньше пользователь видел
@@ -2428,19 +2405,187 @@ function PieCard({
   );
 }
 
-function DistRow({ label, pct, amount, color }: { label: string; pct: number; amount: number; color: string }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <span style={{ fontSize: 13 }}>
-          <b style={{ color }}>{pct}%</b> · {label}
-        </span>
-        <span style={{ fontWeight: 600, fontSize: 14 }}>
-          {amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
-        </span>
+/**
+ * Карточка распределения выручки по активной FOUNDER-редактируемой схеме.
+ *
+ * Backend GET /finance/distribution возвращает `scheme.buckets` с
+ * рассчитанным `allocated` на каждый фонд (PERCENTAGE: `incomeTotal *
+ * percent / 100`; FIXED_SUM: `sum(items.amount)`). UI:
+ *   • строка на фонд: цвет-акцент (bucket.color), заголовок (%N · Name для
+ *     PERCENTAGE, «Name» для FIXED_SUM), сумма и прогресс-бар в долях от
+ *     `incomeTotal` (даёт визуальную интуицию, сколько «съел» фонд);
+ *   • для FIXED_SUM бакетов доступен раскрывающийся список статей (клик по
+ *     заголовку) — показывает name + amount, чтобы FOUNDER видел «на кого
+ *     ушёл ФОТ» без похода в Настройки;
+ *   • внизу — «Прибыль после распределения» (`netAfterDistribution`),
+ *     зелёная при > 0, красная при < 0. Отрицательный net = фонды
+ *     перерасходовали выручку → сигнал пересобрать схему.
+ */
+function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/finance').FinanceDistribution }) {
+  const { t } = useT();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Backend возвращает `scheme: null`, если активная FOUNDER-редактируемая
+  // схема ещё не сконфигурирована (или RevenueSchemeService не инжектирован
+  // на этом деплое). В этом случае buckets/name читать неоткуда — рендерим
+  // «пустой» плейсхолдер той же формы, чтобы FOUNDER увидел место карточки
+  // и понял, куда идти настраивать. Раньше это падало в TypeError и клало
+  // всю страницу Finance.
+  const scheme = breakdown.scheme;
+  const buckets = useMemo(
+    () => (scheme ? [...scheme.buckets].sort((a, b) => a.order - b.order) : []),
+    [scheme],
+  );
+  if (!scheme) {
+    return (
+      <div className="card" style={{ padding: 24 }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+          color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        }}>
+          <span>DISTRIBUTION · SCHEME</span>
+          <CurrencyBadge currency={breakdown.currency ?? 'TJS'} />
+        </div>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 8 }}>
+          {t('finance.dist.title')}
+        </h3>
+        <div style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12 }}>
+          Схема не настроена — Настройки → Схема распределения
+        </div>
+        <NonTjsStrip totals={breakdown.nonTjsTotals} />
       </div>
-      <div style={{ height: 8, background: 'var(--bg-soft)', borderRadius: 4, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${pct}%`, background: color }} />
+    );
+  }
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const denom = Math.max(1, breakdown.incomeTotal); // защита от /0
+
+  return (
+    <div className="card" style={{ padding: 24 }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+        color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+      }}>
+        <span>DISTRIBUTION · SCHEME</span>
+        <CurrencyBadge currency={breakdown.currency ?? 'TJS'} />
+      </div>
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 8 }}>
+        {scheme.name || t('finance.dist.title')}
+      </h3>
+      <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 16 }}>
+        {t('finance.dist.title')} · {breakdown.incomeTotal.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} {breakdown.currency}
+      </div>
+
+      {/* Валютная активность за тот же период (не входит в распределение —
+          backend распределяет только TJS-выручку). */}
+      <NonTjsStrip totals={breakdown.nonTjsTotals} />
+
+      {buckets.map((b) => {
+        const color = b.color && b.color !== '#ffffff' ? b.color : '#94a3b8';
+        const pctOfIncome = Math.min(100, (b.allocated / denom) * 100);
+        const kindLabel =
+          b.kind === 'PERCENTAGE'
+            ? t('finance.distribution.fund.percentage')
+            : t('finance.distribution.fund.fixed');
+        const headline =
+          b.kind === 'PERCENTAGE'
+            ? `${b.percent ?? 0}% · ${b.name}`
+            : b.name;
+        const isFixed = b.kind === 'FIXED_SUM';
+        const isOpen = expanded.has(b.id);
+
+        return (
+          <div key={b.id} style={{ marginBottom: 14 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                marginBottom: 4,
+                cursor: isFixed && b.items.length > 0 ? 'pointer' : 'default',
+              }}
+              onClick={() => {
+                if (isFixed && b.items.length > 0) toggleExpand(b.id);
+              }}
+            >
+              <span style={{ fontSize: 13 }}>
+                <b style={{ color }}>{headline}</b>
+                <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11 }}>
+                  · {kindLabel}
+                </span>
+                {isFixed && b.items.length > 0 && (
+                  <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11 }}>
+                    · {b.items.length} {isOpen ? '▾' : '▸'}
+                  </span>
+                )}
+              </span>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>
+                {b.allocated.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div style={{ height: 8, background: 'var(--bg-soft)', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pctOfIncome}%`, background: color }} />
+            </div>
+            {isFixed && isOpen && b.items.length > 0 && (
+              <div style={{
+                marginTop: 6, paddingLeft: 12,
+                borderLeft: `2px solid ${color}`,
+                display: 'flex', flexDirection: 'column', gap: 2,
+              }}>
+                {b.items.map((it) => (
+                  <div
+                    key={it.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: 12,
+                      color: 'var(--text-soft)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    <span>{it.name}{it.user ? ` · ${it.user.fullName}` : ''}</span>
+                    <span>{it.amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Net after distribution */}
+      <div
+        style={{
+          marginTop: 16,
+          paddingTop: 12,
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 500 }}>
+          {t('finance.distribution.netAfter')}
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 16,
+            fontWeight: 700,
+            color: breakdown.netAfterDistribution >= 0 ? '#15803d' : '#b91c1c',
+          }}
+        >
+          {breakdown.netAfterDistribution.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} {breakdown.currency}
+        </span>
       </div>
     </div>
   );

@@ -204,6 +204,10 @@ model User {
   workSchedules            WorkSchedule[]
   submissions              SaleSubmission[]    @relation("SubmissionManager")
   submissionPaymentReviews SubmissionPayment[] @relation("SubmissionPaymentReviewer")
+  // Позиции внутри buckets схемы распределения выручки. При удалении
+  // сотрудника ссылка обнуляется (SetNull) — «место» в схеме остаётся,
+  // FOUNDER решает, кого туда поставить.
+  revenueBucketItems       RevenueBucketItem[] @relation("RevenueBucketItemUser")
 }
 
 // ============================================================
@@ -1763,4 +1767,71 @@ model ThrottleHit {
 
   @@index([expiresAt])
   @@index([blockedUntil])
+}
+
+// ============================================================
+// REVENUE SCHEME — FOUNDER-редактируемая схема распределения выручки.
+// ============================================================
+// FOUNDER настраивает через /admin/revenue-scheme, что делать с приходящими
+// деньгами: % на благотворительность / налоги / отделы, ФОТ фиксированными
+// суммами, себестоимость услуги и т.д. Один RevenueScheme (isActive=true)
+// на систему; при первом запуске сервис сеет дефолтную схему из image
+// (см. RevenueSchemeService.onModuleInit — идемпотентно по count > 0).
+//
+// Кнопка «Reset» на UI сначала стирает buckets/items текущей схемы, а
+// затем пересеевает дефолт из того же кода — ровно тот же путь, что и
+// initial seed.
+enum RevenueBucketKind {
+  PERCENTAGE
+  FIXED_SUM
+}
+
+model RevenueScheme {
+  id        String          @id @default(uuid())
+  name      String          @default("Основная схема")
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  buckets   RevenueBucket[]
+
+  @@index([isActive])
+}
+
+model RevenueBucket {
+  id       String              @id @default(uuid())
+  schemeId String
+  scheme   RevenueScheme       @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  kind     RevenueBucketKind
+  name     String
+  color    String?
+  // 0..100 для kind=PERCENTAGE; NULL для FIXED_SUM. Валидация на уровне
+  // сервиса (Prisma не умеет условные check-constraints без raw SQL).
+  percent  Int?
+  order    Int                 @default(0)
+  items    RevenueBucketItem[]
+
+  // Уникальный слот в рамках схемы: (schemeId, order) — защищает от
+  // гонки в createBucket/reorder (два параллельных POST'а не смогут
+  // сесть на один и тот же order). Уникальный индекс сам по себе
+  // работает и как обычный [schemeId, order]-index для сортировки.
+  @@unique([schemeId, order])
+}
+
+model RevenueBucketItem {
+  id          String        @id @default(uuid())
+  bucketId    String
+  bucket      RevenueBucket @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+  name        String
+  // Required для FIXED_SUM (валидатор в сервисе); nullable для PERCENTAGE
+  // (там item — просто под-лейбл вроде «Таргет», «Съёмка Reels»).
+  amountCents Int?
+  order       Int           @default(0)
+  // Опциональная привязка к сотруднику (для ФОТ). При удалении User
+  // ссылка обнуляется, item остаётся — FOUNDER переназначит.
+  userId      String?
+  user        User?         @relation("RevenueBucketItemUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  // Уникальный слот в рамках bucket'а (см. коммент в RevenueBucket).
+  @@unique([bucketId, order])
+  @@index([userId])
 }

@@ -23,6 +23,7 @@ import {
 } from '@prisma/client';
 import { MANAGER_ROLES, hasRole } from '../auth/role-utils';
 import { tjLocalDay, tjYMD } from '../common/tj-time';
+import { RevenueSchemeService } from '../revenue-scheme/revenue-scheme.service';
 
 /**
  * Actor context for create(): id + флаг elevated. Elevated (FOUNDER/ADMIN/
@@ -236,6 +237,11 @@ export class FinanceService {
     // без этого «проигравший» менеджер узнаёт о потере бонуса только по
     // квитку зарплаты). Тот же pattern (notifyAllStaff) в applications.
     @Optional() private notifications?: NotificationsService,
+    // RevenueSchemeService — источник активной схемы распределения для
+    // distribution(). Инжектим необязательно только чтобы старые unit-тесты
+    // FinanceService (создающиеся без RevenueSchemeModule) не падали при
+    // построении инстанса; в проде модуль всегда есть — см. FinanceModule.
+    @Optional() private revenueScheme?: RevenueSchemeService,
   ) {}
 
   /**
@@ -1166,48 +1172,121 @@ export class FinanceService {
   }
 
   /**
-   * Модель распределения 70/20/10:
-   *  70% — бизнес-расходы (зарплаты + аренда + операционные)
-   *  20% — долги/аутсорс (выплаты подрядчикам, посредникам)
-   *  10% — резерв
+   * FOUNDER-editable распределение выручки. Читает активный
+   * RevenueScheme (см. revenue-scheme.service) и раскладывает
+   * incomeTotal за период по его buckets:
+   *   - PERCENTAGE: allocated = incomeTotal × percent / 100
+   *   - FIXED_SUM: allocated = сумма amountCents по items / 100
    *
-   * Берём ЧИСТУЮ ПРИБЫЛЬ за период (доход − расход), и показываем как
-   * она должна быть распределена. Реальное распределение делает админ
-   * вручную через создание EXPENSE-транзакций.
+   * Legacy 70/20/10 логика удалена — единственный потребитель
+   * (Finance.tsx) переходит на новый формат в этой же итерации.
+   *
+   * incomeTotal берём в основной валюте отчётности (TJS). Не-TJS
+   * активности возвращаем в `nonTjsTotals` — бухгалтер видит, что
+   * валютные транзакции были, и обрабатывает их отдельно (пока нет
+   * FX-конвертации на write-time).
    */
   async distribution(opts: { from?: Date; to?: Date }) {
     this.validateRange(opts);
+    // Fix (audit — CANCELLED sales leak): base `where` теперь несёт
+    // `reversedAt: null`, как liveWhere в breakdown() и liveIncomeWhere в
+    // topManagers(). Иначе soft-deleted INCOME-строки от CANCELLED
+    // SaleSubmission продолжают формировать incomeTotal, а зеркальный
+    // компенсирующий EXPENSE distribution() всё равно не читает — каждый
+    // PERCENTAGE-бакет переоценивался на (возвраты × percent / 100), а
+    // netAfterDistribution уезжал. То же и для nonTjsTotals: reversed
+    // USD/EUR-строки исключаются вместе с базовым фильтром.
     const where = {
       ...(opts.from || opts.to
         ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
         : {}),
+      reversedAt: null,
     };
-    // Fix (audit — currency mixing): фильтруем по TJS. Раньше USD/EUR
-    // складывались с TJS как безразмерное число, и рекомендация «70%
-    // бизнес» рассчитывалась от смешанной суммы. Не-TJS активности
-    // возвращаем в `nonTjsTotals` — бухгалтер её видит и обрабатывает
-    // отдельно (пока нет FX-конвертации на write-time).
-    const [grouped, nonTjs] = await Promise.all([
+    const [grouped, nonTjs, scheme] = await Promise.all([
       this.prisma.transaction.groupBy({
         by: ['type'],
         where: { ...where, currency: REPORTING_CURRENCY },
         _sum: { amount: true },
       }),
       this.nonTjsTotals(where),
+      this.revenueScheme?.getActive(),
     ]);
-    const income = grouped.find((g) => g.type === 'INCOME')?._sum.amount || 0;
-    const expense = grouped.find((g) => g.type === 'EXPENSE')?._sum.amount || 0;
-    const net = income - expense;
-    const positive = Math.max(0, net);
+    const incomeTotal = grouped.find((g) => g.type === 'INCOME')?._sum.amount || 0;
+
+    // Прежде чем что-то делить — если по какой-то причине активной
+    // схемы нет (RevenueSchemeService не заинжекчен / БД пустая до
+    // прогонки миграции), возвращаем консистентный «пустой» ответ,
+    // чтобы фронт не падал на scheme.buckets.map. onModuleInit
+    // засеедит дефолт на следующем рестарте.
+    if (!scheme) {
+      return {
+        incomeTotal,
+        scheme: null,
+        totalPercentageAllocated: 0,
+        totalFixedAllocated: 0,
+        netAfterDistribution: incomeTotal,
+        currency: REPORTING_CURRENCY,
+        nonTjsTotals: nonTjs,
+      };
+    }
+
+    let totalPercentageAllocated = 0;
+    let totalFixedAllocated = 0;
+    const buckets = scheme.buckets.map((b) => {
+      // items — оставляем позиции в исходном order (уже отсортированы
+      // в getActive), но amountCents конвертируем в sum-of-currency,
+      // чтобы фронт не делил снова на 100.
+      const items = b.items.map((it) => ({
+        id: it.id,
+        name: it.name,
+        amount: it.amountCents !== null && it.amountCents !== undefined
+          ? Math.round(it.amountCents) / 100
+          : null,
+        userId: it.userId,
+        user: it.user ? { id: it.user.id, fullName: it.user.fullName } : null,
+      }));
+      let allocated = 0;
+      if (b.kind === 'PERCENTAGE') {
+        const pct = b.percent ?? 0;
+        allocated = Math.round(incomeTotal * pct) / 100;
+        totalPercentageAllocated += allocated;
+      } else {
+        // FIXED_SUM — суммируем amountCents всех items. null-суммы
+        // (item без суммы в FIXED_SUM — валидатор запрещает, но на
+        // случай legacy строк защищаемся) игнорируем.
+        const cents = b.items.reduce(
+          (acc, it) => acc + (typeof it.amountCents === 'number' ? it.amountCents : 0),
+          0,
+        );
+        allocated = Math.round(cents) / 100;
+        totalFixedAllocated += allocated;
+      }
+      return {
+        id: b.id,
+        name: b.name,
+        kind: b.kind,
+        color: b.color,
+        percent: b.percent,
+        order: b.order,
+        allocated,
+        items,
+      };
+    });
+
+    const netAfterDistribution =
+      Math.round((incomeTotal - totalPercentageAllocated - totalFixedAllocated) * 100) / 100;
+
     return {
-      income,
-      expense,
-      net,
-      distribution: {
-        business: Math.round(positive * 0.7 * 100) / 100,
-        debts: Math.round(positive * 0.2 * 100) / 100,
-        reserve: Math.round(positive * 0.1 * 100) / 100,
+      incomeTotal,
+      scheme: {
+        id: scheme.id,
+        name: scheme.name,
+        updatedAt: scheme.updatedAt,
+        buckets,
       },
+      totalPercentageAllocated: Math.round(totalPercentageAllocated * 100) / 100,
+      totalFixedAllocated: Math.round(totalFixedAllocated * 100) / 100,
+      netAfterDistribution,
       currency: REPORTING_CURRENCY,
       nonTjsTotals: nonTjs,
     };

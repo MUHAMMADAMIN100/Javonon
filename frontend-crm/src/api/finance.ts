@@ -225,11 +225,52 @@ export interface TimeseriesPoint {
 export const financeTimeseries = (params?: { from?: string; to?: string; bucket?: 'day' | 'week' | 'month' }) =>
   api.get<TimeseriesPoint[]>('/finance/timeseries', { params }).then((r) => r.data);
 
+/**
+ * Ответ /finance/distribution — распределение выручки периода по активной
+ * FOUNDER-редактируемой схеме (`RevenueScheme`). Backend больше не считает
+ * жёстко зашитые 70/20/10 — теперь берёт активную схему и для каждого
+ * фонда возвращает `allocated`:
+ *   • PERCENTAGE: `incomeTotal * percent / 100`
+ *   • FIXED_SUM:  `sum(items.amount)`
+ * `netAfterDistribution = incomeTotal - (totalPercentageAllocated +
+ * totalFixedAllocated)` — может быть отрицательным, если фиксированные
+ * фонды или суммы процентов превысили выручку периода.
+ */
+export interface DistributionBucketItem {
+  id: string;
+  name: string;
+  amount: number;
+  userId?: string | null;
+  user?: { id: string; fullName: string } | null;
+}
+export interface DistributionBucket {
+  id: string;
+  name: string;
+  kind: 'PERCENTAGE' | 'FIXED_SUM';
+  color: string | null;
+  percent: number | null;
+  order: number;
+  allocated: number;
+  items: DistributionBucketItem[];
+}
+export interface DistributionScheme {
+  id: string;
+  name: string;
+  updatedAt: string;
+  buckets: DistributionBucket[];
+}
 export interface FinanceDistribution {
-  income: number;
-  expense: number;
-  net: number;
-  distribution: { business: number; debts: number; reserve: number };
+  incomeTotal: number;
+  /**
+   * `null`, если активная FOUNDER-редактируемая схема не сконфигурирована
+   * (или RevenueSchemeService не инжектирован — deploy без миграции). UI
+   * ОБЯЗАН обработать этот случай явным «Схема не настроена» плейсхолдером,
+   * иначе рендер `scheme.buckets` уронит страницу целиком.
+   */
+  scheme: DistributionScheme | null;
+  totalPercentageAllocated: number;
+  totalFixedAllocated: number;
+  netAfterDistribution: number;
   /** Валюта, в которой посчитано распределение (обычно `TJS`). */
   currency: string;
   /** Отброшенные из основного агрегата суммы в иных валютах. */

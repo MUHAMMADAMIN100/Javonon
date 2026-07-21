@@ -5,6 +5,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { ActivityModule } from '../activity/activity.module';
+import { RevenueSchemeModule } from '../revenue-scheme/revenue-scheme.module';
 
 @Module({
   // NotificationsModule нужен FinanceController для алерта админам:
@@ -28,7 +29,15 @@ import { ActivityModule } from '../activity/activity.module';
   // полной загрузки AppModule. Без этой записи FOUNDER не мог ответить
   // «кто создал/поменял/удалил транзакцию X, когда» — только грепом
   // по логам контейнера. См. finance.service.ts create/update/remove.
-  imports: [PrismaModule, NotificationsModule, RealtimeModule, ActivityModule],
+  imports: [
+    PrismaModule,
+    NotificationsModule,
+    RealtimeModule,
+    ActivityModule,
+    // RevenueSchemeModule нужен FinanceService.distribution() — читает
+    // активную FOUNDER-editable схему и раскладывает доход по её buckets.
+    RevenueSchemeModule,
+  ],
   controllers: [FinanceController],
   providers: [FinanceService],
   exports: [FinanceService],

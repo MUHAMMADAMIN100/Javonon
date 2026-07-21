@@ -32,11 +32,14 @@ import {
   deleteCustomRole,
 } from '../api/customRoles';
 import ScheduleEditor from '../components/ScheduleEditor';
+import RevenueSchemeEditor from '../components/RevenueSchemeEditor';
+import RevenueSchemeMindMap from '../components/RevenueSchemeMindMap';
+import { getRevenueScheme } from '../api/revenue-scheme';
 import { useT } from '../lib/i18n';
 import { useRealtime } from '../realtime';
 import { me as apiMe } from '../api/auth';
 
-type Tab = 'schedule' | 'penalties' | 'location' | 'roles' | 'salary';
+type Tab = 'schedule' | 'penalties' | 'location' | 'roles' | 'salary' | 'revenueScheme';
 
 export default function Settings() {
   const me = useAuth((s) => s.user);
@@ -73,6 +76,7 @@ export default function Settings() {
           <TabButton active={tab === 'location'} onClick={() => setTab('location')} label={t('settings.tab.location')} />
           <TabButton active={tab === 'roles'} onClick={() => setTab('roles')} label={t('settings.tab.roles')} />
           <TabButton active={tab === 'salary'} onClick={() => setTab('salary')} label={t('settings.tab.salary')} />
+          <TabButton active={tab === 'revenueScheme'} onClick={() => setTab('revenueScheme')} label={t('settings.tabs.revenueScheme')} />
         </div>
         <div style={{ padding: 24 }}>
           {tab === 'schedule' && <ScheduleTab />}
@@ -80,6 +84,7 @@ export default function Settings() {
           {tab === 'location' && <LocationTab />}
           {tab === 'roles' && <RolesTab />}
           {tab === 'salary' && <SalaryTab />}
+          {tab === 'revenueScheme' && <RevenueSchemeTab />}
         </div>
       </div>
     </>
@@ -1003,6 +1008,55 @@ function BonusTiersSection() {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ===== Revenue Scheme (схема распределения дохода) =====
+
+function RevenueSchemeTab() {
+  const { t } = useT();
+  const query = useQuery({
+    queryKey: ['revenue-scheme'],
+    queryFn: () => getRevenueScheme(),
+  });
+
+  if (query.isLoading) {
+    return <div style={{ color: 'var(--text-soft)' }}>{t('common.loading')}</div>;
+  }
+
+  if (query.isError || !query.data) {
+    return (
+      <div style={{ color: 'var(--danger, #b91c1c)', fontSize: 13 }}>
+        {t('toast.error')}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+      <div>
+        <h3 style={{
+          fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12,
+        }}>
+          {t('settings.revenueScheme.title')}
+        </h3>
+        <RevenueSchemeEditor scheme={query.data} />
+      </div>
+
+      <div>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'var(--text-soft)',
+          marginBottom: 8,
+        }}>
+          MIND MAP
+        </div>
+        <RevenueSchemeMindMap scheme={query.data} />
       </div>
     </div>
   );
