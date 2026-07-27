@@ -15,15 +15,15 @@ export default function Services() {
       <div className="container">
         <div className="section-head">
           <div>
-            <span className="eyebrow">Что мы делаем</span>
+            <span className="eyebrow">Мо чӣ кор мекунем</span>
             <h2 className="display">
-              Один партнёр — от <em>сомнений</em><br />до письма о зачислении.
+              Як ҳамкор — аз <em>шубҳа</em><br />то номаи қабул.
             </h2>
           </div>
           <p>
-            Мы не просто оформляем бумаги. Мы выстраиваем твою кандидатуру —
-            подбираем подходящие гранты, прокачиваем твою историю и доводим
-            до результата.
+            Мо танҳо ҳуҷҷат намерасонем. Мо номзадии туро месозем —
+            грантҳои мувофиқро интихоб мекунем, ҳикояи туро қавӣ мегардонем
+            ва то натиҷа мебарем.
           </p>
         </div>
 
@@ -40,12 +40,12 @@ export default function Services() {
               <div className="bento-icon">
                 <Icon name="travel_explore" size={24} />
               </div>
-              <h3>Подбор грантов с хирургической точностью.</h3>
+              <h3>Интихоби грантҳо бо дақиқии ҷарроҳӣ.</h3>
             </div>
             <p>
-              Мы сопоставляем твой профиль с 60+ активными стипендиями и оставляем
-              те, где ты не просто проходишь по критериям — ты конкурентоспособен.
-              Никаких "выстрелов в воздух". Только работающие варианты.
+              Мо профили туро бо 60+ стипендияи фаъол муқоиса мекунем ва танҳо
+              онҳоеро мемонем, ки дар онҳо ту на танҳо ба меъёрҳо мувофиқӣ — балки
+              рақобатпазир ҳастӣ. Ҳеҷ «тир ба ҳаво». Танҳо вариантҳои коргар.
             </p>
             <span className="bento-num">01</span>
           </motion.div>
@@ -61,8 +61,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="edit_document" size={22} />
             </div>
-            <h3>Документы с характером</h3>
-            <p>Мотивационные письма, study plan, рекомендации — пишем вместе с тобой, а не за тебя.</p>
+            <h3>Ҳуҷҷатҳо бо характер</h3>
+            <p>Номаҳои ҳавасмандӣ, study plan, тавсияномаҳо — мо ҳамроҳи ту менависем, на ба ҷои ту.</p>
             <span className="bento-num">02</span>
           </motion.div>
 
@@ -77,8 +77,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="forum" size={22} />
             </div>
-            <h3>Mock-интервью</h3>
-            <p>Тренировочные собеседования с выпускниками, прошедшими твою комиссию.</p>
+            <h3>Mock-мусоҳиба</h3>
+            <p>Мусоҳибаҳои омӯзишӣ бо хатмкунандагоне, ки аз ҳамон комиссия гузаштаанд.</p>
             <span className="bento-num">03</span>
           </motion.div>
 
@@ -93,8 +93,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="language" size={22} />
             </div>
-            <h3>Подготовка к экзаменам</h3>
-            <p>IELTS, TOEFL, GRE, GMAT, HSK, TOPIK — целевая подготовка под университет.</p>
+            <h3>Омодагӣ ба имтиҳонҳо</h3>
+            <p>IELTS, TOEFL, GRE, GMAT, HSK, TOPIK — омодагии мақсаднок барои донишгоҳи интихобшуда.</p>
             <span className="bento-num">04</span>
           </motion.div>
 
@@ -109,8 +109,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="flight_takeoff" size={22} />
             </div>
-            <h3>Виза и переезд</h3>
-            <p>Документы в посольство, поиск жилья, встреча в аэропорту, первая неделя на месте.</p>
+            <h3>Виза ва кӯчидан</h3>
+            <p>Ҳуҷҷатҳо ба сафорат, ҷустуҷӯи манзил, пешвоз дар фурудгоҳ, ҳафтаи аввал дар ҷои нав.</p>
             <span className="bento-num">05</span>
           </motion.div>
 
@@ -125,8 +125,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="favorite" size={22} />
             </div>
-            <h3>Сообщество выпускников</h3>
-            <p>Ты не просто бывший клиент — ты часть семьи Javonon. Менторство, рекомендации, новые возможности на годы вперёд.</p>
+            <h3>Ҷомеаи хатмкунандагон</h3>
+            <p>Ту танҳо мизоҷи собиқ нестӣ — ту узви оилаи Javonon ҳастӣ. Менторӣ, тавсияҳо, имкониятҳои нав барои солҳои оянда.</p>
             <span className="bento-num">06</span>
           </motion.div>
 
@@ -141,8 +141,8 @@ export default function Services() {
             <div className="bento-icon">
               <Icon name="bolt" size={22} />
             </div>
-            <h3>Ответ за 30 минут</h3>
-            <p>Твой персональный менеджер на связи в рабочее время. Никаких очередей и тикет-систем.</p>
+            <h3>Ҷавоб дар 30 дақиқа</h3>
+            <p>Менеҷери шахсии ту дар вақти корӣ ҳамеша дар тамос. Ҳеҷ навбат ва системаи тикет.</p>
             <span className="bento-num">07</span>
           </motion.div>
         </div>

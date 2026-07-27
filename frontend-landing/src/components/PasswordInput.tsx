@@ -27,7 +27,7 @@ const PasswordInput = forwardRef<HTMLInputElement, Props>(function PasswordInput
         type="button"
         className="password-toggle"
         onClick={() => setShow((s) => !s)}
-        aria-label={show ? 'Скрыть пароль' : 'Показать пароль'}
+        aria-label={show ? 'Паролро пинҳон кардан' : 'Паролро нишон додан'}
         tabIndex={-1}
       >
         <Icon name={show ? 'visibility_off' : 'visibility'} size={20} />

@@ -18,6 +18,7 @@ import {
   type Partner,
 } from '../api/partners';
 import { useUI } from '../ui/Dialogs';
+import { buildReferralUrl } from '../lib/landingUrl';
 import { useT } from '../lib/i18n';
 import Icon from '../Icon';
 import QrCode from '../components/QrCode';
@@ -97,18 +98,20 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /**
- * Derive a referral URL for a partner whose share modal we're reopening — we
- * don't call the backend again, we reconstruct the same URL the create endpoint
- * would have returned. This mirrors the backend rule (LANDING_URL || fallback)
- * on the client, using VITE_LANDING_URL if configured.
+ * Referral link for a row of the partners list.
+ *
+ * The backend is the single source of truth: `GET /admin/partners` returns a
+ * ready `referralUrl` per partner (partners.service.adminList →
+ * buildReferralUrl), identical to what adminCreate and adminGetOne return. So
+ * the list, the partner card and the share modal can no longer disagree.
+ *
+ * lib/landingUrl.buildReferralUrl is the emergency path only — for the window
+ * where the CRM (Vercel) is deployed ahead of the backend (Railway) and the
+ * field is missing from the response. Never inline an env chain here: the
+ * live domain and the mandatory '#apply' anchor live in that one helper.
  */
-function buildReferralUrl(code: string): string {
-  const raw =
-    (import.meta as any).env?.VITE_LANDING_URL ||
-    (import.meta as any).env?.VITE_PUBLIC_LANDING_URL ||
-    'https://javonon.com';
-  const base = String(raw).replace(/\/+$/, '');
-  return `${base}/?ref=${code}`;
+function referralUrlOf(p: Partner): string {
+  return p.referralUrl || buildReferralUrl(p.referralCode);
 }
 
 function PartnersList() {
@@ -166,13 +169,12 @@ function PartnersList() {
   };
 
   const copyRow = async (p: Partner) => {
-    const url = buildReferralUrl(p.referralCode);
-    const ok = await copyToClipboard(url);
+    const ok = await copyToClipboard(referralUrlOf(p));
     toast(ok ? t('common.copied') : t('toast.error'), ok ? 'success' : 'error');
   };
 
   const openShareFor = (p: Partner) => {
-    setShareData({ referralUrl: buildReferralUrl(p.referralCode), partner: p });
+    setShareData({ referralUrl: referralUrlOf(p), partner: p });
   };
 
   const removePartner = async (p: Partner) => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { listPublicPrograms, type Program } from '../programs';
+import { toTajik } from '../programLabels';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
 const API_ROOT = API_URL.replace(/\/api$/, '');
@@ -31,13 +32,13 @@ export default function PublicProgramsSection() {
   const countries = useMemo(() => {
     const set = new Set<string>();
     for (const p of items) {
-      set.add((p as any).country || 'Другие');
+      set.add((p as any).country || 'Дигар');
     }
     return Array.from(set).sort();
   }, [items]);
 
   const filtered = activeCountry
-    ? items.filter((p) => ((p as any).country || 'Другие') === activeCountry)
+    ? items.filter((p) => ((p as any).country || 'Дигар') === activeCountry)
     : items;
 
   if (loading) return null;
@@ -57,10 +58,10 @@ export default function PublicProgramsSection() {
             marginBottom: 12,
           }}
         >
-          Программы и гранты
+          Барномаҳо ва грантҳо
         </motion.h2>
         <p style={{ textAlign: 'center', color: '#64748b', marginBottom: 32 }}>
-          {items.length} актуальных программ от партнёрских университетов
+          {items.length} барномаи фаъол аз донишгоҳҳои ҳамкор
         </p>
 
         {countries.length > 1 && (
@@ -69,13 +70,14 @@ export default function PublicProgramsSection() {
               onClick={() => setActiveCountry('')}
               style={tabStyle(activeCountry === '')}
             >
-              Все ({items.length})
+              Ҳама ({items.length})
             </button>
             {countries.map((c) => {
-              const count = items.filter((p) => ((p as any).country || 'Другие') === c).length;
+              const count = items.filter((p) => ((p as any).country || 'Дигар') === c).length;
               return (
                 <button key={c} onClick={() => setActiveCountry(c)} style={tabStyle(activeCountry === c)}>
-                  {c} ({count})
+                  {/* қимати аслии БД дар state мемонад, танҳо матн тоҷикӣ мешавад */}
+                  {toTajik(c)} ({count})
                 </button>
               );
             })}
@@ -120,12 +122,13 @@ export default function PublicProgramsSection() {
                   <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>{p.name}</div>
                   <div style={{ color: '#475569', fontSize: 14, marginBottom: 12 }}>{p.university}</div>
                   <div style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
-                    {[(p as any).country, p.city].filter(Boolean).join(', ') || ''}
+                    {/* Аудит-фикс: кишвар/шаҳр аз БД метавонанд русӣ бошанд */}
+                    {[toTajik((p as any).country), toTajik(p.city)].filter(Boolean).join(', ') || ''}
                   </div>
                   <div style={{ fontWeight: 700, fontSize: 18, color: '#1e40af', marginTop: 'auto' }}>
                     {p.cost
-                      ? `${p.cost.toLocaleString('ru-RU')} ${p.currency} / год`
-                      : 'Бесплатно / уточняется'}
+                      ? `${p.cost.toLocaleString('ru-RU')} ${p.currency} / сол`
+                      : 'Ройгон / аниқ карда мешавад'}
                   </div>
                   {(p as any).universityWebsiteUrl && (
                     <a
@@ -145,7 +148,7 @@ export default function PublicProgramsSection() {
                         fontSize: 13,
                       }}
                     >
-                      🌐 Сайт университета
+                      🌐 Сомонаи донишгоҳ
                     </a>
                   )}
                 </div>

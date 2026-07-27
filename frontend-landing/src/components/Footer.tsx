@@ -11,9 +11,9 @@ export default function Footer() {
               <img src="/javonon-logo.svg" alt="Javonon" />
             </a>
             <p>
-              Международная платформа грантов на образование — Fulbright,
-              DAAD, Chevening, GKS, MEXT, CSC, Erasmus и другие. От заявки
-              до зачисления, с реальным человеком на каждом шаге.
+              Платформаи байналмилалии грантҳои таҳсилӣ — Fulbright,
+              DAAD, Chevening, GKS, MEXT, CSC, Erasmus ва дигарон. Аз ариза
+              то қабул, бо одами воқеӣ дар ҳар қадам.
             </p>
             <div className="footer-socials">
               <a href="https://t.me/javonon" target="_blank" rel="noreferrer" aria-label="Telegram">
@@ -32,18 +32,18 @@ export default function Footer() {
           </div>
 
           <div>
-            <h4>Навигация</h4>
+            <h4>Новигатсия</h4>
             <ul>
-              <li><a href="#services">Услуги</a></li>
-              <li><a href="#countries">Страны</a></li>
-              <li><a href="#how">Как это работает</a></li>
-              <li><a href="#voices">Истории</a></li>
-              <li><a href="#apply">Подать заявку</a></li>
+              <li><a href="#services">Хидматҳо</a></li>
+              <li><a href="#countries">Кишварҳо</a></li>
+              <li><a href="#how">Чӣ тавр кор мекунад</a></li>
+              <li><a href="#voices">Ҳикояҳо</a></li>
+              <li><a href="#apply">Ариза фиристодан</a></li>
             </ul>
           </div>
 
           <div>
-            <h4>Гранты</h4>
+            <h4>Грантҳо</h4>
             <ul>
               <li><a href="#countries">🇺🇸 Fulbright</a></li>
               <li><a href="#countries">🇬🇧 Chevening</a></li>
@@ -55,19 +55,19 @@ export default function Footer() {
           </div>
 
           <div>
-            <h4>Контакты</h4>
+            <h4>Тамос</h4>
             <ul>
               <li><a href="mailto:hello@javonon.com">hello@javonon.com</a></li>
               <li><a href="https://t.me/javonon">@javonon</a></li>
               <li><a href="tel:+992900000000">+992 900 000 000</a></li>
-              <li>Душанбе, Таджикистан</li>
+              <li>Душанбе, Тоҷикистон</li>
             </ul>
           </div>
         </div>
 
         <div className="footer-bottom">
-          <div>© {year} JAVONON · МЕЖДУНАРОДНЫЕ ГРАНТЫ</div>
-          <div>СОЗДАНО ДЛЯ АМБИЦИОЗНЫХ УМОВ</div>
+          <div>© {year} JAVONON · ГРАНТҲОИ БАЙНАЛМИЛАЛӢ</div>
+          <div>БАРОИ ЗЕҲНҲОИ ҶАСУР СОХТА ШУДААСТ</div>
         </div>
       </div>
 

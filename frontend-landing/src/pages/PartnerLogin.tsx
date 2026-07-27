@@ -18,7 +18,7 @@ export default function PartnerLogin() {
       setPartnerToken(token);
       nav('/partner/cabinet', { replace: true });
     } catch (e: any) {
-      setErr(e?.response?.data?.message || 'Неверный email или пароль');
+      setErr(e?.response?.data?.message || 'Почтаи электронӣ ё парол нодуруст аст');
     } finally {
       setLoading(false);
     }
@@ -27,14 +27,14 @@ export default function PartnerLogin() {
   return (
     <div className="stu-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ maxWidth: 400, width: '100%', background: 'white', borderRadius: 20, padding: 32, boxShadow: '0 24px 48px -12px rgba(0,0,0,0.10)' }}>
-        <Link to="/" style={{ fontSize: 12, color: 'var(--ink-mute)', textDecoration: 'none' }}>← На главную</Link>
+        <Link to="/" style={{ fontSize: 12, color: 'var(--ink-mute)', textDecoration: 'none' }}>← Ба саҳифаи асосӣ</Link>
         <h1 style={{ fontFamily: 'var(--display)', fontSize: 26, fontWeight: 600, margin: '12px 0 24px' }}>
-          Вход партнёра
+          Ворид шудани ҳамкор
         </h1>
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <input
             type="email"
-            placeholder="Email"
+            placeholder="Почтаи электронӣ"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -42,7 +42,7 @@ export default function PartnerLogin() {
           />
           <input
             type="password"
-            placeholder="Пароль"
+            placeholder="Парол"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -55,11 +55,11 @@ export default function PartnerLogin() {
             className="btn btn-primary"
             style={{ padding: '14px 20px', borderRadius: 10, marginTop: 4 }}
           >
-            {loading ? 'Входим…' : 'Войти'}
+            {loading ? 'Ворид мешавем…' : 'Ворид шудан'}
           </button>
         </form>
         <p style={{ marginTop: 16, fontSize: 13, color: 'var(--ink-mute)', textAlign: 'center' }}>
-          Нет аккаунта? <Link to="/partner/register" style={{ color: 'var(--emerald-deep)' }}>Зарегистрироваться</Link>
+          Ҳисоб надоред? <Link to="/partner/register" style={{ color: 'var(--emerald-deep)' }}>Бақайдгирӣ</Link>
         </p>
       </div>
     </div>

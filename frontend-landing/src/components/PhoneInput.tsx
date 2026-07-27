@@ -11,40 +11,40 @@ export type Country = {
 // Полный список стран для подачи заявки/анкеты студента.
 // Лимит длины номера — 7..15 цифр всего (E.164), без жёсткой привязки к стране.
 export const COUNTRIES: Country[] = [
-  { cc: 'tj', code: '+992', label: 'Таджикистан', minDigits: 7, maxDigits: 15 },
-  { cc: 'ru', code: '+7',   label: 'Россия',      minDigits: 7, maxDigits: 15 },
-  { cc: 'kz', code: '+7',   label: 'Казахстан',   minDigits: 7, maxDigits: 15 },
-  { cc: 'uz', code: '+998', label: 'Узбекистан',  minDigits: 7, maxDigits: 15 },
-  { cc: 'kg', code: '+996', label: 'Кыргызстан',  minDigits: 7, maxDigits: 15 },
-  { cc: 'cn', code: '+86',  label: 'Китай',       minDigits: 7, maxDigits: 15 },
-  { cc: 'tm', code: '+993', label: 'Туркменистан',minDigits: 7, maxDigits: 15 },
-  { cc: 'af', code: '+93',  label: 'Афганистан',  minDigits: 7, maxDigits: 15 },
-  { cc: 'tr', code: '+90',  label: 'Турция',      minDigits: 7, maxDigits: 15 },
-  { cc: 'ae', code: '+971', label: 'ОАЭ',         minDigits: 7, maxDigits: 15 },
-  { cc: 'sa', code: '+966', label: 'Саудовская Аравия', minDigits: 7, maxDigits: 15 },
-  { cc: 'ir', code: '+98',  label: 'Иран',        minDigits: 7, maxDigits: 15 },
-  { cc: 'in', code: '+91',  label: 'Индия',       minDigits: 7, maxDigits: 15 },
-  { cc: 'pk', code: '+92',  label: 'Пакистан',    minDigits: 7, maxDigits: 15 },
+  { cc: 'tj', code: '+992', label: 'Тоҷикистон',  minDigits: 7, maxDigits: 15 },
+  { cc: 'ru', code: '+7',   label: 'Русия',       minDigits: 7, maxDigits: 15 },
+  { cc: 'kz', code: '+7',   label: 'Қазоқистон',  minDigits: 7, maxDigits: 15 },
+  { cc: 'uz', code: '+998', label: 'Ӯзбекистон',  minDigits: 7, maxDigits: 15 },
+  { cc: 'kg', code: '+996', label: 'Қирғизистон', minDigits: 7, maxDigits: 15 },
+  { cc: 'cn', code: '+86',  label: 'Хитой',       minDigits: 7, maxDigits: 15 },
+  { cc: 'tm', code: '+993', label: 'Туркманистон',minDigits: 7, maxDigits: 15 },
+  { cc: 'af', code: '+93',  label: 'Афғонистон',  minDigits: 7, maxDigits: 15 },
+  { cc: 'tr', code: '+90',  label: 'Туркия',      minDigits: 7, maxDigits: 15 },
+  { cc: 'ae', code: '+971', label: 'Аморати Муттаҳидаи Араб', minDigits: 7, maxDigits: 15 },
+  { cc: 'sa', code: '+966', label: 'Арабистони Саудӣ', minDigits: 7, maxDigits: 15 },
+  { cc: 'ir', code: '+98',  label: 'Эрон',        minDigits: 7, maxDigits: 15 },
+  { cc: 'in', code: '+91',  label: 'Ҳиндустон',   minDigits: 7, maxDigits: 15 },
+  { cc: 'pk', code: '+92',  label: 'Покистон',    minDigits: 7, maxDigits: 15 },
   { cc: 'bd', code: '+880', label: 'Бангладеш',   minDigits: 7, maxDigits: 15 },
-  { cc: 'us', code: '+1',   label: 'США',         minDigits: 7, maxDigits: 15 },
-  { cc: 'gb', code: '+44',  label: 'Великобритания', minDigits: 7, maxDigits: 15 },
-  { cc: 'de', code: '+49',  label: 'Германия',    minDigits: 7, maxDigits: 15 },
-  { cc: 'fr', code: '+33',  label: 'Франция',     minDigits: 7, maxDigits: 15 },
+  { cc: 'us', code: '+1',   label: 'ИМА',         minDigits: 7, maxDigits: 15 },
+  { cc: 'gb', code: '+44',  label: 'Британияи Кабир', minDigits: 7, maxDigits: 15 },
+  { cc: 'de', code: '+49',  label: 'Олмон',       minDigits: 7, maxDigits: 15 },
+  { cc: 'fr', code: '+33',  label: 'Фаронса',     minDigits: 7, maxDigits: 15 },
   { cc: 'it', code: '+39',  label: 'Италия',      minDigits: 7, maxDigits: 15 },
   { cc: 'es', code: '+34',  label: 'Испания',     minDigits: 7, maxDigits: 15 },
-  { cc: 'kr', code: '+82',  label: 'Южная Корея', minDigits: 7, maxDigits: 15 },
-  { cc: 'jp', code: '+81',  label: 'Япония',      minDigits: 7, maxDigits: 15 },
+  { cc: 'kr', code: '+82',  label: 'Кореяи Ҷанубӣ', minDigits: 7, maxDigits: 15 },
+  { cc: 'jp', code: '+81',  label: 'Ҷопон',       minDigits: 7, maxDigits: 15 },
   { cc: 'th', code: '+66',  label: 'Таиланд',     minDigits: 7, maxDigits: 15 },
-  { cc: 'vn', code: '+84',  label: 'Вьетнам',     minDigits: 7, maxDigits: 15 },
+  { cc: 'vn', code: '+84',  label: 'Ветнам',      minDigits: 7, maxDigits: 15 },
   { cc: 'my', code: '+60',  label: 'Малайзия',    minDigits: 7, maxDigits: 15 },
   { cc: 'id', code: '+62',  label: 'Индонезия',   minDigits: 7, maxDigits: 15 },
-  { cc: 'mn', code: '+976', label: 'Монголия',    minDigits: 7, maxDigits: 15 },
-  { cc: 'az', code: '+994', label: 'Азербайджан', minDigits: 7, maxDigits: 15 },
-  { cc: 'am', code: '+374', label: 'Армения',     minDigits: 7, maxDigits: 15 },
-  { cc: 'ge', code: '+995', label: 'Грузия',      minDigits: 7, maxDigits: 15 },
-  { cc: 'by', code: '+375', label: 'Беларусь',    minDigits: 7, maxDigits: 15 },
+  { cc: 'mn', code: '+976', label: 'Муғулистон',  minDigits: 7, maxDigits: 15 },
+  { cc: 'az', code: '+994', label: 'Озарбойҷон',  minDigits: 7, maxDigits: 15 },
+  { cc: 'am', code: '+374', label: 'Арманистон',  minDigits: 7, maxDigits: 15 },
+  { cc: 'ge', code: '+995', label: 'Гурҷистон',   minDigits: 7, maxDigits: 15 },
+  { cc: 'by', code: '+375', label: 'Беларус',     minDigits: 7, maxDigits: 15 },
   { cc: 'ua', code: '+380', label: 'Украина',     minDigits: 7, maxDigits: 15 },
-  { cc: 'eg', code: '+20',  label: 'Египет',      minDigits: 7, maxDigits: 15 },
+  { cc: 'eg', code: '+20',  label: 'Миср',        minDigits: 7, maxDigits: 15 },
 ];
 
 const flagUrl = (cc: string, size: 20 | 40 | 80 = 40) =>
@@ -250,14 +250,14 @@ export default function PhoneInput({ value, onChange, error, placeholder }: Prop
             <input
               ref={searchRef}
               type="text"
-              placeholder="Поиск страны или кода..."
+              placeholder="Ҷустуҷӯи кишвар ё код..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <div className="phone-dropdown-list">
             {filtered.length === 0 ? (
-              <div className="phone-dropdown-empty">Не найдено</div>
+              <div className="phone-dropdown-empty">Ёфт нашуд</div>
             ) : (
               filtered.map(({ c, i }) => (
                 <button

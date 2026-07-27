@@ -9,15 +9,15 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'Javonon — международные гранты',
+        name: 'Javonon — грантҳои байналмилалӣ',
         short_name: 'Javonon',
-        description: 'Получи грант на обучение в лучших университетах мира',
+        description: 'Барои таҳсил дар беҳтарин донишгоҳҳои ҷаҳон грант ба даст ор',
         theme_color: '#01368B',
         background_color: '#ffffff',
         display: 'standalone',
         scope: '/',
         start_url: '/',
-        lang: 'ru',
+        lang: 'tg',
         icons: [
           { src: '/favicon.svg', sizes: '192x192', type: 'image/svg+xml' },
           { src: '/favicon.svg', sizes: '512x512', type: 'image/svg+xml' },

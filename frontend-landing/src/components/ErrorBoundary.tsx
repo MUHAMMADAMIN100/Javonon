@@ -51,9 +51,9 @@ export default class ErrorBoundary extends Component<Props, State> {
             }}
           >
             <div style={{ fontSize: 56, marginBottom: 8 }}>⚠️</div>
-            <h2 style={{ marginBottom: 8 }}>Что-то пошло не так</h2>
+            <h2 style={{ marginBottom: 8 }}>Чизе нодуруст рафт</h2>
             <p style={{ color: '#64748b', marginBottom: 20 }}>
-              Страница не смогла загрузиться. Попробуйте перезагрузить.
+              Саҳифа бор нашуд. Лутфан, аз нав бор кунед.
             </p>
             <button
               onClick={this.reset}
@@ -68,7 +68,7 @@ export default class ErrorBoundary extends Component<Props, State> {
                 cursor: 'pointer',
               }}
             >
-              Перезагрузить
+              Аз нав бор кардан
             </button>
           </div>
         </div>

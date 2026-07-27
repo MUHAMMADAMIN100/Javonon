@@ -39,7 +39,7 @@ export default function Hero() {
           animate="show"
         >
           <span className="hero-tag-pill">Live</span>
-          Открыт набор · Поток весна 2026 · Закрытие через 38 дней
+          Қабул кушода · Ҷараёни баҳори 2026 · То хотима 38 рӯз
         </motion.span>
 
         <motion.h1
@@ -49,8 +49,8 @@ export default function Hero() {
           initial="hidden"
           animate="show"
         >
-          Мир — твой <em>кампус.</em><br />
-          Стипендию <span className="underline">оплачиваем</span> мы.
+          Ҷаҳон — <em>кампуси ту.</em><br />
+          Стипендияро <span className="underline">мо</span> мепардозем.
         </motion.h1>
 
         <div className="hero-grid">
@@ -62,9 +62,9 @@ export default function Hero() {
               initial="hidden"
               animate="show"
             >
-              Javonon помогает амбициозным студентам поступать в топ-университеты мира
-              через <strong>полностью оплачиваемые международные гранты</strong> — Fulbright,
-              DAAD, Chevening, GKS, MEXT, CSC, Erasmus и другие.
+              Javonon ба донишҷӯёни ҷасур кӯмак мекунад, ки ба беҳтарин донишгоҳҳои ҷаҳон
+              тавассути <strong>грантҳои байналмилалии пурра пардохтшаванда</strong> — Fulbright,
+              DAAD, Chevening, GKS, MEXT, CSC, Erasmus ва дигарон дохил шаванд.
             </motion.p>
 
             <motion.div
@@ -75,11 +75,11 @@ export default function Hero() {
               animate="show"
             >
               <a href="#apply" className="btn btn-primary btn-large">
-                Подать заявку
+                Ариза фиристодан
                 <Icon name="arrow_outward" size={18} />
               </a>
               <a href="#countries" className="btn btn-ghost-dark btn-large">
-                Все страны
+                Ҳамаи кишварҳо
               </a>
             </motion.div>
           </div>
@@ -95,7 +95,7 @@ export default function Hero() {
               <div className="hero-stat-num">
                 40<span className="plus">+</span>
               </div>
-              <div className="hero-stat-label">Стран · Активных грантов</div>
+              <div className="hero-stat-label">Кишвар · Грантҳои фаъол</div>
             </motion.div>
             <motion.div
               className="hero-stat"
@@ -107,7 +107,7 @@ export default function Hero() {
               <div className="hero-stat-num">
                 1.2<span style={{ fontSize: 32 }}>K</span>
               </div>
-              <div className="hero-stat-label">Студентов с грантом · с 2020</div>
+              <div className="hero-stat-label">Донишҷӯ бо грант · аз 2020</div>
             </motion.div>
             <motion.div
               className="hero-stat"
@@ -117,7 +117,7 @@ export default function Hero() {
               animate="show"
             >
               <div className="hero-stat-num">94<span className="plus">%</span></div>
-              <div className="hero-stat-label">Успешных заявок</div>
+              <div className="hero-stat-label">Аризаҳои муваффақ</div>
             </motion.div>
           </div>
         </div>

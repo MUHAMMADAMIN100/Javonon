@@ -8,12 +8,12 @@ import PasswordInput from '../components/PasswordInput';
 import PhoneInput, { COUNTRIES } from '../components/PhoneInput';
 
 const DIRECTIONS = [
-  { value: 'BACHELOR', label: 'Бакалавриат' },
-  { value: 'MASTER', label: 'Магистратура' },
-  { value: 'LANGUAGE', label: 'Языковые курсы' },
-  { value: 'LANGUAGE_BACHELOR', label: 'Языковой + бакалавриат' },
-  { value: 'LANGUAGE_COLLEGE', label: 'Языковой + колледж' },
-  { value: 'COLLEGE', label: 'Колледж' },
+  { value: 'BACHELOR', label: 'Бакалавр' },
+  { value: 'MASTER', label: 'Магистр' },
+  { value: 'LANGUAGE', label: 'Курсҳои забонӣ' },
+  { value: 'LANGUAGE_BACHELOR', label: 'Забонӣ + бакалавр' },
+  { value: 'LANGUAGE_COLLEGE', label: 'Забонӣ + коллеҷ' },
+  { value: 'COLLEGE', label: 'Коллеҷ' },
 ];
 
 export default function StudentRegister() {
@@ -33,18 +33,18 @@ export default function StudentRegister() {
 
   // Минимальная валидация
   const errors: Record<string, string | undefined> = {};
-  if (!fullName.trim() || fullName.trim().length < 2) errors.fullName = 'Введите ФИО';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Некорректный email';
+  if (!fullName.trim() || fullName.trim().length < 2) errors.fullName = 'Ному насабро ворид кунед';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Почтаи электронӣ нодуруст аст';
   if (phone) {
     const matched = COUNTRIES.find((c) => phone.startsWith(c.code));
-    if (!matched) errors.phone = 'Выберите код страны';
+    if (!matched) errors.phone = 'Рамзи кишварро интихоб кунед';
     else {
       const digits = phone.slice(matched.code.length).replace(/\D/g, '');
-      if (digits.length < matched.minDigits) errors.phone = `Нужно ${matched.minDigits} цифр`;
-      else if (digits.length > matched.maxDigits) errors.phone = 'Слишком длинный';
+      if (digits.length < matched.minDigits) errors.phone = `${matched.minDigits} рақам лозим аст`;
+      else if (digits.length > matched.maxDigits) errors.phone = 'Хеле дароз';
     }
-  } else errors.phone = 'Укажите телефон';
-  if (password.length < 6) errors.password = 'Минимум 6 символов';
+  } else errors.phone = 'Телефонро нишон диҳед';
+  if (password.length < 6) errors.password = 'Ҳадди ақал 6 аломат';
 
   const showErr = (k: string) => touched[k] && errors[k];
   const isInvalid = Object.keys(errors).some((k) => errors[k]);
@@ -69,7 +69,7 @@ export default function StudentRegister() {
       });
       navigate('/cabinet');
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Не удалось зарегистрироваться');
+      setError(err?.response?.data?.message || 'Бақайдгирӣ муяссар нашуд');
     } finally {
       setLoading(false);
     }
@@ -83,12 +83,12 @@ export default function StudentRegister() {
             <img src="/javonon-logo.svg" alt="Javonon" />
           </Link>
           <h1 className="display">
-            Стань <em>стипендиатом</em><br />
-            мирового уровня.
+            Соҳиби <em>стипендияи</em><br />
+            ҷаҳонӣ шав.
           </h1>
           <p>
-            Зарегистрируйся и получи доступ к личному кабинету —
-            подбору грантов, документам, статусам заявок и связи с менеджером.
+            Ба қайд гиред ва ба кабинети шахсӣ дастрасӣ пайдо кунед —
+            интихоби грантҳо, ҳуҷҷатҳо, ҳолати аризаҳо ва алоқа бо менеҷер.
           </p>
         </div>
 
@@ -99,7 +99,7 @@ export default function StudentRegister() {
           transition={{ delay: 0.5, duration: 0.6 }}
         >
           <div className="stu-login-quote-text">
-            "Подал заявку утром, к вечеру со мной связался менеджер. Через 4 месяца — Tsinghua с CSC грантом."
+            "Саҳарӣ ариза фиристодам, бегоҳӣ менеҷер бо ман тамос гирифт. Пас аз 4 моҳ — Tsinghua бо гранти CSC."
           </div>
           <div className="stu-login-quote-author">— Айгерим К. · Tsinghua '25</div>
         </motion.div>
@@ -114,12 +114,12 @@ export default function StudentRegister() {
         >
           <Link to="/" className="stu-login-back">
             <Icon name="arrow_back" size={14} />
-            На главную
+            Ба саҳифаи асосӣ
           </Link>
 
-          <h2 className="display">Регистрация.</h2>
+          <h2 className="display">Бақайдгирӣ.</h2>
           <p className="stu-login-sub">
-            Создай аккаунт за 30 секунд — мы свяжемся с тобой в течение часа.
+            Дар 30 сония ҳисоб созед — мо дар давоми як соат бо шумо тамос мегирем.
           </p>
 
           {error && (
@@ -135,14 +135,14 @@ export default function StudentRegister() {
 
           <form onSubmit={onSubmit}>
             <div className="form-row">
-              <label>ФИО</label>
+              <label>Ному насаб</label>
               <input
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
                 className={showErr('fullName') ? 'input-error' : ''}
-                placeholder="Иванов Иван Иванович"
+                placeholder="Раҳимов Раҳим Раҳимович"
                 required
                 autoComplete="name"
               />
@@ -150,7 +150,7 @@ export default function StudentRegister() {
             </div>
 
             <div className="form-row">
-              <label>Email</label>
+              <label>Почтаи электронӣ</label>
               <input
                 type="email"
                 value={email}
@@ -175,7 +175,7 @@ export default function StudentRegister() {
             </div>
 
             <div className="form-row">
-              <label>Направление</label>
+              <label>Самт</label>
               <select value={direction} onChange={(e) => setDirection(e.target.value)}>
                 {DIRECTIONS.map((d) => (
                   <option key={d.value} value={d.value}>{d.label}</option>
@@ -184,13 +184,13 @@ export default function StudentRegister() {
             </div>
 
             <div className="form-row">
-              <label>Пароль</label>
+              <label>Парол</label>
               <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => setTouched((t) => ({ ...t, password: true }))}
                 className={showErr('password') ? 'input-error' : ''}
-                placeholder="Минимум 6 символов"
+                placeholder="Ҳадди ақал 6 аломат"
                 required
                 autoComplete="new-password"
               />
@@ -205,12 +205,12 @@ export default function StudentRegister() {
               whileHover={!loading ? { scale: 1.02 } : {}}
               whileTap={!loading ? { scale: 0.98 } : {}}
             >
-              {loading ? 'Регистрируем...' : 'Создать аккаунт'}
+              {loading ? 'Ба қайд мегирем...' : 'Ҳисоб сохтан'}
             </motion.button>
           </form>
 
           <p className="stu-login-hint">
-            Уже есть аккаунт? <Link to="/login">Войти</Link>
+            Аллакай ҳисоб доред? <Link to="/login">Ворид шудан</Link>
           </p>
         </motion.div>
       </div>

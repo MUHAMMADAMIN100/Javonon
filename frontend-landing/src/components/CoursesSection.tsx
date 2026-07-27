@@ -54,7 +54,7 @@ export default function CoursesSection() {
           style={{ marginBottom: 16 }}
           onClick={() => setOpenCourse(null)}
         >
-          <Icon name="arrow_back" size={14} /> Все курсы
+          <Icon name="arrow_back" size={14} /> Ҳамаи курсҳо
         </button>
         <h2>{openCourse.title}</h2>
         {openCourse.description && (
@@ -106,7 +106,7 @@ export default function CoursesSection() {
                         fontSize: 13,
                       }}
                     >
-                      <Icon name="play_circle" size={16} /> Смотреть видео
+                      <Icon name="play_circle" size={16} /> Тамошои видео
                     </a>
                   )}
                 </div>
@@ -115,7 +115,7 @@ export default function CoursesSection() {
                     className="btn btn-primary btn-small"
                     onClick={() => onComplete(l.id)}
                   >
-                    Отметить
+                    Қайд кардан
                   </button>
                 )}
               </div>
@@ -133,7 +133,7 @@ export default function CoursesSection() {
       {/* Мои курсы */}
       {my.length > 0 && (
         <div className="stu-card" style={{ marginBottom: 16 }}>
-          <h2>Мои курсы</h2>
+          <h2>Курсҳои ман</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
             {my.map((c) => (
               <motion.button
@@ -170,7 +170,7 @@ export default function CoursesSection() {
                   }} />
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-soft)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{c.completedLessons} / {c.totalLessons} уроков</span>
+                  <span>{c.completedLessons} / {c.totalLessons} дарс</span>
                   <span style={{ fontWeight: 600, color: 'rgb(1, 36, 87)' }}>{c.progress}%</span>
                 </div>
               </motion.button>
@@ -182,7 +182,7 @@ export default function CoursesSection() {
       {/* Доступные курсы */}
       {available.length > 0 && (
         <div className="stu-card">
-          <h2>Доступные курсы</h2>
+          <h2>Курсҳои дастрас</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
             {available.map((c) => (
               <motion.div
@@ -205,10 +205,10 @@ export default function CoursesSection() {
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   fontSize: 12, color: 'var(--text-soft)', marginBottom: 12,
                 }}>
-                  <span>{c._count?.lessons || 0} уроков</span>
+                  <span>{c._count?.lessons || 0} дарс</span>
                 </div>
                 <button className="btn btn-primary btn-small" style={{ width: '100%' }} onClick={() => onEnroll(c.id)}>
-                  Записаться
+                  Сабти ном
                 </button>
               </motion.div>
             ))}
@@ -220,7 +220,7 @@ export default function CoursesSection() {
         <div className="stu-card" style={{ textAlign: 'center', padding: 48 }}>
           <Icon name="school" size={48} style={{ opacity: 0.25, marginBottom: 12 }} />
           <div style={{ fontSize: 16, color: 'var(--text-soft)' }}>
-            Курсы появятся здесь, когда менеджер добавит их в систему
+            Курсҳо дар ин ҷо пайдо мешаванд, вақте ки менеҷер онҳоро ба система илова мекунад
           </div>
         </div>
       )}

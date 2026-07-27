@@ -129,7 +129,7 @@ function Field({
       <div className="af-field af-field-wide">
         <label className="af-label">
           {def.label} <span className="af-label-en">{def.labelEn}</span>
-          {def.optional && <span className="af-optional">— необязательно</span>}
+          {def.optional && <span className="af-optional">— ихтиёрӣ</span>}
         </label>
         <textarea {...common} rows={3} className={error ? 'af-input-error' : ''} />
         {error && <div className="af-field-error">{error}</div>}
@@ -161,7 +161,7 @@ function Field({
       <div className="af-field">
         <label className="af-label">
           {def.label} <span className="af-label-en">{def.labelEn}</span>
-          {def.optional && <span className="af-optional">— необязательно</span>}
+          {def.optional && <span className="af-optional">— ихтиёрӣ</span>}
         </label>
         <PhoneInput value={value || ''} onChange={(v) => { setTouched(true); onChange(v); }} error={!!error} />
         {error && <div className="af-field-error">{error}</div>}
@@ -174,14 +174,14 @@ function Field({
       <div className="af-field">
         <label className="af-label">
           {def.label} <span className="af-label-en">{def.labelEn}</span>
-          {def.optional && <span className="af-optional">— необязательно</span>}
+          {def.optional && <span className="af-optional">— ихтиёрӣ</span>}
         </label>
         <select
           {...common}
           value={value || (def.noEmpty ? def.options[0].value : '')}
           className={error ? 'af-input-error' : ''}
         >
-          {!def.noEmpty && <option value="">— выберите —</option>}
+          {!def.noEmpty && <option value="">— интихоб кунед —</option>}
           {def.options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
@@ -195,7 +195,7 @@ function Field({
     <div className="af-field">
       <label className="af-label">
         {def.label} <span className="af-label-en">{def.labelEn}</span>
-        {def.optional && <span className="af-optional">— необязательно</span>}
+        {def.optional && <span className="af-optional">— ихтиёрӣ</span>}
       </label>
       <input
         type={def.kind || 'text'}
@@ -301,7 +301,7 @@ function TableSection({
           return (
             <div key={ri} className={`af-edu-row${notAttended ? ' not-attended' : ''}`}>
               <div className="af-edu-head" onClick={() => !notAttended && toggleRow(ri)}>
-                <div className="af-edu-title">{rowLabels![ri] || `Строка ${ri + 1}`}</div>
+                <div className="af-edu-title">{rowLabels![ri] || `Сатри ${ri + 1}`}</div>
                 <label
                   className="af-edu-skip"
                   onClick={(e) => e.stopPropagation()}
@@ -311,7 +311,7 @@ function TableSection({
                     checked={notAttended}
                     onChange={(e) => setNotAttended(ri, e.target.checked)}
                   />
-                  <span>{skipLabels?.[ri] || 'Не учился(-ась)'}</span>
+                  <span>{skipLabels?.[ri] || 'Таҳсил накардаам'}</span>
                 </label>
                 {!notAttended && (
                   <Icon name={isOpen ? 'expand_less' : 'expand_more'} size={20} />
@@ -342,7 +342,7 @@ function TableSection({
       <div className="af-table">
         {rows.map((row, ri) => (
           <div key={ri} className="af-table-row">
-            {rowLabels && <div className="af-row-label">{rowLabels[ri] || `Строка ${ri + 1}`}</div>}
+            {rowLabels && <div className="af-row-label">{rowLabels[ri] || `Сатри ${ri + 1}`}</div>}
             <div className="af-row-cells">
               {columns.map((c) => (
                 <Field
@@ -359,7 +359,7 @@ function TableSection({
                 type="button"
                 className="af-row-remove"
                 onClick={() => removeRow(ri)}
-                title="Удалить строку"
+                title="Сатрро нест кардан"
               >
                 <Icon name="close" size={16} />
               </button>
@@ -369,7 +369,7 @@ function TableSection({
       </div>
       {!fixedRows && (
         <button type="button" className="af-add-row" onClick={addRow}>
-          <Icon name="add" size={16} /> Добавить ещё
+          <Icon name="add" size={16} /> Илова кардан
         </button>
       )}
     </div>
@@ -436,8 +436,8 @@ export default function ApplicationFormSection() {
   if (loading || !form) {
     return (
       <div className="stu-card">
-        <h2 className="stu-section-title">Анкета для поступления</h2>
-        <div className="af-loading">Загружаем анкету...</div>
+        <h2 className="stu-section-title">Варақаи дохилшавӣ</h2>
+        <div className="af-loading">Варақа бор шуда истодааст...</div>
       </div>
     );
   }
@@ -453,18 +453,18 @@ export default function ApplicationFormSection() {
       <div className="af-header">
         <div>
           <h2 className="stu-section-title" style={{ margin: 0 }}>
-            Application Form — Анкета для поступления
+            Application Form — Варақаи дохилшавӣ
           </h2>
           <div className="af-sub" style={dirty ? { color: 'var(--primary)' } : undefined}>
             {dirty
-              ? 'У вас есть несохранённые изменения — не забудьте нажать «Сохранить анкету»'
-              : 'Заполняйте поля и нажмите «Сохранить анкету» в конце'}
+              ? 'Шумо тағйироти нигоҳ дошта нашуда доред — «Варақаро нигоҳ доштан»-ро пахш кардан фаромӯш накунед'
+              : 'Майдонҳоро пур кунед ва дар охир «Варақаро нигоҳ доштан»-ро пахш кунед'}
           </div>
         </div>
         <div className="af-save-state">
           {manualSaved && (
             <span className="af-save saved">
-              <Icon name="check_circle" size={16} /> Сохранено
+              <Icon name="check_circle" size={16} /> Нигоҳ дошта шуд
             </span>
           )}
         </div>
@@ -472,7 +472,7 @@ export default function ApplicationFormSection() {
 
       <div className="af-progress">
         <div className="af-progress-text">
-          <span>Заполнено <b>{progress.filled}</b> из {progress.total} полей</span>
+          <span>Пур шуд <b>{progress.filled}</b> аз {progress.total} майдон</span>
           <span className="af-progress-percent">{percent}%</span>
         </div>
         <div className="af-progress-bar">
@@ -487,7 +487,7 @@ export default function ApplicationFormSection() {
       <div className="af-note">
         <Icon name="info" size={18} />
         <div>
-          Заполняйте поля <b>на английском языке</b> (как в паспорте). Анкета войдёт в пакет документов.
+          Майдонҳоро <b>бо забони англисӣ</b> пур кунед (мувофиқи шиноснома). Варақа ба бастаи ҳуҷҷатҳо дохил мешавад.
         </div>
       </div>
 
@@ -555,12 +555,12 @@ export default function ApplicationFormSection() {
             disabled={manualSaving || !dirty}
           >
             <Icon name="save" size={18} />
-            {manualSaving ? 'Сохраняем...' : manualSaved ? 'Сохранено ✓' : 'Сохранить анкету'}
+            {manualSaving ? 'Нигоҳ дошта истодаем...' : manualSaved ? 'Нигоҳ дошта шуд ✓' : 'Варақаро нигоҳ доштан'}
           </button>
           <div className="af-save-hint">
             {dirty
-              ? 'Не забудьте нажать «Сохранить» — иначе изменения потеряются при уходе со страницы'
-              : 'Все изменения сохранены'}
+              ? '«Нигоҳ доштан»-ро пахш кардан фаромӯш накунед — вагарна ҳангоми рафтан аз саҳифа тағйирот гум мешаванд'
+              : 'Ҳамаи тағйирот нигоҳ дошта шуданд'}
           </div>
         </div>
       </div>

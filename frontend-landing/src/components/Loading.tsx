@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
  * Универсальный лоадер с пульсирующим логотипом Javonon.
  * Заменяет "Загрузка..." plain-text везде.
  */
-export default function Loading({ label = 'Загрузка', fullscreen = false }: {
+export default function Loading({ label = 'Боркунӣ', fullscreen = false }: {
   label?: string;
   fullscreen?: boolean;
 }) {

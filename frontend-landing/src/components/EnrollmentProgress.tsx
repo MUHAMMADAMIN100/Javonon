@@ -2,12 +2,12 @@ import { motion } from 'framer-motion';
 import Icon from '../Icon';
 
 const STAGES: { key: string; label: string; short: string }[] = [
-  { key: 'NEW', label: 'Новая заявка', short: 'Заявка' },
-  { key: 'DOCS_REVIEW', label: 'Документы на проверке', short: 'Проверка' },
-  { key: 'DOCS_SUBMITTED', label: 'Подача документов', short: 'Подача' },
-  { key: 'PRE_ADMISSION', label: 'Предварительное зачисление', short: 'Пред. зачисление' },
-  { key: 'AWAITING_PAYMENT', label: 'Ожидание оплаты', short: 'Оплата' },
-  { key: 'ENROLLED', label: 'Зачислен', short: 'Зачислен' },
+  { key: 'NEW', label: 'Аризаи нав', short: 'Ариза' },
+  { key: 'DOCS_REVIEW', label: 'Ҳуҷҷатҳо дар санҷиш', short: 'Санҷиш' },
+  { key: 'DOCS_SUBMITTED', label: 'Супоридани ҳуҷҷатҳо', short: 'Супоридан' },
+  { key: 'PRE_ADMISSION', label: 'Қабули пешакӣ', short: 'Қабули пешакӣ' },
+  { key: 'AWAITING_PAYMENT', label: 'Интизори пардохт', short: 'Пардохт' },
+  { key: 'ENROLLED', label: 'Қабул шуд', short: 'Қабул шуд' },
 ];
 
 // Маппинг старых значений на новые
@@ -29,7 +29,7 @@ export default function EnrollmentProgress({ currentStatus }: Props) {
     <div className="ep-card">
       <div className="ep-head">
         <div>
-          <div className="ep-title">Этап поступления</div>
+          <div className="ep-title">Марҳилаи қабул</div>
           <div className="ep-current">{STAGES[currentIdx].label}</div>
         </div>
         <div className="ep-percent">{percent}%</div>

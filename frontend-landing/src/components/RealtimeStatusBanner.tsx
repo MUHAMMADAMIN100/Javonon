@@ -14,8 +14,8 @@ export default function RealtimeStatusBanner() {
         >
           <span className="dot" />
           {state === 'reconnecting'
-            ? 'Соединение потеряно, переподключаемся…'
-            : 'Нет соединения с сервером'}
+            ? 'Пайваст қатъ шуд, аз нав пайваст мешавем…'
+            : 'Бо сервер пайваст нест'}
         </motion.div>
       )}
     </AnimatePresence>

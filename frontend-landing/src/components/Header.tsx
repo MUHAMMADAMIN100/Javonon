@@ -5,11 +5,11 @@ import { Link } from 'react-router-dom';
 import Icon from '../Icon';
 
 const NAV_ITEMS = [
-  { href: '/#services', label: 'Услуги' },
-  { href: '/#countries', label: 'Страны' },
-  { href: '/#how', label: 'Как это работает' },
-  { href: '/knowledge', label: 'База знаний' },
-  { href: '/#apply', label: 'Заявка' },
+  { href: '/#services', label: 'Хидматҳо' },
+  { href: '/#countries', label: 'Кишварҳо' },
+  { href: '/#how', label: 'Чӣ тавр кор мекунад' },
+  { href: '/knowledge', label: 'Пойгоҳи дониш' },
+  { href: '/#apply', label: 'Ариза' },
 ];
 
 export default function Header() {
@@ -55,7 +55,7 @@ export default function Header() {
               type="button"
               className="land-drawer-close"
               onClick={() => setOpen(false)}
-              aria-label="Закрыть меню"
+              aria-label="Пӯшидани меню"
             >
               <Icon name="close" size={22} />
             </button>
@@ -76,10 +76,10 @@ export default function Header() {
           </nav>
           <div className="land-drawer-cta">
             <Link to="/login" className="btn-pill ghost" onClick={() => setOpen(false)}>
-              <Icon name="lock" size={16} /> Личный кабинет
+              <Icon name="lock" size={16} /> Кабинети шахсӣ
             </Link>
             <Link to="/register" className="btn-pill solid" onClick={() => setOpen(false)}>
-              Регистрация
+              Бақайдгирӣ
               <Icon name="arrow_outward" size={16} />
             </Link>
           </div>
@@ -110,16 +110,16 @@ export default function Header() {
           <div className="header-cta">
             <Link to="/login" className="btn-pill ghost">
               <Icon name="lock" size={14} />
-              Вход
+              Ворид шудан
             </Link>
             <Link to="/register" className="btn-pill solid">
-              Регистрация
+              Бақайдгирӣ
               <Icon name="arrow_outward" size={16} />
             </Link>
             <button
               type="button"
               className="burger"
-              aria-label="Открыть меню"
+              aria-label="Кушодани меню"
               onClick={() => setOpen(true)}
             >
               <Icon name="menu" size={20} />

@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getPublicProgram, type Program } from '../programs';
+import { toTajik } from '../programLabels';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
 const API_ROOT = API_URL.replace(/\/api$/, '');
 
 const DIRECTION_LABEL: Record<string, string> = {
-  BACHELOR: 'Бакалавриат',
-  MASTER: 'Магистратура',
-  LANGUAGE: 'Языковые курсы',
-  LANGUAGE_COLLEGE: 'Языковой + колледж',
-  LANGUAGE_BACHELOR: 'Языковой + бакалавриат',
-  COLLEGE: 'Колледж',
+  BACHELOR: 'Бакалавр',
+  MASTER: 'Магистр',
+  LANGUAGE: 'Курсҳои забонӣ',
+  LANGUAGE_COLLEGE: 'Забонӣ + коллеҷ',
+  LANGUAGE_BACHELOR: 'Забонӣ + бакалавр',
+  COLLEGE: 'Коллеҷ',
 };
 
 interface Scholarship {
@@ -47,7 +48,7 @@ export default function PublicProgramDetail() {
     setLoading(true);
     getPublicProgram(id)
       .then((p) => setProgram(p))
-      .catch((e) => setError(e?.message || 'Ошибка'))
+      .catch((e) => setError(e?.message || 'Хатогӣ'))
       .finally(() => setLoading(false));
 
     // Стипендии — публичный endpoint
@@ -59,13 +60,13 @@ export default function PublicProgramDetail() {
 
   if (!id) return null;
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center' }}>Загрузка…</div>;
+    return <div style={{ padding: 40, textAlign: 'center' }}>Боркунӣ...</div>;
   }
   if (error || !program) {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
-        <Link to="/">← На главную</Link>
-        <h2 style={{ marginTop: 16 }}>Программа не найдена</h2>
+        <Link to="/">← Ба саҳифаи асосӣ</Link>
+        <h2 style={{ marginTop: 16 }}>Барнома ёфт нашуд</h2>
       </div>
     );
   }
@@ -77,7 +78,7 @@ export default function PublicProgramDetail() {
     <div style={{ minHeight: '100vh', background: '#f9fafb', paddingBottom: 60 }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
         <Link to="/" style={{ color: '#475569', fontSize: 14, textDecoration: 'none' }}>
-          ← На главную
+          ← Ба саҳифаи асосӣ
         </Link>
 
         <div style={{
@@ -94,7 +95,7 @@ export default function PublicProgramDetail() {
               </h1>
               <div style={{ fontSize: 18, color: '#475569' }}>{p.university}</div>
               <div style={{ fontSize: 14, color: '#64748b', marginTop: 8 }}>
-                {[p.country, p.city].filter(Boolean).join(', ')}
+                {[toTajik(p.country), toTajik(p.city)].filter(Boolean).join(', ')}
               </div>
             </div>
             {p.universityWebsiteUrl && (
@@ -112,7 +113,7 @@ export default function PublicProgramDetail() {
                   fontSize: 14,
                 }}
               >
-                🌐 Официальный сайт университета
+                🌐 Сомонаи расмии донишгоҳ
               </a>
             )}
           </div>
@@ -153,30 +154,33 @@ export default function PublicProgramDetail() {
           gap: 16, marginTop: 16,
         }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 22 }}>
-            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Основное</h3>
-            <Row label="Направление" value={p.direction ? DIRECTION_LABEL[p.direction] : null} />
-            <Row label="Специальность" value={p.major} />
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Маълумоти асосӣ</h3>
+            {/* Аудит-фикс: майдонҳои озод аз БД метавонанд русӣ бошанд —
+                toTajik() онҳоро тарҷума мекунад, то нимҷумлаи русӣ дар назди
+                нишонаи тоҷикӣ набошад. */}
+            <Row label="Самт" value={p.direction ? DIRECTION_LABEL[p.direction] : null} />
+            <Row label="Ихтисос" value={toTajik(p.major)} />
             <Row
-              label="Стоимость / год"
-              value={p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : 'Бесплатно / уточняется'}
+              label="Арзиш / сол"
+              value={p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : 'Ройгон / аниқ карда мешавад'}
             />
-            <Row label="Длительность" value={p.duration} />
-            <Row label="Язык обучения" value={p.language} />
-            <Row label="Уровень английского" value={p.englishLevel} />
-            <Row label="Средний проходной балл" value={p.avgAdmissionScore} />
-            <Row label="Дедлайн подачи" value={p.applicationDeadline} />
-            <Row label="Наборов в год" value={typeof p.intakesPerYear === 'number' ? String(p.intakesPerYear) : null} />
+            <Row label="Давомнокӣ" value={toTajik(p.duration)} />
+            <Row label="Забони таҳсил" value={toTajik(p.language)} />
+            <Row label="Сатҳи забони англисӣ" value={toTajik(p.englishLevel)} />
+            <Row label="Холи миёнаи қабул" value={toTajik(p.avgAdmissionScore)} />
+            <Row label="Мӯҳлати супоридан" value={toTajik(p.applicationDeadline)} />
+            <Row label="Қабул дар як сол" value={typeof p.intakesPerYear === 'number' ? String(p.intakesPerYear) : null} />
           </div>
 
           {p.disciplines && p.disciplines.length > 0 && (
             <div style={{ background: 'white', borderRadius: 16, padding: 22 }}>
-              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Направления / специализации</h3>
+              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Самтҳо / ихтисосҳо</h3>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {p.disciplines.map((d: string) => (
                   <span key={d} style={{
                     padding: '5px 12px', borderRadius: 999,
                     background: '#f1f5f9', fontSize: 13,
-                  }}>{d}</span>
+                  }}>{toTajik(d)}</span>
                 ))}
               </div>
             </div>
@@ -187,18 +191,18 @@ export default function PublicProgramDetail() {
         {scholarships.length > 0 && (
           <div style={{ background: 'white', borderRadius: 16, padding: 22, marginTop: 16 }}>
             <h3 style={{ marginTop: 0, marginBottom: 12 }}>
-              🎓 Стипендии и гранты ({scholarships.length})
+              🎓 Стипендияҳо ва грантҳо ({scholarships.length})
             </h3>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#f8fafc' }}>
-                    <th style={th}>Название</th>
-                    <th style={th}>Покрытие</th>
-                    <th style={th}>Сумма</th>
-                    <th style={th}>Включено</th>
-                    <th style={th}>Требования</th>
-                    <th style={th}>Дедлайн</th>
+                    <th style={th}>Ном</th>
+                    <th style={th}>Фарогирӣ</th>
+                    <th style={th}>Маблағ</th>
+                    <th style={th}>Дар бар мегирад</th>
+                    <th style={th}>Талабот</th>
+                    <th style={th}>Мӯҳлат</th>
                     <th style={th}></th>
                   </tr>
                 </thead>
@@ -206,11 +210,11 @@ export default function PublicProgramDetail() {
                   {scholarships.map((s) => (
                     <tr key={s.id} style={{ borderTop: '1px solid #e2e8f0' }}>
                       <td style={{ ...td, fontWeight: 600 }}>{s.name}</td>
-                      <td style={td}>{s.coverage || '—'}</td>
-                      <td style={td}>{s.amount || '—'}</td>
-                      <td style={td}>{s.includes || '—'}</td>
-                      <td style={td}>{s.requirements || '—'}</td>
-                      <td style={td}>{s.deadline || '—'}</td>
+                      <td style={td}>{toTajik(s.coverage) || '—'}</td>
+                      <td style={td}>{toTajik(s.amount) || '—'}</td>
+                      <td style={td}>{toTajik(s.includes) || '—'}</td>
+                      <td style={td}>{toTajik(s.requirements) || '—'}</td>
+                      <td style={td}>{toTajik(s.deadline) || '—'}</td>
                       <td style={td}>
                         {s.link && (
                           <a href={s.link} target="_blank" rel="noreferrer" style={{ color: '#1e40af' }}>🔗</a>
@@ -226,7 +230,7 @@ export default function PublicProgramDetail() {
 
         {p.description && (
           <div style={{ background: 'white', borderRadius: 16, padding: 22, marginTop: 16 }}>
-            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Описание программы</h3>
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Тавсифи барнома</h3>
             <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, fontSize: 15 }}>
               {p.description}
             </div>
@@ -238,9 +242,9 @@ export default function PublicProgramDetail() {
           background: 'linear-gradient(135deg, #1e40af, #6366f1)',
           color: 'white', borderRadius: 16, padding: 28, marginTop: 24, textAlign: 'center',
         }}>
-          <h3 style={{ marginTop: 0 }}>Заинтересовала эта программа?</h3>
+          <h3 style={{ marginTop: 0 }}>Ин барнома ба шумо маъқул шуд?</h3>
           <p style={{ opacity: 0.9, marginBottom: 16 }}>
-            Оставьте заявку — мы свяжемся и поможем с поступлением
+            Ариза фиристед — мо бо шумо тамос мегирем ва дар қабул кӯмак мекунем
           </p>
           <Link
             to="/#contact"
@@ -249,7 +253,7 @@ export default function PublicProgramDetail() {
               borderRadius: 10, textDecoration: 'none', fontWeight: 600,
             }}
           >
-            Оставить заявку
+            Ариза фиристодан
           </Link>
         </div>
       </div>

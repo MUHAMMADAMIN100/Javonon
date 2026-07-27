@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
+import { resolveLandingBaseUrl } from '../common/landing-url';
 import { ReferralsService } from './referrals.service';
 
 /**
@@ -24,9 +25,34 @@ export class ReferralsController {
   // Если задано — короткие /r/:code редиректят сразу в Telegram-бот.
   // Иначе — на главный лендинг с query ?ref=CODE.
   private botUsername = process.env.TELEGRAM_BOT_USERNAME || '';
-  private landingUrl = process.env.LANDING_URL || 'https://javonon-landing.vercel.app';
 
   constructor(private svc: ReferralsService) {}
+
+  /**
+   * URL лендинга для редиректов из /r/:code.
+   *
+   * Base — общий resolveLandingBaseUrl (см. common/landing-url.ts): раньше тут
+   * было своё `process.env.LANDING_URL || ...`, и его дефолт расходился с
+   * partners.service.ts.
+   *
+   * Всегда добавляем #apply: человек, кликнувший партнёрскую короткую ссылку,
+   * пришёл подавать заявку, а не читать шапку — везём его сразу к форме.
+   * Порядок частей жёсткий — query, потом фрагмент: всё после '#' браузер в
+   * query-string уже не отдаёт, и ?ref= бы потерялся.
+   */
+  private landingApplyUrl(query?: Record<string, string>): string {
+    const base = resolveLandingBaseUrl();
+    const entries = Object.entries(query || {});
+    if (entries.length === 0) return `${base}/#apply`;
+
+    // LANDING_URL может нести собственные параметры (например ...?utm_source=x) —
+    // не затираем их, дописываемся через '&'.
+    const sep = base.includes('?') ? '&' : '/?';
+    const qs = entries
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&');
+    return `${base}${sep}${qs}#apply`;
+  }
 
   /** Короткая публичная ссылка партнёра: site/r/ABC123 */
   @Get('r/:code')
@@ -47,7 +73,7 @@ export class ReferralsController {
     });
 
     if (!partner) {
-      return res.redirect(this.landingUrl);
+      return res.redirect(this.landingApplyUrl());
     }
 
     // Если есть Telegram-бот — отправляем туда (центр воронки).
@@ -56,9 +82,8 @@ export class ReferralsController {
         `https://t.me/${this.botUsername}?start=${partner.referralCode}`,
       );
     }
-    // Иначе на лендинг с ?ref=
-    const sep = this.landingUrl.includes('?') ? '&' : '?';
-    return res.redirect(`${this.landingUrl}${sep}ref=${partner.referralCode}`);
+    // Иначе на лендинг с ?ref= и якорем на форму заявки.
+    return res.redirect(this.landingApplyUrl({ ref: partner.referralCode }));
   }
 
   /** Фронтенд логирует переход (используется когда юзер пришёл по ?ref=). */

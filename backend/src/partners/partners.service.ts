@@ -9,6 +9,7 @@ import {
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveLandingBaseUrl } from '../common/landing-url';
 import { AdminPartnerCreateDto } from './dto/admin-partner.dto';
 
 // Без I/O/0/1 — чтобы код не путался в письме, звонке, скриншоте.
@@ -61,13 +62,19 @@ export class PartnersService {
     return out;
   }
 
+  /**
+   * Реферальная ссылка партнёра. Base берём ТОЛЬКО из resolveLandingBaseUrl —
+   * раньше здесь была своя env-цепочка с дефолтом 'https://javonon.com',
+   * который не резолвится в DNS, и партнёрам уезжала битая ссылка.
+   *
+   * Фрагмент #apply обязателен: лендинг длинный, форма заявки внизу, и без
+   * якоря приглашённый попадал на первый экран — конверсия по партнёрским
+   * переходам проседала. Фрагмент строго последним: всё после '#' в query
+   * уже не попадает.
+   */
   private buildReferralUrl(code: string): string {
-    const base = (
-      process.env.LANDING_URL ||
-      process.env.PUBLIC_LANDING_URL ||
-      'https://javonon.com'
-    ).replace(/\/+$/, '');
-    return `${base}/?ref=${code}`;
+    const base = resolveLandingBaseUrl();
+    return `${base}/?ref=${code}#apply`;
   }
 
   private toPublicPartner(p: any) {
@@ -193,8 +200,17 @@ export class PartnersService {
 
   // ===== Admin operations =====
 
+  /**
+   * Список партнёров для админки. Возвращаем referralUrl на КАЖДОГО партнёра,
+   * а не только referralCode: CRM собирала ссылку сама (свой fallback-домен,
+   * без '#apply'), и один и тот же партнёр показывал разные ссылки в списке и
+   * в карточке. Ссылку строит только backend — buildReferralUrl здесь тот же,
+   * что в adminCreate и adminGetOne.
+   *
+   * Prisma select не умеет вычисляемые поля, поэтому клеим их после выборки.
+   */
   async adminList() {
-    return this.prisma.partner.findMany({
+    const partners = await this.prisma.partner.findMany({
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -217,6 +233,11 @@ export class PartnersService {
         },
       },
     });
+
+    return partners.map((p) => ({
+      ...p,
+      referralUrl: this.buildReferralUrl(p.referralCode),
+    }));
   }
 
   /**

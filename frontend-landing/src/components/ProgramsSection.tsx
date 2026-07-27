@@ -7,16 +7,17 @@ import {
   type StudentProgram,
 } from '../studentApi';
 import { useStudentRealtime } from '../realtime';
+import { toTajik } from '../programLabels';
 import Icon from '../Icon';
 import Loading from './Loading';
 
 const DIRECTION_LABEL: Record<string, string> = {
-  BACHELOR: 'Бакалавриат',
-  MASTER: 'Магистратура',
-  LANGUAGE: 'Языковые курсы',
-  LANGUAGE_COLLEGE: 'Языковой + колледж',
-  LANGUAGE_BACHELOR: 'Языковой + бакалавриат',
-  COLLEGE: 'Колледж',
+  BACHELOR: 'Бакалавр',
+  MASTER: 'Магистр',
+  LANGUAGE: 'Курсҳои забонӣ',
+  LANGUAGE_COLLEGE: 'Забонӣ + коллеҷ',
+  LANGUAGE_BACHELOR: 'Забонӣ + бакалавр',
+  COLLEGE: 'Коллеҷ',
 };
 
 export default function ProgramsSection() {
@@ -92,9 +93,9 @@ export default function ProgramsSection() {
     <section className="stu-card sp-card">
       <div className="sp-head">
         <div>
-          <h2 className="stu-section-title" style={{ margin: 0 }}>Программы обучения</h2>
+          <h2 className="stu-section-title" style={{ margin: 0 }}>Барномаҳои таҳсил</h2>
           <div className="sp-sub">
-            Каталог программ в университетах Китая
+            Каталоги барномаҳо дар донишгоҳҳои Чин
           </div>
         </div>
         <button
@@ -102,7 +103,7 @@ export default function ProgramsSection() {
           onClick={() => setOpen(!open)}
         >
           <Icon name={open ? 'filter_alt_off' : 'filter_alt'} size={16} />
-          Фильтры
+          Филтрҳо
         </button>
       </div>
 
@@ -116,46 +117,47 @@ export default function ProgramsSection() {
             transition={{ duration: 0.25 }}
           >
             <div className="sp-filter">
-              <label>Поиск</label>
+              <label>Ҷустуҷӯ</label>
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Название, университет..."
+                placeholder="Ном, донишгоҳ..."
               />
             </div>
             <div className="sp-filter">
-              <label>Город</label>
+              <label>Шаҳр</label>
               <select value={city} onChange={(e) => setCity(e.target.value)}>
-                <option value="">Все города</option>
-                {cities.map((c) => <option key={c} value={c}>{c}</option>)}
+                <option value="">Ҳамаи шаҳрҳо</option>
+                {/* value — қимати аслии БД (барои филтр), матн — тоҷикӣ */}
+                {cities.map((c) => <option key={c} value={c}>{toTajik(c)}</option>)}
               </select>
             </div>
             <div className="sp-filter">
-              <label>Специальность</label>
+              <label>Ихтисос</label>
               <select value={major} onChange={(e) => setMajor(e.target.value)}>
-                <option value="">Все специальности</option>
-                {majors.map((m) => <option key={m} value={m}>{m}</option>)}
+                <option value="">Ҳамаи ихтисосҳо</option>
+                {majors.map((m) => <option key={m} value={m}>{toTajik(m)}</option>)}
               </select>
             </div>
             <div className="sp-filter">
-              <label>Направление</label>
+              <label>Самт</label>
               <select value={direction} onChange={(e) => setDirection(e.target.value)}>
-                <option value="">Все</option>
+                <option value="">Ҳама</option>
                 {Object.entries(DIRECTION_LABEL).map(([k, v]) => (
                   <option key={k} value={k}>{v}</option>
                 ))}
               </select>
             </div>
             <div className="sp-filter">
-              <label>Цена (от — до)</label>
+              <label>Нарх (аз — то)</label>
               <div className="sp-range">
-                <input type="number" placeholder="от" value={minCost} onChange={(e) => setMinCost(e.target.value)} />
-                <input type="number" placeholder="до" value={maxCost} onChange={(e) => setMaxCost(e.target.value)} />
+                <input type="number" placeholder="аз" value={minCost} onChange={(e) => setMinCost(e.target.value)} />
+                <input type="number" placeholder="то" value={maxCost} onChange={(e) => setMaxCost(e.target.value)} />
               </div>
             </div>
             {hasFilters && (
               <button className="sp-reset" onClick={reset}>
-                <Icon name="close" size={14} /> Сбросить
+                <Icon name="close" size={14} /> Тоза кардан
               </button>
             )}
           </motion.div>
@@ -167,7 +169,7 @@ export default function ProgramsSection() {
       ) : items.length === 0 ? (
         <div className="sp-empty">
           <Icon name="school" size={40} />
-          <div>Программ пока нет</div>
+          <div>Ҳоло барнома нест</div>
         </div>
       ) : (
         <motion.div
@@ -207,18 +209,20 @@ export default function ProgramsSection() {
                 <div className="sp-item-head">
                   <div className="sp-badge">{DIRECTION_LABEL[p.direction]}</div>
                   <div className="sp-cost">
-                    {p.cost.toLocaleString('ru-RU')} <span>{p.currency}/год</span>
+                    {p.cost.toLocaleString('ru-RU')} <span>{p.currency}/сол</span>
                   </div>
                 </div>
                 <div className="sp-item-name">{p.name}</div>
                 <div className="sp-item-uni">
                   <Icon name="account_balance" size={14} /> {p.university}
                 </div>
+                {/* Аудит-фикс: майдонҳои озод аз БД метавонанд русӣ бошанд —
+                    toTajik() онҳоро ба тоҷикӣ мегардонад. */}
                 <div className="sp-item-meta">
-                  <span><Icon name="location_on" size={13} /> {p.city}</span>
-                  <span><Icon name="school" size={13} /> {p.major}</span>
-                  {p.duration && <span><Icon name="schedule" size={13} /> {p.duration}</span>}
-                  {p.englishLevel && <span><Icon name="record_voice_over" size={13} /> {p.englishLevel}</span>}
+                  <span><Icon name="location_on" size={13} /> {toTajik(p.city)}</span>
+                  <span><Icon name="school" size={13} /> {toTajik(p.major)}</span>
+                  {p.duration && <span><Icon name="schedule" size={13} /> {toTajik(p.duration)}</span>}
+                  {p.englishLevel && <span><Icon name="record_voice_over" size={13} /> {toTajik(p.englishLevel)}</span>}
                 </div>
                 {p.hasGrant && (
                   <div style={{
@@ -268,31 +272,31 @@ export default function ProgramsSection() {
                 <h2 className="sp-modal-name">{selected.name}</h2>
                 <div className="sp-modal-uni">{selected.university}</div>
                 <div className="sp-modal-meta">
-                  <div><Icon name="location_on" size={16} /> {selected.city}</div>
-                  <div><Icon name="school" size={16} /> {selected.major}</div>
-                  {selected.duration && <div><Icon name="schedule" size={16} /> {selected.duration}</div>}
-                  {selected.language && <div><Icon name="translate" size={16} /> {selected.language}</div>}
-                  {selected.englishLevel && <div><Icon name="record_voice_over" size={16} /> Английский: {selected.englishLevel}</div>}
-                  {selected.avgAdmissionScore && <div><Icon name="grade" size={16} /> Проходной балл: {selected.avgAdmissionScore}</div>}
-                  {selected.applicationDeadline && <div><Icon name="event" size={16} /> Дедлайн: {selected.applicationDeadline}</div>}
-                  {typeof selected.intakesPerYear === 'number' && <div><Icon name="repeat" size={16} /> Наборов в год: {selected.intakesPerYear}</div>}
+                  <div><Icon name="location_on" size={16} /> {toTajik(selected.city)}</div>
+                  <div><Icon name="school" size={16} /> {toTajik(selected.major)}</div>
+                  {selected.duration && <div><Icon name="schedule" size={16} /> {toTajik(selected.duration)}</div>}
+                  {selected.language && <div><Icon name="translate" size={16} /> {toTajik(selected.language)}</div>}
+                  {selected.englishLevel && <div><Icon name="record_voice_over" size={16} /> Забони англисӣ: {toTajik(selected.englishLevel)}</div>}
+                  {selected.avgAdmissionScore && <div><Icon name="grade" size={16} /> Холи қабул: {toTajik(selected.avgAdmissionScore)}</div>}
+                  {selected.applicationDeadline && <div><Icon name="event" size={16} /> Мӯҳлат: {toTajik(selected.applicationDeadline)}</div>}
+                  {typeof selected.intakesPerYear === 'number' && <div><Icon name="repeat" size={16} /> Қабул дар як сол: {selected.intakesPerYear}</div>}
                 </div>
                 {selected.hasGrant && (
                   <div style={{
                     background: '#dcfce7', color: '#15803d', borderRadius: 12,
                     padding: '12px 16px', fontSize: 14, marginTop: 12,
                   }}>
-                    <b>🎓 Доступен грант</b>
+                    <b>🎓 Грант дастрас аст</b>
                     {selected.grantDetails && <div style={{ marginTop: 4 }}>{selected.grantDetails}</div>}
                     {selected.grantEnglishLevel && (
                       <div style={{ marginTop: 4, fontSize: 13 }}>
-                        Уровень английского для гранта: <b>{selected.grantEnglishLevel}</b>
+                        Сатҳи забони англисӣ барои грант: <b>{toTajik(selected.grantEnglishLevel)}</b>
                       </div>
                     )}
                   </div>
                 )}
                 <div className="sp-modal-cost">
-                  {selected.cost.toLocaleString('ru-RU')} {selected.currency} <span>/ год</span>
+                  {selected.cost.toLocaleString('ru-RU')} {selected.currency} <span>/ сол</span>
                 </div>
                 {selected.description && (
                   <div className="sp-modal-desc">{selected.description}</div>

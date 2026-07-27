@@ -17,6 +17,7 @@ import { financeSummary, listTransactions } from '../api/finance';
 import { listSalaries } from '../api/salary';
 import { hasRole, isFounder as isFounderFn, displayRoleLabel } from '../lib/roles';
 import { hasPermission } from '../lib/permissions';
+import { resolveLandingBaseUrl } from '../lib/landingUrl';
 import { LangSwitcher, useT } from '../lib/i18n';
 
 // Map route → prefetch fn. Срабатывает по hover/touchstart на nav-link
@@ -266,13 +267,12 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
           style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.08)' }}
         >
           <a
-            href={(() => {
-              // QA-fix #8: javonon.vercel.app/knowledge → 404 (старый Vercel
-              // project без SPA-rewrite). Актуальный landing — на
-              // javonon-landing.vercel.app, его /knowledge работает.
-              const base = (import.meta as any).env?.VITE_LANDING_URL || 'https://javonon-landing.vercel.app';
-              return `${base}/knowledge`;
-            })()}
+            // QA-fix #8: javonon.vercel.app/knowledge → 404 (старый Vercel
+            // project без SPA-rewrite). Актуальный landing — на
+            // javonon-landing.vercel.app, его /knowledge работает. Базу берём
+            // из lib/landingUrl — раньше здесь была своя inline-цепочка env,
+            // и её дефолт разъезжался с тем, что использовал Partners.tsx.
+            href={`${resolveLandingBaseUrl()}/knowledge`}
             target="_blank"
             rel="noreferrer"
             style={{

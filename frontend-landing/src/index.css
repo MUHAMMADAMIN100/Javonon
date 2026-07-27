@@ -1,6 +1,6 @@
 /* ============================================================
    Javonon — Editorial Premium · Navy Blue (#01368B) + White
-   Space Grotesk display · Inter body · JetBrains Mono accents
+   Golos Text display · Inter body · JetBrains Mono accents
    ============================================================ */
 
 :root {
@@ -46,7 +46,11 @@
   --gutter: 32px;
 
   /* Type */
-  --display: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  /* Fallback — 'Inter', а не system-ui: Inter уже загружен и полностью
+     покрывает cyrillic-ext, поэтому даже при недоступности Google Fonts
+     таджикские заголовки не уедут в Segoe UI / SF Pro / Roboto с тремя
+     разными метриками. system-ui остаётся последним рубежом. */
+  --display: 'Golos Text', 'Inter', system-ui, -apple-system, sans-serif;
   --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
@@ -152,7 +156,9 @@ input, textarea, select { font-family: inherit; }
   align-items: center;
   justify-content: space-between;
   gap: 32px;
-  height: 56px;
+  /* min-height, а не height: если перевод когда-нибудь вырастет и ряд
+     всё-таки перенесётся — бар станет выше, а не порвётся по вертикали. */
+  min-height: 56px;
 }
 
 .brand {
@@ -222,6 +228,9 @@ input, textarea, select { font-family: inherit; }
   font-weight: 500;
   color: rgba(255, 255, 255, 0.7);
   transition: all var(--t-fast);
+  /* Таджикские пункты длинные («Чӣ тавр кор мекунад» ≈ 125px текста).
+     Без nowrap они переносились на 2 строки внутри pill'а. */
+  white-space: nowrap;
 }
 .nav a:hover { color: white; background: rgba(255, 255, 255, 0.06); }
 
@@ -335,7 +344,12 @@ input, textarea, select { font-family: inherit; }
   font-weight: 500;
   font-size: clamp(48px, 7.5vw, 112px);
   line-height: 0.95;
-  letter-spacing: -0.04em;
+  /* -0.025em, а не -0.04em: -0.04em было подобрано под латиницу Space
+     Grotesk. У кириллицы Golos Text боковые свесы уже, и на -0.04em пара
+     «ҳу» («Ҷумҳурии») уходит в минус (-0.010em) — глифы физически
+     наезжают. -0.025em даёт зазор +0.015em — ровно тот же оптический
+     просвет, что был у Space Grotesk на латинице при -0.04em. */
+  letter-spacing: -0.025em;
   margin-bottom: 28px;
   max-width: 1100px;
 }
@@ -534,7 +548,7 @@ section.dark {
   font-weight: 500;
   font-size: clamp(36px, 5vw, 72px);
   line-height: 0.98;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.025em;
   color: var(--ink);
   max-width: 720px;
 }
@@ -879,7 +893,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   font-weight: 500;
   font-size: clamp(40px, 5vw, 80px);
   line-height: 0.98;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.025em;
   color: white;
 }
 .cta-left h2 em {
@@ -1176,7 +1190,10 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   font-family: var(--display);
   font-size: clamp(80px, 16vw, 240px);
   font-weight: 500;
-  letter-spacing: -0.06em;
+  /* «JAVONON» обводкой: у Golos Text пара «AV» на -0.06em перекрывается
+     на -0.030em, и при -webkit-text-stroke два контура сливаются в кашу.
+     -0.02em даёт +0.010em (~2.4px на 240px) — штрихи не касаются. */
+  letter-spacing: -0.02em;
   line-height: 0.85;
   color: transparent;
   -webkit-text-stroke: 1px var(--night-line-strong);
@@ -1238,7 +1255,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   font-weight: 500;
   font-size: clamp(36px, 4vw, 56px);
   line-height: 1.05;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.025em;
   margin-bottom: 24px;
 }
 .stu-login-aside h1 em {
@@ -1650,10 +1667,32 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   .stu-login-main { padding: 48px 32px; }
 }
 
-@media (max-width: 820px) {
+/* ---- ХИДЕР: свои брейкпоинты, независимые от 820px ----
+   Ряд = лого (104px) + .nav из 5 таджикских пунктов (~540px)
+   + .header-cta (~277px, оба .btn-pill — white-space: nowrap,
+   т.е. flexbox их не сожмёт) + 2×32px gap + 2×gutter.
+   Итого нужен вьюпорт ≈1033px. Раньше бургер включался только
+   на ≤820px, поэтому вся полоса 821–1032px ломалась: «Чӣ тавр кор
+   мекунад» переносился на вторую строку внутри pill'а, а на
+   ≤900px overflow-x:hidden ещё и прятал улику от QA. */
+
+/* Поджимаем nav заранее, чтобы у полосы 1081–1200px был реальный запас. */
+@media (max-width: 1200px) {
+  .nav { gap: 2px; }
+  .nav a { padding: 8px 11px; }
+}
+
+/* Ниже 1080px полный ряд не помещается — уходим в бургер.
+   Сюда попадают iPad Pro 12.9" portrait (1024), iPad Mini landscape,
+   Surface split-view и любое окно десктопа 900–1080px. */
+@media (max-width: 1080px) {
   .nav { display: none; }
-  .header-cta .btn-pill.ghost { display: none; }
   .burger { display: inline-flex; }
+}
+
+@media (max-width: 820px) {
+  /* .nav / .burger уже переключены блоком 1080px выше */
+  .header-cta .btn-pill.ghost { display: none; }
   section { padding: 80px 0; }
   .hero { padding-top: 88px; }
   .hero-content { padding: 48px 0 32px; }
@@ -2809,7 +2848,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   .hero h1 {
     font-size: clamp(34px, 9.5vw, 44px);
     line-height: 1.05;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.025em;
     word-break: break-word;
     overflow-wrap: anywhere;
     margin-bottom: 20px;
@@ -3204,4 +3243,65 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   aspect-ratio: 1 / 1 !important;
   flex-shrink: 0 !important;
   border-radius: 50% !important;
+}
+
+/* ================================================================
+   #apply — приземление партнёрской ссылки на форму заявки
+   ================================================================
+   Партнёрский URL выглядит как '/?ref=CODE#apply', и referral.ts
+   (scrollToApplyForm) доскролливает сюда программно — секция
+   монтируется позже первого кадра, нативный якорь не срабатывает.
+   ---------------------------------------------------------------- */
+
+/* Шапка .header — position: fixed, без запаса секция уезжала бы под неё. */
+#apply {
+  scroll-margin-top: 80px;
+}
+@media (max-width: 640px) {
+  #apply { scroll-margin-top: 64px; }
+}
+
+/*
+   Подсветка после автоскролла: класс .apply-highlight вешается на ~2s
+   (см. HIGHLIGHT_MS в referral.ts) и снимается из JS.
+   Секция .cta — тёмный navy full-bleed, поэтому кольцо inset: внешнее
+   по краям экрана было бы не видно. Фон НЕ трогаем и ничем не мигаем —
+   только мягкое акцентное кольцо, которое затухает.
+*/
+.apply-highlight {
+  animation: apply-ring 2s var(--ease) forwards;
+}
+
+@keyframes apply-ring {
+  0% {
+    box-shadow: inset 0 0 0 0 rgba(30, 91, 184, 0);
+  }
+  15% {
+    box-shadow:
+      inset 0 0 0 2px var(--emerald-2),
+      inset 0 0 48px 0 var(--emerald-glow);
+  }
+  55% {
+    box-shadow:
+      inset 0 0 0 2px var(--emerald-2),
+      inset 0 0 48px 0 var(--emerald-glow);
+  }
+  100% {
+    box-shadow:
+      inset 0 0 0 2px rgba(30, 91, 184, 0),
+      inset 0 0 48px 0 rgba(30, 91, 184, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Глобальный html { scroll-behavior: smooth } тоже снимаем — иначе
+     scrollIntoView({ behavior: 'auto' }) унаследовал бы smooth из CSS
+     и «уважение» к настройке было бы фикцией. */
+  html { scroll-behavior: auto; }
+
+  /* Статичное кольцо без анимации; JS снимет класс через 2s. */
+  .apply-highlight {
+    animation: none;
+    box-shadow: inset 0 0 0 2px var(--emerald-2);
+  }
 }

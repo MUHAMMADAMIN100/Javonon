@@ -5,10 +5,10 @@ import Icon from '../Icon';
 import Loading from './Loading';
 
 const TYPE_LABEL: Record<string, string> = {
-  CALL: 'Звонок',
-  EMAIL: 'Email',
-  MEETING: 'Встреча',
-  NOTE: 'Заметка',
+  CALL: 'Занг',
+  EMAIL: 'Почтаи электронӣ',
+  MEETING: 'Вохӯрӣ',
+  NOTE: 'Қайд',
   SMS: 'SMS',
   TELEGRAM: 'Telegram',
   WHATSAPP: 'WhatsApp',
@@ -42,15 +42,15 @@ export default function InteractionsHistory() {
 
   return (
     <div className="stu-card">
-      <h2>История общения с менеджером</h2>
+      <h2>Таърихи муошират бо менеҷер</h2>
       {loading ? (
         <Loading />
       ) : items.length === 0 ? (
         <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
           <Icon name="forum" size={48} style={{ opacity: 0.25, marginBottom: 12 }} />
-          <div>Пока нет записей о взаимодействиях</div>
+          <div>Ҳоло сабтҳо дар бораи муошират нест</div>
           <div style={{ fontSize: 13, marginTop: 6 }}>
-            Менеджер будет фиксировать здесь все звонки, встречи и письма
+            Менеҷер дар ин ҷо ҳамаи зангҳо, вохӯриҳо ва мактубҳоро сабт мекунад
           </div>
         </div>
       ) : (

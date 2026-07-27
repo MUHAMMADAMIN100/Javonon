@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Telegraf, Markup, Context } from 'telegraf';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReferralsService } from '../partners/referrals.service';
+import { resolveLandingBaseUrl } from '../common/landing-url';
 
 /**
  * Telegram-бот как центр воронки.
@@ -182,9 +183,9 @@ export class BotFunnelService implements OnApplicationBootstrap, OnModuleDestroy
     this.bot.action('menu:earn', async (ctx) => {
       try {
         await ctx.answerCbQuery();
-        const landing =
-          this.config.get<string>('LANDING_URL') ||
-          'https://javonon-landing.vercel.app';
+        // Без #apply: это ссылка на регистрацию ПАРТНЁРА (/partner/register),
+        // отдельная страница-роут, а не форма заявки студента на лендинге.
+        const landing = resolveLandingBaseUrl((k) => this.config.get<string>(k));
         await ctx.replyWithMarkdown(
           this.MESSAGES.howToEarn(`${landing}/partner/register`),
           this.mainMenu() as any,
@@ -206,11 +207,12 @@ export class BotFunnelService implements OnApplicationBootstrap, OnModuleDestroy
         const session = await this.prisma.botSession.findUnique({
           where: { telegramUserId: String(ctx.from!.id) },
         });
-        const landing =
-          this.config.get<string>('LANDING_URL') ||
-          'https://javonon-landing.vercel.app';
+        // Здесь #apply уместен и уже был: кнопка «Купить» ведёт человека
+        // прямо на форму заявки. Приводим к тому же формату, что и
+        // partners.service.buildReferralUrl — '/?ref=CODE#apply'.
+        const landing = resolveLandingBaseUrl((k) => this.config.get<string>(k));
         const ref = session?.partnerCode;
-        const url = ref ? `${landing}?ref=${ref}#apply` : `${landing}#apply`;
+        const url = ref ? `${landing}/?ref=${ref}#apply` : `${landing}/#apply`;
         await ctx.replyWithMarkdown(this.MESSAGES.buy(url));
       } catch {}
     });

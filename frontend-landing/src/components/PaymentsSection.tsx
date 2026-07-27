@@ -12,24 +12,24 @@ import Icon from '../Icon';
 import Loading from './Loading';
 
 const CATEGORY_LABEL: Record<string, string> = {
-  TUITION_PAYMENT: 'Оплата обучения',
-  ADDITIONAL_FEE: 'Доплата',
-  OTHER_INCOME: 'Прочее',
+  TUITION_PAYMENT: 'Пардохти таҳсил',
+  ADDITIONAL_FEE: 'Пардохти иловагӣ',
+  OTHER_INCOME: 'Дигар',
 };
 
 const METHOD_LABEL: Record<string, string> = {
-  CARD: 'Карта',
-  BANK_TRANSFER: 'Банковский перевод',
-  CASH: 'Наличные',
-  CRYPTO: 'Криптовалюта',
-  OTHER: 'Другое',
+  CARD: 'Корт',
+  BANK_TRANSFER: 'Интиқоли бонкӣ',
+  CASH: 'Нақд',
+  CRYPTO: 'Криптоасъор',
+  OTHER: 'Дигар',
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  PENDING: 'Ожидает подтверждения',
-  CONFIRMED: 'Подтверждена',
-  REJECTED: 'Отклонена',
-  CANCELLED: 'Отменена',
+  PENDING: 'Дар интизори тасдиқ',
+  CONFIRMED: 'Тасдиқ шуд',
+  REJECTED: 'Рад шуд',
+  CANCELLED: 'Бекор карда шуд',
 };
 
 function fmt(n: number, c: string) {
@@ -60,7 +60,7 @@ export default function PaymentsSection() {
       {/* Заявки на оплату */}
       {pendingList.length > 0 && (
         <div className="stu-card" style={{ marginBottom: 16 }}>
-          <h2>Мои заявки на оплату</h2>
+          <h2>Аризаҳои ман барои пардохт</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {pendingList.map((p) => {
               const statusColor =
@@ -110,7 +110,7 @@ export default function PaymentsSection() {
                         refresh();
                       }}
                     >
-                      Отменить
+                      Бекор кардан
                     </button>
                   )}
                 </motion.div>
@@ -123,10 +123,10 @@ export default function PaymentsSection() {
       {/* Кнопка / форма «Оплатить» */}
       <div className="stu-card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <h2 style={{ margin: 0 }}>Оплата обучения</h2>
+          <h2 style={{ margin: 0 }}>Пардохти таҳсил</h2>
           {!showForm && (
             <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-              <Icon name="payments" size={18} /> Оплатить
+              <Icon name="payments" size={18} /> Пардохт кардан
             </button>
           )}
         </div>
@@ -153,13 +153,13 @@ export default function PaymentsSection() {
 
       {/* История платежей */}
       <div className="stu-card">
-        <h2>История платежей</h2>
+        <h2>Таърихи пардохтҳо</h2>
         {loading ? (
           <Loading />
         ) : items.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
             <Icon name="receipt_long" size={48} style={{ opacity: 0.25, marginBottom: 12 }} />
-            <div>Подтверждённых платежей пока нет</div>
+            <div>Ҳоло пардохтҳои тасдиқшуда нест</div>
           </div>
         ) : (
           <>
@@ -176,14 +176,14 @@ export default function PaymentsSection() {
             }}>
               <div>
                 <div style={{ fontSize: 12, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-                  Всего оплачено
+                  Ҳамагӣ пардохт шуд
                 </div>
                 <div style={{ fontFamily: 'var(--font-display, Inter)', fontSize: 36, fontWeight: 600 }}>
                   {fmt(total, items[0]?.currency || 'USD')}
                 </div>
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-soft)' }}>
-                {items.length} {items.length === 1 ? 'платёж' : items.length < 5 ? 'платежа' : 'платежей'}
+                {items.length} пардохт
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -268,7 +268,7 @@ function NewPaymentForm({ onSubmit, onCancel }: {
     }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <div>
-          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Сумма</label>
+          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Маблағ</label>
           <input
             type="number" step="0.01" min={0.01}
             value={amount}
@@ -279,7 +279,7 @@ function NewPaymentForm({ onSubmit, onCancel }: {
           />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Валюта</label>
+          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Асъор</label>
           <select
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
@@ -289,26 +289,26 @@ function NewPaymentForm({ onSubmit, onCancel }: {
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Способ</label>
+          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Усул</label>
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value as any)}
             style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border, #ddd)', borderRadius: 10, fontSize: 14 }}
           >
-            <option value="BANK_TRANSFER">Банковский перевод</option>
-            <option value="CARD">Карта</option>
-            <option value="CASH">Наличные</option>
-            <option value="CRYPTO">Криптовалюта</option>
-            <option value="OTHER">Другое</option>
+            <option value="BANK_TRANSFER">Интиқоли бонкӣ</option>
+            <option value="CARD">Корт</option>
+            <option value="CASH">Нақд</option>
+            <option value="CRYPTO">Криптоасъор</option>
+            <option value="OTHER">Дигар</option>
           </select>
         </div>
       </div>
       <div style={{ marginTop: 12 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Комментарий (опционально)</label>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Шарҳ (ихтиёрӣ)</label>
         <input
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          placeholder="Например: оплата за 1-й семестр"
+          placeholder="Масалан: пардохт барои семестри 1"
           style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border, #ddd)', borderRadius: 10, fontSize: 14 }}
         />
       </div>
@@ -322,12 +322,12 @@ function NewPaymentForm({ onSubmit, onCancel }: {
         color: '#92400e',
       }}>
         <Icon name="info" size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-        После отправки бухгалтер свяжется с тобой и подтвердит оплату.
+        Пас аз фиристодан муҳосиб бо шумо тамос мегирад ва пардохтро тасдиқ мекунад.
       </div>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-        <button type="button" className="btn btn-outline btn-small" onClick={onCancel}>Отмена</button>
+        <button type="button" className="btn btn-outline btn-small" onClick={onCancel}>Бекор кардан</button>
         <button type="submit" className="btn btn-primary" disabled={submitting || !amount}>
-          {submitting ? 'Отправляем...' : 'Отправить заявку'}
+          {submitting ? 'Мефиристем...' : 'Ариза фиристодан'}
         </button>
       </div>
     </form>

@@ -41,15 +41,15 @@ export default function Knowledge() {
           <div className="container">
             <div className="section-head">
               <div>
-                <span className="eyebrow on-dark">База знаний</span>
+                <span className="eyebrow on-dark">Пойгоҳи дониш</span>
                 <h2 className="display">
-                  Всё что нужно знать<br />
-                  <em>о поступлении.</em>
+                  Ҳама чиз дар бораи<br />
+                  <em>қабул ба донишгоҳ.</em>
                 </h2>
               </div>
               <p>
-                Процессы, документы, сроки и стоимость — для клиентов
-                и для сотрудников Javonon. Обновляется вместе с регуляциями.
+                Раванд, ҳуҷҷатҳо, мӯҳлат ва арзиш — барои муштариён
+                ва кормандони Javonon. Ҳамроҳи қоидаҳо навсозӣ мешавад.
               </p>
             </div>
 
@@ -97,7 +97,7 @@ export default function Knowledge() {
                       color: 'var(--emerald-2)',
                       textTransform: 'uppercase',
                     }}>
-                      {c.articleCount} статей <Icon name="arrow_outward" size={14} />
+                      {c.articleCount} мақола <Icon name="arrow_outward" size={14} />
                     </div>
                   </motion.button>
                 ))}
@@ -109,7 +109,7 @@ export default function Knowledge() {
                   onClick={() => { setSelected(null); setOpenArticle(null); }}
                   style={{ marginBottom: 32 }}
                 >
-                  <Icon name="arrow_back" size={14} /> Все категории
+                  <Icon name="arrow_back" size={14} /> Ҳамаи категорияҳо
                 </button>
                 <div style={{ marginBottom: 32 }}>
                   <div style={{ fontSize: 56, marginBottom: 12 }}>{selected.icon}</div>
@@ -147,7 +147,7 @@ export default function Knowledge() {
                           marginBottom: 24,
                         }}
                       >
-                        <Icon name="arrow_back" size={14} /> К статьям
+                        <Icon name="arrow_back" size={14} /> Ба мақолаҳо
                       </button>
                       <h3 style={{
                         fontFamily: 'var(--display)',
@@ -157,7 +157,7 @@ export default function Knowledge() {
                         marginBottom: 32,
                       }}>{openArticle.title}</h3>
 
-                      <ArticleSection title="ПРОЦЕСС" iconName="format_list_numbered">
+                      <ArticleSection title="РАВАНД" iconName="format_list_numbered">
                         <ol style={{ paddingLeft: 24, lineHeight: 1.8 }}>
                           {openArticle.processSteps.map((s, i) => (
                             <li key={i} style={{ marginBottom: 6 }}>{s}</li>
@@ -166,7 +166,7 @@ export default function Knowledge() {
                       </ArticleSection>
 
                       {openArticle.documents.length > 0 && (
-                        <ArticleSection title="ДОКУМЕНТЫ" iconName="description">
+                        <ArticleSection title="ҲУҶҶАТҲО" iconName="description">
                           <ul style={{ paddingLeft: 24, lineHeight: 1.8 }}>
                             {openArticle.documents.map((d, i) => (
                               <li key={i} style={{ marginBottom: 4 }}>{d}</li>
@@ -177,10 +177,10 @@ export default function Knowledge() {
 
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginTop: 24 }}>
                         {openArticle.duration && (
-                          <Stat label="СРОК" value={openArticle.duration} />
+                          <Stat label="МӮҲЛАТ" value={openArticle.duration} />
                         )}
                         {openArticle.cost && (
-                          <Stat label="СТОИМОСТЬ" value={openArticle.cost} />
+                          <Stat label="АРЗИШ" value={openArticle.cost} />
                         )}
                       </div>
 
@@ -199,7 +199,7 @@ export default function Knowledge() {
                             color: 'var(--emerald-deep)',
                             marginBottom: 8,
                             textTransform: 'uppercase',
-                          }}>СОВЕТ</div>
+                          }}>МАСЛИҲАТ</div>
                           <div style={{ fontSize: 15, lineHeight: 1.6 }}>{openArticle.tips}</div>
                         </div>
                       )}
@@ -257,7 +257,7 @@ export default function Knowledge() {
 
             <div style={{ textAlign: 'center', marginTop: 64 }}>
               <Link to="/" className="btn btn-ghost-dark">
-                <Icon name="arrow_back" size={16} /> Главная
+                <Icon name="arrow_back" size={16} /> Саҳифаи асосӣ
               </Link>
             </div>
           </div>

@@ -9,13 +9,13 @@ const MAX_NAME = 100;
 const MAX_EMAIL = 120;
 const MAX_COMMENT = 500;
 
-type Errors = Partial<Record<'fullName' | 'phone' | 'email' | 'comment', string>>;
+type Errors = Partial<Record<'fullName' | 'phone' | 'email' | 'comment' | 'secondaryPhone', string>>;
 
 const PERKS = [
-  'Бесплатная консультация 30 минут',
-  'Менеджер отвечает за 30 минут',
-  'Гарантия по договору',
-  'Сообщество выпускников на годы',
+  'Машварати ройгон 30 дақиқа',
+  'Менеҷер дар 30 дақиқа ҷавоб медиҳад',
+  'Кафолат аз рӯи шартнома',
+  'Ҷомеаи хатмкунандагон барои солҳо',
 ];
 
 export default function ApplicationForm() {
@@ -36,37 +36,63 @@ export default function ApplicationForm() {
   const [success, setSuccess] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
+  // Общая проверка номера для основного и дополнительного телефона.
+  // Пустое значение здесь НЕ считается ошибкой — обязательность решает вызывающий,
+  // т.к. phone обязателен, а secondaryPhone (родитель/опекун) — нет.
+  // Порог minDigits (7 цифр) специально не ниже, чем backend PHONE_RE
+  // /^\+?[\d\s\-()]{7,20}$/ в create-application.dto.ts: там 7 символов считаются
+  // ВМЕСТЕ с кодом страны, поэтому «+992» + 1..3 цифры прошло бы фронт, но упало
+  // бы в 400 на бэке. Проверка ниже строже, значит недобитый номер до сети не дойдёт.
+  const validatePhoneValue = (value: string): string | undefined => {
+    const v = (value || '').trim();
+    const matched = COUNTRIES.find((c) => v.startsWith(c.code));
+    if (!matched) return 'Коди кишварро интихоб кунед';
+    const digits = v.slice(matched.code.length).replace(/\D/g, '');
+    if (digits.length < matched.minDigits) return `${matched.minDigits} рақам лозим аст`;
+    if (digits.length > matched.maxDigits) return `Рақам хеле дароз аст`;
+    return;
+  };
+
   const validateField = (field: keyof Errors, value: string): string | undefined => {
     if (field === 'fullName') {
       const v = value.trim();
-      if (!v) return 'Введи своё имя';
-      if (v.length < 2) return 'Имя слишком короткое';
-      if (v.length > MAX_NAME) return `Максимум ${MAX_NAME} символов`;
-      if (!/[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ]/.test(v)) return 'Только буквы';
+      if (!v) return 'Ному насаби худро нависед';
+      if (v.length < 2) return 'Ном хеле кӯтоҳ аст';
+      if (v.length > MAX_NAME) return `Ҳадди аксар ${MAX_NAME} аломат`;
+      if (!/[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ]/.test(v)) return 'Танҳо ҳарфҳо';
       return;
     }
     if (field === 'phone') {
       const v = (value || '').trim();
-      if (!v) return 'Укажи телефон';
-      const matched = COUNTRIES.find((c) => v.startsWith(c.code));
-      if (!matched) return 'Выбери код страны';
-      const digits = v.slice(matched.code.length).replace(/\D/g, '');
-      if (digits.length < matched.minDigits) return `Нужно ${matched.minDigits} цифр`;
-      if (digits.length > matched.maxDigits) return `Слишком длинный номер`;
-      return;
+      if (!v) return 'Рақами телефонро нависед';
+      return validatePhoneValue(v);
+    }
+    if (field === 'secondaryPhone') {
+      const v = (value || '').trim();
+      // Поле необязательное: пусто — валидно.
+      if (!v) return;
+      return validatePhoneValue(v);
     }
     if (field === 'email') {
       const v = value.trim();
       if (!v) return;
-      if (v.length > MAX_EMAIL) return `Максимум ${MAX_EMAIL} символов`;
-      if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v)) return 'Некорректный email';
+      if (v.length > MAX_EMAIL) return `Ҳадди аксар ${MAX_EMAIL} аломат`;
+      if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v)) return 'Почтаи электронӣ нодуруст';
       return;
     }
     if (field === 'comment') {
-      if (value.length > MAX_COMMENT) return `Максимум ${MAX_COMMENT} символов`;
+      if (value.length > MAX_COMMENT) return `Ҳадди аксар ${MAX_COMMENT} аломат`;
       return;
     }
     return;
+  };
+
+  const fieldValue = (field: keyof Errors): string => {
+    if (field === 'fullName') return fullName;
+    if (field === 'phone') return phone;
+    if (field === 'email') return email;
+    if (field === 'secondaryPhone') return secondaryPhone;
+    return comment;
   };
 
   const checkAll = (): Errors => ({
@@ -74,6 +100,10 @@ export default function ApplicationForm() {
     phone: validateField('phone', phone),
     email: validateField('email', email),
     comment: validateField('comment', comment),
+    // secondaryPhone уходит в тело запроса (см. handleSubmit), поэтому его
+    // тоже надо проверить до отправки — иначе недобитый номер даёт 400
+    // и вся заявка теряется.
+    secondaryPhone: validateField('secondaryPhone', secondaryPhone),
   });
 
   const cleanErrors = (e: Errors): Errors => {
@@ -86,8 +116,7 @@ export default function ApplicationForm() {
 
   const handleBlur = (field: keyof Errors) => {
     setTouched((t) => ({ ...t, [field]: true }));
-    const value = field === 'fullName' ? fullName : field === 'phone' ? phone : field === 'email' ? email : comment;
-    const err = validateField(field, value);
+    const err = validateField(field, fieldValue(field));
     setErrors((prev) => ({ ...prev, [field]: err }));
   };
 
@@ -98,6 +127,16 @@ export default function ApplicationForm() {
       if (touched.phone || errors.phone) {
         const err = validateField('phone', value);
         setErrors((prev) => ({ ...prev, phone: err }));
+      }
+      return;
+    }
+    // PhoneInput не даёт onBlur, поэтому доп. номер валидируем «вживую»,
+    // как и основной: после первого submit / первой ошибки.
+    else if (field === 'secondaryPhone') {
+      setSecondaryPhone(value);
+      if (touched.secondaryPhone || errors.secondaryPhone) {
+        const err = validateField('secondaryPhone', value);
+        setErrors((prev) => ({ ...prev, secondaryPhone: err }));
       }
       return;
     }
@@ -114,7 +153,9 @@ export default function ApplicationForm() {
     setServerError(null);
     const all = cleanErrors(checkAll());
     setErrors(all);
-    setTouched({ fullName: true, phone: true, email: true, comment: true });
+    setTouched({ fullName: true, phone: true, email: true, comment: true, secondaryPhone: true });
+    // Ошибка в свёрнутом блоке была бы невидимым блокером сабмита — разворачиваем.
+    if (all.secondaryPhone) setShowExtra(true);
     if (Object.keys(all).length > 0) return;
 
     setSubmitting(true);
@@ -149,7 +190,7 @@ export default function ApplicationForm() {
       setTouched({});
       setTimeout(() => setSuccess(false), 8000);
     } catch (err: any) {
-      setServerError(err?.message || 'Что-то пошло не так. Попробуй ещё раз.');
+      setServerError(err?.message || 'Хатогӣ рух дод. Лутфан бори дигар кӯшиш кунед.');
     } finally {
       setSubmitting(false);
     }
@@ -161,15 +202,15 @@ export default function ApplicationForm() {
     <section id="apply" className="cta">
       <div className="container cta-grid">
         <div className="cta-left">
-          <span className="eyebrow on-dark">Подать заявку</span>
+          <span className="eyebrow on-dark">Ариза фиристодан</span>
           <h2>
-            Расскажи о себе.<br />
-            <em>Остальное — наша работа.</em>
+            Дар бораи худ нависед.<br />
+            <em>Боқиаш — кори мо.</em>
           </h2>
           <p>
-            Одна короткая форма. Реальный человек прочитает её в течение 30 минут
-            в рабочее время. Никаких ботов, автоответчиков и "ваш звонок очень
-            важен для нас".
+            Як варақаи кӯтоҳ. Одами воқеӣ онро дар давоми 30 дақиқа дар вақти
+            корӣ мехонад. Ҳеҷ бот, ҳеҷ ҷавобгӯи худкор ва ҳеҷ "занги шумо барои
+            мо хеле муҳим аст".
           </p>
           <ul className="cta-list">
             {PERKS.map((p) => (
@@ -190,8 +231,8 @@ export default function ApplicationForm() {
             viewport={{ once: true }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="form-eyebrow">Шаг 01 · О тебе</div>
-            <h3>Начни путь к гранту</h3>
+            <div className="form-eyebrow">Қадами 01 · Дар бораи шумо</div>
+            <h3>Роҳи худро сӯи грант оғоз кунед</h3>
 
             <AnimatePresence>
               {success && (
@@ -202,9 +243,9 @@ export default function ApplicationForm() {
                   exit={{ opacity: 0, scale: 0.9 }}
                 >
                   <div className="ok-icon"><Icon name="check" size={28} /></div>
-                  <div style={{ fontSize: 18, fontWeight: 500 }}>Заявка получена</div>
+                  <div style={{ fontSize: 18, fontWeight: 500 }}>Ариза қабул шуд</div>
                   <div style={{ fontWeight: 400, fontSize: 14, marginTop: 8, color: 'var(--night-text-soft)' }}>
-                    Менеджер Javonon свяжется с тобой в течение 30 минут.
+                    Менеҷери Javonon дар давоми 30 дақиқа бо шумо тамос мегирад.
                   </div>
                 </motion.div>
               )}
@@ -219,13 +260,13 @@ export default function ApplicationForm() {
             {!success && (
               <>
                 <div className="form-row">
-                  <label>ФИО</label>
+                  <label>Ному насаб</label>
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => handleFieldChange('fullName', e.target.value)}
                     onBlur={() => handleBlur('fullName')}
-                    placeholder="Иванов Иван Иванович"
+                    placeholder="Раҳимов Далер Сафарович"
                     maxLength={MAX_NAME}
                     className={invalid('fullName') ? 'error' : ''}
                     autoComplete="name"
@@ -244,7 +285,7 @@ export default function ApplicationForm() {
                 </div>
 
                 <div className="form-row">
-                  <label>Email <span style={{ opacity: 0.5 }}>(не обязательно)</span></label>
+                  <label>Почтаи электронӣ <span style={{ opacity: 0.5 }}>(ихтиёрӣ)</span></label>
                   <input
                     type="email"
                     value={email}
@@ -259,7 +300,7 @@ export default function ApplicationForm() {
                 </div>
 
                 <div className="form-row">
-                  <label>Цель</label>
+                  <label>Ҳадаф</label>
                   <select value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
                     {(Object.keys(DIRECTION_LABEL) as Direction[]).map((d) => (
                       <option key={d} value={d}>{DIRECTION_LABEL[d]}</option>
@@ -269,14 +310,14 @@ export default function ApplicationForm() {
 
                 <div className="form-row">
                   <label>
-                    Что важно знать?
+                    Чӣ донистан муҳим аст?
                     <span className="form-counter">{comment.length}/{MAX_COMMENT}</span>
                   </label>
                   <textarea
                     value={comment}
                     onChange={(e) => handleFieldChange('comment', e.target.value)}
                     onBlur={() => handleBlur('comment')}
-                    placeholder="Страна, университет, дедлайн, бюджет — всё, что поможет нам помочь тебе."
+                    placeholder="Кишвар, донишгоҳ, мӯҳлат, буҷа — ҳар чизе ки ба мо кӯмак мекунад, то ба шумо кӯмак расонем."
                     maxLength={MAX_COMMENT}
                     className={invalid('comment') ? 'error' : ''}
                   />
@@ -303,40 +344,42 @@ export default function ApplicationForm() {
                       textAlign: 'left',
                     }}
                   >
-                    + Добавить ещё контакт или указать предпочтительный канал
+                    + Тамоси иловагӣ ё роҳи дилхоҳи алоқа илова кунед
                   </button>
                 )}
                 {showExtra && (
                   <>
                     <div className="form-row">
-                      <label>Доп. телефон (родитель / опекун)</label>
+                      <label>Телефони иловагӣ (волидайн / васӣ) <span style={{ opacity: 0.5 }}>(ихтиёрӣ)</span></label>
                       <PhoneInput
                         value={secondaryPhone}
-                        onChange={setSecondaryPhone}
+                        onChange={(v) => handleFieldChange('secondaryPhone', v)}
+                        error={invalid('secondaryPhone')}
                       />
+                      {invalid('secondaryPhone') && <div className="form-error">{errors.secondaryPhone}</div>}
                     </div>
                     <div className="form-row">
-                      <label>Кем приходится</label>
+                      <label>Кӣ мешавад</label>
                       <input
                         type="text"
                         value={secondaryLabel}
                         onChange={(e) => setSecondaryLabel(e.target.value)}
-                        placeholder="Например: отец, мать, брат, опекун"
+                        placeholder="Масалан: падар, модар, бародар, васӣ"
                         maxLength={40}
                       />
                     </div>
                     <div className="form-row">
-                      <label>Предпочтительный способ связи</label>
+                      <label>Роҳи дилхоҳи алоқа</label>
                       <select
                         value={preferredChannel}
                         onChange={(e) => setPreferredChannel(e.target.value as ContactChannel | '')}
                       >
-                        <option value="">— не важно —</option>
-                        <option value="PHONE">Звонок</option>
+                        <option value="">— фарқ надорад —</option>
+                        <option value="PHONE">Занг</option>
                         <option value="WHATSAPP">WhatsApp</option>
                         <option value="TELEGRAM">Telegram</option>
                         <option value="INSTAGRAM">Instagram</option>
-                        <option value="EMAIL">Email</option>
+                        <option value="EMAIL">Почтаи электронӣ</option>
                       </select>
                     </div>
                   </>
@@ -349,12 +392,12 @@ export default function ApplicationForm() {
                   whileHover={!submitting ? { scale: 1.02 } : {}}
                   whileTap={!submitting ? { scale: 0.98 } : {}}
                 >
-                  {submitting ? 'Отправляем...' : (
-                    <>Отправить заявку <Icon name="arrow_outward" size={18} /></>
+                  {submitting ? 'Фиристода истодаем...' : (
+                    <>Ариза фиристодан <Icon name="arrow_outward" size={18} /></>
                   )}
                 </motion.button>
                 <p className="form-hint">
-                  Нажимая кнопку, ты соглашаешься с обработкой данных
+                  Бо пахши тугма шумо ба коркарди маълумот розӣ мешавед
                 </p>
               </>
             )}

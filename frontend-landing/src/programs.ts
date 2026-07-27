@@ -30,7 +30,7 @@ export async function listPublicPrograms(filters: {
     if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
   });
   const res = await fetch(`${API_URL}/programs/public?${params}`);
-  if (!res.ok) throw new Error('Не удалось загрузить программы');
+  if (!res.ok) throw new Error('Барномаҳоро бор кардан нашуд');
   return res.json();
 }
 
@@ -42,6 +42,6 @@ export async function getPublicProgramFilters(): Promise<{ cities: string[]; maj
 
 export async function getPublicProgram(id: string): Promise<Program> {
   const res = await fetch(`${API_URL}/programs/public/${id}`);
-  if (!res.ok) throw new Error('Программа не найдена');
+  if (!res.ok) throw new Error('Барнома ёфт нашуд');
   return res.json();
 }

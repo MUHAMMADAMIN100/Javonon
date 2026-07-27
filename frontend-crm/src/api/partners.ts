@@ -7,6 +7,18 @@ export interface Partner {
   phone?: string | null;
   referralCode: string;
   /**
+   * Full referral link built by the backend (`<landing>/?ref=CODE#apply`).
+   * The ONLY source of truth for the share link — never rebuild it on the
+   * client: the base domain and the mandatory `#apply` anchor live in
+   * backend/src/common/landing-url.ts + partners.service.buildReferralUrl.
+   *
+   * Optional because it is only present on payloads that the backend
+   * decorates: `GET /admin/partners` (adminList). Nested `partner` objects
+   * (create / detail responses) omit it — those responses carry a sibling
+   * top-level `referralUrl` instead.
+   */
+  referralUrl?: string;
+  /**
    * Flat commission rate (in TJS cents) paid per successful client payment.
    * This is the current commission source-of-truth (Variant A: fixed sum,
    * not %). Defaults to 50000 (= 500.00 TJS) on the backend.
@@ -29,6 +41,18 @@ export interface Partner {
   updatedAt?: string;
   _count?: { clicks: number; attributions: number; commissions: number };
 }
+
+/**
+ * Row of `GET /admin/partners`. Structurally identical to {@link Partner};
+ * it exists as a named type because this is the one payload where the backend
+ * decorates every row with `referralUrl` (partners.service.adminList), so a
+ * consumer typed as this may read the field instead of rebuilding the link.
+ *
+ * Still optional on the type: the CRM (Vercel) can ship ahead of the API
+ * (Railway), and the pre-decoration backend omits it — callers fall back to
+ * lib/landingUrl.buildReferralUrl for that window only.
+ */
+export type AdminPartnerListItem = Partner;
 
 export interface PartnerStats {
   clicksCount: number;
@@ -146,7 +170,7 @@ export interface AdminPayout {
 }
 
 export const adminListPartners = () =>
-  api.get<Partner[]>('/admin/partners').then((r) => r.data);
+  api.get<AdminPartnerListItem[]>('/admin/partners').then((r) => r.data);
 
 export const adminCreatePartner = (dto: AdminCreatePartnerDto) =>
   api.post<AdminCreatePartnerResponse>('/admin/partners', dto).then((r) => r.data);

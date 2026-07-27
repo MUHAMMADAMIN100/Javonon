@@ -4,30 +4,30 @@ import Icon from '../Icon';
 const CONTACTS = [
   {
     icon: 'mail',
-    label: 'Email',
+    label: 'Почтаи электронӣ',
     value: 'hello@javonon.com',
     href: 'mailto:hello@javonon.com',
-    sub: 'Ответ за 30 минут',
+    sub: 'Ҷавоб дар 30 дақиқа',
   },
   {
     icon: 'send',
     label: 'Telegram',
     value: '@javonon',
     href: 'https://t.me/javonon',
-    sub: 'Самый быстрый канал',
+    sub: 'Тезтарин канал',
   },
   {
     icon: 'call',
     label: 'Телефон',
     value: '+992 900 000 000',
     href: 'tel:+992900000000',
-    sub: 'Пн–Сб, 9:00–19:00',
+    sub: 'Дш–Шб, 9:00–19:00',
   },
   {
     icon: 'location_on',
     label: 'Офис',
     value: 'Душанбе',
-    sub: 'пр. Рудаки, 55',
+    sub: 'хиёбони Рӯдакӣ, 55',
   },
 ];
 
@@ -45,15 +45,15 @@ export default function Contacts() {
       <div className="container">
         <div className="section-head">
           <div>
-            <span className="eyebrow">Связаться</span>
+            <span className="eyebrow">Тамос</span>
             <h2 className="display">
-              Поговори с человеком.<br />
-              <em>Уже сегодня.</em>
+              Бо одам сӯҳбат кун.<br />
+              <em>Ҳамин имрӯз.</em>
             </h2>
           </div>
           <p>
-            Выбери удобный канал. Мы отвечаем одинаково быстро во всех — реальный
-            человек на связи, на твоём языке, без скриптов.
+            Канали қулайро интихоб кун. Мо дар ҳама якхела зуд ҷавоб медиҳем —
+            одами воқеӣ дар тамос, бо забони ту, бидуни скрипт.
           </p>
         </div>
 

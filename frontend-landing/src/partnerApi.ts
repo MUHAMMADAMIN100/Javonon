@@ -1,7 +1,45 @@
 import axios from 'axios';
 
+// VITE_API_URL уже содержит /api на конце (см. .env.example и DEPLOY.md),
+// поэтому дефолт тоже с /api — иначе baseURL выродится в /api/api и всё
+// партнёрское API отдаст 404.
 const API_BASE =
-  (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
+  (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
+
+/**
+ * Origin бэкенда без хвостового `/api` и без хвостовых слэшей.
+ *
+ * Нормализуем обе формы записи VITE_API_URL (с суффиксом `/api` и голым
+ * origin'ом) — так же, как это уже делает PublicProgramsSection через свой
+ * API_ROOT. Ссылка, собранная руками, не должна зависеть от того, кто как
+ * заполнил переменную на Vercel.
+ */
+const API_ROOT = String(API_BASE)
+  .replace(/\/+$/, '')
+  .replace(/\/api$/, '');
+
+/**
+ * Короткая партнёрская ссылка вида `<api-origin>/api/r/CODE`.
+ *
+ * ЭТО МАРШРУТ БЭКЕНДА, А НЕ СТРАНИЦА ЛЕНДИНГА.
+ * Его обслуживает NestJS — backend/src/partners/referrals.controller.ts,
+ * `@Get('r/:code')`: он записывает клик (registerClick) и отдаёт 302 либо в
+ * Telegram-бот, либо на лендинг с `?ref=` и якорем `#apply`.
+ *
+ * Почему НЕ `window.location.origin`: origin здесь — домен лендинга
+ * (javonon-landing.vercel.app). Роута `/r` в main.tsx нет, а vercel.json
+ * переписывает `/(.*)` в `/index.html` — браузер грузил SPA, React Router не
+ * находил совпадения, и партнёр вместе со всеми, кому он переслал ссылку,
+ * получал белый экран. Клик, атрибуция и комиссия терялись молча — ровно тот
+ * класс потерь, ради которого написан backend/src/common/landing-url.ts.
+ *
+ * Почему в пути есть `/api`: backend/src/main.ts зовёт
+ * `app.setGlobalPrefix('api')` без exclude, поэтому контроллер реально слушает
+ * `/api/r/:code`. Ссылка на `<api-origin>/r/CODE` вернула бы 404.
+ */
+export function partnerShortLink(code: string): string {
+  return `${API_ROOT}/api/r/${encodeURIComponent(code)}`;
+}
 
 const TOKEN_KEY = 'javonon_partner_token';
 
@@ -16,7 +54,7 @@ export function clearPartnerToken() {
 }
 
 const client = axios.create({
-  baseURL: `${API_BASE}/api`,
+  baseURL: API_BASE,
 });
 client.interceptors.request.use((cfg) => {
   const t = getPartnerToken();

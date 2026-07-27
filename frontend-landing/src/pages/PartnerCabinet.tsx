@@ -7,6 +7,7 @@ import {
   getPartnerToken,
   partnerDashboard,
   partnerRequestPayout,
+  partnerShortLink,
 } from '../partnerApi';
 
 export default function PartnerCabinet() {
@@ -46,6 +47,10 @@ export default function PartnerCabinet() {
     ? `${window.location.origin}/?ref=${data.partner.referralCode}`
     : '';
 
+  // Короткая ссылка живёт на origin'е API, а не лендинга: `/r/:code` — это
+  // роут NestJS, который пишет клик и отдаёт 302. См. partnerShortLink().
+  const shortLink = data ? partnerShortLink(data.partner.referralCode) : '';
+
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(link);
@@ -59,7 +64,7 @@ export default function PartnerCabinet() {
     setPayoutErr(null);
     const amount = parseFloat(payoutAmount.replace(',', '.'));
     if (!amount || amount <= 0) {
-      setPayoutErr('Сумма должна быть > 0');
+      setPayoutErr('Маблағ бояд аз 0 зиёд бошад');
       return;
     }
     try {
@@ -71,16 +76,16 @@ export default function PartnerCabinet() {
       setPayoutAmount('');
       setPayoutDetails('');
       await refresh();
-      alert('Заявка на выплату создана');
+      alert('Аризаи пардохт сохта шуд');
     } catch (e: any) {
-      setPayoutErr(e?.response?.data?.message || 'Не удалось создать выплату');
+      setPayoutErr(e?.response?.data?.message || 'Пардохтро сохтан нашуд');
     }
   };
 
   if (loading || !data) {
     return (
       <div className="stu-page" style={{ padding: 40, textAlign: 'center' }}>
-        Загружаем…
+        Боркунӣ…
       </div>
     );
   }
@@ -92,7 +97,7 @@ export default function PartnerCabinet() {
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <div>
-            <Link to="/" style={{ fontSize: 12, color: 'var(--ink-mute)', textDecoration: 'none' }}>← На главную</Link>
+            <Link to="/" style={{ fontSize: 12, color: 'var(--ink-mute)', textDecoration: 'none' }}>← Ба саҳифаи асосӣ</Link>
             <h1 style={{ fontFamily: 'var(--display)', fontSize: 28, fontWeight: 600, margin: '8px 0 4px' }}>
               {partner.fullName}
             </h1>
@@ -103,14 +108,14 @@ export default function PartnerCabinet() {
             className="btn-pill ghost"
             style={{ padding: '8px 16px' }}
           >
-            Выйти
+            Баромадан
           </button>
         </header>
 
         {/* Реферальная ссылка */}
         <section style={{ background: 'white', borderRadius: 20, padding: 24, marginBottom: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.12em', color: 'var(--ink-mute)', textTransform: 'uppercase', marginBottom: 8 }}>
-            Реферальная ссылка
+            Пайванди рефералӣ
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <input
@@ -119,45 +124,45 @@ export default function PartnerCabinet() {
               style={{ flex: '1 1 280px', minWidth: 0, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 10, fontFamily: 'var(--mono)', fontSize: 13 }}
             />
             <button onClick={copyLink} className="btn btn-primary" style={{ padding: '12px 20px', borderRadius: 10 }}>
-              {copied ? '✓ Скопировано' : 'Скопировать'}
+              {copied ? '✓ Нусха бардошта шуд' : 'Нусха бардоштан'}
             </button>
           </div>
           <div style={{ marginTop: 12, fontSize: 13, color: 'var(--ink-mute)' }}>
-            Код: <b style={{ color: 'var(--ink)' }}>{partner.referralCode}</b>
+            Рамз: <b style={{ color: 'var(--ink)' }}>{partner.referralCode}</b>
             {' · '}
-            Короткая: <code>{window.location.origin}/r/{partner.referralCode}</code>
+            Кӯтоҳ: <code>{shortLink}</code>
           </div>
         </section>
 
         {/* Статистика */}
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard label="Переходы" value={stats.clicks} />
-          <StatCard label="Лиды" value={stats.leads} />
-          <StatCard label="Продажи" value={stats.sales} />
-          <StatCard label="Оплачено" value={stats.paidSales} />
+          <StatCard label="Гузаришҳо" value={stats.clicks} />
+          <StatCard label="Лидҳо" value={stats.leads} />
+          <StatCard label="Фурӯшҳо" value={stats.sales} />
+          <StatCard label="Пардохтшуда" value={stats.paidSales} />
         </section>
 
         {/* Баланс */}
         <section style={{ background: 'var(--night)', color: 'white', borderRadius: 20, padding: 28, marginBottom: 16 }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: 8 }}>
-            Баланс к выплате
+            Тавозун барои пардохт
           </div>
           <div style={{ fontFamily: 'var(--display)', fontSize: 48, fontWeight: 500, letterSpacing: '-0.03em' }}>
             {fmtMoney(partner.balanceCents)}
           </div>
           <div style={{ marginTop: 8, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-            Заработано всего: {fmtMoney(partner.totalEarnedCents)} · Выплачено: {fmtMoney(partner.totalPaidCents)}
+            Ҳамагӣ ба даст оварда шуд: {fmtMoney(partner.totalEarnedCents)} · Пардохт шуд: {fmtMoney(partner.totalPaidCents)}
           </div>
         </section>
 
         {/* Выплата */}
         <section style={{ background: 'white', borderRadius: 20, padding: 24, marginBottom: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
-          <h3 style={{ fontFamily: 'var(--display)', fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Запросить выплату</h3>
+          <h3 style={{ fontFamily: 'var(--display)', fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Дархости пардохт</h3>
           <form onSubmit={submitPayout} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
             <input
               type="number"
               step="0.01"
-              placeholder="Сумма (USD)"
+              placeholder="Маблағ (USD)"
               value={payoutAmount}
               onChange={(e) => setPayoutAmount(e.target.value)}
               required
@@ -168,31 +173,31 @@ export default function PartnerCabinet() {
               onChange={(e) => setPayoutMethod(e.target.value)}
               style={{ padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 16 }}
             >
-              <option value="CARD">Карта</option>
+              <option value="CARD">Корт</option>
               <option value="CRYPTO">Crypto (USDT)</option>
-              <option value="CASH">Наличные</option>
-              <option value="OTHER">Другое</option>
+              <option value="CASH">Нақд</option>
+              <option value="OTHER">Дигар</option>
             </select>
             <input
               type="text"
-              placeholder="Реквизиты (номер карты / адрес кошелька)"
+              placeholder="Реквизитҳо (рақами корт / суроғаи ҳамён)"
               value={payoutDetails}
               onChange={(e) => setPayoutDetails(e.target.value)}
               style={{ padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 16, gridColumn: 'span 2' }}
             />
             {payoutErr && <div style={{ color: 'var(--danger)', fontSize: 13, gridColumn: 'span 2' }}>{payoutErr}</div>}
             <button type="submit" className="btn btn-primary" style={{ padding: '12px 20px', borderRadius: 10, gridColumn: 'span 2' }}>
-              Запросить выплату
+              Дархости пардохт
             </button>
           </form>
         </section>
 
         {/* История начислений */}
         <section style={{ background: 'white', borderRadius: 20, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
-          <h3 style={{ fontFamily: 'var(--display)', fontSize: 18, fontWeight: 600, marginBottom: 12 }}>История начислений</h3>
+          <h3 style={{ fontFamily: 'var(--display)', fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Таърихи ҳисобкуниҳо</h3>
           {recentCommissions.length === 0 ? (
             <div style={{ color: 'var(--ink-mute)', textAlign: 'center', padding: 32 }}>
-              Пока нет начислений. Делись ссылкой и зарабатывай ✨
+              Ҳоло ҳисобкунӣ нест. Пайвандро мубодила кунед ва даромад ба даст оред ✨
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -213,7 +218,7 @@ export default function PartnerCabinet() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 500, fontSize: 15 }}>
                       {fmtMoney(c.amountCents, c.currency)} <span style={{ color: 'var(--ink-mute)', fontSize: 12 }}>
-                        ({c.percent}% от {fmtMoney(c.baseAmountCents, c.baseCurrency ?? c.currency)})
+                        ({c.percent}% аз {fmtMoney(c.baseAmountCents, c.baseCurrency ?? c.currency)})
                       </span>
                     </div>
                     {c.note && <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>{c.note}</div>}
@@ -226,7 +231,7 @@ export default function PartnerCabinet() {
                     background: c.status === 'PAID' ? '#dcfce7' : c.status === 'REVERSED' ? '#fee2e2' : '#fef3c7',
                     color: c.status === 'PAID' ? '#15803d' : c.status === 'REVERSED' ? '#b91c1c' : '#b45309',
                   }}>
-                    {c.status === 'PAID' ? 'ВЫПЛАЧЕНО' : c.status === 'REVERSED' ? 'ОТМЕНЕНО' : 'ОЖИДАЕТ'}
+                    {c.status === 'PAID' ? 'ПАРДОХТ ШУД' : c.status === 'REVERSED' ? 'БЕКОР ШУД' : 'ДАР ИНТИЗОР'}
                   </span>
                 </div>
               ))}

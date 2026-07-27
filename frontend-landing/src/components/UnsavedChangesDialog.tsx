@@ -25,10 +25,10 @@ export default function UnsavedChangesDialog({
   open,
   onConfirm,
   onCancel,
-  title = 'Несохранённые изменения',
-  message = 'У вас есть несохранённые изменения в анкете. Если уйти сейчас — они потеряются.',
-  confirmLabel = 'Уйти без сохранения',
-  cancelLabel = 'Остаться',
+  title = 'Тағйироти нигоҳ дошта нашуда',
+  message = 'Дар варақа тағйироти нигоҳ дошта нашуда мавҷуданд. Агар ҳозир равед, онҳо гум мешаванд.',
+  confirmLabel = 'Бе нигоҳдорӣ рафтан',
+  cancelLabel = 'Мондан',
 }: Props) {
   useEffect(() => {
     if (!open) return;

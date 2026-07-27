@@ -24,31 +24,31 @@ import Loading from '../components/Loading';
 import { lkeys, optimistic, useOptimisticMutation } from '../queryClient';
 
 const DIRECTION_LABEL: Record<string, string> = {
-  BACHELOR: 'Бакалавриат',
-  MASTER: 'Магистратура',
-  LANGUAGE: 'Языковые курсы',
-  LANGUAGE_COLLEGE: 'Языковой + колледж',
-  LANGUAGE_BACHELOR: 'Языковой + бакалавриат',
-  COLLEGE: 'Колледж',
+  BACHELOR: 'Бакалавр',
+  MASTER: 'Магистр',
+  LANGUAGE: 'Курсҳои забонӣ',
+  LANGUAGE_COLLEGE: 'Забонӣ + коллеҷ',
+  LANGUAGE_BACHELOR: 'Забонӣ + бакалавр',
+  COLLEGE: 'Коллеҷ',
 };
 const STATUS_LABEL: Record<string, string> = {
-  ACTIVE: 'Активный',
-  PAUSED: 'На паузе',
-  GRADUATED: 'Выпустился',
-  ARCHIVED: 'В архиве',
+  ACTIVE: 'Фаъол',
+  PAUSED: 'Дар таваққуф',
+  GRADUATED: 'Хатм кард',
+  ARCHIVED: 'Дар бойгонӣ',
 };
 
 const REQUIRED_DOCS = [
-  { type: 'PHOTO', label: 'Фото 3/4', hint: 'В электронном формате' },
-  { type: 'PASSPORT', label: 'Загран паспорт' },
-  { type: 'BANK', label: 'Справка с банка' },
-  { type: 'MEDICAL', label: 'Мед.справка (для Китая)' },
-  { type: 'NO_CRIMINAL', label: 'Справка о несудимости' },
-  { type: 'STUDY_PLAN', label: 'Study Plan (Мотивационное письмо)' },
-  { type: 'CERTIFICATE', label: 'Certificate', hint: 'IELTS, TOEFL, DUOLINGO, HSK, CSCA (если есть)' },
-  { type: 'PARENTS_PASSPORT', label: 'Паспорт родителей' },
-  { type: 'DIPLOMA', label: 'Аттестат', hint: 'Или табель оценок + справка со школы' },
-  { type: 'RECOMMENDATION', label: 'Рекомендательное письмо' },
+  { type: 'PHOTO', label: 'Сурат 3/4', hint: 'Дар шакли электронӣ' },
+  { type: 'PASSPORT', label: 'Шиносномаи хориҷӣ' },
+  { type: 'BANK', label: 'Маълумотнома аз бонк' },
+  { type: 'MEDICAL', label: 'Маълумотномаи тиббӣ (барои Хитой)' },
+  { type: 'NO_CRIMINAL', label: 'Маълумотнома дар бораи доғи судӣ надоштан' },
+  { type: 'STUDY_PLAN', label: 'Study Plan (Мактуби ангезишӣ)' },
+  { type: 'CERTIFICATE', label: 'Certificate', hint: 'IELTS, TOEFL, DUOLINGO, HSK, CSCA (агар бошад)' },
+  { type: 'PARENTS_PASSPORT', label: 'Шиносномаи волидайн' },
+  { type: 'DIPLOMA', label: 'Аттестат', hint: 'Ё варақаи баҳоҳо + маълумотнома аз мактаб' },
+  { type: 'RECOMMENDATION', label: 'Мактуби тавсиявӣ' },
 ];
 
 const fmtBytes = (b: number) => {
@@ -123,8 +123,8 @@ export default function StudentCabinet() {
       if (!cur) return cur;
       return { ...cur, documents: (cur.documents || []).filter((d) => d.id !== id) };
     },
-    onSuccess: () => showToast('ok', 'Документ удалён'),
-    onError: (err: any) => showToast('err', err?.response?.data?.message || 'Ошибка'),
+    onSuccess: () => showToast('ok', 'Ҳуҷҷат нест карда шуд'),
+    onError: (err: any) => showToast('err', err?.response?.data?.message || 'Хатогӣ'),
   });
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
@@ -135,10 +135,10 @@ export default function StudentCabinet() {
       for (const file of files) {
         await studentUploadDocument(file, type);
       }
-      showToast('ok', files.length > 1 ? `Загружено: ${files.length}` : 'Документ загружен');
+      showToast('ok', files.length > 1 ? `Бор карда шуд: ${files.length}` : 'Ҳуҷҷат бор карда шуд');
       qc.invalidateQueries({ queryKey: meKey });
     } catch (err: any) {
-      showToast('err', err?.response?.data?.message || 'Ошибка загрузки');
+      showToast('err', err?.response?.data?.message || 'Хатогии боркунӣ');
     } finally {
       setUploading(null);
       e.target.value = '';
@@ -161,18 +161,18 @@ export default function StudentCabinet() {
           alignItems: 'center', justifyContent: 'center', gap: 16, padding: 20,
         }}>
           <div style={{ fontFamily: 'var(--display, Georgia, serif)', fontSize: 28, fontWeight: 500 }}>
-            Не удалось загрузить данные
+            Маълумотро бор кардан нашуд
           </div>
           <div style={{ color: 'var(--ink-soft, #64748b)', fontSize: 14, textAlign: 'center', maxWidth: 420 }}>
-            Сервер не ответил вовремя. Возможно, он только что проснулся —
-            попробуй обновить страницу через минуту.
+            Сервер дар вақташ ҷавоб надод. Эҳтимол, ҳозир бедор шуд —
+            пас аз як дақиқа саҳифаро нав кунед.
           </div>
           <button
             className="btn-pill solid"
             onClick={() => meQuery.refetch()}
             style={{ marginTop: 8 }}
           >
-            Попробовать снова
+            Бори дигар кӯшиш кардан
           </button>
         </div>
       );
@@ -199,7 +199,7 @@ export default function StudentCabinet() {
             <div className="stu-header-name">{me.fullName}</div>
             <button className="btn-pill ghost" onClick={logout}>
               <Icon name="logout" size={16} />
-              Sign out
+              Баромадан
             </button>
           </div>
         </div>
@@ -213,7 +213,7 @@ export default function StudentCabinet() {
             onClick={() => setTab('home')}
           >
             <Icon name="dashboard" size={18} />
-            Главная
+            Асосӣ
           </button>
           <button
             type="button"
@@ -221,7 +221,7 @@ export default function StudentCabinet() {
             onClick={() => setTab('programs')}
           >
             <Icon name="menu_book" size={18} />
-            Программы
+            Барномаҳо
           </button>
           <button
             type="button"
@@ -229,7 +229,7 @@ export default function StudentCabinet() {
             onClick={() => setTab('payments')}
           >
             <Icon name="payments" size={18} />
-            Оплаты
+            Пардохтҳо
           </button>
           <button
             type="button"
@@ -237,7 +237,7 @@ export default function StudentCabinet() {
             onClick={() => setTab('courses')}
           >
             <Icon name="school" size={18} />
-            Курсы
+            Курсҳо
           </button>
           <button
             type="button"
@@ -245,7 +245,7 @@ export default function StudentCabinet() {
             onClick={() => setTab('interactions')}
           >
             <Icon name="forum" size={18} />
-            Общение
+            Муошират
           </button>
         </div>
         <AnimatePresence>
@@ -355,7 +355,7 @@ export default function StudentCabinet() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.2 }}
                   >
-                    Поздравляем с зачислением! 🎓
+                    Бо қабулшавӣ табрик мекунем! 🎓
                   </motion.div>
                   <motion.div
                     className="stu-celebrate-sub"
@@ -363,8 +363,8 @@ export default function StudentCabinet() {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
-                    Вы официально зачислены в университет. Это огромный шаг — ваша мечта стала реальностью!
-                    Менеджер свяжется с вами лично, чтобы обсудить следующие шаги.
+                    Шумо расман ба донишгоҳ қабул шудед. Ин қадами бузург аст — орзуи шумо воқеӣ шуд!
+                    Менеҷер шахсан бо шумо тамос мегирад, то қадамҳои навбатиро муҳокима кунад.
                   </motion.div>
                 </div>
               </motion.div>
@@ -403,14 +403,14 @@ export default function StudentCabinet() {
               <h1 className="stu-profile-name">{me.fullName}</h1>
               <div className="stu-badges">
                 <span className="stu-badge">{DIRECTION_LABEL[me.direction]}</span>
-                <span className="stu-badge">Кабинет №{me.cabinet}</span>
+                <span className="stu-badge">Кабинети №{me.cabinet}</span>
                 <span className={`stu-badge stu-status-${me.status.toLowerCase()}`}>
                   {STATUS_LABEL[me.status]}
                 </span>
               </div>
               <div className="stu-profile-grid">
-                <div><span>Email:</span> <b>{me.email}</b></div>
-                <div><span>Телефоны:</span> <b>{me.phones.join(', ') || '—'}</b></div>
+                <div><span>Почтаи электронӣ:</span> <b>{me.email}</b></div>
+                <div><span>Телефонҳо:</span> <b>{me.phones.join(', ') || '—'}</b></div>
               </div>
             </div>
           </div>
@@ -423,12 +423,12 @@ export default function StudentCabinet() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
         >
-          <h2 className="stu-section-title">Ваши менеджеры</h2>
+          <h2 className="stu-section-title">Менеҷерони шумо</h2>
           <div className="stu-managers">
             <div className={`stu-manager-slot${!me.manager ? ' empty' : ''}`}>
-              <div className="stu-manager-flag">🇹🇯 Таджикистан</div>
+              <div className="stu-manager-flag">🇹🇯 Тоҷикистон</div>
               <div className="stu-manager-name">
-                {me.manager?.fullName || 'Ещё не назначен'}
+                {me.manager?.fullName || 'Ҳанӯз таъин нашудааст'}
               </div>
               {me.manager?.email && (
                 <a href={`mailto:${me.manager.email}`} className="stu-manager-email">
@@ -437,9 +437,9 @@ export default function StudentCabinet() {
               )}
             </div>
             <div className={`stu-manager-slot${!me.chinaManager ? ' empty' : ''}`}>
-              <div className="stu-manager-flag">🇨🇳 Китай</div>
+              <div className="stu-manager-flag">🇨🇳 Хитой</div>
               <div className="stu-manager-name">
-                {me.chinaManager?.fullName || 'Ещё не назначен'}
+                {me.chinaManager?.fullName || 'Ҳанӯз таъин нашудааст'}
               </div>
               {me.chinaManager?.email && (
                 <a href={`mailto:${me.chinaManager.email}`} className="stu-manager-email">
@@ -457,19 +457,19 @@ export default function StudentCabinet() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
         >
-          <h2 className="stu-section-title">Документы</h2>
+          <h2 className="stu-section-title">Ҳуҷҷатҳо</h2>
 
           <div className="stu-note">
             <Icon name="info" size={18} />
             <div>
-              Все документы нужно <b>перевести на английский</b> и <b>нотариально заверить</b>.
-              Загружайте в любом формате — менеджер проверит.
+              Ҳамаи ҳуҷҷатҳоро бояд <b>ба забони англисӣ тарҷума</b> ва <b>нотариалӣ тасдиқ</b> кард.
+              Дар ҳар шакл бор кунед — менеҷер месанҷад.
             </div>
           </div>
 
           <div className="stu-progress">
             <div className="stu-progress-text">
-              <span>Загружено <b>{uploaded}</b> из {REQUIRED_DOCS.length}</span>
+              <span>Бор карда шуд <b>{uploaded}</b> аз {REQUIRED_DOCS.length}</span>
               <span className="stu-progress-percent">{percent}%</span>
             </div>
             <div className="stu-progress-bar">
@@ -530,7 +530,7 @@ export default function StudentCabinet() {
                         disabled={loading}
                       >
                         <Icon name={loading ? 'progress_activity' : 'add'} size={14} />
-                        {loading ? 'Загрузка...' : 'Добавить ещё'}
+                        {loading ? 'Боркунӣ...' : 'Боз илова кардан'}
                       </button>
                     </>
                   ) : (
@@ -540,7 +540,7 @@ export default function StudentCabinet() {
                       disabled={loading}
                     >
                       <Icon name={loading ? 'progress_activity' : 'upload'} size={16} />
-                      {loading ? 'Загрузка...' : 'Загрузить'}
+                      {loading ? 'Боркунӣ...' : 'Бор кардан'}
                     </button>
                   )}
                   <input
@@ -556,9 +556,9 @@ export default function StudentCabinet() {
           </div>
 
           <div className="stu-other">
-            <h3>Другие файлы</h3>
+            <h3>Файлҳои дигар</h3>
             {other.length === 0 ? (
-              <div className="stu-empty">Пока нет других документов</div>
+              <div className="stu-empty">Ҳоло ҳуҷҷатҳои дигар нест</div>
             ) : (
               <div className="stu-other-list">
                 {other.map((d) => (
@@ -579,7 +579,7 @@ export default function StudentCabinet() {
               onClick={() => otherRef.current?.click()}
               disabled={uploading === 'OTHER'}
             >
-              <Icon name="attach_file" size={14} /> Загрузить другой файл
+              <Icon name="attach_file" size={14} /> Файли дигар бор кардан
             </button>
             <input ref={otherRef} type="file" hidden onChange={(e) => onUpload(e, 'OTHER')} />
           </div>
@@ -628,17 +628,17 @@ export default function StudentCabinet() {
                 <Icon name="delete" size={24} />
               </div>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 8 }}>
-                Удалить документ?
+                Ҳуҷҷат нест карда шавад?
               </h3>
               <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 22 }}>
-                Файл будет удалён безвозвратно. Это действие нельзя отменить.
+                Файл бебозгашт нест карда мешавад. Ин амалро бекор кардан мумкин нест.
               </p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button
                   className="btn-pill ghost"
                   onClick={() => setConfirmDelete(null)}
                 >
-                  Отмена
+                  Бекор кардан
                 </button>
                 <button
                   className="btn-pill"
@@ -648,7 +648,7 @@ export default function StudentCabinet() {
                     setConfirmDelete(null);
                   }}
                 >
-                  Удалить
+                  Нест кардан
                 </button>
               </div>
             </motion.div>

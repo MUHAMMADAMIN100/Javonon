@@ -15,8 +15,8 @@ export default function StudentLogin() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const errors = {
-    email: compose(required('Введи email'), emailRule())(email),
-    password: compose(required('Введи пароль'), passwordRule())(password),
+    email: compose(required('Почтаи электрониро ворид кунед'), emailRule())(email),
+    password: compose(required('Паролро ворид кунед'), passwordRule())(password),
   };
   const showErr = (k: 'email' | 'password') => touched[k] && errors[k];
   const isInvalid = hasErrors(errors);
@@ -35,7 +35,7 @@ export default function StudentLogin() {
       await studentLogin(email.trim(), password);
       navigate('/cabinet');
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Неверный email или пароль');
+      setError(err?.response?.data?.message || 'Почтаи электронӣ ё парол нодуруст аст');
     } finally {
       setLoading(false);
     }
@@ -49,12 +49,12 @@ export default function StudentLogin() {
             <img src="/javonon-logo.svg" alt="Javonon" />
           </Link>
           <h1 className="display">
-            С возвращением,<br />
-            <em>студент.</em>
+            Хуш омадед,<br />
+            <em>донишҷӯ.</em>
           </h1>
           <p>
-            Твой личный кабинет — статус заявок, документы, программы и прямая
-            линия с менеджером.
+            Кабинети шахсии шумо — ҳолати аризаҳо, ҳуҷҷатҳо, барномаҳо ва алоқаи
+            мустақим бо менеҷер.
           </p>
         </div>
 
@@ -65,8 +65,8 @@ export default function StudentLogin() {
           transition={{ delay: 0.5, duration: 0.6 }}
         >
           <div className="stu-login-quote-text">
-            "Я заходила в кабинет каждый день, чтобы следить за заявкой на
-            Chevening. Команда видела каждый мой комментарий в реальном времени."
+            "Ҳар рӯз ба кабинет медаромадам, то аризаамро ба Chevening пайгирӣ
+            кунам. Даста ҳар шарҳи маро дар вақти воқеӣ медид."
           </div>
           <div className="stu-login-quote-author">— Мадина С. · Manchester '25</div>
         </motion.div>
@@ -81,12 +81,12 @@ export default function StudentLogin() {
         >
           <Link to="/" className="stu-login-back">
             <Icon name="arrow_back" size={14} />
-            На главную
+            Ба саҳифаи асосӣ
           </Link>
 
-          <h2 className="display">Вход.</h2>
+          <h2 className="display">Ворид шудан.</h2>
           <p className="stu-login-sub">
-            Используй email и пароль, которые тебе выдал менеджер Javonon.
+            Почтаи электронӣ ва пароле, ки менеҷери Javonon ба шумо додааст, истифода баред.
           </p>
 
           {error && (
@@ -102,7 +102,7 @@ export default function StudentLogin() {
 
           <form onSubmit={onSubmit}>
             <div className="form-row">
-              <label>Email</label>
+              <label>Почтаи электронӣ</label>
               <input
                 type="email"
                 value={email}
@@ -116,13 +116,13 @@ export default function StudentLogin() {
               {showErr('email') && <div className="form-error">{errors.email}</div>}
             </div>
             <div className="form-row">
-              <label>Пароль</label>
+              <label>Парол</label>
               <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => setTouched((t) => ({ ...t, password: true }))}
                 className={showErr('password') ? 'input-error' : ''}
-                placeholder="Твой пароль"
+                placeholder="Пароли шумо"
                 required
                 autoComplete="current-password"
               />
@@ -136,12 +136,12 @@ export default function StudentLogin() {
               whileHover={!loading && !isInvalid ? { scale: 1.02 } : {}}
               whileTap={!loading && !isInvalid ? { scale: 0.98 } : {}}
             >
-              {loading ? 'Входим...' : 'Войти'}
+              {loading ? 'Ворид мешавем...' : 'Ворид шудан'}
             </motion.button>
           </form>
 
           <p className="stu-login-hint">
-            Ещё нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
+            Ҳанӯз ҳисоб надоред? <Link to="/register">Бақайдгирӣ</Link>
           </p>
         </motion.div>
       </div>

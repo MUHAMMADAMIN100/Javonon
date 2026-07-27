@@ -2,14 +2,14 @@ import { motion } from 'framer-motion';
 import Icon from '../Icon';
 
 const COUNTRIES = [
-  { flag: '🇺🇸', name: 'США', tags: ['Fulbright', 'Hubert Humphrey', 'Schwarzman'] },
-  { flag: '🇬🇧', name: 'Великобритания', tags: ['Chevening', 'Commonwealth', 'GREAT'] },
-  { flag: '🇩🇪', name: 'Германия', tags: ['DAAD', 'Bayerische', 'Heinrich Böll'] },
-  { flag: '🇰🇷', name: 'Южная Корея', tags: ['GKS', 'POSCO', 'Yonsei'] },
-  { flag: '🇨🇳', name: 'Китай', tags: ['CSC', 'Confucius', 'Tsinghua'] },
-  { flag: '🇯🇵', name: 'Япония', tags: ['MEXT', 'JASSO', 'Honjo'] },
-  { flag: '🇪🇺', name: 'Евросоюз', tags: ['Erasmus Mundus', 'Marie Curie'] },
-  { flag: '🇹🇷', name: 'Турция', tags: ['Türkiye Bursları', 'YÖS'] },
+  { flag: '🇺🇸', name: 'ИМА', tags: ['Fulbright', 'Hubert Humphrey', 'Schwarzman'] },
+  { flag: '🇬🇧', name: 'Британияи Кабир', tags: ['Chevening', 'Commonwealth', 'GREAT'] },
+  { flag: '🇩🇪', name: 'Олмон', tags: ['DAAD', 'Bayerische', 'Heinrich Böll'] },
+  { flag: '🇰🇷', name: 'Кореяи Ҷанубӣ', tags: ['GKS', 'POSCO', 'Yonsei'] },
+  { flag: '🇨🇳', name: 'Хитой', tags: ['CSC', 'Confucius', 'Tsinghua'] },
+  { flag: '🇯🇵', name: 'Ҷопон', tags: ['MEXT', 'JASSO', 'Honjo'] },
+  { flag: '🇪🇺', name: 'Иттиҳоди Аврупо', tags: ['Erasmus Mundus', 'Marie Curie'] },
+  { flag: '🇹🇷', name: 'Туркия', tags: ['Türkiye Bursları', 'YÖS'] },
   { flag: '🇨🇦', name: 'Канада', tags: ['Vanier', 'Trudeau', 'OGS'] },
   { flag: '🇦🇺', name: 'Австралия', tags: ['Australia Awards', 'RTP'] },
 ];
@@ -28,17 +28,17 @@ export default function Directions() {
       <div className="container">
         <div className="section-head">
           <div>
-            <span className="eyebrow on-dark">Куда ты поедешь</span>
+            <span className="eyebrow on-dark">Ту ба куҷо меравӣ</span>
             <h2 className="display">
-              Сорок стран.<br />
-              <em>Одна анкета.</em>
+              Чил кишвар.<br />
+              <em>Як ариза.</em>
             </h2>
           </div>
           <p>
-            Мы работаем напрямую с государственными грантовыми программами,
-            университетскими стипендиями и частными фондами на шести
-            континентах. Ты подаёшь заявку один раз — мы распределяем по
-            подходящим направлениям.
+            Мо бевосита бо барномаҳои давлатии грантӣ, стипендияҳои
+            донишгоҳӣ ва фондҳои хусусӣ дар шаш қитъа кор мекунем.
+            Ту як маротиба ариза медиҳӣ — мо онро ба самтҳои
+            мувофиқ тақсим мекунем.
           </p>
         </div>
 

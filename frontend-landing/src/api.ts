@@ -1,4 +1,14 @@
-const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
+/**
+ * База API. ВКЛЮЧАЕТ в себя префикс `/api` (backend вешает его глобально —
+ * main.ts: app.setGlobalPrefix('api')), поэтому пути дописываются сразу от
+ * ресурса: `${API_URL}/applications/public`, а НЕ `${API_URL}/api/...`.
+ * См. .env.example и DEPLOY.md — на Vercel VITE_API_URL тоже задан с `/api`.
+ *
+ * Экспортируется, чтобы остальные модули лендинга не выводили константу заново:
+ * дубли уже разъезжались (referral.ts слал POST на /api/api/referrals/click и
+ * молча получал 404, из-за чего клики партнёров вечно были нулевыми).
+ */
+export const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
 
 export type Direction =
   | 'BACHELOR'
@@ -9,12 +19,12 @@ export type Direction =
   | 'COLLEGE';
 
 export const DIRECTION_LABEL: Record<Direction, string> = {
-  BACHELOR: 'Бакалавриат',
-  MASTER: 'Магистратура',
-  LANGUAGE: 'Языковые курсы',
-  LANGUAGE_COLLEGE: 'Языковой + колледж',
-  LANGUAGE_BACHELOR: 'Языковой + бакалавриат',
-  COLLEGE: 'Колледж',
+  BACHELOR: 'Бакалавр',
+  MASTER: 'Магистр',
+  LANGUAGE: 'Курсҳои забон',
+  LANGUAGE_COLLEGE: 'Забон + коллеҷ',
+  LANGUAGE_BACHELOR: 'Забон + бакалавр',
+  COLLEGE: 'Коллеҷ',
 };
 
 export type ApplicationSource =
@@ -30,16 +40,16 @@ export type ApplicationSource =
   | 'OTHER';
 
 export const SOURCE_LABEL: Record<ApplicationSource, string> = {
-  LANDING_FORM: 'Сайт',
-  SELF_REGISTRATION: 'Регистрация',
-  REFERRAL: 'По рекомендации',
+  LANDING_FORM: 'Сомона',
+  SELF_REGISTRATION: 'Бақайдгирӣ',
+  REFERRAL: 'Бо тавсия',
   INSTAGRAM: 'Instagram',
   TELEGRAM: 'Telegram',
-  GOOGLE_ADS: 'Google реклама',
+  GOOGLE_ADS: 'Рекламаи Google',
   TIKTOK: 'TikTok',
-  WORD_OF_MOUTH: 'Сарафанное радио',
-  EVENT: 'Мероприятие',
-  OTHER: 'Другое',
+  WORD_OF_MOUTH: 'Даҳон ба даҳон',
+  EVENT: 'Чорабинӣ',
+  OTHER: 'Дигар',
 };
 
 // По ТЗ §8: предпочтительный канал связи с клиентом.
@@ -81,7 +91,7 @@ export async function submitApplication(payload: ApplicationPayload) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || 'Не удалось отправить заявку');
+    throw new Error(data.message || 'Аризаро фиристодан муяссар нашуд');
   }
   return res.json();
 }
