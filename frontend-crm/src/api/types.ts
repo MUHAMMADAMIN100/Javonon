@@ -23,6 +23,45 @@ export type Direction =
   | 'LANGUAGE_COLLEGE'
   | 'LANGUAGE_BACHELOR'
   | 'COLLEGE';
+/**
+ * Страна, которую клиент выбирает в форме лендинга («Кишвар»).
+ * Соответствует Prisma enum Country (backend/prisma/schema.prisma) —
+ * значения обязаны совпадать с БД, иначе backend вернёт 400
+ * «Неизвестная страна» на фильтре GET /applications?country=…
+ *
+ * Заменяет собой старый вопрос «Ҳадаф» на лендинге, но НЕ заменяет
+ * Direction: направление менеджер по-прежнему проставляет руками в CRM.
+ */
+export type Country =
+  | 'USA'
+  | 'KOREA'
+  | 'CHINA'
+  | 'LATVIA'
+  | 'MALAYSIA'
+  | 'ITALY'
+  | 'GERMANY';
+
+/** Порядок как на лендинге — чтобы дропдаун CRM читался так же, как форма. */
+export const COUNTRIES: Country[] = [
+  'USA',
+  'KOREA',
+  'CHINA',
+  'LATVIA',
+  'MALAYSIA',
+  'ITALY',
+  'GERMANY',
+];
+
+export const COUNTRY_LABEL: Record<Country, string> = {
+  USA: 'США',
+  KOREA: 'Корея',
+  CHINA: 'Китай',
+  LATVIA: 'Латвия',
+  MALAYSIA: 'Малайзия',
+  ITALY: 'Италия',
+  GERMANY: 'Германия',
+};
+
 export type ApplicationStatus =
   | 'NEW'
   | 'DOCS_REVIEW'
@@ -148,6 +187,28 @@ export interface Application {
   preferredChannel?: ContactChannel | null;
   email: string | null;
   direction: Direction;
+  /**
+   * Направление в поле выше — настоящий ответ (true) или плейсхолдер (false)?
+   *
+   * Форма лендинга направление не спрашивает, но колонка в БД NOT NULL,
+   * поэтому бэкенд подставляет туда Direction.BACHELOR. Пока менеджер не
+   * подтвердит направление в карточке, показывать его как выбор клиента
+   * нельзя — иначе весь входящий трафик выглядит «Бакалавриатом».
+   *
+   * Опционально: старые ответы API (и мок-данные) поля не содержат —
+   * `undefined` трактуем как подтверждённое, как и `@default(true)` в схеме.
+   */
+  directionConfirmed?: boolean;
+  /**
+   * Страна из формы лендинга. nullable: заявки, созданные до релиза формы
+   * (и всё, что заведено в обход формы: ручное создание в CRM, самозапись
+   * студента, approve заявки партнёра) её не имеют.
+   */
+  country?: Country | null;
+  /** WhatsApp клиента. Может совпадать с phone (чекбокс «тот же номер»). */
+  whatsappPhone?: string | null;
+  /** ISO-дата рождения; переносится в Student.birthday при конвертации. */
+  birthday?: string | null;
   comment: string | null;
   status: ApplicationStatus;
   source: ApplicationSource;
@@ -214,6 +275,26 @@ export interface Student {
   email: string | null;
   photoUrl: string | null;
   direction: Direction;
+  /**
+   * То же, что Application.directionConfirmed, но уже на студенте: при
+   * конвертации заявки плейсхолдер переезжает в Student.direction ВМЕСТЕ
+   * с этой пометкой. Без неё placeholder «Бакалавриат» на карточке студента
+   * невозможно отличить от ответа клиента, а исходная заявка — единственное
+   * место, где осталась правда.
+   *
+   * Пока false, `cabinet` ниже — кабинет-«приёмник» (DEFAULT_CABINET), а не
+   * результат маршрутизации по направлению.
+   *
+   * Опционально: старые ответы API поля не содержат — `undefined` трактуем
+   * как подтверждённое, как и `@default(true)` в схеме.
+   */
+  directionConfirmed?: boolean;
+  /**
+   * Страна из формы лендинга, перенесённая с заявки при конвертации, —
+   * единственный НАСТОЯЩИЙ ответ клиента о цели. nullable: у студентов,
+   * заведённых вручную в CRM/самозаписью, страны нет.
+   */
+  country?: Country | null;
   cabinet: number;
   status: StudentStatus;
   comment: string | null;

@@ -66,6 +66,23 @@ enum Direction {
   COLLEGE
 }
 
+// Страна обучения, которую клиент выбирает в форме на лендинге.
+// Заменяет собой вопрос «Ҳадаф» (direction) на лендинге, но НЕ заменяет
+// сам enum Direction: Direction остаётся рабочим полем CRM (менеджер его
+// правит вручную) и уже проставлен у существующих Application/Student/
+// Program-строк. Postgres не умеет удалять значения enum'а, на которые
+// ссылаются строки, а Railway деплоит через `prisma db push
+// --accept-data-loss` — поэтому изменения только аддитивные.
+enum Country {
+  USA
+  KOREA
+  CHINA
+  LATVIA
+  MALAYSIA
+  ITALY
+  GERMANY
+}
+
 enum ApplicationStatus {
   NEW
   IN_PROGRESS // legacy → DOCS_REVIEW
@@ -330,7 +347,44 @@ model Application {
   email                 String?
   // Предпочтительный канал связи с клиентом.
   preferredChannel      ContactChannel?
+  // Направление обучения. Лендинг его БОЛЬШЕ НЕ СПРАШИВАЕТ (вместо него
+  // теперь спрашивается country), но поле остаётся обязательным:
+  //  • на него ссылаются существующие строки Application/Student/Program,
+  //    ~30 файлов бэкенда и ~10 страниц CRM (фильтры, дашборд, массрассылки,
+  //    подбор программ, отчёты);
+  //  • Postgres не может удалить значение enum'а, пока на него есть ссылки,
+  //    а Railway на деплое гоняет `prisma db push --accept-data-loss`.
+  // При создании заявки с лендинга сервис подставляет плейсхолдер
+  // (Direction.BACHELOR), который менеджер правит в CRM.
   direction             Direction
+  // Отличает ОТВЕТ от ПЛЕЙСХОЛДЕРА в колонке direction выше.
+  //   true  — направление реально прислали: CRM (StudentsService.create),
+  //           самозапись (StudentAuthService.register), approve заявки
+  //           партнёра (SubmissionsService) — все они пишут Application
+  //           напрямую через Prisma, — либо менеджер подтвердил его руками
+  //           через PATCH /applications/:id. Telegram-бота в этом списке
+  //           нет: он заявок не создаёт вообще (bot-funnel.service.ts);
+  //   false — в direction лежит DEFAULT_DIRECTION, поставленный только
+  //           чтобы удовлетворить NOT NULL. Такие строки исключаются из
+  //           агрегата «по направлениям» на дашборде и из фильтра списка,
+  //           иначе 100% лидов с лендинга считались бы «Бакалавриатом».
+  // @default(true): все строки, существовавшие до этой колонки, создавались
+  // формой, которая направление ЕЩЁ спрашивала — там это настоящий ответ.
+  directionConfirmed    Boolean           @default(true)
+  // Страна, которую клиент реально выбрал в форме лендинга. Nullable:
+  // у всех заявок, созданных до этого изменения, её нет.
+  country               Country?
+  // WhatsApp-номер. На лендинге по умолчанию совпадает с phone
+  // (чекбокс «Ҳамон рақами телефон» включён), но клиент может указать другой.
+  // Нормализуется так же, как phone (trim).
+  whatsappPhone         String?
+  // Дата рождения из формы лендинга. При конвертации заявки в Student
+  // копируется в Student.birthday → начинает работать cron birthdayGreetings.
+  // КОНВЕНЦИЯ: календарный день хранится UTC-полуночью («2006-03-12T00:00:00Z»),
+  // писать только через parseCalendarDateUtc() (src/common/tj-time.ts).
+  // Душанбинская полночь здесь ломает cron: он читает EXTRACT(DAY FROM birthday)
+  // по сырой UTC-колонке и получил бы предыдущие сутки.
+  birthday              DateTime?
   comment               String?
   source                ApplicationSource @default(LANDING_FORM)
   status                ApplicationStatus @default(NEW)
@@ -361,6 +415,8 @@ model Application {
 
   @@index([status])
   @@index([direction])
+  // CRM фильтрует список заявок по стране (тулбар «Кишвар»/«Страна»).
+  @@index([country])
   @@index([managerId])
   @@index([chinaManagerId])
   @@index([programId])
@@ -370,6 +426,10 @@ model Student {
   id               String          @id @default(uuid())
   fullName         String
   // День рождения — для авто-поздравления (cron birthdayGreetings).
+  // Та же конвенция, что у Application.birthday: UTC-полночь календарного дня
+  // (parseCalendarDateUtc). Смесь двух смещений в этой колонке = поздравления
+  // части студентов на сутки раньше; исторические строки чинит
+  // prisma/migrate-birthdays-utc.ts.
   birthday         DateTime?
   // Все телефоны: phones[0] — основной, phones[1+] — дополнительные.
   phones           String[]        @default([])
@@ -391,7 +451,25 @@ model Student {
   applicationForm  Json?
   photoUrl         String?
   direction        Direction
+  // Тот же смысл, что у Application.directionConfirmed:
+  //   true  — направление выбрал живой человек (менеджер в CRM, самозапись,
+  //           одобрение заявки партнёра);
+  //   false — направление скопировано из заявки-лендинга, где оно всего лишь
+  //           плейсхолдер (DEFAULT_DIRECTION). Пока флаг false, cabinet ниже —
+  //           это DEFAULT_CABINET-«приёмник», а НЕ результат маршрутизации
+  //           по направлению, и карточка студента показывает «не подтверждено»
+  //           вместо выдуманного «Бакалавриата».
+  // @default(true): все строки, существовавшие до этой колонки, заводились
+  // через CRM/самозапись с настоящим направлением.
+  directionConfirmed Boolean       @default(true)
   cabinet          Int
+  // Страна, выбранная клиентом в форме лендинга («Кишвар»), перенесённая
+  // при конвертации заявки. Без неё единственный НАСТОЯЩИЙ ответ клиента
+  // о его цели не переживал бы конвертацию: в карточке студента остался бы
+  // только placeholder-direction, и менеджеру пришлось бы возвращаться
+  // в исходную Application. Nullable — у студентов, заведённых вручную
+  // и созданных до этой колонки, страны нет.
+  country          Country?
   status           StudentStatus   @default(ACTIVE)
   onboardingStage  OnboardingStage @default(WELCOME)
   comment          String?

@@ -110,14 +110,20 @@ export class ReferralsService {
     applicationId?: string;
     telegramUserId?: string;
   }) {
-    const where: any = {};
-    if (opts.studentId) where.studentId = opts.studentId;
-    else if (opts.applicationId) where.applicationId = opts.applicationId;
-    else if (opts.telegramUserId) where.telegramUserId = opts.telegramUserId;
-    else return null;
+    // Раньше здесь была строгая if/else-if цепочка: при переданном studentId
+    // искали ТОЛЬКО по studentId. Атрибуция с лендинга создаётся в момент
+    // отправки формы, когда Student ещё не существует — в строке заполнен
+    // лишь applicationId. Из-за этого при подтверждении оплаты партнёр
+    // никогда не находился и комиссия не начислялась. Теперь ищем по ЛЮБОМУ
+    // из переданных идентификаторов (OR), а не по первому непустому.
+    const or: Prisma.ReferralAttributionWhereInput[] = [];
+    if (opts.studentId) or.push({ studentId: opts.studentId });
+    if (opts.applicationId) or.push({ applicationId: opts.applicationId });
+    if (opts.telegramUserId) or.push({ telegramUserId: opts.telegramUserId });
+    if (or.length === 0) return null;
 
     const attr = await this.prisma.referralAttribution.findFirst({
-      where,
+      where: { OR: or },
       orderBy: { createdAt: 'desc' },
       include: { partner: true },
     });

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
-import { ApplicationSource, ApplicationStatus, Direction, Prisma, Role } from '@prisma/client';
+import { ApplicationSource, ApplicationStatus, Country, Direction, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
@@ -13,15 +13,40 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
 import { SalesService } from '../sales/sales.service';
-import { CABINET_BY_DIRECTION } from '../common/cabinets';
+import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
+import { parseCalendarDateUtc, tjYMD } from '../common/tj-time';
 
-const DIRECTION_LABEL: Record<Direction, string> = {
-  BACHELOR: 'Бакалавриат',
-  MASTER: 'Магистратура',
-  LANGUAGE: 'Языковые курсы',
-  LANGUAGE_COLLEGE: 'Языковой + колледж',
-  LANGUAGE_BACHELOR: 'Языковой + бакалавриат',
-  COLLEGE: 'Колледж',
+// Направление, которое подставляется КАЖДОЙ заявке из create() (= каждой
+// заявке с лендинга: другого клиента у этого метода нет).
+// ЭТО ПЛЕЙСХОЛДЕР, А НЕ ОТВЕТ КЛИЕНТА: форма лендинга больше не спрашивает
+// «Ҳадаф», она спрашивает страну (country). Колонка Application.direction
+// осталась NOT NULL (её нельзя ослабить, не переписав ~30 файлов бэкенда
+// и ~10 страниц CRM), поэтому её надо чем-то заполнить. Настоящее направление
+// менеджер выставляет позже в карточке студента — плейсхолдер копируется туда
+// при переводе заявки NEW → DOCS_REVIEW (см. update() ниже).
+//
+// ВАЖНО: каждая строка, куда попал этот плейсхолдер, помечается
+// directionConfirmed=false. Без этой пометки плейсхолдер неотличим от
+// настоящего ответа и утекает в аналитику: groupBy('direction') в stats()
+// показывал бы 100% лидов с лендинга как «Бакалавриат», а фильтр списка
+// по «Бакалавриату» возвращал бы их все. Поэтому любой read-путь, который
+// трактует direction как ответ клиента (stats, фильтр, колонка списка),
+// обязан смотреть на этот флаг.
+const DEFAULT_DIRECTION: Direction = Direction.BACHELOR;
+
+// Возрастное окно для заявки (включительно). Ниже 14 — школьник, которого
+// не берут ни на одну программу; выше 60 — заведомо опечатка в годе.
+const MIN_AGE = 14;
+const MAX_AGE = 60;
+
+const COUNTRY_LABEL: Record<Country, string> = {
+  USA: 'США',
+  KOREA: 'Корея',
+  CHINA: 'Китай',
+  LATVIA: 'Латвия',
+  MALAYSIA: 'Малайзия',
+  ITALY: 'Италия',
+  GERMANY: 'Германия',
 };
 
 const MANAGER_INCLUDE = {
@@ -106,7 +131,53 @@ export class ApplicationsService {
     ENROLLED: 'Зачислен',
   };
 
+  /**
+   * Парсит дату рождения с лендинга и проверяет возрастное окно 14–60.
+   *
+   * Считаем «сегодня» через tjYMD() (Asia/Dushanbe, см. common/tj-time.ts),
+   * а НЕ через голый `new Date()`: Railway живёт в UTC, и у таджикского
+   * пользователя, отправляющего форму после 19:00 UTC, «сегодня» уже
+   * следующие сутки — на границе дня рождения возраст считался бы на год
+   * меньше.
+   *
+   * А вот саму дату рождения храним UTC-полуночью (parseCalendarDateUtc), а
+   * НЕ душанбинской: DOB — календарный день, а не момент. Раньше здесь стоял
+   * tjParseLocalDate(), и «12.03» ложилось в БД как «2006-03-11T19:00:00Z» —
+   * cron birthdayGreetings читает колонку через `EXTRACT(DAY FROM birthday)`
+   * (сырой UTC) и слал поздравление 11 марта. При этом students.service.ts
+   * писал UTC-полночь, так что в одной таблице сосуществовали две конвенции.
+   */
+  private parseBirthday(input?: string): Date | null {
+    if (!input) return null;
+    const date = parseCalendarDateUtc(input);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Некорректная дата рождения');
+    }
+    const today = tjYMD();
+    // Дата лежит UTC-полуночью → календарные части читаем в UTC. Окно 14..60
+    // при этом сравнивается с сегодняшним днём по Душанбе (tjYMD выше).
+    const born = {
+      y: date.getUTCFullYear(),
+      m: date.getUTCMonth() + 1,
+      d: date.getUTCDate(),
+    };
+    let age = today.y - born.y;
+    // День рождения в этом году ещё не наступил → минус год.
+    if (today.m < born.m || (today.m === born.m && today.d < born.d)) age--;
+    if (age < MIN_AGE || age > MAX_AGE) {
+      throw new BadRequestException(
+        `Дата рождения указана неверно: возраст должен быть от ${MIN_AGE} до ${MAX_AGE} лет`,
+      );
+    }
+    return date;
+  }
+
   async create(dto: CreateApplicationDto & { ref?: string }) {
+    // Валидируем дату рождения ДО любых side-effect'ов (создание заявки,
+    // назначение менеджера, реферальная атрибуция) — иначе при 400 в БД
+    // осталась бы половинчатая заявка.
+    const birthday = this.parseBirthday(dto.birthday);
+
     // Sprint E: авто-распределение лидов. Если managerId не задан явно —
     // round-robin среди SALES_MANAGER (наименее загруженный).
     let assignedManagerId: string | null = null;
@@ -126,11 +197,29 @@ export class ApplicationsService {
       data: {
         fullName: dto.fullName.trim(),
         phone: dto.phone.trim(),
+        // Нормализация та же, что у phone — иначе один и тот же номер
+        // хранился бы в двух разных видах.
+        whatsappPhone: dto.whatsappPhone?.trim() || null,
         secondaryPhone: (dto as any).secondaryPhone?.trim() || null,
         secondaryContactLabel: (dto as any).secondaryContactLabel?.trim() || null,
         preferredChannel: (dto as any).preferredChannel || null,
         email: dto.email?.trim() || null,
-        direction: dto.direction,
+        // Направление здесь ВСЕГДА плейсхолдер: create() вызывается ровно из
+        // одного места — POST /applications/public, а туда ходит только форма
+        // лендинга, которая спрашивает страну вместо «Ҳадаф». Никакой другой
+        // клиент этого метода не существует (Telegram-бот заявок не создаёт,
+        // он уводит человека на ту же форму — telegram/bot-funnel.service.ts).
+        // Остальные создатели заявок — CRM (StudentsService.create),
+        // самозапись (StudentAuthService.register), approve заявки партнёра
+        // (SubmissionsService) — пишут Application напрямую через Prisma
+        // с настоящим направлением и получают directionConfirmed=true
+        // по @default из схемы.
+        direction: DEFAULT_DIRECTION,
+        // …и честно помечаем, что это плейсхолдер, а не ответ. Иначе он
+        // попадёт в дашборд/фильтр как настоящее направление клиента.
+        directionConfirmed: false,
+        country: dto.country ?? null,
+        birthday,
         comment: dto.comment?.trim() || null,
         programId: dto.programId || null,
         source: dto.source || 'LANDING_FORM',
@@ -151,10 +240,21 @@ export class ApplicationsService {
       }).catch(() => undefined);
     }
 
+    // Направление сотрудникам не печатаем вообще: в заявках, созданных этим
+    // методом, в нём всегда плейсхолдер (directionConfirmed=false выше), и
+    // «Бакалавриат» в уведомлении читался бы как ответ клиента. Печатаем
+    // страну — единственное, что клиент действительно выбрал.
+    const countryText = app.country ? COUNTRY_LABEL[app.country] : null;
+    // DOB лежит UTC-полуночью (parseBirthday) → календарный день читаем прямо
+    // из ISO-префикса. Прогонять его через tjLocalDay() нельзя: это сдвиг
+    // календарной даты в таймзону, а 12 марта остаётся 12 марта везде.
+    const birthdayText = app.birthday ? app.birthday.toISOString().slice(0, 10) : null;
+    const headline = countryText || '—';
+
     await this.notifications.notifyAllStaff({
       type: 'APPLICATION_NEW',
       title: 'Новая заявка',
-      message: `${app.fullName} — ${DIRECTION_LABEL[app.direction]}, ${app.phone}`,
+      message: `${app.fullName} — ${headline}, ${app.phone}`,
       payload: { applicationId: app.id },
     });
 
@@ -162,8 +262,10 @@ export class ApplicationsService {
       `🆕 *Новая заявка Javonon*\n` +
       `*ФИО:* ${app.fullName}\n` +
       `*Телефон:* ${app.phone}\n` +
+      (app.whatsappPhone ? `*WhatsApp:* ${app.whatsappPhone}\n` : '') +
       (app.email ? `*Email:* ${app.email}\n` : '') +
-      `*Направление:* ${DIRECTION_LABEL[app.direction]}\n` +
+      (birthdayText ? `*Дата рождения:* ${birthdayText}\n` : '') +
+      (countryText ? `*Страна:* ${countryText}\n` : '') +
       (app.comment ? `*Комментарий:* ${app.comment}` : '');
     this.telegram.send(tgText).catch(() => undefined);
 
@@ -173,8 +275,10 @@ export class ApplicationsService {
         `<h2>Новая заявка с лендинга</h2>
          <p><b>ФИО:</b> ${app.fullName}</p>
          <p><b>Телефон:</b> ${app.phone}</p>
+         ${app.whatsappPhone ? `<p><b>WhatsApp:</b> ${app.whatsappPhone}</p>` : ''}
          ${app.email ? `<p><b>Email:</b> ${app.email}</p>` : ''}
-         <p><b>Направление:</b> ${DIRECTION_LABEL[app.direction]}</p>
+         ${birthdayText ? `<p><b>Дата рождения:</b> ${birthdayText}</p>` : ''}
+         ${countryText ? `<p><b>Страна:</b> ${countryText}</p>` : ''}
          ${app.comment ? `<p><b>Комментарий:</b> ${app.comment}</p>` : ''}`,
       )
       .catch(() => undefined);
@@ -194,6 +298,8 @@ export class ApplicationsService {
   async findAll(filters: {
     status?: ApplicationStatus;
     direction?: Direction;
+    // Фильтр CRM по стране (тулбар «Страна»), зеркалит фильтр по источнику.
+    country?: Country;
     search?: string;
     mine?: boolean;
     managerUserId?: string;
@@ -205,7 +311,15 @@ export class ApplicationsService {
     const where: Prisma.ApplicationWhereInput = {};
     const and: Prisma.ApplicationWhereInput[] = [];
     if (filters.status) where.status = filters.status;
-    if (filters.direction) where.direction = filters.direction;
+    // Фильтр по направлению отдаёт только ПОДТВЕРЖДЁННЫЕ направления.
+    // Без directionConfirmed выбор «Бакалавриат» возвращал бы вообще все
+    // лиды с лендинга — у них там плейсхолдер DEFAULT_DIRECTION, а не выбор
+    // клиента. Менеджер, ищущий бакалавров, получал бы мусорную выборку.
+    if (filters.direction) {
+      where.direction = filters.direction;
+      where.directionConfirmed = true;
+    }
+    if (filters.country) where.country = filters.country;
     if (filters.source) where.source = filters.source;
     // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только свои
     // заявки. FOUNDER/ADMIN/ACCOUNTANT — все, если только не запросили mine.
@@ -280,6 +394,19 @@ export class ApplicationsService {
     const existing = await this.findOne(id);
     this.ensureCanEdit(existing, user);
 
+    // Направление, пришедшее из карточки заявки, — это уже решение живого
+    // менеджера, а не плейсхолдер. Снимаем пометку, и заявка возвращается
+    // в срез «по направлениям» на дашборде и в фильтр списка.
+    const data = {
+      ...dto,
+      ...(dto.direction != null ? { directionConfirmed: true } : {}),
+    };
+    // Направление, которое будет у заявки ПОСЛЕ этого PATCH. Студента ниже
+    // заводим по нему, а не по existing.direction: менеджер обычно правит
+    // направление тем же запросом, которым двигает статус в DOCS_REVIEW,
+    // и иначе в карточку студента (и в номер кабинета) уехал бы плейсхолдер.
+    const effectiveDirection = dto.direction ?? existing.direction;
+
     // Авто-создание студента при переходе NEW → DOCS_REVIEW (если ещё не создан)
     if (
       dto.status === ApplicationStatus.DOCS_REVIEW &&
@@ -295,18 +422,58 @@ export class ApplicationsService {
         // пришлось бы заполнять заново).
         const phones: string[] = [existing.phone];
         const phoneLabels: string[] = ['сам'];
+        // WhatsApp кладём в тот же массив phones[] — это принятая в модели
+        // Student конвенция для «дополнительных» номеров (phones[0] основной,
+        // phoneLabels[i] — подпись). Дубль не добавляем: на лендинге чекбокс
+        // «тот же номер» включён по умолчанию, и WhatsApp обычно совпадает
+        // с основным телефоном.
+        const waPhone = (existing as any).whatsappPhone as string | null;
+        if (waPhone && !phones.includes(waPhone)) {
+          phones.push(waPhone);
+          phoneLabels.push('WhatsApp');
+        }
         if ((existing as any).secondaryPhone) {
           phones.push((existing as any).secondaryPhone);
           phoneLabels.push((existing as any).secondaryContactLabel || '');
         }
+        // Подтверждено ли направление на момент конвертации: либо менеджер
+        // прислал его этим же PATCH'ем, либо оно уже было настоящим на заявке.
+        const directionConfirmed =
+          dto.direction != null || existing.directionConfirmed;
         const studentData: any = {
           fullName: existing.fullName,
+          // Дата рождения из заявки → в карточку студента, иначе cron
+          // birthdayGreetings никогда бы не сработал для лидов с лендинга.
+          // Student создаётся здесь с нуля, так что перезаписывать нечего.
+          birthday: (existing as any).birthday ?? null,
           phones,
           phoneLabels,
           preferredChannel: (existing as any).preferredChannel ?? null,
           email: existing.email,
-          direction: existing.direction,
-          cabinet: CABINET_BY_DIRECTION[existing.direction],
+          // Плейсхолдер приходится скопировать (Student.direction — NOT NULL),
+          // но он переезжает ВМЕСТЕ с пометкой directionConfirmed. Иначе на
+          // студенте он становился бы неотличим от ответа клиента, а вернуться
+          // к правде было бы уже неоткуда: заявку менеджеру пришлось бы
+          // открывать отдельно.
+          direction: effectiveDirection,
+          directionConfirmed,
+          // Кабинет — это маршрутизация/владение в CRM (см. common/cabinets.ts),
+          // и выводить его из плейсхолдера нельзя: CABINET_BY_DIRECTION.BACHELOR
+          // = 1, поэтому 100% лидов с лендинга оседали бы в кабинете 1, а
+          // кабинеты 2–6 переставали бы наполняться новым потоком вообще.
+          // Пока направление не подтверждено, пишем DEFAULT_CABINET ЯВНО —
+          // это «приёмник» до решения менеджера, а не итог маршрутизации.
+          // Как только направление проставят (в карточке заявки до конвертации
+          // или в карточке студента после — StudentsService.update), кабинет
+          // пересчитается по CABINET_BY_DIRECTION.
+          cabinet: directionConfirmed
+            ? CABINET_BY_DIRECTION[effectiveDirection]
+            : DEFAULT_CABINET,
+          // Страна — единственный настоящий ответ клиента о его цели
+          // («Кишвар» вместо снятого вопроса «Ҳадаф»). Переносим её на
+          // студента, иначе после конвертации намерение восстанавливалось бы
+          // только из исходной Application.
+          country: (existing as any).country ?? null,
           comment: existing.comment,
         };
         const student = await this.prisma.student.create({ data: studentData });
@@ -316,9 +483,28 @@ export class ApplicationsService {
       }
       const updated = await this.prisma.application.update({
         where: { id },
-        data: { ...dto, ...(studentId ? { studentId } : {}) },
+        data: { ...data, ...(studentId ? { studentId } : {}) },
         include: MANAGER_INCLUDE,
       });
+
+      // Реферальная атрибуция с лендинга привязана к ЗАЯВКЕ: в момент
+      // отправки формы Student ещё не существовал, поэтому в строке
+      // ReferralAttribution.studentId = null. Здесь студент наконец создан —
+      // проставляем его id. Без этого back-fill'а PaymentsService при
+      // подтверждении оплаты ищет партнёра по studentId, ничего не находит,
+      // и комиссия партнёру не начисляется никогда.
+      if (updated.studentId) {
+        try {
+          await this.prisma.referralAttribution.updateMany({
+            where: { applicationId: id, studentId: null },
+            data: { studentId: updated.studentId },
+          });
+        } catch {
+          // Не валим смену статуса из-за партнёрской таблицы —
+          // resolvePartner всё равно умеет искать по applicationId.
+        }
+      }
+
       this.realtime.emitStaff('application:updated', { application: updated });
       if (updated.studentId) {
         this.realtime.emitStudent(updated.studentId, 'student:updated', { studentId: updated.studentId });
@@ -352,9 +538,29 @@ export class ApplicationsService {
 
     const updated = await this.prisma.application.update({
       where: { id },
-      data: dto,
+      data,
       include: MANAGER_INCLUDE,
     });
+
+    // Зеркало синхронизации из StudentsService.update: менеджер проставил
+    // направление в карточке ЗАЯВКИ, а студент из неё уже сконвертирован —
+    // до-маршрутизируем студента. Условие directionConfirmed:false в where
+    // делает это безопасным и идемпотентным: студента, чьё направление уже
+    // подтверждено (заведён вручную или менеджер правил его карточку),
+    // не трогаем — у него cabinet мог быть выставлен руками.
+    if (dto.direction != null && updated.studentId) {
+      await this.prisma.student
+        .updateMany({
+          where: { id: updated.studentId, directionConfirmed: false },
+          data: {
+            direction: dto.direction,
+            directionConfirmed: true,
+            cabinet: CABINET_BY_DIRECTION[dto.direction],
+          },
+        })
+        .catch(() => undefined);
+    }
+
     this.realtime.emitStaff('application:updated', { application: updated });
     if (updated.studentId) {
       this.realtime.emitStudent(updated.studentId, 'student:updated', { studentId: updated.studentId });
@@ -530,11 +736,33 @@ export class ApplicationsService {
       user && !isElevated(user)
         ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
         : undefined;
-    const [total, byStatus, byDirection] = await Promise.all([
+    const [total, byStatus, byDirection, byCountry, directionUnconfirmed] = await Promise.all([
       this.prisma.application.count({ where }),
       this.prisma.application.groupBy({ by: ['status'], _count: true, where }),
-      this.prisma.application.groupBy({ by: ['direction'], _count: true, where }),
+      // Только подтверждённые направления. Заявки с лендинга носят
+      // плейсхолдер DEFAULT_DIRECTION, и без этого условия дашборд
+      // рапортовал бы 100% входящего трафика как «Бакалавриат».
+      this.prisma.application.groupBy({
+        by: ['direction'],
+        _count: true,
+        where: { ...where, directionConfirmed: true },
+      }),
+      // Страна — то, что клиент теперь РЕАЛЬНО выбирает в форме. Это и есть
+      // осмысленный срез входящего трафика вместо фальшивых направлений.
+      // country IS NULL отсекаем: это заявки до релиза новой формы, плюс всё,
+      // что создано в обход формы (CRM через StudentsService, самозапись,
+      // approve заявки партнёра) — в разрезе «по странам» они не ответ,
+      // а отсутствие ответа (их видно как total − сумма строк).
+      this.prisma.application.groupBy({
+        by: ['country'],
+        _count: true,
+        where: { ...where, country: { not: null } },
+      }),
+      // Сколько заявок ждут, пока менеджер проставит направление руками.
+      // Дашборд показывает это рядом со срезом «по направлениям», иначе
+      // тот выглядел бы просто «пустым» без объяснения причины.
+      this.prisma.application.count({ where: { ...where, directionConfirmed: false } }),
     ]);
-    return { total, byStatus, byDirection };
+    return { total, byStatus, byDirection, byCountry, directionUnconfirmed };
   }
 }

@@ -334,6 +334,14 @@ export class CronService {
     // которое было ВЧЕРА в Душанбе. Считаем месяц/день в TJT.
     const { m: month, d: day } = tjYMD(new Date());
 
+    // EXTRACT читает СЫРУЮ колонку (Prisma DateTime = timestamp без tz,
+    // значение в UTC), поэтому сравнение с душанбинскими month/day корректно
+    // ровно потому, что DOB хранится UTC-полуночью того же календарного дня —
+    // см. parseCalendarDateUtc() в common/tj-time.ts, через который обязаны
+    // идти оба писателя (applications.service.ts и students.service.ts).
+    // Если кто-то снова начнёт писать душанбинскую полночь (19:00Z прошлых
+    // суток), EXTRACT(DAY) вернёт вчерашнее число и поздравление уйдёт на
+    // сутки раньше. Исторические строки чинит prisma/migrate-birthdays-utc.ts.
     // Postgres extract: where extract(month from birthday)=$1 AND day=$2
     const students = await this.prisma.$queryRawUnsafe<any[]>(
       `SELECT id, "fullName", phones FROM "Student"

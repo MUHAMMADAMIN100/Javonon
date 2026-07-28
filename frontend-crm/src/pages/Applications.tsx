@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listApplications } from '../api/applications';
 import { listUsers } from '../api/users';
-import type { ApplicationSource, ApplicationStatus, Direction } from '../api/types';
-import { APPLICATION_SOURCES, SOURCE_BADGE, SOURCE_LABEL, STATUS_BADGE } from '../api/types';
+import type { ApplicationSource, ApplicationStatus, Country, Direction } from '../api/types';
+import { APPLICATION_SOURCES, COUNTRIES, SOURCE_BADGE, SOURCE_LABEL, STATUS_BADGE } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
@@ -15,7 +15,7 @@ import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
-import { useDirectionLabel, useApplicationStatusLabel } from '../lib/labels';
+import { useDirectionLabel, useApplicationStatusLabel, useCountryLabel } from '../lib/labels';
 
 type Scope = 'all' | 'mine';
 
@@ -33,6 +33,7 @@ export default function Applications() {
   const { t } = useT();
   const directionLabel = useDirectionLabel();
   const statusLabel = useApplicationStatusLabel();
+  const countryLabel = useCountryLabel();
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
@@ -42,6 +43,7 @@ export default function Applications() {
   const [direction, setDirection] = useState<Direction | ''>('');
   const [manager, setManager] = useState<string>('');
   const [source, setSource] = useState<ApplicationSource | ''>('');
+  const [country, setCountry] = useState<Country | ''>('');
   const isAdmin = isElevated(me);
   // Менеджер видит только свои заявки; админ может переключать.
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
@@ -55,12 +57,13 @@ export default function Applications() {
   // Сбросить страницу при смене фильтров.
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, status, direction, scope, manager, source]);
+  }, [debouncedSearch, status, direction, scope, manager, source, country]);
 
   const filters = {
     search: debouncedSearch || undefined,
     status: status || undefined,
     direction: direction || undefined,
+    country: country || undefined,
     mine: scope === 'mine',
     manager: manager || undefined,
     source: source || undefined,
@@ -155,14 +158,25 @@ export default function Applications() {
             className="crm-select"
             value={source}
             onChange={(e) => setSource(e.target.value as ApplicationSource | '')}
-            title="Источник"
+            title={t('app.field.source')}
           >
-            <option value="">Источник — все</option>
+            <option value="">{t('app.filter.source')}</option>
             {APPLICATION_SOURCES.map((s) => (
               <option key={s} value={s}>{SOURCE_LABEL[s]}</option>
             ))}
           </select>
-          {(search || status || direction || manager || source) && (
+          <select
+            className="crm-select"
+            value={country}
+            onChange={(e) => setCountry(e.target.value as Country | '')}
+            title={t('app.field.country')}
+          >
+            <option value="">{t('app.filter.country')}</option>
+            {COUNTRIES.map((c) => (
+              <option key={c} value={c}>{countryLabel(c)}</option>
+            ))}
+          </select>
+          {(search || status || direction || manager || source || country) && (
             <button
               type="button"
               className="btn btn-ghost"
@@ -172,6 +186,7 @@ export default function Applications() {
                 setDirection('');
                 setManager('');
                 setSource('');
+                setCountry('');
               }}
               title={t('common.reset')}
             >
@@ -193,7 +208,7 @@ export default function Applications() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>{t('app.field.fullName')}</th><th>{t('app.field.phone')}</th><th>{t('app.field.direction')}</th><th>{t('app.field.manager')}</th><th>Источник</th><th>{t('common.status')}</th><th>{t('reports.col.date')}</th>
+                    <th>{t('app.field.fullName')}</th><th>{t('app.field.phone')}</th><th>{t('app.field.country')}</th><th>{t('app.field.direction')}</th><th>{t('app.field.manager')}</th><th>{t('app.field.source')}</th><th>{t('common.status')}</th><th>{t('reports.col.date')}</th>
                   </tr>
                 </thead>
                 <motion.tbody
@@ -214,7 +229,36 @@ export default function Applications() {
                     >
                       <td><strong>{a.fullName}</strong></td>
                       <td>{a.phone}</td>
-                      <td>{directionLabel(a.direction)}</td>
+                      <td>
+                        {/* Страна есть только у заявок с новой формы лендинга.
+                            Старые заявки и всё, что заведено в обход формы
+                            (ручное создание в CRM, самозапись, approve заявки
+                            партнёра), её не заполняют — показываем нейтральный
+                            прочерк, а не пустую/«undefined» плашку. */}
+                        {a.country ? (
+                          <span className="badge badge-gray">{countryLabel(a.country)}</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-light)' }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        {/* directionConfirmed === false → в direction лежит
+                            плейсхолдер бэкенда, а не выбор клиента: форма
+                            лендинга направление не спрашивает. Рисуем прочерк,
+                            иначе вся колонка была бы «Бакалавриат» и менеджер
+                            принимал бы её за ответ. undefined (старый ответ
+                            API) считаем подтверждённым — как @default(true). */}
+                        {a.directionConfirmed === false ? (
+                          <span
+                            style={{ color: 'var(--text-light)' }}
+                            title={t('app.direction.unconfirmed')}
+                          >
+                            —
+                          </span>
+                        ) : (
+                          directionLabel(a.direction)
+                        )}
+                      </td>
                       <td>
                         <div className="mgr-cell">
                           <div className="mgr-row">

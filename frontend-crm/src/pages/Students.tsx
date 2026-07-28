@@ -308,8 +308,34 @@ export default function Students() {
                     >
                       <td><strong>{s.fullName}</strong></td>
                       <td>{s.phones.join(', ') || '—'}</td>
-                      <td>{directionLabel(s.direction)}</td>
-                      <td>№{s.cabinet}</td>
+                      {/* directionConfirmed === false → студент сконвертирован
+                          из заявки с лендинга, и в direction лежит плейсхолдер
+                          бэкенда, а не выбор клиента. Печатать «Бакалавриат»
+                          нельзя — вся колонка выглядела бы как ответы клиентов.
+                          undefined (старый ответ API) считаем подтверждённым,
+                          как @default(true) в схеме. */}
+                      <td>
+                        {s.directionConfirmed === false ? (
+                          <span
+                            style={{ color: 'var(--text-light)' }}
+                            title={t('app.direction.unconfirmed')}
+                          >
+                            —
+                          </span>
+                        ) : (
+                          directionLabel(s.direction)
+                        )}
+                      </td>
+                      {/* Кабинет до подтверждения направления — «приёмник»
+                          из конвертации, а не назначенная маршрутизация. */}
+                      <td>
+                        №{s.cabinet}
+                        {s.directionConfirmed === false && (
+                          <span style={{ color: 'var(--text-light)', fontSize: 12, marginLeft: 4 }} title={t('app.direction.unconfirmed')}>
+                            ·&nbsp;{t('student.cabinet.pending')}
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <div className="mgr-cell">
                           <div className="mgr-row">

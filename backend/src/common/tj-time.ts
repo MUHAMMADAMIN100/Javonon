@@ -98,6 +98,45 @@ export function tjParseLocalDate(input: string): Date {
   return new Date(`${input}T00:00:00+05:00`);
 }
 
+/**
+ * Парсинг КАЛЕНДАРНОЙ даты (дата рождения) как UTC-полуночи.
+ *
+ * Дата рождения — не момент времени, а календарный день: 12 марта остаётся
+ * 12 марта в любой таймзоне. Поэтому её НЕЛЬЗЯ парсить tjParseLocalDate():
+ * «2006-03-12» превратилось бы в «2006-03-11T19:00:00.000Z», и тогда
+ *   - cron birthdayGreetings (`EXTRACT(DAY FROM birthday)` читает сырую
+ *     UTC-колонку) вернул бы 11 → поздравление ушло бы на сутки раньше;
+ *   - CRM, которая местами читает ISO-префикс (`birthday.slice(0, 10)`),
+ *     показала бы 11.03.
+ *
+ * Конвенция по всей системе: DOB хранится ровно UTC-полуночью того самого
+ * календарного дня (`2006-03-12T00:00:00.000Z`). ОБА писателя —
+ * applications.service.ts (лендинг) и students.service.ts (CRM) — обязаны
+ * идти через этот хелпер, иначе в БД снова заведутся две конвенции.
+ *
+ * Возвращает Invalid Date для мусора на входе — вызывающий сам решает,
+ * бросать 400 или подставить null.
+ */
+export function parseCalendarDateUtc(input: string): Date {
+  const s = String(input).trim();
+  // Основной путь: «YYYY-MM-DD» (и полная ISO-строка — у неё тот же префикс).
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) {
+    const day = `${m[1]}-${m[2]}-${m[3]}`;
+    const date = new Date(`${day}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime())) return date;
+    // Round-trip: V8 не отбраковывает несуществующие даты, а молча
+    // перекатывает их (2006-02-31 → 3 марта). Для DOB это тихая порча данных,
+    // поэтому такой вход считаем невалидным.
+    return date.toISOString().slice(0, 10) === day ? date : new Date(NaN);
+  }
+  // Экзотический формат — разбираем как есть и срезаем время до UTC-полуночи,
+  // чтобы конвенция хранения не зависела от формата ввода.
+  const asInstant = new Date(s);
+  if (Number.isNaN(asInstant.getTime())) return asInstant;
+  return new Date(`${asInstant.toISOString().slice(0, 10)}T00:00:00.000Z`);
+}
+
 /** Парсинг конца периода: 23:59:59.999 ТJT для указанного YYYY-MM-DD. */
 export function tjParseLocalDateEnd(input: string): Date {
   if (hasExplicitTimezone(input)) return new Date(input);

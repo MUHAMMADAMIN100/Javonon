@@ -24,7 +24,8 @@ import Icon from '../Icon';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
-import { useDirectionLabel, useStudentStatusLabel, useOnboardingLabel, useChannelLabel } from '../lib/labels';
+import { useDirectionLabel, useStudentStatusLabel, useOnboardingLabel, useChannelLabel, useCountryLabel } from '../lib/labels';
+import { tjDateInput, tjFormatDate } from '../lib/tjTime';
 
 function CredRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -64,6 +65,7 @@ export default function StudentDetail() {
   const statusLabel = useStudentStatusLabel();
   const onboardingLabel = useOnboardingLabel();
   const channelLabel = useChannelLabel();
+  const countryLabel = useCountryLabel();
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>(null);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -86,7 +88,10 @@ export default function StudentDetail() {
         phones: student.phones.join(', '),
         phoneLabels: (student.phoneLabels || []).join(', '),
         preferredChannel: student.preferredChannel || '',
-        birthday: student.birthday ? student.birthday.slice(0, 10) : '',
+        // tjDateInput, а не slice(0, 10): дата рождения хранится как
+        // душанбинская полночь (12.03 → «2006-03-11T19:00:00.000Z»), срез
+        // строки подставил бы в пикер 11-е и сохранил бы сдвиг в БД.
+        birthday: tjDateInput(student.birthday),
         email: student.email || '',
         direction: student.direction,
         cabinet: student.cabinet,
@@ -413,12 +418,55 @@ export default function StudentDetail() {
                 {student.birthday && (
                   <div className="detail-row">
                     <div className="detail-label">{t('app.field.birthday')}</div>
-                    <div className="detail-value">{new Date(student.birthday).toLocaleDateString('ru-RU')}</div>
+                    {/* TJ-календарь, а не таймзона браузера — иначе карточка
+                        студента и карточка заявки разошлись бы на сутки. */}
+                    <div className="detail-value">{tjFormatDate(student.birthday)}</div>
                   </div>
                 )}
                 <div className="detail-row"><div className="detail-label">{t('userDetail.field.email')}</div><div className="detail-value">{student.email || '—'}</div></div>
-                <div className="detail-row"><div className="detail-label">{t('app.field.direction')}</div><div className="detail-value">{directionLabel(student.direction)}</div></div>
-                <div className="detail-row"><div className="detail-label">{t('app.field.cabinet')}</div><div className="detail-value">№{student.cabinet}</div></div>
+                {/* Страна — то, что клиент реально выбрал на сайте. Переезжает
+                    на студента при конвертации заявки; для заведённых вручную
+                    её нет, поэтому строку показываем только когда есть. */}
+                {student.country && (
+                  <div className="detail-row">
+                    <div className="detail-label">{t('app.field.country')}</div>
+                    <div className="detail-value">{countryLabel(student.country)}</div>
+                  </div>
+                )}
+                <div className="detail-row">
+                  <div className="detail-label">{t('app.field.direction')}</div>
+                  {/* directionConfirmed === false → в direction лежит
+                      плейсхолдер, приехавший из заявки с лендинга. Печатать
+                      «Бакалавриат» здесь опаснее, чем в списке заявок: карточка
+                      студента выглядит как проверенные данные. undefined
+                      (старый ответ API) считаем подтверждённым — @default(true). */}
+                  <div className="detail-value">
+                    {student.directionConfirmed === false ? (
+                      <span
+                        style={{ color: 'var(--text-light)' }}
+                        title={t('app.direction.unconfirmed')}
+                      >
+                        —
+                      </span>
+                    ) : (
+                      directionLabel(student.direction)
+                    )}
+                  </div>
+                </div>
+                <div className="detail-row">
+                  <div className="detail-label">{t('app.field.cabinet')}</div>
+                  {/* Пока направление не подтверждено, номер кабинета —
+                      «приёмник» из конвертации, а не осознанная маршрутизация.
+                      Помечаем, иначе кабинет 1 читался бы как назначенный. */}
+                  <div className="detail-value">
+                    №{student.cabinet}
+                    {student.directionConfirmed === false && (
+                      <span style={{ color: 'var(--text-light)', fontSize: 12, marginLeft: 6 }}>
+                        · {t('student.cabinet.pending')}
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <div className="detail-row"><div className="detail-label">{t('common.status')}</div><div className="detail-value">{statusLabel(student.status)}</div></div>
                 {student.onboardingStage && (
                   <div className="detail-row">

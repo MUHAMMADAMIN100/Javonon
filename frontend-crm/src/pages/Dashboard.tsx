@@ -9,6 +9,7 @@ import { useAuth } from '../store/auth';
 import { keys } from '../lib/queryKeys';
 import { isElevated, hasRole } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useCountryLabel } from '../lib/labels';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -24,6 +25,7 @@ const fadeUp = {
 
 export default function Dashboard() {
   const { t } = useT();
+  const countryLabel = useCountryLabel();
   const me = useAuth((s) => s.user);
   const isAdmin = isElevated(me);
   // hasRole учитывает мульти-роли (ТЗ §2). Раньше было `me?.role === 'ACCOUNTANT'`
@@ -65,6 +67,11 @@ export default function Dashboard() {
     (appStats?.byStatus?.find((s: any) => s.status === 'PRE_ADMISSION')?._count || 0) +
     (appStats?.byStatus?.find((s: any) => s.status === 'AWAITING_PAYMENT')?._count || 0);
   const enrolled = appStats?.byStatus?.find((s: any) => s.status === 'ENROLLED')?._count || 0;
+
+  // Заявки, у которых направление ещё не подтверждено человеком (в БД лежит
+  // плейсхолдер). Они исключены из среза «по направлениям» — показываем их
+  // числом рядом, чтобы срез не выглядел «потерявшим» половину заявок.
+  const unconfirmedDirections = Number(appStats?.directionUnconfirmed ?? 0);
 
   // ТЗ §4 «Активные клиенты» — берём ACTIVE студентов из stuStats.byStatus
   const activeStudents = stuStats?.byStatus?.find((s: any) => s.status === 'ACTIVE')?._count
@@ -270,16 +277,37 @@ export default function Dashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+        {/* Страны идут первыми: это единственный вопрос о цели обучения,
+            на который клиент реально отвечает в форме лендинга. Раньше
+            первым стоял срез «по направлениям», где 100% лидов с сайта
+            показывались «Бакалавриатом» — направление формой не
+            спрашивается, бэкенд подставлял плейсхолдер. */}
         <BreakdownCard
-          eyebrow={`01 · ${t('eyebrow.directions')}`}
+          eyebrow={`01 · ${t('eyebrow.countries')}`}
+          title={t('dashboard.breakdown.countries')}
+          rows={(appStats?.byCountry || []).map((c: any) => ({
+            label: countryLabel(c.country),
+            value: c._count,
+          }))}
+        />
+        <BreakdownCard
+          eyebrow={`02 · ${t('eyebrow.directions')}`}
           title={t('dashboard.breakdown.directions')}
+          // Считаем только подтверждённые направления (бэкенд фильтрует по
+          // directionConfirmed). Сноска объясняет, почему сумма меньше total:
+          // без неё пустой/куцый срез выглядел бы как поломка дашборда.
+          note={
+            unconfirmedDirections > 0
+              ? `${t('dashboard.breakdown.directionsPending')}: ${unconfirmedDirections}`
+              : undefined
+          }
           rows={(appStats?.byDirection || []).map((d: any) => ({
             label: DIRECTION_LABEL[d.direction as keyof typeof DIRECTION_LABEL] || d.direction,
             value: d._count,
           }))}
         />
         <BreakdownCard
-          eyebrow={`02 · ${t('eyebrow.cabinets')}`}
+          eyebrow={`03 · ${t('eyebrow.cabinets')}`}
           title={t('dashboard.breakdown.cabinets')}
           rows={(stuStats?.byCabinet || []).map((c: any) => ({
             label: `${t('app.field.cabinet')} ${c.cabinet}`,
@@ -287,7 +315,7 @@ export default function Dashboard() {
           }))}
         />
         <BreakdownCard
-          eyebrow={`03 · ${t('eyebrow.funnel')}`}
+          eyebrow={`04 · ${t('eyebrow.funnel')}`}
           title={t('dashboard.breakdown.funnel')}
           rows={(appStats?.byStatus || []).map((s: any) => ({
             label: STATUS_LABEL[s.status as keyof typeof STATUS_LABEL] || s.status,
@@ -335,10 +363,13 @@ function BreakdownCard({
   eyebrow,
   title,
   rows,
+  note,
 }: {
   eyebrow: string;
   title: string;
   rows: Array<{ label: string; value: any }>;
+  /** Пояснение под заголовком: почему сумма строк меньше общего числа. */
+  note?: string;
 }) {
   const { t } = useT();
   const total = rows.reduce((s, r) => s + (Number(r.value) || 0), 0) || 1;
@@ -365,10 +396,21 @@ function BreakdownCard({
         fontSize: 22,
         fontWeight: 500,
         letterSpacing: '-0.02em',
-        marginBottom: 20,
+        marginBottom: note ? 6 : 20,
       }}>
         {title}
       </h3>
+      {note && (
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.04em',
+          color: 'var(--text-light)',
+          marginBottom: 20,
+        }}>
+          {note}
+        </div>
+      )}
       {rows.length === 0 ? (
         <div style={{ color: 'var(--text-light)', fontSize: 14, padding: '12px 0' }}>{t('common.empty')}</div>
       ) : (

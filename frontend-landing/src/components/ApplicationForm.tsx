@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { submitApplication, type Direction, DIRECTION_LABEL, type ContactChannel } from '../api';
+import { submitApplication, type Country, COUNTRY_ORDER, COUNTRY_LABEL } from '../api';
+import { birthdayBounds, birthdayRule } from '../validators';
 import { getReferral } from '../referral';
 import Icon from '../Icon';
 import PhoneInput, { COUNTRIES } from './PhoneInput';
 
 const MAX_NAME = 100;
-const MAX_EMAIL = 120;
 const MAX_COMMENT = 500;
 
-type Errors = Partial<Record<'fullName' | 'phone' | 'email' | 'comment' | 'secondaryPhone', string>>;
+type Errors = Partial<
+  Record<'fullName' | 'phone' | 'whatsappPhone' | 'birthday' | 'country' | 'comment', string>
+>;
 
 const PERKS = [
   'Машварати ройгон 30 дақиқа',
@@ -21,24 +23,28 @@ const PERKS = [
 export default function ApplicationForm() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [direction, setDirection] = useState<Direction>('BACHELOR');
+  // WhatsApp по умолчанию = основной номер: у подавляющего большинства клиентов
+  // это один и тот же номер, лишнее поле только удлиняет форму. Пока галочка
+  // стоит — второй PhoneInput не рендерим, а в payload уходит копия phone.
+  const [sameWhatsapp, setSameWhatsapp] = useState(true);
+  const [whatsappPhone, setWhatsappPhone] = useState('');
+  const [birthday, setBirthday] = useState('');
+  const [country, setCountry] = useState<Country | ''>('');
   const [comment, setComment] = useState('');
-  // По ТЗ §8 — доп. контакт (родитель/опекун) + предпочтительный канал
-  // связи. Свёрнуто по умолчанию, чтобы не перегружать форму.
-  const [showExtra, setShowExtra] = useState(false);
-  const [secondaryPhone, setSecondaryPhone] = useState('');
-  const [secondaryLabel, setSecondaryLabel] = useState('');
-  const [preferredChannel, setPreferredChannel] = useState<ContactChannel | ''>('');
   const [errors, setErrors] = useState<Errors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
-  // Общая проверка номера для основного и дополнительного телефона.
-  // Пустое значение здесь НЕ считается ошибкой — обязательность решает вызывающий,
-  // т.к. phone обязателен, а secondaryPhone (родитель/опекун) — нет.
+  // min/max для нативного date-picker: браузер сам не даст выбрать возраст
+  // вне 14..60, т.е. до сабмита. Считается один раз при монтировании —
+  // за время жизни страницы календарные сутки не сдвинутся настолько,
+  // чтобы это было заметно, а Intl на каждый рендер дёргать незачем.
+  const dobBounds = useMemo(() => birthdayBounds(), []);
+
+  // Общая проверка номера для основного номера и WhatsApp.
+  // Пустое значение здесь НЕ считается ошибкой — обязательность решает вызывающий.
   // Порог minDigits (7 цифр) специально не ниже, чем backend PHONE_RE
   // /^\+?[\d\s\-()]{7,20}$/ в create-application.dto.ts: там 7 символов считаются
   // ВМЕСТЕ с кодом страны, поэтому «+992» + 1..3 цифры прошло бы фронт, но упало
@@ -67,17 +73,20 @@ export default function ApplicationForm() {
       if (!v) return 'Рақами телефонро нависед';
       return validatePhoneValue(v);
     }
-    if (field === 'secondaryPhone') {
+    if (field === 'whatsappPhone') {
+      // Галочка «ҳамон рақам» — поле скрыто и уходит копией phone,
+      // отдельная валидация не нужна (phone уже проверен выше).
+      if (sameWhatsapp) return;
       const v = (value || '').trim();
-      // Поле необязательное: пусто — валидно.
-      if (!v) return;
+      if (!v) return 'Рақами WhatsApp-ро нависед';
       return validatePhoneValue(v);
     }
-    if (field === 'email') {
-      const v = value.trim();
-      if (!v) return;
-      if (v.length > MAX_EMAIL) return `Ҳадди аксар ${MAX_EMAIL} аломат`;
-      if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v)) return 'Почтаи электронӣ нодуруст';
+    if (field === 'birthday') {
+      // Та же проверка 14..60 (в поясе Asia/Dushanbe), что и на бэке.
+      return birthdayRule()(value);
+    }
+    if (field === 'country') {
+      if (!value) return 'Кишварро интихоб кунед';
       return;
     }
     if (field === 'comment') {
@@ -88,22 +97,24 @@ export default function ApplicationForm() {
   };
 
   const fieldValue = (field: keyof Errors): string => {
-    if (field === 'fullName') return fullName;
-    if (field === 'phone') return phone;
-    if (field === 'email') return email;
-    if (field === 'secondaryPhone') return secondaryPhone;
-    return comment;
+    switch (field) {
+      case 'fullName': return fullName;
+      case 'phone': return phone;
+      case 'whatsappPhone': return whatsappPhone;
+      case 'birthday': return birthday;
+      case 'country': return country;
+      case 'comment': return comment;
+      default: return '';
+    }
   };
 
   const checkAll = (): Errors => ({
     fullName: validateField('fullName', fullName),
     phone: validateField('phone', phone),
-    email: validateField('email', email),
+    whatsappPhone: validateField('whatsappPhone', whatsappPhone),
+    birthday: validateField('birthday', birthday),
+    country: validateField('country', country),
     comment: validateField('comment', comment),
-    // secondaryPhone уходит в тело запроса (см. handleSubmit), поэтому его
-    // тоже надо проверить до отправки — иначе недобитый номер даёт 400
-    // и вся заявка теряется.
-    secondaryPhone: validateField('secondaryPhone', secondaryPhone),
   });
 
   const cleanErrors = (e: Errors): Errors => {
@@ -122,6 +133,8 @@ export default function ApplicationForm() {
 
   const handleFieldChange = (field: keyof Errors, value: string) => {
     if (field === 'fullName') setFullName(value);
+    // PhoneInput не даёт onBlur, поэтому оба номера валидируем «вживую»:
+    // после первого submit / первой ошибки.
     else if (field === 'phone') {
       setPhone(value);
       if (touched.phone || errors.phone) {
@@ -130,21 +143,30 @@ export default function ApplicationForm() {
       }
       return;
     }
-    // PhoneInput не даёт onBlur, поэтому доп. номер валидируем «вживую»,
-    // как и основной: после первого submit / первой ошибки.
-    else if (field === 'secondaryPhone') {
-      setSecondaryPhone(value);
-      if (touched.secondaryPhone || errors.secondaryPhone) {
-        const err = validateField('secondaryPhone', value);
-        setErrors((prev) => ({ ...prev, secondaryPhone: err }));
+    else if (field === 'whatsappPhone') {
+      setWhatsappPhone(value);
+      if (touched.whatsappPhone || errors.whatsappPhone) {
+        const err = validateField('whatsappPhone', value);
+        setErrors((prev) => ({ ...prev, whatsappPhone: err }));
       }
       return;
     }
-    else if (field === 'email') setEmail(value);
+    else if (field === 'birthday') setBirthday(value);
+    else if (field === 'country') setCountry(value as Country | '');
     else if (field === 'comment') setComment(value);
     if (touched[field] || errors[field]) {
       const err = validateField(field, value);
       setErrors((prev) => ({ ...prev, [field]: err }));
+    }
+  };
+
+  const toggleSameWhatsapp = (checked: boolean) => {
+    setSameWhatsapp(checked);
+    if (checked) {
+      // Поле скрывается — снимаем и ошибку, иначе она осталась бы
+      // невидимым блокером сабмита.
+      setWhatsappPhone('');
+      setErrors((prev) => ({ ...prev, whatsappPhone: undefined }));
     }
   };
 
@@ -153,9 +175,14 @@ export default function ApplicationForm() {
     setServerError(null);
     const all = cleanErrors(checkAll());
     setErrors(all);
-    setTouched({ fullName: true, phone: true, email: true, comment: true, secondaryPhone: true });
-    // Ошибка в свёрнутом блоке была бы невидимым блокером сабмита — разворачиваем.
-    if (all.secondaryPhone) setShowExtra(true);
+    setTouched({
+      fullName: true,
+      phone: true,
+      whatsappPhone: true,
+      birthday: true,
+      country: true,
+      comment: true,
+    });
     if (Object.keys(all).length > 0) return;
 
     setSubmitting(true);
@@ -163,12 +190,14 @@ export default function ApplicationForm() {
       await submitApplication({
         fullName: fullName.trim(),
         phone: phone.trim(),
-        secondaryPhone: secondaryPhone.trim() || undefined,
-        secondaryContactLabel: secondaryLabel.trim() || undefined,
-        preferredChannel: preferredChannel || undefined,
-        email: email.trim() || undefined,
-        direction,
+        // Галочка «ҳамон рақам» → WhatsApp = основной номер.
+        whatsappPhone: (sameWhatsapp ? phone : whatsappPhone).trim() || undefined,
+        birthday: birthday || undefined,
+        country: country || undefined,
         comment: comment.trim() || undefined,
+        // `direction` лендинг больше НЕ шлёт: клиента про него не спрашивают.
+        // Бэк подставит Direction.BACHELOR-заглушку, менеджер правит её в CRM.
+        //
         // Реферальный код партнёра (TTL-aware чтение из localStorage).
         // Без этого ReferralsService.attribute() на бэке не запускается
         // и комиссия партнёру не начисляется. clearReferral() НЕ вызываем:
@@ -179,13 +208,12 @@ export default function ApplicationForm() {
       });
       setSuccess(true);
       try {
-        (window as any).gtag?.('event', 'submit_application', { direction });
+        (window as any).gtag?.('event', 'submit_application', { country });
         (window as any).ym?.((window as any).__YM_ID__, 'reachGoal', 'APPLICATION_SUBMIT');
       } catch {}
-      setFullName(''); setPhone(''); setEmail(''); setComment('');
-      setSecondaryPhone(''); setSecondaryLabel(''); setPreferredChannel('');
-      setShowExtra(false);
-      setDirection('BACHELOR');
+      setFullName(''); setPhone(''); setComment('');
+      setWhatsappPhone(''); setSameWhatsapp(true);
+      setBirthday(''); setCountry('');
       setErrors({});
       setTouched({});
       setTimeout(() => setSuccess(false), 8000);
@@ -285,27 +313,59 @@ export default function ApplicationForm() {
                 </div>
 
                 <div className="form-row">
-                  <label>Почтаи электронӣ <span style={{ opacity: 0.5 }}>(ихтиёрӣ)</span></label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => handleFieldChange('email', e.target.value)}
-                    onBlur={() => handleBlur('email')}
-                    placeholder="you@example.com"
-                    maxLength={MAX_EMAIL}
-                    className={invalid('email') ? 'error' : ''}
-                    autoComplete="email"
-                  />
-                  {invalid('email') && <div className="form-error">{errors.email}</div>}
+                  <label htmlFor="wa-same">WhatsApp</label>
+                  <div className="form-check">
+                    <input
+                      id="wa-same"
+                      type="checkbox"
+                      checked={sameWhatsapp}
+                      onChange={(e) => toggleSameWhatsapp(e.target.checked)}
+                    />
+                    <label htmlFor="wa-same">Ҳамон рақами телефон</label>
+                  </div>
+                  {!sameWhatsapp && (
+                    <>
+                      <PhoneInput
+                        value={whatsappPhone}
+                        onChange={(v) => handleFieldChange('whatsappPhone', v)}
+                        error={invalid('whatsappPhone')}
+                      />
+                      {invalid('whatsappPhone') && (
+                        <div className="form-error">{errors.whatsappPhone}</div>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 <div className="form-row">
-                  <label>Ҳадаф</label>
-                  <select value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
-                    {(Object.keys(DIRECTION_LABEL) as Direction[]).map((d) => (
-                      <option key={d} value={d}>{DIRECTION_LABEL[d]}</option>
+                  <label>Санаи таваллуд</label>
+                  <input
+                    type="date"
+                    value={birthday}
+                    onChange={(e) => handleFieldChange('birthday', e.target.value)}
+                    onBlur={() => handleBlur('birthday')}
+                    min={dobBounds.min}
+                    max={dobBounds.max}
+                    className={invalid('birthday') ? 'error' : ''}
+                    autoComplete="bday"
+                  />
+                  {invalid('birthday') && <div className="form-error">{errors.birthday}</div>}
+                </div>
+
+                <div className="form-row">
+                  <label>Кишвар</label>
+                  <select
+                    value={country}
+                    onChange={(e) => handleFieldChange('country', e.target.value)}
+                    onBlur={() => handleBlur('country')}
+                    className={invalid('country') ? 'error' : ''}
+                  >
+                    <option value="">Кишварро интихоб кунед</option>
+                    {COUNTRY_ORDER.map((c) => (
+                      <option key={c} value={c}>{COUNTRY_LABEL[c]}</option>
                     ))}
                   </select>
+                  {invalid('country') && <div className="form-error">{errors.country}</div>}
                 </div>
 
                 <div className="form-row">
@@ -317,73 +377,12 @@ export default function ApplicationForm() {
                     value={comment}
                     onChange={(e) => handleFieldChange('comment', e.target.value)}
                     onBlur={() => handleBlur('comment')}
-                    placeholder="Кишвар, донишгоҳ, мӯҳлат, буҷа — ҳар чизе ки ба мо кӯмак мекунад, то ба шумо кӯмак расонем."
+                    placeholder="Донишгоҳ, мӯҳлат, буҷа — ҳар чизе ки ба мо кӯмак мекунад, то ба шумо кӯмак расонем."
                     maxLength={MAX_COMMENT}
                     className={invalid('comment') ? 'error' : ''}
                   />
                   {invalid('comment') && <div className="form-error">{errors.comment}</div>}
                 </div>
-
-                {/* Доп. поля по ТЗ §8 — свёрнуты по умолчанию.
-                    Кликабельная подсказка "Добавить ещё контакт" → разворачивает.
-                    Не блокирует UX простой формы, но даёт возможность сразу указать
-                    родителя/опекуна и канал связи. */}
-                {!showExtra && (
-                  <button
-                    type="button"
-                    onClick={() => setShowExtra(true)}
-                    style={{
-                      background: 'transparent',
-                      border: '1px dashed rgba(255,255,255,0.3)',
-                      color: 'rgba(255,255,255,0.7)',
-                      padding: '10px 14px',
-                      borderRadius: 10,
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      width: '100%',
-                      textAlign: 'left',
-                    }}
-                  >
-                    + Тамоси иловагӣ ё роҳи дилхоҳи алоқа илова кунед
-                  </button>
-                )}
-                {showExtra && (
-                  <>
-                    <div className="form-row">
-                      <label>Телефони иловагӣ (волидайн / васӣ) <span style={{ opacity: 0.5 }}>(ихтиёрӣ)</span></label>
-                      <PhoneInput
-                        value={secondaryPhone}
-                        onChange={(v) => handleFieldChange('secondaryPhone', v)}
-                        error={invalid('secondaryPhone')}
-                      />
-                      {invalid('secondaryPhone') && <div className="form-error">{errors.secondaryPhone}</div>}
-                    </div>
-                    <div className="form-row">
-                      <label>Кӣ мешавад</label>
-                      <input
-                        type="text"
-                        value={secondaryLabel}
-                        onChange={(e) => setSecondaryLabel(e.target.value)}
-                        placeholder="Масалан: падар, модар, бародар, васӣ"
-                        maxLength={40}
-                      />
-                    </div>
-                    <div className="form-row">
-                      <label>Роҳи дилхоҳи алоқа</label>
-                      <select
-                        value={preferredChannel}
-                        onChange={(e) => setPreferredChannel(e.target.value as ContactChannel | '')}
-                      >
-                        <option value="">— фарқ надорад —</option>
-                        <option value="PHONE">Занг</option>
-                        <option value="WHATSAPP">WhatsApp</option>
-                        <option value="TELEGRAM">Telegram</option>
-                        <option value="INSTAGRAM">Instagram</option>
-                        <option value="EMAIL">Почтаи электронӣ</option>
-                      </select>
-                    </div>
-                  </>
-                )}
 
                 <motion.button
                   type="submit"

@@ -27,6 +27,41 @@ export const DIRECTION_LABEL: Record<Direction, string> = {
   COLLEGE: 'Коллеҷ',
 };
 
+/**
+ * Страна назначения, которую спрашивает лендинг вместо старого «Ҳадаф».
+ * Значения — 1:1 ключи backend-энума `Country` (prisma/schema.prisma),
+ * поэтому строки НЕЛЬЗЯ переименовывать: они уходят в БД как есть.
+ * Порядок в COUNTRY_ORDER задан основателем и определяет порядок в <select>.
+ */
+export type Country =
+  | 'USA'
+  | 'KOREA'
+  | 'CHINA'
+  | 'LATVIA'
+  | 'MALAYSIA'
+  | 'ITALY'
+  | 'GERMANY';
+
+export const COUNTRY_ORDER: Country[] = [
+  'USA',
+  'KOREA',
+  'CHINA',
+  'LATVIA',
+  'MALAYSIA',
+  'ITALY',
+  'GERMANY',
+];
+
+export const COUNTRY_LABEL: Record<Country, string> = {
+  USA: 'Амрико',
+  KOREA: 'Корея',
+  CHINA: 'Хитой',
+  LATVIA: 'Латвия',
+  MALAYSIA: 'Малайзия',
+  ITALY: 'Италия',
+  GERMANY: 'Олмон',
+};
+
 export type ApplicationSource =
   | 'LANDING_FORM'
   | 'SELF_REGISTRATION'
@@ -58,13 +93,26 @@ export type ContactChannel = 'WHATSAPP' | 'PHONE' | 'INSTAGRAM' | 'TELEGRAM' | '
 export interface ApplicationPayload {
   fullName: string;
   phone: string;
+  /** Номер WhatsApp. Лендинг шлёт его всегда: при галочке «тот же номер» — копию phone. */
+  whatsappPhone?: string;
+  /** Дата рождения, ISO `YYYY-MM-DD`. На бэке конвертируется в Date и переносится в Student.birthday. */
+  birthday?: string;
+  /** Страна назначения — то, что лендинг спрашивает вместо направления. */
+  country?: Country;
   // Доп. контакт (отец/мать/другое лицо) — по ТЗ §8.
+  // Форма лендинга их БОЛЬШЕ НЕ СПРАШИВАЕТ, но backend по-прежнему принимает
+  // их в CreateApplicationDto, и менеджер дозаполняет эти поля в карточке
+  // заявки (PATCH /applications/:id). Из типа не убираем.
   secondaryPhone?: string;
   secondaryContactLabel?: string;
   // Предпочтительный канал связи с клиентом.
   preferredChannel?: ContactChannel;
   email?: string;
-  direction: Direction;
+  // `direction` здесь НЕТ: backend его на создании больше не принимает
+  // (CreateApplicationDto), заявке всегда проставляется плейсхолдер
+  // Direction.BACHELOR с directionConfirmed=false. Настоящее направление
+  // выставляет менеджер в CRM. Не добавляй поле обратно — ValidationPipe
+  // ({ whitelist: true }) молча срежет его на бэке.
   comment?: string;
   programId?: string;
   source?: ApplicationSource;

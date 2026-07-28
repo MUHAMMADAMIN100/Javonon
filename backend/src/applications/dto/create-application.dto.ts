@@ -1,5 +1,14 @@
-import { IsEmail, IsEnum, IsOptional, IsString, Matches, MinLength, MaxLength } from 'class-validator';
-import { ContactChannel, Direction, ApplicationSource } from '@prisma/client';
+import {
+  IsDateString,
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  Matches,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
+import { ContactChannel, Country, ApplicationSource } from '@prisma/client';
 
 // E.164: '+' необязателен, 7–15 цифр всего, разрешаем пробелы/дефисы при вводе.
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
@@ -21,6 +30,17 @@ export class CreateApplicationDto {
   @MaxLength(40)
   @Matches(PHONE_RE, { message: 'phone должен содержать только цифры (с опциональным «+» и пробелами/дефисами)' })
   phone: string;
+
+  // WhatsApp-номер клиента. На лендинге чекбокс «Ҳамон рақами телефон»
+  // включён по умолчанию — тогда сюда приходит тот же номер, что и в phone.
+  // Валидация СПЕЦИАЛЬНО та же самая (PHONE_RE + те же границы длины),
+  // что и у phone: второй регекс завёл бы два расходящихся правила.
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(40)
+  @Matches(PHONE_RE, { message: 'whatsappPhone должен содержать только цифры (с опциональным «+» и пробелами/дефисами)' })
+  whatsappPhone?: string;
 
   // Доп. номер (отец/мать/другое контактное лицо). По ТЗ §8.
   @IsOptional()
@@ -44,8 +64,30 @@ export class CreateApplicationDto {
   @MaxLength(120)
   email?: string;
 
-  @IsEnum(Direction)
-  direction: Direction;
+  // Поля `direction` здесь НЕТ и быть не должно: направление на этапе создания
+  // не спрашивает ни один клиент этого DTO. Единственный вход в
+  // ApplicationsService.create() — POST /applications/public, и дёргает его
+  // только форма лендинга, которая спрашивает страну (country) вместо «Ҳадаф».
+  // Telegram-бот заявок не создаёт вообще (уводит человека на ту же форму,
+  // см. telegram/bot-funnel.service.ts), а «ручное создание» в CRM идёт через
+  // POST /students → StudentsService.create(), который пишет Application
+  // напрямую в Prisma и это DTO не использует.
+  // NOT NULL-колонку Application.direction заполняет плейсхолдер
+  // ApplicationsService.DEFAULT_DIRECTION; настоящее направление менеджер
+  // выставляет позже в карточке студента (PATCH /students/:id).
+
+  // Страна обучения — то, что теперь реально спрашивает лендинг.
+  @IsOptional()
+  @IsEnum(Country)
+  country?: Country;
+
+  // Дата рождения, ISO (`YYYY-MM-DD` из <input type="date">).
+  // Сервис хранит её как UTC-полночь того же календарного дня (DOB — дата, а
+  // не момент; см. parseCalendarDateUtc в common/tj-time.ts), а возраст 14–60
+  // проверяет относительно «сегодня» по Asia/Dushanbe.
+  @IsOptional()
+  @IsDateString()
+  birthday?: string;
 
   @IsOptional()
   @IsString()

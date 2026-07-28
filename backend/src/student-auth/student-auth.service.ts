@@ -103,13 +103,27 @@ export class StudentAuthService {
     if (existing) throw new BadRequestException('Такой email уже зарегистрирован');
 
     const passwordHash = await bcrypt.hash(password, 10);
+    // Прислал ли направление сам студент. StudentRegisterDto объявляет
+    // direction обязательным, так что через HTTP сюда без него не попасть —
+    // но сигнатура register() принимает direction?: string, и подстановка
+    // 'BACHELOR' ниже осталась бы молчаливой, если DTO когда-нибудь ослабят
+    // или появится внутренний вызов. Запоминаем факт подстановки, чтобы
+    // ниже пометить заявку directionConfirmed=false: плейсхолдер, попавший
+    // в БД как «подтверждённый», неотличим от настоящего ответа клиента и
+    // утекает в срез дашборда «по направлениям» и в фильтр списка заявок.
+    const directionAnswered = dto.direction != null;
     const direction: any = dto.direction || 'BACHELOR';
     // Cabinet auto-assigned by direction.
     const CABINET: Record<string, number> = {
       BACHELOR: 1, MASTER: 2, LANGUAGE: 3,
       LANGUAGE_COLLEGE: 4, LANGUAGE_BACHELOR: 5, COLLEGE: 6,
     };
-    const cabinet = CABINET[direction] || 1;
+    // Кабинет выводим из направления, только если направление настоящее.
+    // Иначе это маршрутизация по плейсхолдеру: весь поток осел бы в кабинете 1
+    // (BACHELOR), а кабинеты 2–6 перестали бы наполняться. Для подставленного
+    // направления кабинет 1 — осознанный «приёмник» (DEFAULT_CABINET),
+    // помеченный directionConfirmed=false.
+    const cabinet = directionAnswered ? CABINET[direction] || 1 : 1;
 
     // QA-fix #43: ловим race-condition через P2002 от unique constraint.
     let student;
@@ -121,6 +135,11 @@ export class StudentAuthService {
           phones: [phone],
           password: passwordHash,
           direction,
+          // Пометка едет на СТУДЕНТА вместе с (возможно) подставленным
+          // направлением — не только на заявку ниже. Иначе плейсхолдер
+          // в карточке студента неотличим от ответа, а cabinet выглядит
+          // как назначенный менеджером.
+          directionConfirmed: directionAnswered,
           cabinet,
           comment: dto.comment?.trim() || null,
         },
@@ -139,6 +158,11 @@ export class StudentAuthService {
         phone,
         email,
         direction,
+        // Явно, а не через @default(true) в схеме: здесь direction может
+        // оказаться подставленным (см. directionAnswered выше), и полагаться
+        // на «по умолчанию подтверждено» значило бы записать плейсхолдер как
+        // ответ клиента. Менеджер снимет пометку, выбрав направление в CRM.
+        directionConfirmed: directionAnswered,
         comment: dto.comment?.trim() || null,
         status: 'NEW',
         source: 'SELF_REGISTRATION',

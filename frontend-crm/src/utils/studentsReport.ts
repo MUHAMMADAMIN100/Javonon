@@ -37,8 +37,16 @@ export async function generateStudentsReport(params: {
     acc[s.status] = (acc[s.status] || 0) + 1;
     return acc;
   }, {});
+  // Студенты, приехавшие из заявок с лендинга, до подтверждения направления
+  // держат в direction плейсхолдер бэкенда (BACHELOR). В отчёте, который
+  // уходит наружу, такой студент не должен считаться бакалавром — иначе
+  // «По направлениям» показывает выдуманную структуру потока. Сводим их
+  // в отдельную строку.
+  const DIRECTION_UNCONFIRMED_KEY = '__unconfirmed__';
+  const DIRECTION_UNCONFIRMED_LABEL = 'Направление не подтверждено';
   const byDirection = students.reduce<Record<string, number>>((acc, s) => {
-    acc[s.direction] = (acc[s.direction] || 0) + 1;
+    const key = s.directionConfirmed === false ? DIRECTION_UNCONFIRMED_KEY : s.direction;
+    acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
 
@@ -101,7 +109,13 @@ export async function generateStudentsReport(params: {
           children: [
             bodyCell(String(i + 1), 0, i % 2 === 1),
             bodyCell(s.fullName, 1, i % 2 === 1),
-            bodyCell(DIRECTION_LABEL[s.direction], 2, i % 2 === 1),
+            // Прочерк, а не «Бакалавриат»: направление ещё не подтверждено
+            // человеком (см. byDirection выше).
+            bodyCell(
+              s.directionConfirmed === false ? '—' : DIRECTION_LABEL[s.direction],
+              2,
+              i % 2 === 1,
+            ),
             bodyCell(String(s.cabinet), 3, i % 2 === 1),
             bodyCell(STUDENT_STATUS_LABEL[s.status], 4, i % 2 === 1),
             bodyCell(s.phones.join(', '), 5, i % 2 === 1),
@@ -198,7 +212,11 @@ export async function generateStudentsReport(params: {
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: `  • ${DIRECTION_LABEL[k as keyof typeof DIRECTION_LABEL] || k}: ${v}`,
+                    text: `  • ${
+                      k === DIRECTION_UNCONFIRMED_KEY
+                        ? DIRECTION_UNCONFIRMED_LABEL
+                        : DIRECTION_LABEL[k as keyof typeof DIRECTION_LABEL] || k
+                    }: ${v}`,
                     size: 20,
                     color: '5B6478',
                   }),

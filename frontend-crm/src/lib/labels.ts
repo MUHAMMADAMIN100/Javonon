@@ -30,6 +30,22 @@ export function useDirectionLabel(): (dir: string | null | undefined) => string 
   };
 }
 
+/**
+ * Страна заявки («Кишвар» из формы лендинга). Возвращает «—» для заявок
+ * без страны — их много: всё, что создано до релиза новой формы, плюс
+ * заявки, заведённые в обход формы (ручное создание в CRM, самозапись
+ * студента, approve заявки партнёра).
+ */
+export function useCountryLabel(): (country: string | null | undefined) => string {
+  const { t } = useT();
+  return (c) => {
+    if (!c) return '—';
+    const key = `country.${c}`;
+    const val = t(key);
+    return val === key ? String(c) : val;
+  };
+}
+
 export function useApplicationStatusLabel(): (status: string | null | undefined) => string {
   const { t } = useT();
   return (s) => {

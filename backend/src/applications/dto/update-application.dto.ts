@@ -1,5 +1,5 @@
 import { IsEmail, IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { ApplicationStatus, ContactChannel, Direction } from '@prisma/client';
+import { ApplicationStatus, ContactChannel, Country, Direction } from '@prisma/client';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 
@@ -18,6 +18,12 @@ export class UpdateApplicationDto {
   @IsString()
   @Matches(PHONE_RE, { message: 'phone должен содержать только цифры' })
   phone?: string;
+
+  // WhatsApp-номер: менеджер может поправить его в карточке заявки.
+  @IsOptional()
+  @IsString()
+  @Matches(PHONE_RE, { message: 'whatsappPhone должен содержать только цифры' })
+  whatsappPhone?: string;
 
   @IsOptional()
   @IsString()
@@ -38,9 +44,16 @@ export class UpdateApplicationDto {
   @MaxLength(120)
   email?: string;
 
+  // Направление менеджер по-прежнему правит руками — у заявок с лендинга
+  // здесь лежит плейсхолдер (см. ApplicationsService.DEFAULT_DIRECTION).
   @IsOptional()
   @IsEnum(Direction)
   direction?: Direction;
+
+  // Страна, выбранная клиентом на лендинге; менеджер может исправить.
+  @IsOptional()
+  @IsEnum(Country)
+  country?: Country;
 
   @IsOptional()
   @IsString()

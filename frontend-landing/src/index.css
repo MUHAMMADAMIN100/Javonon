@@ -1052,6 +1052,58 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   letter-spacing: 0.04em;
 }
 
+/* Чекбокс внутри .form-row (например «Ҳамон рақами телефон» у WhatsApp).
+   Селекторы специфичнее, чем `.form-row input`, иначе чекбокс получает
+   width:100% и padding основного инпута. */
+.form-row .form-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+.form-row .form-check input[type="checkbox"] {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  padding: 0;
+  margin: 0;
+  border-radius: 5px;
+  accent-color: var(--emerald);
+  cursor: pointer;
+  background: transparent;
+}
+.form-row .form-check label {
+  display: inline;
+  margin: 0;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--night-text-soft);
+  cursor: pointer;
+  user-select: none;
+  word-break: break-word;
+}
+/* Нативный date-picker на тёмной карточке: color-scheme красит выпадающий
+   календарь, invert — иконку, иначе она чёрная на чёрном.
+   -webkit-appearance:none нужен, чтобы iOS не схлопывал пустое поле. */
+.form-row input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  color-scheme: dark;
+  min-height: 50px;
+}
+.form-row input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.5;
+  cursor: pointer;
+}
+.form-row input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 0.9; }
+
 /* ============================================================
    CONTACTS strip
    ============================================================ */
@@ -1851,7 +1903,42 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   gap: 8px;
 }
 
-   Inheritance from .af-field input { width: 100% } или подобных правил
+/* ============================================================
+   Phone input + country dropdown
+   ------------------------------------------------------------
+   Раскладка самого поля задана инлайн-стилями в PhoneInput.tsx
+   (wrapStyle / btnStyle / inputStyle). Здесь — то, что инлайном
+   выразить нельзя: hover, ::placeholder и всплывающий список стран.
+
+   ЦВЕТА ЗАДАЮТСЯ ЯВНО. .phone-input-wrap — это белый «остров»
+   и на тёмной .form-card (у неё color: white), и на светлой
+   .af-card. Без явных color/background кнопки стран наследуют
+   белый текст от .form-card и получается белое по белому.
+
+   ЛИТЕРАЛЬНЫЕ ЦВЕТА, НЕ var(). Токены --text / --border /
+   --primary / --text-soft существуют только в CRM; в лендинге
+   они не определены, и var(--border) без fallback сделал бы
+   объявление невалидным (граница/цвет просто пропали бы).
+   ============================================================ */
+
+/* position: relative — якорь для .phone-dropdown (position: absolute).
+   Дублирует инлайн-стиль в PhoneInput.tsx: без него top: calc(100% + 4px)
+   отсчитывался бы от случайного позиционированного предка. */
+.phone-input-wrap { position: relative; }
+
+/* Радиус совпадает с borderRadius: 10 у обёртки — теперь, когда
+   overflow у неё `visible`, фон hover-а больше не обрезается ею
+   и без своего радиуса торчал бы квадратным углом наружу. */
+.phone-country-btn { border-radius: 10px 0 0 10px; }
+.phone-country-btn:hover { background: rgba(0, 0, 0, 0.04) !important; }
+
+/* Без этого правила флаг рисуется в натуральную величину PNG (40x20)
+   и кнопка страны съедает ~116px из 309px ширины поля на 375px. */
+.phone-country-flag {
+  width: 22px; height: 16px; object-fit: cover;
+  border-radius: 2px; flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
 
 .af-field .phone-input-wrap input[type="tel"],
 .form-group .phone-input-wrap input[type="tel"] {
@@ -1862,6 +1949,58 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   padding: 9px 12px; font-size: 14px; outline: none;
   border-radius: 0 8px 8px 0 !important;
   margin: 0 !important;
+}
+
+/* Список стран — оверлей, а НЕ третий flex-элемент строки.
+   Без position/z-index он встраивается в `flex-wrap: nowrap` ряд
+   и растягивает .phone-input-wrap с 42px до ~1200px, раздавливая
+   поле номера. */
+.phone-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: #ffffff; border: 1px solid #e5e7eb;
+  border-radius: 10px; box-shadow: 0 12px 32px rgba(2, 8, 23, 0.28);
+  z-index: 60; overflow: hidden;
+  display: flex; flex-direction: column;
+  max-height: 320px;
+  color: #0f172a; text-align: left;
+}
+.phone-dropdown-search {
+  padding: 10px; border-bottom: 1px solid #e5e7eb;
+  background: #f6f8fc;
+}
+/* .form-row input / .af-field input бьют по этому полю тем же весом
+   (0,1,1) и красят его в белый по белому — перебиваем !important. */
+.phone-dropdown-search input,
+.form-row .phone-dropdown-search input,
+.af-field .phone-dropdown-search input {
+  width: 100% !important; box-sizing: border-box !important;
+  padding: 7px 10px !important; font-size: 13px !important;
+  font-family: inherit;
+  border: 1px solid #e5e7eb !important; border-radius: 6px !important;
+  background: #ffffff !important; color: #0f172a !important;
+  outline: none; box-shadow: none !important;
+}
+.phone-dropdown-search input::placeholder { color: #94a3b8 !important; }
+.phone-dropdown-search input:focus,
+.form-row .phone-dropdown-search input:focus,
+.af-field .phone-dropdown-search input:focus {
+  border-color: var(--emerald) !important;
+  box-shadow: 0 0 0 3px var(--emerald-soft) !important;
+}
+.phone-dropdown-list { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+.phone-dropdown-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 12px; border: none;
+  background: transparent; color: #0f172a;
+  font-family: inherit; font-size: 13px; line-height: 1.4;
+  text-align: left; cursor: pointer;
+}
+.phone-dropdown-item:hover { background: rgba(1, 54, 139, 0.06); }
+.phone-dropdown-item.active { background: var(--emerald-soft); color: var(--emerald); }
+.phone-dropdown-label { flex: 1 1 auto; min-width: 0; color: inherit; }
+.phone-dropdown-code { flex: 0 0 auto; color: #64748b; font-size: 12px; font-weight: 500; }
+.phone-dropdown-empty {
+  padding: 20px; text-align: center; color: #64748b; font-size: 13px;
 }
 
 .stu-card.af-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 0; overflow: hidden; }
@@ -3128,6 +3267,28 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
     font-size: 16px !important;
   }
   .form-row textarea { min-height: 80px !important; }
+  /* Чекбокс «Ҳамон рақами телефон» — не даём правилам выше растянуть его
+     на всю ширину (.form-row input { width:100% !important }). */
+  .form-row .form-check {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
+  }
+  .form-row .form-check input[type="checkbox"] {
+    width: 18px !important;
+    min-width: 18px !important;
+    max-width: 18px !important;
+    height: 18px !important;
+    padding: 0 !important;
+    flex: 0 0 auto !important;
+  }
+  .form-row .form-check label {
+    font-size: 12px !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+  }
+  .form-row input[type="date"] { min-height: 44px; }
   .form-card .btn-primary {
     width: 100% !important;
     padding: 14px 20px !important;

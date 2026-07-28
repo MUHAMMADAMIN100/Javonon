@@ -1,9 +1,11 @@
 import { api } from './client';
-import type { Application, ApplicationSource, ApplicationStatus, Direction, Student } from './types';
+import type { Application, ApplicationSource, ApplicationStatus, Country, Direction, Student } from './types';
 
 export interface AppFilters {
   status?: ApplicationStatus;
   direction?: Direction;
+  /** Страна, выбранная клиентом на лендинге (GET /applications?country=…). */
+  country?: Country;
   search?: string;
   mine?: boolean;
   /** Фильтр по конкретному менеджеру (TJ или CN) — userId */

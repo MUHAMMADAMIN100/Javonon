@@ -9,6 +9,22 @@ import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isElevated } from '../auth/role-utils';
 import { CABINET_BY_DIRECTION } from '../common/cabinets';
+import { parseCalendarDateUtc } from '../common/tj-time';
+
+/**
+ * DOB из CRM → UTC-полночь. Раньше здесь стоял голый `new Date(b)`: для
+ * «YYYY-MM-DD» он даёт ровно UTC-полночь, то есть верную конвенцию, но
+ * ЛЮБОЙ другой формат уехал бы в таймзону процесса. Единый хелпер держит
+ * конвенцию одинаковой с applications.service.ts (лендинг), иначе в колонке
+ * Student.birthday снова заведётся смесь двух смещений и cron
+ * birthdayGreetings начнёт поздравлять часть студентов на сутки раньше.
+ * Невалидную дату не роняем 400-й — просто не пишем (поведение как было).
+ */
+function parseStudentBirthday(input: unknown): Date | null {
+  if (!input) return null;
+  const date = parseCalendarDateUtc(String(input));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 function generatePassword(length = 8): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -76,7 +92,7 @@ export class StudentsService {
         phones: dto.phones?.length ? dto.phones : [],
         phoneLabels: dto.phoneLabels?.length ? dto.phoneLabels : [],
         preferredChannel: dto.preferredChannel ?? null,
-        birthday: (dto as any).birthday ? new Date((dto as any).birthday) : null,
+        birthday: parseStudentBirthday((dto as any).birthday),
         email: emailNormalized,
         password: passwordHash,
         photoUrl: dto.photoUrl || null,
@@ -96,6 +112,11 @@ export class StudentsService {
         phone: student.phones[0] || '',
         email: student.email,
         direction: student.direction,
+        // Переносим пометку со студента, а не полагаемся на @default(true).
+        // Здесь она всегда true (direction обязателен в CreateStudentDto),
+        // но копировать направление и НЕ копировать его статус — значит
+        // заводить два расходящихся источника правды об одном и том же поле.
+        directionConfirmed: student.directionConfirmed,
         comment: student.comment,
         status: 'NEW',
         studentId: student.id,
@@ -137,6 +158,12 @@ export class StudentsService {
         phone: student.phones[0] || '',
         email: student.email,
         direction: student.direction,
+        // В отличие от create() выше, студент здесь СУЩЕСТВУЮЩИЙ и мог быть
+        // заведён самозаписью без направления — тогда у него
+        // directionConfirmed=false. Без переноса пометки плейсхолдер
+        // «отмывался» бы: заявка получила бы @default(true) и попала
+        // в срез дашборда «по направлениям» как настоящий ответ клиента.
+        directionConfirmed: student.directionConfirmed,
         comment: student.comment,
         status: 'NEW',
         studentId: id,
@@ -316,26 +343,57 @@ export class StudentsService {
       data.onboardingStage = dto.onboardingStage;
     }
     if ((dto as any).birthday !== undefined) {
-      const b = (dto as any).birthday;
-      data.birthday = b ? new Date(b) : null;
+      data.birthday = parseStudentBirthday((dto as any).birthday);
     }
     if (dto.email !== undefined) data.email = dto.email;
     if (dto.photoUrl !== undefined) data.photoUrl = dto.photoUrl;
     if (dto.comment !== undefined) data.comment = dto.comment;
     if (dto.status !== undefined) data.status = dto.status;
+    if (dto.cabinet !== undefined) data.cabinet = dto.cabinet;
     if (dto.direction !== undefined) {
       data.direction = dto.direction;
-      if (dto.cabinet === undefined) {
+      // Направление проставил живой человек — плейсхолдер, приехавший из
+      // заявки с лендинга, больше не плейсхолдер.
+      data.directionConfirmed = true;
+      // Кабинет пересчитываем по направлению, когда менеджер его не выбирал:
+      //   (A) cabinet вообще не прислан — прежнее поведение;
+      //   (B) cabinet прислан, но не изменился, а студент до этого сидел
+      //       в кабинете-«приёмнике» после конвертации заявки
+      //       (directionConfirmed=false). Форма CRM шлёт cabinet ВСЕГДА —
+      //       инпут просто прогружен старым значением, — поэтому без (B)
+      //       конвертированный лид навсегда застревал бы в DEFAULT_CABINET,
+      //       и кабинеты 2–6 не наполнялись бы новым потоком вообще.
+      // Номер, который менеджер поменял руками в этом же запросе, не трогаем.
+      const cabinetWasPlaceholder =
+        (existing as any).directionConfirmed === false &&
+        dto.cabinet === existing.cabinet;
+      if (dto.cabinet === undefined || cabinetWasPlaceholder) {
         data.cabinet = CABINET_BY_DIRECTION[dto.direction];
       }
     }
-    if (dto.cabinet !== undefined) data.cabinet = dto.cabinet;
 
     const updated = await this.prisma.student.update({
       where: { id },
       data,
       include: STUDENT_INCLUDE,
     });
+
+    // Направление, проставленное менеджером здесь, — решение живого человека,
+    // а не плейсхолдер, которым ApplicationsService заполняет NOT NULL-колонку
+    // у заявок с лендинга. Прокидываем его в связанные заявки и снимаем
+    // пометку directionConfirmed=false. Без этой синхронизации конвертированный
+    // лид оставался бы «неподтверждённым» навсегда: после конвертации
+    // направление правят именно в карточке студента, а срез дашборда
+    // «по направлениям» и фильтр списка заявок его бы так и не увидели.
+    if (dto.direction !== undefined) {
+      await this.prisma.application
+        .updateMany({
+          where: { studentId: id },
+          data: { direction: dto.direction, directionConfirmed: true },
+        })
+        .catch(() => undefined);
+    }
+
     this.realtime.emitStudentAndStaff(id, 'student:updated', { studentId: id });
 
     // Логируем и уведомляем staff о каждом изменённом поле

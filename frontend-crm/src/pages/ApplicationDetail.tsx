@@ -23,9 +23,122 @@ import { listPipelines, moveApplicationStage } from '../api/sales';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
-import { useDirectionLabel, useApplicationStatusLabel, useStudentStatusLabel, useChannelLabel } from '../lib/labels';
+import { useDirectionLabel, useApplicationStatusLabel, useStudentStatusLabel, useChannelLabel, useCountryLabel } from '../lib/labels';
+import { tjDateInput, tjFormatDate, tjYMD } from '../lib/tjTime';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
+
+/**
+ * wa.me принимает только цифры — «+992 90 123-45-67» → «992901234567».
+ * Возвращает null для пустого/мусорного номера, чтобы вместо битой ссылки
+ * отрисовать прочерк.
+ */
+function waLink(phone: string | null | undefined): string | null {
+  const digits = String(phone ?? '').replace(/\D/g, '');
+  return digits.length >= 7 ? `https://wa.me/${digits}` : null;
+}
+
+/**
+ * «2006-03-11T19:00:00.000Z» → «12.03.2006».
+ *
+ * Y-M-D берём через Intl в Asia/Dushanbe, а НЕ регуляркой по сырой ISO-строке.
+ * Бэкенд парсит дату с лендинга как душанбинскую полночь (tjParseLocalDate),
+ * поэтому 12 марта сериализуется в JSON как 11 марта 19:00Z — срез/регексп
+ * по строке показал бы день рождения на сутки раньше.
+ */
+function formatBirthday(iso: string): string {
+  return tjFormatDate(iso) || iso;
+}
+
+/**
+ * Возраст на сегодня в Asia/Dushanbe — тот же часовой пояс, в котором бэкенд
+ * проверяет диапазон 14..60 при создании заявки. Обе даты (рождения и
+ * «сегодня») приводим к TJ-календарю через tjYMD, чтобы сравнивать
+ * сопоставимые Y/M/D — см. комментарий к formatBirthday.
+ */
+function ageFromBirthday(iso: string): number | null {
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return null;
+  const { y: by, m: bm, d: bd } = tjYMD(date);
+  const today = tjYMD();
+  let age = today.y - by;
+  if (today.m < bm || (today.m === bm && today.d < bd)) age -= 1;
+  return age >= 0 && age < 150 ? age : null;
+}
+
+/** 21 год · 22 года · 25 лет — русские формы множественного числа. */
+function agePluralKey(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'app.age.many';
+  const mod10 = n % 10;
+  if (mod10 === 1) return 'app.age.one';
+  if (mod10 >= 2 && mod10 <= 4) return 'app.age.few';
+  return 'app.age.many';
+}
+
+/**
+ * Ответы, которые клиент дал в форме на сайте: страна, WhatsApp, дата
+ * рождения. Живут на самой заявке (Application), а не на студенте, поэтому
+ * показываем их на любом этапе — и до конвертации, и после.
+ */
+function ApplicationLeadFields({ app }: { app: Application }) {
+  const { t } = useT();
+  const countryLabel = useCountryLabel();
+  const wa = waLink(app.whatsappPhone);
+  const age = app.birthday ? ageFromBirthday(app.birthday) : null;
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.12em',
+          color: 'var(--text-soft)',
+          textTransform: 'uppercase',
+          marginBottom: 6,
+        }}
+      >
+        {t('applicationDetail.leadFields')}
+      </div>
+      <div className="detail-row">
+        <div className="detail-label">{t('app.field.country')}</div>
+        {/* countryLabel сам возвращает «—» для null — заявки, заведённые
+            в обход формы лендинга (ручное создание в CRM, самозапись,
+            approve заявки партнёра), и созданные до релиза новой формы
+            страну не заполняют. */}
+        <div className="detail-value">{countryLabel(app.country)}</div>
+      </div>
+      <div className="detail-row">
+        <div className="detail-label">{t('app.field.whatsapp')}</div>
+        <div className="detail-value">
+          {wa ? (
+            <a href={wa} target="_blank" rel="noopener noreferrer">{app.whatsappPhone}</a>
+          ) : (
+            '—'
+          )}
+        </div>
+      </div>
+      <div className="detail-row">
+        <div className="detail-label">{t('app.field.birthday')}</div>
+        <div className="detail-value">
+          {app.birthday ? (
+            <>
+              {formatBirthday(app.birthday)}
+              {age !== null && (
+                <span style={{ color: 'var(--text-soft)', marginLeft: 6 }}>
+                  · {age} {t(agePluralKey(age))}
+                </span>
+              )}
+            </>
+          ) : (
+            '—'
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ApplicationDetail() {
   const { id } = useParams();
@@ -69,7 +182,10 @@ export default function ApplicationDetail() {
         phones: student.phones.join(', '),
         phoneLabels: (student.phoneLabels || []).join(', '),
         preferredChannel: student.preferredChannel || '',
-        birthday: student.birthday ? student.birthday.slice(0, 10) : '',
+        // tjDateInput, а не slice(0, 10): сырая ISO-строка хранит TJ-полночь
+        // (11.03 19:00Z для 12.03), и срез подставил бы в пикер 11-е — при
+        // сохранении форма записала бы этот сдвиг в БД навсегда.
+        birthday: tjDateInput(student.birthday),
         email: student.email || '',
         direction: student.direction,
         cabinet: student.cabinet,
@@ -358,6 +474,7 @@ export default function ApplicationDetail() {
           onChanged={reload}
         />
 
+        <ApplicationLeadFields app={app} />
 
         {isNew && (
           <>
@@ -432,12 +549,45 @@ export default function ApplicationDetail() {
                     {student.birthday && (
                       <div className="detail-row">
                         <div className="detail-label">{t('app.field.birthday')}</div>
-                        <div className="detail-value">{new Date(student.birthday).toLocaleDateString('ru-RU')}</div>
+                        {/* Тот же TJ-хелпер, что и в блоке лид-полей выше:
+                            иначе у менеджера с не-душанбинским браузером две
+                            карточки одной заявки показывали бы разные даты. */}
+                        <div className="detail-value">{formatBirthday(student.birthday)}</div>
                       </div>
                     )}
                     <div className="detail-row"><div className="detail-label">{t('userDetail.field.email')}</div><div className="detail-value">{student.email || '—'}</div></div>
-                    <div className="detail-row"><div className="detail-label">{t('app.field.direction')}</div><div className="detail-value">{directionLabel(student.direction)}</div></div>
-                    <div className="detail-row"><div className="detail-label">{t('app.field.cabinet')}</div><div className="detail-value">№{student.cabinet}</div></div>
+                    <div className="detail-row">
+                      <div className="detail-label">{t('app.field.direction')}</div>
+                      {/* Тот же принцип, что в списке заявок и на карточке
+                          студента: неподтверждённое направление — плейсхолдер
+                          бэкенда, а не выбор клиента. undefined (старый ответ
+                          API) считаем подтверждённым — @default(true). */}
+                      <div className="detail-value">
+                        {student.directionConfirmed === false ? (
+                          <span
+                            style={{ color: 'var(--text-light)' }}
+                            title={t('app.direction.unconfirmed')}
+                          >
+                            —
+                          </span>
+                        ) : (
+                          directionLabel(student.direction)
+                        )}
+                      </div>
+                    </div>
+                    <div className="detail-row">
+                      <div className="detail-label">{t('app.field.cabinet')}</div>
+                      {/* Кабинет до подтверждения направления — «приёмник»
+                          из конвертации, а не назначенный менеджером. */}
+                      <div className="detail-value">
+                        №{student.cabinet}
+                        {student.directionConfirmed === false && (
+                          <span style={{ color: 'var(--text-light)', fontSize: 12, marginLeft: 6 }}>
+                            · {t('student.cabinet.pending')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     <div className="detail-row"><div className="detail-label">{t('common.status')}</div><div className="detail-value">{studentStatusLabel(student.status)}</div></div>
                     <div className="detail-row"><div className="detail-label">{t('app.field.comment')}</div><div className="detail-value" style={{ whiteSpace: 'pre-wrap' }}>{student.comment || '—'}</div></div>
                     <div className="detail-row"><div className="detail-label">{t('profile.field.createdAt')}</div><div className="detail-value">{new Date(app.createdAt).toLocaleString('ru-RU')}</div></div>
@@ -644,12 +794,20 @@ function CommentsSection({ applicationId }: { applicationId: string }) {
  */
 function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () => void }) {
   const { toast } = useUI();
+  const { t } = useT();
   const [edit, setEdit] = useState(false);
   const [phone, setPhone] = useState(app.phone || '');
   const [secondaryPhone, setSecondaryPhone] = useState(app.secondaryPhone || '');
   const [secondaryContactLabel, setSecondaryContactLabel] = useState(app.secondaryContactLabel || '');
   const [preferredChannel, setPreferredChannel] = useState<string>(app.preferredChannel || '');
   const [email, setEmail] = useState(app.email || '');
+  // Неподтверждённое направление показываем как пустой выбор, а не как
+  // «Бакалавриат»: в БД там плейсхолдер, и предзаполненный селект заставил бы
+  // менеджера подтвердить чужую догадку одним нажатием «Сохранить».
+  const unconfirmedDirection = app.directionConfirmed === false;
+  const [direction, setDirection] = useState<Direction | ''>(
+    unconfirmedDirection ? '' : app.direction,
+  );
   const [comment, setComment] = useState(app.comment || '');
   const [saving, setSaving] = useState(false);
 
@@ -662,6 +820,10 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
         secondaryContactLabel: secondaryContactLabel.trim() || undefined,
         preferredChannel: (preferredChannel || undefined) as any,
         email: email.trim() || undefined,
+        // Отправляем направление, только когда менеджер его выбрал. Пустое
+        // значение не шлём: бэкенд трактует пришедший direction как
+        // подтверждение (directionConfirmed=true) и снял бы пометку зря.
+        direction: (direction || undefined) as any,
         comment: comment.trim() || undefined,
       } as any);
       toast('Сохранено', 'success');
@@ -698,7 +860,19 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
           </div>
         )}
         <div className="detail-row"><div className="detail-label">Email</div><div className="detail-value">{app.email || '—'}</div></div>
-        <div className="detail-row"><div className="detail-label">Направление</div><div className="detail-value">{DIRECTION_LABEL[app.direction]}</div></div>
+        <div className="detail-row">
+          <div className="detail-label">Направление</div>
+          {/* Плейсхолдер не выдаём за ответ клиента: форма лендинга
+              направление не спрашивает (спрашивает страну), бэкенд ставит
+              туда DEFAULT_DIRECTION и помечает directionConfirmed=false. */}
+          <div className="detail-value">
+            {unconfirmedDirection ? (
+              <span style={{ color: 'var(--text-light)' }} title={t('app.direction.unconfirmed')}>—</span>
+            ) : (
+              DIRECTION_LABEL[app.direction]
+            )}
+          </div>
+        </div>
         <div className="detail-row"><div className="detail-label">Комментарий</div><div className="detail-value">{app.comment || '—'}</div></div>
         <div style={{ marginTop: 10 }}>
           <button className="btn btn-sm btn-secondary" onClick={() => setEdit(true)}>
@@ -738,6 +912,21 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Email</label>
           <input className="crm-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        {/* Единственное место, где направление лида с лендинга вообще можно
+            проставить. Без него заявка навсегда оставалась бы
+            directionConfirmed=false и не попадала бы ни в срез дашборда
+            «по направлениям», ни в фильтр списка. */}
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label>Направление</label>
+          <select
+            className="crm-select"
+            value={direction}
+            onChange={(e) => setDirection(e.target.value as Direction | '')}
+          >
+            <option value="">{t('app.direction.notChosen')}</option>
+            <DirectionOptions />
+          </select>
         </div>
       </div>
       <div className="form-group" style={{ marginTop: 12 }}>

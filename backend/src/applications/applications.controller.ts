@@ -10,7 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApplicationSource, ApplicationStatus, Direction } from '@prisma/client';
+import { ApplicationSource, ApplicationStatus, Country, Direction } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -38,6 +38,7 @@ export class ApplicationsController {
     @CurrentUser() user: any,
     @Query('status') status?: string,
     @Query('direction') direction?: string,
+    @Query('country') country?: string,
     @Query('search') search?: string,
     @Query('mine') mine?: string,
     @Query('manager') manager?: string,
@@ -50,8 +51,10 @@ export class ApplicationsController {
     const VALID_STATUS = Object.values(ApplicationStatus) as string[];
     const VALID_DIR = Object.values(Direction) as string[];
     const VALID_SOURCE = Object.values(ApplicationSource) as string[];
+    const VALID_COUNTRY = Object.values(Country) as string[];
     if (status && !VALID_STATUS.includes(status)) throw new BadRequestException('Неизвестный статус');
     if (direction && !VALID_DIR.includes(direction)) throw new BadRequestException('Неизвестное направление');
+    if (country && !VALID_COUNTRY.includes(country)) throw new BadRequestException('Неизвестная страна');
     if (source && !VALID_SOURCE.includes(source)) throw new BadRequestException('Неизвестный источник');
     // search cap: без него юзер мог запросить ?search=AAA...×100k →
     // ILIKE %AAA% сканировал бы всю Application таблицу с гигантским
@@ -60,6 +63,7 @@ export class ApplicationsController {
     return this.apps.findAll({
       status: status as ApplicationStatus | undefined,
       direction: direction as Direction | undefined,
+      country: country as Country | undefined,
       search,
       mine: mine === 'true',
       managerUserId: manager || undefined,

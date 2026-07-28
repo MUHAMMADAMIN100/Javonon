@@ -162,8 +162,19 @@ export class PaymentsService {
     // Если студент пришёл от партнёра → создаём Commission и пополняем баланс.
     (async () => {
       try {
+        // Атрибуция лида с лендинга заводится на ЗАЯВКУ (Student ещё не
+        // существует в момент отправки формы). ApplicationsService при
+        // конвертации NEW→DOCS_REVIEW проставляет туда studentId, но у
+        // заявок, сконвертированных ДО этого фикса, поле осталось пустым —
+        // поэтому ищем партнёра по обоим идентификаторам сразу.
+        const application = await this.prisma.application.findFirst({
+          where: { studentId: payment.studentId },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
         const partner = await this.referrals.resolvePartner({
           studentId: payment.studentId,
+          applicationId: application?.id,
         });
         if (partner) {
           await this.referrals.creditCommission({

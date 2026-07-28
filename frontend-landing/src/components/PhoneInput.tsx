@@ -166,7 +166,15 @@ export default function PhoneInput({ value, onChange, error, placeholder }: Prop
     border: `1.5px solid ${error ? 'var(--danger, #dc2626)' : 'var(--border, #e5e7eb)'}`,
     borderRadius: 10,
     background: error ? '#fef2f2' : '#fff',
-    overflow: 'hidden',
+    // Якорь для `.phone-dropdown` — он `position: absolute;
+    // top: calc(100% + 4px)`. Без relative он отсчитывался бы от
+    // случайного позиционированного предка (или от viewport).
+    position: 'relative',
+    // NOTE: overflow ОБЯЗАН оставаться `visible`. Список стран висит
+    // ниже границы обёртки, и `hidden` вырезал бы его целиком.
+    // Скругление углов при этом не страдает: дети — input и button
+    // со своими радиусами, а не медиа, вылезающие за уголки.
+    overflow: 'visible',
   };
   const btnStyle: React.CSSProperties = {
     flex: '0 0 auto',

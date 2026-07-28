@@ -64,6 +64,23 @@ export function tjFormatDate(input: string | Date | null | undefined): string {
   }).format(d);
 }
 
+/**
+ * «YYYY-MM-DD» в TJ-календаре — значение для <input type="date"> / CrmDatePicker.
+ *
+ * Для МОМЕНТОВ времени (createdAt, дедлайны) резать ISO через `.slice(0, 10)`
+ * нельзя: у момента после 19:00 UTC душанбинский день уже следующий.
+ *
+ * Дата рождения — отдельный случай: это календарный день, и бэк хранит его
+ * ровно UTC-полуночью (`parseCalendarDateUtc` в backend/src/common/tj-time.ts),
+ * поэтому для неё и срез, и этот хелпер дают один и тот же верный день.
+ */
+export function tjDateInput(input: string | Date | null | undefined): string {
+  if (!input) return '';
+  const d = typeof input === 'string' ? new Date(input) : input;
+  if (isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TJ_TZ }).format(d);
+}
+
 /** «14:32» в TJ-времени. */
 export function tjFormatTime(input: string | Date | null | undefined): string {
   if (!input) return '';
