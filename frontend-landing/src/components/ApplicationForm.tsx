@@ -273,7 +273,7 @@ export default function ApplicationForm() {
                   <div className="ok-icon"><Icon name="check" size={28} /></div>
                   <div style={{ fontSize: 18, fontWeight: 500 }}>Ариза қабул шуд</div>
                   <div style={{ fontWeight: 400, fontSize: 14, marginTop: 8, color: 'var(--night-text-soft)' }}>
-                    Менеҷери Javonon дар давоми 30 дақиқа бо шумо тамос мегирад.
+                    Менеҷери Javonon дар давоми 1-12 соат бо шумо тамос мегирад.
                   </div>
                 </motion.div>
               )}
@@ -287,7 +287,12 @@ export default function ApplicationForm() {
 
             {!success && (
               <>
-                <div className="form-row">
+                {/* id — цель автоскролла по реферальной ссылке (?ref=...#apply).
+                    Целимся именно в первое поле, а не в секцию #apply: секция
+                    состоит из двух колонок, и на мобильном они встают друг под
+                    друга — прокрутка к её верху упирается в текстовую колонку,
+                    а форма остаётся ниже экрана. См. referral.ts. */}
+                <div className="form-row" id="apply-first-field">
                   <label>Ному насаб</label>
                   <input
                     type="text"

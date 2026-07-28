@@ -99,7 +99,21 @@ export function captureReferralFromUrl(): string | null {
 // Автоскролл к форме заявки (#apply)
 // ---------------------------------------------------------------------------
 
+/**
+ * Секция с формой. Остаётся якорем для обычных ссылок (`/#apply` в шапке и
+ * подвале) — её id мы не трогаем, чтобы навигация работала как раньше.
+ */
 const APPLY_ID = 'apply';
+/**
+ * Первое поле формы («Ному насаб») — реальная цель автоскролла.
+ *
+ * Почему не секция: `#apply` состоит из двух колонок — слева текст с
+ * преимуществами, справа карточка формы. На десктопе они рядом, и скролл к
+ * верху секции показывает обе. На мобильном они встают друг под друга, и тот
+ * же скролл упирается в текстовую колонку — форма остаётся ниже экрана.
+ * Поэтому целимся в само поле.
+ */
+const APPLY_FIRST_FIELD_ID = 'apply-first-field';
 const HIGHLIGHT_CLASS = 'apply-highlight';
 /** Синхронизировано с длительностью анимации .apply-highlight в index.css. */
 const HIGHLIGHT_MS = 2000;
@@ -146,16 +160,40 @@ function absoluteTop(el: Element): number {
   return el.getBoundingClientRect().top + window.scrollY;
 }
 
+/**
+ * Высота перекрывающей шапки + небольшой зазор.
+ *
+ * `.header` — `position: fixed`, поэтому он не занимает места в потоке:
+ * элемент, выровненный по верху вьюпорта, оказывается ПОД ним. Меряем
+ * фактическую высоту в момент скролла, а не хардкодим: на мобильном и
+ * десктопе она разная, плюс изменится, если подписи в шапке когда-нибудь
+ * станут длиннее и ряд перенесётся.
+ */
+function overlayOffset(): number {
+  try {
+    const header = document.querySelector('.header') as HTMLElement | null;
+    const h = header?.offsetHeight ?? 0;
+    // Зазор, чтобы подпись поля не липла вплотную к нижней кромке шапки.
+    return h > 0 ? h + 12 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function issueScroll(el: HTMLElement) {
   // 'auto' = поведение из CSS scroll-behavior. В index.css под
   // prefers-reduced-motion глобальный smooth снят, так что для таких
   // пользователей прыжок будет мгновенным.
   const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
+  // scrollIntoView({ block: 'start' }) не умеет отступ под фиксированную
+  // шапку, поэтому считаем координату сами. absoluteTop — документная,
+  // она не зависит от того, где сейчас вьюпорт.
+  const top = Math.max(0, absoluteTop(el) - overlayOffset());
   try {
-    el.scrollIntoView({ behavior, block: 'start' });
+    window.scrollTo({ top, behavior });
   } catch {
     // Очень старые движки не понимают объектный аргумент.
-    el.scrollIntoView();
+    window.scrollTo(0, top);
   }
 }
 
@@ -272,7 +310,14 @@ export function scrollToApplyForm(opts?: { highlight?: boolean }) {
 
   const attempt = () => {
     tries += 1;
-    const el = document.getElementById(APPLY_ID);
+    // Приоритет — первое поле формы. Фоллбэк на секцию нужен на случай, если
+    // разметку формы когда-нибудь перепишут и id потеряется: доехать до
+    // секции всё равно лучше, чем не доехать никуда. Плюс форма скрыта после
+    // успешной отправки (`{!success && ...}`) — тогда поля в DOM нет, и мы
+    // корректно откатываемся на секцию с сообщением об успехе.
+    const el =
+      document.getElementById(APPLY_FIRST_FIELD_ID) ||
+      document.getElementById(APPLY_ID);
 
     if (!el) {
       if (tries >= MAX_TRIES) return; // тихо сдаёмся
