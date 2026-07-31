@@ -4,14 +4,23 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignApplicationManager, deleteApplication, getApplication, updateApplication } from '../api/applications';
 import { getStudent, updateStudent, uploadPhoto } from '../api/students';
 import type { Application, ApplicationStatus, Direction, Student, StudentStatus } from '../api/types';
-import { APPLICATION_STAGES, DIRECTION_LABEL, STAGE_INDEX, STATUS_BADGE, STATUS_LABEL, STATUS_SHORT, STUDENT_STATUS_LABEL } from '../api/types';
+import {
+  APPLICATION_STATUSES,
+  DIRECTION_LABEL,
+  STATUS_BADGE,
+  STATUS_LABEL,
+  STUDENT_STATUS_LABEL,
+  isFinishedApplicationStatus,
+  isLegacyApplicationStatus,
+  isNewLeadApplicationStatus,
+} from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
-import DocumentsChecklist, { REQUIRED_DOCUMENTS } from '../components/DocumentsChecklist';
+import DocumentsChecklist from '../components/DocumentsChecklist';
 import DirectionOptions from '../components/DirectionOptions';
 import ManagerBar from '../components/ManagerBar';
 import ApplicationFormSection from '../components/ApplicationFormSection';
@@ -248,9 +257,32 @@ export default function ApplicationDetail() {
     queryKey: appKey,
     applyOptimistic: (cur, status) => optimistic.patch(cur, { status }),
     invalidateAlso: [keys.applications.all, keys.students.all],
-    onSuccess: (_d, status) => {
-      if (status === 'IN_PROGRESS' || status === 'COMPLETED') toast(t('toast.updated'), 'success');
+    onSuccess: () => {
+      // Раньше тост показывался только для двух legacy-значений — в новой
+      // схеме этих статусов не существует, и подтверждение исчезло бы совсем.
+      toast(t('toast.updated'), 'success');
     },
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
+  });
+
+  // ЗАДОЛЖЕННОСТЬ — отдельный флаг, а не статус.
+  //
+  // Раньше «ждёт оплаты» был пунктом воронки (AWAITING_PAYMENT), и финансы
+  // читали именно статус. В новом наборе статусов — исходы квалификации лида,
+  // и «ждёт оплаты» среди них нет: долг ортогонален квалификации (должник
+  // одновременно «Успешный лид»). Поэтому признак живёт в поле
+  // Application.paymentPending, а раздел «Задолженность студентов» на /finance
+  // и карточка дашборда строятся по нему. Без этого переключателя колонку
+  // могла бы заполнить только миграция — список должников замер бы снимком.
+  const debtMut = useOptimisticMutation<Application, boolean, Application>({
+    mutationFn: (paymentPending) => updateApplication(id!, { paymentPending }),
+    queryKey: appKey,
+    applyOptimistic: (cur, paymentPending) => optimistic.patch(cur, { paymentPending }),
+    // Инвалидируем ещё и финансы: карточка «Студентов с задолженностью» и
+    // таблица долгов кэшируются под keys.finance.pending() — без этого
+    // менеджер снимает долг, а Финансы продолжают показывать студента.
+    invalidateAlso: [keys.applications.all, keys.students.all, keys.finance.pending()],
+    onSuccess: () => toast(t('toast.updated'), 'success'),
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
@@ -348,29 +380,26 @@ export default function ApplicationDetail() {
   if (error) return <div className="error-banner">{error}</div>;
   if (!app) return <Loading />;
 
-  const isNew = app.status === 'NEW';
-  const isEnrolled = app.status === 'ENROLLED';
+  // Новые/успешные исходы считаем вместе с legacy-значениями: перенос строк на
+  // бэкенде опт-ин (MIGRATE_LEAD_STATUSES, см. api/types.ts и DEPLOY.md), и
+  // пока его не прогнали, API отдаёт NEW / ENROLLED.
+  const isNew = isNewLeadApplicationStatus(app.status);
+  const isEnrolled = isFinishedApplicationStatus(app.status);
   const isAdmin = isElevated(me);
   const assigned = !!app.managerId || !!app.chinaManagerId;
   const isMine = !assigned || app.managerId === me?.id || app.chinaManagerId === me?.id;
   const canAct = isAdmin || isMine;
-  const currentIdx = STAGE_INDEX[app.status] ?? 0;
   // Админ и назначенный менеджер (TJ/CN) могут редактировать заявку на любом этапе
   // — как данные студента, так и анкету.
   const canEdit = !!student && canAct;
-  const uploadedTypes = new Set((student?.documents || []).map((d) => d.type).filter((t) => t && t !== 'OTHER'));
-  const missingDocs = REQUIRED_DOCUMENTS.filter((r) => !uploadedTypes.has(r.type));
-  const nextStage = APPLICATION_STAGES[currentIdx + 1];
-  const prevStage = currentIdx > 0 ? APPLICATION_STAGES[currentIdx - 1] : null;
-
-  const handleNext = async () => {
-    if (!nextStage) return;
-    if (nextStage === 'DOCS_SUBMITTED' && missingDocs.length > 0) {
-      toast(t('applicationDetail.docs.missing') + ': ' + missingDocs.length, 'error');
-      return;
-    }
-    await onStatus(nextStage);
-  };
+  // NB: здесь была проверка «нельзя перейти в DOCS_SUBMITTED, пока не
+  // загружены обязательные документы». Статуса DOCS_SUBMITTED в новой схеме
+  // нет, а вешать это условие на «Успешные лиды» — другая бизнес-семантика,
+  // поэтому проверка снята. Незагруженные документы по-прежнему видны в
+  // DocumentsChecklist ниже.
+  // Статус заявки, ещё не переведённой на новую схему: в списке предлагаемых
+  // его нет, но выбранным значением он обязан показываться.
+  const statusIsLegacy = isLegacyApplicationStatus(app.status);
 
   return (
     <div>
@@ -396,67 +425,86 @@ export default function ApplicationDetail() {
         </div>
       </div>
 
-      {/* Пошаговая воронка статусов — скрываем когда заявка зачислена */}
-      {!isEnrolled && (
-        <div className="stage-bar">
-          <div className="stage-bar-track">
-            {APPLICATION_STAGES.map((stage, i) => {
-              const done = i < currentIdx;
-              const current = i === currentIdx;
-              return (
-                <div
-                  key={stage}
-                  className={`stage-step${done ? ' done' : ''}${current ? ' current' : ''}`}
-                >
-                  <div className="stage-dot">
-                    {done ? <Icon name="check" size={16} /> : <span>{i + 1}</span>}
-                  </div>
-                  <div className="stage-label">{t(`app.short.${stage}`) !== `app.short.${stage}` ? t(`app.short.${stage}`) : STATUS_SHORT[stage]}</div>
-                  {i < APPLICATION_STAGES.length - 1 && <div className="stage-connector" />}
-                </div>
-              );
-            })}
-          </div>
+      {/*
+        Статус заявки. Был степпер с кнопками «назад/вперёд» по воронке;
+        новые статусы — исходы квалификации, а не этапы («Вне города» ничему
+        не предшествует), поэтому здесь обычный дропдаун. Смена статуса
+        по-прежнему идёт через оптимистичный statusMut → onStatus.
+      */}
+      <div className="stage-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-soft)' }}>{t('app.field.status')}</span>
+          <span className={`badge ${STATUS_BADGE[app.status] || 'badge-gray'}`}>
+            {appStatusLabel(app.status)}
+          </span>
           {canAct && (
-            <div className="stage-actions">
-              {prevStage && (
-                <button
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => onStatus(prevStage)}
-                  title={t('common.back')}
-                >
-                  <Icon name="arrow_back" size={16} style={{ marginRight: 4 }} />
-                  {t('common.back')}
-                </button>
+            <select
+              className="app-stepper-select"
+              style={{ marginLeft: 'auto' }}
+              value={app.status}
+              onChange={(e) => onStatus(e.target.value as ApplicationStatus)}
+              title={t('app.field.status')}
+            >
+              {statusIsLegacy && (
+                <option value={app.status} disabled>
+                  {appStatusLabel(app.status)}
+                </option>
               )}
-              {nextStage && (
-                <button
-                  className="btn btn-sm btn-primary"
-                  onClick={handleNext}
-                  title={appStatusLabel(nextStage)}
-                >
-                  {appStatusLabel(nextStage)}
-                  <Icon name="arrow_forward" size={16} style={{ marginLeft: 4 }} />
-                </button>
-              )}
-            </div>
+              {APPLICATION_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {appStatusLabel(s)}
+                </option>
+              ))}
+            </select>
           )}
         </div>
-      )}
-      {isEnrolled && canAct && prevStage && (
-        <div className="stage-bar" style={{ paddingTop: 12, paddingBottom: 12 }}>
-          <div className="stage-actions" style={{ marginLeft: 'auto' }}>
-            <button
-              className="btn btn-sm btn-secondary"
-              onClick={() => onStatus(prevStage)}
-              title={t('common.back')}
+
+        {/*
+          Задолженность. Отдельная строка, а не пункт дропдауна выше: долг
+          ортогонален квалификации лида — «Успешный лид» вполне может быть
+          должником, и раньше, когда это был статус AWAITING_PAYMENT, одно
+          состояние затирало другое. Флаг читают Финансы
+          (GET /finance/pending-payments) и карточка дашборда «Студентов
+          с задолженностью».
+        */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginTop: 10,
+          }}
+        >
+          <span style={{ fontSize: 13, color: 'var(--text-soft)' }}>{t('app.field.debt')}</span>
+          {app.paymentPending ? (
+            <span className="badge badge-warning">{t('app.debt.pending')}</span>
+          ) : (
+            <span className="badge badge-gray">{t('app.debt.none')}</span>
+          )}
+          {canAct && (
+            <label
+              style={{
+                marginLeft: 'auto',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 13,
+                cursor: debtMut.isPending ? 'progress' : 'pointer',
+              }}
+              title={t('app.debt.hint')}
             >
-              <Icon name="arrow_back" size={16} style={{ marginRight: 4 }} />
-              {t('common.back')}
-            </button>
-          </div>
+              <input
+                type="checkbox"
+                checked={!!app.paymentPending}
+                disabled={debtMut.isPending}
+                onChange={(e) => debtMut.mutate(e.target.checked)}
+              />
+              {t('app.debt.toggle')}
+            </label>
+          )}
         </div>
-      )}
+      </div>
 
       <div className="card-body">
         {!isNew && (
@@ -501,7 +549,7 @@ export default function ApplicationDetail() {
                     style={{ color: '#16a34a' }}
                   >
                     <Icon name="verified" size={16} style={{ color: '#16a34a' }} />
-                    <span style={{ color: '#16a34a' }}>{appStatusLabel('ENROLLED' as any)}</span>
+                    <span style={{ color: '#16a34a' }}>{appStatusLabel('SUCCESSFUL_LEAD')}</span>
                   </motion.div>
                 )}
                 {canEdit && (

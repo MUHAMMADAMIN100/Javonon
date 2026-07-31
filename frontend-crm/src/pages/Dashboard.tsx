@@ -4,12 +4,12 @@ import { applicationStats } from '../api/applications';
 import { studentStats } from '../api/students';
 import { financeSummary, pendingPayments, type FinanceSummary } from '../api/finance';
 import { leaderboard, type KpiRow } from '../api/kpi';
-import { DIRECTION_LABEL, STATUS_LABEL } from '../api/types';
+import { DIRECTION_LABEL, isFinishedApplicationStatus, isNewLeadApplicationStatus } from '../api/types';
 import { useAuth } from '../store/auth';
 import { keys } from '../lib/queryKeys';
 import { isElevated, hasRole } from '../lib/roles';
 import { useT } from '../lib/i18n';
-import { useCountryLabel } from '../lib/labels';
+import { useApplicationStatusLabel, useCountryLabel } from '../lib/labels';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -26,6 +26,7 @@ const fadeUp = {
 export default function Dashboard() {
   const { t } = useT();
   const countryLabel = useCountryLabel();
+  const appStatusLabel = useApplicationStatusLabel();
   const me = useAuth((s) => s.user);
   const isAdmin = isElevated(me);
   // hasRole учитывает мульти-роли (ТЗ §2). Раньше было `me?.role === 'ACCOUNTANT'`
@@ -60,13 +61,19 @@ export default function Dashboard() {
   });
   const topPerformers = (leaderQuery.data ?? []).slice(0, 3);
 
-  const newCount = appStats?.byStatus?.find((s: any) => s.status === 'NEW')?._count || 0;
-  const inProgress =
-    (appStats?.byStatus?.find((s: any) => s.status === 'DOCS_REVIEW')?._count || 0) +
-    (appStats?.byStatus?.find((s: any) => s.status === 'DOCS_SUBMITTED')?._count || 0) +
-    (appStats?.byStatus?.find((s: any) => s.status === 'PRE_ADMISSION')?._count || 0) +
-    (appStats?.byStatus?.find((s: any) => s.status === 'AWAITING_PAYMENT')?._count || 0);
-  const enrolled = appStats?.byStatus?.find((s: any) => s.status === 'ENROLLED')?._count || 0;
+  // Срезы считаем предикатами, а не перечислением конкретных статусов:
+  // статусов стало 10 и они ещё будут меняться, а пока миграция строк не
+  // отработала, API отдаёт вперемешку новые и legacy-значения. Предикаты
+  // (см. api/types.ts) знают про обе схемы, поэтому «Успешные» не покажут
+  // ноль в окно между деплоем и миграцией.
+  const byStatus: Array<{ status: string; _count: number }> = appStats?.byStatus || [];
+  const sumWhere = (pred: (s: string) => boolean) =>
+    byStatus.reduce((acc, row) => (pred(row.status) ? acc + (row._count || 0) : acc), 0);
+
+  const newCount = sumWhere(isNewLeadApplicationStatus);
+  const enrolled = sumWhere(isFinishedApplicationStatus);
+  // «В работе» — всё, что уже не новый лид и ещё не закрытый исход.
+  const inProgress = sumWhere((s) => !isNewLeadApplicationStatus(s) && !isFinishedApplicationStatus(s));
 
   // Заявки, у которых направление ещё не подтверждено человеком (в БД лежит
   // плейсхолдер). Они исключены из среза «по направлениям» — показываем их
@@ -317,8 +324,10 @@ export default function Dashboard() {
         <BreakdownCard
           eyebrow={`04 · ${t('eyebrow.funnel')}`}
           title={t('dashboard.breakdown.funnel')}
-          rows={(appStats?.byStatus || []).map((s: any) => ({
-            label: STATUS_LABEL[s.status as keyof typeof STATUS_LABEL] || s.status,
+          rows={byStatus.map((s) => ({
+            // Через хук, а не через STATUS_LABEL: разрез по статусам обязан
+            // переключаться на таджикский вместе с остальным дашбордом.
+            label: appStatusLabel(s.status),
             value: s._count,
           }))}
         />

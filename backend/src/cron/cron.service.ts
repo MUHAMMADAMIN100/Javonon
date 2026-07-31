@@ -5,6 +5,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PenaltiesService } from '../penalties/penalties.service';
 import { SmsService } from '../sms/sms.service';
 import { tjStartOfDay, tjStartOfNextDay, tjYMD } from '../common/tj-time';
+import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 
 const TASK_OVERDUE_PENALTY_USD = 10; // ТЗ §3.9: «Нарушение → штраф» за просроченную задачу
 
@@ -251,7 +252,12 @@ export class CronService {
 
     const stale = await this.prisma.application.findMany({
       where: {
-        status: { notIn: ['ENROLLED', 'COMPLETED'] },
+        // Завершённые заявки не дёргаем. Группа, а не одно значение: пока
+        // не прогнали migrate-lead-statuses.ts (перенос опт-ин, см.
+        // MIGRATE_LEAD_STATUSES), закрытая заявка может ещё носить
+        // ENROLLED/COMPLETED — и менеджер получал бы напоминание «обнови
+        // статус» по уже успешному лиду.
+        status: { notIn: FINISHED_APPLICATION_STATUSES },
         updatedAt: { lt: weekAgo },
         managerId: { not: null },
       },

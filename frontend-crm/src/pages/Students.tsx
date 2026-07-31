@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listStudents } from '../api/students';
 import { listUsers } from '../api/users';
 import type { Direction } from '../api/types';
-import { DIRECTION_LABEL, STATUS_BADGE, STATUS_LABEL, STUDENT_STATUS_BADGE, STUDENT_STATUS_LABEL } from '../api/types';
+import { APPLICATION_STATUSES, DIRECTION_LABEL, STATUS_BADGE, STATUS_LABEL, STUDENT_STATUS_BADGE, STUDENT_STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
@@ -19,8 +19,34 @@ import Loading from '../components/Loading';
 import { isElevated, isFounder } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useApplicationStatusLabel } from '../lib/labels';
+import {
+  boolParam,
+  enumParam,
+  ignoredParam,
+  pageParam,
+  stringParam,
+  useUrlListState,
+} from '../lib/useUrlListState';
 
 type Scope = 'all' | 'mine';
+
+// Клиентский фильтр по этапу/специальному статусу студента.
+const SPECIAL_STUDENT_STATUSES = ['PAUSED', 'GRADUATED', 'ARCHIVED'];
+
+/**
+ * Белые списки для разбора URL. Дропдаун «этап/статус» смешивает два
+ * перечисления, поэтому и фильтр принимает объединение: статусы заявки
+ * (ключи STATUS_BADGE — Record<ApplicationStatus, string>, то есть enum
+ * целиком, включая legacy: старая ссылка обязана работать, пока миграция
+ * строк не доехала) плюс три «специальных» статуса студента.
+ * Всё остальное при чтении URL молча падает в «без фильтра».
+ */
+const STAGE_FILTER_VALUES = [
+  ...(Object.keys(STATUS_BADGE) as string[]),
+  ...SPECIAL_STUDENT_STATUSES,
+];
+const DIRECTION_VALUES = Object.keys(DIRECTION_LABEL) as Direction[];
+const CABINET_VALUES = ['1', '2', '3'] as const;
 
 // Согласовано с Applications.tsx — 20 на страницу (демо-значение 5
 // было удобно для скриншотов, но реальный CRM с базой студентов
@@ -40,31 +66,68 @@ export default function Students() {
   const me = useAuth((s) => s.user);
   const { toast } = useUI();
   const qc = useQueryClient();
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [direction, setDirection] = useState<Direction | ''>('');
-  const [stageFilter, setStageFilter] = useState<string>('');
-  const [cabinet, setCabinet] = useState('');
-  const [manager, setManager] = useState<string>('');
   const isAdmin = isElevated(me);
   const founder = isFounder(me);
-  const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
-  // Отдельная вкладка «база студентов» по ТЗ — отображаются только
-  // оплатившие (есть хотя бы одна TUITION_PAYMENT транзакция).
-  const [paidOnly, setPaidOnly] = useState(false);
+
+  // Состояние списка — в query-string (см. lib/useUrlListState): клик по
+  // строке уводит на карточку студента, список размонтируется, и «назад»
+  // обязан вернуть ту же страницу с теми же фильтрами.
+  const { values, setValue } = useUrlListState(
+    {
+      search: stringParam(),
+      direction: enumParam(DIRECTION_VALUES),
+      // В URL — просто `status`: для читающего ссылку это статус, а не
+      // «stage», хотя внутри дропдаун смешивает этап заявки и статус студента.
+      status: enumParam(STAGE_FILTER_VALUES),
+      cabinet: enumParam(CABINET_VALUES),
+      manager: isAdmin ? stringParam('', 64) : ignoredParam(''),
+      scope: enumParam<Scope, Scope>(
+        isAdmin ? (['all', 'mine'] as const) : (['mine'] as const),
+        isAdmin ? 'all' : 'mine',
+      ),
+      // Отдельная вкладка «база студентов» по ТЗ — отображаются только
+      // оплатившие (есть хотя бы одна TUITION_PAYMENT транзакция).
+      paid: boolParam(false),
+      page: pageParam(),
+    },
+    { pageKey: 'page' },
+  );
+  const {
+    direction,
+    status: stageFilter,
+    cabinet,
+    manager,
+    scope,
+    paid: paidOnly,
+    page,
+  } = values;
+  const urlSearch = values.search;
+
+  // Модалка отчёта — не состояние списка, в URL ей делать нечего.
   const [reportOpen, setReportOpen] = useState(false);
   const [reportFrom, setReportFrom] = useState('');
   const [reportTo, setReportTo] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [page, setPage] = useState(1);
 
+  // Инпут поиска локальный (мгновенный отклик), в URL уезжает только
+  // «устаканившееся» значение — дебаунс те же 300 мс.
+  const [searchInput, setSearchInput] = useState(urlSearch);
+
+  // URL → инпут: «назад/вперёд» и переход по ссылке с фильтрами. Когда
+  // значение записали мы сами, setState получает то же и ререндера нет.
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
+    setSearchInput(urlSearch);
+  }, [urlSearch]);
+
+  // Инпут → URL, replace'ом: история не забивается на каждую букву.
+  useEffect(() => {
+    if (searchInput === urlSearch) return;
+    const timer = setTimeout(() => setValue('search', searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput, urlSearch, setValue]);
 
   const filters = {
-    search: debouncedSearch || undefined,
+    search: urlSearch || undefined,
     direction: direction || undefined,
     cabinet: cabinet ? parseInt(cabinet, 10) : undefined,
     mine: scope === 'mine',
@@ -79,13 +142,11 @@ export default function Students() {
   const items = studentsQuery.data ?? [];
   const loading = studentsQuery.isLoading;
 
-  // Сброс страницы при смене любого фильтра.
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, direction, cabinet, scope, manager, stageFilter, paidOnly]);
+  // Сброс страницы при смене любого фильтра делает сам useUrlListState
+  // (pageKey): отдельным эффектом это было бы хуже — он срабатывает и на
+  // монтировании, то есть затирал бы восстановленный из URL ?page=3.
 
   // Клиентский фильтр по этапу/специальному статусу.
-  const SPECIAL_STUDENT_STATUSES = ['PAUSED', 'GRADUATED', 'ARCHIVED'];
   const filteredItems = stageFilter
     ? items.filter((s) => {
         if (SPECIAL_STUDENT_STATUSES.includes(stageFilter)) {
@@ -96,10 +157,15 @@ export default function Students() {
       })
     : items;
 
+  // Кламп страницы под сократившийся список. Только после успешной
+  // загрузки: пока данных нет, filteredItems пуст, и наивный кламп сбросил
+  // бы восстановленный из URL ?page=3 в единицу. replace — коррекция, а не
+  // переход пользователя.
   useEffect(() => {
+    if (!studentsQuery.isSuccess) return;
     const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
-    if (page > totalPages) setPage(totalPages);
-  }, [filteredItems.length, page]);
+    if (page > totalPages) setValue('page', totalPages, { replace: true });
+  }, [studentsQuery.isSuccess, filteredItems.length, page, setValue]);
 
   const pagedItems = filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -177,14 +243,14 @@ export default function Students() {
             <div className="scope-switch">
               <button
                 className={`scope-btn${scope === 'mine' ? ' active' : ''}`}
-                onClick={() => setScope('mine')}
+                onClick={() => setValue('scope', 'mine')}
               >
                 <Icon name="person" size={16} />
                 Мои
               </button>
               <button
                 className={`scope-btn${scope === 'all' ? ' active' : ''}`}
-                onClick={() => setScope('all')}
+                onClick={() => setValue('scope', 'all')}
               >
                 <Icon name="groups" size={16} />
                 Все
@@ -215,8 +281,8 @@ export default function Students() {
       </div>
       <div className="card-body">
         <div className="filters" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
-          <input className="crm-input" style={{ flex: '1 1 200px' }} placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select className="crm-select" style={{ flex: '1 1 200px' }} value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+          <input className="crm-input" style={{ flex: '1 1 200px' }} placeholder={t('common.search')} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+          <select className="crm-select" style={{ flex: '1 1 200px' }} value={direction} onChange={(e) => setValue('direction', e.target.value as Direction | '')}>
             <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
           </select>
@@ -224,17 +290,14 @@ export default function Students() {
             className="crm-select"
             style={{ flex: '1 1 200px' }}
             value={stageFilter}
-            onChange={(e) => setStageFilter(e.target.value)}
+            onChange={(e) => setValue('status', e.target.value)}
             title={t('app.filter.status')}
           >
             <option value="">{t('app.filter.status')}</option>
             <optgroup label={t('app.field.stage')}>
-              <option value="NEW">{appStatusLabel('NEW' as any)}</option>
-              <option value="DOCS_REVIEW">{appStatusLabel('DOCS_REVIEW' as any)}</option>
-              <option value="DOCS_SUBMITTED">{appStatusLabel('DOCS_SUBMITTED' as any)}</option>
-              <option value="PRE_ADMISSION">{appStatusLabel('PRE_ADMISSION' as any)}</option>
-              <option value="AWAITING_PAYMENT">{appStatusLabel('AWAITING_PAYMENT' as any)}</option>
-              <option value="ENROLLED">{appStatusLabel('ENROLLED' as any)}</option>
+              {APPLICATION_STATUSES.map((s) => (
+                <option key={s} value={s}>{appStatusLabel(s)}</option>
+              ))}
             </optgroup>
             <optgroup label={t('common.status')}>
               <option value="PAUSED">{studentStatusLabel('PAUSED' as any)}</option>
@@ -242,7 +305,7 @@ export default function Students() {
               <option value="ARCHIVED">{studentStatusLabel('ARCHIVED' as any)}</option>
             </optgroup>
           </select>
-          <select className="crm-select" style={{ flex: '1 1 200px' }} value={cabinet} onChange={(e) => setCabinet(e.target.value)}>
+          <select className="crm-select" style={{ flex: '1 1 200px' }} value={cabinet} onChange={(e) => setValue('cabinet', e.target.value as typeof CABINET_VALUES[number] | '')}>
             <option value="">{t('app.field.cabinet')}</option>
             <option value="1">{t('app.field.cabinet')} 1</option>
             <option value="2">{t('app.field.cabinet')} 2</option>
@@ -253,7 +316,7 @@ export default function Students() {
               className="crm-select"
               style={{ flex: '1 1 200px' }}
               value={manager}
-              onChange={(e) => setManager(e.target.value)}
+              onChange={(e) => setValue('manager', e.target.value)}
               title={t('app.filter.manager')}
             >
               <option value="">{t('app.filter.manager')}</option>
@@ -268,7 +331,7 @@ export default function Students() {
               type="checkbox"
               className="crm-checkbox"
               checked={paidOnly}
-              onChange={(e) => setPaidOnly(e.target.checked)}
+              onChange={(e) => setValue('paid', e.target.checked)}
             />
             {t('students.paidOnly')}
           </label>
@@ -390,7 +453,7 @@ export default function Students() {
             page={page}
             total={filteredItems.length}
             pageSize={PAGE_SIZE}
-            onChange={setPage}
+            onChange={(next) => setValue('page', next)}
           />
         )}
       </div>

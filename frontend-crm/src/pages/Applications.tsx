@@ -5,7 +5,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listApplications } from '../api/applications';
 import { listUsers } from '../api/users';
 import type { ApplicationSource, ApplicationStatus, Country, Direction } from '../api/types';
-import { APPLICATION_SOURCES, COUNTRIES, SOURCE_BADGE, SOURCE_LABEL, STATUS_BADGE } from '../api/types';
+import {
+  APPLICATION_SOURCES,
+  APPLICATION_STATUSES,
+  COUNTRIES,
+  DIRECTION_LABEL,
+  SOURCE_BADGE,
+  SOURCE_LABEL,
+  STATUS_BADGE,
+} from '../api/types';
 import { useAuth } from '../store/auth';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
@@ -16,8 +24,29 @@ import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useApplicationStatusLabel, useCountryLabel } from '../lib/labels';
+import {
+  enumParam,
+  ignoredParam,
+  pageParam,
+  stringParam,
+  useUrlListState,
+} from '../lib/useUrlListState';
 
 type Scope = 'all' | 'mine';
+
+/**
+ * Белые списки для разбора `?status=` / `?direction=` из URL.
+ *
+ * Для статуса берём ключи STATUS_BADGE (Record<ApplicationStatus, string>,
+ * то есть перечисление целиком), а не APPLICATION_STATUSES: в дропдауне
+ * предлагаются только актуальные 10 исходов, но ссылка/закладка вида
+ * `?status=ENROLLED` обязана продолжать работать, пока миграция строк не
+ * доехала и API реально отдаёт legacy-значения. Новые статусы список
+ * подхватывает сам — тип заставляет STATUS_BADGE быть полным.
+ * Всё, чего в списках нет, при чтении URL молча падает в «без фильтра».
+ */
+const APPLICATION_STATUS_VALUES = Object.keys(STATUS_BADGE) as ApplicationStatus[];
+const DIRECTION_VALUES = Object.keys(DIRECTION_LABEL) as Direction[];
 
 // 5 — было удобно для скриншотов/демо, но на реальном CRM с сотнями
 // заявок это значит постоянное «следующая страница». 20 даёт нормальный
@@ -37,30 +66,59 @@ export default function Applications() {
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [status, setStatus] = useState<ApplicationStatus | ''>('');
-  const [direction, setDirection] = useState<Direction | ''>('');
-  const [manager, setManager] = useState<string>('');
-  const [source, setSource] = useState<ApplicationSource | ''>('');
-  const [country, setCountry] = useState<Country | ''>('');
   const isAdmin = isElevated(me);
-  // Менеджер видит только свои заявки; админ может переключать.
-  const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
-  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
+  // Всё состояние списка — в query-string (см. lib/useUrlListState).
+  // useState здесь не годится: клик по строке уводит на карточку заявки,
+  // список размонтируется, и «назад» возвращал бы первую страницу без
+  // фильтров. Заодно выборка переживает F5 и шарится ссылкой.
+  const { values, setValue, reset } = useUrlListState(
+    {
+      search: stringParam(),
+      status: enumParam(APPLICATION_STATUS_VALUES),
+      direction: enumParam(DIRECTION_VALUES),
+      country: enumParam(COUNTRIES),
+      source: enumParam(APPLICATION_SOURCES),
+      // id менеджера белым списком не проверить — пользователи грузятся
+      // асинхронно. Ограничиваем длину; неизвестный id бэкенд отдаст
+      // пустым списком, а не ошибкой (User.id — обычная String-колонка).
+      manager: isAdmin ? stringParam('', 64) : ignoredParam(''),
+      // Менеджер видит только свои заявки; админ может переключать.
+      // Дефолт зависит от роли и потому в URL не пишется: чистый
+      // /applications у админа значит «все», у менеджера — «мои».
+      scope: enumParam<Scope, Scope>(
+        isAdmin ? (['all', 'mine'] as const) : (['mine'] as const),
+        isAdmin ? 'all' : 'mine',
+      ),
+      page: pageParam(),
+    },
+    { pageKey: 'page' },
+  );
+  const { status, direction, country, source, manager, scope, page } = values;
+  const urlSearch = values.search;
 
-  // Сбросить страницу при смене фильтров.
+  // Инпут поиска держим локально: буквы обязаны появляться мгновенно, а в
+  // URL уезжает только «устаканившееся» значение. Дебаунс тот же, 300 мс.
+  const [searchInput, setSearchInput] = useState(urlSearch);
+
+  // URL → инпут. Срабатывает на «назад/вперёд», на «Сбросить» и на переход
+  // по ссылке с фильтрами. Если значение в URL записали мы сами, setState
+  // получает то же самое и React ререндер не делает.
   useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, status, direction, scope, manager, source, country]);
+    setSearchInput(urlSearch);
+  }, [urlSearch]);
+
+  // Инпут → URL. Запись идёт replace'ом (см. useUrlListState), поэтому
+  // история не забивается на каждую букву. setValue стабилен, так что
+  // таймер перезапускает только реальный ввод.
+  useEffect(() => {
+    if (searchInput === urlSearch) return;
+    const timer = setTimeout(() => setValue('search', searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput, urlSearch, setValue]);
 
   const filters = {
-    search: debouncedSearch || undefined,
+    search: urlSearch || undefined,
     status: status || undefined,
     direction: direction || undefined,
     country: country || undefined,
@@ -89,10 +147,15 @@ export default function Applications() {
   });
 
   // При изменении набора заявок извне — корректируем текущую страницу.
+  // Ждём успешной загрузки: пока данных нет, items.length === 0, и наивный
+  // кламп сбросил бы восстановленный из URL ?page=3 в единицу — ровно тот
+  // баг, ради которого состояние и переехало в URL. replace: true — это
+  // техническая коррекция, а не переход, в истории ей не место.
   useEffect(() => {
+    if (!appsQuery.isSuccess) return;
     const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-    if (page > totalPages) setPage(totalPages);
-  }, [items.length, page]);
+    if (page > totalPages) setValue('page', totalPages, { replace: true });
+  }, [appsQuery.isSuccess, items.length, page, setValue]);
 
   const pagedItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -115,14 +178,14 @@ export default function Applications() {
           <div className="scope-switch">
             <button
               className={`scope-btn${scope === 'mine' ? ' active' : ''}`}
-              onClick={() => setScope('mine')}
+              onClick={() => setValue('scope', 'mine')}
             >
               <Icon name="person" size={16} />
               {t('scope.mine')}
             </button>
             <button
               className={`scope-btn${scope === 'all' ? ' active' : ''}`}
-              onClick={() => setScope('all')}
+              onClick={() => setValue('scope', 'all')}
             >
               <Icon name="groups" size={16} />
               {t('common.all')}
@@ -132,32 +195,29 @@ export default function Applications() {
       </div>
       <div className="card-body">
         <div className="filters">
-          <input className="crm-input" placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select className="crm-select" value={status} onChange={(e) => setStatus(e.target.value as any)}>
+          <input className="crm-input" placeholder={t('common.search')} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+          <select className="crm-select" value={status} onChange={(e) => setValue('status', e.target.value as ApplicationStatus | '')}>
             <option value="">{t('app.filter.status')}</option>
-            <option value="NEW">{statusLabel('NEW' as any)}</option>
-            <option value="DOCS_REVIEW">{statusLabel('DOCS_REVIEW' as any)}</option>
-            <option value="DOCS_SUBMITTED">{statusLabel('DOCS_SUBMITTED' as any)}</option>
-            <option value="PRE_ADMISSION">{statusLabel('PRE_ADMISSION' as any)}</option>
-            <option value="AWAITING_PAYMENT">{statusLabel('AWAITING_PAYMENT' as any)}</option>
-            <option value="ENROLLED">{statusLabel('ENROLLED' as any)}</option>
+            {APPLICATION_STATUSES.map((s) => (
+              <option key={s} value={s}>{statusLabel(s)}</option>
+            ))}
           </select>
           {isAdmin && (
-            <select className="crm-select" value={manager} onChange={(e) => setManager(e.target.value)} title={t('app.filter.manager')}>
+            <select className="crm-select" value={manager} onChange={(e) => setValue('manager', e.target.value)} title={t('app.filter.manager')}>
               <option value="">{t('app.filter.manager')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
             </select>
           )}
-          <select className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+          <select className="crm-select" value={direction} onChange={(e) => setValue('direction', e.target.value as Direction | '')}>
             <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
           </select>
           <select
             className="crm-select"
             value={source}
-            onChange={(e) => setSource(e.target.value as ApplicationSource | '')}
+            onChange={(e) => setValue('source', e.target.value as ApplicationSource | '')}
             title={t('app.field.source')}
           >
             <option value="">{t('app.filter.source')}</option>
@@ -168,7 +228,7 @@ export default function Applications() {
           <select
             className="crm-select"
             value={country}
-            onChange={(e) => setCountry(e.target.value as Country | '')}
+            onChange={(e) => setValue('country', e.target.value as Country | '')}
             title={t('app.field.country')}
           >
             <option value="">{t('app.filter.country')}</option>
@@ -176,17 +236,18 @@ export default function Applications() {
               <option key={c} value={c}>{countryLabel(c)}</option>
             ))}
           </select>
-          {(search || status || direction || manager || source || country) && (
+          {(searchInput || status || direction || manager || source || country) && (
             <button
               type="button"
               className="btn btn-ghost"
               onClick={() => {
-                setSearch('');
-                setStatus('');
-                setDirection('');
-                setManager('');
-                setSource('');
-                setCountry('');
+                // Инпут гасим сразу и вручную: иначе недобежавший дебаунс
+                // (успели нажать «Сбросить» раньше 300 мс) через мгновение
+                // вернул бы текст обратно в URL.
+                setSearchInput('');
+                // scope не трогаем — как и раньше: «Мои/Все» это не фильтр
+                // выборки, а режим просмотра. Страницу reset() сбрасывает сам.
+                reset(['search', 'status', 'direction', 'manager', 'source', 'country']);
               }}
               title={t('common.reset')}
             >
@@ -306,7 +367,7 @@ export default function Applications() {
             page={page}
             total={items.length}
             pageSize={PAGE_SIZE}
-            onChange={setPage}
+            onChange={(next) => setValue('page', next)}
           />
         )}
       </div>

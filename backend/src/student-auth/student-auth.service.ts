@@ -16,7 +16,15 @@ const STUDENT_INCLUDE = {
   documents: true,
   manager: { select: { id: true, fullName: true, email: true } },
   chinaManager: { select: { id: true, fullName: true, email: true } },
-  applications: { select: { id: true, status: true, createdAt: true } },
+  // orderBy обязателен: кабинет студента показывает марҳилаи қабул и
+  // поздравление по applications[0] (EnrollmentProgress, StudentCabinet).
+  // Без сортировки Postgres волен вернуть строки в любом порядке, и студент
+  // с двумя заявками увидел бы статус то новой, то старой — между
+  // перезагрузками страницы. Свежая заявка первая.
+  applications: {
+    select: { id: true, status: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  },
 } as const;
 
 @Injectable()
@@ -164,7 +172,9 @@ export class StudentAuthService {
         // ответ клиента. Менеджер снимет пометку, выбрав направление в CRM.
         directionConfirmed: directionAnswered,
         comment: dto.comment?.trim() || null,
-        status: 'NEW',
+        // NEW_LEAD, а не легаси-NEW: самозапись — такой же входящий лид,
+        // и он обязан попасть в актуальный набор статусов CRM.
+        status: 'NEW_LEAD',
         source: 'SELF_REGISTRATION',
         studentId: student.id,
       },

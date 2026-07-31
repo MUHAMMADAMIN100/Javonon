@@ -22,6 +22,7 @@ import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
 import { lkeys, optimistic, useOptimisticMutation } from '../queryClient';
+import { isFinishedApplicationStatus } from '../applicationStatus';
 
 const DIRECTION_LABEL: Record<string, string> = {
   BACHELOR: 'Бакалавр',
@@ -300,8 +301,10 @@ export default function StudentCabinet() {
         )}
         {tab === 'home' && (
           <>
-            {/* Поздравление при зачислении */}
-            {me.applications?.[0]?.status === 'ENROLLED' && (
+            {/* Поздравление при зачислении. Статус матчим списком, а не
+                литералом: до миграции у зачисленного лежит ENROLLED, после —
+                SUCCESSFUL_LEAD (см. applicationStatus.ts). */}
+            {isFinishedApplicationStatus(me.applications?.[0]?.status) && (
               <motion.div
                 className="stu-celebrate"
                 initial={{ opacity: 0, scale: 0.9, y: -20 }}

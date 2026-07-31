@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 
 @Injectable()
 export class KpiService {
@@ -8,7 +9,8 @@ export class KpiService {
   /**
    * Сводный KPI по сотрудникам:
    *  - applicationsAssigned — сколько заявок назначено
-   *  - applicationsEnrolled — сколько дошло до ENROLLED (зачислено)
+   *  - applicationsEnrolled — сколько дошло до SUCCESSFUL_LEAD (успешный лид;
+   *    легаси ENROLLED/COMPLETED считаются тем же, см. common/application-status)
    *  - conversionRate — % конверсии
    *  - studentsCount — текущих студентов в работе
    *  - salesAmount — сумма продаж клиентов этого менеджера
@@ -53,7 +55,11 @@ export class KpiService {
           this.prisma.application.count({
             where: {
               OR: [{ managerId: u.id }, { chinaManagerId: u.id }],
-              status: 'ENROLLED',
+              // Не одно значение, а группа: пока не прогнали
+              // migrate-lead-statuses.ts (перенос опт-ин, см.
+              // MIGRATE_LEAD_STATUSES), часть строк носит ENROLLED/COMPLETED,
+              // и строгий матч по SUCCESSFUL_LEAD обнулил бы весь KPI.
+              status: { in: FINISHED_APPLICATION_STATUSES },
               ...(dateFilter && { updatedAt: dateFilter }),
             },
           }),

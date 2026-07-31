@@ -162,6 +162,17 @@ const DICT: Record<Lang, Record<string, string>> = {
     'country.GERMANY': 'Германия',
 
     // ===== application status =====
+    'app.status.NEW_LEAD': 'Новые лиды',
+    'app.status.IN_PROCESSING': 'В обработке',
+    'app.status.ONLINE_CONSULTATION': 'Онлайн консультации',
+    'app.status.OFFLINE_CONSULTATION': 'Оффлайн консультации',
+    'app.status.THINKING': 'Думает',
+    'app.status.OUT_OF_TOWN': 'Вне города',
+    'app.status.UNDER_17': 'До 17 лет',
+    'app.status.POTENTIAL_LEAD': 'Потенциальные лиды',
+    'app.status.LOW_QUALITY_LEAD': 'Некачественные лиды',
+    'app.status.SUCCESSFUL_LEAD': 'Успешные лиды',
+    // legacy — заявки до миграции статусов, из дропдаунов исключены
     'app.status.NEW': 'Новая заявка',
     'app.status.DOCS_REVIEW': 'Документы на проверке',
     'app.status.DOCS_SUBMITTED': 'Подача документов',
@@ -170,6 +181,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'app.status.ENROLLED': 'Зачислен',
     'app.status.IN_PROGRESS': 'Документы на проверке',
     'app.status.COMPLETED': 'Зачислен',
+    // Уведомляется ли клиент об этом статусе (см. ApplicationStatusSelect).
+    'app.status.smsSent': 'Клиент получает SMS об этом статусе.',
+    'app.status.smsSilent': 'Внутренний статус — клиенту SMS не отправляется.',
     'app.title': 'Заявки клиентов',
     'app.new': 'Новая заявка',
     'app.empty': 'Заявок пока нет',
@@ -198,6 +212,14 @@ const DICT: Record<Lang, Record<string, string>> = {
     'app.field.preferredChannel': 'Предп. канал связи',
     'app.field.comment': 'Комментарий',
     'app.field.status': 'Статус',
+    // Задолженность — отдельный флаг заявки (paymentPending), а не статус.
+    // На нём держатся раздел «Задолженность студентов» в Финансах и карточка
+    // дашборда: статуса AWAITING_PAYMENT в новом наборе больше нет.
+    'app.field.debt': 'Задолженность',
+    'app.debt.pending': 'Ждёт оплаты',
+    'app.debt.none': 'Долга нет',
+    'app.debt.toggle': 'Числится долг',
+    'app.debt.hint': 'Заявка попадёт в раздел «Задолженность студентов» в Финансах',
     'app.field.pipeline': 'Воронка',
     'app.field.stage': 'Этап',
     'app.field.cabinet': 'Кабинет',
@@ -610,6 +632,16 @@ const DICT: Record<Lang, Record<string, string>> = {
     'penalty.reason.OTHER': 'Прочее',
 
     // ===== application stepper (short) =====
+    'app.short.NEW_LEAD': 'НОВЫЙ',
+    'app.short.IN_PROCESSING': 'В РАБОТЕ',
+    'app.short.ONLINE_CONSULTATION': 'ОНЛАЙН',
+    'app.short.OFFLINE_CONSULTATION': 'ОФФЛАЙН',
+    'app.short.THINKING': 'ДУМАЕТ',
+    'app.short.OUT_OF_TOWN': 'ВНЕ ГОРОДА',
+    'app.short.UNDER_17': 'ДО 17',
+    'app.short.POTENTIAL_LEAD': 'ПОТЕНЦИАЛ',
+    'app.short.LOW_QUALITY_LEAD': 'НЕКАЧЕСТВ.',
+    'app.short.SUCCESSFUL_LEAD': 'УСПЕШНЫЙ',
     'app.short.NEW': 'НОВАЯ',
     'app.short.DOCS_REVIEW': 'ПРОВЕРКА',
     'app.short.DOCS_SUBMITTED': 'ПОДАЧА',
@@ -990,6 +1022,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     'finance.byProduct': 'Доход по продуктам',
     'finance.paymentRequests': 'Заявки на оплату',
     'finance.outstanding': 'Задолженность студентов',
+    // Пустой и ошибочный ответ раздела дебиторки проговариваем словами.
+    // Молча спрятанный блок неотличим от «запрос сломался» — а это ровно то,
+    // что произошло, когда признак долга переехал со статуса на флаг.
+    'finance.outstanding.empty': 'Должников нет — ни за одной заявкой не отмечена задолженность.',
+    'finance.outstanding.error': 'Не удалось загрузить список должников. Обновите страницу.',
     'finance.recordPayment': 'Записать оплату',
     'finance.ledger': 'Журнал транзакций',
     'finance.newTransaction': 'Новая транзакция',
@@ -1572,6 +1609,17 @@ const DICT: Record<Lang, Record<string, string>> = {
     'country.GERMANY': 'Олмон',
 
     // ===== application status =====
+    'app.status.NEW_LEAD': 'Лидҳои нав',
+    'app.status.IN_PROCESSING': 'Дар коркард',
+    'app.status.ONLINE_CONSULTATION': 'Машварати онлайн',
+    'app.status.OFFLINE_CONSULTATION': 'Машварати офлайн',
+    'app.status.THINKING': 'Фикр дорад',
+    'app.status.OUT_OF_TOWN': 'Берун аз шаҳр',
+    'app.status.UNDER_17': 'Аз 17 сола поён',
+    'app.status.POTENTIAL_LEAD': 'Лидҳои эҳтимолӣ',
+    'app.status.LOW_QUALITY_LEAD': 'Лиди нолозим',
+    'app.status.SUCCESSFUL_LEAD': 'Лидҳои муваффақ',
+    // legacy
     'app.status.NEW': 'Аризаи нав',
     'app.status.DOCS_REVIEW': 'Ҳуҷҷатҳо дар санҷиш',
     'app.status.DOCS_SUBMITTED': 'Супоридани ҳуҷҷатҳо',
@@ -1580,6 +1628,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'app.status.ENROLLED': 'Қабул шуд',
     'app.status.IN_PROGRESS': 'Ҳуҷҷатҳо дар санҷиш',
     'app.status.COMPLETED': 'Қабул шуд',
+    // Оё муштарӣ дар бораи ин ҳолат хабар мегирад (ниг. ApplicationStatusSelect).
+    'app.status.smsSent': 'Муштарӣ дар бораи ин ҳолат SMS мегирад.',
+    'app.status.smsSilent': 'Ҳолати дохилӣ — ба муштарӣ SMS фиристода намешавад.',
     'app.title': 'Аризаҳои муштариён',
     'app.new': 'Аризаи нав',
     'app.empty': 'Ҳоло ариза нест',
@@ -1604,6 +1655,12 @@ const DICT: Record<Lang, Record<string, string>> = {
     'app.field.preferredChannel': 'Канали алоқа',
     'app.field.comment': 'Шарҳ',
     'app.field.status': 'Ҳолат',
+    // Қарз — аломати алоҳидаи ариза (paymentPending), на ҳолат.
+    'app.field.debt': 'Қарздорӣ',
+    'app.debt.pending': 'Интизори пардохт',
+    'app.debt.none': 'Қарз надорад',
+    'app.debt.toggle': 'Қарз дорад',
+    'app.debt.hint': 'Ариза ба бахши «Қарзи донишҷӯён» дар Молия дохил мешавад',
     'app.field.pipeline': 'Канал',
     'app.field.stage': 'Марҳила',
     'app.field.cabinet': 'Кабинет',
@@ -2015,6 +2072,16 @@ const DICT: Record<Lang, Record<string, string>> = {
     'penalty.reason.OTHER': 'Дигар',
 
     // ===== application stepper (short) =====
+    'app.short.NEW_LEAD': 'НАВ',
+    'app.short.IN_PROCESSING': 'ДАР КОР',
+    'app.short.ONLINE_CONSULTATION': 'ОНЛАЙН',
+    'app.short.OFFLINE_CONSULTATION': 'ОФЛАЙН',
+    'app.short.THINKING': 'ФИКР',
+    'app.short.OUT_OF_TOWN': 'БЕРУН',
+    'app.short.UNDER_17': 'ТО 17',
+    'app.short.POTENTIAL_LEAD': 'ЭҲТИМОЛӢ',
+    'app.short.LOW_QUALITY_LEAD': 'НОЛОЗИМ',
+    'app.short.SUCCESSFUL_LEAD': 'МУВАФФАҚ',
     'app.short.NEW': 'НАВ',
     'app.short.DOCS_REVIEW': 'САНҶИШ',
     'app.short.DOCS_SUBMITTED': 'СУПОРИШ',
@@ -2393,6 +2460,8 @@ const DICT: Record<Lang, Record<string, string>> = {
     'finance.byProduct': 'Даромад аз рӯи маҳсулот',
     'finance.paymentRequests': 'Дархостҳои пардохт',
     'finance.outstanding': 'Қарзи донишҷӯён',
+    'finance.outstanding.empty': 'Қарздор нест — дар ҳеҷ ариза қарздорӣ қайд нашудааст.',
+    'finance.outstanding.error': 'Рӯйхати қарздоронро бор кардан нашуд. Саҳифаро нав кунед.',
     'finance.recordPayment': 'Сабти пардохт',
     'finance.ledger': 'Журнали амалиётҳо',
     'finance.newTransaction': 'Амалиёти нав',

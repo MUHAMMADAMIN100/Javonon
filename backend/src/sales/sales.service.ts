@@ -2,12 +2,14 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isElevated } from '../auth/role-utils';
+import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 
 /**
  * SalesService — авто-распределение лидов и управление воронками.
  *
  * Авто-распределение: round-robin среди SALES_MANAGER. Метрика «наименее
- * загружен» — текущее число активных заявок (не ENROLLED/COMPLETED).
+ * загружен» — текущее число активных заявок (не доведённых до результата,
+ * см. FINISHED_APPLICATION_STATUSES в common/application-status).
  * Это можно потом усложнить (учитывать выходные, отпуска), сейчас
  * простой и предсказуемый алгоритм.
  */
@@ -101,7 +103,12 @@ export class SalesService {
         load: await this.prisma.application.count({
           where: {
             managerId: m.id,
-            status: { notIn: ['ENROLLED', 'COMPLETED'] },
+            // notIn по всей группе «доведено до результата»: если бы здесь
+            // остался только новый SUCCESSFUL_LEAD, то на неперенесённых
+            // строках (перенос опт-ин, см. MIGRATE_LEAD_STATUSES) все старые
+            // ENROLLED-заявки снова считались бы активными и нагрузка
+            // менеджеров скакнула бы, перекосив round-robin.
+            status: { notIn: FINISHED_APPLICATION_STATUSES },
           },
         }),
       })),

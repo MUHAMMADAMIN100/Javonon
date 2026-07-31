@@ -1,7 +1,25 @@
+/**
+ * Базовый сидер: учётки FOUNDER/ADMIN + (опционально) демо-заявки.
+ *
+ * Учётки сидятся ВСЕГДА — это upsert по email, он идемпотентен и нужен,
+ * чтобы на новом окружении было кем залогиниться.
+ *
+ * Демо-заявки — за флагом SEED_DEMO_APPLICATIONS=1. Почему за флагом:
+ * `start:prod` дёргает этот скрипт на КАЖДОМ старте прода, а единственной
+ * защитой был `findFirst({ phone })`. Стоило удалить/отредактировать демо-строки
+ * (или поднять чистое окружение) — и прод снова получал три фейковых лида
+ * в общий список заявок. Прод демо-данные получать не должен.
+ */
 import { PrismaClient, Role, Direction, ApplicationStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+
+/**
+ * Демо-заявки создаём только по явному запросу (локальная разработка,
+ * демо-стенд). `start:prod` этот флаг не выставляет — см. package.json.
+ */
+const SEED_DEMO_APPLICATIONS = process.env.SEED_DEMO_APPLICATIONS === '1';
 
 async function main() {
   console.log('🌱 Seeding database...');
@@ -40,7 +58,16 @@ async function main() {
     },
   });
 
-  // Несколько демо-заявок (международные направления)
+  // Несколько демо-заявок (международные направления).
+  //
+  // Статусы — ТОЛЬКО из актуального набора квалификации лида. Легаси-значения
+  // (NEW, IN_PROGRESS, DOCS_REVIEW, …) писать нельзя: этот скрипт в `start:prod`
+  // выполняется ПОСЛЕ prisma/migrate-lead-statuses.ts, то есть созданная здесь
+  // легаси-строка переносом уже не подхватится. И «на следующем деплое
+  // подхватится» тоже не сработает: перенос запускается только по явному
+  // MIGRATE_LEAD_STATUSES (см. src/common/application-status.ts), а после
+  // раскатки флаг снимают. Такая строка не показывается ни в одном фильтре CRM
+  // и держит ссылку на легаси-значение enum'а, блокируя его будущую уборку.
   const demoApps = [
     {
       fullName: 'Иванов Алексей Петрович',
@@ -48,17 +75,16 @@ async function main() {
       email: 'alex@example.com',
       direction: Direction.BACHELOR,
       comment: 'Интересует грант на бакалавриат в США.',
-      status: ApplicationStatus.NEW,
+      status: ApplicationStatus.NEW_LEAD,
     },
     {
       fullName: 'Каримова Малика',
       phone: '+992 901 222 333',
       direction: Direction.LANGUAGE,
       comment: 'Хочу пройти языковую программу в Германии.',
-      // Раньше было ApplicationStatus.IN_PROGRESS — legacy enum, который
-      // фронт уже не отображает (STATUS_LABEL/BADGE не содержат его).
-      // Новый эквивалент — DOCS_REVIEW.
-      status: ApplicationStatus.DOCS_REVIEW,
+      // Исторически здесь были IN_PROGRESS, затем DOCS_REVIEW — оба легаси.
+      // Актуальный эквивалент по маппингу migrate-lead-statuses.ts — IN_PROCESSING.
+      status: ApplicationStatus.IN_PROCESSING,
     },
     {
       fullName: 'Раджабов Фаррух',
@@ -66,15 +92,20 @@ async function main() {
       email: 'farr@example.com',
       direction: Direction.MASTER,
       comment: 'Магистратура в Южной Корее, IT-направление.',
-      status: ApplicationStatus.NEW,
+      status: ApplicationStatus.NEW_LEAD,
     },
   ];
 
-  for (const a of demoApps) {
-    const exists = await prisma.application.findFirst({ where: { phone: a.phone } });
-    if (!exists) {
-      await prisma.application.create({ data: a });
+  if (SEED_DEMO_APPLICATIONS) {
+    for (const a of demoApps) {
+      const exists = await prisma.application.findFirst({ where: { phone: a.phone } });
+      if (!exists) {
+        await prisma.application.create({ data: a });
+      }
     }
+    console.log(`   Демо-заявки: ${demoApps.length} шт. (SEED_DEMO_APPLICATIONS=1)`);
+  } else {
+    console.log('   Демо-заявки пропущены (задай SEED_DEMO_APPLICATIONS=1, чтобы создать).');
   }
 
   console.log('✅ Seed complete.');

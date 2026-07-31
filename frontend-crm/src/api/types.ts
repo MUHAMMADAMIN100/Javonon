@@ -62,14 +62,50 @@ export const COUNTRY_LABEL: Record<Country, string> = {
   GERMANY: 'Германия',
 };
 
+/**
+ * Статус заявки. Соответствует Prisma enum ApplicationStatus.
+ *
+ * Актуальные значения — 10 исходов квалификации лида (см. APPLICATION_STATUSES).
+ * Это НЕ воронка: «Вне города» и «До 17 лет» — не этапы, а причины отказа,
+ * поэтому статус меняется выпадающим списком, а не кнопками «вперёд/назад».
+ *
+ * LEGACY-значения ниже удалять из типа НЕЛЬЗЯ: enum в Postgres additive-only
+ * (старые строки на них ссылаются), а перенос строк на новые значения —
+ * ЯВНО ОПТ-ИН на бэкенде (MIGRATE_LEAD_STATUSES, см.
+ * backend/src/common/application-status.ts и DEPLOY.md). Пока его не прогнали
+ * — а это может быть сколь угодно долго, — API реально отдаёт старые значения,
+ * и тип обязан это описывать.
+ *
+ * ⚠️ Раньше здесь было написано, что «миграция rows идёт скриптом уже после
+ * деплоя». Это неверно и в другую сторону опасно: в `start:prod` перенос
+ * стоит в цепочке `&&` ПЕРЕД `node dist/main`, то есть отрабатывает, пока
+ * трафик держит предыдущий контейнер. Именно поэтому его и сделали опт-ин.
+ * Не используй старую формулировку как основание «легаси уже мигрировали,
+ * хвосты можно удалять» — проверяй по БД.
+ *
+ * Из UI-списков легаси исключены (APPLICATION_STATUSES), но метку и badge для
+ * них держим — иначе старая заявка отрисуется пустым бейджем с сырым ключом
+ * enum.
+ */
 export type ApplicationStatus =
+  // ===== актуальные =====
+  | 'NEW_LEAD'
+  | 'IN_PROCESSING'
+  | 'ONLINE_CONSULTATION'
+  | 'OFFLINE_CONSULTATION'
+  | 'THINKING'
+  | 'OUT_OF_TOWN'
+  | 'UNDER_17'
+  | 'POTENTIAL_LEAD'
+  | 'LOW_QUALITY_LEAD'
+  | 'SUCCESSFUL_LEAD'
+  // ===== legacy (мигрируются скриптом migrate-lead-statuses.ts) =====
   | 'NEW'
   | 'DOCS_REVIEW'
   | 'DOCS_SUBMITTED'
   | 'PRE_ADMISSION'
   | 'AWAITING_PAYMENT'
   | 'ENROLLED'
-  // legacy (migrated automatically)
   | 'IN_PROGRESS'
   | 'COMPLETED';
 
@@ -131,25 +167,110 @@ export const SOURCE_BADGE: Record<ApplicationSource, string> = {
   OTHER: 'badge-gray',
 };
 
-export const APPLICATION_STAGES: ApplicationStatus[] = [
+/**
+ * Единственный список статусов, который предлагается пользователю —
+ * во всех дропдаунах (фильтры списков и редактор статуса в карточке).
+ * Порядок задан бизнесом и осмыслен: сверху свежие лиды, снизу исход.
+ *
+ * LEGACY сюда НЕ входят: выбрать старый статус заново нельзя, движение
+ * только в новую схему.
+ */
+export const APPLICATION_STATUSES: ApplicationStatus[] = [
+  'NEW_LEAD',
+  'IN_PROCESSING',
+  'ONLINE_CONSULTATION',
+  'OFFLINE_CONSULTATION',
+  'THINKING',
+  'OUT_OF_TOWN',
+  'UNDER_17',
+  'POTENTIAL_LEAD',
+  'LOW_QUALITY_LEAD',
+  'SUCCESSFUL_LEAD',
+];
+
+/** Старые значения enum — только для чтения уже существующих строк. */
+export const LEGACY_APPLICATION_STATUSES: ApplicationStatus[] = [
   'NEW',
   'DOCS_REVIEW',
   'DOCS_SUBMITTED',
   'PRE_ADMISSION',
   'AWAITING_PAYMENT',
   'ENROLLED',
+  'IN_PROGRESS',
+  'COMPLETED',
 ];
 
-export const STAGE_INDEX: Record<ApplicationStatus, number> = {
-  NEW: 0,
-  DOCS_REVIEW: 1,
-  IN_PROGRESS: 1, // legacy
-  DOCS_SUBMITTED: 2,
-  PRE_ADMISSION: 3,
-  AWAITING_PAYMENT: 4,
-  ENROLLED: 5,
-  COMPLETED: 5, // legacy
-};
+const LEGACY_SET = new Set<string>(LEGACY_APPLICATION_STATUSES);
+
+/** Заявка ещё не мигрирована на новую схему статусов? */
+export function isLegacyApplicationStatus(status: string | null | undefined): boolean {
+  return !!status && LEGACY_SET.has(status);
+}
+
+/**
+ * «Успешный» исход. Зеркалит FINISHED_APPLICATION_STATUSES на бэкенде
+ * (backend/src/common/application-status.ts): пока перенос строк не прогнали
+ * (он опт-ин, MIGRATE_LEAD_STATUSES), часть заявок носит ENROLLED/COMPLETED,
+ * поэтому любой подсчёт «успешных» обязан считать старое и новое как одно и
+ * то же.
+ */
+export const FINISHED_APPLICATION_STATUSES: ApplicationStatus[] = [
+  'SUCCESSFUL_LEAD',
+  'ENROLLED',
+  'COMPLETED',
+];
+
+const FINISHED_SET = new Set<string>(FINISHED_APPLICATION_STATUSES);
+
+export function isFinishedApplicationStatus(status: string | null | undefined): boolean {
+  return !!status && FINISHED_SET.has(status);
+}
+
+/**
+ * Статусы, о переходе в которые бэкенд шлёт клиенту SMS.
+ *
+ * Зеркалит CLIENT_SMS_STATUS_LABEL в backend/src/common/application-status.ts
+ * (там это подписи, где null = «клиенту не пишем»); при правке одного —
+ * правь второе. Остальные значения нового набора — внутренняя квалификация
+ * лида («Думает», «До 17 лет», «Некачественные лиды»), и отправлять её
+ * человеку нельзя.
+ *
+ * CRM использует список ровно для одного: честно показать менеджеру, уйдёт
+ * клиенту SMS от этой смены статуса или нет. Решает всё равно бэкенд —
+ * фронт ничего не отправляет и отключить отправку не может.
+ */
+export const CLIENT_NOTIFIED_APPLICATION_STATUSES: ApplicationStatus[] = [
+  'NEW_LEAD',
+  'IN_PROCESSING',
+  'ONLINE_CONSULTATION',
+  'OFFLINE_CONSULTATION',
+  'SUCCESSFUL_LEAD',
+  // legacy — вся старая воронка состояла из этапов обработки и была клиентской
+  'NEW',
+  'IN_PROGRESS',
+  'DOCS_REVIEW',
+  'DOCS_SUBMITTED',
+  'PRE_ADMISSION',
+  'AWAITING_PAYMENT',
+  'COMPLETED',
+  'ENROLLED',
+];
+
+const CLIENT_NOTIFIED_SET = new Set<string>(CLIENT_NOTIFIED_APPLICATION_STATUSES);
+
+/** Узнает ли клиент о переходе заявки в этот статус? */
+export function isClientNotifiedApplicationStatus(status: string | null | undefined): boolean {
+  return !!status && CLIENT_NOTIFIED_SET.has(status);
+}
+
+/** Новый, ещё не взятый в работу лид (новое значение + его legacy-предок). */
+export const NEW_LEAD_APPLICATION_STATUSES: ApplicationStatus[] = ['NEW_LEAD', 'NEW'];
+
+const NEW_LEAD_SET = new Set<string>(NEW_LEAD_APPLICATION_STATUSES);
+
+export function isNewLeadApplicationStatus(status: string | null | undefined): boolean {
+  return !!status && NEW_LEAD_SET.has(status);
+}
 export type StudentStatus = 'ACTIVE' | 'PAUSED' | 'GRADUATED' | 'ARCHIVED';
 
 export interface User {
@@ -211,6 +332,20 @@ export interface Application {
   birthday?: string | null;
   comment: string | null;
   status: ApplicationStatus;
+  /**
+   * За заявкой числится долг («ждёт оплаты»).
+   *
+   * Раньше это выражалось статусом AWAITING_PAYMENT. В новом наборе (исходы
+   * квалификации лида) такого значения нет, а миграция схлопывает его в
+   * IN_PROCESSING — поэтому признак вынесен в отдельное поле. Именно по нему
+   * строятся раздел «Задолженность студентов» на /finance и карточка
+   * «Студентов с задолженностью» на дашборде.
+   *
+   * Опционально: ответы API, отданные до появления колонки (и мок-данные)
+   * поля не содержат — `undefined` трактуем как «долга нет», как и
+   * `@default(false)` в схеме.
+   */
+  paymentPending?: boolean;
   source: ApplicationSource;
   studentId: string | null;
   student?: Student | null;
@@ -368,7 +503,23 @@ export const DIRECTION_LABEL: Record<Direction, string> = {
   COLLEGE: 'Колледж',
 };
 
+/**
+ * RU-фоллбэк для меток статуса. Основной источник — i18n
+ * (`app.status.*`, см. useApplicationStatusLabel): здесь остаётся то, что
+ * нужно вне React-дерева и как страховка от отсутствующего ключа.
+ */
 export const STATUS_LABEL: Record<ApplicationStatus, string> = {
+  NEW_LEAD: 'Новые лиды',
+  IN_PROCESSING: 'В обработке',
+  ONLINE_CONSULTATION: 'Онлайн консультации',
+  OFFLINE_CONSULTATION: 'Оффлайн консультации',
+  THINKING: 'Думает',
+  OUT_OF_TOWN: 'Вне города',
+  UNDER_17: 'До 17 лет',
+  POTENTIAL_LEAD: 'Потенциальные лиды',
+  LOW_QUALITY_LEAD: 'Некачественные лиды',
+  SUCCESSFUL_LEAD: 'Успешные лиды',
+  // legacy
   NEW: 'Новая заявка',
   DOCS_REVIEW: 'Документы на проверке',
   DOCS_SUBMITTED: 'Подача документов',
@@ -380,6 +531,17 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = {
 };
 
 export const STATUS_SHORT: Record<ApplicationStatus, string> = {
+  NEW_LEAD: 'Новый',
+  IN_PROCESSING: 'В работе',
+  ONLINE_CONSULTATION: 'Онлайн',
+  OFFLINE_CONSULTATION: 'Оффлайн',
+  THINKING: 'Думает',
+  OUT_OF_TOWN: 'Вне города',
+  UNDER_17: 'До 17',
+  POTENTIAL_LEAD: 'Потенциальный',
+  LOW_QUALITY_LEAD: 'Некачественный',
+  SUCCESSFUL_LEAD: 'Успешный',
+  // legacy
   NEW: 'Новая',
   DOCS_REVIEW: 'Проверка',
   DOCS_SUBMITTED: 'Подача',
@@ -397,7 +559,23 @@ export const STUDENT_STATUS_LABEL: Record<StudentStatus, string> = {
   ARCHIVED: 'В архиве',
 };
 
+/**
+ * Цвет бейджа. Логика: синий — лид только пришёл, жёлтый — с ним идёт
+ * работа, серый — отложен по внешней причине, красный — отказ,
+ * зелёный — успех.
+ */
 export const STATUS_BADGE: Record<ApplicationStatus, string> = {
+  NEW_LEAD: 'badge-info',
+  IN_PROCESSING: 'badge-warning',
+  ONLINE_CONSULTATION: 'badge-warning',
+  OFFLINE_CONSULTATION: 'badge-warning',
+  THINKING: 'badge-warning',
+  OUT_OF_TOWN: 'badge-gray',
+  UNDER_17: 'badge-gray',
+  POTENTIAL_LEAD: 'badge-info',
+  LOW_QUALITY_LEAD: 'badge-danger',
+  SUCCESSFUL_LEAD: 'badge-success',
+  // legacy — старые строки должны рисоваться бейджем, а не голым текстом
   NEW: 'badge-info',
   DOCS_REVIEW: 'badge-warning',
   DOCS_SUBMITTED: 'badge-warning',

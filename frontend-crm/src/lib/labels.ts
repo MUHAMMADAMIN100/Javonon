@@ -1,4 +1,5 @@
 import { useT } from './i18n';
+import { STATUS_LABEL } from '../api/types';
 
 /**
  * Helpers для перевода динамических enum-меток (ROLE_LABEL,
@@ -46,13 +47,24 @@ export function useCountryLabel(): (country: string | null | undefined) => strin
   };
 }
 
+/**
+ * Метка статуса заявки. Резолвит и 10 актуальных статусов, и legacy-значения:
+ * пока перенос строк не прогнали, API реально отдаёт ENROLLED/DOCS_REVIEW
+ * и т.д., и показать менеджеру сырой ключ enum — хуже, чем показать русскую
+ * метку в TJ-локали. Поэтому порядок: i18n → RU-фоллбэк STATUS_LABEL → ключ.
+ *
+ * Перенос строк на бэкенде — ЯВНО ОПТ-ИН (MIGRATE_LEAD_STATUSES, см.
+ * backend/src/common/application-status.ts), то есть «пока» тут может длиться
+ * сколько угодно; это не временный костыль на пару минут деплоя.
+ */
 export function useApplicationStatusLabel(): (status: string | null | undefined) => string {
   const { t } = useT();
   return (s) => {
     if (!s) return '—';
     const key = `app.status.${s}`;
     const val = t(key);
-    return val === key ? String(s) : val;
+    if (val !== key) return val;
+    return STATUS_LABEL[s as keyof typeof STATUS_LABEL] ?? String(s);
   };
 }
 

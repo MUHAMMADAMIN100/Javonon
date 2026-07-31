@@ -2047,10 +2047,36 @@ export class FinanceService {
       .map(([key, value]) => ({ key, ...value }));
   }
 
-  /** Студенты с задолженностью — из status AWAITING_PAYMENT. */
+  /**
+   * Студенты с задолженностью — по флагу Application.paymentPending.
+   *
+   * ПОЧЕМУ НЕ СТАТУС. Раньше здесь стояло `status: 'AWAITING_PAYMENT'`.
+   * В новом наборе статусов (исходы квалификации лида) «ожидает оплаты» нет
+   * вообще, а prisma/migrate-lead-statuses.ts схлопывает AWAITING_PAYMENT в
+   * IN_PROCESSING — то есть после первого же прогона миграции этот запрос
+   * навсегда возвращал бы пустой список. Причём молча: и карточка дашборда
+   * «Студентов с задолженностью», и раздел «Задолженность студентов» в
+   * Финансах рисуют пустоту, а не ошибку, так что «ноль должников» никто бы
+   * не оспорил. Подменить статус на IN_PROCESSING тоже нельзя — это объявило
+   * бы должниками всех, кто просто в работе.
+   *
+   * Поэтому признак долга живёт в durable-колонке paymentPending: миграция
+   * заполняет её из AWAITING_PAYMENT ДО перезаписи статусов, а менеджер
+   * ставит и снимает флаг в карточке заявки (PATCH /applications/:id),
+   * независимо от статуса квалификации.
+   *
+   * Легаси-статус остаётся во втором операнде OR ровно по той же причине, по
+   * которой легаси-хвосты есть в common/application-status.ts: `start:prod`
+   * поднимает новый билд, а миграционные скрипты доезжают уже после, и в этом
+   * окне должник ещё лежит с AWAITING_PAYMENT и paymentPending = false.
+   * Когда `SELECT DISTINCT status FROM "Application"` перестанет отдавать
+   * легаси-значения, этот операнд можно убрать вместе с остальными хвостами.
+   */
   async pendingPayments() {
     const apps = await this.prisma.application.findMany({
-      where: { status: 'AWAITING_PAYMENT' },
+      where: {
+        OR: [{ paymentPending: true }, { status: 'AWAITING_PAYMENT' }],
+      },
       include: {
         student: { select: { id: true, fullName: true, phones: true, email: true } },
         manager: { select: { id: true, fullName: true } },

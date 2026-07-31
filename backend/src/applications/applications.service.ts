@@ -15,6 +15,14 @@ import { ReferralsService } from '../partners/referrals.service';
 import { SalesService } from '../sales/sales.service';
 import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
 import { parseCalendarDateUtc, tjYMD } from '../common/tj-time';
+import {
+  ACTIVE_APPLICATION_STATUSES,
+  CLIENT_SMS_STATUS_LABEL,
+  NEW_LEAD_APPLICATION_STATUSES,
+  applicationStatusFilterValues,
+  isFinishedApplicationStatus,
+  isWritableApplicationStatus,
+} from '../common/application-status';
 
 // Направление, которое подставляется КАЖДОЙ заявке из create() (= каждой
 // заявке с лендинга: другого клиента у этого метода нет).
@@ -23,7 +31,7 @@ import { parseCalendarDateUtc, tjYMD } from '../common/tj-time';
 // осталась NOT NULL (её нельзя ослабить, не переписав ~30 файлов бэкенда
 // и ~10 страниц CRM), поэтому её надо чем-то заполнить. Настоящее направление
 // менеджер выставляет позже в карточке студента — плейсхолдер копируется туда
-// при переводе заявки NEW → DOCS_REVIEW (см. update() ниже).
+// при переводе заявки NEW_LEAD → IN_PROCESSING (см. update() ниже).
 //
 // ВАЖНО: каждая строка, куда попал этот плейсхолдер, помечается
 // directionConfirmed=false. Без этой пометки плейсхолдер неотличим от
@@ -78,27 +86,83 @@ export class ApplicationsService {
     @Optional() private sales?: SalesService,
   ) {}
 
-  // Порядок этапов воронки — для определения, "понизили" или "продвинули" заявку
-  private static STAGE_ORDER: ApplicationStatus[] = [
-    'NEW',
-    'DOCS_REVIEW',
-    'DOCS_SUBMITTED',
-    'PRE_ADMISSION',
-    'AWAITING_PAYMENT',
-    'ENROLLED',
-  ];
+  // Порядок статусов — для определения, "понизили" или "продвинули" заявку.
+  // Раньше это был порядок ЭТАПОВ старой воронки (NEW → DOCS_REVIEW → … →
+  // ENROLLED). Теперь это порядок пунктов нового набора квалификации
+  // (ACTIVE_APPLICATION_STATUSES). Строгой «лестницей» он больше не является —
+  // «Вне города» и «До 17 лет» это исходы, а не ступени, — но ранг здесь
+  // используется ровно для одного: выбрать формулировку SMS («возвращена
+  // с … на …» против «изменён … → …»). Поведение то же, что и было.
+  private static STAGE_ORDER: ApplicationStatus[] = ACTIVE_APPLICATION_STATUSES;
+
+  /**
+   * Ранг статуса в STAGE_ORDER. Легаси-значение отдаёт ранг своего нового
+   * эквивалента: prev вполне может прийти старым (перенос строк опт-ин, см.
+   * LEAD_STATUS_MIGRATION_ENV — пока его не прогнали, легаси-статусы лежат в
+   * БД), и без этой подстановки переход «ENROLLED → THINKING» не распознался
+   * бы как откат.
+   */
+  private static stageRank(status: ApplicationStatus): number {
+    const direct = ApplicationsService.STAGE_ORDER.indexOf(status);
+    if (direct >= 0) return direct;
+    const legacyEquivalent = ApplicationsService.LEGACY_STAGE_EQUIVALENT[status];
+    return legacyEquivalent
+      ? ApplicationsService.STAGE_ORDER.indexOf(legacyEquivalent)
+      : -1;
+  }
+
+  /** Легаси-статус → его новый эквивалент (тот же маппинг, что в миграции). */
+  private static LEGACY_STAGE_EQUIVALENT: Partial<Record<ApplicationStatus, ApplicationStatus>> = {
+    NEW: 'NEW_LEAD',
+    IN_PROGRESS: 'IN_PROCESSING',
+    DOCS_REVIEW: 'IN_PROCESSING',
+    DOCS_SUBMITTED: 'IN_PROCESSING',
+    PRE_ADMISSION: 'IN_PROCESSING',
+    AWAITING_PAYMENT: 'IN_PROCESSING',
+    COMPLETED: 'SUCCESSFUL_LEAD',
+    ENROLLED: 'SUCCESSFUL_LEAD',
+  };
 
   private isDowngrade(prev: ApplicationStatus, next: ApplicationStatus): boolean {
-    const a = ApplicationsService.STAGE_ORDER.indexOf(prev);
-    const b = ApplicationsService.STAGE_ORDER.indexOf(next);
+    const a = ApplicationsService.stageRank(prev);
+    const b = ApplicationsService.stageRank(next);
     return a >= 0 && b >= 0 && b < a;
   }
 
-  private smsTextForStatus(prev: ApplicationStatus, next: ApplicationStatus): string {
-    const labelNext = ApplicationsService.STATUS_LABEL[next] || next;
-    const labelPrev = ApplicationsService.STATUS_LABEL[prev] || prev;
-    if (next === 'ENROLLED') {
-      return `🎉 Javonon: Поздравляем! Вы зачислены. Подробности в личном кабинете.`;
+  /**
+   * Текст SMS клиенту при смене статуса — или null, если писать не о чем.
+   *
+   * Раньше метод возвращал строку всегда, потому что вся старая воронка
+   * состояла из этапов обработки: «Документы на проверке», «Ожидание оплаты»,
+   * «Зачислен» — каждый из них клиенту не стыдно назвать. Новый набор — это
+   * КВАЛИФИКАЦИЯ ЛИДА для отдела продаж, и половина его значений описывает
+   * не заявку, а мнение менеджера о человеке. Сохрани мы прежнее правило
+   * «SMS на любую смену статуса», клиент получил бы буквально
+   * «Javonon: Статус Вашей заявки изменён: «Думает» → «Некачественные лиды»».
+   *
+   * Поэтому источник подписей здесь — CLIENT_SMS_STATUS_LABEL (клиентский
+   * словарь), а НЕ STATUS_LABEL (внутренние названия колонок воронки, они
+   * для сотрудника). null в словаре = статус внутренний, и тогда:
+   *   • внутренний NEXT → молчим совсем (return null);
+   *   • внутренний PREV → шлём одностороннее «Статус Вашей заявки: «…»»,
+   *     потому что назвать клиенту, откуда его вернули, нельзя.
+   */
+  private smsTextForStatus(prev: ApplicationStatus, next: ApplicationStatus): string | null {
+    const labelNext = CLIENT_SMS_STATUS_LABEL[next];
+    if (!labelNext) return null;
+    // Успешный лид. Формулировка НЕ про зачисление в вуз: SUCCESSFUL_LEAD
+    // означает «лид доведён до результата» — заявка оформлена, человек стал
+    // клиентом, — и наступает он заметно раньше, чем наступал ENROLLED в
+    // старой воронке. Обещать здесь «Вы зачислены» значит врать клиенту.
+    // Проверка группой (isFinishedApplicationStatus), а не сравнением с
+    // одним значением — на случай, если легаси-эквивалент всё-таки доберётся
+    // сюда мимо isWritableApplicationStatus.
+    if (isFinishedApplicationStatus(next)) {
+      return `🎉 Javonon: Ваша заявка успешно оформлена! Менеджер свяжется с Вами по дальнейшим шагам. Подробности в личном кабинете.`;
+    }
+    const labelPrev = CLIENT_SMS_STATUS_LABEL[prev];
+    if (!labelPrev) {
+      return `Javonon: Статус Вашей заявки: «${labelNext}».`;
     }
     if (this.isDowngrade(prev, next)) {
       return `Javonon: Заявка возвращена с «${labelPrev}» на «${labelNext}». Свяжитесь с менеджером для уточнений.`;
@@ -120,7 +184,38 @@ export class ApplicationsService {
     return null;
   }
 
+  /**
+   * ВНУТРЕННИЕ подписи статусов — для СОТРУДНИКА, не для клиента.
+   *
+   * Это названия колонок воронки как их видит менеджер в CRM («Новые лиды»,
+   * «Некачественные лиды»). Единственный потребитель — текст ошибки про
+   * устаревший статус в update(): её читает тот, кто прислал PATCH, то есть
+   * сотрудник со старой вкладкой CRM.
+   *
+   * В SMS клиенту это НЕ идёт: там свой словарь CLIENT_SMS_STATUS_LABEL
+   * (common/application-status.ts), в котором внутренние оценки лида вообще
+   * не имеют подписи. Не подставлять сюда клиентские тексты и наоборот —
+   * половина этих строк для клиента оскорбительна, а половина клиентских
+   * («Принята») ничего не говорит менеджеру о колонке воронки.
+   *
+   * Легаси-значения оставлены НАМЕРЕННО: именно они и попадают в текст
+   * ошибки — старая вкладка присылает DOCS_REVIEW, и менеджер должен увидеть
+   * «Документы на проверке», а не сырой ключ enum'а. Record<ApplicationStatus,
+   * string> обязывает покрыть весь enum: забытая подпись — ошибка компиляции.
+   */
   private static STATUS_LABEL: Record<ApplicationStatus, string> = {
+    // Актуальный набор квалификации лида.
+    NEW_LEAD: 'Новые лиды',
+    IN_PROCESSING: 'В обработке',
+    ONLINE_CONSULTATION: 'Онлайн консультации',
+    OFFLINE_CONSULTATION: 'Оффлайн консультации',
+    THINKING: 'Думает',
+    OUT_OF_TOWN: 'Вне города',
+    UNDER_17: 'До 17 лет',
+    POTENTIAL_LEAD: 'Потенциальные лиды',
+    LOW_QUALITY_LEAD: 'Некачественные лиды',
+    SUCCESSFUL_LEAD: 'Успешные лиды',
+    // Легаси — только для чтения старых строк, в UI не предлагаются.
     NEW: 'Новая заявка',
     IN_PROGRESS: 'В работе',
     COMPLETED: 'Завершена',
@@ -218,6 +313,12 @@ export class ApplicationsService {
         // …и честно помечаем, что это плейсхолдер, а не ответ. Иначе он
         // попадёт в дашборд/фильтр как настоящее направление клиента.
         directionConfirmed: false,
+        // Статус пишем ЯВНО, хотя в схеме на колонке стоит @default(NEW).
+        // Дефолт остался легаси намеренно (enum правим только аддитивно, см.
+        // комментарий в schema.prisma), а новый лид обязан попадать сразу в
+        // актуальный набор — иначе каждая заявка с лендинга рождалась бы в
+        // статусе, которого нет ни в одном фильтре CRM.
+        status: 'NEW_LEAD',
         country: dto.country ?? null,
         birthday,
         comment: dto.comment?.trim() || null,
@@ -310,7 +411,15 @@ export class ApplicationsService {
   }) {
     const where: Prisma.ApplicationWhereInput = {};
     const and: Prisma.ApplicationWhereInput[] = [];
-    if (filters.status) where.status = filters.status;
+    // Фильтр по статусу разворачиваем в группу равнозначных значений: пока
+    // перенос строк не прогнали (он опт-ин, MIGRATE_LEAD_STATUSES — см.
+    // src/common/application-status.ts), часть строк носит легаси-статус, и
+    // выбор «Успешные лиды» показывал бы пустой список вместо зачисленных.
+    // Для статусов без легаси-хвоста applicationStatusFilterValues()
+    // возвращает одно значение — поведение ровно прежнее.
+    if (filters.status) {
+      where.status = { in: applicationStatusFilterValues(filters.status) };
+    }
     // Фильтр по направлению отдаёт только ПОДТВЕРЖДЁННЫЕ направления.
     // Без directionConfirmed выбор «Бакалавриат» возвращал бы вообще все
     // лиды с лендинга — у них там плейсхолдер DEFAULT_DIRECTION, а не выбор
@@ -394,6 +503,20 @@ export class ApplicationsService {
     const existing = await this.findOne(id);
     this.ensureCanEdit(existing, user);
 
+    // Второй рубеж к @IsIn в UpdateApplicationDto: писать легаси-статус нельзя
+    // никогда. DTO ловит это на HTTP-границе (ValidationPipe в main.ts), но
+    // проверка живёт и здесь — сервис не должен зависеть от того, каким путём
+    // до него дошли данные, а цена ошибки высокая: откат строки за уже
+    // отработавшую миграцию необратим (migrate-lead-statuses.ts запускается
+    // только по явному MIGRATE_LEAD_STATUSES, и после раскатки флаг снимают —
+    // никто эту строку заново не перенесёт) и сопровождается SMS клиенту
+    // «Заявка возвращена».
+    if (dto.status != null && !isWritableApplicationStatus(dto.status)) {
+      throw new BadRequestException(
+        `Статус «${ApplicationsService.STATUS_LABEL[dto.status] || dto.status}» устарел и доступен только для чтения. Обновите страницу CRM и выберите статус заново.`,
+      );
+    }
+
     // Направление, пришедшее из карточки заявки, — это уже решение живого
     // менеджера, а не плейсхолдер. Снимаем пометку, и заявка возвращается
     // в срез «по направлениям» на дашборде и в фильтр списка.
@@ -403,14 +526,19 @@ export class ApplicationsService {
     };
     // Направление, которое будет у заявки ПОСЛЕ этого PATCH. Студента ниже
     // заводим по нему, а не по existing.direction: менеджер обычно правит
-    // направление тем же запросом, которым двигает статус в DOCS_REVIEW,
+    // направление тем же запросом, которым двигает статус в IN_PROCESSING,
     // и иначе в карточку студента (и в номер кабинета) уехал бы плейсхолдер.
     const effectiveDirection = dto.direction ?? existing.direction;
 
-    // Авто-создание студента при переходе NEW → DOCS_REVIEW (если ещё не создан)
+    // Авто-создание студента при переходе «новый лид» → «в обработке»
+    // (если ещё не создан). Раньше триггером была пара NEW → DOCS_REVIEW;
+    // в новом наборе это NEW_LEAD → IN_PROCESSING. Прежний статус матчим
+    // через NEW_LEAD_APPLICATION_STATUSES, чтобы заявка, которая ещё лежит
+    // с легаси-NEW, тоже конвертировалась — иначе на неперенесённых строках
+    // (перенос опт-ин, MIGRATE_LEAD_STATUSES) студент бы молча не создавался.
     if (
-      dto.status === ApplicationStatus.DOCS_REVIEW &&
-      existing.status === ApplicationStatus.NEW &&
+      dto.status === ApplicationStatus.IN_PROCESSING &&
+      NEW_LEAD_APPLICATION_STATUSES.includes(existing.status) &&
       !existing.studentId
     ) {
       // Создаём студента только если email уникален (он обязателен для ЛК)
@@ -509,11 +637,16 @@ export class ApplicationsService {
       if (updated.studentId) {
         this.realtime.emitStudent(updated.studentId, 'student:updated', { studentId: updated.studentId });
       }
-      // SMS студенту: статус изменился на «Документы на проверке»
-      const text = this.smsTextForStatus(existing.status, ApplicationStatus.DOCS_REVIEW);
-      this.resolvePhone(updated).then((phone) => {
-        if (phone) this.sms.send(phone, text).catch(() => undefined);
-      }).catch(() => undefined);
+      // SMS студенту: статус изменился на «В обработке». Здесь next всегда
+      // IN_PROCESSING, то есть статус клиентский и текст будет непустым, но
+      // проверку держим общей — правило «шлём, только если есть что сказать»
+      // одно на оба места вызова.
+      const text = this.smsTextForStatus(existing.status, ApplicationStatus.IN_PROCESSING);
+      if (text) {
+        this.resolvePhone(updated).then((phone) => {
+          if (phone) this.sms.send(phone, text).catch(() => undefined);
+        }).catch(() => undefined);
+      }
 
       // ActivityLog
       this.activity
@@ -567,12 +700,18 @@ export class ApplicationsService {
       this.realtime.emitStudent(updated.studentId, 'application:updated', { application: updated });
     }
 
-    // SMS студенту при ЛЮБОЙ смене статуса (вперёд/назад/на ENROLLED)
+    // SMS клиенту — ТОЛЬКО по клиентским статусам. Переход во внутреннюю
+    // квалификацию («Думает», «До 17 лет», «Некачественные лиды») меняет
+    // строку и пишется в ActivityLog ниже, но клиента не касается: SMS про
+    // него не уходит (smsTextForStatus вернёт null). ActivityLog при этом
+    // ведём по-прежнему на КАЖДУЮ смену — это внутренняя история заявки.
     if (dto.status && dto.status !== existing.status) {
       const text = this.smsTextForStatus(existing.status, dto.status);
-      this.resolvePhone(updated).then((phone) => {
-        if (phone) this.sms.send(phone, text).catch(() => undefined);
-      }).catch(() => undefined);
+      if (text) {
+        this.resolvePhone(updated).then((phone) => {
+          if (phone) this.sms.send(phone, text).catch(() => undefined);
+        }).catch(() => undefined);
+      }
     }
 
     // ActivityLog для смены статуса
@@ -586,6 +725,32 @@ export class ApplicationsService {
           studentId: updated.studentId,
           studentName: updated.fullName,
           details: `Статус: ${existing.status} → ${dto.status}`,
+        })
+        .catch(() => undefined);
+    }
+
+    // ActivityLog для признака долга. Раньше долг выражался статусом
+    // AWAITING_PAYMENT, и его снятие попадало в журнал само собой — веткой
+    // STATUS_CHANGE выше. Теперь это отдельная колонка (paymentPending), на
+    // которой целиком держится раздел «Задолженность студентов», поэтому
+    // логируем её отдельно: иначе «почему клиент исчез из должников»
+    // становится вопросом без ответа. Action — FINANCE_UPDATE, чтобы такие
+    // записи находились тем же фильтром /activity, что и правки транзакций.
+    if (
+      dto.paymentPending !== undefined &&
+      dto.paymentPending !== existing.paymentPending
+    ) {
+      this.activity
+        .log({
+          actorId: user.id,
+          actorName: '',
+          actorRole: user.role,
+          action: 'FINANCE_UPDATE',
+          studentId: updated.studentId,
+          studentName: updated.fullName,
+          details: dto.paymentPending
+            ? 'Задолженность: отмечена («ждёт оплаты»)'
+            : 'Задолженность: снята',
         })
         .catch(() => undefined);
     }

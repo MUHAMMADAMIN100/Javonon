@@ -104,8 +104,8 @@ export class StudentsService {
       include: STUDENT_INCLUDE,
     });
 
-    // Автосоздаём связанную заявку со статусом NEW, чтобы степпер этапов был
-    // доступен сразу. Это нужно для студентов, заведённых вручную через CRM.
+    // Автосоздаём связанную заявку со статусом NEW_LEAD, чтобы выбор статуса
+    // был доступен сразу. Это нужно для студентов, заведённых вручную через CRM.
     const application = await this.prisma.application.create({
       data: {
         fullName: student.fullName,
@@ -118,7 +118,7 @@ export class StudentsService {
         // заводить два расходящихся источника правды об одном и том же поле.
         directionConfirmed: student.directionConfirmed,
         comment: student.comment,
-        status: 'NEW',
+        status: 'NEW_LEAD',
         studentId: student.id,
       },
     });
@@ -139,7 +139,7 @@ export class StudentsService {
 
   /**
    * Гарантирует, что у студента есть хотя бы одна заявка. Если нет — создаёт
-   * новую со статусом NEW. Используется для студентов, заведённых вручную
+   * новую со статусом NEW_LEAD. Используется для студентов, заведённых вручную
    * до того, как авто-создание заявки появилось в коде.
    */
   async ensureApplication(id: string, user: CurrentUser) {
@@ -165,7 +165,7 @@ export class StudentsService {
         // в срез дашборда «по направлениям» как настоящий ответ клиента.
         directionConfirmed: student.directionConfirmed,
         comment: student.comment,
-        status: 'NEW',
+        status: 'NEW_LEAD',
         studentId: id,
       },
     });

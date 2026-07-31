@@ -1,42 +1,84 @@
 import { motion } from 'framer-motion';
 import Icon from '../Icon';
+import { STUDENT_STAGES, resolveStudentStage } from '../applicationStage';
 
-const STAGES: { key: string; label: string; short: string }[] = [
-  { key: 'NEW', label: 'Аризаи нав', short: 'Ариза' },
-  { key: 'DOCS_REVIEW', label: 'Ҳуҷҷатҳо дар санҷиш', short: 'Санҷиш' },
-  { key: 'DOCS_SUBMITTED', label: 'Супоридани ҳуҷҷатҳо', short: 'Супоридан' },
-  { key: 'PRE_ADMISSION', label: 'Қабули пешакӣ', short: 'Қабули пешакӣ' },
-  { key: 'AWAITING_PAYMENT', label: 'Интизори пардохт', short: 'Пардохт' },
-  { key: 'ENROLLED', label: 'Қабул шуд', short: 'Қабул шуд' },
-];
-
-// Маппинг старых значений на новые
-const LEGACY: Record<string, string> = {
-  IN_PROGRESS: 'DOCS_REVIEW',
-  COMPLETED: 'ENROLLED',
-};
+/**
+ * Шкала «где моя заявка» в кабинете студента.
+ *
+ * Что статус означает для студента, решает ../applicationStage.ts — здесь
+ * только отрисовка. Разделение не косметическое: прежняя версия держала
+ * лестницу из шести этапов старой воронки прямо в компоненте и добивала
+ * промах `findIndex` через `Math.max(0, -1)`. После
+ * backend/prisma/migrate-lead-statuses.ts API отдаёт NEW_LEAD…SUCCESSFUL_LEAD,
+ * в лестницу не попадало ни одно из них, и КАЖДЫЙ студент — включая
+ * зачисленных — видел «Аризаи нав, 0%». Без ошибки и без следа в CRM.
+ *
+ * Отсюда правило: индекс шага берётся только из resolveStudentStage. Ступеней
+ * три, потому что новые статусы — исходы квалификации, а не лестница
+ * (см. разбор в applicationStage.ts). Состояния «не знаем такой статус» и
+ * «внутренняя оценка лида» рисуются карточкой без шкалы и без процента.
+ * Фолбэка «ну пусть будет первый шаг» здесь нет намеренно — он и был багом.
+ */
 
 type Props = {
   currentStatus?: string | null;
 };
 
+/** Куда отправлять студента за подробностями, если шкалу показать нельзя. */
+const ASK_MANAGER = 'Барои маълумоти дақиқ бо менеҷери худ дар тамос шавед.';
+
+/**
+ * Карточка без шкалы: заявка есть, но ставить её на конкретную ступень мы
+ * не вправе. Процент не рисуем вообще — любое число тут было бы выдумкой.
+ */
+function EnrollmentNote({ title }: { title: string }) {
+  return (
+    <div className="ep-card">
+      <div className="ep-head">
+        <div>
+          <div className="ep-title">Марҳилаи қабул</div>
+          <div className="ep-current">{title}</div>
+          <div className="ep-hint">{ASK_MANAGER}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EnrollmentProgress({ currentStatus }: Props) {
-  const normalized = currentStatus ? LEGACY[currentStatus] || currentStatus : 'NEW';
-  const currentIdx = Math.max(0, STAGES.findIndex((s) => s.key === normalized));
-  const percent = Math.round((currentIdx / (STAGES.length - 1)) * 100);
+  const stage = resolveStudentStage(currentStatus);
+
+  // Заявки нет — прогрессу неоткуда взяться. Пустая карточка «Аризаи нав»
+  // сообщала бы студенту о заявке, которой не существует.
+  if (stage.kind === 'none') return null;
+
+  // OUT_OF_TOWN / UNDER_17 / LOW_QUALITY_LEAD — оценка лида для менеджера.
+  // Показывать её студенту нельзя, изображать движение по этапам — тоже.
+  if (stage.kind === 'internal') {
+    return <EnrollmentNote title="Ариза сабт шудааст" />;
+  }
+
+  // Схема ушла вперёд, а лендинг не обновили. Честнее сказать «не знаем»,
+  // чем нарисовать первый шаг: молчаливый индекс 0 никто не замечал годами.
+  if (stage.kind === 'unknown') {
+    return <EnrollmentNote title="Ҳолати ариза муайян нашуд" />;
+  }
+
+  const currentIdx = stage.index;
+  const percent = Math.round((currentIdx / (STUDENT_STAGES.length - 1)) * 100);
 
   return (
     <div className="ep-card">
       <div className="ep-head">
         <div>
           <div className="ep-title">Марҳилаи қабул</div>
-          <div className="ep-current">{STAGES[currentIdx].label}</div>
+          <div className="ep-current">{STUDENT_STAGES[currentIdx].label}</div>
         </div>
         <div className="ep-percent">{percent}%</div>
       </div>
 
       <div className="ep-track">
-        {STAGES.map((s, i) => {
+        {STUDENT_STAGES.map((s, i) => {
           const done = i < currentIdx;
           const current = i === currentIdx;
           return (
@@ -50,7 +92,7 @@ export default function EnrollmentProgress({ currentStatus }: Props) {
                 {done ? <Icon name="check" size={14} /> : <span>{i + 1}</span>}
               </motion.div>
               <div className="ep-label">{s.short}</div>
-              {i < STAGES.length - 1 && (
+              {i < STUDENT_STAGES.length - 1 && (
                 <div className="ep-connector">
                   <motion.div
                     className="ep-connector-fill"

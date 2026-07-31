@@ -1578,6 +1578,16 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   letter-spacing: -0.02em;
   color: var(--ink, #0f172a);
 }
+/* Подпись под состоянием — показывается, когда шкалы нет (статус внутренний
+   или незнакомый, см. EnrollmentProgress). Отправляет студента к менеджеру
+   вместо выдуманного процента. */
+.ep-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-soft, #64748b);
+  max-width: 46ch;
+}
 .ep-percent {
   font-family: var(--display, Georgia, serif);
   font-size: 56px;
@@ -2758,10 +2768,13 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
     justify-content: flex-start;
     gap: 4px;
   }
+  /* Шагов теперь три (исходы квалификации не раскладываются в лестницу,
+     см. applicationStage.ts), и они помещаются в экран без скролла —
+     поэтому растягиваем по ширине, а не прижимаем влево фикс-шириной. */
   .ep-step {
-    flex: 0 0 auto;
-    min-width: 72px;
-    max-width: 84px;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
   }
   .ep-label {
     white-space: normal;

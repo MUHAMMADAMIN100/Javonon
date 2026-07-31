@@ -1000,13 +1000,32 @@ export default function Finance() {
         </div>
       )}
 
-      {/* Pending payments */}
-      {pending.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <div className="crm-section-head">
-            <span className="crm-section-eyebrow" style={{ color: '#b45309' }}>{t('eyebrow.outstandingPayment')}</span>
-            <h2 className="crm-section-title">{t('finance.outstanding')}</h2>
-          </div>
+      {/*
+        Задолженность студентов.
+
+        Раздел рисуется ВСЕГДА, даже когда должников ноль. Раньше здесь стояло
+        `pending.length > 0 &&`, и пустой ответ прятал блок целиком — экран
+        выглядел так, будто раздела просто нет. Это опасно именно для
+        дебиторки: неотличимо «долгов действительно нет» от «запрос перестал
+        находить должников» (ровно так и случилось, когда признак долга
+        переехал со статуса AWAITING_PAYMENT на флаг paymentPending). Явное
+        «должников нет» — утверждение, которое бухгалтер может оспорить;
+        отсутствие блока оспорить нельзя.
+
+        Ошибку запроса тоже показываем текстом, а не пустой таблицей.
+      */}
+      <div style={{ marginBottom: 32 }}>
+        <div className="crm-section-head">
+          <span className="crm-section-eyebrow" style={{ color: '#b45309' }}>{t('eyebrow.outstandingPayment')}</span>
+          <h2 className="crm-section-title">{t('finance.outstanding')}</h2>
+        </div>
+        {pendingQuery.isError ? (
+          <div className="error-banner">{t('finance.outstanding.error')}</div>
+        ) : pendingQuery.isLoading ? (
+          <div className="card" style={{ color: 'var(--text-light)' }}>{t('common.loading')}</div>
+        ) : pending.length === 0 ? (
+          <div className="card" style={{ color: 'var(--text-light)' }}>{t('finance.outstanding.empty')}</div>
+        ) : (
           <div className="card" style={{ padding: 0 }}>
             <table className="table" style={{ width: '100%' }}>
               <thead>
@@ -1059,8 +1078,8 @@ export default function Finance() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Управление транзакциями */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>

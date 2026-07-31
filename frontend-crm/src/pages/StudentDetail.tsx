@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignStudentManager, deleteStudent, ensureStudentApplication, getStudent, regenerateStudentPassword, updateStudent, uploadPhoto } from '../api/students';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Direction, Student, StudentStatus } from '../api/types';
-import { DIRECTION_LABEL, ONBOARDING_STAGE_LABEL, STUDENT_STATUS_LABEL } from '../api/types';
+import { DIRECTION_LABEL, ONBOARDING_STAGE_LABEL, STUDENT_STATUS_LABEL, isFinishedApplicationStatus } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
@@ -16,7 +16,7 @@ import InteractionsLog from '../components/InteractionsLog';
 import StudentPaymentsSection from '../components/StudentPaymentsSection';
 import ManagerBar from '../components/ManagerBar';
 import ApplicationFormSection from '../components/ApplicationFormSection';
-import ApplicationStatusStepper from '../components/ApplicationStatusStepper';
+import ApplicationStatusSelect from '../components/ApplicationStatusSelect';
 import DirectionOptions from '../components/DirectionOptions';
 import BackButton from '../components/BackButton';
 import CrmDatePicker from '../components/CrmDatePicker';
@@ -24,7 +24,7 @@ import Icon from '../Icon';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
-import { useDirectionLabel, useStudentStatusLabel, useOnboardingLabel, useChannelLabel, useCountryLabel } from '../lib/labels';
+import { useDirectionLabel, useStudentStatusLabel, useApplicationStatusLabel, useOnboardingLabel, useChannelLabel, useCountryLabel } from '../lib/labels';
 import { tjDateInput, tjFormatDate } from '../lib/tjTime';
 
 function CredRow({ label, value }: { label: string; value: string }) {
@@ -63,6 +63,10 @@ export default function StudentDetail() {
   const { t } = useT();
   const directionLabel = useDirectionLabel();
   const statusLabel = useStudentStatusLabel();
+  // Метка «успешного» исхода заявки. Раньше сюда передавали 'ENROLLED' в
+  // useStudentStatusLabel — ключа student.status.ENROLLED нет ни в одном
+  // словаре, и на плашке зачисления рендерился сырой enum.
+  const appStatusLabel = useApplicationStatusLabel();
   const onboardingLabel = useOnboardingLabel();
   const channelLabel = useChannelLabel();
   const countryLabel = useCountryLabel();
@@ -266,7 +270,9 @@ export default function StudentDetail() {
   const isMine = !assigned || student.managerId === me?.id || student.chinaManagerId === me?.id;
   const canEdit = isAdmin || isMine;
 
-  const isEnrolled = student.applications?.[0]?.status === 'ENROLLED';
+  // «Успех» — новое SUCCESSFUL_LEAD ИЛИ старые ENROLLED/COMPLETED: пока
+  // миграция строк не отработала, API отдаёт и то и другое.
+  const isEnrolled = isFinishedApplicationStatus(student.applications?.[0]?.status);
 
   return (
     <div>
@@ -276,9 +282,9 @@ export default function StudentDetail() {
         <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {student.fullName}
           {isEnrolled && (
-            <span className="enrolled-badge" title={statusLabel('ENROLLED' as any)}>
+            <span className="enrolled-badge" title={appStatusLabel('SUCCESSFUL_LEAD')}>
               <Icon name="verified" size={16} />
-              {statusLabel('ENROLLED' as any)}
+              {appStatusLabel('SUCCESSFUL_LEAD')}
             </span>
           )}
         </h2>
@@ -299,13 +305,15 @@ export default function StudentDetail() {
         />
 
         {student.applications && student.applications.length > 0 ? (
-          !isEnrolled && (
-            <ApplicationStatusStepper
-              application={student.applications[0]}
-              canEdit={canEdit}
-              onChanged={reload}
-            />
-          )
+          // Раньше редактор прятался у зачисленных: у степпера просто не было
+          // следующего шага. Теперь это дропдаун и «Успешные лиды» — обычный
+          // выбираемый статус, поэтому показываем всегда: иначе ошибочно
+          // проставленный успех откатить из карточки невозможно.
+          <ApplicationStatusSelect
+            application={student.applications[0]}
+            canEdit={canEdit}
+            onChanged={reload}
+          />
         ) : (
           canEdit && (
             <div className="app-stepper" style={{ textAlign: 'center' }}>
@@ -375,7 +383,7 @@ export default function StudentDetail() {
                 style={{ color: '#16a34a' }}
               >
                 <Icon name="verified" size={16} style={{ color: '#16a34a' }} />
-                <span style={{ color: '#16a34a' }}>{statusLabel('ENROLLED' as any)}</span>
+                <span style={{ color: '#16a34a' }}>{appStatusLabel('SUCCESSFUL_LEAD')}</span>
               </motion.div>
             )}
             {canEdit && (

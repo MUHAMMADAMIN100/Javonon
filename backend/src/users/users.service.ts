@@ -15,6 +15,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { isElevated, isFounder } from '../auth/role-utils';
 import { tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
 import { SettingsService } from '../settings/settings.service';
+import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 
 @Injectable()
 export class UsersService {
@@ -166,7 +167,11 @@ export class UsersService {
       this.prisma.application.count({
         where: {
           managerId: id,
-          status: 'ENROLLED',
+          // Закрытые за месяц заявки. Группа, а не один SUCCESSFUL_LEAD: пока
+          // перенос строк не прогнали (он опт-ин, см. MIGRATE_LEAD_STATUSES),
+          // строки ещё носят ENROLLED/COMPLETED, и KPI-план сотрудника
+          // показал бы ноль закрытых.
+          status: { in: FINISHED_APPLICATION_STATUSES },
           updatedAt: { gte: monthStart, lte: monthEnd },
         },
       }),

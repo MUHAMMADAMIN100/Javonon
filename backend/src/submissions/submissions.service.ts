@@ -838,7 +838,8 @@ export class SubmissionsService {
       }
 
       if (wonFirstApproval) {
-        // Application — всегда новая запись с status=ENROLLED.
+        // Application — всегда новая запись с status=SUCCESSFUL_LEAD
+        // (бывший ENROLLED): оплата подтверждена, лид доведён до результата.
         const stu = await tx.student.findUnique({
           where: { id: studentId },
           select: { fullName: true, phones: true },
@@ -851,7 +852,7 @@ export class SubmissionsService {
             phone,
             direction: program.direction,
             programId,
-            status: 'ENROLLED',
+            status: 'SUCCESSFUL_LEAD',
             managerId: submission.managerId,
           },
         });

@@ -83,15 +83,56 @@ enum Country {
   GERMANY
 }
 
+/// Статусы заявки. Значения разбиты на два блока: сначала легаси, затем
+/// актуальный набор. Порядок объяснён в конце комментария — он не косметика.
+///
+/// АКТУАЛЬНЫЙ НАБОР (NEW_LEAD … SUCCESSFUL_LEAD) — квалификация лида. Это то,
+/// что менеджер видит и выбирает в CRM, и то, что пишет весь новый код.
+/// Это НЕ воронка-лестница: «Вне города» и «До 17 лет» — исходы квалификации,
+/// а не этапы, поэтому UI перешёл с шагов «назад/вперёд» на плоский select.
+///
+/// ЛЕГАСИ (NEW … ENROLLED) — эти значения НЕЛЬЗЯ удалять или переименовывать:
+///   • в проде ~496 строк Application всё ещё ссылаются на них до того, как
+///     отработает prisma/migrate-lead-statuses.ts, а Postgres не умеет
+///     удалять значение enum'а, на которое есть ссылки;
+///   • `start:prod` выполняет `prisma db push` ДО миграционных скриптов и
+///     без `--accept-data-loss` — удаление значения уронило бы деплой.
+/// Ни одна поверхность UI их больше не предлагает: они остаются только для
+/// того, чтобы старые строки читались, и ради совместимости на время окна
+/// «деплой прошёл, миграция ещё не догнала» (см. FINISHED_APPLICATION_STATUSES
+/// в src/common/application-status.ts). Отдельной уборкой их можно будет
+/// выпилить, когда ни одна строка на них не ссылается.
+///
+/// ПОЧЕМУ ЛЕГАСИ ИДЁТ ПЕРВЫМ. Старый блок оставлен ровно таким, каким был, а
+/// новые значения ДОПИСАНЫ в конец: так diff схемы получается чисто
+/// аддитивным, и `prisma db push` выдаёт только
+/// `ALTER TYPE "ApplicationStatus" ADD VALUE ...`. Перестановка уже
+/// существующих значений заставила бы движок пересоздавать тип (drop → create),
+/// а это data-loss-операция, которая на деплое упадёт. Порядок пунктов в UI
+/// задаётся отдельным списком (ACTIVE_APPLICATION_STATUSES + фронтенд),
+/// а не порядком строк в этом enum.
 enum ApplicationStatus {
-  NEW
-  IN_PROGRESS // legacy → DOCS_REVIEW
-  COMPLETED // legacy → ENROLLED
-  DOCS_REVIEW
-  DOCS_SUBMITTED
-  PRE_ADMISSION
-  AWAITING_PAYMENT
-  ENROLLED
+  // --- Легаси: только для чтения старых строк, в UI не предлагается ---
+  NEW // legacy → NEW_LEAD
+  IN_PROGRESS // legacy → IN_PROCESSING
+  COMPLETED // legacy → SUCCESSFUL_LEAD
+  DOCS_REVIEW // legacy → IN_PROCESSING
+  DOCS_SUBMITTED // legacy → IN_PROCESSING
+  PRE_ADMISSION // legacy → IN_PROCESSING
+  AWAITING_PAYMENT // legacy → IN_PROCESSING
+  ENROLLED // legacy → SUCCESSFUL_LEAD
+
+  // --- Актуальный набор квалификации лида (UI-порядок 1..10) ---
+  NEW_LEAD // 1  Новые лиды
+  IN_PROCESSING // 2  В обработке
+  ONLINE_CONSULTATION // 3  Онлайн консультации
+  OFFLINE_CONSULTATION // 4  Оффлайн консультации
+  THINKING // 5  Думает
+  OUT_OF_TOWN // 6  Вне города
+  UNDER_17 // 7  До 17 лет
+  POTENTIAL_LEAD // 8  Потенциальные лиды
+  LOW_QUALITY_LEAD // 9  Некачественные лиды
+  SUCCESSFUL_LEAD // 10 Успешные лиды
 }
 
 enum StudentStatus {
@@ -388,6 +429,25 @@ model Application {
   comment               String?
   source                ApplicationSource @default(LANDING_FORM)
   status                ApplicationStatus @default(NEW)
+  // За заявкой числится долг («ждёт оплаты») — источник правды для
+  // раздела «Задолженность студентов» (GET /finance/pending-payments,
+  // карточка «Студентов с задолженностью» на дашборде).
+  //
+  // ПОЧЕМУ ОТДЕЛЬНАЯ КОЛОНКА, А НЕ СТАТУС. Долг раньше выражался статусом
+  // ApplicationStatus.AWAITING_PAYMENT. Новый набор статусов — это исходы
+  // квалификации лида, «ожидает оплаты» среди них нет, а
+  // prisma/migrate-lead-statuses.ts схлопывает AWAITING_PAYMENT в
+  // IN_PROCESSING вместе с остальной старой воронкой. Оставить чтение
+  // финансов на статусе значило бы после миграции навсегда получить пустой
+  // список должников — причём молча, «ноль долгов» вместо ошибки.
+  // Поэтому признак вынесен в durable-колонку: миграция его ЗАПОЛНЯЕТ
+  // (backfill из AWAITING_PAYMENT) ДО того, как перезапишет статусы, а
+  // менеджер продолжает ставить/снимать его руками в карточке заявки —
+  // независимо от того, на каком статусе квалификации сейчас лид.
+  //
+  // @default(false) — все строки, существовавшие до колонки, получают false,
+  // и настоящих должников среди них восстанавливает backfill миграции.
+  paymentPending        Boolean           @default(false)
   studentId             String?
   // student → SetNull-семантика по сути не задана, потому что removed применяется в коде вручную.
   student               Student?          @relation(fields: [studentId], references: [id])
@@ -415,6 +475,10 @@ model Application {
 
   @@index([status])
   @@index([direction])
+  // Финансы читают только должников (paymentPending = true) — их единицы
+  // на фоне всей таблицы, без индекса это seq scan на каждом открытии
+  // дашборда.
+  @@index([paymentPending])
   // CRM фильтрует список заявок по стране (тулбар «Кишвар»/«Страна»).
   @@index([country])
   @@index([managerId])
