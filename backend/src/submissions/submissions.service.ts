@@ -7,6 +7,7 @@ import {
   ReferralsService,
   isNonPaymentReason,
   type CommissionReversal,
+  type ReferralClientRef,
 } from '../partners/referrals.service';
 import { recordCommissionNonPayment } from '../partners/commission-audit';
 import {
@@ -441,6 +442,10 @@ export class SubmissionsService {
     managerId?: string;
     take?: number;
     firstApproved?: boolean;
+    /** Показать только сделки клиентов, закреплённых за этим партнёром. */
+    partnerId?: string;
+    /** Кто спрашивает — от этого зависит, приложим ли партнёрский блок. */
+    viewer?: { role?: string | null; roles?: string[] | null; hasCustomRole?: boolean } | null;
   } = {}) {
     const where: any = {};
     if (opts.status) where.status = opts.status;
@@ -451,7 +456,34 @@ export class SubmissionsService {
     if (opts.firstApproved) {
       where.firstApprovedAt = { not: null };
     }
-    return this.prisma.saleSubmission.findMany({
+
+    // Фильтр по партнёру. Клиент у сделки может лежать в трёх разных полях
+    // (студент, заявка, заявка-источник у сделки из вкладки «Новый»), поэтому
+    // сначала спрашиваем у партнёрского сервиса идентификаторы его клиентов,
+    // а потом ищем сделку по любому из полей.
+    if (opts.partnerId) {
+      if (!this.referrals) {
+        // Партнёрский модуль недоступен — молча вернуть ВСЕ сделки было бы
+        // хуже всего: пользователь выбрал партнёра и получил бы чужие сделки
+        // как «его». Отдаём пусто.
+        return [];
+      }
+      const { studentIds, applicationIds } = await this.referrals.getClientIdsForPartner(
+        opts.partnerId,
+      );
+      if (studentIds.length === 0 && applicationIds.length === 0) return [];
+      where.OR = [
+        ...(studentIds.length ? [{ studentId: { in: studentIds } }] : []),
+        ...(applicationIds.length
+          ? [
+              { applicationId: { in: applicationIds } },
+              { sourceApplicationId: { in: applicationIds } },
+            ]
+          : []),
+      ];
+    }
+
+    const rows = await this.prisma.saleSubmission.findMany({
       where,
       include: {
         program: { select: { id: true, name: true, university: true } },
@@ -462,6 +494,24 @@ export class SubmissionsService {
       orderBy: { createdAt: 'desc' },
       take: Math.min(opts.take || 200, 500),
     });
+
+    // Партнёрский блок в строках списка. Гейт тот же, что и в карточке, хотя
+    // сам эндпоинт уже закрыт @Roles(FOUNDER, ADMIN) — дублируем осознанно:
+    // если роли на эндпоинте когда-нибудь ослабят, партнёрские данные не
+    // утекут молча вместе с этим послаблением.
+    if (!this.referrals || !canSeePartnerAttribution(opts.viewer ?? null)) return rows;
+
+    const refs = new Map<string, ReferralClientRef>();
+    for (const r of rows) {
+      refs.set(r.id, {
+        studentId: r.studentId,
+        applicationId: r.applicationId,
+        applicationIds: [r.sourceApplicationId],
+      });
+    }
+    const views = await this.referrals.getPartnerAttributionViewsBatch(refs);
+
+    return rows.map((r) => ({ ...r, partnerAttribution: views.get(r.id) ?? null }));
   }
 
   /** FOUNDER: список платежей ожидающих одобрения. */

@@ -78,12 +78,13 @@ export class SubmissionsController {
   @Get()
   @Roles(Role.FOUNDER, Role.ADMIN)
   list(
-    @CurrentUser() _me: any,
+    @CurrentUser() me: any,
     @Query('status') status?: string,
     @Query('paymentStatus') paymentStatus?: string,
     @Query('managerId') managerId?: string,
     @Query('take') take?: string,
     @Query('firstApproved') firstApproved?: string,
+    @Query('partnerId') partnerId?: string,
   ) {
     // Доступ ограничен @Roles(FOUNDER, ADMIN) на уровне декоратора —
     // ACCOUNTANT/менеджеры до сюда не дойдут. Раньше здесь был fallback на
@@ -97,6 +98,9 @@ export class SubmissionsController {
       managerId: managerId || undefined,
       take: take ? parseInt(take, 10) : undefined,
       firstApproved: firstApproved === 'true' || firstApproved === '1' ? true : undefined,
+      partnerId: partnerId || undefined,
+      // Нужен, чтобы решить, прикладывать ли партнёрский блок к строкам.
+      viewer: me,
     });
   }
 

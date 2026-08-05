@@ -541,6 +541,218 @@ export class ReferralsService {
   }
 
   /**
+   * Пакетная версия getPartnerAttributionView для СПИСКОВ.
+   *
+   * Зачем отдельный метод. В списке сделок до 500 строк. Вызвать для каждой
+   * getPartnerAttributionView — это 500 последовательных пар запросов
+   * (атрибуция + заморозка комиссии), то есть список просто перестанет
+   * открываться. Здесь то же самое делается четырьмя запросами на всю
+   * страницу, независимо от числа строк.
+   *
+   * Результат обязан совпадать с карточкой строка в строку: и там и там
+   * показывается одна и та же сумма по одному и тому же клиенту, и
+   * расхождение читалось бы как ошибка в деньгах. Поэтому логика заморозки
+   * (после начисления берём сумму из Commission, а не текущую ставку
+   * партнёра) продублирована здесь один в один — см. подробное объяснение
+   * в getPartnerAttributionView.
+   *
+   * @param refs Ключ → идентификаторы клиента. Ключом удобно брать id строки
+   *             списка, чтобы вызывающий сразу разложил результат по строкам.
+   */
+  async getPartnerAttributionViewsBatch(
+    refs: Map<string, ReferralClientRef>,
+  ): Promise<Map<string, PartnerAttributionView>> {
+    const out = new Map<string, PartnerAttributionView>();
+    if (refs.size === 0) return out;
+
+    const studentIds = new Set<string>();
+    const applicationIds = new Set<string>();
+    const telegramUserIds = new Set<string>();
+
+    for (const ref of refs.values()) {
+      if (ref.studentId) studentIds.add(ref.studentId);
+      if (ref.applicationId) applicationIds.add(ref.applicationId);
+      for (const a of ref.applicationIds ?? []) if (a) applicationIds.add(a);
+      if (ref.telegramUserId) telegramUserIds.add(ref.telegramUserId);
+    }
+
+    // Заявки студентов. Атрибуция часто висит на ЗАЯВКЕ (её создаёт форма
+    // лендинга), а в строке списка есть только studentId — без этого шага
+    // такие клиенты выглядели бы «без партнёра». Одиночный метод делает то
+    // же самое через includeStudentApplications.
+    if (studentIds.size > 0) {
+      const apps = await this.prisma.application.findMany({
+        where: { studentId: { in: [...studentIds] } },
+        select: { id: true, studentId: true },
+      });
+      for (const a of apps) applicationIds.add(a.id);
+    }
+
+    const or: Prisma.ReferralAttributionWhereInput[] = [];
+    if (studentIds.size > 0) or.push({ studentId: { in: [...studentIds] } });
+    if (applicationIds.size > 0) or.push({ applicationId: { in: [...applicationIds] } });
+    if (telegramUserIds.size > 0) or.push({ telegramUserId: { in: [...telegramUserIds] } });
+    if (or.length === 0) return out;
+
+    const attributions = await this.prisma.referralAttribution.findMany({
+      where: { OR: or },
+      include: {
+        partner: {
+          select: {
+            id: true,
+            fullName: true,
+            referralCode: true,
+            commissionAmountCents: true,
+          },
+        },
+      },
+      // Старейшая привязка выигрывает: если клиент почему-то закреплён дважды,
+      // партнёром считается тот, кто привёл его первым. Тот же порядок, что и
+      // в одиночном поиске.
+      orderBy: { createdAt: 'asc' },
+    });
+    if (attributions.length === 0) return out;
+
+    // Замороженные суммы по уже начисленным — одним запросом на всю страницу.
+    const commissionIds = attributions
+      .map((a) => a.commissionId)
+      .filter((id): id is string => !!id);
+    const frozen = new Map<string, { amountCents: number; currency: string }>();
+    if (commissionIds.length > 0) {
+      const rows = await this.prisma.commission.findMany({
+        where: { id: { in: commissionIds } },
+        select: { id: true, amountCents: true, currency: true },
+      });
+      for (const r of rows) {
+        frozen.set(r.id, { amountCents: r.amountCents, currency: r.currency });
+      }
+    }
+
+    // Индексы для сопоставления строки списка с найденной привязкой.
+    const byStudent = new Map<string, (typeof attributions)[number]>();
+    const byApplication = new Map<string, (typeof attributions)[number]>();
+    const byTelegram = new Map<string, (typeof attributions)[number]>();
+    for (const a of attributions) {
+      if (!a.partner) continue;
+      // Не перезаписываем: массив отсортирован по возрастанию createdAt,
+      // поэтому первая запись — самая ранняя, она и остаётся.
+      if (a.studentId && !byStudent.has(a.studentId)) byStudent.set(a.studentId, a);
+      if (a.applicationId && !byApplication.has(a.applicationId)) {
+        byApplication.set(a.applicationId, a);
+      }
+      if (a.telegramUserId && !byTelegram.has(a.telegramUserId)) {
+        byTelegram.set(a.telegramUserId, a);
+      }
+    }
+
+    // Заявки студента нужны и на обратном ходе: привязка найдена по заявке,
+    // а в строке списка лежит студент.
+    let appsByStudent = new Map<string, string[]>();
+    if (studentIds.size > 0) {
+      const apps = await this.prisma.application.findMany({
+        where: { studentId: { in: [...studentIds] } },
+        select: { id: true, studentId: true },
+      });
+      appsByStudent = apps.reduce((acc, a) => {
+        if (!a.studentId) return acc;
+        const list = acc.get(a.studentId) ?? [];
+        list.push(a.id);
+        acc.set(a.studentId, list);
+        return acc;
+      }, new Map<string, string[]>());
+    }
+
+    for (const [key, ref] of refs.entries()) {
+      let attr = null as (typeof attributions)[number] | null;
+
+      if (ref.studentId) attr = byStudent.get(ref.studentId) ?? null;
+      if (!attr && ref.applicationId) attr = byApplication.get(ref.applicationId) ?? null;
+      if (!attr) {
+        for (const a of ref.applicationIds ?? []) {
+          if (!a) continue;
+          const hit = byApplication.get(a);
+          if (hit) {
+            attr = hit;
+            break;
+          }
+        }
+      }
+      if (!attr && ref.studentId) {
+        for (const appId of appsByStudent.get(ref.studentId) ?? []) {
+          const hit = byApplication.get(appId);
+          if (hit) {
+            attr = hit;
+            break;
+          }
+        }
+      }
+      if (!attr && ref.telegramUserId) attr = byTelegram.get(ref.telegramUserId) ?? null;
+      if (!attr || !attr.partner) continue;
+
+      const frozenRow = attr.commissionId ? frozen.get(attr.commissionId) : undefined;
+      out.set(key, {
+        partnerId: attr.partner.id,
+        fullName: attr.partner.fullName,
+        referralCode: attr.partner.referralCode,
+        referralUrl: buildReferralUrl(attr.partner.referralCode),
+        commissionAmountCents:
+          attr.commissionedAt && frozenRow
+            ? frozenRow.amountCents
+            : attr.partner.commissionAmountCents,
+        commissionCurrency: attr.commissionedAt && frozenRow ? frozenRow.currency : null,
+        commissionedAt: attr.commissionedAt ? attr.commissionedAt.toISOString() : null,
+        commissionId: attr.commissionId ?? null,
+      });
+    }
+
+    return out;
+  }
+
+  /**
+   * Идентификаторы клиентов, закреплённых за партнёром — для фильтра
+   * «показать только сделки этого партнёра».
+   *
+   * Возвращает сырые множества, а не готовый where: у сделки клиент может
+   * лежать в трёх разных полях (studentId / applicationId /
+   * sourceApplicationId), и как именно их сопоставлять — знает вызывающий.
+   */
+  async getClientIdsForPartner(
+    partnerId: string,
+  ): Promise<{ studentIds: string[]; applicationIds: string[] }> {
+    const rows = await this.prisma.referralAttribution.findMany({
+      where: { partnerId },
+      select: { studentId: true, applicationId: true },
+    });
+
+    const studentIds = new Set<string>();
+    const applicationIds = new Set<string>();
+    for (const r of rows) {
+      if (r.studentId) studentIds.add(r.studentId);
+      if (r.applicationId) applicationIds.add(r.applicationId);
+    }
+
+    // Клиент мог быть закреплён по ЗАЯВКЕ, а сделка ссылается на СТУДЕНТА
+    // (или наоборот) — достраиваем недостающую сторону, иначе фильтр
+    // потеряет часть сделок партнёра.
+    if (applicationIds.size > 0) {
+      const apps = await this.prisma.application.findMany({
+        where: { id: { in: [...applicationIds] }, studentId: { not: null } },
+        select: { studentId: true },
+      });
+      for (const a of apps) if (a.studentId) studentIds.add(a.studentId);
+    }
+    if (studentIds.size > 0) {
+      const apps = await this.prisma.application.findMany({
+        where: { studentId: { in: [...studentIds] } },
+        select: { id: true },
+      });
+      for (const a of apps) applicationIds.add(a.id);
+    }
+
+    return { studentIds: [...studentIds], applicationIds: [...applicationIds] };
+  }
+
+  /**
    * ЕДИНСТВЕННОЕ начисление комиссии в системе: партнёру платят ОДИН раз за
    * КЛИЕНТА, а не за платёж.
    *

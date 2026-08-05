@@ -172,6 +172,12 @@ export const listAllSubmissions = (params?: {
   managerId?: string;
   take?: number;
   firstApproved?: boolean;
+  /**
+   * Только сделки клиентов, закреплённых за этим партнёром. Совпадение ищется
+   * по студенту и по заявке (включая заявку-источник сделки из вкладки
+   * «Новый»), поэтому находятся и те сделки, где студент ещё не заведён.
+   */
+  partnerId?: string;
 }) => api.get<SaleSubmission[]>('/submissions', { params }).then((r) => r.data);
 
 export const listPendingPayments = () =>

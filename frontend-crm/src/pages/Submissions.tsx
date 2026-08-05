@@ -6,6 +6,7 @@ import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
 import { useRealtime } from '../realtime';
 import { useT } from '../lib/i18n';
+import { adminListPartners } from '../api/partners';
 import {
   listMySubmissions,
   listAllSubmissions,
@@ -117,29 +118,83 @@ function MySubmissions() {
   );
 }
 
+/**
+ * Выпадающий фильтр «партнёр». Нужен ровно для одной задачи: перед выплатой
+ * открыть список сделок конкретного партнёра и посчитать, сколько ему должны.
+ *
+ * Список партнёров тянем только когда фильтр вообще показывается — эндпоинт
+ * админский, и дёргать его на вкладках, где он не нужен, незачем.
+ */
+function PartnerFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { data: partners = [] } = useQuery({
+    queryKey: ['admin', 'partners'],
+    queryFn: () => adminListPartners(),
+  });
+  if (partners.length === 0) return null;
+  return (
+    <select
+      className="crm-select"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ maxWidth: 260 }}
+    >
+      <option value="">Все партнёры</option>
+      {partners.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.fullName} · {p.referralCode}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function AllSubmissions() {
-  const query = useQuery({ queryKey: ['submissions', 'all'], queryFn: () => listAllSubmissions({ take: 200 }) });
-  if (query.isLoading) return <Loading />;
+  const [partnerId, setPartnerId] = useState('');
+  const query = useQuery({
+    queryKey: ['submissions', 'all', partnerId],
+    queryFn: () => listAllSubmissions({ take: 200, partnerId: partnerId || undefined }),
+  });
   const items = query.data || [];
-  if (items.length === 0) return <Empty>Сделок пока нет.</Empty>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {items.map((s) => <SubmissionCard key={s.id} s={s} showManager />)}
+      <PartnerFilter value={partnerId} onChange={setPartnerId} />
+      {query.isLoading ? (
+        <Loading />
+      ) : items.length === 0 ? (
+        <Empty>{partnerId ? 'У этого партнёра сделок нет.' : 'Сделок пока нет.'}</Empty>
+      ) : (
+        items.map((s) => <SubmissionCard key={s.id} s={s} showManager />)
+      )}
     </div>
   );
 }
 
 function ApprovedSubmissions() {
+  const [partnerId, setPartnerId] = useState('');
   const query = useQuery({
-    queryKey: ['submissions', 'approved'],
-    queryFn: () => listAllSubmissions({ firstApproved: true, take: 200 }),
+    queryKey: ['submissions', 'approved', partnerId],
+    queryFn: () =>
+      listAllSubmissions({ firstApproved: true, take: 200, partnerId: partnerId || undefined }),
   });
-  if (query.isLoading) return <Loading />;
   const items = query.data || [];
-  if (items.length === 0) return <Empty>Одобренных сделок пока нет.</Empty>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {items.map((s) => <SubmissionCard key={s.id} s={s} showManager />)}
+      <PartnerFilter value={partnerId} onChange={setPartnerId} />
+      {query.isLoading ? (
+        <Loading />
+      ) : items.length === 0 ? (
+        <Empty>
+          {partnerId ? 'У этого партнёра одобренных сделок нет.' : 'Одобренных сделок пока нет.'}
+        </Empty>
+      ) : (
+        items.map((s) => <SubmissionCard key={s.id} s={s} showManager />)
+      )}
     </div>
   );
 }
@@ -180,6 +235,34 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
             {showManager && s.manager && (
               <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>
                 Менеджер: {s.manager.fullName}
+              </div>
+            )}
+            {/* Партнёр, приведший клиента. Приходит только руководству —
+                бэкенд не кладёт поле в ответ остальным ролям, поэтому здесь
+                достаточно проверки на наличие. Сделки без партнёра (таких
+                большинство — люди приходят сами) строку не показывают. */}
+            {s.partnerAttribution && (
+              <div
+                style={{
+                  fontSize: 11,
+                  marginTop: 4,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  background: 'rgba(139, 92, 246, 0.12)',
+                  color: '#7c3aed',
+                  fontWeight: 600,
+                }}
+              >
+                Партнёр: {s.partnerAttribution.fullName}
+                <span style={{ opacity: 0.7, fontWeight: 400 }}>
+                  · {s.partnerAttribution.referralCode}
+                </span>
+                {s.partnerAttribution.commissionedAt && (
+                  <span style={{ opacity: 0.7, fontWeight: 400 }}>· начислено</span>
+                )}
               </div>
             )}
           </div>
