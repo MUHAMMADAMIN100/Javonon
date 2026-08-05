@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  adminApproveCommission,
   adminCreatePartner,
   adminDeletePartner,
   adminListPartners,
@@ -20,6 +21,8 @@ import {
 import { useUI } from '../ui/Dialogs';
 import { buildReferralUrl } from '../lib/landingUrl';
 import { useT } from '../lib/i18n';
+import { hasRole } from '../lib/roles';
+import { useAuth } from '../store/auth';
 import Icon from '../Icon';
 import QrCode from '../components/QrCode';
 
@@ -686,11 +689,32 @@ function CommissionsList() {
   const { toast, confirm } = useUI();
   const { t } = useT();
   const [statusFilter, setStatusFilter] = useState<'' | 'PENDING' | 'APPROVED' | 'PAID' | 'REVERSED'>('');
+  // POST commissions/:id/approve is @Roles('FOUNDER','ADMIN') — the accountant
+  // executes payouts but does not authorise them. Mirror that here so the
+  // button is not offered to someone who would only get a 403.
+  const me = useAuth((s) => s.user);
+  const canApprove = hasRole(me, 'FOUNDER', 'ADMIN');
 
   const { data: commissions = [], isLoading } = useQuery({
     queryKey: ['admin', 'commissions', statusFilter],
     queryFn: () => adminListCommissions(statusFilter ? { status: statusFilter as any } : undefined),
   });
+
+  const approve = async (id: string) => {
+    const ok = await confirm({
+      title: t('partners.commission.approve.confirm'),
+      message: t('partners.commission.approve.hint'),
+      confirmText: t('partners.commission.approve'),
+    });
+    if (!ok) return;
+    try {
+      await adminApproveCommission(id);
+      qc.invalidateQueries({ queryKey: ['admin', 'commissions'] });
+      toast(t('toast.updated'), 'success');
+    } catch (e: any) {
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
+    }
+  };
 
   const markPaid = async (id: string) => {
     const ok = await confirm({
@@ -753,9 +777,32 @@ function CommissionsList() {
                       : `${c.percent}%`}
                   </td>
                   <td><b>{fmtMoneyCents(c.amountCents, c.currency)}</b></td>
-                  <td>{t(`partners.commission.status.${c.status}`)}</td>
                   <td>
-                    {c.status !== 'PAID' && (
+                    {t(`partners.commission.status.${c.status}`)}
+                    {/* A reversed row is the audit record of a cancelled deal:
+                        the money has already been taken back off the partner's
+                        balance. Spell that out — "Отменено" alone reads as
+                        "not paid yet". */}
+                    {c.status === 'REVERSED' && (
+                      <div style={{ color: 'var(--text-soft)', fontSize: 12, marginTop: 2 }}>
+                        {t('partners.commission.reversed.hint')}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    {/* REVERSED is terminal — both endpoints reject it, so no
+                        action buttons. PENDING must be approved before the
+                        partner can withdraw it. */}
+                    {c.status === 'PENDING' && canApprove && (
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        style={{ marginRight: 4 }}
+                        onClick={() => approve(c.id)}
+                      >
+                        {t('partners.commission.approve')}
+                      </button>
+                    )}
+                    {c.status !== 'PAID' && c.status !== 'REVERSED' && (
                       <button className="btn btn-sm btn-primary" onClick={() => markPaid(c.id)}>
                         {t('partners.commission.status.PAID')}
                       </button>

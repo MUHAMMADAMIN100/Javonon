@@ -8,7 +8,7 @@ import { TelegramService } from '../telegram/telegram.service';
 import { MailService } from '../mail/mail.service';
 import { SmsService } from '../sms/sms.service';
 import { ActivityService } from '../activity/activity.service';
-import { isElevated } from '../auth/role-utils';
+import { canSeePartnerAttribution, isElevated, UserWithRoles } from '../auth/role-utils';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
@@ -474,13 +474,33 @@ export class ApplicationsService {
     });
   }
 
-  async findOne(id: string) {
+  /**
+   * Карточка заявки.
+   *
+   * @param viewer — кто смотрит. Нужен ТОЛЬКО для блока «Партнёр»:
+   *   partnerAttribution попадает в ответ исключительно руководству
+   *   (канонический гейт canSeePartnerAttribution из auth/role-utils —
+   *   FOUNDER/ADMIN/ACCOUNTANT, но НЕ носитель активной кастомной роли
+   *   с базой-«подложкой»: ему нужен явный partners:read). Остальным поля
+   *   в ответе НЕТ вовсе — менеджер по продажам не должен знать ни имени
+   *   партнёра, ни суммы, ни самого факта партнёрского происхождения
+   *   клиента, а «скрыть в UI» он обошёл бы чтением сетевого ответа.
+   *   Внутренние вызовы (update и т.п.) viewer не передают.
+   */
+  async findOne(id: string, viewer?: UserWithRoles | null) {
     const app = await this.prisma.application.findUnique({
       where: { id },
       include: MANAGER_INCLUDE,
     });
     if (!app) throw new NotFoundException('Заявка не найдена');
-    return app;
+    if (!canSeePartnerAttribution(viewer)) return app;
+    const partnerAttribution = this.referrals
+      ? await this.referrals.getPartnerAttributionView({
+          applicationId: app.id,
+          studentId: app.studentId,
+        })
+      : null;
+    return { ...app, partnerAttribution };
   }
 
   private ensureCanEdit(
@@ -628,8 +648,9 @@ export class ApplicationsService {
             data: { studentId: updated.studentId },
           });
         } catch {
-          // Не валим смену статуса из-за партнёрской таблицы —
-          // resolvePartner всё равно умеет искать по applicationId.
+          // Не валим смену статуса из-за партнёрской таблицы — поиск
+          // атрибуции (ReferralsService.findAttribution) всё равно умеет
+          // искать по applicationId, в том числе по всем заявкам студента.
         }
       }
 

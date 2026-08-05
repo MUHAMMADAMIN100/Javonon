@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PenaltiesService } from '../penalties/penalties.service';
 import { SmsService } from '../sms/sms.service';
+import { CommissionOutboxService } from '../partners/commission-outbox.service';
 import { tjStartOfDay, tjStartOfNextDay, tjYMD } from '../common/tj-time';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 
@@ -18,7 +19,78 @@ export class CronService {
     private notifications: NotificationsService,
     private penalties: PenaltiesService,
     private sms: SmsService,
+    private commissionOutbox: CommissionOutboxService,
   ) {}
+
+  /**
+   * Каждые 5 минут — добираем партнёрские комиссии, которые не доехали.
+   *
+   * approvePayment коммитит одобрение платежа одной транзакцией, а начисляет
+   * партнёру — отдельной, уже после COMMIT'а (иначе сбой партнёрской части
+   * ронял бы работу бухгалтера). Смерть процесса между этими двумя
+   * транзакциями раньше теряла комиссию НАВСЕГДА: по одноплатёжной сделке
+   * второго одобрения, которое «догнало» бы начисление, не бывает. Теперь
+   * одобрение пишет строку CommissionOutbox в своей же транзакции, а этот
+   * cron доставляет всё, что быстрый путь не закрыл.
+   *
+   * В норме проход не находит ничего и молчит: строку создают с форой в
+   * COMMISSION_OUTBOX_INLINE_GRACE_MS, и approvePayment успевает закрыть её
+   * сам. Каждая claimed-строка здесь — это либо рестарт в момент одобрения,
+   * либо устойчивый сбой БД.
+   *
+   * Идемпотентность обеспечивает creditCommissionForAttributionOnce (CAS-штамп
+   * ReferralAttribution.commissionedAt), поэтому даже несколько реплик,
+   * запустивших cron одновременно, не могут заплатить партнёру дважды.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async drainCommissionOutbox() {
+    const res = await this.commissionOutbox.drain({ limit: 100 });
+    // Тишина в 99.9% проходов: логируем только когда реально что-то делали.
+    if (res.claimed === 0) return;
+    this.logger.log(
+      `Cron: drainCommissionOutbox — взято ${res.claimed}, начислено ${res.credited}, ` +
+        `пропущено ${res.skipped}, отложено ${res.retried}, провалено ${res.failed.length}`,
+    );
+    if (res.failed.length === 0) return;
+
+    // Доставка провалена окончательно — дальше только руками. Уведомляем
+    // ТОЛЬКО руководство: сам факт, что клиент партнёрский, менеджерам по
+    // продажам видеть нельзя (см. canSeePartnerAttribution). Ни имени
+    // партнёра, ни суммы в сообщении нет — только номера сделок, чтобы разбор
+    // шёл через карточку, где гейт уже стоит.
+    const RECIPIENT_ROLES = ['FOUNDER', 'ADMIN', 'ACCOUNTANT'] as const;
+    const recipients = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { role: { in: RECIPIENT_ROLES as any } },
+          { roles: { hasSome: RECIPIENT_ROLES as any } },
+        ],
+      },
+      select: { id: true },
+    });
+    // ОДНО уведомление на проход, а не на строку: устойчивый сбой БД валит
+    // сразу всю пачку, и порядная рассылка засыпала бы основателя сотней
+    // одинаковых сообщений. Номера сделок целиком лежат в payload.
+    const shortIds = res.failed.slice(0, 5).map((f) => `#${f.submissionId.slice(0, 8)}`);
+    const tail = res.failed.length > shortIds.length ? ` и ещё ${res.failed.length - shortIds.length}` : '';
+    for (const u of recipients) {
+      await this.notifications.notifyUser(u.id, {
+        type: 'COMMISSION_DELIVERY_FAILED',
+        title: '⚠️ Партнёрская комиссия не начислена',
+        message:
+          `Не прошло начислений: ${res.failed.length} (сделки ${shortIds.join(', ')}${tail}). ` +
+          `Попытки исчерпаны — проверьте вручную.`,
+        payload: {
+          outbox: res.failed.map((f) => ({
+            outboxId: f.id,
+            submissionId: f.submissionId,
+            paymentId: f.paymentId,
+            attempts: f.attempts,
+          })),
+        },
+      });
+    }
+  }
 
   /**
    * Каждый рабочий день в 22:00 — генерируем штрафы за опоздания
@@ -429,8 +501,17 @@ export class CronService {
       where: { createdAt: { lt: cutoff6 } },
     });
 
+    // Отработанные строки outbox'а комиссий старше 6 месяцев. Удаляем ТОЛЬКО
+    // DONE: PENDING — недоставленная комиссия, FAILED — незакрытый разбор с
+    // партнёром, их чистка стёрла бы ровно тот след, ради которого outbox и
+    // заведён.
+    const outbox = await this.prisma.commissionOutbox.deleteMany({
+      where: { status: 'DONE', processedAt: { lt: cutoff6 } },
+    });
+
     this.logger.log(
-      `Cleanup: ${activity.count} activity, ${notifications.count} notifications, ${clicks.count} clicks`,
+      `Cleanup: ${activity.count} activity, ${notifications.count} notifications, ` +
+        `${clicks.count} clicks, ${outbox.count} commission outbox`,
     );
   }
 }

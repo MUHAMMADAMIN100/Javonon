@@ -6,10 +6,11 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { resolveLandingBaseUrl } from '../common/landing-url';
+import { buildReferralUrl } from '../common/landing-url';
 import { AdminPartnerCreateDto } from './dto/admin-partner.dto';
 
 // Без I/O/0/1 — чтобы код не путался в письме, звонке, скриншоте.
@@ -73,13 +74,64 @@ export class PartnersService {
    * уже не попадает.
    */
   private buildReferralUrl(code: string): string {
-    const base = resolveLandingBaseUrl();
-    return `${base}/?ref=${code}#apply`;
+    // Сама сборка переехала в common/landing-url.ts — её теперь использует и
+    // ReferralsService (блок «Партнёр» в карточках CRM). Строка та же.
+    return buildReferralUrl(code);
   }
 
   private toPublicPartner(p: any) {
     const { password, ...rest } = p;
     return rest;
+  }
+
+  /**
+   * Сколько из баланса партнёр реально ИМЕЕТ ПРАВО вывести.
+   *
+   * ЗАЧЕМ ЭТО ВООБЩЕ ЕСТЬ. balanceCents растёт в момент СОЗДАНИЯ Commission
+   * (creditCommissionForAttributionOnce), то есть сразу на одобрении платежа,
+   * когда комиссия ещё PENDING. requestPayout смотрел только на balanceCents —
+   * значит неподтверждённые деньги выводились в ту же секунду, в которую
+   * начислялись, и отмена сделки (пусть даже с корректным реверсом) уже не
+   * успевала ничего вернуть. Гейт закрывает окно: снять можно только то, что
+   * подписал человек — Commission.status = APPROVED (или PAID, то есть
+   * подписанное и уже проведённое).
+   *
+   * ФОРМУЛА:
+   *   пул   = Σ Commission(APPROVED, PAID).amountCents     — подписанное
+   *   ушло  = partner.totalPaidCents                       — комиссии, проведённые
+   *                                                          через «Отметить выплаченной»
+   *         + Σ PartnerPayout(REQUESTED, PAID).amountCents — payout'ы: REQUESTED
+   *                                                          уже зарезервирован
+   *                                                          (баланс списан), PAID
+   *                                                          тем более
+   *   доступно = min(balanceCents, пул − ушло)
+   *
+   * min с балансом обязателен: REVERSED-комиссии из пула выпадают, и после
+   * отката уже выведенных денег баланс уходит в минус — доступное к выводу
+   * обязано следовать за ним, а не за пулом.
+   *
+   * Возвращает СЫРОЕ значение, в том числе отрицательное: вызывающий сам
+   * решает, зажимать ли его в ноль для показа. Гейт выплаты должен видеть
+   * минус как минус.
+   */
+  private async approvedWithdrawableCents(
+    db: Prisma.TransactionClient,
+    partnerId: string,
+    partner: { balanceCents: number; totalPaidCents: number },
+  ): Promise<number> {
+    const [approvedAgg, payoutsAgg] = await Promise.all([
+      db.commission.aggregate({
+        where: { partnerId, status: { in: ['APPROVED', 'PAID'] } },
+        _sum: { amountCents: true },
+      }),
+      db.partnerPayout.aggregate({
+        where: { partnerId, status: { in: ['REQUESTED', 'PAID'] } },
+        _sum: { amountCents: true },
+      }),
+    ]);
+    const pool = approvedAgg._sum.amountCents ?? 0;
+    const alreadyOut = (payoutsAgg._sum.amountCents ?? 0) + partner.totalPaidCents;
+    return Math.min(partner.balanceCents, pool - alreadyOut);
   }
 
   /** Дашборд партнёра: ссылка, статистика воронки, баланс. */
@@ -102,6 +154,17 @@ export class PartnersService {
     const paidCount = commissions.filter((c) => c.status === 'PAID').length;
     const pendingCount = commissions.filter((c) => c.status !== 'PAID').length;
 
+    // Сколько из баланса реально доступно к выводу прямо сейчас. Без этого
+    // поля кабинет показывал бы «Баланс 500 TJS», а форма выплаты отвечала бы
+    // «Недостаточно средств» — партнёр читал бы это как поломку, а не как
+    // «начисление ещё не подтверждено». Для показа зажимаем в ноль: долг
+    // (отрицательный баланс) виден в balanceCents, дублировать его вторым
+    // отрицательным числом незачем.
+    const availableCents = Math.max(
+      0,
+      await this.approvedWithdrawableCents(this.prisma, partnerId, partner),
+    );
+
     return {
       partner: {
         id: partner.id,
@@ -113,6 +176,13 @@ export class PartnersService {
         totalEarnedCents: partner.totalEarnedCents,
         totalPaidCents: partner.totalPaidCents,
       },
+      /**
+       * Доступно к выводу = подтверждённая часть баланса. Отдельно от
+       * partner.balanceCents намеренно: баланс — это «сколько начислено и не
+       * выплачено», availableCents — «сколько из этого можно запросить».
+       * Разница = начисления, которые ещё не подтвердил основатель.
+       */
+      availableCents,
       stats: {
         clicks,
         leads: attributions,
@@ -179,6 +249,46 @@ export class PartnersService {
         if (!exists) throw new NotFoundException('Партнёр не найден');
         throw new BadRequestException('Недостаточно средств на балансе');
       }
+
+      // ВТОРОЙ ГЕЙТ: подтверждена ли эта сумма человеком.
+      //
+      // Баланс поднимается в момент создания Commission (status=PENDING) —
+      // одного лишь `balanceCents >= amount` хватало, чтобы вывести деньги за
+      // сделку, которую через минуту отменят. Теперь дополнительно требуем,
+      // чтобы сумма помещалась в пул APPROVED-начислений (см.
+      // approvedWithdrawableCents).
+      //
+      // ПОРЯДОК ВАЖЕН: сначала updateMany по partner (он берёт эксклюзивную
+      // блокировку строки партнёра до конца транзакции), и только потом
+      // считаем пул. Параллельный requestPayout того же партнёра встанет на
+      // этой блокировке и после нашего COMMIT'а увидит уже созданный
+      // PartnerPayout в своей агрегации. Обратный порядок (сначала посчитать,
+      // потом списать) под READ COMMITTED позволил бы двум запросам
+      // одновременно прочитать один и тот же пул и вывести его дважды.
+      const fresh = await tx.partner.findUnique({
+        where: { id: partnerId },
+        select: { balanceCents: true, totalPaidCents: true },
+      });
+      if (!fresh) throw new NotFoundException('Партнёр не найден');
+      const available = await this.approvedWithdrawableCents(tx, partnerId, {
+        // balanceCents уже уменьшен нашим claim'ом — возвращаем его к
+        // состоянию «до резервации», иначе запрошенная сумма вычлась бы
+        // из лимита дважды.
+        balanceCents: fresh.balanceCents + amount,
+        totalPaidCents: fresh.totalPaidCents,
+      });
+      if (amount > available) {
+        // throw откатывает и claim — баланс остаётся нетронутым.
+        throw new BadRequestException(
+          available > 0
+            ? `К выводу доступно ${(available / 100).toFixed(2)} TJS: остальные ` +
+              `начисления ещё не подтверждены. Подтверждённые начисления ` +
+              `появляются здесь после проверки основателем.`
+            : 'Нет подтверждённых начислений к выводу. Начисления становятся ' +
+              'доступны после проверки основателем.',
+        );
+      }
+
       const payout = await tx.partnerPayout.create({
         data: {
           partnerId,
@@ -583,10 +693,50 @@ export class PartnersService {
     };
   }
 
+  /**
+   * Подтвердить начисление к выплате: PENDING → APPROVED.
+   *
+   * Денег НЕ двигает — balanceCents уже был поднят при создании Commission.
+   * Единственный эффект: сумма попадает в пул, из которого партнёру разрешено
+   * запрашивать выплату (см. approvedWithdrawableCents). До этого действия
+   * начисление живёт в балансе, но вывести его нельзя — окно между «клиент
+   * оплатил» и «сделку отменили» больше не даёт партнёру забрать деньги за
+   * возвращённую продажу.
+   *
+   * Идемпотентно: APPROVED/PAID возвращаются как есть, повторный клик ничего
+   * не ломает. REVERSED подтвердить нельзя — начисление откачено, подтверждать
+   * нечего; молчаливое APPROVED вернуло бы отменённые деньги в пул выплат.
+   */
+  async adminApproveCommission(id: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const c = await tx.commission.findUnique({ where: { id } });
+      if (!c) throw new NotFoundException('Начисление не найдено');
+      if (c.status === 'REVERSED' || c.reversedAt) {
+        throw new BadRequestException(
+          'Начисление отменено (сделка возвращена) — подтвердить его нельзя',
+        );
+      }
+      if (c.status !== 'PENDING') return c;
+      return tx.commission.update({
+        where: { id },
+        data: { status: 'APPROVED', approvedAt: new Date() },
+      });
+    });
+  }
+
   async adminMarkCommissionPaid(id: string) {
     return this.prisma.$transaction(async (tx) => {
       const c = await tx.commission.findUnique({ where: { id } });
       if (!c) throw new NotFoundException('Начисление не найдено');
+      // Откаченное начисление уже списано с баланса
+      // (reverseCommissionsForTransactionsTx). Пометка «выплачено» списала бы
+      // ту же сумму второй раз и записала бы её в totalPaidCents как реально
+      // отданную партнёру — то есть превратила бы возврат в двойной убыток.
+      if (c.status === 'REVERSED' || c.reversedAt) {
+        throw new BadRequestException(
+          'Начисление отменено (сделка возвращена) — отмечать выплаченным нельзя',
+        );
+      }
       if (c.status === 'PAID') return c;
       const updated = await tx.commission.update({
         where: { id },

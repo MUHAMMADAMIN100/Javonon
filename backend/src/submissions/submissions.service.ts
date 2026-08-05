@@ -1,9 +1,19 @@
-import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException, Optional } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ActivityService } from '../activity/activity.service';
-import { hasRole, isFounder, UserWithRoles } from '../auth/role-utils';
+import {
+  ReferralsService,
+  isNonPaymentReason,
+  type CommissionReversal,
+} from '../partners/referrals.service';
+import { recordCommissionNonPayment } from '../partners/commission-audit';
+import {
+  COMMISSION_OUTBOX_INLINE_GRACE_MS,
+  CommissionOutboxService,
+} from '../partners/commission-outbox.service';
+import { canSeePartnerAttribution, hasRole, isFounder, UserWithRoles } from '../auth/role-utils';
 import {
   SubmissionStatus,
   SubmissionPaymentStatus,
@@ -73,6 +83,18 @@ function parseClientDate(value: string | Date): Date {
 
 interface CreateSubmissionDto {
   studentId?: string | null;
+  /**
+   * Заявка-ИСТОЧНИК: лид, из которого менеджер завёл сделку («Создать сделку»
+   * в карточке заявки). Ложится в SaleSubmission.sourceApplicationId и НЕ
+   * имеет отношения к SaleSubmission.applicationId — ту создаёт одобрение
+   * первого платежа.
+   *
+   * Это единственный мост от партнёрской атрибуции к сделке, когда менеджер
+   * пропустил конвертацию лида в студента и завёл сделку вкладкой «Новый»:
+   * тогда studentId ещё null, а атрибуция с лендинга висит на этом лиде.
+   * Подробнее — комментарий к колонке в schema.prisma.
+   */
+  applicationId?: string | null;
   // Если studentId ЗАДАН (existing student) и менеджер прислал этот email —
   // обновим Student.email атомарно после проверки уникальности. Для нового
   // студента идёт в newStudentEmail (snapshot до APPROVE).
@@ -114,6 +136,8 @@ interface CreatePaymentDto {
 
 @Injectable()
 export class SubmissionsService {
+  private readonly logger = new Logger(SubmissionsService.name);
+
   constructor(
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
@@ -124,6 +148,18 @@ export class SubmissionsService {
     // одобрении/отмене. ActivityModule помечен @Global(), поэтому в
     // submissions.module.ts дополнительный import не нужен.
     private activity: ActivityService,
+    // Партнёрская комиссия по сделке (см. approvePayment). @Optional() —
+    // как в ApplicationsService: если модуль собран без PartnersModule,
+    // сделки продолжают работать, просто без начислений (в approvePayment
+    // стоит явная проверка на наличие сервиса + логирование).
+    // PartnersModule ничего из submissions/ не импортирует, поэтому
+    // forwardRef не нужен.
+    @Optional() private referrals?: ReferralsService,
+    // Outbox партнёрской комиссии: строка пишется внутри транзакции
+    // одобрения, а этот сервис её закрывает (settle) или откладывает
+    // (defer). @Optional() по той же причине, что и referrals — без
+    // PartnersModule строка просто дождётся cron'а.
+    @Optional() private commissionOutbox?: CommissionOutboxService,
   ) {}
 
   /**
@@ -175,6 +211,23 @@ export class SubmissionsService {
 
     const program = await this.prisma.program.findUnique({ where: { id: dto.programId } });
     if (!program) throw new NotFoundException('Программа не найдена');
+
+    // Заявка-источник (кнопка «Создать сделку» в карточке заявки). Проверяем
+    // существование ЗДЕСЬ, а не полагаемся на FK: FK-ошибка вылезла бы из
+    // saleSubmission.create как P2003 → bare 500, а менеджеру нужно понятное
+    // «заявка не найдена». Пустую строку из query-параметра трактуем как
+    // отсутствие ссылки, а не как «искать заявку с id ''».
+    const sourceApplicationIdRaw =
+      typeof dto.applicationId === 'string' ? dto.applicationId.trim() : '';
+    let sourceApplicationId: string | null = null;
+    if (sourceApplicationIdRaw) {
+      const sourceApp = await this.prisma.application.findUnique({
+        where: { id: sourceApplicationIdRaw },
+        select: { id: true },
+      });
+      if (!sourceApp) throw new NotFoundException('Заявка-источник не найдена');
+      sourceApplicationId = sourceApp.id;
+    }
 
     const p = dto.firstPayment;
     if (typeof p.amount !== 'number' || !isFinite(p.amount) || p.amount <= 0) {
@@ -273,6 +326,10 @@ export class SubmissionsService {
         newStudentPassportSizes: passportSizes,
         newStudentPassportOriginalNames: passportOriginalNames,
         programId: dto.programId,
+        // Мост «лид с лендинга → сделка». Пишется ТОЛЬКО здесь, при создании:
+        // после первого одобрения любая перезапись стёрла бы связь с
+        // атрибуцией, ради которой колонка и заведена.
+        sourceApplicationId,
         contractUrls: ctrUrls,
         contractMimes: ctrMimes,
         contractSizes: ctrSizes,
@@ -451,7 +508,32 @@ export class SubmissionsService {
     if (!elevated && s.managerId !== user.id) {
       throw new ForbiddenException('Это не ваша сделка');
     }
-    return s;
+
+    // Блок «Партнёр» — ТОЛЬКО руководству (канонический гейт
+    // canSeePartnerAttribution из auth/role-utils: FOUNDER/ADMIN/ACCOUNTANT,
+    // а носителю активной кастомной роли — лишь по явному partners:read,
+    // т.к. его base role это «подложка», см. RolesGuard.skipBaseRole).
+    // Менеджер по продажам не должен видеть ни имя партнёра, ни сумму, ни
+    // сам факт, что клиент партнёрский, поэтому поле физически ОТСУТСТВУЕТ
+    // в его ответе — не null и не скрытие в UI: сетевой ответ читается в
+    // devtools. Локальный `elevated` выше — это ДРУГАЯ, более узкая проверка
+    // (FOUNDER/ADMIN, без ACCOUNTANT) для доступа к PII сделки; смешивать их
+    // нельзя.
+    if (!canSeePartnerAttribution(user)) return s;
+    const partnerAttribution = this.referrals
+      ? await this.referrals.getPartnerAttributionView({
+          studentId: s.studentId,
+          applicationId: s.applicationId,
+          // Заявка-источник обязана участвовать в поиске наравне с двумя
+          // остальными идентификаторами. У сделки, заведённой вкладкой
+          // «Новый» до одобрения, studentId и applicationId ОБА null —
+          // findAttribution получал пустой OR и возвращал null, поэтому блок
+          // «Партнёр» не показывался даже основателю, хотя атрибуция на лиде
+          // была.
+          applicationIds: [s.sourceApplicationId],
+        })
+      : null;
+    return { ...s, partnerAttribution };
   }
 
   /**
@@ -714,6 +796,10 @@ export class SubmissionsService {
     // только если transaction COMMIT'ился (в противном случае переменная
     // останется null и emit пропустится — никаких «фантомных» строк в UI).
     let finTxForEmit: Awaited<ReturnType<typeof this.prisma.transaction.create>> | null = null;
+    // Строка outbox'а партнёрской комиссии, созданная ВНУТРИ транзакции
+    // одобрения. Заполняется только при успешном COMMIT'е — при роллбэке
+    // остаётся null (как и сама строка в БД, её уносит тот же роллбэк).
+    let commissionOutboxId: string | null = null;
     try {
       upd = await this.prisma.$transaction(async (tx) => {
       // Bug #26 (CRITICAL): pessimistic lock на SaleSubmission — первая
@@ -978,6 +1064,65 @@ export class SubmissionsService {
         where: { id: paymentId },
         data: { financeTransactionId: finTx.id },
       });
+
+      // OUTBOX партнёрской комиссии. Единственное, что в этой транзакции
+      // делается ради партнёра, — и делается намеренно: строка обязана
+      // коммититься АТОМАРНО с одобрением. Само начисление идёт после
+      // COMMIT'а (см. блок «Партнёрская комиссия» ниже), и раньше смерть
+      // процесса между COMMIT'ом и начислением теряла комиссию НАВСЕГДА:
+      // платёж одобрен, доход в отчётах, commissionedAt пуст, а второго
+      // одобрения по одноплатёжной сделке уже не будет. Теперь «намерение
+      // начислить» переживает рестарт вместе с самим одобрением, а доставку
+      // добивает CronService.drainCommissionOutbox.
+      //
+      // Требование «партнёрская часть не имеет права ронять одобрение»
+      // соблюдено: это один INSERT в таблицу без внешних ключей и без
+      // обращения к ReferralsService — уронить его может только та же
+      // авария, которая уронит и сам платёж.
+      //
+      // upsert, а не create: единственный ключ строки — paymentId, и хотя
+      // повторный approve того же платежа сегодня невозможен (CAS на
+      // status выше), P2002 отсюда откатил бы уже сделанное одобрение —
+      // ровно то, чего этот блок не должен уметь.
+      const outboxRow = await tx.commissionOutbox.upsert({
+        where: { paymentId },
+        // Ветка update переписывает ВСЕ поля, а не только счётчики: если
+        // платёж когда-нибудь снова окажется одобряемым, это новое одобрение
+        // с новой Transaction — доставлять по нему старую замороженную базу
+        // было бы хуже, чем не доставлять вовсе.
+        update: {
+          status: 'PENDING',
+          attempts: 0,
+          resultReason: null,
+          lastError: null,
+          processedAt: null,
+          submissionId: submission.id,
+          financeTransactionId: finTx.id,
+          studentId,
+          applicationId: submission.applicationId,
+          sourceApplicationId: submission.sourceApplicationId,
+          baseAmountCents: Math.round(payment.amount * 100),
+          baseCurrency: originalCurrency,
+          sourceLabel: `Сделка #${submission.id.slice(0, 8)} (${program.name})`,
+          nextAttemptAt: new Date(Date.now() + COMMISSION_OUTBOX_INLINE_GRACE_MS),
+        },
+        create: {
+          submissionId: submission.id,
+          paymentId,
+          financeTransactionId: finTx.id,
+          studentId,
+          applicationId: submission.applicationId,
+          sourceApplicationId: submission.sourceApplicationId,
+          baseAmountCents: Math.round(payment.amount * 100),
+          baseCurrency: originalCurrency,
+          sourceLabel: `Сделка #${submission.id.slice(0, 8)} (${program.name})`,
+          // Фора быстрому пути: cron не полезет за эту строку, пока
+          // approvePayment сам её отрабатывает.
+          nextAttemptAt: new Date(Date.now() + COMMISSION_OUTBOX_INLINE_GRACE_MS),
+        },
+        select: { id: true },
+      });
+
       // Захватываем id-шники для пост-коммитного audit-лога (см. блок
       // после try/catch). Если транзакция откатится — эти переменные так и
       // останутся null, ложного лога не будет.
@@ -985,6 +1130,7 @@ export class SubmissionsService {
       studentIdForAudit = studentId;
       finTxAmountForAudit = payment.amount;
       finTxForEmit = finTx;
+      commissionOutboxId = outboxRow.id;
       return updated;
     });
     } catch (err) {
@@ -1074,6 +1220,148 @@ export class SubmissionsService {
     if (finTxForEmit) {
       this.realtime.emitFinanceStaff('transaction:new', { transaction: finTxForEmit });
     }
+
+    // ── Партнёрская комиссия ──────────────────────────────────────────────
+    //
+    // ПОЧЕМУ ПОСЛЕ КОММИТА, А НЕ ВНУТРИ ТРАНЗАКЦИИ ОДОБРЕНИЯ.
+    // Два требования тянут в разные стороны:
+    //   1) одобрение платежа НЕ должно падать из-за партнёрской части —
+    //      сломанное начисление не имеет права блокировать бухгалтера;
+    //   2) молча проглоченная ошибка стоит партнёру денег.
+    // Внутри транзакции требование (1) нарушается: любой сбой начисления
+    // откатил бы уже сделанное одобрение, финансовую проводку и созданного
+    // студента. Поэтому начисление идёт ОТДЕЛЬНОЙ транзакцией после COMMIT'а
+    // основной, а провал — громкий logger.error (никаких пустых catch).
+    // Атомарность при этом не теряется: штамп commissionedAt и создание
+    // Commission лежат внутри ОДНОЙ транзакции в
+    // ReferralsService.creditCommissionForAttributionOnce.
+    //
+    // ЧТО ЗАКРЫВАЕТ РАЗРЫВ МЕЖДУ ДВУМЯ ТРАНЗАКЦИЯМИ. Сам по себе «отдельной
+    // транзакцией после COMMIT'а» означал: процесс умер между ними (деплой,
+    // рестарт контейнера, eviction пода, обрыв соединения с БД) — платёж
+    // одобрен, доход в отчётах, партнёр не получил ничего и уже не получит,
+    // потому что второго одобрения по одноплатёжной сделке не будет.
+    // Поэтому в транзакции выше пишется строка CommissionOutbox: намерение
+    // начислить коммитится атомарно с одобрением. Код ниже — быстрый путь,
+    // он же закрывает строку (settle) или откладывает её (defer); всё, что
+    // он не закрыл, добирает CronService.drainCommissionOutbox. Повтор
+    // безопасен — creditCommissionForAttributionOnce идемпотентен.
+    //
+    // await, а не fire-and-forget: ответ бухгалтеру задерживается на одну
+    // короткую транзакцию, зато ошибка гарантированно попадает в лог и не
+    // теряется при рестарте контейнера как unhandled rejection.
+    //
+    // Условие finTxIdForAudit && studentIdForAudit — тот же приём, что в
+    // audit-блоке выше: при роллбэке обе переменные остаются null, и
+    // начисление не запускается по несостоявшемуся одобрению.
+    //
+    // Начисляем ОДИН раз за клиента (решение основателя «один раз за
+    // клиента»): рассрочка из 4 платежей платит партнёру только на первом
+    // одобренном. Дедуп — по ReferralAttribution.commissionedAt.
+    if (finTxIdForAudit && studentIdForAudit) {
+      if (!this.referrals) {
+        this.logger.error(
+          `Партнёрская комиссия не начислена немедленно: ReferralsService не подключён ` +
+            `(submission=${submission.id}, payment=${paymentId}). Проверьте PartnersModule в submissions.module.ts. ` +
+            `Строка outbox'а осталась PENDING — начисление доедет через cron, когда модуль подключат.`,
+        );
+      } else {
+        try {
+          const result = await this.referrals.creditCommissionForAttributionOnce({
+            studentId: studentIdForAudit,
+            // SaleSubmission.applicationId — новая заявка SUCCESSFUL_LEAD,
+            // созданная этим же одобрением, а НЕ лид с лендинга, на котором
+            // висит атрибуция. Передаём его как есть, а по лендинговой
+            // заявке ReferralsService доберёт сам (ищет по всем заявкам
+            // студента) — второго поиска здесь намеренно нет.
+            applicationId: submission.applicationId,
+            // …кроме одного случая, который добором «по всем заявкам студента»
+            // не закрывается: сделка заведена вкладкой «Новый» в обход
+            // конвертации лида. Тогда Student создан ЭТИМ ЖЕ одобрением, и
+            // единственная его заявка — свежая SUCCESSFUL_LEAD; лендинговый
+            // лид, на котором висит атрибуция, к нему не привязан ничем, и
+            // начисление молча уходило в no-attribution. sourceApplicationId
+            // берём из снапшота сделки — он проставлен при СОЗДАНИИ и потому
+            // не устаревает, в отличие от applicationId выше.
+            applicationIds: [submission.sourceApplicationId],
+            baseAmountCents: Math.round((finTxAmountForAudit ?? 0) * 100),
+            baseCurrency: originalCurrencyForAudit,
+            transactionId: finTxIdForAudit,
+            sourceLabel: `Сделка #${submission.id.slice(0, 8)} (${program.name})`,
+          });
+          if (result.credited) {
+            this.logger.log(
+              `Партнёрская комиссия начислена: partner=${result.partnerId}, ` +
+                `commission=${result.commissionId}, ${result.amountCents} копеек TJS ` +
+                `(submission=${submission.id})`,
+            );
+          } else if (isNonPaymentReason(result.reason)) {
+            // ОТКАЗ В ДЕНЬГАХ живому партнёру: клиент оплатил, партнёр
+            // существует и реально его привёл, а комиссии не будет.
+            // Раньше эта ветка молчала вместе со штатными исходами — партнёр
+            // приходил с вопросом «почему мне не заплатили», и ни лога, ни
+            // строки аудита, ни флага на сделке не существовало. Начисление
+            // при этом НЕ откладывается и НЕ восстанавливается само.
+            await recordCommissionNonPayment(
+              { logger: this.logger, activity: this.activity },
+              {
+                reason: result.reason,
+                partnerId: result.partnerId,
+                partnerName: result.partnerName,
+                studentId: studentIdForAudit,
+                actorId: reviewerId,
+                actorRole: 'FOUNDER',
+                context: `Сделка #${submission.id.slice(0, 8)}, платёж #${paymentId.slice(0, 8)} (${program.name})`,
+                payload: {
+                  submissionId: submission.id,
+                  paymentId,
+                  transactionId: finTxIdForAudit,
+                  managerId: submission.managerId,
+                },
+              },
+            );
+          }
+          // Остальные исходы (no-attribution / already-credited / race-lost /
+          // zero-rate) — штатные и молчаливые: большинство клиентов приходят
+          // сами, повтор по уже оплаченному клиенту — ожидаемое поведение
+          // guard'а, а zero-rate штамп не ставит и клиента для партнёра не
+          // сжигает (следующий платёж начислит по восстановленной ставке).
+
+          // Быстрый путь отработал — закрываем строку outbox'а с фактическим
+          // исходом. ЛЮБОЙ исход (включая no-attribution) — терминальный:
+          // повторять нечего, решение принято по тем же данным, что увидел бы
+          // cron. Если процесс умрёт ровно здесь, строка останется PENDING и
+          // cron повторит доставку, получив already-credited, — двойного
+          // начисления это не даёт (CAS-штамп commissionedAt).
+          if (commissionOutboxId && this.commissionOutbox) {
+            await this.commissionOutbox.settle(commissionOutboxId, result);
+          }
+        } catch (err) {
+          // Громко, но не бросаем: платёж уже одобрен и закоммичен, откатить
+          // его отсюда нельзя, а падение ответа заставило бы бухгалтера жать
+          // «Одобрить» ещё раз по уже одобренному платежу.
+          this.logger.error(
+            `Не удалось начислить партнёрскую комиссию по сделке ${submission.id} ` +
+              `(payment=${paymentId}, student=${studentIdForAudit}): ${(err as Error).message}`,
+            (err as Error).stack,
+          );
+          // …и — главное — не теряем начисление. Строка outbox'а остаётся
+          // PENDING с отодвинутым nextAttemptAt: cron повторит доставку, и
+          // сбой, который раньше стоил партнёру денег, теперь стоит задержки.
+          if (commissionOutboxId && this.commissionOutbox) {
+            const deferred = await this.commissionOutbox.defer(commissionOutboxId, err);
+            if (deferred.exhausted) {
+              this.logger.error(
+                `Партнёрская комиссия по сделке ${submission.id} исчерпала лимит попыток ` +
+                  `доставки (${deferred.attempts}) — строка outbox'а переведена в FAILED, ` +
+                  `нужна ручная проверка.`,
+              );
+            }
+          }
+        }
+      }
+    }
+
     // Bug #31 (HIGH): на первый APPROVE возвращаем plain-пароль нового
     // студента, чтобы FOUNDER (UI /pending-payments) показал его менеджеру,
     // а тот передал клиенту. На последующие approve'ы (studentCredentials =
@@ -1146,9 +1434,16 @@ export class SubmissionsService {
    *      (доход − расход) показывает корректный нетто;
    *   3) меняем сам платёж на REJECTED + проставляем rejectReason
    *      (защита от повторного approvePayment и от UI, который рисует
-   *      «одобрено» по отменённой сделке).
+   *      «одобрено» по отменённой сделке);
+   *   4) откатываем партнёрскую комиссию, начисленную с этих же транзакций
+   *      (Commission→REVERSED, минус с balanceCents/totalEarnedCents,
+   *      расштамповка ReferralAttribution) — см.
+   *      ReferralsService.reverseCommissionsForTransactionsTx.
    * Bug #25 из audit:edge-cases: раньше CANCEL не откатывал ничего, и
    * деньги по отменённой сделке оставались в выручке и бонусной базе.
+   * Пункт (4) — тот же баг на партнёрской стороне: компания возвращала
+   * клиенту деньги, а комиссия за возвращённую продажу оставалась у партнёра
+   * и была выводима.
    */
   async changeStatus(user: { id: string; role?: any; roles?: any }, submissionId: string, status: SubmissionStatus) {
     const submission = await this.prisma.saleSubmission.findUnique({
@@ -1210,6 +1505,15 @@ export class SubmissionsService {
       studentId: string | null;
       managerId: string | null;
     }> = [];
+
+    // Реверсы партнёрских комиссий — тоже собираем внутри $transaction, но
+    // ОТДЕЛЬНО от refundAuditPayloads: эти строки содержат partnerId и суммы
+    // начислений, поэтому уходят только в серверный лог и в finance-staff
+    // канал. В ActivityLog они не пишутся: GET /activity открыт любому
+    // сотруднику под JwtAuthGuard, а факт «клиент партнёрский» и тем более
+    // сумма комиссии менеджеру по продажам не видны нигде (см.
+    // canSeePartnerAttribution). В HTTP-ответ changeStatus они тоже не идут.
+    const commissionReversals: CommissionReversal[] = [];
 
     const updated = await this.prisma.$transaction(async (tx) => {
       for (const p of approvedPayments) {
@@ -1281,11 +1585,46 @@ export class SubmissionsService {
         });
       }
 
+      // (4) партнёрская комиссия по этим же транзакциям — в ТОЙ ЖЕ
+      //     транзакции, что и реверс дохода. Не best-effort и не после
+      //     COMMIT'а (в отличие от НАЧИСЛЕНИЯ в approvePayment): если реверс
+      //     комиссии упадёт, отмена сделки обязана откатиться целиком —
+      //     «сделка отменена, а комиссия по ней живая и выводимая» это ровно
+      //     тот рассинхрон, ради которого пункт (4) и появился.
+      //
+      //     Список transactionId собираем по ВСЕМ APPROVED-платежам, а не
+      //     только по тем, чей INCOME мы реверснули выше: комиссия может
+      //     висеть на транзакции, которую уже пометили reversedAt другим
+      //     путём. Сам реверс идемпотентен (CAS по Commission.reversedAt),
+      //     поэтому лишние id безопасны.
+      if (this.referrals) {
+        const reversals = await this.referrals.reverseCommissionsForTransactionsTx(
+          tx,
+          approvedPayments.map((p) => p.financeTransactionId),
+          {
+            reversedAt,
+            reason: `Реверс: сделка #${shortId} отменена ${reversedAt.toISOString().slice(0, 10)}`,
+          },
+        );
+        commissionReversals.push(...reversals);
+      }
+
       return tx.saleSubmission.update({
         where: { id: submissionId },
         data: { status },
       });
     });
+
+    // ReferralsService не подключён — комиссия НЕ откачена. Отмену уже
+    // закоммитили (ронять её нечестно: финансовая часть отработала верно),
+    // но молчать нельзя: у партнёра остались деньги за возвращённую продажу.
+    if (!this.referrals && approvedPayments.length > 0) {
+      this.logger.error(
+        `Партнёрская комиссия НЕ откачена при отмене сделки ${submissionId}: ` +
+          `ReferralsService не подключён. Проверьте PartnersModule в submissions.module.ts ` +
+          `и откатите начисления вручную.`,
+      );
+    }
 
     // Audit-trail и realtime-эмит по каждому реверсированному платежу —
     // только после COMMIT'а. catch(() => undefined) на .log() — best-effort:
@@ -1329,13 +1668,63 @@ export class SubmissionsService {
       });
     }
 
+    this.logCommissionReversals(
+      commissionReversals,
+      `отмена сделки ${submissionId}`,
+    );
+
     // Уведомляем FOUNDER-канал: бухгалтерия должна видеть рефанд сразу.
+    // Про откаченные комиссии здесь НЕТ НИЧЕГО — даже счётчика: событие идёт
+    // в общий staff-канал, а «у этого клиента была партнёрская комиссия» —
+    // это уже партнёрские данные, закрытые для менеджеров (см.
+    // canSeePartnerAttribution). Детали уходят отдельным эмитом
+    // `commission:reversed` в finance-staff — см. logCommissionReversals.
     this.realtime.emitStaff('submission:cancelled', {
       submissionId,
       reversedPayments: approvedPayments.length,
     });
 
     return updated;
+  }
+
+  /**
+   * Пост-коммитный след по откаченным комиссиям: серверный лог + эмит в
+   * finance-staff (FOUNDER/ADMIN/ACCOUNTANT — те же роли, что видят
+   * «Партнёров»).
+   *
+   * ПОЧЕМУ НЕ ActivityLog. GET /activity висит под одним JwtAuthGuard, то есть
+   * читается любым сотрудником, включая менеджеров по продажам. Партнёрские
+   * данные (кто привёл клиента, сколько ему начислено) им закрыты на всех
+   * остальных поверхностях — строка аудита стала бы обходным каналом. Аудит-
+   * запись реверса — это сама строка Commission: status=REVERSED, reversedAt
+   * и причина, дописанная в note; она видна в «Партнёры → Комиссии», где
+   * роли уже проверены.
+   */
+  private logCommissionReversals(reversals: CommissionReversal[], context: string) {
+    for (const r of reversals) {
+      // warn, а не log: отрицательный баланс — это долг партнёра компании,
+      // его должен увидеть человек. Сообщение намеренно содержит всё, что
+      // нужно для ручного разбора, без похода в БД.
+      const debt = r.balanceAfterCents < 0;
+      const line =
+        `Партнёрская комиссия откачена (${context}): partner=${r.partnerId}, ` +
+        `commission=${r.commissionId}, был статус ${r.previousStatus}, ` +
+        `-${r.amountCents} копеек ${r.currency}, баланс после: ${r.balanceAfterCents}` +
+        (debt
+          ? ' — ОТРИЦАТЕЛЬНЫЙ: партнёр уже вывел эти деньги, долг гасится ' +
+            'следующими начислениями, выплаты заблокированы до нуля'
+          : '');
+      if (debt) this.logger.warn(line);
+      else this.logger.log(line);
+
+      this.realtime.emitFinanceStaff('commission:reversed', {
+        commissionId: r.commissionId,
+        partnerId: r.partnerId,
+        amountCents: r.amountCents,
+        currency: r.currency,
+        balanceAfterCents: r.balanceAfterCents,
+      });
+    }
   }
 
   /**
@@ -1707,7 +2096,15 @@ export class SubmissionsService {
    * Если платёж был APPROVED и есть linked Transaction — реверсим по
    * паттерну changeStatus: original.reversedAt=now + create обратной
    * EXPENSE-транзакции, чтобы finance dashboard и бонусная база
-   * скорректировались. Затем удаляем сам SubmissionPayment.
+   * скорректировались, ПЛЮС откат партнёрской комиссии с этой транзакции.
+   * Затем удаляем сам SubmissionPayment.
+   *
+   * Комиссия здесь обязательна ровно по той же причине, что и в CANCEL:
+   * начисление партнёру привязано к финансовой Transaction, и удаление
+   * породившего её платежа без отката оставляло бы живую выводимую комиссию
+   * за платёж, которого больше нет. Обычно комиссия висит на ПЕРВОМ
+   * одобренном платеже сделки («один раз за клиента»), поэтому удаление
+   * второго/третьего платежа не найдёт ничего и пройдёт без изменений.
    */
   async deletePayment(
     user: (UserWithRoles & { id: string }) | null | undefined,
@@ -1738,6 +2135,7 @@ export class SubmissionsService {
     const submissionId = payment.submissionId;
     const shortId = submissionId.slice(0, 8);
     const reversedAt = new Date();
+    const commissionReversals: CommissionReversal[] = [];
 
     await this.prisma.$transaction(async (tx) => {
       // Реверс финансовой записи по паттерну changeStatus (CANCEL-ветка).
@@ -1775,10 +2173,41 @@ export class SubmissionsService {
           });
         }
       }
+      // Партнёрская комиссия с этой же транзакции — в той же транзакции, что
+      // и реверс дохода (см. changeStatus, пункт 4). Ошибка откатит удаление
+      // платежа целиком: остаться без платежа, но с живой комиссией по нему
+      // нельзя.
+      if (wasApproved && this.referrals) {
+        const reversals = await this.referrals.reverseCommissionsForTransactionsTx(
+          tx,
+          [payment.financeTransactionId],
+          {
+            reversedAt,
+            reason:
+              `Реверс: платёж по сделке #${shortId} удалён основателем ` +
+              `${reversedAt.toISOString().slice(0, 10)}`,
+          },
+        );
+        commissionReversals.push(...reversals);
+      }
       // Удаляем сам платёж.
       await tx.submissionPayment.delete({ where: { id: paymentId } });
     });
 
+    if (wasApproved && !this.referrals) {
+      this.logger.error(
+        `Партнёрская комиссия НЕ откачена при удалении платежа ${paymentId} ` +
+          `(сделка ${submissionId}): ReferralsService не подключён.`,
+      );
+    }
+    this.logCommissionReversals(
+      commissionReversals,
+      `удаление платежа ${paymentId}`,
+    );
+
+    // Счётчик откаченных комиссий сюда НЕ кладём: staff-канал слушают и
+    // менеджеры, а сам факт партнёрской комиссии по клиенту им закрыт.
+    // Детали — эмитом `commission:reversed` в finance-staff выше.
     this.realtime.emitStaff('submission:payment-deleted', {
       submissionId,
       paymentId,

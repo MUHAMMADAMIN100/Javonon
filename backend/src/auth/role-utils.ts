@@ -18,6 +18,10 @@ export type UserWithRoles = {
   roles?: (Role | string)[] | null;
   // Пермиссии из CustomRole. Заполняются JwtStrategy при validate.
   permissions?: string[] | null;
+  // true, если у юзера привязана АКТИВНАЯ CustomRole (ставит JwtStrategy).
+  // Означает: base role в БД — техническая «подложка», она НЕ даёт прав
+  // сама по себе (см. RolesGuard.skipBaseRole).
+  hasCustomRole?: boolean;
 };
 
 /** Проверка наличия пермиссии у юзера (через CustomRole). */
@@ -44,6 +48,37 @@ export function isFounder(user: UserWithRoles | undefined | null): boolean {
 /** FOUNDER / ADMIN / ACCOUNTANT — те, кому в ТЗ дан полный доступ к админ-зоне. */
 export function isElevated(user: UserWithRoles | undefined | null): boolean {
   return hasRole(user, 'FOUNDER', 'ADMIN', 'ACCOUNTANT');
+}
+
+/**
+ * Единственный канонический гейт на блок «Партнёр» (partnerAttribution:
+ * ФИО партнёра, referralCode, referralUrl, сумма и дата комиссии).
+ * Используется в students/applications/submissions — НЕ вызывать здесь
+ * isElevated() напрямую.
+ *
+ * Почему отдельный хелпер, а не isElevated():
+ * isElevated() читает только user.role/user.roles[] и ничего не знает про
+ * активную кастомную роль. А RolesGuard (roles.guard.ts, skipBaseRole)
+ * устанавливает противоположное правило: активная CustomRole ЗАМЕНЯЕТ
+ * базовую роль для целей авторизации — base role в БД это «подложка»,
+ * она не даёт доступа. Без учёта этого флага «Таргетолог»/«SMM» с
+ * подложкой ADMIN/ACCOUNTANT проходил бы isElevated() и вычитывал
+ * партнёрский блок из JSON, хотя на всех остальных поверхностях
+ * авторизации его база не даёт ровно ничего. Эндпоинты
+ * GET /students/:id и GET /applications/:id висят под одним лишь
+ * JwtAuthGuard (RolesGuard не глобальный), так что промежуточного
+ * рубежа там нет — гейт здесь и есть единственный.
+ *
+ * Fail-closed: носителю кастомной роли партнёрские данные видны только
+ * по ЯВНОМУ гранту 'partners:read' в CustomRole.permissions.
+ */
+export function canSeePartnerAttribution(
+  user: UserWithRoles | undefined | null,
+): boolean {
+  if (!user) return false;
+  if (isFounder(user)) return true; // FOUNDER — неявно всё
+  if (user.hasCustomRole) return hasPermission(user, 'partners:read');
+  return isElevated(user);
 }
 
 /** Любой менеджер по продажам или клиентский менеджер. */

@@ -49,7 +49,29 @@ export type ActivityAction =
   | 'REVENUE_BUCKET_DELETE'
   | 'REVENUE_ITEM_CREATE'
   | 'REVENUE_ITEM_UPDATE'
-  | 'REVENUE_ITEM_DELETE';
+  | 'REVENUE_ITEM_DELETE'
+  // Партнёру НЕ начислена комиссия за клиента, которого он реально привёл:
+  // истёк 90-дневный TTL атрибуции, партнёр оказался неактивен в момент
+  // оплаты, либо сработал БД-гард дедупа. Раньше такой исход не оставлял
+  // следа нигде — ни лога, ни строки аудита, — и на вопрос партнёра «почему
+  // мне не заплатили» ответить было нечем. Начисление НЕ откладывается и НЕ
+  // восстанавливается автоматически: строка фиксирует, что решение было
+  // принято, кем/когда и по какому клиенту.
+  | 'PARTNER_COMMISSION_SKIPPED';
+
+/**
+ * Action'ы, чьи details/payload содержат ПАРТНЁРСКИЕ данные (имя партнёра,
+ * сумму комиссии, сам факт «клиент партнёрский»).
+ *
+ * GET /activity закрыт только JwtAuthGuard — любой аутентифицированный
+ * сотрудник может дёрнуть его напрямую, минуя фронтовый гейт в Activity.tsx.
+ * Партнёрский блок в карточках сделки/студента/заявки намеренно физически
+ * отсутствует в ответе неэлевейтед-ролям (см. referrals.service
+ * getPartnerAttributionView), и журнал активности не должен становиться
+ * обходным путём к тем же данным. Поэтому такие строки отдаются и
+ * транслируются по WS только FOUNDER/ADMIN/ACCOUNTANT.
+ */
+export const PARTNER_SENSITIVE_ACTIONS: ActivityAction[] = ['PARTNER_COMMISSION_SKIPPED'];
 
 @Injectable()
 export class ActivityService {
@@ -85,7 +107,16 @@ export class ActivityService {
         payload: data.payload ?? undefined,
       },
     });
-    this.realtime.emitStaff('activity:new', { entry });
+    // Партнёрские строки уходят только в finance-staff (FOUNDER/ADMIN/
+    // ACCOUNTANT). emitStaff вещает в комнату 'staff', куда входят и
+    // SALES_MANAGER/CLIENT_MANAGER — через `socket.on('activity:new')` они
+    // прочитали бы имя партнёра и сумму, которых им не отдаёт ни один REST-
+    // эндпоинт. См. PARTNER_SENSITIVE_ACTIONS.
+    if (PARTNER_SENSITIVE_ACTIONS.includes(data.action)) {
+      this.realtime.emitFinanceStaff('activity:new', { entry });
+    } else {
+      this.realtime.emitStaff('activity:new', { entry });
+    }
     return entry;
   }
 
@@ -96,11 +127,28 @@ export class ActivityService {
     from?: Date;
     to?: Date;
     take?: number;
+    /**
+     * Результат canSeePartnerAttribution() для читателя. false/undefined ⇒
+     * из выдачи вырезаются PARTNER_SENSITIVE_ACTIONS. Дефолт намеренно
+     * fail-closed: новый вызывающий, забывший передать флаг, получит
+     * УРЕЗАННУЮ выдачу, а не утечку партнёрских данных.
+     */
+    viewerCanSeePartnerData?: boolean;
   } = {}) {
     const where: any = {};
     if (filters.actorId) where.actorId = filters.actorId;
     if (filters.studentId) where.studentId = filters.studentId;
     if (filters.action) where.action = filters.action;
+
+    if (!filters.viewerCanSeePartnerData) {
+      if (filters.action && PARTNER_SENSITIVE_ACTIONS.includes(filters.action)) {
+        // Прямой запрос партнёрского журнала неэлевейтед-ролью — пустой ответ.
+        return [];
+      }
+      // Точечный фильтр по неопасному action уже сам исключает партнёрские
+      // строки, поэтому notIn нужен только для «все действия».
+      if (!filters.action) where.action = { notIn: PARTNER_SENSITIVE_ACTIONS };
+    }
     if (filters.from || filters.to) {
       where.createdAt = {};
       if (filters.from) where.createdAt.gte = filters.from;

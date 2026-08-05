@@ -1,6 +1,8 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ActivityService, ActivityAction } from './activity.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { canSeePartnerAttribution } from '../auth/role-utils';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
 @Controller('activity')
@@ -10,6 +12,7 @@ export class ActivityController {
 
   @Get()
   list(
+    @CurrentUser() me: any,
     @Query('actorId') actorId?: string,
     @Query('studentId') studentId?: string,
     @Query('action') action?: ActivityAction,
@@ -24,6 +27,15 @@ export class ActivityController {
       from: from ? tjParseLocalDate(from) : undefined,
       to: to ? tjParseLocalDateEnd(to) : undefined,
       take: take ? Number(take) : undefined,
+      // Эндпоинт закрыт только JwtAuthGuard, поэтому SALES_MANAGER может
+      // дёрнуть его напрямую в обход фронтового гейта в Activity.tsx.
+      // Партнёрские строки журнала (PARTNER_SENSITIVE_ACTIONS) содержат имя
+      // партнёра и сумму — их нельзя отдавать тем, кому эти же данные
+      // вырезаны из карточек сделки/студента/заявки. Гейт тот же самый
+      // canSeePartnerAttribution (а НЕ isElevated), иначе носитель кастомной
+      // роли с технической подложкой ADMIN прочитал бы здесь ровно то, что
+      // ему вырезали в students/applications/submissions.
+      viewerCanSeePartnerData: canSeePartnerAttribution(me),
     });
   }
 }

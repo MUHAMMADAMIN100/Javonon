@@ -63,3 +63,19 @@ export function resolveLandingBaseUrl(get?: EnvGetter): string {
 
   return FALLBACK_LANDING_URL;
 }
+
+/**
+ * Полная реферальная ссылка партнёра: base + ?ref=CODE + #apply.
+ *
+ * Живёт здесь, а не в partners.service, потому что ссылку теперь отдаёт и
+ * ReferralsService (блок «Партнёр» в карточках сделки/студента/заявки).
+ * Две независимые сборки одной строки — ровно тот класс расхождений, из-за
+ * которого этот файл и появился.
+ *
+ * Фрагмент #apply строго последним: всё после '#' в query уже не попадает,
+ * и ?ref= бы потерялся.
+ */
+export function buildReferralUrl(code: string, get?: EnvGetter): string {
+  const base = resolveLandingBaseUrl(get);
+  return `${base}/?ref=${code}#apply`;
+}

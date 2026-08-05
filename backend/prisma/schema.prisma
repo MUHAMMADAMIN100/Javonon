@@ -472,6 +472,10 @@ model Application {
   updatedAt             DateTime          @updatedAt
 
   submission SaleSubmission? @relation("SubmissionApplication")
+  // Сделки, ЗАВЕДЁННЫЕ из этой заявки (обратная сторона
+  // SaleSubmission.sourceApplicationId). Список, а не одна запись: отменённая
+  // сделка остаётся в истории, а по тому же лиду заводят новую.
+  sourcedSubmissions SaleSubmission[] @relation("SubmissionSourceApplication")
 
   @@index([status])
   @@index([direction])
@@ -1364,6 +1368,13 @@ enum PartnerPayoutStatus {
   REJECTED
 }
 
+// Состояние строки outbox'а партнёрской комиссии (см. model CommissionOutbox).
+enum CommissionOutboxStatus {
+  PENDING // ещё не доставлено в ReferralsService
+  DONE // отработано (начислено ИЛИ штатно пропущено — см. resultReason)
+  FAILED // исчерпаны попытки, нужна ручная проверка (руководство уведомлено)
+}
+
 model Partner {
   id       String  @id @default(uuid())
   email    String  @unique
@@ -1450,6 +1461,36 @@ model ReferralAttribution {
   // TTL — атрибуция действительна 90 дней по умолчанию.
   expiresAt DateTime?
 
+  // ОДНА комиссия за КЛИЕНТА, а не за платёж («один раз за клиента» —
+  // решение основателя). Сделка, оплаченная в 4 рассрочки, начисляет
+  // партнёру ровно один раз — на первом одобренном платеже.
+  //
+  // commissionedAt != null == комиссия по этому клиенту УЖЕ начислена,
+  // повторно начислять нельзя никогда.
+  //
+  // ВАЖНО: guard «один раз за клиента» — это НЕ «одна строка = одно
+  // начисление». Строк на одного клиента бывает несколько: повторная отправка
+  // формы с лендинга по той же ?ref= создаёт новую строку с новым
+  // applicationId (клиента в тот момент опознать нечем — ни studentId, ни
+  // telegramUserId ещё нет). Пока штамп ставился на ОДНУ найденную строку —
+  // самую свежую, — вторая строка того же клиента приходила с commissionedAt
+  // = NULL и начисляла партнёру второй раз за того же человека.
+  //
+  // Поэтому штамп проставляется условным апдейтом
+  // (WHERE <идентичность клиента> AND commissionedAt IS NULL) сразу по ВСЕМ
+  // строкам клиента, в одной транзакции с созданием Commission — см.
+  // ReferralsService.creditCommissionForAttributionOnce. Второй, независимый
+  // backstop живёт в БД: Commission.@@unique([partnerId, studentId]).
+  // Отдельный @@index на commissionedAt не заводим: запрос всегда сначала
+  // сужается по идентичности клиента (studentId/applicationId/telegramUserId
+  // — под каждым свой индекс ниже), а commissionedAt лишь фильтрует уже
+  // отобранные единицы строк.
+  commissionedAt DateTime?
+  // Ссылка на созданную Commission (аудит: из карточки клиента видно, какое
+  // именно начисление породила эта атрибуция). Без FK-связи — Commission не
+  // должна каскадно тянуть за собой атрибуцию.
+  commissionId   String?
+
   @@index([partnerId, createdAt])
   @@index([studentId])
   @@index([applicationId])
@@ -1465,6 +1506,28 @@ model Commission {
   // Источник: одна из этих связок
   paymentId     String? // студенческий Payment
   transactionId String? // финансовая Transaction
+
+  // КЛИЕНТ, за которого начислено. Ключ правила основателя «один раз за
+  // клиента»: вместе с @@unique([partnerId, studentId]) ниже это
+  // ЕДИНСТВЕННЫЙ guard, который живёт в БД, а не в порядке чтения строк.
+  //
+  // Зачем он нужен помимо ReferralAttribution.commissionedAt: строк
+  // атрибуции на одного клиента бывает НЕСКОЛЬКО (повторная отправка формы
+  // с лендинга по той же ?ref= создаёт новую строку с новым applicationId и
+  // commissionedAt = NULL). Пока штамп ставился на одну найденную строку,
+  // вторая, свежая и неотштампованная, начисляла партнёру ещё раз за того же
+  // клиента. Теперь дубль упирается в P2002 и транзакция откатывается
+  // целиком — баланс партнёра не трогается.
+  //
+  // Без FK-связи на Student: Commission — финансовая история, она обязана
+  // пережить удаление карточки студента (тот же приём, что у
+  // ReferralAttribution.commissionId).
+  //
+  // NULL допустим и НЕ конфликтует: Postgres считает NULL'ы различными, так
+  // что легаси-строки (начисленные до появления поля) и начисления по
+  // telegram-клиентам без Student живут как раньше. Задним числом поле НЕ
+  // заполняется — прошлые сделки не трогаем.
+  studentId     String?
 
   amountCents     Int // итоговое начисление (в копейках/центах)
   baseAmountCents Int // сумма платежа, с которой считалось
@@ -1483,6 +1546,12 @@ model Commission {
 
   @@unique([partnerId, paymentId])
   @@unique([partnerId, transactionId])
+  // «Один раз за КЛИЕНТА» на уровне БД. Работает как partial unique index:
+  // NULL'ы в Postgres различны, поэтому ограничение действует ровно на строки
+  // с заполненным studentId и не мешает ни легаси-записям, ни начислениям без
+  // студента. Создаётся `prisma db push` без потери данных: колонка новая, у
+  // всех существующих строк studentId = NULL, конфликтующих пар нет.
+  @@unique([partnerId, studentId])
   @@index([partnerId, status])
   @@index([paymentId])
   @@index([transactionId])
@@ -1508,6 +1577,85 @@ model PartnerPayout {
 
   @@index([partnerId, status])
   @@index([status])
+}
+
+/// TRANSACTIONAL OUTBOX для партнёрской комиссии по сделкам.
+///
+/// ЗАЧЕМ. approvePayment коммитит одобрение платежа (Transaction INCOME,
+/// Student, Application) ОДНОЙ транзакцией, а начисление партнёру идёт
+/// ОТДЕЛЬНОЙ транзакцией уже после COMMIT'а — иначе сбой партнёрской части
+/// откатывал бы одобрение бухгалтера (см. комментарий в
+/// submissions.service.ts, блок «Партнёрская комиссия»). Пока эти две
+/// транзакции ничем не связаны, смерть процесса МЕЖДУ ними (деплой,
+/// рестарт контейнера, eviction пода, обрыв соединения с БД) означала:
+/// платёж одобрен, доход в отчёте, партнёр не получил ничего и никогда не
+/// получит — commissionedAt остался null, но по одноплатёжной сделке
+/// второго approve, который «догнал» бы начисление, уже не будет.
+///
+/// КАК. Строка PENDING пишется ВНУТРИ транзакции одобрения — она
+/// коммитится атомарно вместе с платежом или не появляется вовсе. Сразу
+/// после COMMIT'а approvePayment пытается отработать её сам (быстрый путь,
+/// комиссия начисляется в те же миллисекунды, что и раньше). Если процесс
+/// умер до/во время этого — строка остаётся PENDING, и её добирает cron
+/// (CronService.drainCommissionOutbox). Повторная доставка безопасна:
+/// creditCommissionForAttributionOnce идемпотентен через CAS-штамп
+/// ReferralAttribution.commissionedAt, поэтому at-least-once не может
+/// заплатить дважды.
+///
+/// ЭТО ТОЛЬКО ДЛЯ НОВЫХ ОДОБРЕНИЙ. Задним числом строки не создаются:
+/// прошлые сделки остаются как есть (осознанное решение — не трогать уже
+/// закрытые балансы партнёров).
+model CommissionOutbox {
+  id String @id @default(uuid())
+
+  // Что именно породило начисление. Без FK-связей: outbox — журнал
+  // намерения, он не должен каскадно удаляться вместе со сделкой и не
+  // должен мешать удалению студента/платежа.
+  submissionId         String
+  // @unique — один платёж порождает ровно одну попытку начисления.
+  // Второй approve того же платежа невозможен (CAS на status), так что
+  // конфликт здесь означал бы баг, а не гонку.
+  paymentId            String  @unique
+  financeTransactionId String
+  studentId            String
+  // Обе заявки сделки, ровно как их передаёт немедленное начисление:
+  //  - applicationId — свежая SUCCESSFUL_LEAD, созданная этим одобрением;
+  //  - sourceApplicationId — лид, из которого сделку завели; именно на нём
+  //    висит атрибуция с лендинга.
+  // Хранятся обе, потому что искать атрибуцию надо по обеим (см.
+  // ReferralClientRef.applicationIds). Если повтор будет знать только одну,
+  // восстановленное начисление уйдёт в no-attribution — то есть outbox молча
+  // «доставит» пустоту вместо потерянной комиссии.
+  applicationId        String?
+  sourceApplicationId  String?
+
+  // Аргументы начисления, замороженные на момент одобрения: cron не должен
+  // пересчитывать базу по «сегодняшнему» состоянию сделки.
+  baseAmountCents Int
+  baseCurrency    String  @default("TJS")
+  sourceLabel     String?
+
+  status   CommissionOutboxStatus @default(PENDING)
+  attempts Int                    @default(0)
+  /// Итог доставки: credited | no-attribution | already-credited |
+  /// race-lost | attribution-expired | partner-inactive | zero-rate |
+  /// duplicate-commission | payment-not-approved. Нужен, чтобы по DONE-строке
+  /// было видно, начислили или осознанно пропустили.
+  resultReason String?
+  /// Текст последней ошибки доставки (для разбора FAILED-строк).
+  lastError    String?
+  /// Лизинг/бэкофф: строку берёт в работу только тот, кто прошёл CAS по
+  /// nextAttemptAt <= now(). Защищает от двойной обработки при нескольких
+  /// репликах и растягивает ретраи при устойчивом сбое.
+  nextAttemptAt DateTime @default(now())
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  processedAt DateTime?
+
+  // Рабочий индекс дренажа: PENDING со сроком попытки в прошлом.
+  @@index([status, nextAttemptAt])
+  @@index([submissionId])
 }
 
 // Сессия пользователя Telegram-бота — храним привязку telegramUserId к
@@ -1828,6 +1976,27 @@ model SaleSubmission {
   // Куда оформился (создаётся при APPROVE первого платежа).
   applicationId                   String?          @unique
   application                     Application?     @relation("SubmissionApplication", fields: [applicationId], references: [id], onDelete: SetNull)
+  // Заявка-ИСТОЧНИК: лид, из которого менеджер завёл сделку (кнопка
+  // «Создать сделку» в карточке заявки). Это НЕ то же самое, что
+  // applicationId выше: тот создаётся ЗАНОВО (status=SUCCESSFUL_LEAD) при
+  // одобрении первого платежа и перезаписывается — хранить в нём источник
+  // нельзя, он бы затёрся ровно в тот момент, когда нужен.
+  //
+  // ЗАЧЕМ. Реферальная атрибуция с лендинга висит на ЛИДЕ
+  // (ReferralAttribution.applicationId): в момент отправки формы Student ещё
+  // не существует. Student появляется только когда менеджер переводит заявку
+  // NEW_LEAD → IN_PROCESSING (там же back-fill ReferralAttribution.studentId).
+  // Если менеджер этот шаг пропустил и завёл сделку вкладкой «Новый» по имени
+  // и телефону лида, у сделки нет ни studentId, ни applicationId — моста к
+  // партнёру не существует вовсе: блок «Партнёр» пуст даже у основателя, а на
+  // одобрении первого платежа поиск уходит по СВЕЖЕсозданному студенту, у
+  // которого есть только новая SUCCESSFUL_LEAD-заявка. Итог — no-attribution
+  // и молча неоплаченный партнёр. Эта колонка и есть недостающий мост.
+  //
+  // НЕ @unique (в отличие от applicationId): по одному лиду можно завести
+  // несколько сделок — первую отменили, вторая настоящая.
+  sourceApplicationId             String?
+  sourceApplication               Application?     @relation("SubmissionSourceApplication", fields: [sourceApplicationId], references: [id], onDelete: SetNull)
   notes                           String?
   createdAt                       DateTime         @default(now())
   updatedAt                       DateTime         @updatedAt
@@ -1840,6 +2009,7 @@ model SaleSubmission {
   @@index([status])
   @@index([studentId])
   @@index([programId])
+  @@index([sourceApplicationId])
 }
 
 model SubmissionPayment {

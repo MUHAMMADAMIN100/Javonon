@@ -244,6 +244,15 @@ const DICT: Record<Lang, Record<string, string>> = {
     'applicationDetail.title': 'Заявка',
     'applicationDetail.leadFields': 'Ответы клиента с сайта',
     'applicationDetail.docs.missing': 'Не хватает документов',
+    'applicationDetail.createDeal': 'Создать сделку',
+    'applicationDetail.createDeal.hint':
+      'Заводите сделку отсюда — так она останется связана с этой заявкой (партнёр, приведший клиента, не потеряется).',
+    'submissionForm.fromApplication': 'Сделка по заявке',
+    'submissionForm.fromApplication.hint':
+      'Данные подставлены из заявки. Связь с ней сохранится в сделке — не создавайте её заново с нуля.',
+    'submissionForm.fromApplication.loading': 'Загружаем заявку…',
+    'submissionForm.fromApplication.failed':
+      'Не удалось загрузить заявку-источник. Вернитесь в карточку заявки и нажмите «Создать сделку» ещё раз.',
     'app.contact.channel.WHATSAPP': 'WhatsApp',
     'app.contact.channel.PHONE': 'Телефон',
     'app.contact.channel.INSTAGRAM': 'Instagram',
@@ -1299,6 +1308,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'activity.action.MANAGER_CHANGE': 'Смена менеджера',
     'activity.action.STUDENT_CREATE': 'Создание студента',
     'activity.action.STUDENT_DELETE': 'Удаление студента',
+    'activity.action.PARTNER_COMMISSION_SKIPPED': 'Комиссия партнёру не начислена',
 
     // ===== managerBar =====
     'managerBar.assigned': 'Назначен',
@@ -1392,6 +1402,16 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.commission.status.APPROVED': 'Одобрено',
     'partners.commission.status.PAID': 'Выплачено',
     'partners.commission.status.REVERSED': 'Отменено',
+    // Подтверждение начисления к выплате (PENDING → APPROVED). Денег не
+    // двигает: баланс партнёра поднялся ещё при начислении. Открывает вывод —
+    // партнёр может запросить выплату только на подтверждённую часть баланса.
+    'partners.commission.approve': 'Подтвердить',
+    'partners.commission.approve.confirm': 'Подтвердить начисление к выплате?',
+    'partners.commission.approve.hint':
+      'Партнёр сможет запросить вывод этой суммы. Баланс не изменится.',
+    // Пояснение к статусу «Отменено»: сумма уже снята с баланса партнёра, это
+    // не «ещё не выплачено».
+    'partners.commission.reversed.hint': 'сделка возвращена, сумма снята с баланса',
     'partners.add': '+ Добавить партнёра',
     'partners.add.password': 'Пароль',
     'partners.add.password.placeholder': 'оставить пусто — сгенерируется',
@@ -1435,6 +1455,19 @@ const DICT: Record<Lang, Record<string, string>> = {
     // (renders as "Ставка: 500 TJS / клиент").
     'partners.detail.rate.label': 'Ставка',
     'partners.detail.rate.perClient': '/ клиент',
+
+    // Блок «Партнёр» на карточках сделки / студента / заявки
+    // (components/PartnerAttributionCard.tsx). Виден ТОЛЬКО руководству —
+    // бэкенд не кладёт partnerAttribution в ответ остальным.
+    'partners.attribution.title': 'Партнёр',
+    'partners.attribution.code': 'Реф. код',
+    // «за клиента», не «за платёж»: комиссия начисляется ОДИН раз, на первом
+    // одобренном платеже сделки, даже если оплата в 4 рассрочки.
+    'partners.attribution.commission': 'Комиссия за клиента',
+    // Склеивается с датой: «Начислено 05.08.2026».
+    'partners.attribution.credited': 'Начислено',
+    'partners.attribution.notCredited': 'Ещё не начислено',
+    'partners.attribution.open': 'Карточка партнёра',
 
     // ===== massmail =====
     'massmail.field.name': 'Название кампании',
@@ -1684,6 +1717,15 @@ const DICT: Record<Lang, Record<string, string>> = {
     'applicationDetail.title': 'Ариза',
     'applicationDetail.leadFields': 'Ҷавобҳои муштарӣ аз сайт',
     'applicationDetail.docs.missing': 'Ҳуҷҷатҳо нокифоянд',
+    'applicationDetail.createDeal': 'Эҷоди аҳд',
+    'applicationDetail.createDeal.hint':
+      'Аҳдро аз ҳамин ҷо кушоед — он бо ин ариза алоқаманд мемонад (шарике, ки муштариро овардааст, гум намешавад).',
+    'submissionForm.fromApplication': 'Аҳд аз рӯи ариза',
+    'submissionForm.fromApplication.hint':
+      'Маълумот аз ариза гузошта шуд. Алоқа бо ариза дар аҳд нигоҳ дошта мешавад — онро аз нав насозед.',
+    'submissionForm.fromApplication.loading': 'Ариза бор мешавад…',
+    'submissionForm.fromApplication.failed':
+      'Аризаи манбаъро бор карда нашуд. Ба кортаи ариза баргардед ва «Эҷоди аҳд»-ро дубора пахш кунед.',
     'app.contact.channel.WHATSAPP': 'WhatsApp',
     'app.contact.channel.PHONE': 'Телефон',
     'app.contact.channel.INSTAGRAM': 'Instagram',
@@ -2734,6 +2776,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'activity.action.MANAGER_CHANGE': 'Тағйири менеҷер',
     'activity.action.STUDENT_CREATE': 'Сохтани донишҷӯ',
     'activity.action.STUDENT_DELETE': 'Несткунии донишҷӯ',
+    'activity.action.PARTNER_COMMISSION_SKIPPED': 'Комиссия ба шарик ҳисоб нашуд',
 
     // ===== managerBar =====
     'managerBar.assigned': 'Таъин шуд',
@@ -2826,6 +2869,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     'partners.commission.status.APPROVED': 'Тасдиқ шуд',
     'partners.commission.status.PAID': 'Пардохт шуд',
     'partners.commission.status.REVERSED': 'Бекор шуд',
+    'partners.commission.approve': 'Тасдиқ кардан',
+    'partners.commission.approve.confirm': 'Ҳисобкуниро барои пардохт тасдиқ мекунед?',
+    'partners.commission.approve.hint':
+      'Шарик метавонад ин маблағро барои баровардан дархост кунад. Тавозун тағйир намеёбад.',
+    'partners.commission.reversed.hint': 'муомила баргардонда шуд, маблағ аз тавозун гирифта шуд',
     'partners.add': '+ Илова кардани шарик',
     'partners.add.password': 'Рамз',
     'partners.add.password.placeholder': 'холӣ гузоред — худ сохта мешавад',
@@ -2867,6 +2915,16 @@ const DICT: Record<Lang, Record<string, string>> = {
     // PartnerDetail sub-header: renders "Меъёр: 500 TJS / мизоҷ".
     'partners.detail.rate.label': 'Меъёр',
     'partners.detail.rate.perClient': '/ мизоҷ',
+
+    // Блоки «Шарик» дар кортаи аҳд / донишҷӯ / ариза
+    // (components/PartnerAttributionCard.tsx). Танҳо ба роҳбарият.
+    'partners.attribution.title': 'Шарик',
+    'partners.attribution.code': 'Рамзи реф.',
+    'partners.attribution.commission': 'Комиссия барои мизоҷ',
+    // Бо сана васл мешавад: «Ҳисоб шуд 05.08.2026».
+    'partners.attribution.credited': 'Ҳисоб шуд',
+    'partners.attribution.notCredited': 'Ҳанӯз ҳисоб нашудааст',
+    'partners.attribution.open': 'Кортаи шарик',
 
     // ===== massmail =====
     'massmail.field.name': 'Номи маъракаи',

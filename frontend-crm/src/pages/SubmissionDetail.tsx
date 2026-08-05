@@ -29,6 +29,7 @@ import {
 import { listPrograms } from '../api/programs';
 import Icon from '../Icon';
 import CrmDatePicker from '../components/CrmDatePicker';
+import PartnerAttributionCard from '../components/PartnerAttributionCard';
 import { absFileUrl as absUrl } from '../lib/fileUrl';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -213,6 +214,13 @@ export default function SubmissionDetail() {
             {SUBMISSION_STATUS_LABEL[s.status]}
           </span>
         </div>
+
+        {/* Блок «Партнёр» — сразу под строкой менеджера. Рисуется, только если
+            бэкенд положил partnerAttribution в ответ: поле приходит ТОЛЬКО
+            руководству (FOUNDER/ADMIN/ACCOUNTANT) и только у партнёрских
+            клиентов. У менеджера-владельца сделки ключа в JSON нет вовсе,
+            поэтому компонент возвращает null и блока не существует. */}
+        <PartnerAttributionCard attribution={s.partnerAttribution} />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
           <Stat label="Контракт" value={`${s.totalAmount.toLocaleString('ru-RU')} ${s.currency}`} />

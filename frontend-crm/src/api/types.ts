@@ -299,6 +299,49 @@ export interface ManagerInfo {
   email: string;
 }
 
+/**
+ * Блок «Партнёр» в карточке сделки / студента / заявки.
+ * Зеркалит backend `PartnerAttributionView` (partners/referrals.service.ts).
+ *
+ * ПОЛЕ ОПЦИОНАЛЬНО НЕ ПРОСТО ТАК. Бэкенд отдаёт `partnerAttribution` ТОЛЬКО
+ * руководству (FOUNDER/ADMIN/ACCOUNTANT — канонический isElevated). Менеджеру
+ * по продажам ключа в ответе НЕТ ВООБЩЕ: он не должен знать ни имени партнёра,
+ * ни суммы, ни самого факта, что клиент партнёрский. Это гейт бэкенда, а не
+ * UI — поэтому на фронте роль НЕ проверяем: пришло поле → рисуем, не пришло →
+ * не рисуем. Дублирующая клиентская проверка создала бы ложное ощущение, что
+ * приватность держится на UI (её можно обойти чтением сетевого ответа).
+ *
+ * `undefined` = «не элевейтед либо ответ старого бэка», `null` = «элевейтед,
+ * но клиент органический». Оба случая рисуются одинаково — ничем.
+ */
+export interface PartnerAttributionView {
+  partnerId: string;
+  fullName: string;
+  referralCode: string;
+  /** Готовая ссылка с бэка. Никогда не собираем её на клиенте. */
+  referralUrl: string;
+  /**
+   * Сумма комиссии за клиента (копейки). ДО начисления — прогноз по текущей
+   * фикс-ставке партнёра; ПОСЛЕ — замороженная сумма из Commission, то есть
+   * сколько партнёру реально записали. Бэкенд подставляет нужный источник
+   * сам, на клиенте пересчитывать нечего.
+   */
+  commissionAmountCents: number;
+  /**
+   * Валюта `commissionAmountCents`, заполнена ТОЛЬКО когда сумма взята из
+   * реальной Commission. Это и есть признак «число настоящее»: null →
+   * рисуем как ставку-прогноз (всегда TJS), строка → рисуем как деньги в
+   * этой валюте, ровно как «Партнёры → Комиссии».
+   *
+   * Опционально: CRM (Vercel) может выкатиться раньше API (Railway), и
+   * старый бэкенд поля не отдаёт — undefined трактуем как null.
+   */
+  commissionCurrency?: string | null;
+  /** null = комиссия за этого клиента ещё не начислена (одна на клиента). */
+  commissionedAt: string | null;
+  commissionId: string | null;
+}
+
 export interface Application {
   id: string;
   fullName: string;
@@ -358,6 +401,12 @@ export interface Application {
   /** Текущий этап воронки. Меняется через POST /sales/applications/:id/move-stage. */
   pipelineStageId?: string | null;
   createdAt: string;
+  /**
+   * Партнёр, приведший клиента. Только в ответе GET /applications/:id и только
+   * руководству — см. {@link PartnerAttributionView}. В списках и во всех
+   * остальных ответах поля нет.
+   */
+  partnerAttribution?: PartnerAttributionView | null;
 }
 
 export interface Document {
@@ -441,6 +490,11 @@ export interface Student {
   documents?: Document[];
   applications?: Application[];
   createdAt: string;
+  /**
+   * Партнёр, приведший клиента. Только в ответе GET /students/:id и только
+   * руководству — см. {@link PartnerAttributionView}. В списках поля нет.
+   */
+  partnerAttribution?: PartnerAttributionView | null;
 }
 
 export interface Notification {

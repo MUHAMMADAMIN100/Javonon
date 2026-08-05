@@ -23,6 +23,12 @@ export async function listStudents(filters: StudentFilters = {}) {
   return data;
 }
 
+/**
+ * Карточка студента. Единственный ответ, который может нести
+ * `partnerAttribution` (Student.partnerAttribution → PartnerAttributionView):
+ * бэкенд добавляет его только для FOUNDER/ADMIN/ACCOUNTANT, остальным ключа
+ * в JSON нет вовсе. Поэтому поле опционально и рисуется по факту наличия.
+ */
 export async function getStudent(id: string) {
   const { data } = await api.get<Student>(`/students/${id}`);
   return data;

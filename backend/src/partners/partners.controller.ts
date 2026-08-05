@@ -101,6 +101,23 @@ export class AdminPartnersController {
     return this.svc.adminListCommissions({ partnerId, status });
   }
 
+  /**
+   * Подтвердить начисление к выплате (PENDING → APPROVED). Денег не двигает,
+   * но без него партнёр не может запросить выплату: requestPayout выдаёт
+   * только подтверждённую часть баланса (partners.service.ts,
+   * approvedWithdrawableCents).
+   *
+   * Роли — FOUNDER/ADMIN, как у POST/DELETE партнёра, а не class-default с
+   * ACCOUNTANT'ом: это АВТОРИЗАЦИЯ расхода («да, эти деньги партнёр
+   * заработал»), а не его проведение. Проведение — commissions/:id/pay и
+   * payouts/:id/pay — остаётся бухгалтеру.
+   */
+  @Post('commissions/:id/approve')
+  @Roles('FOUNDER', 'ADMIN')
+  approveCommission(@Param('id') id: string) {
+    return this.svc.adminApproveCommission(id);
+  }
+
   @Post('commissions/:id/pay')
   markCommissionPaid(@Param('id') id: string) {
     return this.svc.adminMarkCommissionPaid(id);
@@ -122,8 +139,26 @@ export class AdminPartnersController {
   }
 
   /**
-   * Карточка партнёра. Роли — FOUNDER/ADMIN (тот же паттерн, что и у
-   * POST/DELETE — ACCOUNTANT (class-default) сюда не пускаем).
+   * Карточка партнёра. Роли — FOUNDER/ADMIN/ACCOUNTANT, то есть ровно
+   * class-level default.
+   *
+   * ПОЧЕМУ ACCOUNTANT ЗДЕСЬ ЕСТЬ (в отличие от POST/DELETE выше). Читать
+   * карточку и менять партнёра — разные вещи, и раньше они разъехались в
+   * обратную сторону: @Roles на методе НЕ объединяется с class-level, он его
+   * ПЕРЕКРЫВАЕТ (RolesGuard → reflector.getAllAndOverride). Из-за этого
+   * бухгалтер мог PATCH ':id' (наследует class-default) и не мог GET ':id'
+   * — право писать без права читать.
+   *
+   * Плюс ACCOUNTANT входит в isElevated (FOUNDER/ADMIN/ACCOUNTANT), а именно
+   * isElevated решает, показывать ли блок «Партнёр» на карточках студента и
+   * заявки (students/applications.service.ts). Блок показывали, а его
+   * единственная ссылка «Открыть карточку» вела в 403. При этом бухгалтер уже
+   * видит партнёра в GET '' (список: имя, e-mail, реф-код, ставка, баланс,
+   * начислено/выплачено) и сам же проводит выплаты — commissions/:id/pay,
+   * payouts/:id/pay. Карточка не открывает ему ничего нового.
+   *
+   * Записи (POST/DELETE) остаются FOUNDER/ADMIN — создавать и удалять
+   * партнёров бухгалтер по-прежнему не может.
    *
    * ВАЖНО: :id-роуты объявлены ПОСЛЕ commissions/* и payouts/* литералов
    * специально — чтобы Nest не поймал GET /commissions или /payouts как
@@ -132,7 +167,7 @@ export class AdminPartnersController {
    * держать порядок.)
    */
   @Get(':id')
-  @Roles('FOUNDER', 'ADMIN')
+  @Roles('FOUNDER', 'ADMIN', 'ACCOUNTANT')
   adminGetOne(@Param('id') id: string) {
     return this.svc.adminGetOne(id);
   }
@@ -140,9 +175,14 @@ export class AdminPartnersController {
   /**
    * Пагинированный список атрибуций конкретного партнёра.
    * take: clamped 1..100 (default 20). skip: >=0 (default 0).
+   *
+   * Роли — те же, что и у GET ':id' выше (вкладка «Клиенты» той же карточки;
+   * разъехавшиеся роли снова дали бы наполовину рабочую страницу). PII
+   * клиентов в ответе (ФИО/телефон/e-mail студента и заявки) для ACCOUNTANT
+   * не новость: GET /students/:id и GET /applications/:id ему уже открыты.
    */
   @Get(':id/attributions')
-  @Roles('FOUNDER', 'ADMIN')
+  @Roles('FOUNDER', 'ADMIN', 'ACCOUNTANT')
   adminGetAttributions(
     @Param('id') id: string,
     @Query('take') take?: string,

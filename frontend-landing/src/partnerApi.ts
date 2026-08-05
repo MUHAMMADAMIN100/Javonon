@@ -77,6 +77,19 @@ export interface Partner {
 
 export interface PartnerDashboard {
   partner: Partner;
+  /**
+   * Подтверждённая часть баланса — только её можно запросить к выводу.
+   *
+   * balanceCents поднимается в момент начисления, когда комиссия ещё
+   * PENDING; вывод открывается лишь после того, как начисление подтвердили в
+   * CRM. Разница `balanceCents − availableCents` — начисления в ожидании
+   * подтверждения (и, если сделку вернули, уже снятые с баланса суммы).
+   *
+   * Опционально: лендинг (Vercel) может выехать раньше бэкенда (Railway), и
+   * старый ответ этого поля не содержит — в этом окне откатываемся на
+   * balanceCents.
+   */
+  availableCents?: number;
   stats: { clicks: number; leads: number; sales: number; paidSales: number };
   recentCommissions: Array<{
     id: string;

@@ -12,6 +12,7 @@ import {
 import { PartnersService } from './partners.service';
 import { ReferralsController } from './referrals.controller';
 import { ReferralsService } from './referrals.service';
+import { CommissionOutboxService } from './commission-outbox.service';
 import { PartnerJwtGuard } from './partner-jwt.guard';
 
 @Module({
@@ -42,8 +43,12 @@ import { PartnerJwtGuard } from './partner-jwt.guard';
     PartnerAuthService,
     PartnersService,
     ReferralsService,
+    CommissionOutboxService,
     PartnerJwtGuard,
   ],
-  exports: [ReferralsService],
+  // CommissionOutboxService экспортируется двум потребителям: submissions
+  // (пишет строку в транзакции одобрения и сам же её закрывает) и cron
+  // (добирает то, что быстрый путь потерял на рестарте).
+  exports: [ReferralsService, CommissionOutboxService],
 })
 export class PartnersModule {}

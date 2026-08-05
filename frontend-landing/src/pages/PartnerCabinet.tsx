@@ -92,6 +92,17 @@ export default function PartnerCabinet() {
 
   const { partner, stats, recentCommissions } = data;
 
+  // Доступно к выводу = подтверждённая часть баланса. Показываем ОТДЕЛЬНО от
+  // balanceCents: начисление попадает в баланс сразу при оплате клиента, а
+  // запросить его можно только после подтверждения в CRM. Без этой строки
+  // партнёр видел бы «Тавозун 500» и получал бы отказ на выплату — читалось
+  // бы как поломка, а не как «ещё не подтвердили».
+  //
+  // ?? balanceCents — окно рассинхрона деплоев: лендинг на Vercel может выйти
+  // раньше бэкенда на Railway, и в старом ответе поля нет.
+  const availableCents = data.availableCents ?? partner.balanceCents;
+  const pendingCents = Math.max(0, partner.balanceCents - availableCents);
+
   return (
     <div className="stu-page" style={{ padding: 'max(16px, 4vw)' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -148,10 +159,16 @@ export default function PartnerCabinet() {
             Тавозун барои пардохт
           </div>
           <div style={{ fontFamily: 'var(--display)', fontSize: 48, fontWeight: 500, letterSpacing: '-0.03em' }}>
-            {fmtMoney(partner.balanceCents)}
+            {fmtMoney(availableCents)}
           </div>
+          {pendingCents > 0 && (
+            <div style={{ marginTop: 6, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
+              Дар интизори тасдиқ: {fmtMoney(pendingCents)} — пас аз тасдиқ барои
+              баровардан дастрас мешавад
+            </div>
+          )}
           <div style={{ marginTop: 8, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-            Ҳамагӣ ба даст оварда шуд: {fmtMoney(partner.totalEarnedCents)} · Пардохт шуд: {fmtMoney(partner.totalPaidCents)}
+            Тавозуни умумӣ: {fmtMoney(partner.balanceCents)} · Ҳамагӣ ба даст оварда шуд: {fmtMoney(partner.totalEarnedCents)} · Пардохт шуд: {fmtMoney(partner.totalPaidCents)}
           </div>
         </section>
 

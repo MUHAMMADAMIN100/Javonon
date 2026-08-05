@@ -15,6 +15,7 @@ import DocumentsChecklist from '../components/DocumentsChecklist';
 import InteractionsLog from '../components/InteractionsLog';
 import StudentPaymentsSection from '../components/StudentPaymentsSection';
 import ManagerBar from '../components/ManagerBar';
+import PartnerAttributionCard from '../components/PartnerAttributionCard';
 import ApplicationFormSection from '../components/ApplicationFormSection';
 import ApplicationStatusSelect from '../components/ApplicationStatusSelect';
 import DirectionOptions from '../components/DirectionOptions';
@@ -303,6 +304,12 @@ export default function StudentDetail() {
           chinaManager={student.chinaManager}
           onReassign={onReassign}
         />
+
+        {/* Блок «Партнёр» — сразу под менеджерами. Рисуется, только если
+            бэкенд положил partnerAttribution в ответ: поле приходит ТОЛЬКО
+            руководству (FOUNDER/ADMIN/ACCOUNTANT) и только у партнёрских
+            клиентов. Клиентскому менеджеру ключа в JSON нет вовсе. */}
+        <PartnerAttributionCard attribution={student.partnerAttribution} />
 
         {student.applications && student.applications.length > 0 ? (
           // Раньше редактор прятался у зачисленных: у степпера просто не было

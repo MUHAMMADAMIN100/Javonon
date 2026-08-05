@@ -18,7 +18,12 @@ export type ActivityAction =
   | 'FINANCE_DELETE'
   | 'TRANSACTION_MANAGER_CHANGE'
   | 'PAYMENT_APPROVED'
-  | 'PAYMENT_REFUND';
+  | 'PAYMENT_REFUND'
+  // Партнёру НЕ начислена комиссия за клиента, которого он привёл (истёк
+  // 90-дневный TTL атрибуции / партнёр неактивен / дедуп). Строка приходит
+  // только руководству — бэкенд вырезает её из GET /activity остальным
+  // (activity.service.ts, PARTNER_SENSITIVE_ACTIONS).
+  | 'PARTNER_COMMISSION_SKIPPED';
 
 export interface ActivityEntry {
   id: string;
@@ -60,4 +65,5 @@ export const ACTIVITY_LABEL: Record<ActivityAction, string> = {
   TRANSACTION_MANAGER_CHANGE: 'Смена менеджера транзакции',
   PAYMENT_APPROVED: 'Одобрение платежа',
   PAYMENT_REFUND: 'Возврат платежа',
+  PARTNER_COMMISSION_SKIPPED: 'Комиссия партнёру не начислена',
 };

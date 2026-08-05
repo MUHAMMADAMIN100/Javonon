@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { PartnerAttributionView } from './types';
 
 export type SubmissionStatus = 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 export type SubmissionPaymentStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -46,6 +47,13 @@ export interface SaleSubmission {
   currency: string;
   status: SubmissionStatus;
   applicationId: string | null;
+  /**
+   * Заявка-ИСТОЧНИК: лид, из которого сделку завели кнопкой «Создать сделку».
+   * Не путать с `applicationId` выше — ту создаёт одобрение первого платежа.
+   * Именно по этой ссылке бэкенд находит партнёрскую атрибуцию с лендинга,
+   * когда сделка заведена как «новый студент» и `studentId` ещё null.
+   */
+  sourceApplicationId: string | null;
   notes: string | null;
   firstApprovedAt: string | null;
   createdAt: string;
@@ -55,6 +63,13 @@ export interface SaleSubmission {
   student?: { id: string; fullName: string } | null;
   manager?: { id: string; fullName: string; role: string };
   application?: { id: string; status: string } | null;
+  /**
+   * Партнёр, приведший клиента. Приходит ТОЛЬКО в GET /submissions/:id и
+   * ТОЛЬКО руководству (FOUNDER/ADMIN/ACCOUNTANT) — см.
+   * {@link PartnerAttributionView}. В списках (`/submissions`, `/mine`,
+   * `/pending-payments`) поля нет никогда, поэтому оно опционально.
+   */
+  partnerAttribution?: PartnerAttributionView | null;
 }
 
 export interface PendingPayment extends SubmissionPayment {
@@ -67,6 +82,14 @@ export interface PendingPayment extends SubmissionPayment {
 
 export interface CreateSubmissionDto {
   studentId?: string | null;
+  /**
+   * Заявка-источник (`/submissions/new?applicationId=…`, кнопка «Создать
+   * сделку» в карточке заявки). Ложится в SaleSubmission.sourceApplicationId
+   * и служит мостом к партнёрской атрибуции: без него сделка по лиду с
+   * лендинга, заведённая как «новый студент», остаётся ничем не связана с
+   * партнёром — комиссия не начисляется.
+   */
+  applicationId?: string | null;
   // Обновить email существующего студента при create (уникальность на бэке).
   existingStudentEmail?: string;
   newStudentName?: string;

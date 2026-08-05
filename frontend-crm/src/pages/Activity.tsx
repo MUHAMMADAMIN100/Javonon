@@ -28,6 +28,9 @@ const ACTION_VISUAL: Record<ActivityAction, { icon: string; color: string; bg: s
   TRANSACTION_MANAGER_CHANGE: { icon: 'swap_horiz', color: '#6d28d9', bg: '#ede9fe' },
   PAYMENT_APPROVED: { icon: 'verified',      color: '#166534', bg: '#dcfce7' },
   PAYMENT_REFUND:  { icon: 'undo',           color: '#c2410c', bg: '#ffedd5' },
+  // Отказ в партнёрской комиссии — красный, как денежные потери: строка
+  // означает, что партнёру за приведённого клиента не заплатили.
+  PARTNER_COMMISSION_SKIPPED: { icon: 'money_off', color: '#9f1239', bg: '#ffe4e6' },
 };
 const FALLBACK_VISUAL = { icon: 'bolt', color: '#64748b', bg: '#f1f5f9' };
 
@@ -89,6 +92,16 @@ export default function Activity() {
 
   const reset = () => { setAction(''); setFrom(''); setTo(''); };
 
+  // Название действия через i18n с русским фолбэком из ACTIVITY_LABEL.
+  // Раньше чипы и заголовки карточек читали ACTIVITY_LABEL напрямую, и
+  // таджикская локаль показывала в них русские подписи, хотя ключи
+  // activity.action.* уже существовали (их использовал только dropdown).
+  const actionLabel = (a: ActivityAction) => {
+    const key = `activity.action.${a}`;
+    const translated = t(key);
+    return translated === key ? ACTIVITY_LABEL[a] : translated;
+  };
+
   // Сводка по типам действий (для верхних чипов)
   const counts = items.reduce((acc, e) => {
     acc[e.action] = (acc[e.action] || 0) + 1;
@@ -125,7 +138,7 @@ export default function Activity() {
                 }}
               >
                 <Icon name={v.icon} size={15} />
-                {ACTIVITY_LABEL[a]}
+                {actionLabel(a)}
                 <b>{counts[a]}</b>
               </button>
             );
@@ -144,13 +157,9 @@ export default function Activity() {
           <div className="filters">
             <select className="crm-select" value={action} onChange={(e) => setAction(e.target.value as any)}>
               <option value="">{t('activity.filter.allActions')}</option>
-              {Object.entries(ACTIVITY_LABEL).map(([k, v]) => {
-                const key = `activity.action.${k}`;
-                const translated = t(key);
-                return (
-                  <option key={k} value={k}>{translated === key ? v : translated}</option>
-                );
-              })}
+              {(Object.keys(ACTIVITY_LABEL) as ActivityAction[]).map((k) => (
+                <option key={k} value={k}>{actionLabel(k)}</option>
+              ))}
             </select>
             <CrmDatePicker className="crm-input" value={from} onChange={(v) => setFrom(v)} />
             <CrmDatePicker className="crm-input" value={to} onChange={(v) => setTo(v)} />
@@ -213,7 +222,7 @@ export default function Activity() {
                               alignItems: 'baseline', gap: 12, flexWrap: 'wrap',
                             }}>
                               <span style={{ fontWeight: 600, color: v.color, fontSize: 13 }}>
-                                {ACTIVITY_LABEL[e.action]}
+                                {actionLabel(e.action)}
                               </span>
                               <span style={{ fontSize: 11, color: 'var(--text-light)' }}>
                                 {new Date(e.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}

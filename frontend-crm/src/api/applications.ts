@@ -19,6 +19,13 @@ export async function listApplications(filters: AppFilters = {}) {
   return data;
 }
 
+/**
+ * Карточка заявки. Единственный ответ, который может нести
+ * `partnerAttribution` (Application.partnerAttribution →
+ * PartnerAttributionView): бэкенд добавляет его только для
+ * FOUNDER/ADMIN/ACCOUNTANT, остальным ключа в JSON нет вовсе. Поэтому поле
+ * опционально и рисуется по факту наличия.
+ */
 export async function getApplication(id: string) {
   const { data } = await api.get<Application>(`/applications/${id}`);
   return data;

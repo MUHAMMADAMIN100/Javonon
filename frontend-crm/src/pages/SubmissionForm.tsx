@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useUI } from '../ui/Dialogs';
 import {
@@ -9,10 +9,13 @@ import {
   type CreateSubmissionDto,
   type SubmissionPaymentMethod,
 } from '../api/submissions';
-import { listStudents } from '../api/students';
+import { getStudent, listStudents } from '../api/students';
+import { getApplication } from '../api/applications';
 import { listPrograms } from '../api/programs';
+import type { Student } from '../api/types';
 import Icon from '../Icon';
 import CrmDatePicker from '../components/CrmDatePicker';
+import { useT } from '../lib/i18n';
 
 type Mode = 'existing' | 'new';
 
@@ -23,6 +26,19 @@ type UploadMeta = { mime: string; size: number; originalName: string };
 export default function SubmissionForm() {
   const navigate = useNavigate();
   const { toast } = useUI();
+  const { t } = useT();
+
+  /**
+   * Заявка-источник: `/submissions/new?applicationId=…` — кнопка «Создать
+   * сделку» в карточке заявки. Единственный способ не потерять партнёра,
+   * приведшего клиента: реферальная атрибуция с лендинга висит на ЗАЯВКЕ, а
+   * сделка, заведённая с чистого листа вкладкой «Новый», не связана с ней
+   * ничем — ни studentId (студент появится только на одобрении), ни
+   * applicationId (та заявка создаётся тем же одобрением заново). id уходит на
+   * бэкенд как есть и живёт в SaleSubmission.sourceApplicationId.
+   */
+  const [searchParams] = useSearchParams();
+  const sourceApplicationId = (searchParams.get('applicationId') || '').trim();
 
   // Студент
   const [mode, setMode] = useState<Mode>('existing');
@@ -81,11 +97,69 @@ export default function SubmissionForm() {
     enabled: mode === 'existing' && debouncedStudentSearch.length >= 2,
   });
   const studentOptions = studentsQuery.data || [];
-  const selectedStudent = studentOptions.find((s) => s.id === studentId);
   const programsQuery = useQuery({
     queryKey: ['programs-all'],
     queryFn: () => listPrograms(),
   });
+
+  // ── Предзаполнение из заявки-источника ───────────────────────────────────
+  //
+  // Заявка тянется только когда в query есть applicationId (обычный вход
+  // «Новая сделка» из списка сделок ничего лишнего не грузит).
+  const applicationQuery = useQuery({
+    queryKey: ['submission-form-application', sourceApplicationId],
+    queryFn: () => getApplication(sourceApplicationId),
+    enabled: !!sourceApplicationId,
+    // Форма — снимок на момент открытия: перезагрузка заявки под руками
+    // менеджера затирала бы уже введённые правки.
+    staleTime: Infinity,
+    retry: false,
+  });
+  const sourceApp = applicationQuery.data;
+
+  /**
+   * Студент, подставленный из заявки. Список `studentOptions` наполняется
+   * только поиском по >= 2 символам, поэтому найти в нём преподставленного
+   * студента нечем — держим его отдельно, иначе выбранная строка выглядела бы
+   * пустой и менеджер искал бы того же человека руками.
+   */
+  const [presetStudent, setPresetStudent] = useState<Student | null>(null);
+  const selectedStudent =
+    studentOptions.find((s) => s.id === studentId) ||
+    (presetStudent && presetStudent.id === studentId ? presetStudent : undefined);
+
+  // Однократная подстановка: `prefilledRef` не даёт перетереть правки
+  // менеджера, если react-query отдаст данные повторно (refetch на focus).
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (!sourceApp || prefilledRef.current) return;
+    prefilledRef.current = true;
+    if (sourceApp.studentId) {
+      // Лид уже сконвертирован в студента — вкладка «Существующий».
+      // Заводить его вторым «новым» нельзя: на одобрении создался бы дубль
+      // Student, а при совпадении email одобрение вообще упало бы в 400.
+      setMode('existing');
+      setStudentId(sourceApp.studentId);
+      // Имя в строку поиска — на случай, если карточку студента отдать не
+      // смогли (нет прав, студента удалили): менеджер увидит подсказки и
+      // выберет человека сам, а не пустое поле при непонятно чем выбранном.
+      setStudentSearch(sourceApp.fullName || '');
+      getStudent(sourceApp.studentId)
+        .then(setPresetStudent)
+        .catch(() => {
+          // Молча оставить studentId выбранным нельзя: поле выглядело бы
+          // пустым, а сделка ушла бы на студента, которого менеджер на
+          // экране не видел. Снимаем выбор — связь с заявкой при этом
+          // сохраняется отдельным applicationId и партнёр не теряется.
+          setStudentId('');
+        });
+    } else {
+      setMode('new');
+      setNewName(sourceApp.fullName || '');
+      setNewPhone(sourceApp.phone || '');
+      setNewEmail(sourceApp.email || '');
+    }
+  }, [sourceApp]);
 
   const createMut = useMutation({
     mutationFn: (data: CreateSubmissionDto) => createSubmission(data),
@@ -126,6 +200,11 @@ export default function SubmissionForm() {
 
     createMut.mutate({
       studentId: mode === 'existing' ? studentId : null,
+      // Мост к партнёрской атрибуции. Отправляем ВСЕГДА, когда сделку открыли
+      // из карточки заявки, — в том числе в режиме «Существующий»: студент
+      // мог быть заведён вручную, без конвертации лида, и тогда атрибуция
+      // по-прежнему висит только на заявке.
+      applicationId: sourceApplicationId || undefined,
       // Если existing и email введён — обновляем Student.email на бэке
       // (проверка уникальности + update перед созданием submission).
       existingStudentEmail: mode === 'existing' && newEmail.trim()
@@ -178,6 +257,54 @@ export default function SubmissionForm() {
         animate={{ opacity: 1, y: 0 }}
         style={{ padding: 24 }}
       >
+        {/* Сделка открыта из карточки заявки. Плашка нужна не для красоты:
+            она подтверждает менеджеру, что связь с лидом установлена — от неё
+            зависит, найдётся ли партнёр, приведший клиента, при начислении
+            комиссии. Ошибку загрузки показываем так же явно: молча потерять
+            связь и уйти в обычную «новую сделку» — ровно тот сценарий,
+            из-за которого партнёр остаётся неоплаченным. */}
+        {sourceApplicationId && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 10,
+              padding: '10px 12px',
+              marginBottom: 18,
+              background: 'var(--bg)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+            }}
+          >
+            <Icon
+              name={applicationQuery.isError ? 'error' : 'link'}
+              size={18}
+              style={{ color: 'var(--text-soft)', flexShrink: 0 }}
+            />
+            <div style={{ fontSize: 13, minWidth: 0 }}>
+              {applicationQuery.isError ? (
+                <span style={{ color: 'var(--danger)' }}>
+                  {t('submissionForm.fromApplication.failed')}
+                </span>
+              ) : applicationQuery.isLoading ? (
+                <span style={{ color: 'var(--text-soft)' }}>
+                  {t('submissionForm.fromApplication.loading')}
+                </span>
+              ) : (
+                <>
+                  <strong>
+                    {t('submissionForm.fromApplication')}
+                    {sourceApp?.fullName ? `: ${sourceApp.fullName}` : ''}
+                  </strong>
+                  <div style={{ color: 'var(--text-soft)', marginTop: 2 }}>
+                    {t('submissionForm.fromApplication.hint')}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ===== 1. СТУДЕНТ ===== */}
         <Section title="1. Студент">
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>

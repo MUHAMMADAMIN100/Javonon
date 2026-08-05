@@ -23,6 +23,7 @@ import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../l
 import DocumentsChecklist from '../components/DocumentsChecklist';
 import DirectionOptions from '../components/DirectionOptions';
 import ManagerBar from '../components/ManagerBar';
+import PartnerAttributionCard from '../components/PartnerAttributionCard';
 import ApplicationFormSection from '../components/ApplicationFormSection';
 import BackButton from '../components/BackButton';
 import CrmDatePicker from '../components/CrmDatePicker';
@@ -419,6 +420,30 @@ export default function ApplicationDetail() {
               <button className="btn btn-sm btn-primary" onClick={onSave}>{t('common.save')}</button>
             </>
           )}
+          {/*
+            ЕДИНСТВЕННЫЙ вход «заявка → сделка». Раньше его не существовало
+            вовсе: /submissions/new открывался только кнопкой «Новая сделка» из
+            списка сделок, и менеджер заводил клиента вкладкой «Новый» по имени
+            и телефону лида. Такая сделка не связана с заявкой ничем, а
+            партнёрская атрибуция с лендинга висит именно на заявке — партнёр
+            оставался неоплаченным молча, без единой записи в логе.
+            Здесь id заявки уходит в query, бэкенд кладёт его в
+            SaleSubmission.sourceApplicationId, и связь переживает одобрение.
+
+            Скрыт на «успешных» исходах: такая заявка обычно САМА создана
+            одобрением первого платежа (SUCCESSFUL_LEAD), и заводить по ней
+            новую сделку — почти всегда ошибка. Через список сделок этот путь
+            по-прежнему доступен, если он действительно нужен.
+          */}
+          {canAct && !isEnrolled && !edit && (
+            <button
+              className="btn btn-sm btn-secondary"
+              title={t('applicationDetail.createDeal.hint')}
+              onClick={() => navigate(`/submissions/new?applicationId=${encodeURIComponent(app.id)}`)}
+            >
+              <Icon name="handshake" size={14} /> {t('applicationDetail.createDeal')}
+            </button>
+          )}
           {canAct && (
             <button className="btn btn-sm btn-danger" onClick={onDeleteApp}>{t('common.delete')}</button>
           )}
@@ -514,6 +539,14 @@ export default function ApplicationDetail() {
             onReassign={onReassign}
           />
         )}
+
+        {/* Блок «Партнёр» — сразу под менеджерами. В отличие от ManagerBar
+            рисуем и у новых заявок (isNew): партнёрский лид ценен именно на
+            входе, до назначения менеджера. Само наличие блока определяет
+            бэкенд: partnerAttribution приходит ТОЛЬКО руководству
+            (FOUNDER/ADMIN/ACCOUNTANT) и только у партнёрских клиентов —
+            у менеджера по продажам ключа в JSON нет вовсе. */}
+        <PartnerAttributionCard attribution={app.partnerAttribution} />
 
         <PipelineStageSelector
           applicationId={app.id}

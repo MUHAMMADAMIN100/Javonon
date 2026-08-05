@@ -150,7 +150,16 @@ export interface AdminCommission {
    *  currency в этом случае. */
   baseCurrency?: string;
   status: 'PENDING' | 'APPROVED' | 'PAID' | 'REVERSED';
+  approvedAt?: string | null;
   paidAt?: string | null;
+  /**
+   * Set when the deal behind this commission was cancelled (or its approved
+   * payment deleted). The backend then flips `status` to REVERSED, subtracts
+   * the amount back off `Partner.balanceCents` / `totalEarnedCents`, and
+   * appends the reason to `note`. A reversed row can be neither approved nor
+   * marked paid — both endpoints reject it.
+   */
+  reversedAt?: string | null;
   createdAt: string;
   note?: string | null;
 }
@@ -194,6 +203,19 @@ export const adminListCommissions = (params?: {
 }) =>
   api.get<AdminCommission[]>('/admin/partners/commissions/list', { params })
     .then((r) => r.data);
+
+/**
+ * Sign a commission off for payout (PENDING → APPROVED). Moves no money — the
+ * partner's balance was already credited when the commission was created.
+ * What it unlocks is withdrawal: `POST /partner/payouts` only hands out the
+ * APPROVED slice of the balance, so an unapproved commission cannot leave the
+ * company before someone confirms the sale actually stuck.
+ *
+ * Backend roles: FOUNDER/ADMIN (ACCOUNTANT executes payouts, does not
+ * authorise them) — gate the button with the same check.
+ */
+export const adminApproveCommission = (id: string) =>
+  api.post<AdminCommission>(`/admin/partners/commissions/${id}/approve`).then((r) => r.data);
 
 export const adminMarkCommissionPaid = (id: string) =>
   api.post<AdminCommission>(`/admin/partners/commissions/${id}/pay`).then((r) => r.data);

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Optional } from '@nestjs/common';
 import { Direction, Prisma, Role, StudentStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -7,7 +7,8 @@ import { UpdateStudentDto } from './dto/update-student.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { isElevated } from '../auth/role-utils';
+import { canSeePartnerAttribution, isElevated, UserWithRoles } from '../auth/role-utils';
+import { ReferralsService } from '../partners/referrals.service';
 import { CABINET_BY_DIRECTION } from '../common/cabinets';
 import { parseCalendarDateUtc } from '../common/tj-time';
 
@@ -50,6 +51,10 @@ export class StudentsService {
     private realtime: RealtimeGateway,
     private activity: ActivityService,
     private notifications: NotificationsService,
+    // Блок «Партнёр» в карточке студента (см. findOne). @Optional() — как в
+    // ApplicationsService: без PartnersModule карточка работает, просто без
+    // партнёрского блока.
+    @Optional() private referrals?: ReferralsService,
   ) {}
 
   private ensureCanEdit(
@@ -281,13 +286,31 @@ export class StudentsService {
     });
   }
 
-  async findOne(id: string) {
+  /**
+   * Карточка студента.
+   *
+   * @param viewer — кто смотрит. Нужен ТОЛЬКО для блока «Партнёр»:
+   *   partnerAttribution добавляется в ответ исключительно руководству
+   *   (канонический гейт canSeePartnerAttribution из auth/role-utils —
+   *   FOUNDER/ADMIN/ACCOUNTANT, но НЕ носитель активной кастомной роли
+   *   с базой-«подложкой»: ему нужен явный partners:read). Для всех
+   *   остальных поля в ответе НЕТ вовсе: менеджер по продажам не должен
+   *   знать ни имя партнёра, ни сумму, ни сам факт, что клиент партнёрский,
+   *   а скрытие на фронте он обошёл бы чтением сетевого ответа.
+   *   Внутренние вызовы (update и т.п.) viewer не передают — и партнёрский
+   *   блок им не считается: лишний запрос и лишний риск утечки.
+   */
+  async findOne(id: string, viewer?: UserWithRoles | null) {
     const student = await this.prisma.student.findUnique({
       where: { id },
       include: { ...STUDENT_INCLUDE, applications: true },
     });
     if (!student) throw new NotFoundException('Студент не найден');
-    return student;
+    if (!canSeePartnerAttribution(viewer)) return student;
+    const partnerAttribution = this.referrals
+      ? await this.referrals.getPartnerAttributionView({ studentId: student.id })
+      : null;
+    return { ...student, partnerAttribution };
   }
 
   /**
