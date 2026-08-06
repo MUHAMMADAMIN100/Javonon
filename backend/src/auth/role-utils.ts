@@ -71,6 +71,10 @@ export function isElevated(user: UserWithRoles | undefined | null): boolean {
  *
  * Fail-closed: носителю кастомной роли партнёрские данные видны только
  * по ЯВНОМУ гранту 'partners:read' в CustomRole.permissions.
+ *
+ * Ровно одно задокументированное исключение — превью формы создания сделки,
+ * см. canPreviewDealFormPartner ниже. Оно тоже fail-closed для кастомных
+ * ролей и НЕ является поводом заводить новые послабления.
  */
 export function canSeePartnerAttribution(
   user: UserWithRoles | undefined | null,
@@ -84,6 +88,45 @@ export function canSeePartnerAttribution(
 /** Любой менеджер по продажам или клиентский менеджер. */
 export function isManager(user: UserWithRoles | undefined | null): boolean {
   return hasRole(user, 'SALES_MANAGER', 'CLIENT_MANAGER');
+}
+
+/**
+ * ЕДИНСТВЕННОЕ исключение из canSeePartnerAttribution — превью формы создания
+ * сделки (GET /submissions/partner-preview, SubmissionsService.
+ * previewPartnerForClient). Больше нигде не применять: на любой другой
+ * поверхности гейт — canSeePartnerAttribution.
+ *
+ * Почему исключение вообще есть: связь клиента с партнёром проставляет
+ * СЕРВЕР, и менеджер, который прямо сейчас вводит номер, обязан видеть, что
+ * именно система нашла, — иначе решение «партнёру заплатят» принимается
+ * невидимо для единственного человека, способного заметить ошибку. Поэтому
+ * SALES_MANAGER/CLIENT_MANAGER сюда допущены, хотя во всех остальных местах
+ * партнёрский блок им закрыт. Ответ при этом сужен до трёх полей по одному
+ * вводимому клиенту (см. previewPartnerForClient).
+ *
+ * Почему носитель кастомной роли — НЕТ:
+ * исключение выдано базовым ролям продаж, а не «всем, кто прошёл RolesGuard».
+ * У носителя активной CustomRole base role — техническая «подложка»
+ * (RolesGuard.skipBaseRole), она не даёт прав ни на одной поверхности, и
+ * @Roles(...) на этом эндпоинте его НЕ останавливает: implicit-проверка в
+ * RolesGuard матчит любой submissions:* по префиксу '/submissions', а на GET
+ * проходит и read-only submissions:read. То есть роль вида «Таргетолог»/«SMM»
+ * с одним лишь «Продажи — просмотр» дошла бы до превью, не имея при этом
+ * права создать сделку (POST /submissions её отсекает — read-only пермиссия
+ * на write не засчитывается). Обоснование исключения — «показываем тому, кто
+ * эту связь своим действием и создаёт» — на неё не распространяется.
+ * Fail-closed: кастомной роли партнёрские данные видны только по ЯВНОМУ
+ * гранту 'partners:read', то есть через canSeePartnerAttribution ниже.
+ */
+export function canPreviewDealFormPartner(
+  user: UserWithRoles | undefined | null,
+): boolean {
+  if (!user) return false;
+  // FOUNDER/ADMIN/ACCOUNTANT, а также кастомная роль с явным partners:read.
+  if (canSeePartnerAttribution(user)) return true;
+  // Кастомная роль без partners:read — стоп (см. блок выше).
+  if (user.hasCustomRole) return false;
+  return isManager(user);
 }
 
 /** Любой сотрудник компании (кроме студентов/партнёров). */

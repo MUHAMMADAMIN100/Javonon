@@ -64,10 +64,13 @@ export interface SaleSubmission {
   manager?: { id: string; fullName: string; role: string };
   application?: { id: string; status: string } | null;
   /**
-   * Партнёр, приведший клиента. Приходит ТОЛЬКО в GET /submissions/:id и
-   * ТОЛЬКО руководству (FOUNDER/ADMIN/ACCOUNTANT) — см.
-   * {@link PartnerAttributionView}. В списках (`/submissions`, `/mine`,
-   * `/pending-payments`) поля нет никогда, поэтому оно опционально.
+   * Партнёр, приведший клиента. Приходит ТОЛЬКО руководству
+   * (FOUNDER/ADMIN/ACCOUNTANT — канонический `canSeePartnerAttribution` на
+   * бэке) и только там, где бэкенд поле прикладывает: GET /submissions/:id,
+   * GET /submissions (список «Все»/«Одобренные») и вложенная сделка в
+   * GET /submissions/pending-payments. В /submissions/mine поля нет.
+   * Отсюда опциональность: `undefined` = не приложили, `null` = клиент
+   * органический. Рисуются одинаково — ничем.
    */
   partnerAttribution?: PartnerAttributionView | null;
 }
@@ -78,6 +81,30 @@ export interface PendingPayment extends SubmissionPayment {
     student: { id: string; fullName: string } | null;
     manager: { id: string; fullName: string };
   };
+}
+
+/**
+ * Ответ GET /submissions/partner-preview — «кто привёл этого клиента» для
+ * формы создания сделки.
+ *
+ * ЭТО НЕ {@link PartnerAttributionView}, и подменять одно другим нельзя.
+ * Эндпоинт открыт в том числе SALES_MANAGER/CLIENT_MANAGER, которым
+ * партнёрские данные закрыты во всех остальных местах CRM, поэтому бэкенд
+ * осознанно сузил ответ до трёх полей: ни partnerId, ни referralUrl, ни
+ * commissionId, ни дат начисления — чтобы форма не превратилась в справочник
+ * партнёров, доступный менеджеру.
+ */
+export interface SubmissionPartnerPreview {
+  fullName: string;
+  referralCode: string;
+  /** Копейки. См. {@link commissionCurrency} — от неё зависит форматтер. */
+  commissionAmountCents: number;
+  /**
+   * null = сумма это ПРОГНОЗ по текущей фикс-ставке партнёра (всегда TJS),
+   * строка = сумма взята из реальной Commission. Ровно та же семантика, что
+   * у PartnerAttributionView.commissionCurrency.
+   */
+  commissionCurrency: string | null;
 }
 
 export interface CreateSubmissionDto {
@@ -180,8 +207,50 @@ export const listAllSubmissions = (params?: {
   partnerId?: string;
 }) => api.get<SaleSubmission[]>('/submissions', { params }).then((r) => r.data);
 
-export const listPendingPayments = () =>
-  api.get<PendingPayment[]>('/submissions/pending-payments').then((r) => r.data);
+export const listPendingPayments = (params?: {
+  /**
+   * Только платежи клиентов, закреплённых за этим партнёром. Совпадение
+   * бэкенд ищет так же, как в `listAllSubmissions`: по студенту, по заявке и
+   * по заявке-источнику сделки — иначе сделки без заведённого студента
+   * (а на вкладке «На рассмотрении» их большинство) не нашлись бы.
+   */
+  partnerId?: string;
+}) => api.get<PendingPayment[]>('/submissions/pending-payments', { params }).then((r) => r.data);
+
+/**
+ * Кто привёл клиента, которого менеджер вводит прямо сейчас. ТОЛЬКО ЧТЕНИЕ —
+ * ничего не создаёт и не меняет, поэтому дёргать на каждый ввод безопасно.
+ *
+ * Матчинг делает бэкенд: по студенту (`studentId`) либо по последним 9 цифрам
+ * телефона. Нормализовать телефон здесь НЕ НАДО — эталон нормализации один и
+ * живёт на сервере (`backend/src/common/phone.ts`), вторая копия на клиенте
+ * рано или поздно разъедется с ней и форма начнёт показывать не того
+ * партнёра, которого запишет создание сделки.
+ *
+ * `applicationId` — заявка-источник (`/submissions/new?applicationId=…`).
+ * ПЕРЕДАВАТЬ ОБЯЗАТЕЛЬНО ВЕЗДЕ, ГДЕ ЕГО ПЕРЕДАЁТ {@link createSubmission}:
+ * именно эту заявку сделка и запишет, а без неё сервер вынужден искать заявку
+ * заново («старейшая атрибуция выигрывает») и находит другую — плашка назовёт
+ * одного партнёра, а комиссию получит другой (или никто).
+ *
+ * `signal` — из queryFn-контекста react-query: при размонтировании формы или
+ * смене телефона висящий запрос отменяется, а не долетает ответом на уже
+ * устаревший ввод.
+ */
+export const previewSubmissionPartner = (
+  params: { phone?: string; studentId?: string; applicationId?: string },
+  signal?: AbortSignal,
+) =>
+  api
+    .get<SubmissionPartnerPreview | null>('/submissions/partner-preview', { params, signal })
+    .then((r) => {
+      // Nest отдаёт `null` ПУСТЫМ телом (ExpressAdapter.reply: isNil → send()),
+      // и axios в этом случае кладёт в data пустую строку, а не null. Без
+      // приведения `data` был бы '' с типом объекта — падало бы на первом же
+      // обращении к полю.
+      const d = r.data;
+      return d && typeof d === 'object' ? d : null;
+    });
 
 export const getSubmission = (id: string) =>
   api.get<SaleSubmission>(`/submissions/${id}`).then((r) => r.data);

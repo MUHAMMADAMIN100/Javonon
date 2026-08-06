@@ -14,7 +14,19 @@ import {
   COMMISSION_OUTBOX_INLINE_GRACE_MS,
   CommissionOutboxService,
 } from '../partners/commission-outbox.service';
-import { canSeePartnerAttribution, hasRole, isFounder, UserWithRoles } from '../auth/role-utils';
+import {
+  canPreviewDealFormPartner,
+  canSeePartnerAttribution,
+  hasRole,
+  isFounder,
+  UserWithRoles,
+} from '../auth/role-utils';
+import {
+  maskPhoneForLog,
+  parsePhoneIdentity,
+  phoneMatchPrefilterTail,
+  phonesMatch,
+} from '../common/phone';
 import {
   SubmissionStatus,
   SubmissionPaymentStatus,
@@ -39,6 +51,28 @@ import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
  * клиенту вместе с email'ом. Алфавит и длина совпадают с
  * StudentsService.generatePassword, поэтому UX одинаковый.
  */
+/**
+ * Сколько заявок-кандидатов вычитывает поиск по телефону за раз.
+ *
+ * Пред-фильтр в SQL сравнивает последние 9 цифр и потому может вернуть больше
+ * одной строки (соседние коды стран схлопываются именно так); настоящее
+ * совпадение считает phonesMatch уже здесь, в коде. Кандидатов на один хвост
+ * реально один-два, поэтому число — предохранитель от аномальных данных, а не
+ * рабочий режим. Отбор идёт «старейшая атрибуция первой», так что обрезание
+ * хвоста списка не может подменить победителя.
+ */
+const PHONE_MATCH_CANDIDATE_LIMIT = 20;
+
+/**
+ * Кто смотрит превью партнёра. UserWithRoles отвечает на вопрос «что за роль»,
+ * но скоуп «свой ли это клиент» спрашивает про КОНКРЕТНОГО человека, поэтому
+ * нужен ещё и id (JwtStrategy кладёт его в req.user.id).
+ *
+ * id опционален и проверяется на месте: без него скоуп отвечает «не своё»
+ * (fail-closed), а не пропускает запрос.
+ */
+type PreviewViewer = UserWithRoles & { id?: string | null };
+
 function generateStudentPassword(length = 8): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   let out = '';
@@ -94,6 +128,11 @@ interface CreateSubmissionDto {
    * пропустил конвертацию лида в студента и завёл сделку вкладкой «Новый»:
    * тогда studentId ещё null, а атрибуция с лендинга висит на этом лиде.
    * Подробнее — комментарий к колонке в schema.prisma.
+   *
+   * НЕ ОТМЕНЯЕТ серверный поиск заявки-источника сам по себе: заявка без
+   * атрибуции мостом не работает, и вместо неё выигрывает найденная заявка С
+   * атрибуцией (см. create). Присланный id при этом не пропадает — он
+   * остаётся, если поиск ничего не нашёл.
    */
   applicationId?: string | null;
   // Если studentId ЗАДАН (existing student) и менеджер прислал этот email —
@@ -179,6 +218,10 @@ export class SubmissionsService {
     if (!dto.firstPayment) throw new BadRequestException('Первый платёж обязателен');
 
     // Студент: либо ссылка на существующего, либо snapshot нового.
+    // Телефоны выбранного студента запоминаем здесь: они понадобятся ниже, в
+    // поиске партнёрской заявки по номеру. Отдельным запросом их не тянем —
+    // строка студента и так уже прочитана.
+    let existingStudentPhones: string[] = [];
     if (!dto.studentId) {
       if (!dto.newStudentName || dto.newStudentName.trim().length < 2) {
         throw new BadRequestException('ФИО студента обязательно (мин. 2 символа)');
@@ -186,6 +229,7 @@ export class SubmissionsService {
     } else {
       const exists = await this.prisma.student.findUnique({ where: { id: dto.studentId } });
       if (!exists) throw new NotFoundException('Студент не найден');
+      existingStudentPhones = Array.isArray(exists.phones) ? exists.phones : [];
       // Если менеджер прислал новый email для существующего студента —
       // обновляем Student.email с проверкой уникальности.
       if (dto.existingStudentEmail !== undefined) {
@@ -221,6 +265,10 @@ export class SubmissionsService {
     const sourceApplicationIdRaw =
       typeof dto.applicationId === 'string' ? dto.applicationId.trim() : '';
     let sourceApplicationId: string | null = null;
+    // Несёт ли присланная заявка партнёрскую атрибуцию. Колонка
+    // sourceApplicationId заведена ровно ради неё, поэтому ниже этот флаг
+    // решает, можно ли пропустить серверный поиск заявки-источника.
+    let sourceApplicationHasAttribution = false;
     if (sourceApplicationIdRaw) {
       const sourceApp = await this.prisma.application.findUnique({
         where: { id: sourceApplicationIdRaw },
@@ -228,6 +276,9 @@ export class SubmissionsService {
       });
       if (!sourceApp) throw new NotFoundException('Заявка-источник не найдена');
       sourceApplicationId = sourceApp.id;
+      sourceApplicationHasAttribution = await this.applicationCarriesAttribution(
+        sourceApp.id,
+      );
     }
 
     const p = dto.firstPayment;
@@ -288,6 +339,63 @@ export class SubmissionsService {
     }
     if (firstMethod === SubmissionPaymentMethod.CASH && firstDepositProofUrls.length === 0) {
       throw new BadRequestException('Загрузите минимум 1 скрин пополнения счёта');
+    }
+
+    // МОСТ К ПАРТНЁРУ, КОГДА МЕНЕДЖЕР ВОШЁЛ НЕ ЧЕРЕЗ КАРТОЧКУ ЗАЯВКИ.
+    //
+    // sourceApplicationId — единственная связь сделки с партнёрской
+    // атрибуцией до первого одобрения (см. комментарий к колонке в
+    // schema.prisma). Он приходит только от кнопки «Создать сделку» внутри
+    // карточки заявки. Менеджер, нажавший «+ Новая сделка» в списке сделок,
+    // отдавал сделку без всяких мостов: studentId ещё null (студент
+    // создаётся на первом одобрении), applicationId ещё null (её создаёт то
+    // же одобрение), sourceApplicationId — null. Партнёр после этого
+    // недостижим НАВСЕГДА и денег не увидит.
+    //
+    // Поэтому ищем заявку клиента на сервере, а не в форме: потерять связь
+    // «не тем входом» или «забыл поставить галочку» менеджер не должен уметь.
+    //
+    // ПОЧЕМУ ИМЕННО ЗДЕСЬ, ДО ПРОВЕРКИ ИДЕМПОТЕНТНОСТИ, А НЕ ПЕРЕД create().
+    // Проверка ниже — это findFirst по окну времени, а НЕ constraint в БД
+    // (уникального индекса под неё нет). Она держится исключительно на том,
+    // что между чтением и вставкой ничего не происходит: каждый лишний
+    // round-trip в этом промежутке — это окно, в котором второй клик успевает
+    // прочитать «дубликатов нет» до того, как первый вставил строку, и сделка
+    // задваивается. Резолвер делает до двух неиндексированных запросов, то
+    // есть растянул бы промежуток втрое. При этом он ТОЛЬКО ЧИТАЕТ, а на
+    // ветке `return existing` его результат всё равно выбрасывается — так что
+    // цена переноса это лишний SELECT на дубликате, а цена обратного
+    // переноса — удвоенный доход и удвоенный бонус. НЕ ОПУСКАЙТЕ ЕГО НИЖЕ.
+    //
+    // «ЯВНЫЙ ВЫБОР СИЛЬНЕЕ» ЗНАЧИТ «СИЛЬНЕЕ СРЕДИ ЗАЯВОК С АТРИБУЦИЕЙ».
+    // dto.applicationId означает лишь «менеджер нажал кнопку в вот этой
+    // карточке». Атрибуции на ней может не быть вовсе — клиент позвонил сам,
+    // лид завели руками. Мостом к партнёру такая заявка не работает, а
+    // замороженная в sourceApplicationId она ещё и отменяла поиск ниже. Для
+    // НОВОГО студента это стоило партнёру денег: на одобрении множество
+    // идентичности — это {новый studentId} ∪ {новая SUCCESSFUL_LEAD} ∪
+    // {замороженная бесполезная заявка}, лендингового лида с атрибуцией в нём
+    // нет ни под каким видом, и начисление молча уходило в no-attribution.
+    // Перезаписать колонку потом нельзя (см. комментарий у create ниже), то
+    // есть партнёр становился недостижим НАВСЕГДА — ровно тот исход, ради
+    // предотвращения которого колонка и заведена.
+    //
+    // Поэтому неатрибуированная ссылка поиск не отменяет. Потерять её при
+    // этом невозможно: резолвер отдал пусто — в колонке остаётся ровно то,
+    // что прислал вызывающий, и сделка по-прежнему помнит свою карточку.
+    if (!sourceApplicationId || !sourceApplicationHasAttribution) {
+      const resolvedSourceApplicationId = await this.resolveSourceApplicationId({
+        studentId: dto.studentId || null,
+        // У существующего студента newStudentPhone обнуляется (см. ниже в
+        // data), поэтому сравниваем по его основному номеру.
+        phone: dto.studentId ? existingStudentPhones[0] : dto.newStudentPhone,
+        // Путь на запись: совпадение по телефону обязано остаться в журнале —
+        // именно оно потом оплачивается партнёру.
+        audit: true,
+      });
+      if (resolvedSourceApplicationId) {
+        sourceApplicationId = resolvedSourceApplicationId;
+      }
     }
 
     // Идемпотентность: защита от двойного клика «Создать» и retry на
@@ -358,6 +466,651 @@ export class SubmissionsService {
 
     this.realtime.emitStaff('submission:new', { submissionId: submission.id, managerId });
     return submission;
+  }
+
+  /**
+   * Висит ли на ЭТОЙ заявке партнёрская атрибуция.
+   *
+   * Нужно ровно в одном месте — на входе «Создать сделку из карточки заявки»,
+   * чтобы отличить лид с лендинга (мост к партнёру) от заявки, заведённой
+   * руками (мостом не работает). Дальше по этому ответу create() решает,
+   * пропускать ли поиск заявки-источника.
+   *
+   * Отдельным запросом, а не include в findUnique выше: ReferralAttribution
+   * связана с заявкой только полем applicationId, relation'а в схеме нет.
+   * Запрос уходит лишь на этом входе и бьёт по @@index([applicationId]).
+   *
+   * НИКОГДА НЕ БРОСАЕТ — по той же причине, что и resolveSourceApplicationId
+   * ниже: сорванный партнёрский запрос не должен стоить менеджеру сделки.
+   * Ответ на сбое — false, то есть «поиск заявки-источника всё-таки сделай»:
+   * резолвер сам не бросает, а если и он ничего не найдёт, в колонке
+   * останется присланный вызывающим id. Потерять при сбое нечего.
+   */
+  private async applicationCarriesAttribution(applicationId: string): Promise<boolean> {
+    try {
+      const attr = await this.prisma.referralAttribution.findFirst({
+        where: { applicationId },
+        select: { id: true },
+      });
+      return !!attr;
+    } catch (e: any) {
+      this.logger.warn(
+        `Атрибуция заявки-источника не проверена (applicationId=${applicationId}): ${e?.message || e}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Ищет заявку клиента, на которой висит партнёрская атрибуция — чтобы
+   * положить её в SaleSubmission.sourceApplicationId и не потерять партнёра.
+   *
+   * ПОРЯДОК ПОИСКА (важен: первый сработавший шаг выигрывает).
+   *  1. Выбран существующий студент → берём его заявки и среди них ту, у
+   *     которой ЕСТЬ атрибуция.
+   *  2. Иначе (или если у студента ничего не нашлось) — сопоставление по
+   *     ТЕЛЕФОНУ (phonesMatch: национальная часть целиком + код страны, см.
+   *     common/phone.ts). Написание имени не участвует вообще: «Иванов И.»,
+   *     «Iванов Ислом» и «Ivanov» — это один и тот же клиент, а номер он
+   *     диктует один.
+   *
+   * ШАГ 2 НЕ РЕШАЕТ ПО ХВОСТУ НОМЕРА. Пред-фильтр в SQL по последним 9 цифрам
+   * остался (индекса под разбор кода страны в БД нет), но он только СУЖАЕТ
+   * кандидатов; решение принимает phonesMatch уже на прочитанных строках.
+   * Разница не косметическая: по хвосту «+998 90 123 45 67» и
+   * «+992 90 123 45 67» — один ключ, то есть узбекский лид партнёра и
+   * таджикский клиент с тем же национальным номером были одним человеком, а
+   * запись «+992 1234567» (7 цифр, лендинг такое пропускает) выглядела как
+   * чужой +992 92 123 45 67. Разбор с кодом страны обе развязывает, а
+   * неоднозначные записи (10–11 цифр без подходящего кода) не сопоставляет
+   * ни с чем.
+   *
+   * ШАГ 2 НИКОГДА НЕ ПЕРЕСЕКАЕТ ГРАНИЦУ ЧУЖОГО КЛИЕНТА. Номер бывает
+   * семейным, поэтому по телефону подбираются только заявки БЕЗ студента
+   * (неконвертированные лиды) и заявки САМОГО выбранного студента. Заявка,
+   * уже принадлежащая другому студенту, не подбирается никогда — иначе
+   * автоматическая догадка сервера сожгла бы его партнёрскую комиссию (см.
+   * развёрнутый разбор у запроса ниже).
+   *
+   * Среди нескольких кандидатов выигрывает СТАРЕЙШАЯ атрибуция — партнёр,
+   * приведший клиента первым. Тот же приоритет, что в
+   * findAttributionByIdentity и getPartnerAttributionViewsBatch; расхождение
+   * означало бы, что карточка показывает одного партнёра, а деньги уходят
+   * другому.
+   *
+   * Заявки БЕЗ атрибуции сюда не попадают ни на одном шаге: партнёра они не
+   * добавляют, а проставленный из такой заявки sourceApplicationId только
+   * заморозил бы бесполезную ссылку (перезаписывать её потом нельзя).
+   *
+   * НИКОГДА НЕ БРОСАЕТ. Сорванный поиск партнёра — это «партнёра не нашли»,
+   * а не «сделку не создали»: потерять сделку менеджера из-за проблемы в
+   * партнёрском поиске несоизмеримо хуже. Все сбои уходят в logger.
+   */
+  private async resolveSourceApplicationId(opts: {
+    studentId?: string | null;
+    phone?: string | null;
+    /**
+     * true — вызов на ЗАПИСЬ (create). Совпадение по телефону уходит в лог
+     * уровня info: это единственный след того, какую именно чужую заявку
+     * сервер угадал по номеру, а на ней потом висит реальная выплата
+     * партнёру. Превью формы дёргается на каждый ввод символа, поэтому там
+     * false и debug — иначе журнал заливается служебным шумом.
+     */
+    audit?: boolean;
+  }): Promise<string | null> {
+    try {
+      // Шаг 1 — заявки выбранного студента.
+      if (opts.studentId) {
+        const apps = await this.prisma.application.findMany({
+          where: { studentId: opts.studentId },
+          select: { id: true },
+        });
+        if (apps.length > 0) {
+          const attr = await this.prisma.referralAttribution.findFirst({
+            where: { applicationId: { in: apps.map((a) => a.id) } },
+            // Старейшая привязка выигрывает (см. док-комментарий выше).
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            select: { applicationId: true },
+          });
+          if (attr?.applicationId) return attr.applicationId;
+        }
+      }
+
+      // Шаг 2 — сопоставление по телефону.
+      // Номер могли не передать (превью формы знает только studentId) —
+      // добираем основной телефон студента, чтобы превью и создание сделки
+      // искали ОДНО И ТО ЖЕ. create() номер передаёт сам (студент там уже
+      // прочитан), поэтому лишнего запроса на записи не возникает.
+      let phone = opts.phone ?? null;
+      if (!parsePhoneIdentity(phone) && opts.studentId) {
+        const st = await this.prisma.student.findUnique({
+          where: { id: opts.studentId },
+          select: { phones: true },
+        });
+        phone = st?.phones?.[0] ?? null;
+      }
+      // Номер, который нельзя разобрать однозначно (обрывок, «+992 1234567»,
+      // любые 10–11 цифр без подходящего кода страны), ключа не получает — и
+      // запрос по нему не уходит вовсе.
+      const tail = phoneMatchPrefilterTail(phone);
+      if (!tail) return null;
+
+      // ЧЕСТНО ПРО СТОИМОСТЬ: Application.phone хранится СЫРЫМ (в сервисе
+      // только .trim(), см. applications.service), индекса на нём нет, и
+      // индекса по «последним 9 цифрам» тоже нет — под tail-сравнение нужен
+      // functional index, а он потребовал бы миграции.
+      //
+      // Поэтому сравнение считается на лету. Чтобы это не превратилось в
+      // проход по ВСЕЙ таблице заявок, идём от ReferralAttribution, а не от
+      // Application: заявки без атрибуции нас всё равно не интересуют, а
+      // строк атрибуции на порядок меньше — это только партнёрский трафик.
+      // JOIN по первичному ключу заявки, regexp считается лишь по отобранным
+      // строкам, ORDER BY/LIMIT выполняет правило «старейшая атрибуция».
+      // Один запрос, одна лишняя миллисекунда на создание сделки.
+      //
+      // ГРАНИЦА ПРИМЕНИМОСТИ: это решение для нынешнего масштаба (заявок
+      // сотни, атрибуций — десятки). Когда партнёрских привязок станут
+      // десятки тысяч, дешёвого способа два: functional index
+      // `((right(regexp_replace(phone,'[^0-9]','','g'),9)))` на Application
+      // либо отдельная нормализованная колонка. Делать вид, что текущий
+      // вариант масштабируется, не нужно — он рассчитан на seq scan по
+      // маленькой таблице.
+
+      // ГРАНИЦА ЧУЖОГО КЛИЕНТА — ЧАСТЬ УСЛОВИЯ, А НЕ ОПТИМИЗАЦИЯ.
+      //
+      // Совпадение хвоста номера НЕ доказывает, что это тот же человек.
+      // Семейный номер здесь — первоклассная сущность схемы
+      // (Application.secondaryContactLabel и Student.phoneLabels хранят
+      // «Отец»/«Мать»), так что номер родителя, записанный в лендинговой
+      // заявке брата Б и введённый как основной телефон сестры А, — рядовая
+      // форма данных, а не экзотика.
+      //
+      // Без этого предиката сделка А получала sourceApplicationId заявки Б, и
+      // ошибка уходила прямо в деньги: approvePayment передаёт его в
+      // creditCommissionForAttributionOnce → строка атрибуции Б попадает в
+      // набор идентичности клиента → (1) backfillAttributionStudent
+      // переписывает ей studentId на А, (2) CAS-штамп ставит ей commissionedAt.
+      // Когда позже платит сам Б, guard отвечает already-credited, и партнёр,
+      // реально приведший Б, не получает НИЧЕГО — молча и навсегда. Ровно та
+      // потеря, ради предотвращения которой мост и существует.
+      //
+      // Поэтому берём только заявки, про которые НЕ доказано, что они чужие:
+      //   • студент выбран        → его собственные заявки + ничейные лиды;
+      //   • студента ещё нет      → только ничейные лиды.
+      // Заявка с ЧУЖИМ studentId не проходит ни в одном из случаев. Целевой
+      // сценарий — неконвертированный лид с лендинга (studentId IS NULL) —
+      // работает как работал.
+      //
+      // Ветка через Prisma.sql, а не параметр-NULL в общем выражении: для
+      // нового студента условие обязано быть строго `IS NULL`, а не
+      // сравнением с NULL, которое зависит от типизации плейсхолдера.
+      const studentScope = opts.studentId
+        ? Prisma.sql`AND (a."studentId" IS NULL OR a."studentId" = ${opts.studentId})`
+        : Prisma.sql`AND a."studentId" IS NULL`;
+
+      // ХВОСТ В SQL — ПРЕД-ФИЛЬТР, А НЕ РЕШЕНИЕ.
+      //
+      // right(digits, 9) не умеет отличить код страны от номера, поэтому
+      // «+998 90 123 45 67» и «+992 90 123 45 67» он отдаёт как одну строку.
+      // Раз решать по нему нельзя, а сузить кандидатов можно (условие
+      // необходимое — доказательство у phoneMatchPrefilterTail), запрос
+      // читает phone и отдаёт НЕСКОЛЬКО строк, а окончательное «это тот же
+      // человек» считает phonesMatch здесь, с разбором кода страны.
+      //
+      // LIMIT — страховка от аномалии, а не рабочий режим: строк с одним
+      // хвостом реально одна-две. Порядок «старейшая атрибуция первой»
+      // сохраняется, поэтому обрезание сверху не может подменить победителя —
+      // отбрасываются только те, что заведомо моложе выбранной.
+      const rows = await this.prisma.$queryRaw<Array<{ id: string; phone: string | null }>>`
+        SELECT a."id", a."phone"
+        FROM "ReferralAttribution" ra
+        JOIN "Application" a ON a."id" = ra."applicationId"
+        WHERE right(regexp_replace(a."phone", '[^0-9]', '', 'g'), 9) = ${tail}
+        ${studentScope}
+        ORDER BY ra."createdAt" ASC, ra."id" ASC
+        LIMIT ${Prisma.raw(String(PHONE_MATCH_CANDIDATE_LIMIT))}
+      `;
+
+      let rejected = 0;
+      for (const row of rows) {
+        if (!phonesMatch(row.phone, phone)) {
+          rejected += 1;
+          continue;
+        }
+        // СЛЕД ДЛЯ РАЗБОРА ВЫПЛАТЫ. Дальше этот id уезжает в
+        // SaleSubmission.sourceApplicationId, а с него — в
+        // creditCommissionForAttributionOnce, и перезаписать колонку потом
+        // нельзя. Если сервер угадал не того клиента, единственный способ
+        // это доказать постфактум — строка лога: какую заявку выбрали, по
+        // какому номеру и сколько кандидатов отсеяли.
+        const line =
+          `Заявка-источник найдена по телефону: application=${row.id}, ` +
+          `номер=${maskPhoneForLog(phone)}, студент=${opts.studentId ?? '-'}, ` +
+          `кандидатов=${rows.length}, отсеяно кодом страны=${rejected}`;
+        if (opts.audit) this.logger.log(line);
+        else this.logger.debug(line);
+        return row.id;
+      }
+
+      if (rejected > 0 && opts.audit) {
+        // Пред-фильтр нашёл номер, разбор его отклонил. Ровно тот случай, ради
+        // которого правило и переписано: раньше здесь молча возвращался чужой
+        // applicationId и партнёру уходили деньги.
+        this.logger.log(
+          `Заявка-источник по телефону не найдена: ${rejected} кандидат(ов) с тем же ` +
+            `хвостом отклонены по коду страны (номер=${maskPhoneForLog(phone)}, ` +
+            `студент=${opts.studentId ?? '-'})`,
+        );
+      }
+      return null;
+    } catch (e: any) {
+      // Осознанно warn, а не error: сделка создалась, деньги на месте,
+      // руками восстановимо (FOUNDER видит партнёра в карточке заявки).
+      this.logger.warn(
+        `Партнёрская заявка-источник не определена (studentId=${opts.studentId ?? '-'}): ${e?.message || e}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * СВОЙ ЛИ ЭТО КЛИЕНТ — скоуп-гейт превью партнёра (см.
+   * previewPartnerForClient). Спрашивается по КАЖДОМУ переданному ключу
+   * отдельно; вызывающий обязан требовать «свой» от всех сразу.
+   *
+   * Правило то же, что уже действует в students.service.findAll и
+   * applications.service.findAll: менеджер работает с записями, где назначен
+   * он сам — TJ (managerId) или CN (chinaManagerId). Здесь оно перенесено на
+   * ВХОД превью, чтобы «кто привёл клиента» нельзя было спросить про
+   * человека, которого вызывающий и так не видит ни в одном своём списке.
+   *
+   * НЕНАЗНАЧЕННЫЕ ЗАПИСИ (managerId и chinaManagerId оба null) «своими» НЕ
+   * считаются — сознательно, хотя applications.ensureCanEdit их пропускает
+   * («не назначен — любой может взять в работу»). Скоуп чтения обязан
+   * совпадать с ВИДИМОСТЬЮ, а не с правом правки: findAll ничьи заявки
+   * менеджеру не показывает, значит и превью по ним отвечать не должно.
+   * Штатный путь не задет: лид с лендинга почти всегда назначен сразу —
+   * applications.service.create раздаёт их round-robin
+   * (sales.pickManagerForLead).
+   */
+  private async callerOwnsStudent(viewerId: string, studentId: string): Promise<boolean> {
+    const own = await this.prisma.student.findFirst({
+      where: {
+        id: studentId,
+        OR: [{ managerId: viewerId }, { chinaManagerId: viewerId }],
+      },
+      select: { id: true },
+    });
+    if (own) return true;
+    // Студент может быть закреплён за другим менеджером, а конкретная заявка
+    // этого же человека — за вызывающим (типовой случай: лид ведёт продажник,
+    // сопровождение — китайский менеджер). Своя заявка клиента — такое же
+    // законное основание видеть превью по нему.
+    const ownApp = await this.prisma.application.findFirst({
+      where: {
+        studentId,
+        OR: [{ managerId: viewerId }, { chinaManagerId: viewerId }],
+      },
+      select: { id: true },
+    });
+    return !!ownApp;
+  }
+
+  private async callerOwnsApplication(
+    viewerId: string,
+    applicationId: string,
+  ): Promise<boolean> {
+    const app = await this.prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { managerId: true, chinaManagerId: true, studentId: true },
+    });
+    // Несуществующая заявка — не «своя». Отказ и промах для вызывающего
+    // неотличимы (оба дают null), так что оракула «такой id есть» нет.
+    if (!app) return false;
+    if (app.managerId === viewerId || app.chinaManagerId === viewerId) return true;
+    if (app.studentId) return this.callerOwnsStudent(viewerId, app.studentId);
+    return false;
+  }
+
+  private async callerOwnsPhone(viewerId: string, phone: string): Promise<boolean> {
+    const tail = phoneMatchPrefilterTail(phone);
+    // Неразбираемый номер ключа не получает — и запрос по нему не уходит
+    // (то же правило, что в resolveSourceApplicationId).
+    if (!tail) return false;
+
+    // ХВОСТ В SQL — ПРЕД-ФИЛЬТР, РЕШАЕТ phonesMatch. Предикат по менеджеру
+    // стоит первым не для красоты: под него есть индексы (Application и
+    // Student — @@index([managerId]) и @@index([chinaManagerId])), поэтому
+    // regexp считается по записям самого вызывающего, а не по всей таблице.
+    //
+    // РЕШАТЬ ПО ХВОСТУ ЗДЕСЬ НЕЛЬЗЯ, хотя соблазн есть: это «всего лишь»
+    // проверка принадлежности. Но хвост склеивает соседние коды стран, и
+    // склейка работает в обе стороны. Менеджеру достаточно вести ОДНОГО
+    // узбекского клиента +998 90 123 45 67, чтобы пройти скоуп по чужому
+    // таджикскому +992 90 123 45 67 — а дальше резолвер честно разберёт код
+    // страны и покажет партнёра именно того, чужого клиента. То есть гейт
+    // пропускал бы ровно тот запрос, ради запрета которого написан.
+    // Поэтому кандидатов сужает хвост, а «это тот же человек» решает
+    // phonesMatch с разбором кода страны — как и везде.
+    const rows = await this.prisma.$queryRaw<Array<{ phone: string | null }>>`
+      SELECT c."phone"
+      FROM (
+        SELECT a."phone" AS phone
+        FROM "Application" a
+        WHERE (a."managerId" = ${viewerId} OR a."chinaManagerId" = ${viewerId})
+          AND right(regexp_replace(a."phone", '[^0-9]', '', 'g'), 9) = ${tail}
+        UNION ALL
+        SELECT sp."value" AS phone
+        FROM "Student" s
+        CROSS JOIN unnest(s."phones") AS sp("value")
+        WHERE (s."managerId" = ${viewerId} OR s."chinaManagerId" = ${viewerId})
+          AND right(regexp_replace(sp."value", '[^0-9]', '', 'g'), 9) = ${tail}
+      ) c
+      LIMIT ${Prisma.raw(String(PHONE_MATCH_CANDIDATE_LIMIT))}
+    `;
+    return rows.some((r) => phonesMatch(r.phone, phone));
+  }
+
+  /**
+   * След обращения к превью в ActivityLog.
+   *
+   * ЗАЧЕМ. Превью — единственная поверхность, где партнёрские данные видит
+   * не-elevated роль, и до этой записи обращения к нему не оставляли следа
+   * нигде: прогон списка чужих номеров был не только возможен, но и
+   * недоказуем постфактум. Пишем КАЖДЫЙ реальный lookup, включая отказ по
+   * скоупу и промах, — серия отказов и есть самый явный признак перебора, и
+   * теряется он первым, если логировать только удачные ответы. Вызывающий
+   * при этом во всех трёх исходах получает одинаковый null, так что журнал
+   * знает больше, чем узнал он.
+   *
+   * НОМЕР МАСКИРУЕТСЯ (maskPhoneForLog, последние 4 цифры) — та же
+   * конвенция, что у остального партнёрского логирования: телефон это ПДн, а
+   * для «тот ли это клиент, что в карточке» и для счёта различных проб за
+   * минуту четырёх цифр достаточно.
+   *
+   * НИКОГДА НЕ БРОСАЕТ: превью справочное, и провал INSERT'а в журнал не
+   * должен гасить плашку у менеджера. Провал уходит в logger.warn — как в
+   * recordCommissionNonPayment, по той же причине (два носителя, журнал —
+   * вторичный).
+   */
+  private async logPartnerPreviewLookup(opts: {
+    viewer: PreviewViewer;
+    studentId: string | null;
+    applicationId: string | null;
+    phone: string | null;
+    outcome: 'found' | 'not-found' | 'denied';
+    referralCode?: string | null;
+  }): Promise<void> {
+    const OUTCOME_RU: Record<typeof opts.outcome, string> = {
+      found: 'партнёр найден',
+      'not-found': 'партнёр не найден',
+      denied: 'отказано: клиент не закреплён за вызывающим',
+    };
+    const phoneMasked = opts.phone ? maskPhoneForLog(opts.phone) : null;
+    // Ключ, по которому спрашивали: именно он отличает работу по своим
+    // клиентам от прогона чужого списка номеров.
+    const subject =
+      [
+        opts.studentId ? `студент ${opts.studentId}` : null,
+        opts.applicationId ? `заявка ${opts.applicationId}` : null,
+        phoneMasked ? `номер ${phoneMasked}` : null,
+      ]
+        .filter(Boolean)
+        .join(', ') || '—';
+    try {
+      await this.activity.log({
+        actorId: opts.viewer.id || null,
+        actorRole: String(opts.viewer.role ?? '—'),
+        action: 'PARTNER_PREVIEW_LOOKUP',
+        // В индексированную колонку кладём id только когда он подтверждён как
+        // свой: на отказе строка ещё не доказана существующей, а по этой
+        // колонке журнал джойнят с карточкой студента.
+        studentId: opts.outcome === 'denied' ? null : opts.studentId,
+        details: `Превью «кто привёл клиента» (${subject}) — ${OUTCOME_RU[opts.outcome]}`,
+        payload: {
+          outcome: opts.outcome,
+          studentId: opts.studentId,
+          applicationId: opts.applicationId,
+          phone: phoneMasked,
+          referralCode: opts.referralCode ?? null,
+        },
+      });
+    } catch (e: any) {
+      this.logger.warn(
+        `Не удалось записать PARTNER_PREVIEW_LOOKUP в ActivityLog (${subject}): ${e?.message || e}`,
+      );
+    }
+  }
+
+  /**
+   * Кто привёл этого клиента — для формы создания сделки. ТОЛЬКО ЧТЕНИЕ,
+   * ничего не создаёт и не меняет.
+   *
+   * ГЕЙТ — canPreviewDealFormPartner(viewer), узкое исключение из
+   * canSeePartnerAttribution (оба живут в auth/role-utils). Везде ещё
+   * (карточки студента/заявки/сделки, списки) партнёрские данные закрыты от
+   * менеджеров. Здесь — открыты, и вот почему: связь с партнёром теперь
+   * проставляет СЕРВЕР, а менеджер обязан видеть, что именно система нашла
+   * по введённому номеру. Иначе решение «партнёру заплатят» принимается
+   * невидимо для того единственного человека, который в этот момент говорит
+   * с клиентом и может заметить ошибку.
+   *
+   * ПОЧЕМУ ГЕЙТ ЗДЕСЬ, А НЕ ТОЛЬКО @Roles НА КОНТРОЛЛЕРЕ. @Roles(...) этот
+   * круг НЕ удерживает: у носителя активной кастомной роли base role — лишь
+   * «подложка» (RolesGuard.skipBaseRole), и дальше RolesGuard пускает по
+   * implicit-проверке URL, где на GET проходит любой submissions:*, включая
+   * read-only submissions:read. Роль вида «Таргетолог»/«SMM» с одним
+   * «Продажи — просмотр» доходила бы сюда, НЕ имея права создать сделку
+   * (POST /submissions её отсекает). Это ломало заявленный инвариант «роли
+   * зеркалят POST /submissions» и обходило fail-closed правило, ради
+   * которого canSeePartnerAttribution и написан. Остальные партнёрские
+   * поверхности (getOne, listAll, listPendingPayments, students, applications)
+   * такого носителя останавливают — эта обязана тоже.
+   *
+   * Отказ = null, а не 403: превью справочное, и «партнёра не нашли» и
+   * «показывать нельзя» для формы одинаковы — она молча не рисует чип
+   * (SubmissionForm: retry:false, data ?? null). Кастомная роль с правом
+   * оформлять сделки продолжает их оформлять, просто без партнёрского блока —
+   * ровно как на всех прочих поверхностях. Партнёрский резолвер при отказе не
+   * запускается вовсе: ни запроса, ни строчки в лог.
+   *
+   * ЧТО ИМЕННО ОТДАЁМ — минимум: имя партнёра, его код и сумма комиссии по
+   * ЭТОМУ клиенту. Ни баланса, ни списка клиентов, ни partnerId, ни
+   * referralUrl, ни истории начислений. Ответ всегда про одного клиента,
+   * которого менеджер прямо сейчас вводит, поэтому эндпоинт не превращается
+   * в справочник партнёров.
+   *
+   * ВТОРОЙ ГЕЙТ — СКОУП: «СВОЙ ЛИ ЭТО КЛИЕНТ» (callerOwns*).
+   *
+   * Роль отвечает на вопрос «показывать ли партнёров вообще», но не на вопрос
+   * «про кого». Без скоупа эндпоинт принимал ЛЮБОЙ телефон, ЛЮБОЙ studentId и
+   * ЛЮБОЙ applicationId без единой проверки принадлежности, и непустой ответ
+   * сам по себе был утверждением «вот этот номер — клиент от партнёра», да ещё
+   * с именем партнёра, его кодом и суммой комиссии. Вслепую 9-значное
+   * пространство не пройти, но прогнать ИЗВЕСТНЫЙ список номеров (выгрузка,
+   * свой старый телефонник, база конкурента) — вполне: получался справочник
+   * ЧУЖОЙ клиентуры ценой одного запроса на номер.
+   *
+   * Поэтому не-elevated вызывающий обязан быть менеджером этого клиента —
+   * тот же скоуп, что в students.service.findAll / applications.service.findAll.
+   * Обоснование самого исключения от этого не страдает: свою сделку менеджер
+   * заводит по СВОЕМУ клиенту. Elevated (canSeePartnerAttribution) скоуп не
+   * проходят — им те же данные и так отдаёт партнёрский блок карточек.
+   *
+   * ПРОВЕРЯЕТСЯ КАЖДЫЙ КЛЮЧ, А НЕ «ХОТЯ БЫ ОДИН». Ключей три, и в резолвер они
+   * идут независимо друг от друга. При проверке «хотя бы одного» пара «свой
+   * studentId + чужой applicationId» проходила бы гейт и возвращала партнёра
+   * ЧУЖОЙ заявки — то есть весь скоуп обходился бы одним лишним параметром.
+   * Достаточно одного непринадлежащего ключа, чтобы ответ стал null.
+   *
+   * ОТКАЗ НЕОТЛИЧИМ ОТ ПРОМАХА — оба дают null. ForbiddenException был бы тем
+   * же оракулом с другой стороны: «403 вместо пустоты» означало бы «номер в
+   * базе есть, просто он чужой». Форма трактует null как «партнёра нет» и
+   * молча не рисует чип, отдельного состояния под отказ не нужно.
+   *
+   * ТРЕТИЙ И ЧЕТВЁРТЫЙ РУБЕЖИ — ЛИМИТ И ЖУРНАЛ:
+   *   • @Throttle на маршруте (submissions.controller): дефолтного бакета
+   *     60/мин здесь мало — это ~3600 проб в час, чего для прогона списка
+   *     номеров с запасом хватает;
+   *   • ActivityLog(PARTNER_PREVIEW_LOOKUP) на КАЖДЫЙ реальный lookup, включая
+   *     отказ по скоупу (см. logPartnerPreviewLookup). Раньше перебор не
+   *     оставлял в журнале ни строчки — то есть был не только возможен, но и
+   *     недоказуем.
+   * Ключом при этом по-прежнему служит только ПОЛНЫЙ разобранный номер
+   * (parsePhoneIdentity отдаёт null и на обрывке, и на неоднозначной записи).
+   *
+   * `applicationId` — та самая заявка-источник из адреса формы
+   * (`/submissions/new?applicationId=…`). Она НЕ подсказка к поиску, а тот же
+   * приоритет, что в create(): названную вызывающим заявку смотрим первой, а
+   * резолвер зовём ровно в тех же двух случаях, что и create(), — её не
+   * назвали вовсе либо на ней НЕТ атрибуции (см. ниже).
+   */
+  async previewPartnerForClient(opts: {
+    phone?: string | null;
+    studentId?: string | null;
+    applicationId?: string | null;
+    /** Кто спрашивает. Без него превью не строится (fail-closed). */
+    viewer?: PreviewViewer | null;
+  }): Promise<{
+    fullName: string;
+    referralCode: string;
+    commissionAmountCents: number;
+    /** null = это прогноз по текущей ставке (TJS), а не начисленная сумма. */
+    commissionCurrency: string | null;
+  } | null> {
+    // Авторизация по роли — до любой работы: отказ не должен ни ходить в БД,
+    // ни отличаться по времени ответа от «партнёра не нашли». В журнал он
+    // тоже не идёт: решение статично, ни одного клиента вызывающий
+    // результативно не назвал, а INSERT на каждый заведомо запрещённый GET —
+    // это только способ засорить журнал тому, кто ничего не узнал.
+    const viewer = opts.viewer ?? null;
+    if (!canPreviewDealFormPartner(viewer)) return null;
+    if (!this.referrals) return null;
+
+    // Длину ключей режем: они уходят в ActivityLog.payload, и без потолка
+    // вызывающий писал бы в журнал строки произвольного размера. Настоящие
+    // id — uuid (36 символов), легальный ввод обрезка не задевает.
+    const KEY_MAX = 100;
+    const studentId = typeof opts.studentId === 'string' && opts.studentId.trim()
+      ? opts.studentId.trim().slice(0, KEY_MAX)
+      : null;
+    const phone = typeof opts.phone === 'string' ? opts.phone : null;
+    // Разобрать номер обязаны ЗДЕСЬ, а не внутри резолвера: неразбираемая
+    // строка ключом не является, значит по ней нечего ни проверять на
+    // принадлежность, ни писать в журнал.
+    const usablePhone = parsePhoneIdentity(phone) ? phone : null;
+    // Пустую строку из query-параметра трактуем как отсутствие ссылки — ровно
+    // как create() (см. sourceApplicationIdRaw).
+    const explicitApplicationId =
+      typeof opts.applicationId === 'string' && opts.applicationId.trim()
+        ? opts.applicationId.trim().slice(0, KEY_MAX)
+        : null;
+    // Заявка-источник — самостоятельный ключ клиента, не довесок к телефону:
+    // на входе `/submissions/new?applicationId=…` у лида может не быть
+    // пригодного номера (или менеджер ещё не дошёл до поля), а сделка эту
+    // заявку всё равно запишет. Молчать в этом случае — значит скрыть от
+    // менеджера партнёра, которому по его сделке заплатят.
+    //
+    // Спрашивать не о чем — ни журнала, ни расхода лимита: ничего не
+    // резолвилось и ничего не раскрыто.
+    if (!studentId && !explicitApplicationId && !usablePhone) return null;
+
+    try {
+      // СКОУП-ГЕЙТ (см. док-комментарий). Каждый переданный ключ обязан
+      // принадлежать вызывающему; elevated пропускаем — партнёрский блок
+      // карточек и так отдаёт им то же самое.
+      if (!canSeePartnerAttribution(viewer)) {
+        const viewerId = typeof viewer?.id === 'string' ? viewer.id : '';
+        // Fail-closed: без id владельца проверять принадлежность нечем.
+        const ownsAll =
+          !!viewerId &&
+          (!studentId || (await this.callerOwnsStudent(viewerId, studentId))) &&
+          (!explicitApplicationId ||
+            (await this.callerOwnsApplication(viewerId, explicitApplicationId))) &&
+          (!usablePhone || (await this.callerOwnsPhone(viewerId, usablePhone)));
+        if (!ownsAll) {
+          await this.logPartnerPreviewLookup({
+            viewer: viewer as PreviewViewer,
+            studentId,
+            applicationId: explicitApplicationId,
+            phone: usablePhone,
+            outcome: 'denied',
+          });
+          return null;
+        }
+      }
+
+      // ТА ЖЕ РАЗВИЛКА, ЧТО В create(), И ЭТО ГЛАВНОЕ ЗДЕСЬ.
+      //
+      // Повторяем условие create() дословно, ОБЕ его половины:
+      //   1) заявку назвали и на ней ЕСТЬ атрибуция → берём её, резолвер не
+      //      зовём («явный выбор сильнее — среди заявок с атрибуцией»);
+      //   2) не назвали ЛИБО названная без атрибуции → зовёт резолвер, и его
+      //      находка, если она есть, побеждает.
+      //
+      // Взять только половину — значит развести превью с записью, а расхождение
+      // здесь выражается прямо в деньгах.
+      //   • Потерять шаг 1 (спрашивать один резолвер): он судит по правилу
+      //     «старейшая атрибуция выигрывает» и на том же клиенте выбирает
+      //     ДРУГУЮ заявку, чем пришла в адресе формы, — плашка называет
+      //     партнёра P_old, а сделка запишет заявку партнёра P_new.
+      //   • Потерять шаг 2 (`explicit ?? resolve`): заявка из адреса сплошь и
+      //     рядом без атрибуции — клиент позвонил сам, лид завели руками, — и
+      //     тогда create() всё равно уходит в резолвер и находит старый
+      //     лендинговый лид того же телефона. Партнёру по сделке заплатят, а
+      //     плашка промолчит: менеджер узнаёт о чужой комиссии из ниоткуда.
+      //
+      // Флаг «есть ли атрибуция» считает тот же applicationCarriesAttribution,
+      // что и create(), — второй копии правила быть не должно.
+      // В резолвер уходит usablePhone, а не сырой phone: инвариант «искать
+      // можно только по ключу, прошедшему скоуп-гейт» должен читаться в
+      // коде, а не выводиться из того, что резолвер разберёт номер заново.
+      let sourceApplicationId: string | null = explicitApplicationId;
+      if (
+        !sourceApplicationId ||
+        !(await this.applicationCarriesAttribution(sourceApplicationId))
+      ) {
+        const resolvedSourceApplicationId = await this.resolveSourceApplicationId({
+          studentId,
+          phone: usablePhone,
+        });
+        // Как в create(): пустой резолвер ничего не отбирает — названная
+        // вызывающим заявка остаётся на месте.
+        if (resolvedSourceApplicationId) {
+          sourceApplicationId = resolvedSourceApplicationId;
+        }
+      }
+
+      const view = await this.referrals.getPartnerAttributionView({
+        studentId,
+        applicationIds: [sourceApplicationId],
+      });
+      // След пишем ДО ветвления на null: промах — такая же проба, как
+      // попадание, и именно из промахов складывается картина перебора.
+      await this.logPartnerPreviewLookup({
+        viewer: viewer as PreviewViewer,
+        studentId,
+        applicationId: explicitApplicationId,
+        phone: usablePhone,
+        outcome: view ? 'found' : 'not-found',
+        referralCode: view?.referralCode ?? null,
+      });
+      if (!view) return null;
+
+      // Сужение — не косметика: PartnerAttributionView содержит partnerId,
+      // referralUrl, commissionId и дату начисления. Менеджеру они не нужны
+      // и не должны утекать в сетевой ответ.
+      return {
+        fullName: view.fullName,
+        referralCode: view.referralCode,
+        commissionAmountCents: view.commissionAmountCents,
+        commissionCurrency: view.commissionCurrency,
+      };
+    } catch (e: any) {
+      // Превью информационное: форма не должна ломаться из-за него.
+      this.logger.warn(`Превью партнёра не построено: ${e?.message || e}`);
+      return null;
+    }
   }
 
   /** Добавить новый платёж к существующей сделке (продолжение оплаты). */
@@ -515,9 +1268,45 @@ export class SubmissionsService {
   }
 
   /** FOUNDER: список платежей ожидающих одобрения. */
-  async listPendingPayments() {
-    return this.prisma.submissionPayment.findMany({
-      where: { status: SubmissionPaymentStatus.PENDING },
+  async listPendingPayments(opts: {
+    /** Показать только платежи клиентов, закреплённых за этим партнёром. */
+    partnerId?: string;
+    /** Кто спрашивает — от этого зависит, приложим ли партнёрский блок. */
+    viewer?: UserWithRoles | null;
+  } = {}) {
+    const where: Prisma.SubmissionPaymentWhereInput = {
+      status: SubmissionPaymentStatus.PENDING,
+    };
+
+    // Фильтр по партнёру — ровно тот же способ, что в listAll: клиент сделки
+    // лежит в трёх разных полях (студент, заявка, заявка-источник), поэтому
+    // сначала спрашиваем идентификаторы клиентов партнёра, потом матчим по
+    // любому из полей. Разница только в том, что здесь сделка вложенная.
+    if (opts.partnerId) {
+      if (!this.referrals) {
+        // Как и в listAll: молча отдать ВСЕ платежи было бы хуже всего —
+        // пользователь выбрал партнёра и принял бы чужие платежи за его.
+        return [];
+      }
+      const { studentIds, applicationIds } = await this.referrals.getClientIdsForPartner(
+        opts.partnerId,
+      );
+      if (studentIds.length === 0 && applicationIds.length === 0) return [];
+      where.submission = {
+        OR: [
+          ...(studentIds.length ? [{ studentId: { in: studentIds } }] : []),
+          ...(applicationIds.length
+            ? [
+                { applicationId: { in: applicationIds } },
+                { sourceApplicationId: { in: applicationIds } },
+              ]
+            : []),
+        ],
+      };
+    }
+
+    const rows = await this.prisma.submissionPayment.findMany({
+      where,
       include: {
         submission: {
           include: {
@@ -529,6 +1318,38 @@ export class SubmissionsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Партнёрский блок. Гейт тот же канонический, что и в listAll/getOne,
+    // хотя эндпоинт и так закрыт @Roles(FOUNDER, ADMIN) — дублируем осознанно
+    // на случай будущего послабления ролей.
+    if (!this.referrals || !canSeePartnerAttribution(opts.viewer ?? null)) return rows;
+
+    // ПАКЕТНО, а не по строке. Ключ — id СДЕЛКИ, а не платежа: у одной сделки
+    // в рассрочке несколько PENDING-платежей, и по всем них партнёр один и
+    // тот же. Map по submissionId схлопывает их сам, поэтому лишних
+    // идентичностей в батч не уходит.
+    const refs = new Map<string, ReferralClientRef>();
+    for (const r of rows) {
+      if (!r.submission) continue;
+      refs.set(r.submission.id, {
+        studentId: r.submission.studentId,
+        applicationId: r.submission.applicationId,
+        applicationIds: [r.submission.sourceApplicationId],
+      });
+    }
+    const views = await this.referrals.getPartnerAttributionViewsBatch(refs);
+
+    return rows.map((r) =>
+      r.submission
+        ? {
+            ...r,
+            submission: {
+              ...r.submission,
+              partnerAttribution: views.get(r.submission.id) ?? null,
+            },
+          }
+        : r,
+    );
   }
 
   async getOne(user: (UserWithRoles & { id: string }) | null | undefined, id: string) {

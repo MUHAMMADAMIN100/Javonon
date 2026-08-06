@@ -23,7 +23,13 @@ export type ActivityAction =
   // 90-дневный TTL атрибуции / партнёр неактивен / дедуп). Строка приходит
   // только руководству — бэкенд вырезает её из GET /activity остальным
   // (activity.service.ts, PARTNER_SENSITIVE_ACTIONS).
-  | 'PARTNER_COMMISSION_SKIPPED';
+  | 'PARTNER_COMMISSION_SKIPPED'
+  // Обращение к превью «кто привёл клиента» в форме создания сделки
+  // (GET /submissions/partner-preview) — единственное место, где партнёрские
+  // данные видит менеджер по продажам. Пишется на каждый запрос, включая
+  // отказ по скоупу и промах: серия отказов — признак подбора по списку
+  // чужих номеров. Приходит только руководству (PARTNER_SENSITIVE_ACTIONS).
+  | 'PARTNER_PREVIEW_LOOKUP';
 
 export interface ActivityEntry {
   id: string;
@@ -66,4 +72,5 @@ export const ACTIVITY_LABEL: Record<ActivityAction, string> = {
   PAYMENT_APPROVED: 'Одобрение платежа',
   PAYMENT_REFUND: 'Возврат платежа',
   PARTNER_COMMISSION_SKIPPED: 'Комиссия партнёру не начислена',
+  PARTNER_PREVIEW_LOOKUP: 'Запрос партнёра по клиенту',
 };

@@ -253,6 +253,8 @@ const DICT: Record<Lang, Record<string, string>> = {
     'submissionForm.fromApplication.loading': 'Загружаем заявку…',
     'submissionForm.fromApplication.failed':
       'Не удалось загрузить заявку-источник. Вернитесь в карточку заявки и нажмите «Создать сделку» ещё раз.',
+    'submissionForm.partner': 'Клиент от партнёра',
+    'submissionForm.partner.commission': 'комиссия',
     'app.contact.channel.WHATSAPP': 'WhatsApp',
     'app.contact.channel.PHONE': 'Телефон',
     'app.contact.channel.INSTAGRAM': 'Instagram',
@@ -1309,6 +1311,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'activity.action.STUDENT_CREATE': 'Создание студента',
     'activity.action.STUDENT_DELETE': 'Удаление студента',
     'activity.action.PARTNER_COMMISSION_SKIPPED': 'Комиссия партнёру не начислена',
+    'activity.action.PARTNER_PREVIEW_LOOKUP': 'Запрос партнёра по клиенту',
 
     // ===== managerBar =====
     'managerBar.assigned': 'Назначен',
@@ -1726,6 +1729,8 @@ const DICT: Record<Lang, Record<string, string>> = {
     'submissionForm.fromApplication.loading': 'Ариза бор мешавад…',
     'submissionForm.fromApplication.failed':
       'Аризаи манбаъро бор карда нашуд. Ба кортаи ариза баргардед ва «Эҷоди аҳд»-ро дубора пахш кунед.',
+    'submissionForm.partner': 'Муштарӣ аз шарик',
+    'submissionForm.partner.commission': 'комиссия',
     'app.contact.channel.WHATSAPP': 'WhatsApp',
     'app.contact.channel.PHONE': 'Телефон',
     'app.contact.channel.INSTAGRAM': 'Instagram',
@@ -2777,6 +2782,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'activity.action.STUDENT_CREATE': 'Сохтани донишҷӯ',
     'activity.action.STUDENT_DELETE': 'Несткунии донишҷӯ',
     'activity.action.PARTNER_COMMISSION_SKIPPED': 'Комиссия ба шарик ҳисоб нашуд',
+    'activity.action.PARTNER_PREVIEW_LOOKUP': 'Дархости шарик аз рӯи муштарӣ',
 
     // ===== managerBar =====
     'managerBar.assigned': 'Таъин шуд',

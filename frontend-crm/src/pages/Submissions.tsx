@@ -6,7 +6,7 @@ import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
 import { useRealtime } from '../realtime';
 import { useT } from '../lib/i18n';
-import { adminListPartners } from '../api/partners';
+import { adminListPartners, fmtCommissionRate, fmtMoneyCents } from '../api/partners';
 import {
   listMySubmissions,
   listAllSubmissions,
@@ -200,13 +200,30 @@ function ApprovedSubmissions() {
 }
 
 function PendingPayments() {
-  const query = useQuery({ queryKey: ['submissions', 'pending'], queryFn: () => listPendingPayments() });
-  if (query.isLoading) return <Loading />;
+  // Тот же фильтр, что на «Всех» и «Одобренных», и по той же причине: перед
+  // выплатой партнёру нужно видеть не только уже одобренные сделки, но и то,
+  // что вот-вот одобрят, — иначе сумма к выплате считается по неполной
+  // картине.
+  const [partnerId, setPartnerId] = useState('');
+  const query = useQuery({
+    queryKey: ['submissions', 'pending', partnerId],
+    queryFn: () => listPendingPayments({ partnerId: partnerId || undefined }),
+  });
   const items = query.data || [];
-  if (items.length === 0) return <Empty>Нет платежей на рассмотрении.</Empty>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {items.map((p) => <PendingPaymentCard key={p.id} p={p} />)}
+      <PartnerFilter value={partnerId} onChange={setPartnerId} />
+      {query.isLoading ? (
+        <Loading />
+      ) : items.length === 0 ? (
+        <Empty>
+          {partnerId
+            ? 'У этого партнёра платежей на рассмотрении нет.'
+            : 'Нет платежей на рассмотрении.'}
+        </Empty>
+      ) : (
+        items.map((p) => <PendingPaymentCard key={p.id} p={p} />)
+      )}
     </div>
   );
 }
@@ -313,6 +330,24 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
 
 function PendingPaymentCard({ p }: { p: PendingPayment }) {
   const studentName = p.submission.student?.fullName || p.submission.newStudentName || '—';
+  const partner = p.submission.partnerAttribution;
+
+  // Сколько уйдёт партнёру. Здесь нельзя писать «начислено», как в карточке
+  // сделки: на вкладке «На рассмотрении» платёж ещё не одобрен, комиссии в
+  // природе нет, и «начислено» было бы неправдой — деньги показались бы уже
+  // потраченными.
+  //
+  // Исключение — рассрочка: если первый платёж сделки давно одобрен, комиссия
+  // за этого клиента уже существует (она одна на клиента, не на платёж), и
+  // очередной PENDING-платёж партнёру ничего не добавит. Тогда правда
+  // противоположная — «начислено», и врать в другую сторону тоже нельзя.
+  const credited = !!partner?.commissionedAt;
+  const commissionLabel = partner
+    ? partner.commissionCurrency
+      ? fmtMoneyCents(partner.commissionAmountCents, partner.commissionCurrency)
+      : fmtCommissionRate(partner.commissionAmountCents)
+    : '';
+
   return (
     <Link
       to={`/submissions/${p.submission.id}`}
@@ -332,6 +367,32 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
             <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>
               Менеджер: {p.submission.manager.fullName}
             </div>
+            {/* Партнёр приходит только руководству — бэкенд не кладёт поле в
+                ответ остальным ролям, поэтому здесь достаточно проверки на
+                наличие. Клиенты без партнёра (их большинство) строку не
+                показывают. */}
+            {partner && (
+              <div
+                style={{
+                  fontSize: 11,
+                  marginTop: 4,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  background: 'rgba(139, 92, 246, 0.12)',
+                  color: '#7c3aed',
+                  fontWeight: 600,
+                }}
+              >
+                Партнёр: {partner.fullName}
+                <span style={{ opacity: 0.7, fontWeight: 400 }}>· {partner.referralCode}</span>
+                <span style={{ opacity: 0.7, fontWeight: 400 }}>
+                  · {credited ? 'начислено' : 'при одобрении'} {commissionLabel}
+                </span>
+              </div>
+            )}
           </div>
           <span
             style={{

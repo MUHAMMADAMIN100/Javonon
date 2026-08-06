@@ -31,6 +31,10 @@ const ACTION_VISUAL: Record<ActivityAction, { icon: string; color: string; bg: s
   // Отказ в партнёрской комиссии — красный, как денежные потери: строка
   // означает, что партнёру за приведённого клиента не заплатили.
   PARTNER_COMMISSION_SKIPPED: { icon: 'money_off', color: '#9f1239', bg: '#ffe4e6' },
+  // Запрос партнёра по клиенту — нейтральный синий: это штатное действие
+  // менеджера при заведении сделки, а не инцидент. Разбирают такие строки не
+  // по цвету одной записи, а по их серии от одного человека за минуту.
+  PARTNER_PREVIEW_LOOKUP: { icon: 'person_search', color: '#1d4ed8', bg: '#dbeafe' },
 };
 const FALLBACK_VISUAL = { icon: 'bolt', color: '#64748b', bg: '#f1f5f9' };
 

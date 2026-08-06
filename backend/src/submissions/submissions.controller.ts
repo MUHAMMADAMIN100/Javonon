@@ -12,6 +12,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -107,8 +108,74 @@ export class SubmissionsController {
   /** FOUNDER/ADMIN — pending платежи на одобрение. */
   @Get('pending-payments')
   @Roles(Role.FOUNDER, Role.ADMIN)
-  pending() {
-    return this.svc.listPendingPayments();
+  pending(@CurrentUser() me: any, @Query('partnerId') partnerId?: string) {
+    return this.svc.listPendingPayments({
+      partnerId: partnerId || undefined,
+      // Нужен, чтобы решить, прикладывать ли партнёрский блок к строкам.
+      viewer: me,
+    });
+  }
+
+  /**
+   * Кто привёл клиента — для формы создания сделки (чип «Клиент от
+   * партнёра»). ТОЛЬКО ЧТЕНИЕ.
+   *
+   * РОЛИ ЗЕРКАЛЯТ POST /submissions: показывать связь обязан тот же круг
+   * людей, который эту связь своим действием и создаёт. Да, сюда попадают
+   * SALES_MANAGER/CLIENT_MANAGER, которым партнёрские данные закрыты во всех
+   * остальных местах, — это осознанное исключение, объяснённое в
+   * SubmissionsService.previewPartnerForClient. Ответ сужен до имени
+   * партнёра, кода и суммы комиссии по одному вводимому клиенту.
+   *
+   * ОДНОГО @Roles ЗДЕСЬ НЕ ХВАТАЕТ, поэтому viewer уходит в сервис. Носителя
+   * активной кастомной роли этот декоратор не удерживает: RolesGuard ставит
+   * skipBaseRole и пускает по implicit-проверке URL, где на GET засчитывается
+   * любой submissions:*, включая read-only submissions:read. Такая роль
+   * («Таргетолог»/«SMM» с одним «Продажи — просмотр») дошла бы сюда, не имея
+   * права оформить сделку, — то есть ровно мимо зеркала, заявленного выше.
+   * Настоящий гейт — canPreviewDealFormPartner в сервисе; кастомной роли
+   * по-прежнему нужен явный partners:read.
+   *
+   * ВНИМАНИЕ: маршрут обязан быть ВЫШЕ @Get(':id'), иначе Nest разберёт
+   * 'partner-preview' как id сделки.
+   *
+   * `applicationId` — заявка-источник из адреса формы
+   * (`/submissions/new?applicationId=…`), тот же параметр, который форма
+   * пошлёт в POST /submissions. Без него превью и создание сделки разрешают
+   * заявку по РАЗНЫМ правилам и называют разных партнёров — см.
+   * previewPartnerForClient.
+   *
+   * СВОЙ ЛИМИТ, А НЕ ДЕФОЛТНЫЙ. Глобальный бакет — 60/мин (app.module.ts), то
+   * есть ~3600 запросов в час: для подбора по списку известных номеров этого
+   * с запасом хватает, а именно подбором эндпоинт и опасен (см. скоуп-гейт в
+   * previewPartnerForClient). 10/мин рассчитаны на реальную форму: телефон
+   * дебаунсится 400 мс, ответ живёт в react-query 5 минут по ключу
+   * «режим + идентичность клиента», retry выключен — то есть на одну
+   * заполняемую сделку приходятся единицы запросов, а не десятки.
+   *
+   * Имя бакета — 'default': ThrottlerGuard обходит только те throttler'ы,
+   * что объявлены в ThrottlerModule (там он один), поэтому выдуманное имя
+   * было бы молча проигнорировано. Пересечения с другими маршрутами нет —
+   * ключ бакета включает класс и хендлер. FOUNDER/ADMIN/ACCOUNTANT throttle
+   * пропускают целиком (UserThrottlerGuard.shouldSkip), их этот лимит не
+   * касается.
+   */
+  @Get('partner-preview')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  partnerPreview(
+    @CurrentUser() me: any,
+    @Query('phone') phone?: string,
+    @Query('studentId') studentId?: string,
+    @Query('applicationId') applicationId?: string,
+  ) {
+    return this.svc.previewPartnerForClient({
+      phone: phone || null,
+      studentId: studentId || null,
+      applicationId: applicationId || null,
+      // Решает, отдавать ли партнёрский блок вообще (см. док-комментарий).
+      viewer: me,
+    });
   }
 
   /**

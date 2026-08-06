@@ -5,10 +5,13 @@ import { motion } from 'framer-motion';
 import { useUI } from '../ui/Dialogs';
 import {
   createSubmission,
+  previewSubmissionPartner,
   uploadSubmissionFile,
   type CreateSubmissionDto,
+  type SubmissionPartnerPreview,
   type SubmissionPaymentMethod,
 } from '../api/submissions';
+import { fmtCommissionRate, fmtMoneyCents } from '../api/partners';
 import { getStudent, listStudents } from '../api/students';
 import { getApplication } from '../api/applications';
 import { listPrograms } from '../api/programs';
@@ -127,6 +130,66 @@ export default function SubmissionForm() {
   const selectedStudent =
     studentOptions.find((s) => s.id === studentId) ||
     (presetStudent && presetStudent.id === studentId ? presetStudent : undefined);
+
+  // ── Кто привёл клиента ───────────────────────────────────────────────────
+  //
+  // Плашка «Клиент от партнёра». Это ИНФОРМАЦИЯ, а не переключатель: связь со
+  // старой заявкой (и, значит, с партнёром) находит и записывает бэкенд при
+  // создании сделки — по телефону, независимо от того, через какую дверь
+  // менеджер вошёл. Здесь мы лишь показываем то, что бэкенд запишет, — и
+  // поэтому шлём в превью РОВНО ТОТ ЖЕ набор полей, что уходит в
+  // createSubmission ниже, включая sourceApplicationId. Стоит его потерять —
+  // и превью пойдёт другим путём: сервер начнёт искать заявку сам («старейшая
+  // атрибуция выигрывает») и найдёт не ту, что придёт в адресе формы.
+  // Поэтому у плашки нет ни чекбокса, ни крестика: право отменить чужую
+  // комиссию одним кликом — не менеджерское.
+  //
+  // Debounce 400 мс тем же приёмом, что и поиск студента выше: пока телефон
+  // набирают, запрос не летит на каждый символ.
+  const [debouncedPhone, setDebouncedPhone] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedPhone(newPhone.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [newPhone]);
+
+  // Бэкенд сравнивает последние 9 цифр (национальная часть +992 XX XXX XX XX)
+  // и на более коротком вводе возвращает null. Проверяем только ДЛИНУ, чтобы
+  // не гонять заведомо пустые запросы на каждой половине номера; сама
+  // нормализация остаётся на сервере в единственном экземпляре.
+  const phoneHasEnoughDigits = debouncedPhone.replace(/\D/g, '').length >= 9;
+  const previewByStudent = mode === 'existing' && !!studentId;
+  const previewByPhone = mode === 'new' && phoneHasEnoughDigits;
+
+  const partnerPreviewQuery = useQuery({
+    // Ключ — режим + сама идентичность клиента + заявка-источник. Смена
+    // телефона порождает новый ключ, react-query отменяет предыдущий запрос по
+    // signal, и ответ на устаревший ввод не может «догнать» и подменить
+    // плашку. applicationId в ключе не для кэша, а чтобы ответ по одной
+    // заявке-источнику нельзя было показать под другой.
+    queryKey: [
+      'submission-partner-preview',
+      previewByStudent ? `student:${studentId}` : `phone:${debouncedPhone}`,
+      `app:${sourceApplicationId}`,
+    ],
+    queryFn: ({ signal }) =>
+      previewSubmissionPartner(
+        {
+          ...(previewByStudent ? { studentId } : { phone: debouncedPhone }),
+          // Тот же параметр и то же условие, что в createSubmission ниже.
+          applicationId: sourceApplicationId || undefined,
+        },
+        signal,
+      ),
+    // Заявка-источник сама по себе — достаточный ключ клиента: сделку по ней
+    // запишут независимо от того, выбран ли уже студент и введён ли телефон.
+    enabled: previewByStudent || previewByPhone || !!sourceApplicationId,
+    // Партнёрская привязка клиента за время заполнения формы не меняется —
+    // перезапрашивать её на каждый возврат фокуса в окно незачем.
+    staleTime: 5 * 60_000,
+    // Плашка справочная: молча не показать её лучше, чем ретраить и мигать.
+    retry: false,
+  });
+  const partnerPreview = partnerPreviewQuery.data ?? null;
 
   // Однократная подстановка: `prefilledRef` не даёт перетереть правки
   // менеджера, если react-query отдаст данные повторно (refetch на focus).
@@ -453,6 +516,12 @@ export default function SubmissionForm() {
               </Field>
             </div>
           )}
+
+          {/* Ничего не найдено — ничего и не рисуем. Ни «партнёра нет», ни
+              спиннера: большинство клиентов приходят сами, и постоянная
+              пустая строка приучила бы менеджера не смотреть на это место
+              вообще — ровно тогда, когда там однажды появится партнёр. */}
+          <PartnerChip preview={partnerPreview} />
         </Section>
 
         {/* ===== 2. ПРОГРАММА + КОНТРАКТ ===== */}
@@ -574,6 +643,54 @@ export default function SubmissionForm() {
         </div>
       </motion.div>
     </>
+  );
+}
+
+/**
+ * «Клиент от партнёра: Имя · КОД — комиссия 500 TJS».
+ *
+ * Только чтение. Ни чекбокса «не учитывать», ни крестика «убрать»: сама
+ * возможность снять галочку означала бы, что комиссию партнёра можно молча
+ * отменить одним кликом из формы сделки — а связь всё равно устанавливает
+ * сервер при создании, и плашка на неё не влияет.
+ *
+ * Стиль намеренно совпадает с чипом партнёра в списке сделок
+ * (pages/Submissions.tsx): один и тот же факт должен читаться одинаково.
+ */
+function PartnerChip({ preview }: { preview: SubmissionPartnerPreview | null }) {
+  const { t } = useT();
+  if (!preview) return null;
+
+  // Те же два форматтера и то же правило выбора, что в PartnerAttributionCard:
+  // пришла валюта → сумма из настоящей Commission, рисуем деньгами; не пришла
+  // → это прогноз по фикс-ставке партнёра, всегда целые TJS.
+  const commissionLabel = preview.commissionCurrency
+    ? fmtMoneyCents(preview.commissionAmountCents, preview.commissionCurrency)
+    : fmtCommissionRate(preview.commissionAmountCents);
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        flexWrap: 'wrap',
+        padding: '4px 10px',
+        borderRadius: 999,
+        background: 'rgba(139, 92, 246, 0.12)',
+        color: '#7c3aed',
+        fontSize: 12,
+        fontWeight: 600,
+      }}
+    >
+      <Icon name="handshake" size={14} />
+      {t('submissionForm.partner')}: {preview.fullName}
+      <span style={{ opacity: 0.7, fontWeight: 400 }}>· {preview.referralCode}</span>
+      <span style={{ opacity: 0.7, fontWeight: 400 }}>
+        — {t('submissionForm.partner.commission')} {commissionLabel}
+      </span>
+    </div>
   );
 }
 
