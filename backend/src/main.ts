@@ -1,9 +1,31 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
+
+// Последний рубеж: НИ ОДИН незакрытый промис не имеет права уронить процесс.
+//
+// Node ≥15 по умолчанию (--unhandled-rejections=throw) превращает
+// unhandledRejection в uncaughtException и завершает процесс, а стартуемся мы
+// как голый `node dist/main` (railway.json → npm run start:prod), без
+// --unhandled-rejections=warn. При restartPolicyMaxRetries: 3 детерминированный
+// реджект успевает сжечь все три рестарта за минуты и оставить API лежать.
+//
+// Главный поставщик таких промисов — cron: cron@3 дёргает колбэки как
+// `void callback.call(...)`, и @nestjs/schedule их не оборачивает. Каждый
+// @Cron в CronService уже прикрыт своим try/catch (см. CronService.jobFailed),
+// этот хук — страховка на будущее: новый cron, забытый .catch() у
+// fire-and-forget вызова, промис в setInterval стороннего модуля. HTTP-путь
+// сюда не приходит — там ошибки ловит Nest'овский exception layer.
+//
+// Ошибку только логируем и живём дальше: процесс, обслуживающий CRM, полезнее
+// живым с одной потерянной фоновой операцией, чем мёртвым.
+process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  new Logger('UnhandledRejection').error(err.message, err.stack);
+});
 
 async function bootstrap() {
   // bodyParser: false отключает Nest'овский авто-парсер. Мы добавим json/

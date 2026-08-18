@@ -287,6 +287,19 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
     label: 'Обучение — редактирование',
     paths: [{ prefix: '/lms' }] },
 
+  // Группы и расписание занятий. Свой ключ нужен именно потому, что префикс
+  // /study-groups новый: без записи в каталоге implicit-проверка RolesGuard
+  // не нашла бы для него НИ ОДНОГО permission'а, и носитель кастомной роли
+  // получал бы 403 на разделе, который ему открыли в сайдбаре.
+  // Пара read/write (а не полный CRUD) — как у lms/partners/settings: тонкой
+  // детализации внутри расписания не требуется.
+  { key: 'groups:read',  section: 'groups', group: 'Обучение',
+    label: 'Группы и расписание — просмотр',
+    paths: [{ method: 'GET', prefix: '/study-groups' }] },
+  { key: 'groups:write', section: 'groups', group: 'Обучение',
+    label: 'Группы и расписание — редактирование',
+    paths: [{ prefix: '/study-groups' }] },
+
   // ─── Партнёры ──────────────────────────────────────────────────────────
   { key: 'partners:read',  section: 'partners', group: 'Партнёры',
     label: 'Партнёры — просмотр',

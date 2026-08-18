@@ -12,6 +12,7 @@ import { DIRECTION_LABEL } from '../api/types';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
 import { MiniMarkdown } from '../lib/miniMarkdown';
+import InstallmentTemplateSection from '../components/InstallmentTemplateSection';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { isElevated } from '../lib/roles';
@@ -176,6 +177,10 @@ export default function ProgramDetail() {
           <MiniMarkdown text={p.description} />
         </div>
       )}
+
+      {/* Шаблон рассрочки: доли этапов + сдвиги сроков. Материализуется в
+          PaymentStage при создании сделки; действующие сделки не меняются. */}
+      <InstallmentTemplateSection programId={p.id} programCost={p.cost} currency={p.currency} />
 
       {/* Документы программы (ТЗ п.7) */}
       <ProgramDocumentsSection programId={p.id} />

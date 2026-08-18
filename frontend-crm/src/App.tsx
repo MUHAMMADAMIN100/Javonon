@@ -37,6 +37,9 @@ import UserDetail, { MyProfile } from './pages/UserDetail';
 import Submissions from './pages/Submissions';
 import SubmissionForm from './pages/SubmissionForm';
 import SubmissionDetail from './pages/SubmissionDetail';
+import Groups from './pages/Groups';
+import GroupDetail from './pages/GroupDetail';
+import Schedule from './pages/Schedule';
 import Loading from './components/Loading';
 
 export default function App() {
@@ -66,6 +69,11 @@ export default function App() {
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/programs" element={<Programs />} />
         <Route path="/programs/:id" element={<ProgramDetail />} />
+        {/* Учебные группы и календарь занятий. Индивидуальный студент —
+            это группа из одного человека, отдельного роута под него нет. */}
+        <Route path="/groups" element={<Groups />} />
+        <Route path="/groups/:id" element={<GroupDetail />} />
+        <Route path="/schedule" element={<Schedule />} />
         <Route path="/users" element={<Users />} />
         <Route path="/users/:id" element={<UserDetail />} />
         {/* /profile/:id — для сотрудников с выданным доступом к чужому досье */}

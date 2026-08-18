@@ -57,6 +57,8 @@ import { MassmailModule } from './integrations/massmail/massmail.module';
 import { InboxModule } from './integrations/inbox/inbox.module';
 import { SmsIntegrationModule } from './integrations/sms/sms-integration.module';
 import { RevenueSchemeModule } from './revenue-scheme/revenue-scheme.module';
+import { StudyGroupsModule } from './study-groups/study-groups.module';
+import { InstallmentsModule } from './installments/installments.module';
 
 @Module({
   imports: [
@@ -140,6 +142,11 @@ import { RevenueSchemeModule } from './revenue-scheme/revenue-scheme.module';
     InboxModule,
     SmsIntegrationModule,
     RevenueSchemeModule,
+    // Расписание занятий по группам и рассрочка по сделкам. Оба модуля
+    // экспортируют свой сервис — их дёргают CronModule, SubmissionsModule и
+    // ProgramsModule; обратных зависимостей нет.
+    StudyGroupsModule,
+    InstallmentsModule,
   ],
   controllers: [HealthController],
   providers: [

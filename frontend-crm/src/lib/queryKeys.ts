@@ -89,6 +89,21 @@ export const keys = {
     mine: (p: Record<string, unknown> = {}) => ['reports', 'mine', p] as const,
     admin: (p: Record<string, unknown> = {}) => ['reports', 'admin', p] as const,
   },
+  groups: {
+    all: ['groups'] as const,
+    list: (p: Record<string, unknown> = {}) => ['groups', 'list', p] as const,
+    one: (id: string) => ['groups', 'one', id] as const,
+    // Лента занятий календаря: период и фильтры — часть ключа, иначе
+    // переключение месяца отдавало бы из кеша прошлый месяц.
+    sessions: (p: Record<string, unknown> = {}) => ['groups', 'sessions', p] as const,
+  },
+  installments: {
+    all: ['installments'] as const,
+    /** Этапы рассрочки сделки. */
+    stages: (submissionId: string) => ['installments', 'stages', submissionId] as const,
+    /** Шаблон рассрочки программы. */
+    template: (programId: string) => ['installments', 'template', programId] as const,
+  },
   calls: {
     all: ['calls'] as const,
     list: (p: Record<string, unknown> = {}) => ['calls', 'list', p] as const,

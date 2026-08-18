@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseGuards,
@@ -24,6 +25,8 @@ import { UpdateProgramDto } from './dto/update-program.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { isElevated } from '../auth/role-utils';
+import { InstallmentsService } from '../installments/installments.service';
+import { SaveInstallmentTemplateDto } from '../installments/dto/installments.dto';
 
 // Изображения программ — только картинки. Whitelist расширения + MIME,
 // иначе можно было загрузить .html/.js и получить XSS при отдаче статики.
@@ -48,7 +51,13 @@ const programImageFilter: any = (_req: any, file: any, cb: any) => {
 
 @Controller('programs')
 export class ProgramsController {
-  constructor(private programs: ProgramsService) {}
+  constructor(
+    private programs: ProgramsService,
+    // Шаблон рассрочки — такая же часть карточки программы, как стипендии и
+    // документы, поэтому и живёт на префиксе /programs: наследует
+    // permission-пути `programs:*` из PERMISSION_CATALOG.
+    private installments: InstallmentsService,
+  ) {}
 
   // Публичный каталог (для лендинга, без авторизации)
   @Get('public')
@@ -387,5 +396,32 @@ export class ProgramsController {
   @Delete('comments/:commentId')
   removeComment(@Param('commentId') cid: string, @CurrentUser() user: any) {
     return this.programs.removeComment(cid, user);
+  }
+
+  // ===== Шаблон рассрочки (этапы оплаты программы) =====
+  //
+  // Шаблон описывает ПОРЯДОК взносов: доля в процентах + сдвиг срока в днях
+  // от заключения сделки. При создании сделки он материализуется в
+  // PaymentStage; дальше менеджер правит суммы и даты в карточке сделки, а
+  // правка шаблона на уже подписанные контракты НЕ влияет.
+  //
+  // Публичного варианта нет намеренно: условия рассрочки — предмет
+  // переговоров, а не витрина лендинга.
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/installment-template')
+  installmentTemplate(@Param('id') id: string) {
+    return this.installments.getTemplate(id);
+  }
+
+  /** PUT-семантика: что прислали, то и лежит. Пустой массив = рассрочки нет. */
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/installment-template')
+  saveInstallmentTemplate(
+    @Param('id') id: string,
+    @Body() body: SaveInstallmentTemplateDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.installments.saveTemplate(user, id, body.stages);
   }
 }

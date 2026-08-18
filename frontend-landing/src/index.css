@@ -1544,6 +1544,219 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 }
 .stu-toast.error { border-left-color: var(--danger); }
 
+/* ═══════════════ РАСПИСАНИЕ ЗАНЯТИЙ (кабинет студента) ═══════════════ */
+.stu-sched-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.stu-sched-head h2 { margin-bottom: 20px; }
+.stu-sched-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.stu-sched-days { display: flex; flex-direction: column; gap: 20px; }
+.stu-sched-day-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--emerald);
+  margin-bottom: 10px;
+}
+.stu-sched-items { display: flex; flex-direction: column; gap: 8px; }
+.stu-sched-item {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: var(--bg-soft);
+  border: 1px solid var(--bg-mute);
+  border-left: 3px solid var(--emerald);
+  border-radius: var(--radius);
+}
+.stu-sched-time {
+  display: flex;
+  flex-direction: column;
+  min-width: 56px;
+  flex-shrink: 0;
+  line-height: 1.25;
+}
+.stu-sched-time-start {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.stu-sched-time-end {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+.stu-sched-body { min-width: 0; flex: 1; }
+.stu-sched-topic {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.stu-sched-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.stu-sched-meta span { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ═══════════════ ГРАФИК РАССРОЧКИ (кабинет студента) ═══════════════ */
+.stu-inst-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.stu-inst-head h2 { margin-bottom: 20px; }
+.stu-inst-program { font-size: 13px; color: var(--ink-soft); }
+.stu-inst-totals { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.stu-inst-total-value {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.stu-inst-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  padding: 20px;
+  background: var(--bg-soft);
+  border-radius: var(--radius-lg);
+}
+.stu-inst-sum-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.stu-inst-sum-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.stu-inst-sum-value {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.stu-inst-sum-value.paid { color: var(--emerald); }
+.stu-inst-sum-value.out { color: var(--ink-2); }
+.stu-inst-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-mute);
+  overflow: hidden;
+  margin: 14px 0 4px;
+}
+.stu-inst-bar-fill { height: 100%; background: var(--emerald); border-radius: 999px; }
+.stu-inst-next {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 18px;
+}
+.stu-inst-stages { display: flex; flex-direction: column; gap: 8px; }
+.stu-inst-stage {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--bg-mute);
+  border-left: 3px solid var(--bg-mute);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.stu-inst-stage.paid { border-left-color: var(--emerald); background: var(--emerald-soft); }
+/* Просрочку помечаем янтарём, а не красным: тон нейтральный. */
+.stu-inst-stage.overdue { border-left-color: var(--warning); background: rgba(251, 191, 36, 0.08); }
+.stu-inst-stage-no {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--bg-mute);
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+.stu-inst-stage.paid .stu-inst-stage-no { background: var(--emerald); color: #fff; }
+.stu-inst-stage-body { flex: 1; min-width: 0; }
+.stu-inst-stage-title { font-size: 14px; font-weight: 500; color: var(--ink); }
+.stu-inst-stage-due { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.stu-inst-stage-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.stu-inst-stage-amount { font-size: 16px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.stu-inst-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--bg-mute);
+  color: var(--ink-3);
+}
+.stu-inst-chip.paid { background: var(--emerald-soft); color: var(--emerald-deep); }
+.stu-inst-chip.overdue { background: rgba(251, 191, 36, 0.18); color: #92400e; }
+.stu-inst-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  .stu-sched-item { gap: 12px; padding: 12px 14px; }
+  .stu-sched-time { min-width: 48px; }
+  .stu-sched-time-start { font-size: 15px; }
+  .stu-inst-summary { padding: 16px; gap: 12px; }
+  .stu-inst-sum-value { font-size: 19px; }
+  .stu-inst-total-value { font-size: 26px; }
+  /* Сумма и статус уезжают под текст: в 320px они не помещаются в строку. */
+  .stu-inst-stage { flex-wrap: wrap; row-gap: 10px; }
+  .stu-inst-stage-body { flex-basis: calc(100% - 44px); }
+  .stu-inst-stage-right {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 10px;
+  }
+}
+
 /* ENROLLMENT PROGRESS */
 /* QA-fix: классы в JSX (.ep-head/.ep-track/.ep-title/.ep-percent) не
    совпадали с CSS (.ep-row), поэтому Cabinet Home выглядел как plain

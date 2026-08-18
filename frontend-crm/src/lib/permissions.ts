@@ -168,6 +168,11 @@ export const PERMISSION_KEYS = {
   partnersRead: 'partners:read',
   partnersWrite: 'partners:write',
 
+  // Study groups + расписание занятий (read + write) — пара, а не полный
+  // CRUD, ровно как в backend PERMISSION_CATALOG (секция 'groups').
+  groupsRead: 'groups:read',
+  groupsWrite: 'groups:write',
+
   // HR (kept for backwards compat — used inside /workday sub-tabs).
   penaltiesWrite: 'penalties:write',
   attendanceRead: 'attendance:read',

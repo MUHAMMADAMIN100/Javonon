@@ -135,6 +135,14 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.settings',
     items: [
       { to: '/programs', icon: 'menu_book', labelKey: 'sidebar.programs', visible: (c) => c.show('programs:read', c.isWorkforce) },
+      // Учебный блок: группы и календарь занятий стоят рядом с «Программами»
+      // и LMS — это тот же контур обучения, а не продажи и не HR. Условие
+      // видимости в стиле соседа-«Программ»: permission у кастомной роли,
+      // иначе базовая роль (isWorkforce). Бэкенд пускает к /study-groups весь
+      // штат, но не-руководство видит только СВОИ группы (скоуп в сервисе),
+      // поэтому пункт безопасно показывать всей рабочей группе.
+      { to: '/groups', icon: 'diversity_2', labelKey: 'sidebar.groups', visible: (c) => c.show('groups:read', c.isWorkforce) },
+      { to: '/schedule', icon: 'calendar_month', labelKey: 'sidebar.schedule', visible: (c) => c.show('groups:read', c.isWorkforce) },
       { to: '/lms', icon: 'auto_stories', labelKey: 'sidebar.lms', visible: (c) => c.show('lms:read', c.elevated) },
       // Осознанно НЕ через show(): custom-роль не открывает оферты никаким
       // permission'ом — так было и в старом сайдбаре.

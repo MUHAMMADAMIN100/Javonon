@@ -83,4 +83,8 @@ export const lkeys = {
     filters: () => ['programs', 'filters'] as const,
   },
   knowledge: { index: () => ['knowledge', 'index'] as const, category: (slug: string) => ['knowledge', slug] as const },
+  schedule: {
+    upcoming: () => ['student-schedule', 'upcoming'] as const,
+  },
+  installments: { mine: () => ['student-installments', 'mine'] as const },
 } as const;

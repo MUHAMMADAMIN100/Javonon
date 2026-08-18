@@ -22,6 +22,8 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { SubmissionsService } from './submissions.service';
+import { InstallmentsService } from '../installments/installments.service';
+import { UpdatePaymentStageDto } from '../installments/dto/installments.dto';
 import { Role, SubmissionStatus, SubmissionPaymentStatus } from '@prisma/client';
 
 // Те же типы файлов что и в time-tracking (паспорт/контракт/чек).
@@ -49,7 +51,14 @@ const submissionFileFilter: any = (_req: any, file: any, cb: any) => {
 @Controller('submissions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SubmissionsController {
-  constructor(private svc: SubmissionsService) {}
+  constructor(
+    private svc: SubmissionsService,
+    // Этапы рассрочки живут в своём домене, но висят на маршрутах
+    // /submissions намеренно: так они наследуют уже существующие
+    // permission-пути `submissions:*` из PERMISSION_CATALOG, и кастомной
+    // роли не нужен отдельный ключ ради блока внутри той же карточки.
+    private installments: InstallmentsService,
+  ) {}
 
   /** Менеджер создаёт новую сделку. */
   @Post()
@@ -176,6 +185,35 @@ export class SubmissionsController {
       // Решает, отдавать ли партнёрский блок вообще (см. док-комментарий).
       viewer: me,
     });
+  }
+
+  /**
+   * Ручная правка этапа рассрочки: сумма, срок, название.
+   *
+   * МАРШРУТ ОБЯЗАН СТОЯТЬ ВЫШЕ @Patch(':id'), иначе Nest разберёт 'stages'
+   * как id сделки. Три сегмента против двух — пересечения нет, но порядок
+   * оставляем явным, как у 'partner-preview' выше.
+   *
+   * Роли — те же, что у редактирования сделки; владение («своя ли сделка»)
+   * проверяет InstallmentsService, как и везде в этом контроллере.
+   * Пометить этап оплаченным отсюда НЕЛЬЗЯ: единственный путь в PAID —
+   * одобрение платежа (см. InstallmentsService.settleStagesTx).
+   */
+  @Patch('stages/:stageId')
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  updateStage(
+    @CurrentUser() me: any,
+    @Param('stageId') stageId: string,
+    @Body() body: UpdatePaymentStageDto,
+  ) {
+    return this.installments.updateStage(me, stageId, body);
+  }
+
+  /** Этапы рассрочки сделки + итоги (оплачено / остаток / просрочено). */
+  @Get(':id/stages')
+  @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  listStages(@CurrentUser() me: any, @Param('id') id: string) {
+    return this.installments.listForSubmission(me, id);
   }
 
   /**

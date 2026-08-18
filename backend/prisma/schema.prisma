@@ -266,6 +266,12 @@ model User {
   // сотрудника ссылка обнуляется (SetNull) — «место» в схеме остаётся,
   // FOUNDER решает, кого туда поставить.
   revenueBucketItems       RevenueBucketItem[] @relation("RevenueBucketItemUser")
+
+  // Расписание: группы, где сотрудник — штатный преподаватель, и отдельные
+  // занятия, которые он ведёт на замене. Обе связи SetNull — увольнение
+  // сотрудника не уносит ни группу, ни историю занятий.
+  taughtGroups   StudyGroup[]   @relation("StudyGroupTeacher")
+  taughtSessions ClassSession[] @relation("ClassSessionTeacher")
 }
 
 // ============================================================
@@ -560,6 +566,9 @@ model Student {
   callLogs       CallLog[]        @relation("CallLogStudent")
   submissions    SaleSubmission[] @relation("StudentSubmissions")
 
+  // Членство в учебных группах — единственный путь студента к расписанию.
+  groupMemberships GroupMember[] @relation("StudentGroupMemberships")
+
   @@index([direction])
   @@index([cabinet])
   @@index([status])
@@ -677,6 +686,11 @@ model Program {
   documents    ProgramDocument[]
   comments     ProgramComment[]
   submissions  SaleSubmission[]     @relation("ProgramSubmissions")
+
+  // Учебные группы, занимающиеся по этой программе (см. StudyGroup).
+  studyGroups       StudyGroup[]              @relation("ProgramStudyGroups")
+  // Шаблон рассрочки: этапы, из которых материализуются PaymentStage сделки.
+  installmentStages ProgramInstallmentStage[]
 
   @@index([city])
   @@index([country])
@@ -2005,6 +2019,10 @@ model SaleSubmission {
 
   payments SubmissionPayment[]
 
+  // Этапы рассрочки, материализованные из шаблона программы при создании
+  // сделки. Cascade — без сделки этапы смысла не имеют.
+  paymentStages PaymentStage[]
+
   @@index([managerId, createdAt])
   @@index([status])
   @@index([studentId])
@@ -2041,6 +2059,10 @@ model SubmissionPayment {
   financeTransactionId String?                 @unique
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
+
+  // Этапы рассрочки, погашенные этим платежом при APPROVE. Единственный
+  // путь, которым PaymentStage становится PAID.
+  settledStages PaymentStage[] @relation("PaymentStageSettledBy")
 
   @@index([submissionId, paidAt])
   @@index([status])
@@ -2146,4 +2168,199 @@ model RevenueBucketItem {
   // Уникальный слот в рамках bucket'а (см. коммент в RevenueBucket).
   @@unique([bucketId, order])
   @@index([userId])
+}
+
+
+// ============================================================
+// STUDY GROUPS & CLASS SCHEDULE — расписание занятий по группам.
+// ============================================================
+// Единственный путь к расписанию — ГРУППА. Индивидуальный студент — это
+// группа из одного человека (StudyGroup + один GroupMember), отдельной
+// «персональной» ветки НЕТ и заводить её нельзя: иначе календарь, напоминания
+// и кабинет студента пришлось бы писать дважды и они бы разъехались.
+//
+// Кто что видит: FOUNDER/ADMIN — все группы; преподаватель (User в
+// StudyGroup.teacherId) — свои; студент (лендинг-кабинет) — только занятия
+// групп, в которых он состоит (через GroupMember).
+//
+// Напоминание перед занятием шлёт CronService через уже существующий
+// NotificationsService — второго канала уведомлений не заводим.
+enum StudyGroupStatus {
+  ACTIVE // группа занимается, сессии планируются
+  ARCHIVED // отучились / расформирована; история занятий сохраняется
+}
+
+enum ClassSessionStatus {
+  SCHEDULED // запланировано, ещё не прошло
+  DONE // занятие состоялось
+  CANCELLED // отменено (преподаватель заболел и т.п.), из кабинета скрывается
+}
+
+/// Учебная группа. Инвариант: расписание висит ТОЛЬКО на группе — у
+/// ClassSession нет и не должно быть прямой ссылки на студента.
+model StudyGroup {
+  id          String           @id @default(uuid())
+  name        String
+  // Программа, по которой учится группа. Опциональна: бывают общие курсы
+  // (языковая подготовка) вне каталога. Удалили Program → группа остаётся
+  // с историей занятий, ссылка обнуляется.
+  programId   String?
+  program     Program?         @relation("ProgramStudyGroups", fields: [programId], references: [id], onDelete: SetNull)
+  // Преподаватель — обычный User (отдельной роли TEACHER в enum Role нет,
+  // права разруливает RolesGuard + принцип «свои группы»). Уволили/удалили
+  // сотрудника → группа не пропадает, преподавателя переназначают.
+  teacherId   String?
+  teacher     User?            @relation("StudyGroupTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  status      StudyGroupStatus @default(ACTIVE)
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  members  GroupMember[]
+  sessions ClassSession[]
+
+  @@index([status])
+  @@index([teacherId])
+  @@index([programId])
+  @@index([createdAt])
+}
+
+/// Членство студента в группе. Чистая join-строка со снапшотом даты входа.
+/// Инвариант: один студент — максимум одна строка на группу (@@unique).
+/// Cascade с ОБЕИХ сторон удаляет только саму строку членства: удаление
+/// группы НЕ удаляет студентов, удаление студента НЕ удаляет группу.
+model GroupMember {
+  id        String     @id @default(uuid())
+  groupId   String
+  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student    @relation("StudentGroupMemberships", fields: [studentId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime   @default(now())
+
+  @@unique([groupId, studentId])
+  @@index([studentId])
+}
+
+/// Одно занятие группы. Основные запросы — «ближайшие занятия группы» и
+/// «ближайшие занятия студента» (через GroupMember), отсюда
+/// @@index([groupId, startsAt]).
+model ClassSession {
+  id             String             @id @default(uuid())
+  groupId        String
+  group          StudyGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  // Границы занятия в UTC. Границы СУТОК для календаря и cron'ов считаются
+  // только через common/tj-time.ts (Asia/Dushanbe), без сырой арифметики
+  // над Date.
+  startsAt       DateTime
+  endsAt         DateTime
+  topic          String?
+  // Замена штатного преподавателя на конкретное занятие. NULL = ведёт
+  // преподаватель группы (StudyGroup.teacherId).
+  teacherId      String?
+  teacher        User?              @relation("ClassSessionTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  status         ClassSessionStatus @default(SCHEDULED)
+  // Идемпотентность напоминания: cron проставляет отметку, отправив
+  // уведомление, и по этой сессии больше не срабатывает. Без колонки
+  // повторный запуск (или рестарт пода) шлёт напоминание заново.
+  reminderSentAt DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([groupId, startsAt])
+  @@index([startsAt])
+  // Выборка cron'а напоминаний: SCHEDULED в ближайшем окне.
+  @@index([status, startsAt])
+  @@index([teacherId])
+}
+
+// ============================================================
+// INSTALLMENT PLANS — рассрочка по сделке (SaleSubmission).
+// ============================================================
+// Шаблон живёт на программе (ProgramInstallmentStage): упорядоченные этапы
+// с долей в процентах и сдвигом в днях от старта сделки. При создании сделки
+// шаблон МАТЕРИАЛИЗУЕТСЯ в строки PaymentStage — дальше менеджер правит суммы
+// и даты руками, шаблон на уже созданные этапы больше не влияет.
+//
+// Деньги: Float в тех же единицах, что SaleSubmission.totalAmount и
+// SubmissionPayment.amount (целые единицы валюты, НЕ центы; в центы переводится
+// только партнёрская комиссия на своей границе). Своей валюты у этапа нет —
+// наследуется из submission.currency.
+//
+// Инвариант сумм: sum(PaymentStage.amount) == SaleSubmission.totalAmount ТОЧНО.
+// Остаток от округления процентов кладётся на ПОСЛЕДНИЙ этап (сравнение — с
+// уже существующим PAYMENT_PHASE_EPSILON). Держится на всех трёх путях, где
+// двигается любая сторона равенства: материализация (allocateStageAmounts),
+// правка суммы этапа (rebalancePlanForStageEditTx — разница переносится на
+// последний неоплаченный этап) и правка суммы контракта
+// (reallocateOnTotalChangeTx — неоплаченные этапы пересобираются под новую
+// цену). Оплаченные этапы не двигает никто: они сведены с платежами.
+//
+// Инвариант статуса: PAID выставляется ТОЛЬКО при одобрении SubmissionPayment
+// (гасятся самые ранние неоплаченные этапы, которые платёж покрывает).
+// Второго места, где этап становится PAID, нет.
+//
+// OVERDUE проставляет суточный cron в Asia/Dushanbe; он же поднимает уже
+// существующий Application.paymentPending (второй источник правды про долг
+// не заводим) и уведомляет ответственного менеджера — студента НЕ уведомляет.
+
+/// Этап шаблона рассрочки у программы. Инвариант: sum(percent) по программе
+/// == 100 (проверяется в сервисе — условных check-constraint'ов Prisma не
+/// умеет). Порядок этапов уникален в рамках программы, чтобы параллельные
+/// правки не сели на один слот (та же схема, что у RevenueBucket).
+model ProgramInstallmentStage {
+  id         String   @id @default(uuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  // Порядковый номер этапа (нормализует сервис при сохранении шаблона).
+  order      Int
+  title      String? // «Первый взнос», «Второй платёж» …
+  // Доля этапа от полной суммы контракта, 0..100. Float, а не Int: рассрочка
+  // на три части — это 33.33 / 33.33 / 33.34.
+  percent    Float
+  // Сдвиг срока от старта сделки (SaleSubmission.createdAt) в днях.
+  // 0 = «в день заключения». Дата считается через common/tj-time.ts.
+  offsetDays Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Уникальный слот в рамках программы; он же индекс для сортировки.
+  @@unique([programId, order])
+}
+
+enum PaymentStageStatus {
+  PENDING // ждёт оплаты, срок ещё не вышел
+  PAID // погашен одобренным SubmissionPayment (единственный путь)
+  OVERDUE // срок прошёл, денег нет — ставит суточный cron Asia/Dushanbe
+}
+
+/// Материализованный этап рассрочки конкретной сделки. Живёт и умирает вместе
+/// со сделкой (Cascade) — без сделки этап смысла не имеет.
+/// Инвариант: (submissionId, order) уникальна — защищает от двойной
+/// материализации шаблона при гонке двух параллельных созданий сделки.
+model PaymentStage {
+  id           String             @id @default(uuid())
+  submissionId String
+  submission   SaleSubmission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  order        Int
+  title        String?
+  // Целые единицы валюты сделки (см. комментарий секции), не центы.
+  amount       Float
+  // Срок оплаты. Хранится в UTC; вычисляется от SaleSubmission.createdAt
+  // + offsetDays шаблона через common/tj-time.ts, а не сырой арифметикой.
+  dueDate      DateTime
+  status       PaymentStageStatus @default(PENDING)
+  paidAt       DateTime?
+  // Платёж, который погасил этап. SetNull, а не Cascade: удаление одного
+  // платежа не должно сносить сам этап рассрочки — он вернётся в
+  // PENDING/OVERDUE и его снова можно будет закрыть.
+  paymentId    String?
+  payment      SubmissionPayment? @relation("PaymentStageSettledBy", fields: [paymentId], references: [id], onDelete: SetNull)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([submissionId, order])
+  // Выборка суточного cron'а просрочки: PENDING с dueDate < начала суток.
+  @@index([status, dueDate])
+  @@index([dueDate])
+  @@index([paymentId])
 }

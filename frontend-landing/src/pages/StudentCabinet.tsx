@@ -16,6 +16,8 @@ import ApplicationFormSection from '../components/ApplicationFormSection';
 import EnrollmentProgress from '../components/EnrollmentProgress';
 import ProgramsSection from '../components/ProgramsSection';
 import PaymentsSection from '../components/PaymentsSection';
+import InstallmentPlanSection from '../components/InstallmentPlanSection';
+import ScheduleSection from '../components/ScheduleSection';
 import CoursesSection from '../components/CoursesSection';
 import InteractionsHistory from '../components/InteractionsHistory';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
@@ -278,6 +280,10 @@ export default function StudentCabinet() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
+            {/* График рассрочки — над историей платежей: сначала «сколько и
+                когда причитается», потом «что уже прошло». Секция сама
+                исчезает, если рассрочки у студента нет. */}
+            <InstallmentPlanSection />
             <PaymentsSection />
           </motion.div>
         )}
@@ -383,6 +389,10 @@ export default function StudentCabinet() {
                 currentStatus={me.applications?.[0]?.status}
               />
             </motion.div>
+
+            {/* Расписание занятий. Ничего не рисует, пока у студента нет
+                группы, — а у большинства её нет. */}
+            <ScheduleSection />
           </>
         )}
 

@@ -284,3 +284,88 @@ export async function getKnowledgeCategory(slug: string): Promise<KnowledgeCateg
   const res = await fetch(`${API_URL}/knowledge/${slug}`);
   return res.json();
 }
+
+/* ─────────────────────── РАСПИСАНИЕ ЗАНЯТИЙ (кабинет) ───────────────────────
+ * Читаем /student-schedule/*: id студента бэкенд берёт из токена, поэтому
+ * параметра «чьё расписание» тут нет и быть не должно. Индивидуальный студент
+ * на бэкенде — это группа из одного человека, отдельной ветки под него нет.
+ */
+
+export type StudentClassSessionStatus = 'SCHEDULED' | 'DONE' | 'CANCELLED';
+
+export type StudentClassSession = {
+  id: string;
+  /** UTC ISO. Рисовать только через tjDate.ts — сутки душанбинские. */
+  startsAt: string;
+  endsAt: string;
+  topic: string | null;
+  status: StudentClassSessionStatus;
+  group: {
+    id: string;
+    name: string;
+    program: { id: string; name: string } | null;
+  };
+  /**
+   * Замена штатного преподавателя на конкретное занятие. NULL = ведёт
+   * преподаватель группы, но его имя в этот ответ бэкенд не кладёт —
+   * поэтому строку «Устод» показываем только когда имя реально пришло.
+   */
+  teacher: { id: string; fullName: string } | null;
+};
+
+export async function listStudentUpcomingSessions(limit?: number): Promise<StudentClassSession[]> {
+  const { data } = await client.get<StudentClassSession[]>('/student-schedule/upcoming', {
+    params: limit ? { limit } : undefined,
+  });
+  return data;
+}
+
+/* ────────────────────────── РАССРОЧКА (кабинет) ──────────────────────────
+ * /student-installments/mine. Деньги — ЦЕЛЫЕ единицы валюты сделки (не
+ * центы), те же, что у сумм платежей выше. Валюта своя у каждого плана и
+ * наследуется из сделки, поэтому суммарный остаток бэкенд отдаёт разбитым
+ * по валютам, а не одним числом.
+ */
+
+export type StudentPaymentStageStatus = 'PENDING' | 'PAID' | 'OVERDUE';
+
+export type StudentPaymentStage = {
+  id: string;
+  /** 1-based. */
+  order: number;
+  title: string | null;
+  amount: number;
+  /** UTC ISO; сутки срока — душанбинские. */
+  dueDate: string;
+  status: StudentPaymentStageStatus;
+  paidAt: string | null;
+};
+
+export type StudentInstallmentTotals = {
+  stageCount: number;
+  paid: number;
+  outstanding: number;
+  overdueAmount: number;
+  overdueCount: number;
+  nextDueDate: string | null;
+};
+
+export type StudentInstallmentPlan = {
+  submissionId: string;
+  currency: string;
+  totalAmount: number;
+  program: { id: string; name: string } | null;
+  stages: StudentPaymentStage[];
+  totals: StudentInstallmentTotals;
+};
+
+export type StudentInstallments = {
+  plans: StudentInstallmentPlan[];
+  /** Остаток по каждой валюте отдельно — складывать USD с TJS нельзя. */
+  outstandingByCurrency: Record<string, number>;
+};
+
+export async function listStudentInstallments(): Promise<StudentInstallments> {
+  const { data } = await client.get<StudentInstallments>('/student-installments/mine');
+  return data;
+}

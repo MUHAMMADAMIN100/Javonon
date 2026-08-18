@@ -185,3 +185,17 @@ export function tjYearRange(base: Date = new Date()): TjDayRange {
   const { y } = tjYMD(base);
   return { from: ymdStr(y, 1, 1), to: ymdStr(y, 12, 31) };
 }
+
+/**
+ * «YYYY-MM-DDTHH:mm» в TJ-календаре — значение для CrmDatePicker(showTime).
+ *
+ * Именно эту наивную строку ждёт бэкенд расписания: tjParseLocalDate в
+ * backend/src/common/tj-time.ts трактует её как ДУШАНБИНСКОЕ стенное время.
+ * Резать ISO через `.slice(0, 16)` нельзя — это даст UTC-часы, и занятие
+ * уехало бы на 5 часов назад при каждом открытии формы редактирования.
+ */
+export function tjDateTimeInput(input: string | Date | null | undefined): string {
+  const day = tjDateInput(input);
+  if (!day) return '';
+  return `${day}T${tjFormatTime(input)}`;
+}

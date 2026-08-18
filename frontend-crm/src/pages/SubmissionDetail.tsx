@@ -30,7 +30,9 @@ import { listPrograms } from '../api/programs';
 import Icon from '../Icon';
 import CrmDatePicker from '../components/CrmDatePicker';
 import PartnerAttributionCard from '../components/PartnerAttributionCard';
+import PaymentStagesSection from '../components/PaymentStagesSection';
 import { absFileUrl as absUrl } from '../lib/fileUrl';
+import { keys } from '../lib/queryKeys';
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: '#0ea5e9',
@@ -61,6 +63,7 @@ export default function SubmissionDetail() {
     onSuccess: () => {
       toast('Платёж одобрен — доход и бонус начислены', 'success');
       qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
@@ -71,6 +74,7 @@ export default function SubmissionDetail() {
     onSuccess: () => {
       toast('Платёж отклонён', 'success');
       qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
@@ -81,6 +85,7 @@ export default function SubmissionDetail() {
     onSuccess: () => {
       toast('Статус обновлён', 'success');
       qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
@@ -92,18 +97,22 @@ export default function SubmissionDetail() {
     'submission:new': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
     'submission:payment-new': () => {
       qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     'submission:reviewed': () => {
       qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     'submission:approved': () => {
       qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     'submission:rejected': () => {
       qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
     },
   });
@@ -128,6 +137,7 @@ export default function SubmissionDetail() {
     onSuccess: (res) => {
       toast(res?.reversed ? 'Платёж удалён — Transaction реверсирован' : 'Платёж удалён', 'success');
       qc.invalidateQueries({ queryKey: ['submission', id] });
+      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
@@ -312,8 +322,15 @@ export default function SubmissionDetail() {
         )}
       </motion.div>
 
+      {/* Рассрочка — этапы оплаты сделки.
+          Секция сама себя прячет, если у сделки нет этапов (у программы
+          пустой шаблон = платят разом). Правит этапы тот же, кто правит
+          сделку: FOUNDER/ADMIN либо менеджер-владелец. Пометить этап
+          оплаченным отсюда НЕЛЬЗЯ — это делает только одобрение платежа. */}
+      <PaymentStagesSection submissionId={s.id} canEdit={founder || isOwnSubmission} />
+
       {/* Платежи */}
-      <h3 style={{ fontSize: 16, marginBottom: 12 }}>Платежи ({s.payments.length})</h3>
+      <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 12 }}>Платежи ({s.payments.length})</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {s.payments.map((p) => (
           <PaymentRow
@@ -347,6 +364,7 @@ export default function SubmissionDetail() {
           onSuccess={() => {
             setShowAddPayment(false);
             qc.invalidateQueries({ queryKey: ['submission', id] });
+            qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
             toast('Платёж добавлен', 'success');
           }}
         />
@@ -375,6 +393,7 @@ export default function SubmissionDetail() {
           onSuccess={() => {
             setShowEditSubmission(false);
             qc.invalidateQueries({ queryKey: ['submission', id] });
+            qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
             qc.invalidateQueries({ queryKey: ['submissions'] });
             toast('Сделка обновлена', 'success');
           }}
@@ -392,6 +411,7 @@ export default function SubmissionDetail() {
             onSuccess={() => {
               setEditPaymentId(null);
               qc.invalidateQueries({ queryKey: ['submission', id] });
+              qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
               qc.invalidateQueries({ queryKey: ['submissions'] });
               toast('Платёж обновлён', 'success');
             }}

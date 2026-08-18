@@ -184,3 +184,23 @@ export function tjStartOfNextYear(d: Date = new Date()): Date {
 export function tjEndOfYear(d: Date = new Date()): Date {
   return new Date(tjStartOfNextYear(d).getTime() - 1);
 }
+
+/**
+ * Полночь Asia/Dushanbe через `days` календарных суток от указанного момента.
+ *
+ * Нужен рассрочке: срок этапа — это «старт сделки + N дней» из шаблона
+ * программы, а «день» здесь обязан быть душанбинским. Сырое
+ * `new Date(t + N*86400000)` дало бы момент, а не границу суток, и на
+ * границе месяца/года в UTC-процессе Railway съезжало бы на 5 часов —
+ * ровно тот класс багов, ради которого заведён этот файл.
+ *
+ * Календарную арифметику ведём на UTC-якоре: Date.UTC сам переносит через
+ * границы месяцев, лет и високосные годы (Date.UTC(2026, 0, 32) → 1 февраля),
+ * а обратно собираем строку с явным +05:00 — тем же способом, что
+ * tjStartOfDay. Отрицательный `days` тоже работает.
+ */
+export function tjStartOfDayPlusDays(d: Date = new Date(), days = 0): Date {
+  const { y, m, d: dd } = tjYMD(d);
+  const anchor = new Date(Date.UTC(y, m - 1, dd + Math.trunc(days)));
+  return new Date(`${anchor.toISOString().slice(0, 10)}T00:00:00+05:00`);
+}

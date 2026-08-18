@@ -37,6 +37,7 @@ import {
   PaymentPhaseStatus,
 } from '@prisma/client';
 import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
+import { InstallmentsService } from '../installments/installments.service';
 
 /**
  * Bug #31 (HIGH): студент, созданный из SaleSubmission через approvePayment,
@@ -188,6 +189,11 @@ export class SubmissionsService {
     // одобрении/отмене. ActivityModule помечен @Global(), поэтому в
     // submissions.module.ts дополнительный import не нужен.
     private activity: ActivityService,
+    // Рассрочка: create() материализует шаблон программы в этапы сделки,
+    // approvePayment() гасит этапы внутри своей транзакции. НЕ @Optional():
+    // в отличие от партнёрской части, план платежей — это условия самого
+    // контракта, и молча создавать сделку без него нельзя.
+    private installments: InstallmentsService,
     // Партнёрская комиссия по сделке (см. approvePayment). @Optional() —
     // как в ApplicationsService: если модуль собран без PartnersModule,
     // сделки продолжают работать, просто без начислений (в approvePayment
@@ -415,13 +421,44 @@ export class SubmissionsService {
         totalAmount: dto.totalAmount,
         createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
       },
-      include: { payments: true, program: true, student: true },
+      include: {
+        payments: true,
+        program: true,
+        student: true,
+        // Тот же include, что у ветки реального создания ниже: идемпотентный
+        // ответ обязан быть неотличим от первого, иначе форма после двойного
+        // клика решит, что рассрочки у сделки нет.
+        paymentStages: { orderBy: { order: 'asc' } },
+      },
       orderBy: { createdAt: 'desc' },
     });
     if (existing) {
       // Идемпотентный ответ: возвращаем ту же сделку, новых записей не создаём.
       return existing;
     }
+
+    // РАССРОЧКА: материализуем шаблон программы в этапы сделки.
+    //
+    // Считаем ДО create и вкладываем результат в тот же вызов, а не пишем
+    // этапы отдельным запросом после: вложенный create коммитится одной
+    // транзакцией со сделкой, поэтому состояния «сделка есть, а плана нет»
+    // (упали между двумя запросами) не существует в принципе.
+    //
+    // Старт плана — момент заключения сделки. `firstApprovedAt` на этот
+    // момент ещё null (студент и заявка создаются только на первом
+    // одобрении), так что отсчитывать сроки больше не от чего; отличие
+    // dealStart от фактического `createdAt` — миллисекунды, а нужна лишь
+    // календарная дата в Душанбе.
+    //
+    // Шаблона у программы нет → массив пустой → этапов не создаём. Угадывать
+    // план («один этап на всю сумму») нельзя: это молча объявило бы клиента
+    // должником на весь контракт в день подписания.
+    const dealStart = new Date();
+    const stageRows = await this.installments.buildStagesForNewSubmission({
+      programId: dto.programId,
+      totalAmount: dto.totalAmount,
+      dealStart,
+    });
 
     const submission = await this.prisma.saleSubmission.create({
       data: {
@@ -460,8 +497,16 @@ export class SubmissionsService {
             status: SubmissionPaymentStatus.PENDING,
           },
         },
+        // Пустой массив — это «шаблона нет», а не «забыли»: Prisma на
+        // `create: []` не пишет ни одной строки.
+        paymentStages: stageRows.length ? { create: stageRows } : undefined,
       },
-      include: { payments: true, program: true, student: true },
+      include: {
+        payments: true,
+        program: true,
+        student: true,
+        paymentStages: { orderBy: { order: 'asc' } },
+      },
     });
 
     this.realtime.emitStaff('submission:new', { submissionId: submission.id, managerId });
@@ -1364,6 +1409,11 @@ export class SubmissionsService {
           orderBy: { paidAt: 'desc' },
           include: { reviewedBy: { select: { id: true, fullName: true } } },
         },
+        // План рассрочки — часть карточки сделки, а не отдельный экран.
+        // Отдаём здесь же, чтобы страница не делала второй запрос ради
+        // блока, который видна сразу. Порядок — по order: он же
+        // хронологический (сроки этапов возрастают вместе с номером).
+        paymentStages: { orderBy: { order: 'asc' } },
       },
     });
     if (!s) throw new NotFoundException('Сделка не найдена');
@@ -1936,6 +1986,37 @@ export class SubmissionsService {
         data: { financeTransactionId: finTx.id },
       });
 
+      // РАССРОЧКА: гасим этапы, которые это одобрение покрывает.
+      //
+      // ЗДЕСЬ И ТОЛЬКО ЗДЕСЬ этап становится PAID. Второго места, где кто-то
+      // мог бы пометить этап оплаченным, в системе нет — ни ручной ручки в
+      // CRM, ни отдельного эндпоинта: иначе «оплачено» и «деньги пришли»
+      // разъехались бы, а разбирать пришлось бы бухгалтеру.
+      //
+      // Внутри ТОЙ ЖЕ транзакции — намеренно. Одобрение платежа и погашение
+      // этапа это одно событие: коммит одного без другого оставил бы либо
+      // деньги без закрытого этапа (клиент числится должником, хотя заплатил),
+      // либо закрытый этап без денег. Pessimistic lock на SaleSubmission,
+      // взятый в начале этой транзакции, заодно сериализует параллельные
+      // одобрения по разным платежам одной сделки, так что кумулятивная сумма
+      // внутри settleStagesTx всегда консистентна.
+      //
+      // Правило частичной оплаты (этап закрывается целиком или не закрывается,
+      // излишек переходит на следующий этап) описано в док-комментарии
+      // InstallmentsService.settleStagesTx.
+      //
+      // applicationId здесь — уже актуальный: на первом одобрении он присвоен
+      // в ветке wonFirstApproval выше. Через него settleStagesTx снимает
+      // Application.paymentPending, когда просрочек по сделке не осталось.
+      await this.installments.settleStagesTx(tx, {
+        submissionId: submission.id,
+        applicationId: applicationId ?? null,
+        paymentId,
+        // Дата фактического прихода денег, а не момент одобрения: этап
+        // погашен тогда, когда клиент заплатил.
+        paidAt: payment.paidAt,
+      });
+
       // OUTBOX партнёрской комиссии. Единственное, что в этой транзакции
       // делается ради партнёра, — и делается намеренно: строка обязана
       // коммититься АТОМАРНО с одобрением. Само начисление идёт после
@@ -2310,6 +2391,14 @@ export class SubmissionsService {
    *      (Commission→REVERSED, минус с balanceCents/totalEarnedCents,
    *      расштамповка ReferralAttribution) — см.
    *      ReferralsService.reverseCommissionsForTransactionsTx.
+   *   5) прогоняем InstallmentsService.settleStagesTx — после (3) сумма
+   *      APPROVED-платежей сделки равна нулю, поэтому проход снимает PAID
+   *      со ВСЕХ этапов рассрочки (paidAt/paymentId → null, статус →
+   *      PENDING/OVERDUE по сроку). Иначе этап остался бы «оплачен» ссылкой
+   *      на только что отклонённый платёж;
+   *   6) гасим Application.paymentPending: по расторгнутому договору долга
+   *      нет, а суточный cron просрочки трогает только ACTIVE-сделки и снять
+   *      флаг уже никогда бы не смог (студент навсегда в должниках).
    * Bug #25 из audit:edge-cases: раньше CANCEL не откатывал ничего, и
    * деньги по отменённой сделке оставались в выручке и бонусной базе.
    * Пункт (4) — тот же баг на партнёрской стороне: компания возвращала
@@ -2349,11 +2438,37 @@ export class SubmissionsService {
       return submission;
     }
 
-    // COMPLETED — простой апдейт статуса, ничего реверсить не нужно.
+    // COMPLETED — реверсить нечего (деньги остаются в выручке), но ДОЛГ
+    // обязан пересчитаться. Раньше здесь стоял голый update статуса, и сделка,
+    // закрытая с уже поднятым Application.paymentPending, оставляла его
+    // поднятым НАВСЕГДА: пересчитать было больше некому — settleStagesTx
+    // зовётся только там, где меняется сумма одобренных платежей, а суточный
+    // sweepOverdueStages джойнит `s.status = ACTIVE` (по закрытому контракту
+    // уведомлять незачем) и умеет только ПОДНИМАТЬ флаг. Клиент навсегда
+    // оставался в «Студентах с задолженностью» на дашборде и в «Задолженности
+    // студентов» в финансах (FinanceService.pendingPayments), и снять это мог
+    // только ручной PATCH /applications/:id.
+    //
+    // Пересчёт идёт ОТ СОСТОЯНИЯ ПЛАНА, а не по принципу «закрыли — значит не
+    // должен»: если менеджер закрывает контракт с непогашенной просрочкой,
+    // долг реальный и флаг обязан остаться. Гасит его только фактическое
+    // отсутствие OVERDUE-этапов. Сделку без плана рассрочки вызов не трогает
+    // вовсе — там флаг целиком за менеджером (см.
+    // InstallmentsService.syncPaymentPendingForSubmissionTx).
+    //
+    // В ОДНОЙ транзакции со сменой статуса: закрытая сделка с несогласованным
+    // признаком должника — ровно то расхождение, которое этот блок убирает.
     if (status === SubmissionStatus.COMPLETED) {
-      return this.prisma.saleSubmission.update({
-        where: { id: submissionId },
-        data: { status },
+      return this.prisma.$transaction(async (tx) => {
+        const row = await tx.saleSubmission.update({
+          where: { id: submissionId },
+          data: { status },
+        });
+        await this.installments.syncPaymentPendingForSubmissionTx(tx, {
+          submissionId,
+          applicationId: submission.applicationId,
+        });
+        return row;
       });
     }
 
@@ -2480,6 +2595,59 @@ export class SubmissionsService {
         commissionReversals.push(...reversals);
       }
 
+      // (5) РАССРОЧКА: этапы обязаны последовать за деньгами. Каждый
+      //     APPROVED-платёж выше стал REJECTED, значит кумулятивная сумма
+      //     одобренного по сделке теперь 0 — и тот же state-based проход,
+      //     который гасит этапы при одобрении, здесь снимает PAID со ВСЕХ:
+      //     status → PENDING/OVERDUE (по сроку), paidAt → null, paymentId →
+      //     null. Без этого вызова этап остался бы PAID со ссылкой на
+      //     платёж, который мы только что отклонили и по которому выписан
+      //     возврат: CRM (installments listForSubmission) рисовала бы
+      //     «оплачено» по отменённой сделке, а бухгалтер не свёл бы кассу.
+      //     Нового правила не вводим — правило одно: «этап оплачен тогда и
+      //     только тогда, когда сумма APPROVED-платежей его покрывает»
+      //     (см. InstallmentsService.settleStagesTx), просто здесь оно
+      //     применяется после реверса.
+      //
+      //     Внутри ТОЙ ЖЕ транзакции, что и реверс денег: коммит одного без
+      //     другого — это ровно то расхождение, которое фикс и закрывает.
+      const settlement = await this.installments.settleStagesTx(tx, {
+        submissionId,
+        applicationId: submission.applicationId,
+        // Закрывать этапы нечем — одобренных платежей по сделке не осталось.
+        paymentId: null,
+        paidAt: reversedAt,
+      });
+
+      // (6) Долг по отменённому контракту — не долг. settleStagesTx выставил
+      //     paymentPending по overdueLeft, а он после реверса почти всегда
+      //     > 0: этапы с прошедшим сроком вернулись в OVERDUE. Для ЖИВОЙ
+      //     сделки это верно, для отменённой — нет: платить по расторгнутому
+      //     договору нечего, а снять флаг больше некому. Суточный cron
+      //     просрочки джойнит `s.status = ACTIVE` (намеренно — иначе слал бы
+      //     менеджеру вечные уведомления по несуществующей сделке), значит
+      //     студент завис бы в FinanceService.pendingPayments и в блоке
+      //     должников НАВСЕГДА. Поэтому гасим флаг явно, последним шагом —
+      //     после settleStagesTx, а не вместо него.
+      //
+      //     Только при hasStages: у сделки без плана рассрочки paymentPending
+      //     целиком за менеджером (он ставит его руками для долгов, к
+      //     рассрочке отношения не имеющих), и стирать эту пометку отменой
+      //     сделки нельзя — тот же инвариант, что у syncPaymentPendingTx.
+      //     Второго флага-должника не заводим: reuse paymentPending.
+      //
+      //     Скоуп безопасен: SaleSubmission.applicationId — @unique, то есть
+      //     заявка принадлежит ровно одной сделке, и снятый здесь флаг не
+      //     может погасить долг чужой (активной) сделки того же студента.
+      if (settlement.hasStages && submission.applicationId) {
+        // updateMany, а не update: заявку могли удалить между чтением сделки
+        // и этим шагом, и P2025 уронил бы всю отмену.
+        await tx.application.updateMany({
+          where: { id: submission.applicationId, paymentPending: true },
+          data: { paymentPending: false },
+        });
+      }
+
       return tx.saleSubmission.update({
         where: { id: submissionId },
         data: { status },
@@ -2604,14 +2772,35 @@ export class SubmissionsService {
    * APPROVED Transaction'ы и Application НЕ удаляются — связи SetNull,
    * они остаются в финансовой истории как есть.
    * Нужен для удаления тестовых/ошибочных сделок.
+   *
+   * ПРИЗНАК ДОЛЖНИКА СНИМАЕМ ДО УДАЛЕНИЯ. PaymentStage уходит каскадом вместе
+   * со сделкой, а Application остаётся (SetNull) — и оставался с
+   * paymentPending = true, при том что ни одного этапа, который бы это
+   * объяснял, в базе уже нет: должник-фантом в FinanceService.pendingPayments
+   * навсегда (пересчитывать нечего — settleStagesTx зовут только денежные
+   * пути, а sweepOverdueStages джойнит `s.status = ACTIVE` и только поднимает
+   * флаг). ПОСЛЕ delete посчитать уже нельзя, поэтому пересчёт — первый шаг
+   * той же транзакции: упадёт удаление — снятый флаг откатится вместе с ним.
    */
   async remove(submissionId: string) {
     const submission = await this.prisma.saleSubmission.findUnique({
       where: { id: submissionId },
-      select: { id: true },
+      // applicationId — чтобы снять признак должника до каскадного удаления
+      // этапов рассрочки (см. док-комментарий выше).
+      select: { id: true, applicationId: true },
     });
     if (!submission) throw new NotFoundException('Сделка не найдена');
-    await this.prisma.saleSubmission.delete({ where: { id: submissionId } });
+    await this.prisma.$transaction(async (tx) => {
+      // settled: true — удалённая сделка долга не порождает: плана больше не
+      // существует, платить не по чему. Заявку сделки БЕЗ этапов вызов не
+      // трогает — ручную пометку менеджера удаление сделки стирать не должно.
+      await this.installments.syncPaymentPendingForSubmissionTx(tx, {
+        submissionId,
+        applicationId: submission.applicationId,
+        settled: true,
+      });
+      await tx.saleSubmission.delete({ where: { id: submissionId } });
+    });
     this.realtime.emitStaff('submission:deleted', { submissionId });
     return { ok: true };
   }
@@ -2622,7 +2811,17 @@ export class SubmissionsService {
    * Student/Application (studentId, newStudent*, programId), становятся
    * "замороженными" после firstApprovedAt — если фронт всё же прислал
    * их, silently ignore (не бросаем 400, чтобы не ломать UI).
-   * Обёртка в $transaction не нужна: одиночный update.
+   * ОБЁРТКА В $transaction ОБЯЗАТЕЛЬНА, хотя update и одиночный: смена
+   * totalAmount у сделки с рассрочкой обязана в том же коммите пересобрать
+   * PaymentStage. Инвариант плана — sum(PaymentStage.amount) ==
+   * SaleSubmission.totalAmount ТОЧНО (schema.prisma, «INSTALLMENT PLANS»), и
+   * раньше эта правка его молча ломала: строки этапов оставались от прежней
+   * цены. Оба направления расхождения денежно неверны — план БОЛЬШЕ
+   * контракта даёт этап, который не закрывается никогда (вечная просрочка и
+   * ежедневное уведомление менеджеру при том, что финансы по тому же
+   * totalAmount уже показывают FULL), план МЕНЬШЕ контракта гасит все этапы
+   * и стирает реальный долг с дашборда. Разбор и правила пересборки — в
+   * InstallmentsService.reallocateOnTotalChangeTx.
    */
   async updateSubmission(
     user: (UserWithRoles & { id: string }) | null | undefined,
@@ -2652,7 +2851,19 @@ export class SubmissionsService {
     if (!user) throw new ForbiddenException('Не авторизован');
     const submission = await this.prisma.saleSubmission.findUnique({
       where: { id: submissionId },
-      select: { id: true, firstApprovedAt: true, managerId: true, studentId: true },
+      select: {
+        id: true,
+        firstApprovedAt: true,
+        managerId: true,
+        studentId: true,
+        // Нужны для пересборки плана рассрочки при смене суммы контракта:
+        // totalAmount — чтобы понять, сдвинулась ли она вообще, currency —
+        // для сообщений об отказе, applicationId — чтобы settleStagesTx внутри
+        // пересборки синхронизировал Application.paymentPending.
+        totalAmount: true,
+        currency: true,
+        applicationId: true,
+      },
     });
     if (!submission) throw new NotFoundException('Сделка не найдена');
 
@@ -2802,15 +3013,46 @@ export class SubmissionsService {
       });
     }
 
-    const updated = await this.prisma.saleSubmission.update({
-      where: { id: submissionId },
-      data,
-      include: {
-        program: { select: { id: true, name: true, university: true } },
-        student: { select: { id: true, fullName: true } },
-        manager: { select: { id: true, fullName: true, role: true } },
-        payments: { orderBy: { paidAt: 'desc' } },
-      },
+    // Сдвинулась ли сумма контракта. Сравниваем в центах по той же причине,
+    // по которой план считается в центах: 5000 и 5000.000000001 — это одна и
+    // та же цена, и пересобирать под неё план незачем.
+    const totalChanged =
+      data.totalAmount !== undefined &&
+      Math.round(data.totalAmount * 100) !== Math.round(submission.totalAmount * 100);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (totalChanged) {
+        // Тот же pessimistic lock, что берёт approvePayment, и по той же
+        // причине: пока мы переписываем цену и план, параллельное одобрение
+        // платежа не должно считать покрытие этапов по суммам, которые прямо
+        // сейчас меняются.
+        await tx.$queryRaw`SELECT id FROM "SaleSubmission" WHERE id = ${submissionId} FOR UPDATE`;
+      }
+
+      const row = await tx.saleSubmission.update({
+        where: { id: submissionId },
+        data,
+        include: {
+          program: { select: { id: true, name: true, university: true } },
+          student: { select: { id: true, fullName: true } },
+          manager: { select: { id: true, fullName: true, role: true } },
+          payments: { orderBy: { paidAt: 'desc' } },
+        },
+      });
+
+      if (totalChanged) {
+        // Пересборка ПОСЛЕ записи новой цены: план строится от неё, и обе
+        // записи уезжают одним коммитом. Если пересобирать нечем (все этапы
+        // оплачены; новая сумма не покрывает оплаченное) — внутри летит 400 с
+        // цифрами, и правка суммы откатывается целиком вместе с ним.
+        await this.installments.reallocateOnTotalChangeTx(tx, {
+          submissionId,
+          applicationId: submission.applicationId,
+          newTotal: row.totalAmount,
+          currency: row.currency,
+        });
+      }
+      return row;
     });
     this.realtime.emitStaff('submission:updated', { submissionId });
     return updated;
@@ -2820,6 +3062,10 @@ export class SubmissionsService {
    * Редактирование платежа.
    * - FOUNDER — любой платёж (PENDING/APPROVED, REJECTED нельзя).
    *   APPROVED: связанная Transaction обновляется атомарно в $transaction.
+   *   Правка amount дополнительно пересчитывает этапы рассрочки в ТОЙ ЖЕ
+   *   транзакции (settleStagesTx) — сумма платежа входит в базу покрытия,
+   *   и коммит новой цифры без пересчёта оставлял бы план рассинхронным с
+   *   деньгами в обе стороны. Подробности — у самого вызова ниже.
    *
    * Task 2: SALES_MANAGER больше НЕ может редактировать платежи, даже свои
    * PENDING. Раньше owner-manager мог менять amount/paidAt на PENDING —
@@ -2854,7 +3100,17 @@ export class SubmissionsService {
     const payment = await this.prisma.submissionPayment.findUnique({
       where: { id: paymentId },
       include: {
-        submission: { select: { id: true, currency: true, managerId: true } },
+        submission: {
+          select: {
+            id: true,
+            currency: true,
+            managerId: true,
+            // Нужен для пересчёта этапов рассрочки после правки суммы —
+            // через него settleStagesTx снимает/поднимает
+            // Application.paymentPending (см. блок ниже).
+            applicationId: true,
+          },
+        },
       },
     });
     if (!payment) throw new NotFoundException('Платёж не найден');
@@ -2929,19 +3185,77 @@ export class SubmissionsService {
       !!payment.financeTransactionId &&
       (data.amount !== undefined || data.paidAt !== undefined);
 
-    if (needSyncFinance) {
+    // РАССРОЧКА: правка СУММЫ меняет кумулятивную базу, от которой
+    // settleStagesTx считает покрытие этапов, поэтому пересчёт обязателен.
+    //
+    // Без него редактирование суммы было ЕДИНСТВЕННОЙ денежной операцией,
+    // которая не приводила план в соответствие с деньгами, и расхождение
+    // жило до следующего постороннего approve/delete:
+    //   - уменьшили сумму (10000 → 4000 на плане 5000+5000) — этап №1 больше
+    //     не покрыт, но остаётся PAID с paidAt/paymentId. Это ровно тот
+    //     случай, ради которого пересчёт добавлен в deletePayment: «деньги
+    //     вернули, а этап числится оплаченным». Клиент пропадает из
+    //     должников, суточный cron PAID-строку не трогает, и
+    //     Application.paymentPending больше никогда не поднимется;
+    //   - увеличили сумму — новопокрытые этапы не гасятся, клиент остаётся
+    //     должником, cron переводит их в OVERDUE и дёргает менеджера по
+    //     уже оплаченному долгу.
+    //
+    // Пересчёт нужен и когда платёж ещё PENDING: сам он в сумму APPROVED не
+    // входит, но settleStagesTx — функция от состояния и идемпотентна,
+    // поэтому этот же вызов заодно вычищает расхождение, оставшееся с
+    // прошлых правок. Второго правила не появляется: правило одно —
+    // «этап оплачен тогда и только тогда, когда сумма APPROVED-платежей его
+    // покрывает».
+    const needSettleStages = data.amount !== undefined;
+
+    if (needSyncFinance || needSettleStages) {
       const updated = await this.prisma.$transaction(async (tx) => {
-        const financeUpdate: any = {};
-        if (data.amount !== undefined) financeUpdate.amount = data.amount;
-        if (data.paidAt !== undefined) financeUpdate.date = data.paidAt;
-        await tx.transaction.update({
-          where: { id: payment.financeTransactionId! },
-          data: financeUpdate,
-        });
-        return tx.submissionPayment.update({
+        // Тот же pessimistic lock и в том же порядке, что берёт
+        // approvePayment (Bug #26): пока мы правим сумму, параллельное
+        // одобрение по другому платежу этой сделки ждёт на SELECT FOR UPDATE
+        // — иначе оба посчитали бы кумулятивную сумму по своему снимку и
+        // разъехались бы в статусах этапов. Единый порядок захвата
+        // (SaleSubmission первым) исключает взаимную блокировку.
+        await tx.$queryRaw`SELECT id FROM "SaleSubmission" WHERE id = ${payment.submissionId} FOR UPDATE`;
+
+        if (needSyncFinance) {
+          const financeUpdate: any = {};
+          if (data.amount !== undefined) financeUpdate.amount = data.amount;
+          if (data.paidAt !== undefined) financeUpdate.date = data.paidAt;
+          await tx.transaction.update({
+            where: { id: payment.financeTransactionId! },
+            data: financeUpdate,
+          });
+        }
+
+        const row = await tx.submissionPayment.update({
           where: { id: paymentId },
           data,
         });
+
+        if (needSettleStages) {
+          // ПОСЛЕ апдейта платежа — settleStagesTx читает сумму из ЭТОЙ же
+          // транзакции и обязан увидеть уже новую цифру.
+          await this.installments.settleStagesTx(tx, {
+            submissionId: payment.submissionId,
+            applicationId: payment.submission.applicationId,
+            // Атрибутируем новопокрытые этапы этому платежу только если он
+            // APPROVED — то есть реально входит в кумулятивную сумму. Для
+            // PENDING передаём null: закрывать этапы ему нечем, и подписать
+            // чужой этап его id значило бы соврать в карточке.
+            // При УМЕНЬШЕНИИ суммы поле не используется вовсе: сумма только
+            // падает, новопокрытых этапов не появляется, а снятые с PAID
+            // очищают paymentId сами.
+            paymentId:
+              payment.status === SubmissionPaymentStatus.APPROVED ? paymentId : null,
+            // Дата фактического прихода денег (уже с учётом правки paidAt),
+            // а не момент редактирования — как в approvePayment.
+            paidAt: row.paidAt,
+          });
+        }
+
+        return row;
       });
       this.realtime.emitStaff('submission:payment-updated', {
         submissionId: payment.submissionId,
@@ -2990,6 +3304,9 @@ export class SubmissionsService {
         submission: {
           select: {
             id: true,
+            // Нужен для пересчёта этапов рассрочки после удаления платежа —
+            // через него снимается/поднимается Application.paymentPending.
+            applicationId: true,
             _count: { select: { payments: true } },
           },
         },
@@ -3063,6 +3380,29 @@ export class SubmissionsService {
       }
       // Удаляем сам платёж.
       await tx.submissionPayment.delete({ where: { id: paymentId } });
+
+      // РАССРОЧКА: пересчитываем этапы под уменьшившуюся сумму одобренного.
+      //
+      // FK PaymentStage.paymentId стоит на SetNull, поэтому удаление платежа
+      // само по себе лишь обнуляет ссылку — статус остался бы PAID. То есть
+      // деньги вернули, а этап числится оплаченным: клиент пропал из
+      // должников дашборда, и просрочка по нему больше никогда не всплывёт.
+      // settleStagesTx считает покрытие от состояния (кумулятивная сумма
+      // APPROVED-платежей), поэтому тот же вызов, что гасит этапы при
+      // одобрении, здесь возвращает непокрытые обратно в PENDING/OVERDUE и
+      // поднимает Application.paymentPending. Нового правила не вводим —
+      // правило одно, просто применяется после удаления.
+      //
+      // Внутри ТОЙ ЖЕ транзакции: пересчёт без удаления (или наоборот) —
+      // это ровно то расхождение, которое он призван не допустить.
+      await this.installments.settleStagesTx(tx, {
+        submissionId,
+        applicationId: payment.submission.applicationId,
+        // Платежа больше нет — закрывать этапы нечем. Те, что останутся PAID,
+        // свой paymentId уже носят и здесь не переписываются.
+        paymentId: null,
+        paidAt: reversedAt,
+      });
     });
 
     if (wasApproved && !this.referrals) {
