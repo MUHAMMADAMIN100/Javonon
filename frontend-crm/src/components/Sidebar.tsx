@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useAuth } from '../store/auth';
@@ -632,21 +632,48 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   // контейнере React, и до слушателя на document оно уже не доходило —
   // клавиатурный сценарий работал бы, а hover-сценарий (основной) нет.
 
-  const renderItems = (g: VisibleGroup) => (
+  /**
+   * `animated` включает поштучное проявление пунктов (десктопная панель).
+   * В мобильном ящике оно не нужно: там панель не выезжает, а список
+   * появляется целиком, и задержка на каждом пункте читалась бы как тормоз.
+   *
+   * Обёртка motion.div безопасна для вёрстки: правила в CSS написаны как
+   * `.sidebar-panel-nav a` (потомок, не прямой ребёнок), а flex-gap теперь
+   * раскладывает обёртки вместо ссылок — визуально то же самое.
+   */
+  const itemVariants = {
+    hidden: { opacity: 0, x: -10 },
+    show: { opacity: 1, x: 0 },
+  };
+
+  const renderItems = (g: VisibleGroup, animated = false) => (
     <>
-      {g.items.map((it) => (
-        <NavLink
-          key={it.to}
-          to={it.to}
-          onClick={() => onClose?.()}
-          {...prefetchProps(it.to)}
-        >
-          <span className="sidebar-nav-icon">
-            <Icon name={it.icon} size={20} />
-          </span>
-          <span>{t(it.labelKey)}</span>
-        </NavLink>
-      ))}
+      {g.items.map((it) => {
+        const link = (
+          <NavLink
+            to={it.to}
+            onClick={() => onClose?.()}
+            {...prefetchProps(it.to)}
+          >
+            <span className="sidebar-nav-icon">
+              <Icon name={it.icon} size={20} />
+            </span>
+            <span>{t(it.labelKey)}</span>
+          </NavLink>
+        );
+        if (!animated || reduceMotion) {
+          return <Fragment key={it.to}>{link}</Fragment>;
+        }
+        return (
+          <motion.div
+            key={it.to}
+            variants={itemVariants}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {link}
+          </motion.div>
+        );
+      })}
     </>
   );
 
@@ -919,12 +946,26 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
                 className="sidebar-panel"
                 // Только transform и opacity: ширина в потоке (rail) не
                 // анимируется вообще, поэтому контент страницы не дёргается.
-                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -12 }}
+                // Выезд из-под рейла: панель начинает целиком слева от своей
+                // позиции, поэтому кажется, что она выдвигается из полосы с
+                // иконками, а не проявляется на месте. Закрытие быстрее
+                // открытия — уходящий элемент не должен задерживать взгляд.
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -28 }}
                 animate={reduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
-                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -12 }}
-                transition={{ duration: reduceMotion ? 0.001 : 0.17, ease: [0.22, 1, 0.36, 1] }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -22 }}
+                transition={{
+                  duration: reduceMotion ? 0.001 : 0.26,
+                  ease: [0.16, 1, 0.3, 1],
+                }}
               >
-                <div className="sidebar-panel-title">{t(panelGroup.labelKey)}</div>
+                <motion.div
+                  className="sidebar-panel-title"
+                  initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, delay: reduceMotion ? 0 : 0.04 }}
+                >
+                  {t(panelGroup.labelKey)}
+                </motion.div>
                 <motion.nav
                   // Здесь ключ по группе — короткое проявление содержимого
                   // при переходе между иконками. Без AnimatePresence: exit
@@ -935,11 +976,24 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
                   className="sidebar-panel-nav"
                   aria-label={t(panelGroup.labelKey)}
                   onKeyDown={(e) => onPanelKeyDown(e, panelGroup.key)}
-                  initial={reduceMotion ? false : { opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.12 }}
+                  // Контейнер-дирижёр: пункты проявляются друг за другом с
+                  // шагом 30мс. Задержка перед первым — чтобы список начинал
+                  // появляться, когда панель уже выехала, а не одновременно
+                  // с ней (иначе всё сливается в одно пятно).
+                  variants={
+                    reduceMotion
+                      ? undefined
+                      : {
+                          hidden: {},
+                          show: {
+                            transition: { staggerChildren: 0.03, delayChildren: 0.06 },
+                          },
+                        }
+                  }
+                  initial={reduceMotion ? false : 'hidden'}
+                  animate={reduceMotion ? { opacity: 1 } : 'show'}
                 >
-                  {renderItems(panelGroup)}
+                  {renderItems(panelGroup, true)}
                 </motion.nav>
               </motion.div>
             )}
