@@ -1560,11 +1560,16 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   body { background: #f5f7fb; }
   .app-layout { /* flex-direction теперь row из @media 900px правила */ }
   .sidebar {
-    /* position/width перебито в @media 900px на fixed drawer */
-    flex-direction: row; align-items: center;
+    /* position/width/flex-direction/overflow-x перебиты в @media 900px на
+       fixed drawer — держать их мёртвые копии здесь незачем.
+       ВАЖНО: тут раньше стоял ещё и align-items: center. В @media 900px он
+       НЕ перебивался (там задаются только flex-direction/overflow), поэтому
+       на ≤720px каждый ребёнок drawer'а сжимался по контенту и центрировался:
+       .sidebar-foot/.sidebar-quick вылезали за оба края (на 375px — x -18..260
+       при ширине drawer'а 244) и обрезались overflow-x: hidden, а
+       .sidebar-mobile был уже drawer'а, из-за чего подписи групп резались.
+       Оставляем только border-bottom — единственное, что здесь ещё живое. */
     border-bottom: 1px solid rgba(255,255,255,0.08);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
   }
   .sidebar-logo, .sidebar-user { display: none; }
   .sidebar-nav {
@@ -3409,6 +3414,11 @@ textarea:focus {
     transition: transform .28s cubic-bezier(0.22, 1, 0.36, 1) !important;
     z-index: 100;
     flex-direction: column !important;
+    /* Дети drawer'а тянутся на всю его ширину. Без этого любое легаси-правило
+       с align-items: center (такое жило в @media 720px) заставляет их
+       сжиматься по контенту: .sidebar-foot оказывается шире drawer'а и
+       обрезается overflow-x: hidden, а .sidebar-mobile — уже него. */
+    align-items: stretch !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     border-right: 1px solid rgba(255,255,255,0.08);
@@ -3472,7 +3482,8 @@ textarea:focus {
 }
 
 /* ===== Tables — horizontal scroll wrapper для широких таблиц ===== */
-@media (min-width: 901px) {
+/* Дополнение MOBILE_MQ — см. пояснение у hover-панели ниже. */
+@media not all and (max-width: 900px) {
   .table-wrap {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -4928,6 +4939,15 @@ input[type="checkbox"].crm-checkbox:checked {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .sidebar-panel-nav a:hover { background: var(--bg-sidebar-hover); color: white; }
+/* Клавиатура теперь реально ходит по пунктам панели (Tab/→ с иконки rail'а),
+   а не только по иконкам, — кольцо фокуса обязано быть таким же заметным,
+   как у .rail-btn. outline не участвует в layout, поэтому панель от него не
+   «дышит» и контент страницы не двигается. offset отрицательный: пункт
+   прижат к краям скроллящегося nav'а, наружное кольцо срезалось бы. */
+.sidebar-panel-nav a:focus-visible {
+  outline: 2px solid var(--primary-light);
+  outline-offset: -2px;
+}
 .sidebar-panel-nav a.active {
   /* Синий остаётся заливкой, текст — белый (~15:1 на --bg-sidebar).
      До этого активный пункт был темнее неактивных и читался как
@@ -5033,4 +5053,118 @@ input[type="checkbox"].crm-checkbox:checked {
   .sidebar-2l .sidebar-user .user-info { display: block !important; }
   .sidebar-2l .sidebar-logo { padding: 16px 18px !important; }
   .sidebar-2l .sidebar-foot { padding-bottom: env(safe-area-inset-bottom, 0); }
+}
+
+/* ============================================================
+   HOVER-ПАНЕЛЬ (> 900px) — rail в потоке, пункты оверлеем.
+   ============================================================
+   Раньше rail (64px) и панель (184px) стояли рядом и постоянно
+   занимали 248px потока. Теперь в потоке ТОЛЬКО rail, а панель
+   выезжает поверх страницы: .main не пересчитывает ширину, канбан
+   и широкие таблицы не перекладываются на каждое движение мыши.
+
+   Порядок слоёв: панель живёт внутри стек-контекста .sidebar
+   (z-index: 80) — выше .topbar (10) и контента, ниже
+   .sidebar-backdrop (90), модалок (1000), Dialpad FAB (1500),
+   тостов (2000) и CrmDatePicker (9999).
+   ============================================================ */
+/* ТОЧНОЕ дополнение MOBILE_MQ = "(max-width: 900px)" из Sidebar.tsx.
+   НЕ "(min-width: 901px)": между 900 и 901 CSS-пикселями (дробная ширина
+   вьюпорта при зуме браузера / дробном DPI-масштабе) не сработал бы НИ ОДИН
+   из двух запросов — React уже рисует rail+панель, а оверлейные правила ещё
+   выключены, и панель падала бы В ПОТОК, раздвигая .main на каждый hover.
+   "not all and (...)" инвертирует условие ровно так же, как JS-код читает
+   !matchMedia(MOBILE_MQ).matches, поэтому щели не остаётся. */
+@media not all and (max-width: 900px) {
+  .sidebar-2l {
+    width: 64px;
+    z-index: 80;
+  }
+
+  /* Логотип ужимается под 64px. SVG-вордмарк 1000x421 держит пропорции
+     сам (height: auto), поэтому фиксированную height: 44px снимаем. */
+  .sidebar-2l .sidebar-logo { padding: 14px 8px 12px; justify-content: center; }
+  .sidebar-2l .sidebar-brand-img { width: 100%; max-width: 46px; height: auto; }
+
+  /* Containing block для панели-оверлея. */
+  .sidebar-2l .sidebar-split { position: relative; }
+  /* Rail занимает всю ширину сайдбара: жёсткие 64px внутри 63px
+     контент-бокса (64 минус border-right у .sidebar) давали 1px
+     переполнения и лишний скроллбар в rail'е. */
+  .sidebar-2l .sidebar-rail { flex: 1 1 auto; width: auto; }
+
+  .sidebar-2l .sidebar-panel {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 100%;
+    width: 208px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    /* Тень — единственный признак того, что панель ЛЕЖИТ НА контенте,
+       а не раздвигает его. */
+    box-shadow: 16px 0 46px -20px rgba(0, 0, 0, 0.8);
+    /* Анимируются только transform/opacity (framer-motion), ширина в
+       потоке не трогается вообще. */
+    will-change: transform, opacity;
+  }
+
+  /* Закреплённая (кликом) группа: точка под иконкой — второй, нецветовой
+     признак «панель не закроется по уходу мыши». */
+  .rail-btn.pinned::after {
+    content: '';
+    position: absolute;
+    left: 50%; bottom: 3px;
+    width: 4px; height: 4px;
+    margin-left: -2px;
+    border-radius: 50%;
+    background: var(--primary-tint);
+  }
+
+  /* --- Нижний блок в 64px rail'а: иконки без подписей --- */
+  .sidebar-2l .rail-foot {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 2px 0 6px;
+    /* Пилюли RU/TJ ужаты трансформом, но их layout-бокс шире rail'а —
+       страховка от горизонтального переполнения сайдбара. */
+    overflow: hidden;
+  }
+  .sidebar-2l .rail-foot .sidebar-quick {
+    width: 100%;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 0 2px;
+  }
+  .sidebar-2l .rail-foot .sidebar-quick a {
+    width: 42px; height: 36px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 11px;
+  }
+  .sidebar-2l .rail-lang { display: flex; justify-content: center; padding: 2px 0 0; }
+  /* LangSwitcher рисуется инлайновыми стилями (display: inline-flex,
+     две пилюли ~72px) — перебить их правилом без !important нельзя,
+     поэтому ужимаем трансформом: 72 * 0.8 = 57px, влезает в 64px. */
+  .sidebar-2l .rail-lang > * { transform: scale(0.8); transform-origin: center; }
+
+  .sidebar-2l .rail-user {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 2px 8px;
+    border-top: none;
+  }
+  /* Имя и роль в 64px не помещаются — ушли в title аватара. */
+  .sidebar-2l .rail-user .user-info { display: none; }
+  .sidebar-2l .rail-user .user-avatar { width: 32px; height: 32px; font-size: 12px; }
+  .sidebar-2l .rail-actions { display: flex; align-items: center; gap: 2px; }
+  .sidebar-2l .rail-user .logout-btn { width: 28px; height: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Выезд панели уже отключён в JS (useReducedMotion) — здесь глушим
+     оставшиеся CSS-переходы сайдбара. */
+  .sidebar-2l .sidebar-panel,
+  .sidebar-2l .rail-btn,
+  .sidebar-2l .sidebar-panel-nav a,
+  .sidebar-2l .sidebar-quick a { transition: none; }
 }
