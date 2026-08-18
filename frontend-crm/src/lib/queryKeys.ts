@@ -14,12 +14,15 @@ export const keys = {
     list: (p: Record<string, unknown> = {}) => ['students', 'list', p] as const,
     one: (id: string) => ['students', 'one', id] as const,
     payments: (id: string) => ['students', 'payments', id] as const,
-    stats: () => ['students', 'stats'] as const,
+    // Период (from/to) — часть ключа: без него переключатель на дашборде
+    // отдавал бы из кеша цифры предыдущего периода.
+    stats: (p: Record<string, unknown> = {}) => ['students', 'stats', p] as const,
   },
   applications: {
     all: ['applications'] as const,
     list: (p: Record<string, unknown> = {}) => ['applications', 'list', p] as const,
     one: (id: string) => ['applications', 'one', id] as const,
+    stats: (p: Record<string, unknown> = {}) => ['applications', 'stats', p] as const,
   },
   users: {
     all: ['users'] as const,

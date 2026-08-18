@@ -6,6 +6,7 @@ import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
+import { tjLastDaysRange } from '../lib/tjTime';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -25,11 +26,15 @@ export default function Kpi() {
   const [rangeIdx, setRangeIdx] = useState(2); // 30 days по умолчанию
 
   const range = RANGE_KEYS[rangeIdx];
-  const params = range.days
-    ? { from: new Date(Date.now() - range.days * 24 * 60 * 60 * 1000).toISOString() }
-    : undefined;
+  // Границы — календарные дни Asia/Dushanbe (YYYY-MM-DD), как их ждёт
+  // общий parseDate на бэке: он поднимет `to` до 23:59:59.999 TJT.
+  // «Все время» — params undefined, запрос уходит без from/to, и KPI
+  // считается ровно как раньше, за всё время.
+  const params = range.days ? tjLastDaysRange(range.days) : undefined;
   const kpiQuery = useQuery<KpiRow[]>({
-    queryKey: ['kpi', 'leaderboard', rangeIdx],
+    // Ключ по самим границам, а не по индексу кнопки: в полночь по
+    // Душанбе окно «30 дней» съезжает, и кэш обязан это заметить.
+    queryKey: ['kpi', 'leaderboard', params?.from ?? 'all', params?.to ?? 'all'],
     queryFn: () => leaderboard(params),
   });
   const rows = kpiQuery.data ?? [];
@@ -55,6 +60,11 @@ export default function Kpi() {
             >{t(rg.key)}</button>
           ))}
         </div>
+        {/* Показатели за период читаются одинаково на всех экранах:
+            «из записей, СОЗДАННЫХ за период». Без этой подписи цифры
+            выглядят как «закрыто/зачислено за период», а это другое
+            число — см. шапку KpiService.leaderboard. */}
+        <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>{t('kpi.range.hint')}</span>
       </div>
 
       {/* My row highlight if employee */}

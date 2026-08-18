@@ -24,6 +24,7 @@ import { UpdateStudentDto } from './dto/update-student.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { normalizeDocumentType } from '../common/documents';
+import { parseDate } from '../common/query-date';
 
 const uploadStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
@@ -115,9 +116,19 @@ export class StudentsController {
     });
   }
 
+  // from/to — опциональный период дашборда, фильтр по дате СОЗДАНИЯ
+  // карточки студента. Тот же общий parseDate, что и у /finance/summary
+  // (границы Asia/Dushanbe, `to` inclusive). Без параметров — за всё время.
   @Get('stats')
-  stats(@CurrentUser() user: any) {
-    return this.students.stats(user);
+  stats(
+    @CurrentUser() user: any,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.students.stats(user, {
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to', true),
+    });
   }
 
   @Get(':id')

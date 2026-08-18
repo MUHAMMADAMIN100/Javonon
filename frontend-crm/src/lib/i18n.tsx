@@ -878,18 +878,56 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== dashboard =====
     'dashboard.title': 'Дашборд',
+    // Переключатель периода. Фильтр — по дате СОЗДАНИЯ записи, одинаково
+    // для всех карточек (см. components/PeriodSwitcher.tsx).
+    'dashboard.period.title': 'Период',
+    'dashboard.period.month': 'Этот месяц',
+    'dashboard.period.prev': 'Прошлый месяц',
+    'dashboard.period.quarter': 'Квартал',
+    'dashboard.period.year': 'Год',
+    'dashboard.period.all': 'Всё время',
+    'dashboard.period.custom': 'Свой период',
+    'dashboard.period.from': 'Дата с',
+    'dashboard.period.to': 'Дата по',
+    'dashboard.period.invalid': 'Дата «с» позже даты «по» — выберите корректный диапазон',
+    // Тело дашборда при перевёрнутом диапазоне не рисуется вообще (см.
+    // pages/Dashboard.tsx): нули в карточках неотличимы от честного «за период
+    // ничего не создано». Эта строка объясняет пустой экран.
+    'dashboard.period.invalidBody': 'Показатели не посчитаны: диапазон дат задан наоборот. Исправьте даты — цифры вернутся.',
+    // Пустая граница «своего периода» — не «за всё время», а незаданный
+    // период: запросы не уходят, вместо цифр за всю историю — эта подсказка.
+    'dashboard.period.incomplete': 'Укажите обе даты — «с» и «по»: пока период не задан, цифры не считаем',
+    // Подписи к цифрам: «Чистая прибыль за этот месяц». Отдельные строки,
+    // а не подстановка в шаблон: t() у нас без интерполяции, а склейка
+    // «за» + название кнопки на таджикском даёт не ту форму.
+    'dashboard.period.of.month': 'за этот месяц',
+    'dashboard.period.of.prev': 'за прошлый месяц',
+    'dashboard.period.of.quarter': 'за квартал',
+    'dashboard.period.of.year': 'за год',
+    'dashboard.period.of.all': 'за всё время',
+    'dashboard.period.of.custom': 'за выбранный период',
+    // Не период, а момент: «сейчас» ставим карточкам, чьё число
+    // считается на текущий момент и не двигается переключателем
+    // (должники). Без этой пометки цифра читается как «за этот
+    // месяц» по соседям и выглядит сломанной при смене периода.
+    'dashboard.period.of.now': 'сейчас',
     'dashboard.kpi.total': 'Всего заявок',
     'dashboard.kpi.new': 'Новые',
     'dashboard.kpi.pipeline': 'В воронке',
     'dashboard.kpi.active': 'Активные клиенты',
-    'dashboard.kpi.enrolled': 'Зачислено всего',
+    'dashboard.kpi.enrolled': 'Зачислено',
     'dashboard.section.finance': 'Финансы',
     'dashboard.section.top': 'Лучшие сотрудники',
     'dashboard.section.breakdown': 'Распределение',
-    'dashboard.finance.netProfit': 'Чистая прибыль за всё время',
+    'dashboard.finance.netProfit': 'Чистая прибыль',
     'dashboard.finance.income': 'Доходы',
     'dashboard.finance.expense': 'Расходы',
     'dashboard.finance.debt': 'Студентов с задолженностью',
+    // Карточка должников — единственная в финансовом бенто, которая не
+    // фильтруется переключателем периода: /finance/pending-payments отдаёт
+    // текущее состояние («должны прямо сейчас»), а не события за интервал.
+    // Поэтому подпись несёт своё «сейчас» вместо period.suffix соседей.
+    'dashboard.finance.debtNow': 'Студентов с задолженностью сейчас',
     'dashboard.breakdown.directions': 'Заявки по направлениям',
     // Сноска под срезом «по направлениям»: сколько заявок в него не вошло,
     // потому что менеджер ещё не проставил направление руками.
@@ -1240,6 +1278,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'kpi.range.7': '7 дней',
     'kpi.range.30': '30 дней',
     'kpi.range.90': '90 дней',
+    // Одна семантика периода на все экраны — см. шапку
+    // KpiService.leaderboard и PeriodSwitcher.tsx.
+    'kpi.range.hint': 'Все показатели — по записям, созданным за выбранный период',
     'kpi.col.rank': '#',
     'kpi.col.applications': 'Заявок',
     'kpi.col.enrolled': 'Зачислено',
@@ -2361,6 +2402,25 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== dashboard =====
     'dashboard.title': 'Тахтаи асосӣ',
+    'dashboard.period.title': 'Давра',
+    'dashboard.period.month': 'Ин моҳ',
+    'dashboard.period.prev': 'Моҳи гузашта',
+    'dashboard.period.quarter': 'Семоҳа',
+    'dashboard.period.year': 'Сол',
+    'dashboard.period.all': 'Тамоми вақт',
+    'dashboard.period.custom': 'Давраи дилхоҳ',
+    'dashboard.period.from': 'Сана аз',
+    'dashboard.period.to': 'Сана то',
+    'dashboard.period.invalid': 'Санаи «аз» аз санаи «то» дертар аст — давраи дурустро интихоб кунед',
+    'dashboard.period.invalidBody': 'Нишондиҳандаҳо ҳисоб карда нашуданд: фосилаи санаҳо чаппа дода шудааст. Санаҳоро дуруст кунед — рақамҳо бармегарданд.',
+    'dashboard.period.incomplete': 'Ҳар ду санаро — «аз» ва «то» — нишон диҳед: то муайян шудани давра рақамҳо ҳисоб намешаванд',
+    'dashboard.period.of.month': 'барои ин моҳ',
+    'dashboard.period.of.prev': 'барои моҳи гузашта',
+    'dashboard.period.of.quarter': 'барои семоҳа',
+    'dashboard.period.of.year': 'барои сол',
+    'dashboard.period.of.all': 'барои тамоми вақт',
+    'dashboard.period.of.custom': 'барои давраи интихобшуда',
+    'dashboard.period.of.now': 'ҳоло',
     'dashboard.kpi.total': 'Ҳамаи аризаҳо',
     'dashboard.kpi.new': 'Нав',
     'dashboard.kpi.pipeline': 'Дар канал',
@@ -2369,10 +2429,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     'dashboard.section.finance': 'Молия',
     'dashboard.section.top': 'Беҳтарин кормандон',
     'dashboard.section.breakdown': 'Тавзеоти',
-    'dashboard.finance.netProfit': 'Фоидаи холиси умумӣ',
+    'dashboard.finance.netProfit': 'Фоидаи холис',
     'dashboard.finance.income': 'Даромад',
     'dashboard.finance.expense': 'Хароҷот',
     'dashboard.finance.debt': 'Донишҷӯёни қарздор',
+    'dashboard.finance.debtNow': 'Донишҷӯёни қарздор ҳоло',
     'dashboard.breakdown.directions': 'Аризаҳо аз рӯи самтҳо',
     'dashboard.breakdown.directionsPending': 'Бе самт',
     'dashboard.breakdown.countries': 'Аризаҳо аз рӯи кишварҳо',
@@ -2718,6 +2779,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'kpi.range.7': '7 рӯз',
     'kpi.range.30': '30 рӯз',
     'kpi.range.90': '90 рӯз',
+    'kpi.range.hint': 'Ҳамаи нишондиҳандаҳо — аз рӯи сабтҳое, ки дар давраи интихобшуда сохта шудаанд',
     'kpi.col.rank': '#',
     'kpi.col.applications': 'Аризаҳо',
     'kpi.col.enrolled': 'Қабул шуд',

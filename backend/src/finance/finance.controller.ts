@@ -23,6 +23,10 @@ import {
   tjStartOfDay,
   tjYMD,
 } from '../common/tj-time';
+// parseDate жил здесь локально; переехал в common/query-date.ts, когда
+// applications/stats и students/stats тоже стали принимать from/to —
+// парсер границ периода в проекте должен быть ровно один.
+import { parseDate } from '../common/query-date';
 
 // Receipts: только изображения и PDF. Whitelist расширений и MIME —
 // раньше можно было загрузить .exe/.html/.php (потенциальный XSS если
@@ -56,36 +60,6 @@ const VALID_TX_CATEGORIES: TransactionCategory[] = [
   'TUITION_PAYMENT', 'ADDITIONAL_FEE', 'SALARY', 'RENT', 'UTILITIES',
   'MARKETING', 'OFFICE', 'OTHER_INCOME', 'OTHER_EXPENSE',
 ];
-// endOfDay=true — если пришла date-only строка "YYYY-MM-DD" (её присылает
-// <input type="date"> и наш календарный пикер), поднимаем её до конца
-// суток 23:59:59.999 Asia/Dushanbe. Иначе `new Date("2026-01-31")` даёт
-// 2026-01-31T00:00:00Z, а фильтр `date <= to` молча выкидывает всё с
-// этой даты после полуночи UTC — целый последний день пропадал из
-// summary/breakdown/timeseries/etc. Bug: менеджер смотрит на пирог и не
-// видит платёж, зарегистрированный сегодня днём.
-//
-// TZ-fix (issue #4): раньше здесь стоял `new Date(v) + setUTCHours(23,…)`,
-// что давало границу по UTC-суткам. Из-за offset UTC+5 в Душанбе
-// «2026-01-31» на самом деле начинается в 19:00 UTC 30-го числа, поэтому
-// фильтр с UTC-границами обрезал последние 5 часов суток TJT в каждом
-// периоде — все finance-эндпоинты (summary/byCategory/timeseries/
-// distribution/top-managers/income-*/transactions) давали цифры,
-// расходящиеся на несколько часов реальных операций. Единый парсер
-// через tjParseLocalDate/tjParseLocalDateEnd делает границы согласованными
-// с остальным бэкендом (reports, salary, attendance, kpi и т.д.).
-//
-// Использовать endOfDay=true только для «правой» границы диапазона (to).
-// Для `from` фактическое 00:00 TJT — это как раз то, что нужно.
-function parseDate(
-  v: string | undefined,
-  name: string,
-  endOfDay = false,
-): Date | undefined {
-  if (!v) return undefined;
-  const d = endOfDay ? tjParseLocalDateEnd(v) : tjParseLocalDate(v);
-  if (isNaN(d.getTime())) throw new BadRequestException(`${name}: некорректная дата`);
-  return d;
-}
 function parseTake(v: string | undefined): number | undefined {
   if (v === undefined || v === '') return undefined;
   const n = parseInt(v, 10);

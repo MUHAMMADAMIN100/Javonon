@@ -17,6 +17,7 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { parseDate } from '../common/query-date';
 
 @Controller('applications')
 export class ApplicationsController {
@@ -74,10 +75,22 @@ export class ApplicationsController {
     });
   }
 
+  // from/to — опциональный период дашборда (переключатель «Этот месяц /
+  // Квартал / …»). Фильтрует по дате СОЗДАНИЯ заявки. Парсер — тот же
+  // общий parseDate, что и у /finance/summary: границы считаются по
+  // Asia/Dushanbe, `to` inclusive до 23:59:59.999 TJT. Без параметров
+  // ответ ровно прежний — за всё время.
   @UseGuards(JwtAuthGuard)
   @Get('stats')
-  stats(@CurrentUser() user: any) {
-    return this.apps.stats(user);
+  stats(
+    @CurrentUser() user: any,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.apps.stats(user, {
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to', true),
+    });
   }
 
   @UseGuards(JwtAuthGuard)

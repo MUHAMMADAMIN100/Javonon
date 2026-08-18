@@ -97,7 +97,8 @@ export async function deleteDocument(docId: string) {
   return data;
 }
 
-export async function studentStats() {
-  const { data } = await api.get('/students/stats');
+/** См. applications.ts: те же from/to (YYYY-MM-DD, границы включительно). */
+export async function studentStats(range?: { from?: string; to?: string }) {
+  const { data } = await api.get('/students/stats', { params: range });
   return data;
 }

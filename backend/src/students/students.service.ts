@@ -11,6 +11,7 @@ import { canSeePartnerAttribution, isElevated, UserWithRoles } from '../auth/rol
 import { ReferralsService } from '../partners/referrals.service';
 import { CABINET_BY_DIRECTION } from '../common/cabinets';
 import { parseCalendarDateUtc } from '../common/tj-time';
+import { dateRangeFilter } from '../common/query-date';
 
 /**
  * DOB из CRM → UTC-полночь. Раньше здесь стоял голый `new Date(b)`: для
@@ -610,12 +611,28 @@ export class StudentsService {
     return { ok: true };
   }
 
-  async stats(user?: { id: string; role: Role; roles?: Role[] }) {
+  /**
+   * @param range — опциональный период дашборда. Фильтрует по ДАТЕ СОЗДАНИЯ
+   *   карточки (Student.createdAt), т.е. «Активные клиенты» читается как
+   *   «из студентов, заведённых за период, сколько сейчас ACTIVE» — то же
+   *   правило, что и в applications.stats(), чтобы цифры карточек сходились
+   *   между собой. Границы уже разобраны контроллером через общий parseDate.
+   *   Без периода where остаётся ровно прежним — «за всё время».
+   */
+  async stats(
+    user?: { id: string; role: Role; roles?: Role[] },
+    range?: { from?: Date; to?: Date },
+  ) {
     // Менеджеры видят только своих. Elevated (FOUNDER/ADMIN/ACCOUNTANT) — всех.
-    const where: Prisma.StudentWhereInput | undefined =
+    const scope: Prisma.StudentWhereInput | undefined =
       user && !isElevated(user)
         ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
         : undefined;
+    // Период накладывается ПОВЕРХ скоупа, не заменяя его.
+    const createdAt = dateRangeFilter(range);
+    const where: Prisma.StudentWhereInput | undefined = createdAt
+      ? { ...(scope ?? {}), createdAt }
+      : scope;
     const [total, byCabinet, byDirection, byStatus] = await Promise.all([
       this.prisma.student.count({ where }),
       this.prisma.student.groupBy({

@@ -54,7 +54,15 @@ export async function deleteApplication(id: string) {
   return data;
 }
 
-export async function applicationStats() {
-  const { data } = await api.get('/applications/stats');
+/**
+ * Период для агрегатов: YYYY-MM-DD, границы включительно. Бэкенд поднимает
+ * `to` до 23:59:59.999 Asia/Dushanbe (backend/src/common/query-date.ts),
+ * поэтому слать ISO-момент, посчитанный в таймзоне браузера, не нужно и
+ * вредно. Без параметров поведение прежнее — за всё время.
+ */
+export type StatsRange = { from?: string; to?: string };
+
+export async function applicationStats(range?: StatsRange) {
+  const { data } = await api.get('/applications/stats', { params: range });
   return data;
 }

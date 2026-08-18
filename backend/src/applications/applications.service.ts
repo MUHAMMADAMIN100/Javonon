@@ -15,6 +15,7 @@ import { ReferralsService } from '../partners/referrals.service';
 import { SalesService } from '../sales/sales.service';
 import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
 import { parseCalendarDateUtc, tjYMD } from '../common/tj-time';
+import { dateRangeFilter } from '../common/query-date';
 import {
   ACTIVE_APPLICATION_STATUSES,
   CLIENT_SMS_STATUS_LABEL,
@@ -916,12 +917,28 @@ export class ApplicationsService {
     return { ok: true };
   }
 
-  async stats(user?: { id: string; role: Role; roles?: Role[] }) {
+  /**
+   * @param range — опциональный период дашборда. Фильтрует по ДАТЕ СОЗДАНИЯ
+   *   заявки (Application.createdAt), т.е. все карточки читаются как
+   *   «из заявок, созданных за период, сколько сейчас в таком-то статусе».
+   *   Границы уже разобраны контроллером через общий parseDate (TJT).
+   *   Без периода where остаётся ровно прежним — «за всё время».
+   */
+  async stats(
+    user?: { id: string; role: Role; roles?: Role[] },
+    range?: { from?: Date; to?: Date },
+  ) {
     // Менеджеры видят только свои заявки. Elevated (FOUNDER/ADMIN/ACCOUNTANT) — все.
-    const where: Prisma.ApplicationWhereInput | undefined =
+    const scope: Prisma.ApplicationWhereInput | undefined =
       user && !isElevated(user)
         ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
         : undefined;
+    // Период накладывается ПОВЕРХ скоупа, не заменяя его: менеджер и с
+    // фильтром по месяцу обязан видеть только свои заявки.
+    const createdAt = dateRangeFilter(range);
+    const where: Prisma.ApplicationWhereInput | undefined = createdAt
+      ? { ...(scope ?? {}), createdAt }
+      : scope;
     const [total, byStatus, byDirection, byCountry, directionUnconfirmed] = await Promise.all([
       this.prisma.application.count({ where }),
       this.prisma.application.groupBy({ by: ['status'], _count: true, where }),

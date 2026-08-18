@@ -137,6 +137,35 @@ export function pageParam(): UrlParam<number> {
   return intParam({ fallback: 1, min: 1, max: MAX_PAGE, push: true });
 }
 
+/**
+ * Календарный день `YYYY-MM-DD` (границы «свой период», значение
+ * CrmDatePicker). Всё остальное — дефолт: `?from=вчера`, `?from=2026-13-40`
+ * и `?from=2026-02-31` не должны ни ронять экран, ни уезжать в API,
+ * который на такое отвечает 400.
+ */
+export function dateParam(fallback = ''): UrlParam<string> {
+  return {
+    fallback,
+    parse: (raw) => {
+      const value = raw.trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+      const [y, m, d] = value.split('-').map(Number);
+      // Round-trip: движок не отбраковывает несуществующие даты, а молча
+      // перекатывает их (2026-02-31 → 3 марта). Для границы периода это
+      // тихо другой период, поэтому такой вход считаем мусором.
+      const probe = new Date(Date.UTC(y, m - 1, d));
+      if (
+        probe.getUTCFullYear() !== y ||
+        probe.getUTCMonth() !== m - 1 ||
+        probe.getUTCDate() !== d
+      ) {
+        return undefined;
+      }
+      return value;
+    },
+  };
+}
+
 /** Флажок. В URL — компактные `1`/`0`. */
 export function boolParam(fallback = false): UrlParam<boolean> {
   return {
