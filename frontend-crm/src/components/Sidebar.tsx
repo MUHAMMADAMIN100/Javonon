@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { useEffect, useMemo, useState } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import Icon from '../Icon';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -15,10 +15,17 @@ import { listUsers } from '../api/users';
 import { listCourses } from '../api/lms';
 import { financeSummary, listTransactions } from '../api/finance';
 import { listSalaries } from '../api/salary';
-import { hasRole, isFounder as isFounderFn, displayRoleLabel } from '../lib/roles';
-import { hasPermission } from '../lib/permissions';
+import { displayRoleLabel } from '../lib/roles';
 import { resolveLandingBaseUrl } from '../lib/landingUrl';
 import { LangSwitcher, useT } from '../lib/i18n';
+import {
+  buildNavCtx,
+  visibleGroups,
+  resolveRoute,
+  groupHome,
+  PROFILE_ITEM,
+  type VisibleGroup,
+} from './navGroups';
 
 // Map route → prefetch fn. Срабатывает по hover/touchstart на nav-link
 // и грузит данные ДО клика — экран открывается мгновенно с готовым кешем.
@@ -71,6 +78,44 @@ const prefetchRoute = (route: string) => {
   setTimeout(() => { prefetchedRoutes.delete(route); }, 60_000);
 };
 
+/** Хендлеры префетча — один и тот же набор для пунктов и для иконок групп. */
+const prefetchProps = (route: string) => ({
+  onMouseEnter: () => prefetchRoute(route),
+  onTouchStart: () => prefetchRoute(route),
+  onFocus: () => prefetchRoute(route),
+});
+
+/**
+ * Префетч ВСЕЙ группы, а не только её «домашнего» пункта.
+ *
+ * В двухуровневом меню в DOM лежат пункты только одной группы, поэтому
+ * hover по самим ссылкам покрывал бы 3–5 роутов из 22. Наведение на
+ * иконку rail'а — единственный момент, когда мы точно знаем, что
+ * пользователь смотрит в сторону этой группы: греем все её роуты сразу.
+ * Дёшево: prefetchRoute дедуплицирует и молча выходит для роутов, которых
+ * нет в PREFETCH_MAP.
+ */
+const prefetchGroup = (g: VisibleGroup) => {
+  g.items.forEach((i) => prefetchRoute(i.to));
+};
+
+/** Тот же брейкпоинт, что и у drawer-правил в index.css (<= 900px). */
+const MOBILE_MQ = '(max-width: 900px)';
+
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(MOBILE_MQ).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_MQ);
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isMobile;
+}
+
 interface SidebarProps {
   mobileOpen?: boolean;
   onClose?: () => void;
@@ -81,8 +126,60 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   const hydrated = useAuth((s) => s.hydrated);
   const logout = useAuth((s) => s.logout);
   const { t } = useT();
+  const loc = useLocation();
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [pwdOpen, setPwdOpen] = useState(false);
   const initials = user?.fullName?.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '?';
+
+  // Двухшаговый drawer: 'groups' — 6 крупных кнопок, 'items' — пункты
+  // выбранной группы. Держим здесь, а не в Layout, чтобы не менять
+  // контракт mobileOpen/onClose.
+  const [drawerGroup, setDrawerGroup] = useState<string | null>(null);
+
+  // Десктоп: группа, которую rail показывает в панели «на просмотр» —
+  // hover/focus по иконке подменяет содержимое панели БЕЗ навигации.
+  // Без этого единственным способом увидеть пункты чужой группы был
+  // переход на её первый пункт, т.е. лишняя загрузка страницы на каждый
+  // межгрупповой переход.
+  const [previewGroupKey, setPreviewGroupKey] = useState<string | null>(null);
+
+  // Группы — только разрешённые, уже отфильтрованные по правам.
+  const groups = useMemo(
+    () => (hydrated ? visibleGroups(buildNavCtx(user)) : []),
+    [hydrated, user],
+  );
+
+  // Активная группа выводится ИЗ ТЕКУЩЕГО РОУТА — прямая ссылка или
+  // deep-link (/submissions/<id>) подсвечивает нужную иконку и открывает
+  // нужную панель. Для /me группы нет — панель показывает первую доступную,
+  // ни одна иконка не активна.
+  const hit = resolveRoute(loc.pathname);
+  const activeGroupKey = hit && groups.some((g) => g.key === hit.groupKey) ? hit.groupKey : null;
+  // Просмотр (hover/focus по rail'у) временно перебивает группу роута.
+  const previewGroup = previewGroupKey
+    ? groups.find((g) => g.key === previewGroupKey)
+    : undefined;
+  const panelGroup: VisibleGroup | undefined =
+    previewGroup || groups.find((g) => g.key === activeGroupKey) || groups[0];
+
+  // После любой навигации панель обязана вернуться к группе текущего
+  // роута: мышь может остаться висеть над rail'ом, mouseenter повторно не
+  // придёт, и панель залипла бы на чужой группе.
+  useEffect(() => {
+    setPreviewGroupKey(null);
+  }, [loc.pathname]);
+
+  // Открытие drawer'а: если текущий роут принадлежит группе — сразу шаг 2
+  // (пользователь скорее всего ходит внутри своего раздела), иначе шаг 1.
+  useEffect(() => {
+    if (mobileOpen) setDrawerGroup(activeGroupKey);
+    // activeGroupKey намеренно вне зависимостей: шаг выбирается один раз
+    // на открытие, иначе переход по ссылке дёргал бы drawer обратно.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobileOpen]);
+
+  const drawerGroupObj = groups.find((g) => g.key === drawerGroup);
 
   // Bootstrap didn't finish /auth/me (Railway cold-start 5xx / timeout).
   // `user` may hold only a minimal JWT-claims stub — fullName='', no
@@ -95,7 +192,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   if (!hydrated) {
     return (
       <motion.aside
-        className={`sidebar${mobileOpen ? ' mobile-open' : ''}`}
+        className={`sidebar sidebar-2l${mobileOpen ? ' mobile-open' : ''}`}
         initial={{ x: -80, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -103,20 +200,29 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
         <div className="sidebar-logo">
           <img src="/javonon-logo.svg" alt="Javonon" className="sidebar-brand-img" />
         </div>
-        <div className="sidebar-nav" aria-busy="true" aria-label={t('common.loading')}>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <motion.div
-              key={i}
-              animate={{ opacity: [0.35, 0.75, 0.35] }}
-              transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.08 }}
-              style={{
-                height: 36,
-                margin: '6px 10px',
-                borderRadius: 8,
-                background: 'rgba(255,255,255,0.08)',
-              }}
-            />
-          ))}
+        <div className="sidebar-split" aria-busy="true" aria-label={t('common.loading')}>
+          <div className="sidebar-rail">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <motion.div
+                key={i}
+                className="rail-skeleton"
+                animate={{ opacity: [0.35, 0.75, 0.35] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.08 }}
+              />
+            ))}
+          </div>
+          <div className="sidebar-panel">
+            <div className="sidebar-panel-nav">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <motion.div
+                  key={i}
+                  className="panel-skeleton"
+                  animate={{ opacity: [0.35, 0.75, 0.35] }}
+                  transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.08 }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
         <div className="sidebar-user">
           <div className="user-avatar" style={{ background: 'rgba(255,255,255,0.08)' }} />
@@ -146,163 +252,76 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     );
   }
 
-  // FOUNDER неявно везде. ADMIN/ACCOUNTANT — равные «elevated» по ТЗ.
-  // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) видят рабочие зоны (заявки,
-  // студенты, KPI, отчёты), но не финансы/обучение/партнёров/активность.
-  const elevated = hasRole(user, 'FOUNDER', 'ADMIN', 'ACCOUNTANT');
-  const isFounder = isFounderFn(user);
-  const isWorkforce = hasRole(user, 'FOUNDER', 'ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER');
+  /** Наведение/фокус на иконку группы: показываем её пункты в панели и
+   *  греем кеш всей группы. Никакой навигации — клик остаётся за
+   *  пользователем, и кликнет он уже по нужному пункту. */
+  const previewGroupOn = (g: VisibleGroup) => {
+    setPreviewGroupKey(g.key);
+    prefetchGroup(g);
+  };
 
-  // Custom-роль (ТЗ-доработка): FOUNDER создал, например, «Таргетолога».
-  // Тогда сайдбар фильтруется ТОЛЬКО по custom-role.permissions —
-  // дефолтный набор по базовой роли подавляется, потому что таргетологу
-  // лишние пункты не нужны. Если custom-роли нет — поведение прежнее.
-  const hasCustomRole = !!(user?.customRoleId);
-  const can = (perm: string) => hasPermission(user as any, perm);
-  /** Показывать ли пункт: либо у юзера есть permission, либо у него нет
-   *  custom-роли и подходит базовая ролевая проверка. */
-  const show = (perm: string, baseCond: boolean) => hasCustomRole ? can(perm) : baseCond;
+  /** Клик по иконке группы.
+   *
+   *  Мышь/клавиатура: панель уже показывает эту группу (hover/focus её
+   *  открыл) — клик означает «веди в раздел», идём на ПЕРВЫЙ разрешённый
+   *  пункт, пустой панели не бывает.
+   *
+   *  Тач на широком экране (планшет > 900px, где рендерится rail, а не
+   *  drawer): hover'а нет, поэтому первый тап только раскрывает панель,
+   *  второй — переходит. */
+  const openGroup = (g: VisibleGroup) => {
+    prefetchGroup(g);
+    if (previewGroupKey === g.key || activeGroupKey === g.key) {
+      navigate(groupHome(g));
+      return;
+    }
+    setPreviewGroupKey(g.key);
+  };
 
-  // CRM core
-  const coreLinks: Array<{ to: string; icon: string; label: string }> = [
-    { to: '/dashboard', icon: 'dashboard', label: t('sidebar.dashboard') },
-  ];
-  if (show('applications:read', isWorkforce)) coreLinks.push({ to: '/applications', icon: 'assignment', label: t('sidebar.applications') });
-  if (show('students:read', isWorkforce)) coreLinks.push({ to: '/students', icon: 'school', label: t('sidebar.students') });
-  if (show('programs:read', isWorkforce)) coreLinks.push({ to: '/programs', icon: 'menu_book', label: t('sidebar.programs') });
-  if (show('tasks:read', isWorkforce)) coreLinks.push({ to: '/tasks', icon: 'task_alt', label: t('sidebar.tasks') });
-  if (show('chat:read', true)) coreLinks.push({ to: '/chat', icon: 'forum', label: t('sidebar.chat') });
-  if (show('inbox:read', isWorkforce)) coreLinks.push({ to: '/inbox', icon: 'inbox', label: t('sidebar.inbox') });
-  // ТЗ-доработка: «Время / Посещаемость / Причины» → одна вкладка
-  // «Рабочий день» (/workday) со вкладками внутри. FOUNDER видит все
-  // 3 вкладки, остальные — только «Моё время».
-  coreLinks.push({ to: '/workday', icon: 'schedule', label: t('sidebar.workday') });
-  if (show('reports:read', isWorkforce)) coreLinks.push({ to: '/reports', icon: 'description', label: t('sidebar.reports') });
-  if (show('calls:read', isWorkforce)) coreLinks.push({ to: '/calls', icon: 'call', label: t('sidebar.calls') });
-  if (show('kpi:read', isWorkforce)) coreLinks.push({ to: '/kpi', icon: 'leaderboard', label: t('sidebar.kpi') });
-  coreLinks.push({ to: '/me', icon: 'person', label: t('sidebar.profile') });
-
-  // Finance
-  const financeLinks: Array<{ to: string; icon: string; label: string }> = [];
-  // «Сделки» — менеджеры оформляют закрытых студентов; FOUNDER одобряет.
-  // Виден всем кто работает с продажами + всем elevated (FOUNDER/ADMIN).
-  financeLinks.push({ to: '/submissions', icon: 'handshake', label: t('sidebar.submissions') !== 'sidebar.submissions' ? t('sidebar.submissions') : 'Сделки' });
-  if (show('finance:read', elevated)) financeLinks.push({ to: '/finance', icon: 'payments', label: t('sidebar.finance') });
-  if (show('salary:read', elevated)) financeLinks.push({ to: '/salary', icon: 'paid', label: t('sidebar.salary') });
-
-  // Admin / management
-  const adminLinks: Array<{ to: string; icon: string; label: string }> = [];
-  if (show('pipelines:write', elevated)) adminLinks.push({ to: '/pipelines', icon: 'route', label: t('sidebar.pipelines') });
-  if (show('mass-mail:write', elevated)) adminLinks.push({ to: '/massmail', icon: 'campaign', label: t('sidebar.massmail') });
-  if (!hasCustomRole && elevated) adminLinks.push({ to: '/offers', icon: 'description', label: t('sidebar.offers') });
-  if (show('lms:read', elevated)) adminLinks.push({ to: '/lms', icon: 'menu_book', label: t('sidebar.lms') });
-  if (show('partners:read', elevated)) adminLinks.push({ to: '/partners', icon: 'handshake', label: t('sidebar.partners') });
-  // Аудит-лог — единолично у FOUNDER (см. Activity.tsx: страница блокируется
-  // для всех, кроме FOUNDER). ADMIN/ACCOUNTANT сюда не пускаем даже в сайдбар.
-  if (show('activity:read', isFounder)) adminLinks.push({ to: '/activity', icon: 'history', label: t('sidebar.activity') });
-  if (show('users:read', elevated)) adminLinks.push({ to: '/users', icon: 'group', label: t('sidebar.users') });
-  if (isFounder) {
-    adminLinks.push({ to: '/settings', icon: 'settings', label: t('sidebar.settings') });
-  }
-
-  const links = [...coreLinks, ...financeLinks, ...adminLinks];
-
-  return (
-    <motion.aside
-      className={`sidebar${mobileOpen ? ' mobile-open' : ''}`}
-      initial={{ x: -80, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-    >
-      <motion.div
-        className="sidebar-logo"
-        whileHover={{ scale: 1.03 }}
-        transition={{ type: 'spring', stiffness: 300 }}
-      >
-        <img src="/javonon-logo.svg" alt="Javonon" className="sidebar-brand-img" />
-      </motion.div>
-      <motion.nav
-        className="sidebar-nav"
-        initial="hidden"
-        animate="show"
-        variants={{
-          hidden: {},
-          show: { transition: { staggerChildren: 0.07, delayChildren: 0.15 } },
-        }}
-      >
-        {links.map((l) => (
-          <motion.div
-            key={l.to}
-            variants={{
-              hidden: { opacity: 0, x: -15 },
-              show: { opacity: 1, x: 0, transition: { duration: 0.3 } },
-            }}
-          >
-            <NavLink
-              to={l.to}
-              onClick={() => onClose?.()}
-              onMouseEnter={() => prefetchRoute(l.to)}
-              onTouchStart={() => prefetchRoute(l.to)}
-              onFocus={() => prefetchRoute(l.to)}
-            >
-              <motion.span
-                className="sidebar-nav-icon"
-                whileHover={{ scale: 1.2, rotate: 8 }}
-                transition={{ type: 'spring', stiffness: 400 }}
-              >
-                <Icon name={l.icon} size={22} />
-              </motion.span>
-              <span>{l.label}</span>
-            </NavLink>
-          </motion.div>
-        ))}
-
-        {/* База знаний — внешняя ссылка на лендинг (ТЗ §3.1
-            "сайт используется ... сотрудниками как база знаний") */}
-        <motion.div
-          variants={{
-            hidden: { opacity: 0, x: -15 },
-            show: { opacity: 1, x: 0, transition: { duration: 0.3 } },
-          }}
-          style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.08)' }}
+  const renderItems = (g: VisibleGroup) => (
+    <>
+      {g.items.map((it) => (
+        <NavLink
+          key={it.to}
+          to={it.to}
+          onClick={() => onClose?.()}
+          {...prefetchProps(it.to)}
         >
-          <a
-            // QA-fix #8: javonon.vercel.app/knowledge → 404 (старый Vercel
-            // project без SPA-rewrite). Актуальный landing — на
-            // javonon-landing.vercel.app, его /knowledge работает. Базу берём
-            // из lib/landingUrl — раньше здесь была своя inline-цепочка env,
-            // и её дефолт разъезжался с тем, что использовал Partners.tsx.
-            href={`${resolveLandingBaseUrl()}/knowledge`}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '11px 14px',
-              borderRadius: 8,
-              color: 'rgba(255,255,255,0.7)',
-              fontWeight: 500,
-              fontSize: 14,
-              textDecoration: 'none',
-              transition: 'all .15s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-sidebar-hover)'; e.currentTarget.style.color = 'white'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
-          >
-            <span className="sidebar-nav-icon">
-              <Icon name="library_books" size={22} />
-            </span>
-            <span>{t('sidebar.knowledge')}</span>
-            <Icon name="open_in_new" size={14} style={{ marginLeft: 'auto', opacity: 0.5 }} />
-          </a>
-        </motion.div>
-      </motion.nav>
+          <span className="sidebar-nav-icon">
+            <Icon name={it.icon} size={20} />
+          </span>
+          <span>{t(it.labelKey)}</span>
+        </NavLink>
+      ))}
+    </>
+  );
+
+  // ===== Нижний блок: /me + База знаний + юзер, язык, пароль, выход =====
+  const foot = (
+    <div className="sidebar-foot">
+      <div className="sidebar-quick">
+        <NavLink to={PROFILE_ITEM.to} onClick={() => onClose?.()} {...prefetchProps(PROFILE_ITEM.to)}>
+          <span className="sidebar-nav-icon">
+            <Icon name={PROFILE_ITEM.icon} size={19} />
+          </span>
+          <span>{t(PROFILE_ITEM.labelKey)}</span>
+        </NavLink>
+        {/* База знаний — внешняя ссылка на лендинг (ТЗ §3.1
+            "сайт используется ... сотрудниками как база знаний").
+            QA-fix #8: базу берём из lib/landingUrl, не из inline-env. */}
+        <a href={`${resolveLandingBaseUrl()}/knowledge`} target="_blank" rel="noreferrer">
+          <span className="sidebar-nav-icon">
+            <Icon name="library_books" size={19} />
+          </span>
+          <span>{t('sidebar.knowledge')}</span>
+          <Icon name="open_in_new" size={13} style={{ marginLeft: 'auto', opacity: 0.45 }} />
+        </a>
+      </div>
       <motion.div
         className="sidebar-user"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.3 }}
+        transition={{ delay: 0.35, duration: 0.3 }}
       >
         <motion.div
           className="user-avatar"
@@ -337,6 +356,138 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
           <Icon name="logout" size={20} />
         </motion.button>
       </motion.div>
+    </div>
+  );
+
+  return (
+    <motion.aside
+      className={`sidebar sidebar-2l${mobileOpen ? ' mobile-open' : ''}`}
+      initial={{ x: -80, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <motion.div
+        className="sidebar-logo"
+        whileHover={{ scale: 1.03 }}
+        transition={{ type: 'spring', stiffness: 300 }}
+      >
+        <img src="/javonon-logo.svg" alt="Javonon" className="sidebar-brand-img" />
+      </motion.div>
+
+      {isMobile ? (
+        // ===== МОБИЛЬНЫЙ DRAWER: два шага =====
+        <div className="sidebar-mobile">
+          <AnimatePresence mode="wait" initial={false}>
+            {!drawerGroupObj ? (
+              <motion.div
+                key="step-groups"
+                className="m-step"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: 0.18 }}
+              >
+                {groups.map((g) => (
+                  <button
+                    key={g.key}
+                    type="button"
+                    className={`m-group-btn${g.key === activeGroupKey ? ' active' : ''}`}
+                    onClick={() => { prefetchGroup(g); setDrawerGroup(g.key); }}
+                    onTouchStart={() => prefetchGroup(g)}
+                    onMouseEnter={() => prefetchGroup(g)}
+                    onFocus={() => prefetchGroup(g)}
+                  >
+                    <span className="sidebar-nav-icon"><Icon name={g.icon} size={22} /></span>
+                    <span>{t(g.labelKey)}</span>
+                    <Icon name="chevron_right" size={20} className="m-chev" />
+                  </button>
+                ))}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="step-items"
+                className="m-step"
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 12 }}
+                transition={{ duration: 0.18 }}
+              >
+                <button
+                  type="button"
+                  className="m-back"
+                  onClick={() => setDrawerGroup(null)}
+                  aria-label={t('common.back')}
+                >
+                  <Icon name="arrow_back" size={18} />
+                  <span>{t(drawerGroupObj.labelKey)}</span>
+                </button>
+                <nav className="sidebar-panel-nav">{renderItems(drawerGroupObj)}</nav>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      ) : (
+        // ===== ДЕСКТОП: rail с 6 иконками + панель пунктов =====
+        <div
+          className="sidebar-split"
+          // Курсор ушёл со всего блока (rail + панель) — снимаем просмотр.
+          // Уход С RAIL'А не считается: пользователь как раз едет мышью в
+          // панель, к пунктам просматриваемой группы.
+          onMouseLeave={() => setPreviewGroupKey(null)}
+          // То же для клавиатуры: фокус покинул сайдбар — просмотр снят.
+          // Переход фокуса внутрь панели (по пунктам) просмотр сохраняет.
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              setPreviewGroupKey(null);
+            }
+          }}
+        >
+          <nav className="sidebar-rail" aria-label={t('sidebar.menu')}>
+            {groups.map((g) => (
+              <motion.button
+                key={g.key}
+                type="button"
+                className={`rail-btn${g.key === activeGroupKey ? ' active' : ''}${
+                  previewGroup && previewGroup.key === g.key && g.key !== activeGroupKey ? ' preview' : ''
+                }`}
+                onClick={() => openGroup(g)}
+                title={t(g.labelKey)}
+                aria-label={t(g.labelKey)}
+                aria-current={g.key === activeGroupKey ? 'true' : undefined}
+                aria-expanded={panelGroup?.key === g.key}
+                aria-controls="sidebar-panel-nav"
+                whileHover={{ scale: 1.06 }}
+                whileTap={{ scale: 0.94 }}
+                onMouseEnter={() => previewGroupOn(g)}
+                onFocus={() => previewGroupOn(g)}
+                onTouchStart={() => prefetchGroup(g)}
+              >
+                <Icon name={g.icon} size={22} />
+              </motion.button>
+            ))}
+          </nav>
+          <div className="sidebar-panel">
+            <div className="sidebar-panel-title">{panelGroup ? t(panelGroup.labelKey) : ''}</div>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.nav
+                key={panelGroup?.key || 'empty'}
+                id="sidebar-panel-nav"
+                className="sidebar-panel-nav"
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 8 }}
+                // Панель теперь переключается по hover'у — при mode="wait"
+                // задержка удваивается (exit + enter), поэтому короче.
+                transition={{ duration: 0.1 }}
+              >
+                {panelGroup ? renderItems(panelGroup) : null}
+              </motion.nav>
+            </AnimatePresence>
+          </div>
+        </div>
+      )}
+
+      {foot}
       <ChangePasswordModal
         open={pwdOpen}
         mode={{ kind: 'self' }}

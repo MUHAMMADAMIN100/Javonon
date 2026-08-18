@@ -17,7 +17,9 @@ const ROUTE_ROLES: Array<{ prefix: string; roles: Role[]; perms?: string[] }> = 
   { prefix: '/partners',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['partners:read'] },
   { prefix: '/settings',    roles: ['FOUNDER'] },
   { prefix: '/pipelines',   roles: ['ADMIN', 'ACCOUNTANT'], perms: ['pipelines:write'] },
-  { prefix: '/massmail',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['mass-mail:write'] },
+  // Оба ключа рассылок: канонический massmail:write и legacy mass-mail:write
+  // — hasPermission вариадичен и ORит их (см. PERMISSION_CATALOG на бэке).
+  { prefix: '/massmail',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['massmail:write', 'mass-mail:write'] },
   { prefix: '/offers',      roles: ['ADMIN', 'ACCOUNTANT'] },
   { prefix: '/excuses',     roles: ['FOUNDER'] },
   { prefix: '/attendance',  roles: ['FOUNDER'] },

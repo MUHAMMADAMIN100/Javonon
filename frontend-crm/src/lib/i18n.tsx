@@ -135,6 +135,14 @@ const DICT: Record<Lang, Record<string, string>> = {
     'sidebar.partners': 'Партнёры',
     'sidebar.activity': 'Активность',
     'sidebar.knowledge': 'База знаний',
+    // ===== Группы двухуровневого меню (только названия групп —
+    // подписи пунктов берутся из sidebar.* выше) =====
+    'nav.group.dashboard': 'Дашборд',
+    'nav.group.sales': 'Продажи',
+    'nav.group.comms': 'Общение',
+    'nav.group.finance': 'Финансы',
+    'nav.group.staff': 'Сотрудники',
+    'nav.group.settings': 'Настройки',
 
     // ===== roles =====
     'role.FOUNDER': 'Основатель',
@@ -1618,6 +1626,13 @@ const DICT: Record<Lang, Record<string, string>> = {
     'sidebar.partners': 'Шарикон',
     'sidebar.activity': 'Фаъолият',
     'sidebar.knowledge': 'Базаи дониш',
+    // ===== Гурӯҳҳои менюи дусатҳа =====
+    'nav.group.dashboard': 'Тахтаи асосӣ',
+    'nav.group.sales': 'Фурӯш',
+    'nav.group.comms': 'Муошират',
+    'nav.group.finance': 'Молия',
+    'nav.group.staff': 'Кормандон',
+    'nav.group.settings': 'Танзимот',
 
     // ===== roles =====
     'role.FOUNDER': 'Асосгузор',

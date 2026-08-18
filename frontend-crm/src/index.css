@@ -13,6 +13,9 @@
   --primary-dark: #012457;
   --primary-darker: #021A40;
   --primary-light: #1E5BB8;
+  /* Светлый тинт того же Javonon-синего (hue 217°) — для акцентов
+     на тёмном сайдбаре, где #01368B/#1E5BB8 сливаются с фоном. */
+  --primary-tint: #7FA8E8;
   --primary-glow: rgba(1, 54, 139, 0.32);
   --border: #e2e8f0;
   --border-soft: #eef2f7;
@@ -75,7 +78,11 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sidebar {
   width: 248px; background: var(--bg-sidebar); color: white;
   display: flex; flex-direction: column;
-  position: sticky; top: 0; height: 100vh;
+  position: sticky; top: 0;
+  /* 100vh — фоллбэк для старых браузеров; 100dvh реально следит за
+     динамическим вьюпортом (iOS Safari / Chrome Android URL-бар). */
+  height: 100vh;
+  height: 100dvh;
   border-right: 1px solid rgba(255,255,255,0.04);
 }
 .sidebar-logo {
@@ -3391,7 +3398,13 @@ textarea:focus {
     position: fixed !important;
     top: 0; left: 0; bottom: 0;
     width: min(65vw, 260px) !important;
+    /* 100vh на iOS Safari / Chrome Android = БОЛЬШОЙ вьюпорт (URL-бар убран),
+       поэтому при видимом тулбаре ~60-90px drawer’а (ровно .sidebar-foot:
+       юзер, RU/TJ, смена пароля, выход, База знаний) уходили под экран, а
+       доскроллить было нельзя: у flex-колонки scrollHeight === clientHeight.
+       100dvh = динамический вьюпорт, 100vh оставлен фоллбэком. */
     height: 100vh !important;
+    height: 100dvh !important;
     transform: translateX(-100%) !important;
     transition: transform .28s cubic-bezier(0.22, 1, 0.36, 1) !important;
     z-index: 100;
@@ -4739,4 +4752,285 @@ input[type="checkbox"].crm-checkbox:checked {
   .revenue-item-delete {
     padding: 2px 5px !important;
   }
+}
+
+/* ============================================================
+   ДВУХУРОВНЕВЫЙ САЙДБАР (rail + панель) — заменяет плоский
+   список из 23 ссылок. Структура: узкий rail с 6 иконками-группами
+   и панель с пунктами активной группы. Палитра/логотип/типографика —
+   прежние Javonon-овские (--bg-sidebar и т.д.).
+
+   Бюджет ширины НЕ меняется: 64 (rail) + 184 (панель) = 248px,
+   ровно как у старого .sidebar — контент страницы не «прыгает».
+   Блок стилей идёт последним в файле, чтобы уверенно перебивать
+   легаси-правила .sidebar-* выше.
+   ============================================================ */
+.sidebar-2l { flex-direction: column; }
+
+.sidebar-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+/* --- Rail: 6 иконок-групп --- */
+.sidebar-rail {
+  flex: 0 0 64px;
+  width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* flex-start: группы всегда начинаются сверху — при нехватке высоты
+     обрезается пустота снизу, а не первая иконка. */
+  justify-content: flex-start;
+  /* Rail сжимается вместе с окном (зум браузера / низкий ноутбук),
+     вместо того чтобы молча прятать 6-ю группу за скрытым скроллом.
+     Бюджет на 1366x768 @125%: 6x38 + 5x3 + 2x9 = 261px против 341px
+     доступных, т.е. запас есть даже с учётом логотипа и нижнего блока. */
+  gap: clamp(2px, 0.5vh, 4px);
+  padding: clamp(6px, 1.5vh, 14px) 0;
+  background: rgba(0, 0, 0, 0.22);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Если высоты не хватит даже сжатому rail'у — скролл ДОЛЖЕН быть виден.
+     Тот же тонкий бегунок, что и у .sidebar-panel-nav; при overflow-y:auto
+     место под него резервируется только когда скролл реально появился. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+.sidebar-rail::-webkit-scrollbar { width: 4px; height: 0; }
+.sidebar-rail::-webkit-scrollbar-track { background: transparent; }
+.sidebar-rail::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16); border-radius: 2px;
+}
+.sidebar-rail::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.26); }
+
+.rail-btn {
+  flex: 0 0 auto;
+  width: 44px;
+  /* см. .sidebar-rail — высота кнопки уступает высоте окна, но не ниже
+     38px (иконка 22px + воздух остаются кликабельными). */
+  height: clamp(38px, 6vh, 44px);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  background: transparent;
+  position: relative;
+  transition: background .15s, color .15s;
+}
+.rail-btn:hover { background: var(--bg-sidebar-hover); color: white; }
+.rail-btn.active {
+  /* Заливка держит Javonon-синий, иконка — белая: активная группа
+     обязана быть САМОЙ читаемой в rail'е, а не самой тусклой. */
+  background: rgba(1, 54, 139, 0.55);
+  color: #fff;
+}
+/* Акцент-риск слева — второй, НЕцветовой признак активной группы:
+   одна лишь заливка даёт ~1.3:1 к фону rail'а, на неё полагаться нельзя.
+   Цвет — --primary-tint, а не --primary: #01368B на rgba(0,0,0,.22)
+   поверх #050a1a — ~1.8:1, риска была практически невидима. */
+.rail-btn.active::before {
+  content: '';
+  position: absolute;
+  left: -10px; top: 10px; bottom: 10px;
+  width: 3px;
+  background: var(--primary-tint);
+  border-radius: 0 3px 3px 0;
+}
+/* Просмотр: панель показывает пункты этой группы, но роут ещё не менялся.
+   Слабее .active — чтобы «где я сейчас» и «куда я смотрю» не путались. */
+.rail-btn.preview {
+  background: var(--bg-sidebar-hover);
+  color: rgba(255, 255, 255, 0.92);
+}
+.rail-btn.preview::before {
+  content: '';
+  position: absolute;
+  left: -10px; top: 14px; bottom: 14px;
+  width: 3px;
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 0 3px 3px 0;
+}
+.rail-btn:focus-visible {
+  outline: 2px solid var(--primary-light);
+  outline-offset: 2px;
+}
+.rail-skeleton {
+  flex: 0 0 auto;
+  width: 44px;
+  height: clamp(38px, 6vh, 44px);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* --- Панель: пункты активной группы --- */
+.sidebar-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* Горизонтальный отступ намеренно живёт на .sidebar-panel-nav, а не здесь.
+     nav — скролл-контейнер (overflow-y: auto ⇒ overflow-x вычисляется в auto),
+     поэтому он обрезает всё, что выходит за его padding-box. Акцент-риск
+     активного пункта стоит на left: -10px и без этого padding'а срезался
+     полностью — ровно как в старом .sidebar-nav отступ 12px спасал left: -12px. */
+  padding: 16px 0 10px;
+}
+.sidebar-panel-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.32);
+  padding: 0 20px 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-panel-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Отступ снят с .sidebar-panel и перенесён сюда: он расширяет padding-box
+     скролл-контейнера, и акцент-риск (left: -10px) попадает ровно на x = 0
+     панели вместо того, чтобы быть обрезанным. */
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+.sidebar-panel-nav::-webkit-scrollbar { width: 6px; }
+.sidebar-panel-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-panel-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12); border-radius: 3px;
+}
+.sidebar-panel-nav::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+
+.sidebar-panel-nav a {
+  display: flex; align-items: center; gap: 10px;
+  /* ТЗ §12 — текст выровнен по левому краю. */
+  justify-content: flex-start;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.62);
+  font-weight: 500; font-size: 13.5px;
+  position: relative;
+  transition: background .15s, color .15s;
+}
+.sidebar-panel-nav a > span:not(.sidebar-nav-icon) {
+  flex: 1; min-width: 0;
+  text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sidebar-panel-nav a:hover { background: var(--bg-sidebar-hover); color: white; }
+.sidebar-panel-nav a.active {
+  /* Синий остаётся заливкой, текст — белый (~15:1 на --bg-sidebar).
+     До этого активный пункт был темнее неактивных и читался как
+     disabled. */
+  background: rgba(1, 54, 139, 0.55);
+  color: #fff;
+}
+.sidebar-panel-nav a.active::before {
+  content: '';
+  position: absolute;
+  /* left: -10px работает ТОЛЬКО в паре с padding: 0 10px на
+     .sidebar-panel-nav — nav скроллится (overflow-y: auto ⇒ overflow-x
+     вычисляется в auto) и режет всё за своим padding-box. Отступ сдвигает
+     эту границу на 10px влево, и риска встаёт ровно на x = 0 панели,
+     вплотную к rail'у — так же, как в старом .sidebar-nav. Убирать
+     padding у nav нельзя: риска снова обрежется на 100%. */
+  left: -10px; top: 7px; bottom: 7px;
+  width: 3px;
+  background: var(--primary-tint);
+  border-radius: 0 3px 3px 0;
+}
+.panel-skeleton {
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+}
+
+/* --- Нижний блок: /me + База знаний + юзер/язык/пароль/выход --- */
+.sidebar-foot {
+  flex: 0 0 auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.sidebar-quick {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px 2px;
+}
+.sidebar-quick a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500; font-size: 13px;
+  transition: background .15s, color .15s;
+}
+.sidebar-quick a > span:not(.sidebar-nav-icon) {
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sidebar-quick a:hover { background: var(--bg-sidebar-hover); color: white; }
+.sidebar-quick a.active { background: rgba(1, 54, 139, 0.55); color: #fff; }
+/* .sidebar-user уже несёт border-top — во второй рамке нет смысла. */
+.sidebar-2l .sidebar-user { border-top: none; padding-top: 10px; }
+
+/* --- Мобильный drawer (<= 900px): два шага --- */
+.sidebar-mobile {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 12px 8px;
+  display: flex; flex-direction: column;
+}
+.m-step { display: flex; flex-direction: column; gap: 6px; }
+.m-group-btn {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%;
+  min-height: 54px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 15px; font-weight: 600;
+  text-align: left;
+  transition: background .15s, color .15s;
+}
+.m-group-btn:active { background: rgba(255, 255, 255, 0.09); }
+.m-group-btn.active { background: rgba(1, 54, 139, 0.55); color: #fff; }
+.m-group-btn > span:not(.sidebar-nav-icon) { flex: 1; min-width: 0; }
+.m-group-btn .m-chev { opacity: 0.4; }
+.m-back {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 6px 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase;
+}
+.m-back:active { color: white; }
+/* В drawer'е горизонтальные поля даёт сам .sidebar-mobile, поэтому 10px
+   из .sidebar-panel-nav вычитаем обратно — геометрия пунктов не меняется,
+   но padding-box остаётся достаточно широким, чтобы риск был виден. */
+.sidebar-mobile .sidebar-panel-nav { margin-left: -10px; margin-right: -10px; }
+.sidebar-mobile .sidebar-panel-nav a {
+  min-height: 48px;
+  padding: 12px 14px !important;
+  font-size: 15px !important;
+}
+
+@media (max-width: 900px) {
+  /* Легаси-правило прячет .user-info на узких экранах — но в drawer'е
+     260px имя и роль обязаны быть видны (нижний блок сохраняем целиком). */
+  .sidebar-2l .sidebar-user .user-info { display: block !important; }
+  .sidebar-2l .sidebar-logo { padding: 16px 18px !important; }
+  .sidebar-2l .sidebar-foot { padding-bottom: env(safe-area-inset-bottom, 0); }
 }
