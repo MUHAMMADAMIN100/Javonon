@@ -11,9 +11,9 @@ import {
 import { ContactChannel, Country, ApplicationSource } from '@prisma/client';
 
 // E.164: '+' необязателен, 7–15 цифр всего, разрешаем пробелы/дефисы при вводе.
-const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
+export const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 // QA-fix: имя без HTML-тегов (XSS) — fullName попадает в email-шаблоны и Telegram.
-const NO_HTML_RE = /^[^<>]*$/;
+export const NO_HTML_RE = /^[^<>]*$/;
 // Реферальный код партнёра: 4–16 буквенно-цифровых, регистр не важен
 // (нормализуется в ReferralsService через .trim().toUpperCase()).
 const REF_CODE_RE = /^[A-Z0-9]{4,16}$/i;

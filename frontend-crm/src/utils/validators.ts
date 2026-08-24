@@ -1,6 +1,8 @@
 // Универсальные валидаторы для форм CRM. Каждая функция возвращает
 // строку-ошибку или undefined, если значение валидно.
 
+import { tjYMD } from '../lib/tjTime';
+
 export type Rule = (v: any) => string | undefined;
 
 export const required = (msg = 'Обязательное поле'): Rule =>
@@ -84,3 +86,61 @@ export function validateAll<T extends Record<string, any>>(
 
 export const hasErrors = (errs: Record<string, string | undefined>) =>
   Object.values(errs).some(Boolean);
+
+/* ============================================================
+   Дата рождения.
+
+   Возраст считаем в Asia/Dushanbe — тем же поясом, что и backend
+   (common/tj-time.ts, ApplicationsService.parseBirthday) и что и форма
+   лендинга (frontend-landing/src/validators.ts). Иначе сотрудник на
+   границе суток увидел бы «14 лет» на фронте и получил 400 от бэка.
+
+   Здесь только ЧИСТЫЕ хелперы без текстов: сообщения об ошибке форма
+   берёт из i18n (RU/TJ), а не из дефолтных строк валидатора.
+   ============================================================ */
+
+/** Границы возраста заявителя — совпадают с backend parseBirthday. */
+export const MIN_AGE = 14;
+export const MAX_AGE = 60;
+
+const isoDate = (y: number, m: number, d: number) =>
+  `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+/**
+ * Границы для date-picker'а, чтобы заведомо невозможную дату нельзя было
+ * выбрать вовсе, а не ловить её только на сабмите.
+ *   max = сегодня − MIN_AGE лет           (в этот день исполняется ровно 14)
+ *   min = сегодня − (MAX_AGE+1) лет + 1 день (в этот день ещё ровно 60)
+ */
+export function birthdayBounds(): { min: string; max: string } {
+  const { y, m, d } = tjYMD();
+  const max = isoDate(y - MIN_AGE, m, d);
+  // Арифметика через UTC, чтобы не зависеть от пояса браузера.
+  const minDate = new Date(Date.UTC(y - MAX_AGE - 1, m - 1, d));
+  minDate.setUTCDate(minDate.getUTCDate() + 1);
+  return { min: isoDate(minDate.getUTCFullYear(), minDate.getUTCMonth() + 1, minDate.getUTCDate()), max };
+}
+
+/**
+ * Полных лет на сегодня (Душанбе) для даты `YYYY-MM-DD`.
+ * `undefined` — строка не дата или дата несуществующая (31.02).
+ */
+export function ageFromBirthday(value: string): number | undefined {
+  const parsed = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? '').trim());
+  if (!parsed) return undefined;
+  const by = Number(parsed[1]);
+  const bm = Number(parsed[2]);
+  const bd = Number(parsed[3]);
+  const probe = new Date(Date.UTC(by, bm - 1, bd));
+  if (
+    probe.getUTCFullYear() !== by ||
+    probe.getUTCMonth() !== bm - 1 ||
+    probe.getUTCDate() !== bd
+  ) {
+    return undefined;
+  }
+  const { y, m, d } = tjYMD();
+  let age = y - by;
+  if (m < bm || (m === bm && d < bd)) age -= 1;
+  return age;
+}

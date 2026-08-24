@@ -81,6 +81,13 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.sales',
     items: [
       { to: '/applications', icon: 'assignment', labelKey: 'sidebar.applications', visible: (c) => c.show('applications:read', c.isWorkforce) },
+      // «Лиды» — ручной ввод заявки с голоса и раздача менеджерам.
+      // Ключ намеренно СУЩЕСТВУЮЩИЙ (applications:create), а не новый:
+      // роль «Квалификатор лидов» основатель уже собрал на текущем
+      // каталоге, и свежий ключ был бы у всех снят по умолчанию — пункт
+      // не появился бы ни у кого. Стиль предиката — как у соседей:
+      // кастомная роль решает пермишеном, базовая — ролью.
+      { to: '/leads', icon: 'person_add', labelKey: 'sidebar.leads', visible: (c) => c.show('applications:create', c.isWorkforce) },
       { to: '/students', icon: 'school', labelKey: 'sidebar.students', visible: (c) => c.show('students:read', c.isWorkforce) },
       // «Сделки» — менеджеры оформляют закрытых студентов; FOUNDER одобряет.
       { to: '/submissions', icon: 'handshake', labelKey: 'sidebar.submissions', visible: always },

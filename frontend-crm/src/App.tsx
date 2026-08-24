@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
 import Applications from './pages/Applications';
 import ApplicationDetail from './pages/ApplicationDetail';
+import Leads from './pages/Leads';
 import Students from './pages/Students';
 import StudentDetail from './pages/StudentDetail';
 import StudentNew from './pages/StudentNew';
@@ -63,6 +64,12 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/applications" element={<Applications />} />
         <Route path="/applications/:id" element={<ApplicationDetail />} />
+        {/* Ручной ввод лидов. Лид — это та же Application (первый статус
+            «Новые лиды»), отдельной сущности нет; экран отличается только
+            задачей: набрать заявку с голоса и сразу отдать менеджеру.
+            Доступ проверяет сама страница тем же предикатом, что и пункт
+            меню (applications:create), а по-настоящему — сервер. */}
+        <Route path="/leads" element={<Leads />} />
         <Route path="/students" element={<Students />} />
         <Route path="/students/new" element={<StudentNew />} />
         <Route path="/students/:id" element={<StudentDetail />} />

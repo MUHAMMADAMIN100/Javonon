@@ -3,6 +3,16 @@ import { ApplicationSource, ApplicationStatus, Country, Direction, Prisma, Role 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
+import {
+  CreateStaffApplicationDto,
+  STAFF_DEFAULT_SOURCE,
+} from './dto/create-staff-application.dto';
+import {
+  canCreateApplication,
+  canReassignApplicationManager,
+  canSeeAllApplications,
+  canTouchApplicationManager,
+} from './application-access';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { MailService } from '../mail/mail.service';
@@ -268,7 +278,30 @@ export class ApplicationsService {
     return date;
   }
 
-  async create(dto: CreateApplicationDto & { ref?: string }) {
+  /**
+   * Общее ядро создания лида: валидация даты рождения → авто-подбор
+   * менеджера/воронки → INSERT. Ноль side-effect'ов наружу: ни Telegram,
+   * ни почты, ни SMS, ни уведомлений, ни реферальной атрибуции — их
+   * навешивает вызывающий, потому что у заявки с лендинга и у лида,
+   * набранного сотрудником руками, наборы этих эффектов принципиально
+   * разные (см. create() и createByStaff() ниже).
+   *
+   * opts.source — провенанс строки. Передаётся ЯВНО, а не берётся из dto:
+   * это единственное место, где он решается, и на staff-пути значения
+   * LANDING_FORM/SELF_REGISTRATION недопустимы (см. STAFF_ALLOWED_SOURCES
+   * в create-staff-application.dto.ts).
+   *
+   * opts.autoAssignManager — round-robin по SALES_MANAGER. Для лендинга
+   * true: лид приходит ночью и обязан кому-то достаться сразу. Для ручного
+   * ввода false: менеджера выбирает квалификатор прямо в строке списка, а
+   * авто-назначение перебило бы его выбор ещё до того, как он его сделает,
+   * и не-elevated сотрудник потом не смог бы переназначить занятый слот
+   * (см. assignManager).
+   */
+  private async persistNewLead(
+    dto: CreateApplicationDto | CreateStaffApplicationDto,
+    opts: { source: ApplicationSource; autoAssignManager: boolean },
+  ) {
     // Валидируем дату рождения ДО любых side-effect'ов (создание заявки,
     // назначение менеджера, реферальная атрибуция) — иначе при 400 в БД
     // осталась бы половинчатая заявка.
@@ -280,8 +313,10 @@ export class ApplicationsService {
     let pipelineId: string | null = null;
     let pipelineStageId: string | null = null;
     if (this.sales) {
-      try { assignedManagerId = await this.sales.pickManagerForLead(); }
-      catch { /* fallback: оставляем без менеджера */ }
+      if (opts.autoAssignManager) {
+        try { assignedManagerId = await this.sales.pickManagerForLead(); }
+        catch { /* fallback: оставляем без менеджера */ }
+      }
       // Авто-проставление дефолтной воронки и её первого этапа.
       try {
         const def = await this.sales.pickDefaultPipelineStage();
@@ -289,7 +324,7 @@ export class ApplicationsService {
         pipelineStageId = def.pipelineStageId;
       } catch { /* без воронки — норм */ }
     }
-    const app = await this.prisma.application.create({
+    return this.prisma.application.create({
       data: {
         fullName: dto.fullName.trim(),
         phone: dto.phone.trim(),
@@ -323,12 +358,19 @@ export class ApplicationsService {
         country: dto.country ?? null,
         birthday,
         comment: dto.comment?.trim() || null,
-        programId: dto.programId || null,
-        source: dto.source || 'LANDING_FORM',
+        programId: (dto as any).programId || null,
+        source: opts.source,
         managerId: assignedManagerId,
         pipelineId,
         pipelineStageId,
       },
+    });
+  }
+
+  async create(dto: CreateApplicationDto & { ref?: string }) {
+    const app = await this.persistNewLead(dto, {
+      source: dto.source || 'LANDING_FORM',
+      autoAssignManager: true,
     });
 
     // Реферальная атрибуция: если в заявке пришёл ref-код партнёра,
@@ -397,6 +439,79 @@ export class ApplicationsService {
     return app;
   }
 
+  /**
+   * Ручной ввод лида сотрудником из CRM (экран /leads, POST
+   * /applications/staff). Meta/Facebook-интеграции ещё нет: лиды приходят по
+   * телефону и в мессенджерах, и квалификатор набирает их десятками подряд.
+   *
+   * Лид — ЭТО заявка. Отдельной таблицы Lead нет и быть не должно: первый
+   * статус заявки буквально «Новые лиды» (NEW_LEAD), и параллельная таблица
+   * заставила бы каждый отчёт делать UNION.
+   *
+   * Чем отличается от create() (заявки с лендинга) — и почему:
+   *  • НЕТ реферальной атрибуции. У лида, набранного руками, партнёра нет по
+   *    определению; поля `ref` нет и в DTO, так что запустить её нельзя даже
+   *    подсунув код в теле запроса.
+   *  • НЕТ SMS клиенту «Ваша заявка получена, менеджер свяжется». Менеджер
+   *    уже на линии — это его разговор и есть.
+   *  • НЕТ письма админу «Новая заявка с лендинга» и НЕТ поста в Telegram:
+   *    оба текста прямо утверждают происхождение с лендинга, а при десятке
+   *    лидов подряд это ещё и спам в общий канал.
+   *  • НЕТ notifyAllStaff: строка уведомления каждому сотруднику на каждый
+   *    набранный вручную лид — тот же спам, только в БД.
+   *  • ЕСТЬ realtime-эмит: список /leads и доска заявок должны показать
+   *    новую строку немедленно, в том числе у остальных сотрудников.
+   *  • НЕТ авто-назначения менеджера: его выбирает квалификатор в строке
+   *    списка (см. persistNewLead, opts.autoAssignManager).
+   *
+   * Права проверяются в контроллере (RolesGuard + canCreateApplication),
+   * здесь — вторым рубежом, потому что RolesGuard на этом контроллере
+   * исторически не висел, а его неявная проверка по URL засчитывает любой
+   * write-пермишен раздела, не только applications:create.
+   */
+  async createByStaff(dto: CreateStaffApplicationDto, user: CurrentUser) {
+    if (!canCreateApplication(user as any)) {
+      throw new ForbiddenException('Недостаточно прав для создания заявки');
+    }
+    const app = await this.persistNewLead(dto, {
+      source: dto.source || STAFF_DEFAULT_SOURCE,
+      autoAssignManager: false,
+    });
+    this.realtime.emitStaff('application:new', { application: app });
+    return app;
+  }
+
+  /**
+   * Плоский справочник сотрудников, которым можно назначить лид, — для
+   * инлайнового <select> в строке списка /leads.
+   *
+   * Зачем отдельный метод, а не GET /users: тот эндпоинт закрыт
+   * @Roles(ADMIN, ACCOUNTANT) и отдаёт кадровую карточку целиком (почта,
+   * телефон, зарплатные поля). Квалификатору лидов не нужно ни то, ни
+   * другое — ему нужны id и имя, и открывать ради выпадающего списка
+   * весь кадровый раздел было бы худшим из двух решений.
+   *
+   * Отдаём только активных SALES_MANAGER/CLIENT_MANAGER — включая тех, у
+   * кого роль лежит в roles[] (мульти-роли, ТЗ §2), иначе половина отдела
+   * в списке бы не появилась.
+   */
+  async listAssignableManagers(user: CurrentUser) {
+    if (!canTouchApplicationManager(user as any)) {
+      throw new ForbiddenException('Недостаточно прав');
+    }
+    return this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { role: { in: ['SALES_MANAGER', 'CLIENT_MANAGER'] } },
+          { roles: { hasSome: ['SALES_MANAGER', 'CLIENT_MANAGER'] } },
+        ],
+      },
+      select: { id: true, fullName: true, role: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
   async findAll(filters: {
     status?: ApplicationStatus;
     direction?: Direction;
@@ -409,6 +524,13 @@ export class ApplicationsService {
     currentUserId?: string;
     currentUserRole?: Role;
     currentUserRoles?: Role[];
+    // Пермиссии и признак активной кастомной роли — нужны, чтобы решить,
+    // видит ли юзер весь раздел (canSeeAllApplications). Без них база
+    // SALES_MANAGER у «Квалификатора лидов» резала список до назначенных
+    // на него заявок, а ручной лид создаётся БЕЗ менеджера — экран /leads
+    // был бы пуст.
+    currentUserPermissions?: string[];
+    currentUserHasCustomRole?: boolean;
   }) {
     const where: Prisma.ApplicationWhereInput = {};
     const and: Prisma.ApplicationWhereInput[] = [];
@@ -433,9 +555,11 @@ export class ApplicationsService {
     if (filters.source) where.source = filters.source;
     // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только свои
     // заявки. FOUNDER/ADMIN/ACCOUNTANT — все, если только не запросили mine.
-    const elevated = isElevated({
+    const elevated = canSeeAllApplications({
       role: filters.currentUserRole,
       roles: filters.currentUserRoles,
+      permissions: filters.currentUserPermissions,
+      hasCustomRole: filters.currentUserHasCustomRole,
     });
     const restrictToMine =
       (filters.mine && filters.currentUserId) ||
@@ -785,6 +909,15 @@ export class ApplicationsService {
     patch: { managerId?: string | null; chinaManagerId?: string | null },
     user: CurrentUser,
   ) {
+    // Рубеж 1 — ПРАВО ВООБЩЕ ТРОГАТЬ НАЗНАЧЕНИЕ.
+    // Для носителя активной кастомной роли решает только явный
+    // 'applications:assign': RolesGuard на этом эндпоинте пропускает и по
+    // неявной проверке URL, где любой write-пермишен раздела ('/applications')
+    // засчитывается одинаково — то есть роль с одним лишь «Заявки —
+    // редактирование» дошла бы сюда. Базовые роли — как раньше.
+    if (!canTouchApplicationManager(user as any)) {
+      throw new ForbiddenException('Недостаточно прав для назначения менеджера');
+    }
     const existing = await this.findOne(id);
     // По ТЗ §7: переназначение между сотрудниками — ТОЛЬКО ADMIN/FOUNDER.
     // Не-elevated (SALES_MANAGER/CLIENT_MANAGER) могут:
@@ -792,7 +925,12 @@ export class ApplicationsService {
     //   • снять себя с лида (присвоить null)
     // Но НЕ могут передать чужой лид кому-то другому. Это закрывает дыру
     // когда SM мог отнять чужого клиента, и аудит-замечание из код-ревью.
-    if (!isElevated(user as any)) {
+    // Рубеж 2 — ОБЪЁМ прав. Раньше здесь стоял голый isElevated(), слепой к
+    // hasCustomRole: квалификатор лидов с applications:assign, но с
+    // технической подложкой SALES_MANAGER, попадал в ветку «не-elevated» и
+    // мог взять лид только на себя — то есть не мог распределить ни одного,
+    // а сам пермишен не значил ничего (см. application-access.ts).
+    if (!canReassignApplicationManager(user as any)) {
       const slot: 'managerId' | 'chinaManagerId' | null =
         patch.managerId !== undefined ? 'managerId' :
         patch.chinaManagerId !== undefined ? 'chinaManagerId' : null;

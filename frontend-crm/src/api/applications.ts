@@ -66,3 +66,63 @@ export async function applicationStats(range?: StatsRange) {
   const { data } = await api.get('/applications/stats', { params: range });
   return data;
 }
+
+/* ============================================================
+   Ручной ввод лида сотрудником — экран /leads.
+   ============================================================ */
+
+/**
+ * Тело POST /applications/staff (backend CreateStaffApplicationDto).
+ *
+ * Набор полей — тот же, что собирает форма лендинга, МИНУС `ref`:
+ * у лида, набранного руками, партнёра нет по определению, и реферальная
+ * атрибуция на этом пути не запускается вообще. Поля в DTO нет — значит
+ * её нельзя инициировать и «снизу», подсунув код в теле запроса.
+ *
+ * `source` намеренно НЕ отправляем: в ApplicationSource нет значения
+ * «завёл сотрудник вручную», выдумывать новое — destructive-изменение
+ * схемы. Бэкенд подставит STAFF_DEFAULT_SOURCE ('OTHER'); LANDING_FORM и
+ * SELF_REGISTRATION он для этого маршрута отвергает, чтобы нельзя было
+ * подделать машинно подтверждённое происхождение заявки.
+ */
+export interface CreateStaffApplicationInput {
+  fullName: string;
+  phone: string;
+  whatsappPhone?: string;
+  birthday?: string;
+  country?: Country;
+  comment?: string;
+}
+
+/**
+ * Создать заявку («лид») из CRM. Публичный POST /applications/public — это
+ * ДРУГОЙ эндпоинт (без гварда, со своим throttle 5/мин, с реферальной
+ * атрибуцией, SMS клиенту и постом в Telegram); он этим экраном не
+ * используется и не затрагивается.
+ *
+ * Права на бэке: applications:create (RolesGuard + canCreateApplication).
+ */
+export async function createStaffApplication(payload: CreateStaffApplicationInput) {
+  const { data } = await api.post<Application>('/applications/staff', payload);
+  return data;
+}
+
+/** Строка справочника GET /applications/managers. */
+export interface AssignableManager {
+  id: string;
+  fullName: string;
+  role: string;
+}
+
+/**
+ * Активные SALES_MANAGER/CLIENT_MANAGER для инлайнового <select>
+ * «Менеджер» в строке списка /leads.
+ *
+ * Отдельный эндпоинт, а не GET /users: тот закрыт @Roles(ADMIN, ACCOUNTANT)
+ * и отдаёт кадровую карточку целиком. Права здесь — applications:assign,
+ * ровно те же, что и у самого назначения.
+ */
+export async function listAssignableManagers() {
+  const { data } = await api.get<AssignableManager[]>('/applications/managers');
+  return data;
+}
