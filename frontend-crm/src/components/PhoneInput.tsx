@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useT } from '../lib/i18n';
 
 export type Country = {
@@ -49,6 +50,11 @@ export const COUNTRIES: Country[] = [
 const flagUrl = (cc: string, size: 20 | 40 | 80 = 40) =>
   `https://flagcdn.com/w${size}/${cc}.png`;
 
+// Основная страна клиентов — всегда первая в списке, в том числе при поиске.
+const PINNED_CC = 'tj';
+const DROPDOWN_MAX_HEIGHT = 320;
+const DROPDOWN_GAP = 4;
+
 const findCountryByPhone = (phone: string): { idx: number; rest: string } => {
   if (!phone) return { idx: 0, rest: '' };
   const normalized = phone.startsWith('+') ? phone : `+${phone}`;
@@ -78,7 +84,11 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  // Список стран рендерится порталом в <body> с position: fixed, чтобы поля
+  // формы ниже (например, «Дата рождения») не перекрывали его первые строки.
+  const [coords, setCoords] = useState<React.CSSProperties>({});
 
   // Синхронизация с внешним value через ref, чтобы не зацикливаться.
   const stateRef = useRef({ countryIdx, local });
@@ -95,23 +105,83 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
     }
   }, [value]);
 
+  const computeCoords = useCallback((): boolean => {
+    const wrap = wrapRef.current;
+    if (!wrap) return false;
+    const rect = wrap.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) return false;
+
+    const spaceBelow = window.innerHeight - rect.bottom - DROPDOWN_GAP - 8;
+    const spaceAbove = rect.top - DROPDOWN_GAP - 8;
+    const flipUp = spaceBelow < DROPDOWN_MAX_HEIGHT && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(160, Math.min(DROPDOWN_MAX_HEIGHT, flipUp ? spaceAbove : spaceBelow));
+    const width = Math.min(rect.width, window.innerWidth - 16);
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+
+    setCoords(
+      flipUp
+        ? { left, width, maxHeight, bottom: window.innerHeight - rect.top + DROPDOWN_GAP }
+        : { left, width, maxHeight, top: rect.bottom + DROPDOWN_GAP },
+    );
+    return true;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    if (!computeCoords()) setOpen(false);
+  }, [open, computeCoords]);
+
+  // Пока список открыт, следим за положением поля покадрово: форма может
+  // сдвинуться без scroll/resize (например, под соседним полем появилась
+  // ошибка валидации после blur) — список должен остаться под полем.
+  useEffect(() => {
+    if (!open) return;
+    let raf = 0;
+    let last = '';
+    const tick = () => {
+      const wrap = wrapRef.current;
+      if (wrap) {
+        const r = wrap.getBoundingClientRect();
+        const sig = `${r.top}|${r.left}|${r.width}|${r.height}|${window.innerHeight}`;
+        if (sig !== last) {
+          last = sig;
+          if (!computeCoords()) { setOpen(false); return; }
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [open, computeCoords]);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const inWrap = wrapRef.current?.contains(target);
+      const inDropdown = dropdownRef.current?.contains(target);
+      if (!inWrap && !inDropdown) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
+    const onScrollOrResize = (e?: Event) => {
+      // Скролл внутри самого списка — не повод пересчитывать/закрывать.
+      if (e && dropdownRef.current && e.target instanceof Node && dropdownRef.current.contains(e.target)) return;
+      if (!computeCoords()) setOpen(false);
+    };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
     setTimeout(() => searchRef.current?.focus(), 30);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
     };
-  }, [open]);
+  }, [open, computeCoords]);
 
   const country = COUNTRIES[countryIdx];
 
@@ -122,17 +192,31 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
     onChange(digits ? `${c.code}${digits}` : '');
   };
 
+  // Название на текущем языке интерфейса (RU/TJ); если перевода нет — русское.
+  const labelOf = useCallback((c: Country) => {
+    const key = `country.${c.cc}`;
+    const tr = t(key);
+    return tr !== key ? tr : c.label;
+  }, [t]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return COUNTRIES.map((c, i) => ({ c, i }));
-    return COUNTRIES
-      .map((c, i) => ({ c, i }))
-      .filter(({ c }) =>
-        c.label.toLowerCase().includes(q) ||
-        c.code.includes(q) ||
-        c.cc.includes(q),
-      );
-  }, [search]);
+    const all = COUNTRIES.map((c, i) => ({ c, i }));
+    const pinned = all.filter(({ c }) => c.cc === PINNED_CC);
+    const rest = all.filter(({ c }) => c.cc !== PINNED_CC);
+    if (!q) return [...pinned, ...rest];
+    // Ищем по НАЧАЛУ слова в русском и переведённом названии («та» →
+    // Таджикистан, Таиланд, но не Казахстан), по коду (+992 / 992) и ISO-коду.
+    const digits = q.replace(/^\+/, '');
+    const wordStarts = (label: string) =>
+      label.toLowerCase().split(/[\s-]+/).some((w) => w.startsWith(q));
+    const matches = ({ c }: { c: Country }) =>
+      wordStarts(c.label) ||
+      wordStarts(labelOf(c)) ||
+      (digits.length > 0 && /^\d+$/.test(digits) && c.code.slice(1).startsWith(digits)) ||
+      c.cc === q;
+    return [...pinned, ...rest.filter(matches)];
+  }, [search, labelOf]);
 
   const pick = (idx: number) => {
     update(idx, local);
@@ -153,11 +237,6 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
     border: `1px solid ${error ? 'var(--danger, #dc2626)' : 'var(--border, #e5e7eb)'}`,
     borderRadius: 8,
     background: error ? '#fef2f2' : '#fff',
-    // NOTE: no `overflow: hidden` here — the country picker `.phone-dropdown`
-    // is `position: absolute; top: calc(100% + 4px)` and lives outside the
-    // wrapper's box, so clipping the wrapper would hide the entire flag/country
-    // list. Border-radius clipping is not needed since children are inputs,
-    // not images/media that would bleed past rounded corners.
     isolation: 'isolate',
   };
   const btnStyle: React.CSSProperties = {
@@ -197,7 +276,20 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
         type="button"
         className="phone-country-btn"
         style={btnStyle}
-        onClick={() => !disabled && setOpen((v) => !v)}
+        // Открываем по mousedown с preventDefault: клик по флагу не уводит
+        // фокус из соседнего поля. Иначе blur показывает ошибку валидации,
+        // форма сдвигается вниз, и mouseup уже не попадает по кнопке —
+        // список «не открывается». onClick оставлен для клавиатуры
+        // (Enter/Space дают click с detail === 0 без mousedown).
+        onMouseDown={(e) => {
+          if (disabled) return;
+          e.preventDefault();
+          setOpen((v) => !v);
+        }}
+        onClick={(e) => {
+          if (disabled || e.detail !== 0) return;
+          setOpen((v) => !v);
+        }}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -240,8 +332,8 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
         }}
       />
 
-      {open && (
-        <div className="phone-dropdown" role="listbox">
+      {open && createPortal(
+        <div ref={dropdownRef} className="phone-dropdown" role="listbox" style={coords}>
           <div className="phone-dropdown-search">
             <input
               ref={searchRef}
@@ -261,7 +353,7 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
                   type="button"
                   role="option"
                   aria-selected={i === countryIdx}
-                  className={`phone-dropdown-item${i === countryIdx ? ' active' : ''}`}
+                  className={`phone-dropdown-item${i === countryIdx ? ' active' : ''}${c.cc === PINNED_CC && filtered.length > 1 ? ' pinned' : ''}`}
                   onClick={() => pick(i)}
                 >
                   <img
@@ -271,13 +363,14 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
                     className="phone-country-flag"
                     loading="lazy"
                   />
-                  <span className="phone-dropdown-label">{t(`country.${c.cc}`) !== `country.${c.cc}` ? t(`country.${c.cc}`) : c.label}</span>
+                  <span className="phone-dropdown-label">{labelOf(c)}</span>
                   <span className="phone-dropdown-code">{c.code}</span>
                 </button>
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

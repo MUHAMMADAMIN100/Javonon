@@ -18,6 +18,11 @@ type Props = {
 };
 
 const POPOVER_HEIGHT = 380;
+// Диапазон селектов месяца/года в шапке календаря. Если поле задаёт свои
+// min/max (например, дата рождения), они сужают диапазон — показывать годы,
+// в которых все дни заведомо запрещены, бессмысленно.
+const DROPDOWN_MIN_YEAR = 1900;
+const DROPDOWN_YEARS_AHEAD = 5;
 // 320px: 7 колонок × 36px + 6 × 2px spacing + 2×12px padding = 300px
 // содержимого + запас 20px чтобы цифры не липли к правой границе.
 const DEFAULT_POPOVER_WIDTH = 320;
@@ -53,7 +58,9 @@ export default function CrmDatePicker({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const [coords, setCoords] = useState<{ top: number; left: number; width: number }>({
+  // top — если открываемся вниз, bottom — если вверх: при развороте popover
+  // прижат к верху поля независимо от своей реальной высоты.
+  const [coords, setCoords] = useState<React.CSSProperties>({
     top: 0,
     left: 0,
     width: DEFAULT_POPOVER_WIDTH,
@@ -68,6 +75,14 @@ export default function CrmDatePicker({
 
   const minDate = useMemo(() => parseDateOnly(min), [min]);
   const maxDate = useMemo(() => parseDateOnly(max), [max]);
+  const startMonth = useMemo(
+    () => minDate ?? new Date(DROPDOWN_MIN_YEAR, 0, 1),
+    [minDate],
+  );
+  const endMonth = useMemo(
+    () => maxDate ?? new Date(new Date().getFullYear() + DROPDOWN_YEARS_AHEAD, 11, 1),
+    [maxDate],
+  );
 
   const formattedLabel = useMemo(() => {
     if (!selectedDate) return '';
@@ -109,17 +124,41 @@ export default function CrmDatePicker({
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const flipUp = spaceBelow < POPOVER_HEIGHT && spaceAbove > spaceBelow;
-    const top = flipUp
-      ? Math.max(8, rect.top - POPOVER_HEIGHT - 4)
-      : rect.bottom + 4;
 
-    setCoords({ top, left, width: popoverWidth });
+    setCoords(
+      flipUp
+        ? { bottom: Math.max(8, window.innerHeight - rect.top + 4), left, width: popoverWidth }
+        : { top: rect.bottom + 4, left, width: popoverWidth },
+    );
     return true;
   }, []);
 
   useLayoutEffect(() => {
     if (!open) return;
     if (!computeCoords()) close();
+  }, [open, computeCoords, close]);
+
+  // Пока календарь открыт, следим за положением триггера покадрово: форма
+  // может сдвинуться без scroll/resize (ошибка валидации под соседним
+  // полем и т.п.) — popover должен остаться под своим полем.
+  useEffect(() => {
+    if (!open) return;
+    let raf = 0;
+    let last = '';
+    const tick = () => {
+      const trigger = triggerRef.current;
+      if (trigger) {
+        const r = trigger.getBoundingClientRect();
+        const sig = `${r.top}|${r.left}|${r.width}|${r.height}|${window.innerHeight}`;
+        if (sig !== last) {
+          last = sig;
+          if (!computeCoords()) { close(); return; }
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [open, computeCoords, close]);
 
   useEffect(() => {
@@ -209,10 +248,8 @@ export default function CrmDatePicker({
       role="dialog"
       style={{
         position: 'fixed',
-        top: coords.top,
-        left: coords.left,
         zIndex: 9999,
-        width: coords.width,
+        ...coords,
       }}
     >
       <DayPicker
@@ -222,8 +259,13 @@ export default function CrmDatePicker({
         locale={ru}
         weekStartsOn={1}
         showOutsideDays
-        startMonth={minDate}
-        endMonth={maxDate}
+        captionLayout="dropdown"
+        // Открываться на месяце выбранной даты. Без этого DayPicker берёт
+        // «сегодня» и прижимает его к границам min/max — у даты рождения
+        // календарь всегда открывался на самом позднем допустимом месяце.
+        defaultMonth={selectedDate}
+        startMonth={startMonth}
+        endMonth={endMonth}
         disabled={(minDate || maxDate) ? [
           ...(minDate ? [{ before: minDate }] : []),
           ...(maxDate ? [{ after: maxDate }] : []),
@@ -271,7 +313,19 @@ export default function CrmDatePicker({
         ref={triggerRef}
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setOpen((o) => !o)}
+        // Открываем по mousedown с preventDefault: клик не уводит фокус из
+        // соседнего поля — иначе его blur показывает ошибку валидации,
+        // форма сдвигается, и mouseup уже не попадает по кнопке.
+        // onClick — для клавиатуры (Enter/Space дают click с detail === 0).
+        onMouseDown={(e) => {
+          if (disabled) return;
+          e.preventDefault();
+          setOpen((o) => !o);
+        }}
+        onClick={(e) => {
+          if (disabled || e.detail !== 0) return;
+          setOpen((o) => !o);
+        }}
         className={'crm-datepicker-trigger' + (isEmpty ? ' empty' : '')}
         aria-haspopup="dialog"
         aria-expanded={open}
