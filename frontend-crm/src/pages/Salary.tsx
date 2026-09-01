@@ -247,9 +247,17 @@ export default function Salary() {
               <PreviewCell label={t('salary.cell.late')} value={preview.lateMinutes > 0 ? `${preview.lateMinutes}м` : '—'} />
               <PreviewCell label={t('salary.cell.base')} value={fmtMoney(preview.baseAmount)} />
               <PreviewCell
-                label={`${t('salary.cell.bonus')} · ${preview.bonusPercent}%`}
+                label={
+                  preview.bonusPercent !== null && preview.bonusPercent !== undefined
+                    ? `${t('salary.cell.bonus')} · ${preview.bonusPercent}%`
+                    : t('salary.cell.bonus')
+                }
                 value={fmtMoney(preview.bonusAmount)}
-                sub={`${t('salary.bonus.volume')}: ${fmtMoney(preview.salesAmount)}`}
+                sub={`${
+                  (preview.bonusMonths?.length ?? 1) > 1
+                    ? t('salary.bonus.volumePeriod')
+                    : t('salary.bonus.volume')
+                }: ${fmtMoney(preview.salesAmount)}`}
               />
               <PreviewCell label="KPI" value={fmtMoney(preview.kpiBonus)} />
               <PreviewCell
@@ -468,15 +476,19 @@ export default function Salary() {
 function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
   const { t } = useT();
   const band = preview.bonusBand;
+  const months = preview.bonusMonths ?? [];
   const bands = preview.bonusBands ?? [];
   const volume = preview.bonusVolume ?? preview.salesAmount;
   const personal = preview.bonusSource === 'PERSONAL';
   const nonTjs = preview.nonTjsSales && Object.keys(preview.nonTjsSales).length > 0
     ? preview.nonTjsSales
     : null;
+  // Период длиннее месяца: у каждого месяца своя полоса, одной строки
+  // «объём → полоса → ставка» для него не существует.
+  const multi = months.length > 1;
 
   // Старый бэк (или ошибка) — не рисуем пустую рамку.
-  if (!band) return null;
+  if (!band && !multi) return null;
 
   const monthLabel = preview.bonusPeriodStart
     ? `${tjFormatDate(preview.bonusPeriodStart)} — ${tjFormatDate(preview.bonusPeriodEnd || preview.bonusPeriodStart)}`
@@ -502,7 +514,46 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
         {t('salary.bonus.title')}
       </div>
 
-      <div style={{
+      {/* Период длиннее месяца — строка на каждый месяц: свой объём, своя
+          полоса, своя ставка. Складывать объёмы и брать одну полосу нельзя,
+          иначе ставка зависела бы от выбранного на экране диапазона. */}
+      {multi && (
+        <div style={{ marginBottom: 12, overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+            <thead>
+              <tr style={{ color: 'var(--text-soft)', textAlign: 'left' }}>
+                <th style={{ padding: '4px 10px 4px 0', fontWeight: 400 }}>{t('salary.bonus.month')}</th>
+                <th style={{ padding: '4px 10px', fontWeight: 400 }}>{t('salary.bonus.volume')}</th>
+                <th style={{ padding: '4px 10px', fontWeight: 400 }}>{t('salary.bonus.band')}</th>
+                <th style={{ padding: '4px 10px', fontWeight: 400, textAlign: 'right' }}>%</th>
+                <th style={{ padding: '4px 0 4px 10px', fontWeight: 400, textAlign: 'right' }}>{t('salary.bonus.due')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {months.map((m) => (
+                <tr key={m.periodStart} style={{ borderTop: '1px solid var(--border-soft)' }}>
+                  <td style={{ padding: '5px 10px 5px 0' }}>{tjFormatDate(m.periodStart)}</td>
+                  <td style={{ padding: '5px 10px' }}>{fmtMoney(m.volume)}</td>
+                  <td style={{ padding: '5px 10px', color: 'var(--text-soft)' }}>
+                    {bandRangeLabel(m.band.minAmount, m.band.maxAmount)}
+                  </td>
+                  <td style={{ padding: '5px 10px', textAlign: 'right' }}>{m.percent}%</td>
+                  <td style={{ padding: '5px 0 5px 10px', textAlign: 'right', fontWeight: 600 }}>
+                    {fmtMoney(m.due)}
+                    {m.alreadyPaid > 0 && (
+                      <span style={{ color: 'var(--text-light)', fontWeight: 400 }}>
+                        {' '}({t('salary.bonus.alreadyPaid')} {fmtMoney(m.alreadyPaid)})
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!multi && <div style={{
         display: 'flex',
         alignItems: 'baseline',
         flexWrap: 'wrap',
@@ -515,18 +566,19 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
         <b>{fmtMoney(volume)}</b>
         <span style={{ color: 'var(--text-light)' }}>→</span>
         <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.band')}</span>
-        <b>{bandRangeLabel(band.minAmount, band.maxAmount)}</b>
+        <b>{band ? bandRangeLabel(band.minAmount, band.maxAmount) : '—'}</b>
         <span style={{ color: 'var(--text-light)' }}>→</span>
         <b>{preview.bonusPercent}%</b>
         <span style={{ color: 'var(--text-light)' }}>→</span>
         <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--primary-dark)' }}>
           {fmtMoney(preview.bonusMonthTotal ?? preview.bonusAmount)}
         </b>
-      </div>
+      </div>}
 
       {/* Уже начисленное за месяц: без этой строки «объём 200 000 → 6% →
-          12 000», а к выплате 0, выглядит как ошибка расчёта. */}
-      {!!preview.bonusAlreadyPaid && (
+          12 000», а к выплате 0, выглядит как ошибка расчёта. При периоде
+          в несколько месяцев то же самое показано построчно в таблице. */}
+      {!multi && !!preview.bonusAlreadyPaid && (
         <div style={{
           display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px',
           fontFamily: 'var(--font-mono)', fontSize: 12, marginBottom: 10,
@@ -539,10 +591,24 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
         </div>
       )}
 
+      {multi && (
+        <div style={{
+          display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px',
+          fontFamily: 'var(--font-mono)', fontSize: 13, marginBottom: 10,
+        }}>
+          <span style={{ color: 'var(--text-soft)' }}>
+            {t('salary.bonus.totalForMonths').replace('{n}', String(months.length))}
+          </span>
+          <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--primary-dark)' }}>
+            {fmtMoney(preview.bonusAmount)}
+          </b>
+        </div>
+      )}
+
       {/* Пустой месяц. Экран по умолчанию открывает ТЕКУЩИЙ месяц, и 1-го
           числа объём законно равен нулю — без этой строки «0 → 4% → 0»
           читается как «система не считает», а не как «месяц ещё пустой». */}
-      {volume === 0 && (
+      {!multi && volume === 0 && (
         <div style={{ fontSize: 11, color: 'var(--text-soft)', marginBottom: 10 }}>
           {t('salary.bonus.emptyMonth')}
         </div>
@@ -564,7 +630,9 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
           следующей полосы — весь объём тогда пойдёт по большей ставке. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: nonTjs || preview.manualSalesAmount ? 10 : 0 }}>
         {bands.map((b) => {
-          const current = !personal && b.key === band.key;
+          // При периоде в несколько месяцев подсвечивать нечего: полос
+          // столько же, сколько месяцев, и они перечислены в таблице выше.
+          const current = !personal && !multi && b.key === band?.key;
           return (
             <div
               key={b.key}
@@ -625,6 +693,10 @@ function SavedBonusBreakdown({ record }: { record: SalaryRecord }) {
   const monthTotal = record.bonusMonthTotal ?? record.bonusAmount;
   const alreadyPaid = record.bonusAlreadyPaid ?? 0;
   const personal = record.bonusSource === 'PERSONAL';
+  // Запись за период длиннее месяца: полос было несколько, и в снимок ни
+  // одна не пишется — иначе она выдавала бы себя за полосу всего периода.
+  // Показываем объём и сумму без цепочки «полоса → ставка».
+  const multiSaved = !record.bonusBandKey;
 
   return (
     <div style={{ padding: '16px 18px' }}>
@@ -651,11 +723,17 @@ function SavedBonusBreakdown({ record }: { record: SalaryRecord }) {
         <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.volume')}</span>
         <b>{fmtMoney(volume, cur)}</b>
         <span style={{ color: 'var(--text-light)' }}>→</span>
-        <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.band')}</span>
-        <b>{bandRangeLabel(record.bonusBandMin ?? 0, record.bonusBandMax ?? null)}</b>
-        <span style={{ color: 'var(--text-light)' }}>→</span>
-        <b>{percent}%</b>
-        <span style={{ color: 'var(--text-light)' }}>→</span>
+        {multiSaved ? (
+          <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.multiMonth')}</span>
+        ) : (
+          <>
+            <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.band')}</span>
+            <b>{bandRangeLabel(record.bonusBandMin ?? 0, record.bonusBandMax ?? null)}</b>
+            <span style={{ color: 'var(--text-light)' }}>→</span>
+            <b>{percent}%</b>
+            <span style={{ color: 'var(--text-light)' }}>→</span>
+          </>
+        )}
         <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--primary-dark)' }}>
           {fmtMoney(monthTotal, cur)}
         </b>

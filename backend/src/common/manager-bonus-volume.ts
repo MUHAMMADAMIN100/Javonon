@@ -74,7 +74,7 @@
  */
 import { PrismaService } from '../prisma/prisma.service';
 import { tjEndOfMonth, tjStartOfMonth } from './tj-time';
-import { ManagerBonusBand, findManagerBonusBand } from './bonus-bands';
+import { ManagerBonusBand, computeManagerBonus, findManagerBonusBand } from './bonus-bands';
 import { NonReportingCurrencyBreakdown, REPORTING_CURRENCY } from './reporting-currency';
 
 /**
@@ -204,4 +204,100 @@ export function effectiveManagerBonus(
     personalPercent,
     band,
   };
+}
+
+/** Округление до копеек — то же, что round() в salary.service. */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+export interface ManagerBonusMonth {
+  /** Начало календарного месяца Asia/Dushanbe. */
+  periodStart: Date;
+  /** Последняя мс месяца, inclusive. */
+  periodEnd: Date;
+  volume: number;
+  band: ManagerBonusBand;
+  percent: number;
+  source: ManagerBonusSource;
+  /** Комиссия за ЭТОТ месяц целиком, до вычета уже начисленного. */
+  monthTotal: number;
+}
+
+/**
+ * Разбивка комиссии по календарным месяцам, которые задевает период.
+ *
+ * ЗАЧЕМ. Комиссия по своей природе месячная: полосу определяет объём за
+ * календарный месяц. Экран зарплаты при этом разрешает выбрать любой
+ * диапазон, и раньше при периоде длиннее месяца бонус считался ТОЛЬКО за
+ * месяц, в котором период начинался — за 1 июня – 1 сентября менеджер
+ * получал июньскую комиссию, а июль и август пропадали молча. Часы и
+ * штрафы при этом честно считались за все три месяца, то есть одна
+ * квитанция складывала окна разной длины.
+ *
+ * Теперь каждый задетый месяц получает свою полосу и свою ставку, а суммы
+ * складываются. Складывать сами ОБЪЁМЫ и брать одну полосу на весь период
+ * нельзя: тогда ставка начала бы зависеть от того, какой диапазон выбрали
+ * на экране — выбрал полгода, получил 8%.
+ *
+ * Месяц входит целиком, даже если период задевает его частично: полоса
+ * определяется МЕСЯЧНЫМ объёмом, а урезанный объём занижал бы ставку.
+ * От двойной оплаты защищает не урезание, а вычет уже начисленного за этот
+ * месяц (salary.service).
+ */
+export async function managerBonusMonths(
+  prisma: PrismaService,
+  userId: string,
+  personalPercentRaw: number | null | undefined,
+  from: Date,
+  to: Date,
+): Promise<ManagerBonusMonth[]> {
+  const months: ManagerBonusMonth[] = [];
+  let cursor = tjStartOfMonth(from);
+  // Страховка от бесконечного цикла: create() уже ограничивает период
+  // годом, но preview зовут и напрямую.
+  for (let guard = 0; cursor.getTime() <= to.getTime() && guard < 24; guard++) {
+    const { periodStart, periodEnd, volume } = await managerBonusVolume(prisma, userId, cursor);
+    const eff = effectiveManagerBonus(personalPercentRaw, volume);
+    const monthTotal =
+      eff.source === 'PERSONAL'
+        ? round2((volume * eff.percent) / 100)
+        : computeManagerBonus(volume).amount;
+    months.push({
+      periodStart,
+      periodEnd,
+      volume,
+      band: eff.band,
+      percent: eff.percent,
+      source: eff.source,
+      monthTotal,
+    });
+    // Следующий месяц — от первой мс после конца текущего, снова через
+    // tj-time: арифметика вида «месяц + 1» на сыром Date промахивается
+    // мимо месяцев разной длины.
+    cursor = tjStartOfMonth(new Date(periodEnd.getTime() + 1));
+  }
+  return months;
+}
+
+/**
+ * Доля месяца, попавшая в период — для окладной части.
+ *
+ * Оклад задан за месяц, поэтому за период в три месяца его надо начислить
+ * трижды, а за половину месяца — половину. Раньше baseAmount был плоским:
+ * за три месяца платился один оклад, а два аванса по половине месяца
+ * приносили ДВА полных оклада. Считаем долей времени, а не днями: границы
+ * приходят как мс, и деление мс на мс не спотыкается о месяцы разной длины.
+ */
+export function monthCoverageShare(
+  monthStart: Date,
+  monthEnd: Date,
+  from: Date,
+  to: Date,
+): number {
+  const start = Math.max(monthStart.getTime(), from.getTime());
+  const end = Math.min(monthEnd.getTime(), to.getTime());
+  const span = monthEnd.getTime() - monthStart.getTime();
+  if (span <= 0 || end <= start) return 0;
+  return Math.min(1, (end - start) / span);
 }

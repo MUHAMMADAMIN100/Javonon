@@ -4,9 +4,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TimeTrackingService } from '../time-tracking/time-tracking.service';
 import { PenaltiesService } from '../penalties/penalties.service';
 import {
+  tjEndOfMonth,
   tjLocalDay,
   tjParseLocalDate,
   tjParseLocalDateEnd,
+  tjStartOfMonth,
 } from '../common/tj-time';
 import {
   MANAGER_BONUS_BANDS,
@@ -17,6 +19,8 @@ import {
   MANAGER_BONUS_CURRENCY,
   effectiveManagerBonus,
   managerBonusVolume,
+  managerBonusMonths,
+  monthCoverageShare,
 } from '../common/manager-bonus-volume';
 
 // Единая отчётная валюта модуля зарплат. Должна совпадать с
@@ -250,11 +254,22 @@ export class SalaryService {
     // Сами фильтры живут в common/manager-bonus-volume.ts — тот же расчёт
     // читает досье сотрудника (/me/full), чтобы менеджер и бухгалтер
     // видели ОДИН и тот же объём, полосу и процент.
-    const {
-      periodStart: bonusPeriodStart,
-      periodEnd: bonusPeriodEnd,
-      volume: salesAmount,
-    } = await managerBonusVolume(this.prisma, userId, periodStart);
+    //
+    // ПЕРИОД ДЛИННЕЕ МЕСЯЦА. Комиссия считается по КАЖДОМУ календарному
+    // месяцу, который задевает период, и суммируется — см.
+    // managerBonusMonths(). Раньше бралcя только месяц начала периода, и
+    // за 1 июня – 1 сентября июль с августом пропадали молча.
+    const bonusMonths = await managerBonusMonths(
+      this.prisma,
+      userId,
+      user.bonusPercent,
+      periodStart,
+      periodEnd,
+    );
+    const bonusPeriodStart = bonusMonths[0]?.periodStart ?? tjStartOfMonth(periodStart);
+    const bonusPeriodEnd =
+      bonusMonths[bonusMonths.length - 1]?.periodEnd ?? tjEndOfMonth(periodStart);
+    const salesAmount = round(bonusMonths.reduce((sum, m) => sum + m.volume, 0));
 
     // Ручные INCOME-транзакции (импорт / исторические данные / операции без
     // сделки) в бонусную базу по новому правилу НЕ входят — но и не
@@ -338,56 +353,73 @@ export class SalaryService {
     //   200 000 → полоса 150 001–225 000 → 6% → 12 000 (а не 9 750).
     // Полоса определяется ВСЕГДА (даже при персональном проценте) — чтобы
     // CRM могла показать менеджеру, куда попал его объём.
-    // Персональный bonusPercent у юзера, если > 0, перебивает сетку
-    // (ручной override FOUNDER'а, существующая функция — не трогаем).
-    const effective = effectiveManagerBonus(user.bonusPercent, salesAmount);
-    const band = effective.band;
-    const personalPct = effective.personalPercent;
-    const usePersonal = effective.source === 'PERSONAL';
-    const bonusPercent = effective.percent;
-    /** Комиссия за ВЕСЬ месяц целиком. */
-    const bonusMonthTotal = usePersonal
-      ? round((salesAmount * personalPct) / 100)
-      : computeManagerBonus(salesAmount).amount;
+    // Персональный bonusPercent, если > 0, перебивает сетку.
+    //
+    // ОДИН МЕСЯЦ — одна полоса. НЕСКОЛЬКО — каждый месяц со своей полосой,
+    // суммой. Ставку «за период целиком» не показываем: у трёх месяцев их
+    // три, и одно число тут врало бы.
+    const singleMonth = bonusMonths.length === 1 ? bonusMonths[0] : null;
+    const bonusPercent = singleMonth ? singleMonth.percent : null;
+    const band = singleMonth ? singleMonth.band : null;
+    const usePersonal = bonusMonths.some((m) => m.source === 'PERSONAL');
+    /** Комиссия за все задетые месяцы целиком. */
+    const bonusMonthTotal = round(bonusMonths.reduce((sum, m) => sum + m.monthTotal, 0));
 
     // ЗАЩИТА ОТ ДВОЙНОГО НАЧИСЛЕНИЯ.
-    // Объём считается за календарный месяц, а зарплатных записей внутри
-    // месяца может быть несколько (аванс + расчёт, две половины месяца).
-    // Без этой поправки каждая такая запись начислила бы ПОЛНЫЙ месячный
-    // бонус — менеджер получил бы комиссию дважды.
+    // Зарплатных записей, задевающих один и тот же месяц, может быть
+    // несколько (аванс + расчёт, две половины месяца, квартальный пересчёт
+    // поверх месячных). Без вычета каждая начислила бы ПОЛНУЮ месячную
+    // комиссию — менеджер получил бы её дважды.
     //
-    // Уже начисленным считаем бонус тех записей, чей periodStart попал в
-    // ЭТОТ ЖЕ месяц: именно так бонус и привязывается к месяцу выше
-    // (окно = месяц даты начала периода). Записи, начавшиеся в прошлом
-    // месяце, относятся к бонусу прошлого месяца и не вычитаются.
+    // Уже начисленным для месяца считаем бонус записей, чей период этот
+    // месяц ПЕРЕСЕКАЕТ. Вычет ограничен снизу нулём, поэтому пересчёт
+    // никогда не отбирает выплаченное, а лишний захват соседних записей
+    // может только недоплатить — и это видно на экране отдельной строкой,
+    // в отличие от тихой двойной выплаты.
     //
-    // Если объём за месяц вырос и поднял полосу, вторая запись доплатит
-    // разницу — это и есть верное поведение месячной комиссии.
-    //
-    // ВНИМАНИЕ: здесь этот вычет — ТОЛЬКО ДЛЯ ПОКАЗА в калькуляторе.
-    // Гардом от двойного начисления он быть не может: preview читает, а
-    // create() пишет отдельным запросом, и между ними ничего не стоит —
-    // два одновременных POST оба видели бы 0 и оба начислили бы полную
-    // месячную комиссию. Настоящий расчёт bonusAmount, который уходит в
-    // БД, делается заново внутри SERIALIZABLE-транзакции —
-    // insertRecordAtomically() ниже. Числа совпадают, пока нет гонки;
-    // при гонке авторитетно значение из транзакции.
-    const priorBonusAgg = await this.prisma.salaryRecord.aggregate({
-      where: {
-        userId,
-        periodStart: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
-      },
-      _sum: { bonusAmount: true },
-    });
-    const bonusAlreadyPaid = round(priorBonusAgg._sum.bonusAmount || 0);
-    /** К начислению сейчас = месячная комиссия минус уже начисленное. */
-    const bonusAmount = Math.max(0, round(bonusMonthTotal - bonusAlreadyPaid));
+    // ВНИМАНИЕ: здесь вычет — ТОЛЬКО ДЛЯ ПОКАЗА в калькуляторе. Гардом он
+    // быть не может: preview читает, а create() пишет отдельным запросом, и
+    // между ними ничего не стоит — два одновременных POST оба видели бы 0.
+    // Настоящий bonusAmount, который уходит в БД, считается заново внутри
+    // SERIALIZABLE-транзакции (insertRecordAtomically). Числа совпадают,
+    // пока нет гонки; при гонке авторитетно значение из транзакции.
+    const monthsWithDue: Array<{ month: (typeof bonusMonths)[number]; alreadyPaid: number; due: number }> = [];
+    for (const m of bonusMonths) {
+      const agg = await this.prisma.salaryRecord.aggregate({
+        where: {
+          userId,
+          periodStart: { lte: m.periodEnd },
+          periodEnd: { gte: m.periodStart },
+        },
+        _sum: { bonusAmount: true },
+      });
+      const alreadyPaid = round(agg._sum.bonusAmount || 0);
+      monthsWithDue.push({
+        month: m,
+        alreadyPaid,
+        due: Math.max(0, round(m.monthTotal - alreadyPaid)),
+      });
+    }
+    const bonusAlreadyPaid = round(monthsWithDue.reduce((sum, x) => sum + x.alreadyPaid, 0));
+    /** К начислению сейчас = месячные комиссии минус уже начисленное. */
+    const bonusAmount = round(monthsWithDue.reduce((sum, x) => sum + x.due, 0));
 
     const baseSalary = user.baseSalary || 0;
     const hourlyRate = user.hourlyRate || 0;
-    // Итоговая базовая ставка: либо фикс., либо почасовая.
     const hours = time.workedMinutes / 60;
-    const baseAmount = baseSalary > 0 ? baseSalary : hourlyRate * hours;
+    // ОКЛАД ПРОПОРЦИОНАЛЕН ДЛИНЕ ПЕРИОДА. baseSalary задан ЗА МЕСЯЦ, а
+    // раньше подставлялся плоско, каким бы период ни был: за три месяца
+    // начислялся один оклад, а два аванса по половине месяца приносили
+    // ДВА полных — то есть двойную оплату. Считаем долю каждого задетого
+    // месяца, попавшую в период, и складываем: полный месяц даёт ровно
+    // один оклад, как и раньше. Почасовая оплата пропорциональна времени
+    // по построению и не трогается.
+    const baseMonthShares = bonusMonths.map((m) =>
+      monthCoverageShare(m.periodStart, m.periodEnd, periodStart, periodEnd),
+    );
+    const monthsCovered = baseMonthShares.reduce((sum, sh) => sum + sh, 0);
+    const baseAmount =
+      baseSalary > 0 ? baseSalary * (monthsCovered || 1) : hourlyRate * hours;
 
     // ПЕРЕРАБОТКА УБРАНА (решение учредителя). Раньше здесь считался
     // overtimePay = overtimeMinutes/60 × effectiveHourlyRate ×
@@ -428,16 +460,41 @@ export class SalaryService {
       bonusPeriodStart,
       bonusPeriodEnd,
       bonusVolume: round(salesAmount),
-      bonusBand: {
-        key: band.key,
-        minAmount: band.minAmount,
-        maxAmount: band.maxAmount, // null = без верхней границы
-        percent: band.percent,
-      } as ManagerBonusBand,
+      /**
+       * Полоса и ставка — только когда период укладывается в ОДИН месяц.
+       * У трёх месяцев полос три, и одно число здесь врало бы; разбивка
+       * уходит в bonusMonths ниже, и её же рисует CRM.
+       */
+      bonusBand: band
+        ? ({
+            key: band.key,
+            minAmount: band.minAmount,
+            maxAmount: band.maxAmount, // null = без верхней границы
+            percent: band.percent,
+          } as ManagerBonusBand)
+        : null,
       /** 'BAND' — ставка из сетки; 'PERSONAL' — персональный процент юзера. */
       bonusSource: usePersonal ? ('PERSONAL' as const) : ('BAND' as const),
       /** Вся сетка целиком — CRM рисует полосы и подсвечивает текущую. */
       bonusBands: MANAGER_BONUS_BANDS,
+      /**
+       * Помесячная расшифровка: объём, полоса, ставка, комиссия за месяц,
+       * уже начисленное и остаток к выплате. Для периода в один месяц — один
+       * элемент, и CRM показывает привычную однострочную расшифровку.
+       */
+      bonusMonths: monthsWithDue.map((x) => ({
+        periodStart: x.month.periodStart,
+        periodEnd: x.month.periodEnd,
+        volume: round(x.month.volume),
+        band: x.month.band,
+        percent: x.month.percent,
+        source: x.month.source,
+        monthTotal: round(x.month.monthTotal),
+        alreadyPaid: x.alreadyPaid,
+        due: x.due,
+      })),
+      /** Сколько месячных окладов вошло в baseAmount (доли — неполный месяц). */
+      monthsCovered: Math.round(monthsCovered * 1000) / 1000,
       /** Ручные INCOME-транзакции за месяц: НЕ входят в объём и бонус. */
       manualSalesAmount: round(manualSalesAmount),
       kpiBonus: round(kpiBonus),
@@ -523,14 +580,22 @@ export class SalaryService {
       bonusPeriodStart: preview.bonusPeriodStart,
       bonusPeriodEnd: preview.bonusPeriodEnd,
       bonusMonthTotal: preview.bonusMonthTotal,
+      bonusMonths: preview.bonusMonths.map((m) => ({
+        periodStart: m.periodStart,
+        periodEnd: m.periodEnd,
+        monthTotal: m.monthTotal,
+      })),
       // Снимок расшифровки комиссии — сохраняется вместе с записью, чтобы
       // выплаченную строку можно было объяснить спустя месяцы. Ставку и
       // полосу берём из того же preview, из которого получился
       // bonusMonthTotal: второго расчёта здесь нет.
       bonusVolume: preview.bonusVolume,
-      bonusBandKey: preview.bonusBand.key,
-      bonusBandMin: preview.bonusBand.minAmount,
-      bonusBandMax: preview.bonusBand.maxAmount,
+      // Полоса пишется только для однoмесячной записи. Для периода в
+      // несколько месяцев полос несколько, и одна из них в снимке была бы
+      // ложью; месяцы восстанавливаются из periodStart/periodEnd записи.
+      bonusBandKey: preview.bonusBand?.key ?? null,
+      bonusBandMin: preview.bonusBand?.minAmount ?? null,
+      bonusBandMax: preview.bonusBand?.maxAmount ?? null,
       bonusPercent: preview.bonusPercent,
       bonusSource: preview.bonusSource,
       workedMinutes: preview.workedMinutes,
@@ -594,12 +659,18 @@ export class SalaryService {
     bonusPeriodStart: Date;
     bonusPeriodEnd: Date;
     bonusMonthTotal: number;
+    /**
+     * Месяцы, задетые периодом, с комиссией за каждый целиком. Вычет уже
+     * начисленного делается по каждому месяцу отдельно внутри транзакции.
+     */
+    bonusMonths: Array<{ periodStart: Date; periodEnd: Date; monthTotal: number }>;
     /** Снимок расшифровки комиссии — пишется в запись как есть. */
     bonusVolume: number;
-    bonusBandKey: string;
-    bonusBandMin: number;
+    /** null — период задел несколько месяцев, одной полосы у него нет. */
+    bonusBandKey: string | null;
+    bonusBandMin: number | null;
     bonusBandMax: number | null;
-    bonusPercent: number;
+    bonusPercent: number | null;
     bonusSource: 'BAND' | 'PERSONAL';
     workedMinutes: number;
     lateMinutes: number;
@@ -622,18 +693,31 @@ export class SalaryService {
             });
             if (dup) throw new BadRequestException(DUPLICATE_PERIOD_MESSAGE);
 
-            // Уже начисленный за ЭТОТ месяц бонус — читаем здесь, а не в
-            // preview: только это чтение попадает в диапазон предикатной
-            // блокировки вместе с последующей вставкой.
-            const priorBonusAgg = await tx.salaryRecord.aggregate({
-              where: {
-                userId: args.userId,
-                periodStart: { gte: args.bonusPeriodStart, lte: args.bonusPeriodEnd },
-              },
-              _sum: { bonusAmount: true },
-            });
-            const bonusAlreadyPaid = round(priorBonusAgg._sum.bonusAmount || 0);
-            const bonusAmount = Math.max(0, round(args.bonusMonthTotal - bonusAlreadyPaid));
+            // Уже начисленный бонус — читаем здесь, а не в preview: только
+            // это чтение попадает в диапазон предикатной блокировки вместе
+            // с последующей вставкой.
+            //
+            // ПО КАЖДОМУ МЕСЯЦУ ОТДЕЛЬНО. Общий вычет «сумма месяцев минус
+            // всё начисленное» схлопнул бы разные месяцы в одно число: уже
+            // выплаченный июнь гасил бы неоплаченный июль. Для месяца
+            // уже начисленным считаем записи, которые его ПЕРЕСЕКАЮТ.
+            let bonusAmount = 0;
+            let bonusAlreadyPaid = 0;
+            for (const m of args.bonusMonths) {
+              const agg = await tx.salaryRecord.aggregate({
+                where: {
+                  userId: args.userId,
+                  periodStart: { lte: m.periodEnd },
+                  periodEnd: { gte: m.periodStart },
+                },
+                _sum: { bonusAmount: true },
+              });
+              const paid = round(agg._sum.bonusAmount || 0);
+              bonusAlreadyPaid += paid;
+              bonusAmount += Math.max(0, round(m.monthTotal - paid));
+            }
+            bonusAmount = round(bonusAmount);
+            bonusAlreadyPaid = round(bonusAlreadyPaid);
             // net пересчитываем здесь же: preview.netAmount посчитан со
             // «своим» bonusAmount, который мог устареть между preview и
             // этой транзакцией.

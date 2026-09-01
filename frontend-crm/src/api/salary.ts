@@ -71,7 +71,8 @@ export interface SalaryPreview {
   baseAmount: number;
   salesAmount: number;
   bonusAmount: number;
-  bonusPercent: number;
+  /** null — период задел несколько месяцев, одной ставки у него нет. */
+  bonusPercent: number | null;
   kpiBonus: number;
   penalties: number;
   /** Штрафы по причинам на рассмотрении основателя (не вычитаются). */
@@ -91,8 +92,29 @@ export interface SalaryPreview {
   bonusPeriodEnd?: string;
   /** Объём продаж за месяц = salesAmount (дублируется явно для расшифровки). */
   bonusVolume?: number;
-  /** Полоса, в которую попал объём. maxAmount = null → без верхней границы. */
-  bonusBand?: BonusBand;
+  /**
+   * Полоса, в которую попал объём. maxAmount = null → без верхней границы.
+   * null — период длиннее месяца: полос несколько, см. bonusMonths.
+   */
+  bonusBand?: BonusBand | null;
+  /**
+   * Помесячная расшифровка комиссии. Один элемент — период уложился в
+   * месяц. Несколько — у каждого месяца своя полоса и своя ставка, суммы
+   * складываются; `due` уже за вычетом начисленного за этот месяц.
+   */
+  bonusMonths?: Array<{
+    periodStart: string;
+    periodEnd: string;
+    volume: number;
+    band: BonusBand;
+    percent: number;
+    source: 'BAND' | 'PERSONAL';
+    monthTotal: number;
+    alreadyPaid: number;
+    due: number;
+  }>;
+  /** Сколько месячных окладов вошло в baseAmount (доли — неполный месяц). */
+  monthsCovered?: number;
   /** Комиссия за месяц целиком, до вычета уже начисленного. */
   bonusMonthTotal?: number;
   /**
