@@ -7,7 +7,7 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:prod": "(ts-node prisma/dedupe-students.ts || echo 'dedupe failed, continuing') && (ts-node prisma/migrate-roles.ts || echo 'role migration failed, continuing') && (ts-node prisma/ensure-commission-unique.ts || echo 'commission unique index step failed, continuing') && prisma db push && (ts-node prisma/migrate-lead-statuses.ts || echo 'lead status migration failed, continuing') && (ts-node prisma/migrate-programs-tj.ts || echo 'programs tj migration failed, continuing') && (ts-node prisma/migrate-birthdays-utc.ts || echo 'birthday migration failed, continuing') && (SEED_IF_EMPTY=1 ts-node prisma/seed-programs.ts || echo 'seed:programs failed, continuing') && (ts-node prisma/seed.ts || echo 'seed:users failed, continuing') && node dist/main",
+    "start:prod": "(ts-node prisma/dedupe-students.ts || echo 'dedupe failed, continuing') && (ts-node prisma/migrate-roles.ts || echo 'role migration failed, continuing') && (ts-node prisma/ensure-commission-unique.ts || echo 'commission unique index step failed, continuing') && (ts-node prisma/ensure-salary-unique.ts || echo 'salary unique index step failed, continuing') && prisma db push && (ts-node prisma/migrate-lead-statuses.ts || echo 'lead status migration failed, continuing') && (ts-node prisma/migrate-programs-tj.ts || echo 'programs tj migration failed, continuing') && (ts-node prisma/migrate-birthdays-utc.ts || echo 'birthday migration failed, continuing') && (SEED_IF_EMPTY=1 ts-node prisma/seed-programs.ts || echo 'seed:programs failed, continuing') && (ts-node prisma/seed.ts || echo 'seed:users failed, continuing') && node dist/main",
     "//start:prod": "ВНИМАНИЕ: это цепочка && — node dist/main стоит ПОСЛЕДНИМ, поэтому все prisma-скрипты выше доигрывают ДО того, как новый процесс займёт порт, а трафик всё это время держит ПРЕДЫДУЩИЙ контейнер. Скрипт, который переписывает данные на значения, известные только новому коду, обязан быть опт-ин — иначе старый контейнер падает в 500 на чтении. Так сделан migrate-lead-statuses.ts: без MIGRATE_LEAD_STATUSES=1 он печатает строку и выходит. Порядок раскатки — DEPLOY.md, «Перевод статусов заявок на набор квалификации лида».",
     "seed": "ts-node prisma/seed.ts",
     "seed:programs": "ts-node prisma/seed-programs.ts",
@@ -19,6 +19,8 @@
     "prisma:migrate": "prisma migrate dev",
     "db:push:force": "prisma db push --accept-data-loss",
     "ensure:commission-unique": "ts-node prisma/ensure-commission-unique.ts",
+    "test:bonus-bands": "ts-node scripts/check-bonus-bands.ts",
+    "ensure:salary-unique": "ts-node prisma/ensure-salary-unique.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

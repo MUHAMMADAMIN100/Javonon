@@ -103,6 +103,44 @@ function parseClientDate(value: string | Date): Date {
 }
 
 /**
+ * Валюта сделки: закрытый список + нормализация.
+ *
+ * ЗАЧЕМ (audit Q7, HIGH). `SaleSubmission.currency` — не подпись под суммой,
+ * а ключ, по которому SalaryService.preview решает, попадает ли ОДОБРЕННЫЙ
+ * платёж в бонусную базу: SubmissionPayment своей валюты не имеет, фильтр
+ * идёт через relation `submission.currency === SALARY_REPORTING_CURRENCY`
+ * ('TJS'). Раньше сюда прилетала любая строка (`dto.currency || 'USD'`,
+ * @Body() без DTO-валидации), поэтому:
+ *   - 'tjs' / ' TJS ' !== 'TJS' — настоящая TJS-сделка молча выпадала из
+ *     salesAmount и уезжала в nonTjsSales; полоса менеджера тихо падала,
+ *     и ошибки при этом не было ни одной;
+ *   - любая мусорная строка ('доллар', 'US$') давала тот же эффект.
+ * Отсюда trim().toUpperCase() и whitelist, совпадающий с финансовым
+ * (finance.service.ts / settings.service.ts: TJS|USD|EUR|CNY|RUB) — валюта
+ * сделки в отчётах стоит рядом с Transaction.currency, разные списки
+ * разошлись бы на первой же сверке.
+ */
+const SUBMISSION_CURRENCIES = ['TJS', 'USD', 'EUR', 'CNY', 'RUB'] as const;
+const DEFAULT_SUBMISSION_CURRENCY = 'USD';
+
+/**
+ * Приводит присланную валюту к канону или бросает 400.
+ * Пустое/отсутствующее значение — это «не указали», а не ошибка: остаётся
+ * дефолт схемы (USD), как и было до фикса.
+ */
+function normalizeSubmissionCurrency(raw: unknown): string {
+  if (raw === undefined || raw === null) return DEFAULT_SUBMISSION_CURRENCY;
+  const c = String(raw).trim().toUpperCase();
+  if (!c) return DEFAULT_SUBMISSION_CURRENCY;
+  if (!(SUBMISSION_CURRENCIES as readonly string[]).includes(c)) {
+    throw new BadRequestException(
+      `Валюта сделки должна быть одной из: ${SUBMISSION_CURRENCIES.join(', ')}`,
+    );
+  }
+  return c;
+}
+
+/**
  * SaleSubmission workflow.
  *
  * Менеджер создаёт SaleSubmission через POST /submissions:
@@ -481,7 +519,9 @@ export class SubmissionsService {
         contractSizes: ctrSizes,
         contractOriginalNames: ctrOriginalNames,
         totalAmount: dto.totalAmount,
-        currency: dto.currency || 'USD',
+        // Whitelist + trim/uppercase (audit Q7): по этому полю фильтруется
+        // бонусная база в SalaryService (см. normalizeSubmissionCurrency).
+        currency: normalizeSubmissionCurrency(dto.currency),
         notes: dto.notes?.trim() || null,
         status: SubmissionStatus.ACTIVE,
         payments: {
@@ -1735,7 +1775,20 @@ export class SubmissionsService {
       // Student/Application — дубли + P2002 на unique-email.
       // Раw SQL — Prisma не умеет SELECT ... FOR UPDATE через model API.
       // Имя таблицы в кавычках — Postgres case-sensitive identifier.
-      await tx.$queryRaw`SELECT id FROM "SaleSubmission" WHERE id = ${submission.id} FOR UPDATE`;
+      //
+      // Audit fix (HIGH, Q5 — manager attribution): забираем managerId ТЕМ ЖЕ
+      // запросом, что берёт lock. Это значение — крединг-менеджер платежа, оно
+      // уходит в снапшот SubmissionPayment.creditedManagerId ниже и больше
+      // никогда не переписывается. Читаем именно ЗДЕСЬ, а не из `submission`,
+      // прочитанного до транзакции: снапшот обязан отражать владельца сделки
+      // на момент одобрения, под тем же локом, что сериализует одобрения.
+      // Fallback на pre-tx `submission.managerId` — только на случай, если raw
+      // почему-то вернул пустой набор (строку удалили между read и tx; тогда
+      // CAS ниже всё равно не пройдёт).
+      const lockedRows = await tx.$queryRaw<Array<{ managerId: string | null }>>`
+        SELECT "id", "managerId" FROM "SaleSubmission" WHERE id = ${submission.id} FOR UPDATE
+      `;
+      const creditedManagerId = lockedRows[0]?.managerId ?? submission.managerId ?? null;
 
       const claim = await tx.submissionPayment.updateMany({
         where: { id: paymentId, status: SubmissionPaymentStatus.PENDING },
@@ -1743,6 +1796,10 @@ export class SubmissionsService {
           status: SubmissionPaymentStatus.APPROVED,
           reviewedById: reviewerId,
           reviewedAt,
+          // Снапшот атрибуции. Пишется в том же CAS-апдейте, что переводит
+          // платёж в APPROVED, — значит «одобрен» и «кому засчитан» не могут
+          // разъехаться даже при роллбэке части транзакции.
+          creditedManagerId,
         },
       });
       if (claim.count === 0) {
@@ -1926,34 +1983,62 @@ export class SubmissionsService {
       // одобрения FOUNDER'ом бонус мог попасть в уже закрытый зарплатный период
       // и потеряться (preview не пересчитывает PAID-записи).
       //
-      // Bug (CRITICAL, audit — currency-mixing follow-up): раньше писали
-      // `currency: submission.currency`, а SaleSubmission.currency @default("USD")
-      // (schema.prisma:1635). После fix'а currency-mixing в FinanceService все
-      // агрегаты (summary/breakdown/distribution/topManagers/incomeSources/
-      // incomeByProduct/byCategory/timeseries) фильтруются по
-      // REPORTING_CURRENCY = 'TJS'. Итог: одобренные контрактные приходы (по
-      // умолчанию USD) силентно ВЫПАДАЛИ из всех дашбордов бухгалтера —
-      // netProfit, пироги источников/менеджеров/продуктов, revenue chart,
-      // распределение 70/20/10 показывали ~0 несмотря на реальные продажи.
-      // Пока нет FX-конвертации на write-time, единственный вариант, при
-      // котором reporting stack видит платёж — писать
-      // Transaction.currency = 'TJS', а исходную валюту сделки сохранять
-      // текстом в comment для последующего аудита/ручной пересборки. Long-term
-      // fix — подставить сюда rate × amount (FX на дату одобрения); тогда
-      // строчка ниже станет `currency: 'TJS', amount: payment.amount * rate`.
+      // Bug (CRITICAL, audit — currency-mixing, финальный фикс): транзакция
+      // пишется В ИСТИННОЙ ВАЛЮТЕ СДЕЛКИ. Это опция (b) из аудита.
+      //
+      // История. Первый заход писал `currency: submission.currency` —
+      // и т.к. SaleSubmission.currency @default("USD"), а FinanceService
+      // фильтрует все агрегаты по REPORTING_CURRENCY='TJS', контрактные
+      // приходы молча выпадали из дашбордов. Второй заход «чинил» это,
+      // подменяя валюту на 'TJS' при НЕТРОНУТОЙ сумме: USD 5000 ложились
+      // в ledger строкой «5000 TJS», а настоящая валюта оставалась только
+      // текстом в comment. Это было хуже исходной болезни:
+      //   • finance/KPI видели сумму, заниженную примерно в курс раз (~11×
+      //     для USD), и фильтр `currency='TJS'` переставал быть защитой —
+      //     чужие деньги были помечены сомони ДО фильтра;
+      //   • SalaryService при этом считает бонусную базу через
+      //     relation `submission.currency` (всё ещё USD) и исключал тот же
+      //     платёж целиком;
+      //   • reversal-EXPENSE при отмене сделки копирует currency ИЗ
+      //     Transaction, т.е. возврат уходил в TJS, а audit-log рядом
+      //     (originalCurrencyForAudit) писал USD.
+      // Одна сделка получала три разных ответа и ни одного правильного.
+      //
+      // Теперь: currency = валюта сделки как есть, amount = сумма как есть.
+      // FX на write-time нет и придумывать курс из воздуха нельзя, поэтому
+      // не-TJS деньги НЕ попадают в TJS-агрегаты — но и не теряются:
+      // finance отдаёт их в `nonTjsTotals`, salary — в `nonTjsSales`
+      // (обе ветки уже отрисованы в CRM). Итог: не-TJS сделка считается
+      // ОДИН раз и ОДИНАКОВО во всех трёх модулях.
+      //
+      // Валюту берём БЕЗ нормализации (без trim/toUpperCase) — ровно то
+      // значение, что лежит в SaleSubmission.currency. Это не небрежность:
+      // salary фильтрует платежи relation-условием
+      // `submission: { currency: 'TJS' }` (точное сравнение), и любая
+      // нормализация здесь развела бы модули обратно — legacy-строка 'tjs'
+      // стала бы 'TJS' в ledger (попала в TJS-выручку) и осталась 'tjs'
+      // для зарплаты (выпала из бонусной базы). Ровно тот двойной счёт,
+      // который этот фикс закрывает. Канонизация значения делается на
+      // ЗАПИСИ сделки (create/update — trim + toUpperCase), а не здесь.
+      //
+      // Long-term (опция (a) из аудита): завести источник курса и колонки
+      // originalAmount/originalCurrency/fxRate — тогда сюда встанет
+      // `amount: payment.amount * rate, currency: REPORTING_CURRENCY` с
+      // сохранением оригинала. До тех пор врать про валюту нельзя.
       const REPORTING_CURRENCY = 'TJS';
-      const originalCurrency = (submission.currency || REPORTING_CURRENCY).toUpperCase();
-      const commentBase = `Платёж по сделке #${submission.id.slice(0, 8)} (${program.name})`;
-      const finTxComment =
-        originalCurrency === REPORTING_CURRENCY
-          ? commentBase
-          : `${commentBase} — исходная валюта сделки: ${originalCurrency} ${payment.amount} (FX не применён)`;
+      const dealCurrency = submission.currency || REPORTING_CURRENCY;
+      // Нормализованная копия — ТОЛЬКО для партнёрской комиссии и audit-лога
+      // (ReferralsService сам делает toUpperCase над baseCurrency, и пост-коммитный
+      // inline-путь ниже считает так же — см. originalCurrencyForAudit). В Transaction
+      // это значение НЕ идёт: там нужен точный passthrough (см. выше).
+      const originalCurrency = dealCurrency.toUpperCase();
+      const finTxComment = `Платёж по сделке #${submission.id.slice(0, 8)} (${program.name})`;
       const finTx = await tx.transaction.create({
         data: {
           type: 'INCOME',
           category: 'TUITION_PAYMENT',
           amount: payment.amount,
-          currency: REPORTING_CURRENCY,
+          currency: dealCurrency,
           date: payment.paidAt,
           comment: finTxComment,
           studentId: studentId,
@@ -2924,8 +3009,40 @@ export class SubmissionsService {
       }
       data.totalAmount = dto.totalAmount;
     }
+    // ВАЛЮТА. Нормализуем и проверяем по whitelist'у (audit Q7) — и
+    // ЗАМОРАЖИВАЕМ после первого одобрения. Валюта сделки — факт о
+    // подписанных деньгах, а не редактируемая подпись: по ней (через
+    // relation, своей колонки у SubmissionPayment нет) SalaryService
+    // отбирает платежи в бонусную базу месяца. Смена USD→TJS на старой
+    // сделке задним числом вбросила бы ВСЕ её ранее одобренные платежи в
+    // базу того прошлого месяца (вплоть до смены полосы у уже ВЫПЛАЧЕННОГО
+    // SalaryRecord), а TJS→USD — так же тихо их оттуда вынесла бы.
+    // Поэтому окно правки — ровно до firstApprovedAt: пока он null,
+    // одобренных платежей у сделки нет и переписывать нечего.
+    //
+    // Присланное значение, совпадающее с текущим, не ошибка, а норма:
+    // фронтовая EditSubmissionModal у FOUNDER'а шлёт currency в каждом
+    // payload'е (в т.ч. при правке одних notes). Такой no-op молча
+    // пропускаем — 400 ловила бы правка, которая ничего не меняет.
+    // Реальная попытка сменить валюту после одобрения — громкий 400.
     if (dto.currency !== undefined) {
-      data.currency = dto.currency || 'USD';
+      const nextCurrency = normalizeSubmissionCurrency(dto.currency);
+      // Текущее значение канонизируем БЕЗ whitelist-проверки: у легаси-строки
+      // в БД ('usd', мусор) валидация бросила бы 400 на любую правку сделки,
+      // включая правку одних notes. Здесь нужно лишь «то же самое или нет».
+      const currentCurrency = String(submission.currency || DEFAULT_SUBMISSION_CURRENCY)
+        .trim()
+        .toUpperCase();
+      if (nextCurrency !== currentCurrency) {
+        if (submission.firstApprovedAt) {
+          throw new BadRequestException(
+            'Валюту сделки нельзя изменить после первого одобрения платежа — ' +
+              'это переписало бы бонусную базу закрытых месяцев. ' +
+              'Отмените сделку и заведите новую в нужной валюте.',
+          );
+        }
+        data.currency = nextCurrency;
+      }
     }
     if (dto.notes !== undefined) {
       data.notes = dto.notes ? String(dto.notes).trim() || null : null;

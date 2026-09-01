@@ -21,6 +21,34 @@ export interface SalaryRecord {
   comment: string | null;
   createdAt: string;
   user?: { id: string; fullName: string; role: string; email: string };
+
+  // ── Снимок расшифровки комиссии на момент создания записи ──
+  // Пишется бэком в той же транзакции, что и bonusAmount
+  // (backend/src/salary/salary.service.ts, insertRecordAtomically).
+  // Нужен, чтобы выплаченную строку можно было объяснить спустя месяцы:
+  // сетка полос живёт в коде и может смениться, платежи могли быть
+  // отменены — пересчёт дал бы уже другое число, а спорят именно про это.
+  //
+  // У записей, созданных ДО этого изменения, полей нет (исторические
+  // строки не пересчитываются). Признак наличия снимка — bonusBandKey:
+  // проверять bonusBandMax нельзя, у верхней полосы потолка нет и там
+  // законный null.
+  /** Объём продаж за календарный месяц (Asia/Dushanbe), TJS. */
+  bonusVolume?: number | null;
+  /** Ключ полосы (band1…band5) на момент расчёта. */
+  bonusBandKey?: string | null;
+  /** Нижняя граница полосы, включительно. */
+  bonusBandMin?: number | null;
+  /** Верхняя граница полосы, включительно; null — без потолка. */
+  bonusBandMax?: number | null;
+  /** Ставка, применённая ко ВСЕМУ объёму (flat-по-полосе). */
+  bonusPercent?: number | null;
+  /** Комиссия за месяц целиком, до вычета уже начисленного. */
+  bonusMonthTotal?: number | null;
+  /** Уже начислено за этот месяц другими записями зарплаты. */
+  bonusAlreadyPaid?: number | null;
+  /** 'BAND' — ставка из сетки; 'PERSONAL' — персональный процент. */
+  bonusSource?: 'BAND' | 'PERSONAL' | null;
 }
 
 /** Полоса комиссии менеджера. Границы включительные с обеих сторон. */

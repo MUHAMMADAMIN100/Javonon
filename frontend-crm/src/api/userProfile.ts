@@ -65,7 +65,28 @@ export interface FullProfile {
     }>;
     baseSalary: number;
     hourlyRate: number;
+    /**
+     * ПЕРСОНАЛЬНЫЙ override ставки (User.bonusPercent). 0 = не задан,
+     * ставка берётся из сетки. Для показа «бонус % с продаж»
+     * бери bonusPercentEffective — иначе все, кто сидит на сетке,
+     * увидят «0%» при 6% на экране Зарплаты.
+     */
     bonusPercent: number;
+    /** Ставка, которая РЕАЛЬНО применяется к объёму этого месяца. */
+    bonusPercentEffective?: number;
+    /** 'BAND' — ставка сетки; 'PERSONAL' — личный процент. */
+    bonusSource?: 'BAND' | 'PERSONAL';
+    /** Полоса, в которую попал объём месяца (всегда есть). */
+    bonusBand?: {
+      key: string;
+      minAmount: number;
+      maxAmount: number | null;
+      percent: number;
+    };
+    /** Объём за календарный месяц (APPROVED-платежи, TJS). */
+    bonusVolume?: number;
+    bonusPeriodStart?: string;
+    bonusPeriodEnd?: string;
   };
   penalties: {
     list: Array<{

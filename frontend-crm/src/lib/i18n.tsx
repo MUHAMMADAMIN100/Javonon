@@ -295,6 +295,11 @@ const DICT: Record<Lang, Record<string, string>> = {
       'Не удалось загрузить заявку-источник. Вернитесь в карточку заявки и нажмите «Создать сделку» ещё раз.',
     'submissionForm.partner': 'Клиент от партнёра',
     'submissionForm.partner.commission': 'комиссия',
+    // Валюта сделки замораживается после первого одобрения платежа: по ней
+    // считается бонусная база месяца (audit Q7).
+    'submissionForm.currency.frozen': 'Валюта зафиксирована',
+    'submissionForm.currency.frozen.hint':
+      'Валюту нельзя менять после первого одобрения платежа — по ней считается бонус за уже закрытые месяцы.',
     'app.contact.channel.WHATSAPP': 'WhatsApp',
     'app.contact.channel.PHONE': 'Телефон',
     'app.contact.channel.INSTAGRAM': 'Instagram',
@@ -434,12 +439,16 @@ const DICT: Record<Lang, Record<string, string>> = {
     'salary.bonus.title': 'Как получился бонус',
     'salary.bonus.volume': 'Объём за месяц',
     'salary.bonus.band': 'Полоса',
-    'salary.bonus.periodNote': 'Объём считается за календарный месяц, а не за выбранный период',
+    'salary.bonus.periodNote': 'Объём — за календарный месяц по дате получения денег, а не за выбранный период',
+    'salary.bonus.emptyMonth': 'За этот месяц одобренных платежей ещё нет — объём и бонус нулевые. Это не ошибка расчёта.',
     'salary.bonus.alreadyPaid': 'Уже начислено за этот месяц',
     'salary.bonus.due': 'К начислению',
     'salary.bonus.personal': 'У сотрудника задан персональный процент — сетка не применяется',
     'salary.bonus.manualExcluded': 'Ручные поступления (в объём не входят)',
     'salary.bonus.nonTjs': 'Продажи в другой валюте (в бонус не входят)',
+    // Расшифровка в журнале выплат — это СНИМОК на момент фиксации, а не
+    // пересчёт: ставки могли смениться, платежи — отмениться.
+    'salary.bonus.snapshotNote': 'Расшифровка сохранена в момент фиксации расчёта. Старые записи не пересчитываются.',
     'salary.cell.kpi': 'KPI',
     'salary.cell.penalties': 'Штрафы',
     'salary.cell.net': 'К выплате',
@@ -452,6 +461,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     'salary.confirmPay': 'Выплатить зарплату?',
     'salary.pendingReview': 'На рассмотрении',
     'salary.excused': 'Одобрено',
+    // Отказы бэкенда при фиксации расчёта. Бэкенд отдаёт 400 с русским
+    // текстом; сопоставляем его и показываем перевод по языку интерфейса.
+    'salary.error.duplicatePeriod': 'Зарплата за этот период уже начислена',
+    'salary.error.concurrent': 'Расчёт не сохранён из-за одновременного запроса. Повторите попытку',
+    'salary.saving': 'Сохраняем…',
 
     // ===== users =====
     'users.title': 'Сотрудники',
@@ -1323,6 +1337,10 @@ const DICT: Record<Lang, Record<string, string>> = {
     'kpi.col.sales': 'Продажи',
     'kpi.col.tasks': 'Задачи',
     'kpi.label.youSales': 'Твои продажи',
+    // Рейтинг считается только в отчётной валюте (TJS) — FX-конвертации на
+    // бэке нет. Приходы в других валютах показываем отдельной подписью,
+    // как `salary.bonus.nonTjs` на экране зарплаты.
+    'kpi.label.nonTjs': 'В другой валюте (в рейтинг не входит)',
     'kpi.label.thisRank': 'Твой ранг',
     'kpi.label.itsYou': '— это вы',
     'kpi.label.topPerformer': '🏆 Топ-1 рейтинга',
@@ -1355,7 +1373,13 @@ const DICT: Record<Lang, Record<string, string>> = {
     'userDetail.field.customRole': 'Кастомная роль',
     'userDetail.field.baseSalary': 'Базовый оклад (TJS/мес)',
     'userDetail.field.hourlyRate': 'Почасовая (TJS/ч)',
+    // ДЕЙСТВУЮЩАЯ ставка (сетка или личный процент) — то, что совпадает
+    // с экраном Зарплаты. Персональный override редактируется под
+    // ключом bonusPercentPersonal ниже — путать их нельзя.
     'userDetail.field.bonusPercent': 'Бонус % с продаж',
+    'userDetail.field.bonusPercentPersonal': 'Бонус % (персональный, 0 = по сетке)',
+    'userDetail.bonus.fromBand': 'по сетке',
+    'userDetail.bonus.personal': 'персональный процент',
     'userDetail.field.kpiTarget': 'KPI цель %',
     'userDetail.field.kpiAutoStep': 'Авто-рост KPI / мес',
     'userDetail.field.kpiMax': 'Потолок KPI %',
@@ -1967,6 +1991,9 @@ const DICT: Record<Lang, Record<string, string>> = {
       'Аризаи манбаъро бор карда нашуд. Ба кортаи ариза баргардед ва «Эҷоди аҳд»-ро дубора пахш кунед.',
     'submissionForm.partner': 'Муштарӣ аз шарик',
     'submissionForm.partner.commission': 'комиссия',
+    'submissionForm.currency.frozen': 'Асъор собит шудааст',
+    'submissionForm.currency.frozen.hint':
+      'Пас аз тасдиқи аввалин пардохт асъорро иваз кардан мумкин нест — аз рӯи он бонуси моҳҳои пӯшидашуда ҳисоб мешавад.',
     'app.contact.channel.WHATSAPP': 'WhatsApp',
     'app.contact.channel.PHONE': 'Телефон',
     'app.contact.channel.INSTAGRAM': 'Instagram',
@@ -2106,12 +2133,15 @@ const DICT: Record<Lang, Record<string, string>> = {
     'salary.bonus.title': 'Бонус чӣ тавр ҳисоб шуд',
     'salary.bonus.volume': 'Ҳаҷми моҳона',
     'salary.bonus.band': 'Полоса',
-    'salary.bonus.periodNote': 'Ҳаҷм барои моҳи тақвимӣ ҳисоб мешавад, на барои давраи интихобшуда',
+    'salary.bonus.periodNote': 'Ҳаҷм — барои моҳи тақвимӣ аз рӯи санаи гирифтани пул, на барои давраи интихобшуда',
+    'salary.bonus.emptyMonth': 'Барои ин моҳ ҳанӯз пардохти тасдиқшуда нест — ҳаҷм ва бонус сифр. Ин хатои ҳисоб нест.',
     'salary.bonus.alreadyPaid': 'Барои ин моҳ аллакай ҳисоб шудааст',
     'salary.bonus.due': 'Барои ҳисоб кардан',
     'salary.bonus.personal': 'Барои корманд фоизи шахсӣ таъин шудааст — тӯр татбиқ намешавад',
     'salary.bonus.manualExcluded': 'Воридоти дастӣ (ба ҳаҷм дохил намешавад)',
     'salary.bonus.nonTjs': 'Фурӯш бо асъори дигар (ба бонус дохил намешавад)',
+    // Шарҳ дар журнали пардохтҳо — сурати лаҳзаи сабт, на ҳисоби нав.
+    'salary.bonus.snapshotNote': 'Шарҳ дар лаҳзаи сабти ҳисоб нигоҳ дошта шудааст. Сабтҳои кӯҳна аз нав ҳисоб намешаванд.',
     'salary.cell.kpi': 'KPI',
     'salary.cell.penalties': 'Ҷаримаҳо',
     'salary.cell.net': 'Барои пардохт',
@@ -2124,6 +2154,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'salary.confirmPay': 'Маошро пардохт кунам?',
     'salary.pendingReview': 'Дар санҷиш',
     'salary.excused': 'Тасдиқ шуд',
+    'salary.error.duplicatePeriod': 'Маош барои ин давра аллакай ҳисоб шудааст',
+    'salary.error.concurrent': 'Ҳисоб сабт нашуд — дархости ҳамзамон. Бори дигар кӯшиш кунед',
+    'salary.saving': 'Сабт мешавад…',
 
     // ===== users =====
     'users.title': 'Кормандон',
@@ -2970,6 +3003,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'kpi.col.sales': 'Фурӯш',
     'kpi.col.tasks': 'Вазифаҳо',
     'kpi.label.youSales': 'Фурӯши шумо',
+    'kpi.label.nonTjs': 'Бо асъори дигар (ба рейтинг дохил намешавад)',
     'kpi.label.thisRank': 'Ранги ту',
     'kpi.label.itsYou': '— ин шумо',
     'kpi.label.topPerformer': '🏆 Топ-1 рейтинг',
@@ -3003,6 +3037,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'userDetail.field.baseSalary': 'Маоши асосӣ (TJS/моҳ)',
     'userDetail.field.hourlyRate': 'Соатона (TJS/соат)',
     'userDetail.field.bonusPercent': 'Бонус % аз фурӯш',
+    'userDetail.field.bonusPercentPersonal': 'Бонус % (шахсӣ, 0 = аз тӯр)',
+    'userDetail.bonus.fromBand': 'аз тӯр',
+    'userDetail.bonus.personal': 'фоизи шахсӣ',
     'userDetail.field.kpiTarget': 'Ҳадафи KPI %',
     'userDetail.field.kpiAutoStep': 'Авторушди KPI / моҳ',
     'userDetail.field.kpiMax': 'Сақфи KPI %',

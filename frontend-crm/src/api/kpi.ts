@@ -14,6 +14,20 @@ export interface KpiRow {
   conversionRate: number;
   studentsCount: number;
   salesAmount: number;
+  /**
+   * Валюта, в которой посчитан `salesAmount`. Бэк считает KPI только в
+   * отчётной валюте (TJS) — см. KpiService.leaderboard, блок «ВАЛЮТА».
+   * Optional: старый бэк поля не отдаёт, тогда fmtMoney берёт дефолт.
+   */
+  currency?: string;
+  /**
+   * Приходы в ПРОЧИХ валютах за тот же период: код валюты → сумма в
+   * исходной валюте. В `salesAmount` и в сортировку рейтинга НЕ входят
+   * (FX-конвертации на бэке нет), но и не теряются молча — показываем
+   * подписью, как `nonTjsSales` в SalaryPreview и `nonTjsTotals` в финансах.
+   * Пустой объект / undefined — период был чисто в сомони.
+   */
+  nonTjsSales?: Record<string, number>;
   tasksOpen: number;
   tasksDone: number;
 }

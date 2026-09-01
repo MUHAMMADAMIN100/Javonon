@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 import { dateRangeFilter } from '../common/query-date';
+import {
+  NonReportingCurrencyBreakdown,
+  REPORTING_CURRENCY,
+} from '../common/reporting-currency';
 
 @Injectable()
 export class KpiService {
@@ -45,6 +49,25 @@ export class KpiService {
    * финансовой карточкой того же дашборда на задним числом проведённых
    * платежах.
    *
+   * ВАЛЮТА — ТОЛЬКО ОТЧЁТНАЯ (TJS), см. common/reporting-currency.ts.
+   * `Transaction.currency` — свободная строка с `@default("TJS")`, а ручная
+   * проводка в /finance принимает пять валют (TJS/USD/EUR/CNY/RUB). До этого
+   * фикса `salesAmount` считался `_sum: { amount: true }` БЕЗ фильтра по
+   * валюте: USD 5 000 складывались с TJS 5 000 как безразмерные числа, а фронт
+   * рисовал итог сомонями (Kpi.tsx — `fmtMoney(row.salesAmount)` с
+   * currency='TJS'). Этим же числом сортируется лидерборд, то есть менеджер с
+   * одной валютной сделкой поднимался наверх на курсовой разнице, а не на
+   * продажах. Ровно этот баг уже чинили в finance.service.ts
+   * (REPORTING_CURRENCY во всех агрегатах) и в salary.service.ts
+   * (SALARY_REPORTING_CURRENCY в бонусной базе) — KPI оставался последним
+   * несинхронизированным модулем.
+   *
+   * Не-TJS приходы НЕ конвертируются (FX на write-time в системе нет) и НЕ
+   * пропадают молча: они уходят отдельным полем `nonTjsSales` — по коду
+   * валюты, в исходной валюте, — по той же схеме, что `nonTjsTotals` в
+   * finance и `nonTjsSales` в salary.preview(). Ни в `salesAmount`, ни в
+   * сортировку они не входят.
+   *
    * Без границ (`{}` — /kpi/me, /kpi/:userId и режим «за всё время»)
    * dateRangeFilter отдаёт undefined, ни один фильтр не подмешивается и
    * запросы остаются ровно теми же, что были до появления периода.
@@ -69,6 +92,36 @@ export class KpiService {
       },
       select: { id: true, fullName: true, role: true, email: true, bonusPercent: true },
     });
+
+    // Разбивка не-TJS приходов — ОДИН groupBy на всех пользователей, а не
+    // ещё один запрос внутри цикла по users: лидерборд и так делает шесть
+    // запросов на человека, седьмой удвоил бы стоимость экрана ради поля,
+    // которое в чисто-сомонёвой базе всегда пустое. Фильтры совпадают с
+    // TJS-агрегатом выше один в один (type / reversedAt / период) — иначе
+    // «остаток» разошёлся бы с основной цифрой по причинам помимо валюты.
+    const nonTjsGrouped = await this.prisma.transaction.groupBy({
+      by: ['managerId', 'currency'],
+      where: {
+        managerId: { in: users.map((u) => u.id) },
+        type: 'INCOME',
+        reversedAt: null,
+        currency: { not: REPORTING_CURRENCY },
+        ...(dateFilter && { date: dateFilter }),
+      },
+      _sum: { amount: true },
+    });
+    const nonTjsByUser = new Map<string, NonReportingCurrencyBreakdown>();
+    for (const g of nonTjsGrouped) {
+      if (!g.managerId) continue; // отсечено в where, но типы этого не знают
+      const bucket = nonTjsByUser.get(g.managerId) || {};
+      // currency — свободная строка в схеме; пустую подписываем UNKNOWN,
+      // ровно как nonTjsTotals() в finance.service.ts.
+      const cur = g.currency || 'UNKNOWN';
+      // Округление до копеек — как round() в salary.service: сложение Float
+      // даёт хвосты вида 4999.999999999999.
+      bucket[cur] = Math.round(((bucket[cur] || 0) + (g._sum.amount || 0)) * 100) / 100;
+      nonTjsByUser.set(g.managerId, bucket);
+    }
 
     const result = await Promise.all(
       users.map(async (u) => {
@@ -121,6 +174,10 @@ export class KpiService {
               // reversed (CANCEL сделки или ручной refund), иначе KPI
               // показывает завышенный salesAmount по отменённым сделкам.
               reversedAt: null,
+              // Audit HIGH: складывать разные валюты в одно число нельзя —
+              // см. блок «ВАЛЮТА» в шапке метода. Остаток периода в прочих
+              // валютах возвращается в nonTjsSales (агрегируется ниже).
+              currency: REPORTING_CURRENCY,
               ...(dateFilter && { date: dateFilter }),
             },
             _sum: { amount: true },
@@ -161,13 +218,23 @@ export class KpiService {
           conversionRate,
           studentsCount,
           salesAmount: salesAgg._sum.amount || 0,
+          // Валюта, в которой посчитан salesAmount. Отдаём явно, чтобы фронт
+          // не хардкодил 'TJS' в fmtMoney — та же форма ответа, что у
+          // finance summary/breakdown.
+          currency: REPORTING_CURRENCY,
+          // Пустой объект = период был чисто в сомони, фронту нечего
+          // дорисовывать. Непустой — подсказка «была ещё выручка в USD/…,
+          // в рейтинг она не входит».
+          nonTjsSales: nonTjsByUser.get(u.id) || {},
           tasksOpen,
           tasksDone,
         };
       }),
     );
 
-    // Сортируем по продажам — топ-менеджеры наверху
+    // Сортируем по продажам — топ-менеджеры наверху. Ключ сортировки
+    // одновалютный (TJS), поэтому сравнение осмысленно: до фикса валюты
+    // порядок мест зависел от того, в какой валюте оформлена сделка.
     return result.sort((a, b) => b.salesAmount - a.salesAmount);
   }
 

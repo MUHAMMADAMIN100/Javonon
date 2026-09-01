@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -22,6 +22,16 @@ import { tjStartOfMonthStr, tjEndOfMonthStr, tjFormatDate } from '../lib/tjTime'
 import { bandRangeLabel } from '../lib/bonusBands';
 import CrmDatePicker from '../components/CrmDatePicker';
 
+// Отказы бэкенда при фиксации расчёта приходят как 400 с русским текстом
+// (Nest не отдаёт машиночитаемых кодов ошибок в этом модуле). Сопоставляем
+// известные тексты со своими ключами, чтобы таджикский интерфейс не
+// показывал русскую строку. Незнакомое сообщение показываем как есть —
+// оно всё равно информативнее общего «Ошибка».
+const SALARY_ERROR_KEYS: Record<string, string> = {
+  'Зарплата за этот период уже начислена': 'salary.error.duplicatePeriod',
+  'Расчёт не сохранён из-за одновременного запроса. Повторите попытку': 'salary.error.concurrent',
+};
+
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
@@ -31,6 +41,25 @@ function fmtMin(min: number) {
   const m = min % 60;
   return m > 0 ? `${h}ч ${m}м` : `${h}ч`;
 }
+/**
+ * Колонок в журнале выплат: сотрудник, период, часы, приход, база, бонус,
+ * KPI, штрафы, к выплате, статус, действия. Держим константой — colSpan
+ * пустой строки и раскрытой расшифровки обязан совпадать с шапкой.
+ */
+const HISTORY_COLUMNS = 11;
+
+/**
+ * Есть ли у записи сохранённый снимок расшифровки комиссии.
+ *
+ * Признак — bonusBandKey. Проверять bonusBandMax нельзя: у верхней полосы
+ * потолка нет, там null — легальное значение, а не «снимка нет».
+ * У записей, созданных до появления снимка, полей нет вовсе; их НЕ
+ * пересчитывают, поэтому расшифровку для них просто не показываем.
+ */
+function hasBonusSnapshot(r: SalaryRecord): boolean {
+  return typeof r.bonusBandKey === 'string' && r.bonusBandKey.length > 0;
+}
+
 function defaultMonthRange() {
   // Границы месяца — в Asia/Dushanbe, а не в UTC и не в TZ браузера.
   // Иначе у пользователя в РФ месяц мог открываться «с 30-го» из-за
@@ -45,6 +74,8 @@ export default function Salary() {
   const [{ start, end }, setRange] = useState(defaultMonthRange());
   const [kpiBonus, setKpiBonus] = useState('0');
   const [comment, setComment] = useState('');
+  // Раскрытая расшифровка бонуса в журнале — одна за раз.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const usersQuery = useQuery({
     queryKey: keys.users.list(),
@@ -79,7 +110,11 @@ export default function Salary() {
       toast('Расчёт сохранён', 'success');
       setComment('');
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => {
+      const raw = e?.response?.data?.message;
+      const key = typeof raw === 'string' ? SALARY_ERROR_KEYS[raw] : undefined;
+      toast(key ? t(key) : raw || 'Ошибка', 'error');
+    },
   });
 
   // Pay — оптимистично переключаем status DRAFT → PAID + paidAt.
@@ -105,6 +140,12 @@ export default function Salary() {
 
   const onCreate = () => {
     if (!userId) return;
+    // Первая линия против двойного начисления — не пускаем второй запрос,
+    // пока первый в полёте (двойной клик по «Зафиксировать»). Настоящие
+    // гарды на бэкенде: SERIALIZABLE-транзакция + уникальный индекс
+    // SalaryRecord(userId, periodStart); здесь — чтобы бухгалтер не ловил
+    // 400 там, где достаточно не отправлять запрос.
+    if (createMut.isPending) return;
     createMut.mutate({
       userId,
       periodStart: start,
@@ -272,8 +313,14 @@ export default function Salary() {
                     minWidth: 0,
                   }}
                 />
-                <button className="btn btn-primary" onClick={onCreate} style={{ flex: '0 1 auto', minWidth: 0 }}>
-                  <Icon name="bookmark_add" size={18} /> {t('salary.new')}
+                <button
+                  className="btn btn-primary"
+                  onClick={onCreate}
+                  disabled={createMut.isPending}
+                  style={{ flex: '0 1 auto', minWidth: 0 }}
+                >
+                  <Icon name="bookmark_add" size={18} />{' '}
+                  {createMut.isPending ? t('salary.saving') : t('salary.new')}
                 </button>
               </div>
             </div>
@@ -287,63 +334,120 @@ export default function Salary() {
         <h2 className="crm-section-title">{t('salary.history')}</h2>
       </div>
 
+      {/* Строка журнала обязана СХОДИТЬСЯ: база + бонус + KPI − штрафы =
+          к выплате. Раньше KPI молча складывался с бонусом в колонке
+          «Бонус», а колонки штрафов не было вовсе — сохранённая строка
+          читалась как «База 3 000 · Бонус 12 500 · К выплате 14 500» и
+          выглядела арифметически неверной ровно в тот момент, когда её
+          показывают учредителю в споре. Колонки разведены, штрафы
+          добавлены, а расшифровка бонуса раскрывается из снимка,
+          сохранённого при создании записи (SalaryRecord.bonus* в
+          api/salary.ts) — то есть переживает выплату, в отличие от
+          live-превью сверху. */}
       <div className="card" style={{ padding: 0 }}>
-        <table className="table" style={{ width: '100%' }}>
-          <thead>
-            <tr>
-              <th>{t('salary.field.employee')}</th>
-              <th>{t('common.period') !== 'common.period' ? t('common.period') : 'Период'}</th>
-              <th>{t('salary.cell.hours')}</th>
-              <th>{t('finance.summary.income')}</th>
-              <th>{t('salary.cell.base')}</th>
-              <th>{t('salary.cell.bonus')}</th>
-              <th>{t('salary.cell.net')}</th>
-              <th>{t('common.status')}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.length === 0 && (
-              <tr><td colSpan={9} className="empty">{t('salary.empty')}</td></tr>
-            )}
-            {records.map((r) => (
-              <tr key={r.id}>
-                <td style={{ fontWeight: 500 }}>{r.user?.fullName}</td>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                  {tjFormatDate(r.periodStart)}
-                  {' → '}
-                  {tjFormatDate(r.periodEnd)}
-                </td>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtMin(r.workedMinutes)}</td>
-                <td style={{ color: 'var(--text-soft)' }}>{fmtMoney(r.salesAmount, r.currency)}</td>
-                <td>{fmtMoney(r.baseAmount, r.currency)}</td>
-                <td style={{ color: 'var(--primary-dark)' }}>+ {fmtMoney(r.bonusAmount + r.kpiBonus, r.currency)}</td>
-                <td style={{
-                  fontFamily: 'var(--font-display)',
-                  fontWeight: 500,
-                  fontSize: 17,
-                }}>{fmtMoney(r.netAmount, r.currency)}</td>
-                <td>
-                  {r.status === 'PAID'
-                    ? <span className="badge badge-success">{t('salary.status.PAID')}</span>
-                    : <span className="badge badge-warning">{t('salary.status.DRAFT')}</span>}
-                </td>
-                <td>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {r.status === 'DRAFT' && (
-                      <button className="btn btn-sm btn-secondary" onClick={() => onPay(r)}>
-                        <Icon name="paid" size={14} /> {t('salary.pay')}
-                      </button>
-                    )}
-                    <button className="btn btn-sm btn-danger" onClick={() => onDelete(r)}>
-                      <Icon name="delete" size={14} />
-                    </button>
-                  </div>
-                </td>
+        {/* Колонок стало 11 — на узком экране таблица должна скроллиться
+            внутри карточки, а не растягивать страницу. */}
+        <div className="table-wrap" style={{ overflowX: 'auto' }}>
+          <table className="table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th>{t('salary.field.employee')}</th>
+                <th>{t('common.period') !== 'common.period' ? t('common.period') : 'Период'}</th>
+                <th>{t('salary.cell.hours')}</th>
+                <th>{t('finance.summary.income')}</th>
+                <th>{t('salary.cell.base')}</th>
+                <th>{t('salary.cell.bonus')}</th>
+                <th>{t('salary.cell.kpi')}</th>
+                <th>{t('salary.cell.penalties')}</th>
+                <th>{t('salary.cell.net')}</th>
+                <th>{t('common.status')}</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {records.length === 0 && (
+                <tr><td colSpan={HISTORY_COLUMNS} className="empty">{t('salary.empty')}</td></tr>
+              )}
+              {records.map((r) => {
+                const expanded = expandedId === r.id;
+                return (
+                  <Fragment key={r.id}>
+                    <tr>
+                      <td style={{ fontWeight: 500 }}>{r.user?.fullName}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                        {tjFormatDate(r.periodStart)}
+                        {' → '}
+                        {tjFormatDate(r.periodEnd)}
+                      </td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtMin(r.workedMinutes)}</td>
+                      <td style={{ color: 'var(--text-soft)' }}>{fmtMoney(r.salesAmount, r.currency)}</td>
+                      <td>{fmtMoney(r.baseAmount, r.currency)}</td>
+                      {/* Только комиссия с продаж. KPI — отдельная колонка:
+                          он назначается вручную и в споре обсуждается
+                          отдельно от бонуса по полосе. */}
+                      <td style={{ color: 'var(--primary-dark)' }}>+ {fmtMoney(r.bonusAmount, r.currency)}</td>
+                      <td style={{ color: r.kpiBonus > 0 ? 'var(--primary-dark)' : 'var(--text-soft)' }}>
+                        {r.kpiBonus > 0 ? `+ ${fmtMoney(r.kpiBonus, r.currency)}` : fmtMoney(0, r.currency)}
+                      </td>
+                      {/* Штрафы вычитаются из net — без этой колонки строка
+                          не сходилась. Значения берём из записи, ничего не
+                          пересчитываем. */}
+                      <td style={{ color: r.penalties > 0 ? 'var(--danger)' : 'var(--text-soft)' }}>
+                        {r.penalties > 0 ? `− ${fmtMoney(r.penalties, r.currency)}` : fmtMoney(0, r.currency)}
+                      </td>
+                      <td style={{
+                        fontFamily: 'var(--font-display)',
+                        fontWeight: 500,
+                        fontSize: 17,
+                      }}>{fmtMoney(r.netAmount, r.currency)}</td>
+                      <td>
+                        {r.status === 'PAID'
+                          ? <span className="badge badge-success">{t('salary.status.PAID')}</span>
+                          : <span className="badge badge-warning">{t('salary.status.DRAFT')}</span>}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {hasBonusSnapshot(r) && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              aria-expanded={expanded}
+                              title={t('salary.bonus.title')}
+                              aria-label={t('salary.bonus.title')}
+                              onClick={() => setExpandedId(expanded ? null : r.id)}
+                            >
+                              <Icon name={expanded ? 'expand_less' : 'expand_more'} size={14} />
+                            </button>
+                          )}
+                          {r.status === 'DRAFT' && (
+                            <button className="btn btn-sm btn-secondary" onClick={() => onPay(r)}>
+                              <Icon name="paid" size={14} /> {t('salary.pay')}
+                            </button>
+                          )}
+                          {/* Удалять можно только черновик. Удаление PAID-записи
+                              вернуло бы месячную комиссию в «к начислению»
+                              (bonusAlreadyPaid) и оставило бы расходную транзакцию
+                              сиротой — бэк такой DELETE тоже отклоняет. */}
+                          {r.status === 'DRAFT' && (
+                            <button className="btn btn-sm btn-danger" onClick={() => onDelete(r)}>
+                              <Icon name="delete" size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {expanded && (
+                      <tr>
+                        <td colSpan={HISTORY_COLUMNS} style={{ background: 'var(--bg-soft)', padding: 0 }}>
+                          <SavedBonusBreakdown record={r} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );
@@ -435,6 +539,15 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
         </div>
       )}
 
+      {/* Пустой месяц. Экран по умолчанию открывает ТЕКУЩИЙ месяц, и 1-го
+          числа объём законно равен нулю — без этой строки «0 → 4% → 0»
+          читается как «система не считает», а не как «месяц ещё пустой». */}
+      {volume === 0 && (
+        <div style={{ fontSize: 11, color: 'var(--text-soft)', marginBottom: 10 }}>
+          {t('salary.bonus.emptyMonth')}
+        </div>
+      )}
+
       {monthLabel && (
         <div style={{ fontSize: 11, color: 'var(--text-light)', marginBottom: 10 }}>
           {t('salary.bonus.periodNote')} · {monthLabel}
@@ -484,6 +597,97 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
             .join(' · ')}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Расшифровка комиссии СОХРАНЁННОЙ записи: объём → полоса → ставка →
+ * комиссия за месяц → минус уже начисленное → к начислению.
+ *
+ * Отличается от BonusBreakdown выше принципиально: та рисует live-превью
+ * (пересчёт по текущим данным), эта — СНИМОК, записанный в SalaryRecord в
+ * момент фиксации расчёта. Именно снимок и нужен в споре: сетка полос
+ * живёт в коде и может смениться, платежи могли быть отменены — пересчёт
+ * через полгода дал бы другое число, а объяснять надо то, что выплачено.
+ * Поэтому здесь НЕТ ни одного обращения к preview и ни одного вычисления
+ * поверх записи: печатаем ровно то, что лежит в строке.
+ *
+ * Сетку полос целиком (как в превью) намеренно не показываем: на экране
+ * она была бы сегодняшней, а запись — прошлогодней. Показываем только ту
+ * полосу, по которой реально посчитали, с её тогдашними границами.
+ */
+function SavedBonusBreakdown({ record }: { record: SalaryRecord }) {
+  const { t } = useT();
+  const cur = record.currency;
+  const volume = record.bonusVolume ?? 0;
+  const percent = record.bonusPercent ?? 0;
+  const monthTotal = record.bonusMonthTotal ?? record.bonusAmount;
+  const alreadyPaid = record.bonusAlreadyPaid ?? 0;
+  const personal = record.bonusSource === 'PERSONAL';
+
+  return (
+    <div style={{ padding: '16px 18px' }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.14em',
+        textTransform: 'uppercase',
+        color: 'var(--text-soft)',
+        marginBottom: 12,
+      }}>
+        {t('salary.bonus.title')}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        flexWrap: 'wrap',
+        gap: '6px 10px',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 13,
+        marginBottom: 10,
+      }}>
+        <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.volume')}</span>
+        <b>{fmtMoney(volume, cur)}</b>
+        <span style={{ color: 'var(--text-light)' }}>→</span>
+        <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.band')}</span>
+        <b>{bandRangeLabel(record.bonusBandMin ?? 0, record.bonusBandMax ?? null)}</b>
+        <span style={{ color: 'var(--text-light)' }}>→</span>
+        <b>{percent}%</b>
+        <span style={{ color: 'var(--text-light)' }}>→</span>
+        <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--primary-dark)' }}>
+          {fmtMoney(monthTotal, cur)}
+        </b>
+      </div>
+
+      {/* Без этой строки «объём 200 000 → 6% → 12 000», а в колонке бонуса
+          0, выглядит как ошибка расчёта: месячная комиссия не платится
+          дважды, вторая запись месяца доплачивает только разницу. */}
+      {alreadyPaid > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px',
+          fontFamily: 'var(--font-mono)', fontSize: 12, marginBottom: 10,
+        }}>
+          <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.alreadyPaid')}</span>
+          <b>− {fmtMoney(alreadyPaid, cur)}</b>
+          <span style={{ color: 'var(--text-light)' }}>→</span>
+          <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.due')}</span>
+          <b>{fmtMoney(record.bonusAmount, cur)}</b>
+        </div>
+      )}
+
+      <div style={{ fontSize: 11, color: 'var(--text-light)' }}>
+        {t('salary.bonus.periodNote')}
+      </div>
+      {personal && (
+        <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', marginTop: 6 }}>
+          {t('salary.bonus.personal')}
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 6 }}>
+        {t('salary.bonus.snapshotNote')}
+      </div>
     </div>
   );
 }

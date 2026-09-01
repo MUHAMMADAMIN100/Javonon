@@ -12,6 +12,18 @@ function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 
+/**
+ * «USD 5 000 · EUR 900» — приходы в прочих валютах за период. Бэк считает
+ * KPI только в отчётной валюте (TJS), потому что FX-конвертации в системе
+ * нет; эти суммы в рейтинг не входят, но и не исчезают из виду. Возвращает
+ * null, когда период был чисто в сомони, — тогда ничего не рисуем.
+ */
+function nonTjsLine(row: KpiRow): string | null {
+  const entries = Object.entries(row.nonTjsSales || {}).filter(([, v]) => !!v);
+  if (entries.length === 0) return null;
+  return entries.map(([cur, sum]) => fmtMoney(sum, cur)).join(' · ');
+}
+
 const RANGE_KEYS: Array<{ key: string; days: number | null }> = [
   { key: 'kpi.range.all', days: null },
   { key: 'kpi.range.7', days: 7 },
@@ -85,7 +97,7 @@ export default function Kpi() {
                 letterSpacing: '-0.04em',
                 lineHeight: 0.9,
                 marginBottom: 16,
-              }}>{fmtMoney(myRow.salesAmount)}</div>
+              }}>{fmtMoney(myRow.salesAmount, myRow.currency)}</div>
               <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
@@ -93,6 +105,18 @@ export default function Kpi() {
                 color: 'rgba(255,255,255,0.55)',
                 textTransform: 'uppercase',
               }}>{t('kpi.label.youSales')}</div>
+              {/* Валютный остаток периода. Без этой строки «твои продажи»
+                  молча теряют валютную сделку и выглядят заниженными —
+                  см. блок «ВАЛЮТА» в KpiService.leaderboard. */}
+              {nonTjsLine(myRow) && (
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.06em',
+                  color: 'rgba(255,255,255,0.45)',
+                  marginTop: 8,
+                }}>{t('kpi.label.nonTjs')}: {nonTjsLine(myRow)}</div>
+              )}
             </div>
           </div>
           <KpiBento eyebrow={t('kpi.col.conversion').toUpperCase()} label={t('kpi.col.conversion')} value={`${myRow.conversionRate}%`} accent />
@@ -147,7 +171,7 @@ export default function Kpi() {
                 letterSpacing: '-0.04em',
                 lineHeight: 1,
                 color: 'var(--primary-light)',
-              }}>{fmtMoney(top.salesAmount)}</div>
+              }}>{fmtMoney(top.salesAmount, top.currency)}</div>
               <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
@@ -155,6 +179,15 @@ export default function Kpi() {
                 letterSpacing: '0.10em',
                 marginTop: 6,
               }}>{top.applicationsEnrolled} ENROLLED · {top.conversionRate}% CONVERSION</div>
+              {nonTjsLine(top) && (
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  color: 'rgba(255,255,255,0.45)',
+                  letterSpacing: '0.06em',
+                  marginTop: 4,
+                }}>{t('kpi.label.nonTjs')}: {nonTjsLine(top)}</div>
+              )}
             </div>
           </div>
         </motion.div>
@@ -211,7 +244,18 @@ export default function Kpi() {
                     fontSize: 16,
                     letterSpacing: '-0.01em',
                     color: 'var(--primary-dark)',
-                  }}>{fmtMoney(r.salesAmount)}</td>
+                  }}>
+                    {fmtMoney(r.salesAmount, r.currency)}
+                    {nonTjsLine(r) && (
+                      <div style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        fontWeight: 400,
+                        letterSpacing: '0.04em',
+                        color: 'var(--text-light)',
+                      }}>+ {nonTjsLine(r)}</div>
+                    )}
+                  </td>
                   <td style={{ fontSize: 13, color: 'var(--text-soft)' }}>
                     <span style={{ color: 'var(--text)' }}>{r.tasksDone}</span> / {r.tasksDone + r.tasksOpen}
                   </td>

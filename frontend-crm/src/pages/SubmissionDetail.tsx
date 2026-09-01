@@ -25,6 +25,8 @@ import {
   PAYMENT_STATUS_LABEL,
   SUBMISSION_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
+  SUBMISSION_CURRENCIES,
+  SUBMISSION_CURRENCY_LABEL,
 } from '../api/submissions';
 import { listPrograms } from '../api/programs';
 import Icon from '../Icon';
@@ -33,6 +35,7 @@ import PartnerAttributionCard from '../components/PartnerAttributionCard';
 import PaymentStagesSection from '../components/PaymentStagesSection';
 import { absFileUrl as absUrl } from '../lib/fileUrl';
 import { keys } from '../lib/queryKeys';
+import { useT } from '../lib/i18n';
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: '#0ea5e9',
@@ -826,6 +829,7 @@ function EditSubmissionModal({
   onSuccess: () => void;
 }) {
   const { toast, confirm } = useUI();
+  const { t } = useT();
   const frozen = !!submission.firstApprovedAt;
 
   const [contractUrls, setContractUrls] = useState<string[]>(submission.contractUrls || []);
@@ -857,7 +861,12 @@ function EditSubmissionModal({
       // не шлём их в payload (бэк реджектит, но чистим уже здесь).
       if (founder) {
         dto.totalAmount = parseFloat(totalAmount);
-        dto.currency = currency;
+        // Валюта уходит на бэк ТОЛЬКО пока сделка не заморожена. После
+        // первого одобрения она зафиксирована (бэк отвечает 400 на смену):
+        // по ней зарплатный модуль отбирает одобренные платежи в бонусную
+        // базу месяца, и правка задним числом переписала бы уже закрытые
+        // периоды. Слать её в payload'е «как было» тоже незачем.
+        if (!frozen) dto.currency = currency;
       }
       if (!frozen) {
         dto.newStudentName = newStudentName.trim() || null;
@@ -937,7 +946,8 @@ function EditSubmissionModal({
             color: '#78350f',
             marginBottom: 12,
           }}>
-            Часть полей заморожена: студент/заявка/программа уже созданы после первого одобрения.
+            Часть полей заморожена: студент/заявка/программа уже созданы после первого одобрения,
+            а валюта сделки участвует в расчёте бонуса за закрытые месяцы.
           </div>
         )}
 
@@ -955,10 +965,38 @@ function EditSubmissionModal({
                 />
               </Field>
               <Field label="Валюта">
-                <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                  <option value="TJS">TJS (сомони)</option>
-                  <option value="USD">USD</option>
-                </select>
+                {frozen ? (
+                  <>
+                    <div
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        padding: '8px 10px',
+                        background: 'var(--bg-soft)',
+                        borderRadius: 6,
+                        color: 'var(--text)',
+                      }}
+                    >
+                      {submission.currency}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4 }}>
+                      {t('submissionForm.currency.frozen.hint')}
+                    </div>
+                  </>
+                ) : (
+                  <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                    {/* Легаси-значение, которого нет в списке, показываем как есть —
+                        иначе select молча «переключил» бы сделку на первый пункт
+                        и отправил чужую валюту в payload. */}
+                    {!(SUBMISSION_CURRENCIES as readonly string[]).includes(currency) && (
+                      <option value={currency}>{currency}</option>
+                    )}
+                    {SUBMISSION_CURRENCIES.map((c) => (
+                      <option key={c} value={c}>{SUBMISSION_CURRENCY_LABEL[c] || c}</option>
+                    ))}
+                  </select>
+                )}
               </Field>
             </>
           ) : (

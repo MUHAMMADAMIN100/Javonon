@@ -10,6 +10,8 @@ import {
   type CreateSubmissionDto,
   type SubmissionPartnerPreview,
   type SubmissionPaymentMethod,
+  SUBMISSION_CURRENCIES,
+  SUBMISSION_CURRENCY_LABEL,
 } from '../api/submissions';
 import { fmtCommissionRate, fmtMoneyCents } from '../api/partners';
 import { getStudent, listStudents } from '../api/students';
@@ -550,9 +552,14 @@ export default function SubmissionForm() {
               <input className="crm-input" type="number" min={0} step={50} value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="3000" />
             </Field>
             <Field label="Валюта">
+              {/* Список — общий с бэком (SUBMISSION_CURRENCIES). Значение вне
+                  списка бэк отвергает: по валюте сделки считается бонусная
+                  база менеджера. Менять валюту можно только до первого
+                  одобрения платежа. */}
               <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                <option value="TJS">TJS (сомони)</option>
-                <option value="USD">USD</option>
+                {SUBMISSION_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{SUBMISSION_CURRENCY_LABEL[c] || c}</option>
+                ))}
               </select>
             </Field>
           </div>

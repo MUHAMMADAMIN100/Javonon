@@ -23,6 +23,7 @@ import {
 } from '@prisma/client';
 import { MANAGER_ROLES, hasRole } from '../auth/role-utils';
 import { tjLocalDay, tjYMD } from '../common/tj-time';
+import { REPORTING_CURRENCY } from '../common/reporting-currency';
 import { RevenueSchemeService } from '../revenue-scheme/revenue-scheme.service';
 
 /**
@@ -200,7 +201,11 @@ function enumForProductCategoryLabel(
 // чтобы бухгалтер видел, что валютная активность в периоде была, и мог
 // её обработать вручную. Это опция (b) из аудита — минимальный blast
 // radius: фронт продолжает работать со старыми формами данных.
-const REPORTING_CURRENCY = 'TJS';
+//
+// Сам литерал живёт в common/reporting-currency.ts — единый источник правды
+// для finance / salary / submissions / kpi. Здесь он только импортируется
+// (шапка файла) под прежним именем REPORTING_CURRENCY, чтобы все агрегаты
+// ниже остались нетронутыми.
 
 // Тип буфера «не-TJS» сумм на период (для admin-панели: «в этом периоде
 // была ещё выручка в USD/EUR/CNY/RUB — обработайте отдельно»).
@@ -1760,11 +1765,12 @@ export class FinanceService {
    *
    * Fix: разбиваем INCOME на два куска (те же, что использует salary):
    *   1) TUITION_PAYMENT-транзакции — берём через SubmissionPayment
-   *      .reviewedAt-период (тот же якорь, что даёт бонус). Так суммарный
+   *      .paidAt-период (тот же якорь, что даёт бонус). Так суммарный
    *      byManager amount === salary.preview.salesAmount для одного
-   *      менеджера/периода.
+   *      менеджера/периода. Якорь переехал с reviewedAt на paidAt вместе
+   *      с бонусом — см. common/manager-bonus-volume.ts.
    *   2) Ручные INCOME (category != TUITION_PAYMENT) — по Transaction
-   *      .date, как раньше. У них нет SubmissionPayment.reviewedAt,
+   *      .date, как раньше. У них нет SubmissionPayment вообще,
    *      триггер начисления = сам факт транзакции.
    *
    * byExpenseCategory остаётся по Transaction.date — расходы к
@@ -1780,8 +1786,12 @@ export class FinanceService {
     const dateRange = opts.from || opts.to
       ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
       : {};
-    const reviewedRange = opts.from || opts.to
-      ? { reviewedAt: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+    // Якорь tuition-прихода — paidAt, тот же, что у бонусной базы
+    // (common/manager-bonus-volume.ts). Совпадает с Transaction.date:
+    // approvePayment пишет date = payment.paidAt, поэтому byManager здесь
+    // и salesAmount в зарплате дают одно и то же число.
+    const paidRange = opts.from || opts.to
+      ? { paidAt: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
       : {};
     const liveWhere = { ...dateRange, reversedAt: null } as const;
     // Fix (audit — currency mixing, CRITICAL): все три groupBy
@@ -1801,7 +1811,7 @@ export class FinanceService {
     const reviewedPayments = await this.prisma.submissionPayment.findMany({
       where: {
         status: 'APPROVED',
-        ...reviewedRange,
+        ...paidRange,
         submission: {
           currency: REPORTING_CURRENCY,
           status: { not: 'CANCELLED' },
@@ -1935,7 +1945,7 @@ export class FinanceService {
       // самой транзакции». Помогает при сверке с /salary/preview,
       // если менеджер спрашивает «почему разные числа?».
       incomeAnchor: {
-        tuition: 'submissionPayment.reviewedAt',
+        tuition: 'submissionPayment.paidAt',
         manual: 'transaction.date',
       },
     };

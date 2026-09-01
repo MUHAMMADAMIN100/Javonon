@@ -32,6 +32,8 @@
  * SalaryRecord.* — Float в целых единицах валюты, НЕ дирамы/центы.
  */
 
+import { REPORTING_CURRENCY } from './reporting-currency';
+
 export interface ManagerBonusBand {
   /** Стабильный ключ для i18n на фронте (ru/tj подписи полос). */
   key: string;
@@ -53,7 +55,7 @@ export const MANAGER_BONUS_BANDS: readonly ManagerBonusBand[] = [
 ] as const;
 
 /** Валюта, в которой заданы пороги (совпадает с SALARY_REPORTING_CURRENCY). */
-export const MANAGER_BONUS_BANDS_CURRENCY = 'TJS';
+export const MANAGER_BONUS_BANDS_CURRENCY = REPORTING_CURRENCY;
 
 /**
  * Полоса для объёма продаж. Никогда не возвращает null.
@@ -65,24 +67,51 @@ export const MANAGER_BONUS_BANDS_CURRENCY = 'TJS';
  * между 75 000 и 75 001 дыра). Здесь такой дыры нет: 75 000 → 4%,
  * 75 000.50 → уже выше потолка первой полосы → 5%. Отрицательное / NaN
  * трактуем как 0 → первая полоса, бонус 0.
+ *
+ * ═══ ОКРУГЛЕНИЕ ВХОДА ДО КОПЕЕК — ЧАСТЬ КОНТРАКТА ═══
+ * Рассуждение выше верно ТОЛЬКО для величины, уже приведённой к копейкам.
+ * Объём приходит как сумма Float-платежей, а IEEE-754-накопление обычных
+ * двухзначных сумм даёт значение чуть ВЫШЕ целого порога:
+ *   6948.28+21080.81+4960.17+14775.2+3445.05+37396.48+61394.01
+ *   = ровно 150 000.00 в десятичном виде, но 150000.00000000002910 как
+ *   Float → «v <= 150000» ложно → 6% вместо 5%, 9 000 вместо 7 500.
+ * Ошибка односторонняя (всегда переплата) и повторяется на 75 000 /
+ * 225 000 / 300 000. Поэтому нормализуем ВХОД, а не только результат.
+ * Штатный вызывающий (common/manager-bonus-volume.ts) отдаёт объём уже
+ * округлённым; здесь — страховка, чтобы никакой будущий вызывающий не
+ * внёс эту ошибку обратно. Округление до копеек НЕ съедает реальное
+ * превышение: 150 000.01 по-прежнему уходит в следующую полосу.
  */
 export function findManagerBonusBand(volume: number): ManagerBonusBand {
-  const v = Number.isFinite(volume) && volume > 0 ? volume : 0;
+  const v = normalizeVolume(volume);
   const band = MANAGER_BONUS_BANDS.find((b) => b.maxAmount === null || v <= b.maxAmount);
   return band || MANAGER_BONUS_BANDS[MANAGER_BONUS_BANDS.length - 1];
 }
 
 /**
- * Бонус = ВЕСЬ объём × ставка полосы. Округление до копеек — как round()
- * в salary.service (Math.round(n*100)/100).
+ * Приведение объёма к сравнимой с целыми порогами величине: NaN /
+ * Infinity / отрицательное → 0, затем округление до копеек — тем же
+ * правилом, что round() в salary.service (Math.round(n*100)/100).
+ * Вызывать ОБЯЗАТЕЛЬНО до сравнения с потолком полосы (см. блок про
+ * IEEE-754 в doc-комментарии findManagerBonusBand).
+ */
+function normalizeVolume(volume: number): number {
+  const v = Number.isFinite(volume) && volume > 0 ? volume : 0;
+  return Math.round(v * 100) / 100;
+}
+
+/**
+ * Бонус = ВЕСЬ объём × ставка полосы. Объём нормализуется до копеек ДО
+ * выбора полосы и ДО умножения, результат округляется тем же правилом,
+ * что round() в salary.service (Math.round(n*100)/100).
  */
 export function computeManagerBonus(volume: number): {
   band: ManagerBonusBand;
   percent: number;
   amount: number;
 } {
-  const band = findManagerBonusBand(volume);
-  const v = Number.isFinite(volume) && volume > 0 ? volume : 0;
+  const v = normalizeVolume(volume);
+  const band = findManagerBonusBand(v);
   const amount = Math.round(((v * band.percent) / 100) * 100) / 100;
   return { band, percent: band.percent, amount };
 }

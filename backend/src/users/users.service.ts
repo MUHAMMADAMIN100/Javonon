@@ -16,6 +16,10 @@ import { isElevated, isFounder } from '../auth/role-utils';
 import { tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
 import { SettingsService } from '../settings/settings.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
+import {
+  effectiveManagerBonus,
+  managerBonusVolume,
+} from '../common/manager-bonus-volume';
 
 @Injectable()
 export class UsersService {
@@ -115,6 +119,7 @@ export class UsersService {
       dailyReportsThisMonth,
       totalLeadsMonth,
       ownClientsMonth,
+      bonusVolume,
     ] = await Promise.all([
       this.prisma.userDocument.findMany({
         where: { userId: id },
@@ -189,7 +194,17 @@ export class UsersService {
           createdAt: { gte: monthStart, lte: monthEnd },
         },
       }),
+      // Бонусный объём текущего месяца — тот же расчёт, что у
+      // бухгалтера на экране Зарплаты (common/manager-bonus-volume.ts).
+      // Нужен, чтобы отдать ДЕЙСТВУЮЩУЮ ставку комиссии, а не сырой
+      // персональный override (у всех, кто на сетке, он равен 0 —
+      // и досье показывало «Бонус % с продаж: 0%» при 6% в зарплате).
+      managerBonusVolume(this.prisma, id, now),
     ]);
+
+    // Действующая ставка: персональный процент, если задан (> 0),
+    // иначе — ставка полосы, в которую попал объём месяца.
+    const bonus = effectiveManagerBonus(user.bonusPercent, bonusVolume.volume);
 
     const target = user.kpiTargetPct ?? 1;
     const requiredClosed = Math.ceil((totalLeadsMonth * target) / 100);
@@ -205,7 +220,26 @@ export class UsersService {
         records: salaryRecords,
         baseSalary: user.baseSalary || 0,
         hourlyRate: user.hourlyRate || 0,
+        /**
+         * ПЕРСОНАЛЬНЫЙ override из User.bonusPercent. 0 = не задан,
+         * ставка берётся из сетки. НЕ показывать как «бонус % с продаж».
+         */
         bonusPercent: user.bonusPercent || 0,
+        /** Ставка, которая РЕАЛЬНО применяется к объёму этого месяца. */
+        bonusPercentEffective: bonus.percent,
+        /** 'PERSONAL' — личный процент; 'BAND' — ставка сетки. */
+        bonusSource: bonus.source,
+        /** Полоса объёма — возвращается всегда, даже при личном проценте. */
+        bonusBand: {
+          key: bonus.band.key,
+          minAmount: bonus.band.minAmount,
+          maxAmount: bonus.band.maxAmount, // null = без верхней границы
+          percent: bonus.band.percent,
+        },
+        /** Объём (APPROVED-платежи, TJS) за календарный месяц. */
+        bonusVolume: Math.round(bonusVolume.volume * 100) / 100,
+        bonusPeriodStart: bonusVolume.periodStart,
+        bonusPeriodEnd: bonusVolume.periodEnd,
       },
       penalties: {
         list: penalties,

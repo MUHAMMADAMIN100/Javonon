@@ -27,6 +27,7 @@ import CrmDatePicker from '../components/CrmDatePicker';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
+import { bandRangeLabel } from '../lib/bonusBands';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -121,7 +122,25 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
           <Field label={t('userDetail.field.baseSalary')} value={fmtMoney(salary.baseSalary)} />
           <Field label={t('userDetail.field.hourlyRate')} value={fmtMoney(salary.hourlyRate)} />
-          <Field label={t('userDetail.field.bonusPercent')} value={`${salary.bonusPercent}%`} />
+          {/*
+            ДЕЙСТВУЮЩАЯ ставка, а не сырой User.bonusPercent. Последний —
+            персональный override, и у всех, кто сидит на сетке, он равен 0:
+            менеджер читал в своём досье «Бонус % с продаж: 0%», пока
+            учредитель видел 6% на экране Зарплаты. Ниже ещё и откуда
+            взялась цифра: полоса + объём за месяц (или «личный процент»).
+            Старый бэк без bonusPercentEffective — падаем на прежнее поведение.
+          */}
+          <Field
+            label={t('userDetail.field.bonusPercent')}
+            value={`${salary.bonusPercentEffective ?? salary.bonusPercent}%`}
+            hint={
+              salary.bonusSource === 'PERSONAL'
+                ? t('userDetail.bonus.personal')
+                : salary.bonusBand
+                  ? `${t('userDetail.bonus.fromBand')} · ${bandRangeLabel(salary.bonusBand.minAmount, salary.bonusBand.maxAmount)} · ${t('salary.bonus.volume')} ${fmtMoney(salary.bonusVolume ?? 0)}`
+                  : undefined
+            }
+          />
           <Field
             label={t('userDetail.field.kpiTarget')}
             value={`${kpi.targetPct}%`}
@@ -343,11 +362,12 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 // Используем общий словарь из api/userProfile.
 const LABEL = USER_DOCUMENT_LABEL;
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
       <div style={{ fontSize: 11, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
       <div style={{ fontWeight: 500 }}>{value}</div>
+      {hint && <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>{hint}</div>}
     </div>
   );
 }
@@ -480,7 +500,7 @@ function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId
         <LabelInput label={t('userDetail.field.hiredAt')} value={hiredAt} onChange={setHiredAt} type="date" />
         <LabelInput label={t('userDetail.field.baseSalary')} value={baseSalary} onChange={setBaseSalary} type="number" />
         <LabelInput label={t('userDetail.field.hourlyRate')} value={hourlyRate} onChange={setHourlyRate} type="number" />
-        <LabelInput label={t('userDetail.field.bonusPercent')} value={bonusPercent} onChange={setBonusPercent} type="number" />
+        <LabelInput label={t('userDetail.field.bonusPercentPersonal')} value={bonusPercent} onChange={setBonusPercent} type="number" />
         <LabelInput label={t('userDetail.field.kpiTarget')} value={kpiTargetPct} onChange={setKpiTargetPct} type="number" />
         <LabelInput label={t('userDetail.field.kpiAutoStep')} value={kpiAutoStepPct} onChange={setKpiAutoStepPct} type="number" />
         <LabelInput label={t('userDetail.field.kpiMax')} value={kpiMaxPct} onChange={setKpiMaxPct} type="number" />

@@ -288,6 +288,27 @@ export const uploadSubmissionFile = (file: File) => {
     .then((r) => r.data);
 };
 
+/**
+ * Валюты сделки — ОДИН список с бэкендом (submissions.service.ts,
+ * SUBMISSION_CURRENCIES). Значение вне списка бэк отвергает 400-й: по
+ * SaleSubmission.currency зарплатный модуль отбирает одобренные платежи в
+ * бонусную базу месяца (своей валюты у платежа нет), поэтому произвольная
+ * строка тихо выкидывала сделку из объёма продаж менеджера.
+ *
+ * Валюта РЕДАКТИРУЕМА только до первого одобрения платежа
+ * (submission.firstApprovedAt === null) — дальше она заморожена, иначе правка
+ * переписала бы бонусную базу уже закрытых месяцев.
+ */
+export const SUBMISSION_CURRENCIES = ['TJS', 'USD', 'EUR', 'CNY', 'RUB'] as const;
+
+export const SUBMISSION_CURRENCY_LABEL: Record<string, string> = {
+  TJS: 'TJS (сомони)',
+  USD: 'USD',
+  EUR: 'EUR',
+  CNY: 'CNY (юань)',
+  RUB: 'RUB',
+};
+
 export const SUBMISSION_STATUS_LABEL: Record<SubmissionStatus, string> = {
   ACTIVE: 'Активна',
   COMPLETED: 'Закрыта',

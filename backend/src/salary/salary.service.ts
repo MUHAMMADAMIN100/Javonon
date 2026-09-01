@@ -1,20 +1,23 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeTrackingService } from '../time-tracking/time-tracking.service';
 import { PenaltiesService } from '../penalties/penalties.service';
 import {
-  tjEndOfMonth,
   tjLocalDay,
   tjParseLocalDate,
   tjParseLocalDateEnd,
-  tjStartOfMonth,
 } from '../common/tj-time';
 import {
   MANAGER_BONUS_BANDS,
   ManagerBonusBand,
   computeManagerBonus,
-  findManagerBonusBand,
 } from '../common/bonus-bands';
+import {
+  MANAGER_BONUS_CURRENCY,
+  effectiveManagerBonus,
+  managerBonusVolume,
+} from '../common/manager-bonus-volume';
 
 // Единая отчётная валюта модуля зарплат. Должна совпадать с
 // REPORTING_CURRENCY из finance.service.ts — иначе финансовый и
@@ -38,12 +41,31 @@ import {
 // схеме что `nonTjsTotals` в finance.service.ts: фронт показывает
 // «в периоде была ещё выручка в USD/EUR/… — обработайте вручную
 // или конвертируйте в TJS вручную перед закрытием периода».
-const SALARY_REPORTING_CURRENCY = 'TJS';
+const SALARY_REPORTING_CURRENCY = MANAGER_BONUS_CURRENCY;
 
 // Разбивка не-TJS продаж (по коду валюты → сумма в исходной валюте).
 // Используется исключительно для отображения / audit — эти суммы НЕ
 // участвуют в bonusAmount и netAmount, но и не теряются в тишине.
 export type NonTjsSalesBreakdown = Record<string, number>;
+
+/**
+ * Сообщение отказа при повторном начислении за тот же период.
+ * Отдаётся как 400. Локализованная подпись у этой ошибки на фронте —
+ * ключ `salary.error.duplicatePeriod` (ru/tj в lib/i18n.tsx): CRM
+ * сопоставляет её по коду 400 + совпадению текста и показывает свой
+ * перевод, а не сырую строку бэкенда.
+ */
+const DUPLICATE_PERIOD_MESSAGE = 'Зарплата за этот период уже начислена';
+
+/**
+ * Сообщение при проигранной гонке SERIALIZABLE-транзакции после
+ * исчерпания ретраев. Ключ на фронте — `salary.error.concurrent`.
+ */
+const CONCURRENT_WRITE_MESSAGE =
+  'Расчёт не сохранён из-за одновременного запроса. Повторите попытку';
+
+/** Сколько раз перезапускать SERIALIZABLE-транзакцию при 40001/P2034. */
+const SERIALIZABLE_RETRIES = 3;
 
 @Injectable()
 export class SalaryService {
@@ -89,9 +111,10 @@ export class SalaryService {
    * Считает (без сохранения) зарплату сотрудника за период:
    *   - hours/minutes — берём из TimeEntry за ЗАПРОШЕННЫЙ период
    *   - объём продаж (бонусная база) — сумма APPROVED SubmissionPayment,
-   *     reviewedAt которых попал в КАЛЕНДАРНЫЙ МЕСЯЦ (Asia/Dushanbe) даты
-   *     начала периода. Триггер начисления — момент одобрения FOUNDER'ом,
-   *     а не дата получения денег менеджером (см. bug #22 ниже).
+   *     paidAt которых попал в КАЛЕНДАРНЫЙ МЕСЯЦ (Asia/Dushanbe) даты
+   *     начала периода. Месяц определяет дата получения денег; одобрение
+   *     остаётся фильтром, а не якорем периода — обоснование и разбор на
+   *     боевых данных в common/manager-bonus-volume.ts.
    *   - bonus = ВЕСЬ объём × ставка ОДНОЙ полосы (см. common/bonus-bands.ts:
    *     flat-по-полосе, не прогрессивно)
    *   - penalty — эффективные штрафы за период (не тронуты этой доработкой)
@@ -220,40 +243,18 @@ export class SalaryService {
     // scope этого фикса (см. верхний комментарий про SALARY_REPORTING_CURRENCY).
     //
     // ОКНО ОБЪЁМА — КАЛЕНДАРНЫЙ МЕСЯЦ Asia/Dushanbe (не запрошенный
-    // период). Границы берём из tj-time (tjStartOfMonth/tjEndOfMonth), а
-    // не из сырого Date: сервер живёт в UTC, и `new Date(y, m, 1)` дал бы
-    // месяц, начинающийся 1-го числа в 05:00 по Душанбе — платежи первой
-    // ночи месяца уехали бы в предыдущий месяц и в чужую полосу.
-    const bonusPeriodStart = tjStartOfMonth(periodStart);
-    const bonusPeriodEnd = tjEndOfMonth(periodStart); // последняя мс месяца, inclusive
-    const tjsPaymentCandidates = await this.prisma.submissionPayment.findMany({
-      where: {
-        status: 'APPROVED',
-        reviewedAt: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
-        submission: {
-          managerId: userId,
-          status: { not: 'CANCELLED' },
-          currency: SALARY_REPORTING_CURRENCY,
-        },
-      },
-      select: { amount: true, financeTransactionId: true },
-    });
-    const reversedLinkedTxIds = await this.reversedLinkedTxIds(
-      tjsPaymentCandidates.map((p) => p.financeTransactionId),
-    );
-    const submissionSalesSum = tjsPaymentCandidates.reduce((sum, p) => {
-      // Второй якорь (parity с finance): linked Transaction.reversedAt.
-      // Пропускаем платежи, чья финансовая запись помечена как reversed —
-      // даже если submission ещё не CANCELLED (случай (B) в комментарии
-      // выше: ручная корректировка).
-      if (p.financeTransactionId && reversedLinkedTxIds.has(p.financeTransactionId)) {
-        return sum;
-      }
-      return sum + (p.amount || 0);
-    }, 0);
+    // период), границы считаются через tj-time — см. комментарий
+    // в common/manager-bonus-volume.ts.
     // ОБЪЁМ ДЛЯ ПОЛОСЫ = только APPROVED-платежи по сделкам (ТЗ):
     // «объём = сумма одобренных платежей по заявкам за календарный месяц».
-    const salesAmount = submissionSalesSum;
+    // Сами фильтры живут в common/manager-bonus-volume.ts — тот же расчёт
+    // читает досье сотрудника (/me/full), чтобы менеджер и бухгалтер
+    // видели ОДИН и тот же объём, полосу и процент.
+    const {
+      periodStart: bonusPeriodStart,
+      periodEnd: bonusPeriodEnd,
+      volume: salesAmount,
+    } = await managerBonusVolume(this.prisma, userId, periodStart);
 
     // Ручные INCOME-транзакции (импорт / исторические данные / операции без
     // сделки) в бонусную базу по новому правилу НЕ входят — но и не
@@ -283,7 +284,9 @@ export class SalaryService {
     const nonTjsSubmissionPayments = await this.prisma.submissionPayment.findMany({
       where: {
         status: 'APPROVED',
-        reviewedAt: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
+        // Тот же якорь, что и у TJS-объёма — paidAt, не reviewedAt
+        // (см. common/manager-bonus-volume.ts, блок «ЯКОРЬ ПЕРИОДА»).
+        paidAt: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
         submission: {
           managerId: userId,
           status: { not: 'CANCELLED' },
@@ -335,12 +338,13 @@ export class SalaryService {
     //   200 000 → полоса 150 001–225 000 → 6% → 12 000 (а не 9 750).
     // Полоса определяется ВСЕГДА (даже при персональном проценте) — чтобы
     // CRM могла показать менеджеру, куда попал его объём.
-    const band = findManagerBonusBand(salesAmount);
     // Персональный bonusPercent у юзера, если > 0, перебивает сетку
     // (ручной override FOUNDER'а, существующая функция — не трогаем).
-    const personalPct = user.bonusPercent || 0;
-    const usePersonal = personalPct > 0;
-    const bonusPercent = usePersonal ? personalPct : band.percent;
+    const effective = effectiveManagerBonus(user.bonusPercent, salesAmount);
+    const band = effective.band;
+    const personalPct = effective.personalPercent;
+    const usePersonal = effective.source === 'PERSONAL';
+    const bonusPercent = effective.percent;
     /** Комиссия за ВЕСЬ месяц целиком. */
     const bonusMonthTotal = usePersonal
       ? round((salesAmount * personalPct) / 100)
@@ -359,6 +363,15 @@ export class SalaryService {
     //
     // Если объём за месяц вырос и поднял полосу, вторая запись доплатит
     // разницу — это и есть верное поведение месячной комиссии.
+    //
+    // ВНИМАНИЕ: здесь этот вычет — ТОЛЬКО ДЛЯ ПОКАЗА в калькуляторе.
+    // Гардом от двойного начисления он быть не может: preview читает, а
+    // create() пишет отдельным запросом, и между ними ничего не стоит —
+    // два одновременных POST оба видели бы 0 и оба начислили бы полную
+    // месячную комиссию. Настоящий расчёт bonusAmount, который уходит в
+    // БД, делается заново внутри SERIALIZABLE-транзакции —
+    // insertRecordAtomically() ниже. Числа совпадают, пока нет гонки;
+    // при гонке авторитетно значение из транзакции.
     const priorBonusAgg = await this.prisma.salaryRecord.aggregate({
       where: {
         userId,
@@ -490,27 +503,44 @@ export class SalaryService {
       commentClean = c || null;
     }
 
+    // Быстрый отказ до тяжёлого preview: запись за этот период уже есть.
+    // Это НЕ гард (проверка гоночная сама по себе) — настоящие гарды ниже:
+    // SERIALIZABLE-транзакция и уникальный индекс. Здесь — только чтобы не
+    // гонять агрегаты по платежам ради заведомо отклонённого запроса и
+    // чтобы бухгалтер увидел внятное 400, а не 500 от индекса.
+    const alreadyExists = await this.prisma.salaryRecord.findFirst({
+      where: { userId: dto.userId, periodStart: start },
+      select: { id: true },
+    });
+    if (alreadyExists) throw new BadRequestException(DUPLICATE_PERIOD_MESSAGE);
+
     const preview = await this.preview(dto.userId, start, end, dto.kpiBonus || 0);
 
-    const record = await this.prisma.salaryRecord.create({
-      data: {
-        userId: dto.userId,
-        periodStart: start,
-        periodEnd: end,
-        workedMinutes: preview.workedMinutes,
-        lateMinutes: preview.lateMinutes,
-        // overtimeMinutes / overtimePay НЕ пишем — переработка убрана.
-        // Колонки остаются в схеме с @default(0) ради исторических строк.
-        baseAmount: preview.baseAmount,
-        salesAmount: preview.salesAmount,
-        bonusAmount: preview.bonusAmount,
-        kpiBonus: preview.kpiBonus,
-        penalties: preview.penalties,
-        netAmount: preview.netAmount,
-        currency: preview.currency,
-        comment: commentClean,
-      },
-      include: { user: { select: { id: true, fullName: true, role: true } } },
+    const record = await this.insertRecordAtomically({
+      userId: dto.userId,
+      periodStart: start,
+      periodEnd: end,
+      bonusPeriodStart: preview.bonusPeriodStart,
+      bonusPeriodEnd: preview.bonusPeriodEnd,
+      bonusMonthTotal: preview.bonusMonthTotal,
+      // Снимок расшифровки комиссии — сохраняется вместе с записью, чтобы
+      // выплаченную строку можно было объяснить спустя месяцы. Ставку и
+      // полосу берём из того же preview, из которого получился
+      // bonusMonthTotal: второго расчёта здесь нет.
+      bonusVolume: preview.bonusVolume,
+      bonusBandKey: preview.bonusBand.key,
+      bonusBandMin: preview.bonusBand.minAmount,
+      bonusBandMax: preview.bonusBand.maxAmount,
+      bonusPercent: preview.bonusPercent,
+      bonusSource: preview.bonusSource,
+      workedMinutes: preview.workedMinutes,
+      lateMinutes: preview.lateMinutes,
+      baseAmount: preview.baseAmount,
+      salesAmount: preview.salesAmount,
+      kpiBonus: preview.kpiBonus,
+      penalties: preview.penalties,
+      currency: preview.currency,
+      comment: commentClean,
     });
     // Помечаем applied ТОЛЬКО те штрафы, которые реально вошли в
     // netAmount. Pending/excused оставляем — они либо станут REJECTED
@@ -521,6 +551,158 @@ export class SalaryService {
       .map((i: any) => i.id as string);
     await this.penaltiesSvc.markApplied(dto.userId, start, end, effectiveIds);
     return record;
+  }
+
+  /**
+   * ЕДИНСТВЕННАЯ точка записи SalaryRecord — и единственное место, где
+   * бонус к начислению становится окончательным.
+   *
+   * ЧТО БЫЛО СЛОМАНО. preview() читает bonusAlreadyPaid (сумма bonusAmount
+   * записей того же календарного месяца), create() отдельным запросом
+   * вставлял строку. Между чтением и записью не было ничего: два
+   * одновременных POST /salary на одного менеджера за один период
+   * (двойной клик по «Зафиксировать», ретрай после таймаута) оба видели
+   * bonusAlreadyPaid = 0, оба писали ПОЛНЫЙ bonusMonthTotal — менеджер
+   * получал месячную комиссию дважды. Дальше markPaid резал под каждую
+   * строку отдельную расходную SALARY-транзакцию, и расходилась ещё и
+   * финансовая отчётность.
+   *
+   * ЧТО ТЕПЕРЬ. Агрегат уже начисленного и вставка выполняются ОДНОЙ
+   * SERIALIZABLE-транзакцией, и bonusAmount/netAmount пересчитываются
+   * ВНУТРИ неё по свежепрочитанному bonusAlreadyPaid. Значения из preview
+   * здесь — только те, что от конкурентной зарплатной вставки не зависят
+   * (объём продаж, база, штрафы, KPI). Postgres SSI видит пересечение
+   * «прочитанный диапазон periodStart ↔ вставка в тот же диапазон» и
+   * отменяет вторую транзакцию с 40001 (Prisma: P2034). Её мы
+   * перезапускаем: на втором проходе агрегат уже видит чужую строку,
+   * bonusAlreadyPaid становится ненулевым и вторая запись доплачивает
+   * ровно разницу (обычно 0) вместо полной комиссии.
+   *
+   * ТРЕТИЙ РУБЕЖ — уникальный индекс SalaryRecord(userId, periodStart)
+   * (schema.prisma + prisma/ensure-salary-unique.ts). Он ловит дубль
+   * периода даже если БД поднята со снятым SSI или индекс обошли мимо
+   * сервиса. P2002 отдаём как 400, а не как 500.
+   *
+   * Полосы, границы и flat-правило комиссии не трогаются: bonusMonthTotal
+   * приходит из preview как есть, здесь только вычитается уже начисленное.
+   * Исторические записи не пересчитываются.
+   */
+  private async insertRecordAtomically(args: {
+    userId: string;
+    periodStart: Date;
+    periodEnd: Date;
+    bonusPeriodStart: Date;
+    bonusPeriodEnd: Date;
+    bonusMonthTotal: number;
+    /** Снимок расшифровки комиссии — пишется в запись как есть. */
+    bonusVolume: number;
+    bonusBandKey: string;
+    bonusBandMin: number;
+    bonusBandMax: number | null;
+    bonusPercent: number;
+    bonusSource: 'BAND' | 'PERSONAL';
+    workedMinutes: number;
+    lateMinutes: number;
+    baseAmount: number;
+    salesAmount: number;
+    kpiBonus: number;
+    penalties: number;
+    currency: string;
+    comment: string | null;
+  }) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            // Повторная проверка дубля — уже под защитой SSI, в отличие от
+            // быстрой проверки в create().
+            const dup = await tx.salaryRecord.findFirst({
+              where: { userId: args.userId, periodStart: args.periodStart },
+              select: { id: true },
+            });
+            if (dup) throw new BadRequestException(DUPLICATE_PERIOD_MESSAGE);
+
+            // Уже начисленный за ЭТОТ месяц бонус — читаем здесь, а не в
+            // preview: только это чтение попадает в диапазон предикатной
+            // блокировки вместе с последующей вставкой.
+            const priorBonusAgg = await tx.salaryRecord.aggregate({
+              where: {
+                userId: args.userId,
+                periodStart: { gte: args.bonusPeriodStart, lte: args.bonusPeriodEnd },
+              },
+              _sum: { bonusAmount: true },
+            });
+            const bonusAlreadyPaid = round(priorBonusAgg._sum.bonusAmount || 0);
+            const bonusAmount = Math.max(0, round(args.bonusMonthTotal - bonusAlreadyPaid));
+            // net пересчитываем здесь же: preview.netAmount посчитан со
+            // «своим» bonusAmount, который мог устареть между preview и
+            // этой транзакцией.
+            const netAmount = round(
+              args.baseAmount + bonusAmount + args.kpiBonus - args.penalties,
+            );
+
+            return tx.salaryRecord.create({
+              data: {
+                userId: args.userId,
+                periodStart: args.periodStart,
+                periodEnd: args.periodEnd,
+                workedMinutes: args.workedMinutes,
+                lateMinutes: args.lateMinutes,
+                // overtimeMinutes / overtimePay НЕ пишем — переработка убрана.
+                // Колонки остаются в схеме с @default(0) ради исторических строк.
+                baseAmount: args.baseAmount,
+                salesAmount: args.salesAmount,
+                bonusAmount,
+                kpiBonus: args.kpiBonus,
+                penalties: args.penalties,
+                netAmount,
+                currency: args.currency,
+                // СНИМОК РАСШИФРОВКИ КОМИССИИ (audit HIGH «строка не
+                // сходится»). Раньше в БД оседало одно число bonusAmount,
+                // а объяснение — объём, полоса, ставка, вычет уже
+                // начисленного — жило только в live-preview и исчезало в
+                // момент сохранения. Спустя полгода строку «Бонус 12 500»
+                // защитить было нечем: сетка полос лежит в коде и может
+                // смениться, платежи могли быть отменены, пересчёт дал бы
+                // уже другое число. Пишем ровно те цифры, из которых
+                // bonusAmount получился ЗДЕСЬ — в том числе
+                // bonusAlreadyPaid, прочитанный внутри этой же
+                // SERIALIZABLE-транзакции (значение из preview могло
+                // устареть, и снимок разошёлся бы с фактом).
+                bonusVolume: args.bonusVolume,
+                bonusBandKey: args.bonusBandKey,
+                bonusBandMin: args.bonusBandMin,
+                bonusBandMax: args.bonusBandMax,
+                bonusPercent: args.bonusPercent,
+                bonusMonthTotal: args.bonusMonthTotal,
+                bonusAlreadyPaid,
+                bonusSource: args.bonusSource,
+                comment: args.comment,
+              },
+              include: { user: { select: { id: true, fullName: true, role: true } } },
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError) {
+          // Уникальный индекс (userId, periodStart) — дубль периода.
+          // 400 с внятным текстом вместо 500.
+          if (e.code === 'P2002') {
+            throw new BadRequestException(DUPLICATE_PERIOD_MESSAGE);
+          }
+          // P2034 — write conflict / serialization failure (Postgres 40001).
+          // Ровно тот случай, ради которого взят SERIALIZABLE: перезапуск
+          // безопасен, потому что вся арифметика бонуса живёт внутри
+          // транзакции и на втором проходе увидит чужую запись.
+          if (e.code === 'P2034') {
+            if (attempt < SERIALIZABLE_RETRIES) continue;
+            throw new BadRequestException(CONCURRENT_WRITE_MESSAGE);
+          }
+        }
+        throw e;
+      }
+    }
   }
 
   /** QA-fix: атомарное claim PENDING → PAID, чтобы повторный вызов
@@ -557,7 +739,35 @@ export class SalaryService {
     });
   }
 
+  /**
+   * Удаление зарплатной записи.
+   *
+   * ВЫПЛАЧЕННУЮ (PAID) запись удалять НЕЛЬЗЯ, и это не косметика:
+   *
+   * 1. Двойная комиссия. preview()/create() считают bonusAlreadyPaid
+   *    агрегатом bonusAmount по записям месяца. Удаление PAID-записи
+   *    вычло бы её из агрегата, и следующий расчёт показал бы ПОЛНУЮ
+   *    месячную комиссию как «к начислению» — её можно было бы
+   *    выплатить второй раз.
+   * 2. Осиротевший расход. markPaid() пишет EXPENSE/SALARY транзакцию;
+   *    при delete она осталась бы в финансах без своей зарплатной
+   *    записи и ничем не сторнировалась бы.
+   *
+   * Удаление DRAFT остаётся разрешённым, и уменьшать агрегат при этом
+   * КОРРЕКТНО: черновик ничего не выплатил, он лишь резервировал часть
+   * месячной комиссии, и удаление этот резерв освобождает.
+   */
   async remove(id: string) {
+    const rec = await this.prisma.salaryRecord.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!rec) throw new NotFoundException('Запись не найдена');
+    if (rec.status === 'PAID') {
+      throw new BadRequestException(
+        'Выплаченную зарплату нельзя удалить — используйте сторнирование',
+      );
+    }
     return this.prisma.salaryRecord.delete({ where: { id } });
   }
 }
