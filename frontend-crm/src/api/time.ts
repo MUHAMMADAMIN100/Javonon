@@ -13,7 +13,6 @@ export interface TimeEntry {
   totalMinutes: number;
   totalLunchMinutes: number;
   lateMinutes: number;
-  overtimeMinutes: number;
   clockInLat?: number | null;
   clockInLon?: number | null;
   clockInProofUrl?: string | null;

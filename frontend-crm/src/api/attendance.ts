@@ -9,7 +9,6 @@ export interface AttendanceEntry {
   lunchIn: string | null;
   status: 'WORKING' | 'ON_LUNCH' | 'OFF';
   lateMinutes: number;
-  overtimeMinutes: number;
   totalMinutes: number;
   totalLunchMinutes: number;
   lateExcuseReason: string | null;

@@ -19,6 +19,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { tjStartOfMonthStr, tjEndOfMonthStr, tjFormatDate } from '../lib/tjTime';
+import { bandRangeLabel } from '../lib/bonusBands';
 import CrmDatePicker from '../components/CrmDatePicker';
 
 function fmtMoney(n: number, c = 'TJS') {
@@ -207,23 +208,9 @@ export default function Salary() {
               <PreviewCell
                 label={`${t('salary.cell.bonus')} · ${preview.bonusPercent}%`}
                 value={fmtMoney(preview.bonusAmount)}
-                sub={
-                  (preview.bonusTierId
-                    ? `Этап${preview.bonusTierComment ? ` «${preview.bonusTierComment}»` : ''} · ${fmtMoney(preview.salesAmount)}`
-                    : `Продажи: ${fmtMoney(preview.salesAmount)}`) +
-                  (preview.nonTjsSales && Object.keys(preview.nonTjsSales).length > 0
-                    ? ` · +${Object.entries(preview.nonTjsSales)
-                        .map(([cur, sum]) => fmtMoney(sum, cur))
-                        .join(' · +')} (не в бонусе)`
-                    : '')
-                }
+                sub={`${t('salary.bonus.volume')}: ${fmtMoney(preview.salesAmount)}`}
               />
               <PreviewCell label="KPI" value={fmtMoney(preview.kpiBonus)} />
-              <PreviewCell
-                label={`${t('salary.cell.overtime')}${preview.overtimeMultiplier ? ` · ×${preview.overtimeMultiplier}` : ''}`}
-                value={preview.overtimePay ? `+ ${fmtMoney(preview.overtimePay)}` : '—'}
-                sub={preview.overtimeMinutes ? `${preview.overtimeMinutes} мин` : undefined}
-              />
               <PreviewCell
                 label={t('salary.cell.penalties')}
                 value={`− ${fmtMoney(preview.penalties)}`}
@@ -242,6 +229,8 @@ export default function Salary() {
                 }
               />
             </div>
+            <BonusBreakdown preview={preview} />
+
             <div style={{
               borderTop: '1px solid var(--border)',
               paddingTop: 24,
@@ -357,6 +346,145 @@ export default function Salary() {
         </table>
       </div>
     </>
+  );
+}
+
+/**
+ * Расшифровка комиссии: объём → полоса → ставка → сумма.
+ *
+ * Правило новое и непривычное (полоса, а не проценты «с каждой продажи»),
+ * поэтому менеджер должен уметь проверить свою цифру не спрашивая
+ * бухгалтерию. Сетку берём из ответа бэка (preview.bonusBands), а не из
+ * константы на фронте — один источник правды.
+ *
+ * Объём считается за КАЛЕНДАРНЫЙ МЕСЯЦ, а фильтр периода сверху может быть
+ * любым — про это пишем прямо, иначе «продажи 200 000» при выбранной
+ * половине месяца выглядят как ошибка.
+ */
+function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
+  const { t } = useT();
+  const band = preview.bonusBand;
+  const bands = preview.bonusBands ?? [];
+  const volume = preview.bonusVolume ?? preview.salesAmount;
+  const personal = preview.bonusSource === 'PERSONAL';
+  const nonTjs = preview.nonTjsSales && Object.keys(preview.nonTjsSales).length > 0
+    ? preview.nonTjsSales
+    : null;
+
+  // Старый бэк (или ошибка) — не рисуем пустую рамку.
+  if (!band) return null;
+
+  const monthLabel = preview.bonusPeriodStart
+    ? `${tjFormatDate(preview.bonusPeriodStart)} — ${tjFormatDate(preview.bonusPeriodEnd || preview.bonusPeriodStart)}`
+    : null;
+
+  return (
+    <div style={{
+      marginTop: 4,
+      marginBottom: 24,
+      padding: 18,
+      borderRadius: 14,
+      border: '1px solid var(--border-soft)',
+      background: 'var(--bg)',
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.14em',
+        textTransform: 'uppercase',
+        color: 'var(--text-soft)',
+        marginBottom: 14,
+      }}>
+        {t('salary.bonus.title')}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        flexWrap: 'wrap',
+        gap: '6px 10px',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 13,
+        marginBottom: 10,
+      }}>
+        <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.volume')}</span>
+        <b>{fmtMoney(volume)}</b>
+        <span style={{ color: 'var(--text-light)' }}>→</span>
+        <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.band')}</span>
+        <b>{bandRangeLabel(band.minAmount, band.maxAmount)}</b>
+        <span style={{ color: 'var(--text-light)' }}>→</span>
+        <b>{preview.bonusPercent}%</b>
+        <span style={{ color: 'var(--text-light)' }}>→</span>
+        <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--primary-dark)' }}>
+          {fmtMoney(preview.bonusMonthTotal ?? preview.bonusAmount)}
+        </b>
+      </div>
+
+      {/* Уже начисленное за месяц: без этой строки «объём 200 000 → 6% →
+          12 000», а к выплате 0, выглядит как ошибка расчёта. */}
+      {!!preview.bonusAlreadyPaid && (
+        <div style={{
+          display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px',
+          fontFamily: 'var(--font-mono)', fontSize: 12, marginBottom: 10,
+        }}>
+          <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.alreadyPaid')}</span>
+          <b>− {fmtMoney(preview.bonusAlreadyPaid)}</b>
+          <span style={{ color: 'var(--text-light)' }}>→</span>
+          <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.due')}</span>
+          <b>{fmtMoney(preview.bonusAmount)}</b>
+        </div>
+      )}
+
+      {monthLabel && (
+        <div style={{ fontSize: 11, color: 'var(--text-light)', marginBottom: 10 }}>
+          {t('salary.bonus.periodNote')} · {monthLabel}
+        </div>
+      )}
+
+      {personal && (
+        <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', marginBottom: 10 }}>
+          {t('salary.bonus.personal')}
+        </div>
+      )}
+
+      {/* Сетка целиком: менеджеру важно видеть, сколько осталось до
+          следующей полосы — весь объём тогда пойдёт по большей ставке. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: nonTjs || preview.manualSalesAmount ? 10 : 0 }}>
+        {bands.map((b) => {
+          const current = !personal && b.key === band.key;
+          return (
+            <div
+              key={b.key}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 8,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                border: `1px solid ${current ? 'var(--primary-dark)' : 'var(--border-soft)'}`,
+                background: current ? 'var(--primary-soft, var(--bg-soft))' : 'transparent',
+                color: current ? 'var(--primary-dark)' : 'var(--text-soft)',
+                fontWeight: current ? 600 : 400,
+              }}
+            >
+              {bandRangeLabel(b.minAmount, b.maxAmount)} · {b.percent}%
+            </div>
+          );
+        })}
+      </div>
+
+      {!!preview.manualSalesAmount && (
+        <div style={{ fontSize: 11, color: 'var(--text-light)' }}>
+          {t('salary.bonus.manualExcluded')}: {fmtMoney(preview.manualSalesAmount)}
+        </div>
+      )}
+      {nonTjs && (
+        <div style={{ fontSize: 11, color: 'var(--text-light)' }}>
+          {t('salary.bonus.nonTjs')}: {Object.entries(nonTjs)
+            .map(([cur, sum]) => fmtMoney(sum, cur))
+            .join(' · ')}
+        </div>
+      )}
+    </div>
   );
 }
 

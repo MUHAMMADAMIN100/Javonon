@@ -95,32 +95,34 @@ export const updateLocation = (id: string, patch: Partial<WorkLocation>) =>
 export const deleteLocation = (id: string) =>
   api.delete(`/settings/work-locations/${id}`).then((r) => r.data);
 
-// --- Bonus Tiers (тарифная сетка комиссии) ---
+// --- Комиссионная сетка менеджера (полосы) ---
+//
+// Сетка задана в коде бэкенда (common/bonus-bands.ts) и отдаётся только на
+// чтение: ставки — договорённость учредителя, меняются вместе с релизом.
+// Ручек создания / правки / удаления здесь больше нет намеренно — бэк на
+// POST/PATCH/DELETE отвечает 400. Строки BonusTier в БД сохранены, но не
+// читаются.
 
 export interface BonusTier {
+  /** Совпадает с key полосы (band1…band5). */
   id: string;
+  key: string;
+  /** Нижняя граница объёма, включительно. */
   minAmount: number;
+  /** Верхняя граница объёма, включительно. null — без верхней границы. */
   maxAmount: number | null;
+  /** Ставка, применяемая ко ВСЕМУ объёму (не посрезово). */
   percent: number;
   currency: string;
   order: number;
   isActive: boolean;
   comment: string | null;
-  createdAt: string;
-  updatedAt: string;
+  /** Всегда true — сетка правится только релизом. */
+  readOnly: boolean;
 }
 
 export const listBonusTiers = () =>
   api.get<BonusTier[]>('/settings/bonus-tiers').then((r) => r.data);
-
-export const createBonusTier = (data: Partial<BonusTier>) =>
-  api.post<BonusTier>('/settings/bonus-tiers', data).then((r) => r.data);
-
-export const updateBonusTier = (id: string, patch: Partial<BonusTier>) =>
-  api.patch<BonusTier>(`/settings/bonus-tiers/${id}`, patch).then((r) => r.data);
-
-export const deleteBonusTier = (id: string) =>
-  api.delete(`/settings/bonus-tiers/${id}`).then((r) => r.data);
 
 // --- Salary settings (table of all employees) ---
 
@@ -132,7 +134,6 @@ export interface UserSalarySettings {
   baseSalary: number | null;
   hourlyRate: number | null;
   bonusPercent: number | null;
-  overtimeMultiplier: number | null;
   customRole?: { id: string; name: string } | null;
   // Поля вычисляются бэком на основе графика сотрудника:
   //   monthHours    — рабочих часов в текущем месяце (за вычетом обеда)
@@ -148,7 +149,7 @@ export const listSalarySettings = () =>
 
 export const updateUserSalary = (
   userId: string,
-  patch: { baseSalary?: number; hourlyRate?: number; bonusPercent?: number; overtimeMultiplier?: number },
+  patch: { baseSalary?: number; hourlyRate?: number; bonusPercent?: number },
 ) => api.patch<UserSalarySettings>(`/users/${userId}/salary`, patch).then((r) => r.data);
 
 // --- Helpers ---

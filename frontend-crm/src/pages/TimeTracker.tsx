@@ -415,14 +415,13 @@ export default function TimeTracker() {
               <th>{t('workday.col.leave')}</th>
               <th>{t('workday.col.late')}</th>
               <th>{t('workday.col.worked')}</th>
-              <th>{t('workday.col.overtime')}</th>
             </tr>
           </thead>
           <tbody>
             <AnimatePresence>
               {history.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty">{t('common.empty')}</td>
+                  <td colSpan={6} className="empty">{t('common.empty')}</td>
                 </tr>
               )}
               {history.map((h) => (
@@ -450,13 +449,6 @@ export default function TimeTracker() {
                     letterSpacing: '-0.01em',
                   }}>
                     {h.status === 'OFF' ? fmtMin(h.totalMinutes) : <span style={{ color: 'var(--primary-dark)' }}>…</span>}
-                  </td>
-                  <td>
-                    {h.overtimeMinutes > 0 ? (
-                      <span className="badge badge-success">+{fmtMin(h.overtimeMinutes)}</span>
-                    ) : (
-                      <span style={{ color: 'var(--text-light)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>—</span>
-                    )}
                   </td>
                 </motion.tr>
               ))}

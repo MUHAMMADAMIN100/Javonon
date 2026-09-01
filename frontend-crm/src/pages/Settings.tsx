@@ -6,7 +6,6 @@ import { useUI } from '../ui/Dialogs';
 import {
   type PenaltyRule,
   type WorkLocation,
-  type BonusTier,
   type UserSalarySettings,
   listPenaltyRules,
   createPenaltyRule,
@@ -16,9 +15,6 @@ import {
   createLocation,
   updateLocation,
   listBonusTiers,
-  createBonusTier,
-  updateBonusTier,
-  deleteBonusTier,
   listSalarySettings,
   updateUserSalary,
 } from '../api/settings';
@@ -36,6 +32,7 @@ import RevenueSchemeEditor from '../components/RevenueSchemeEditor';
 import RevenueSchemeMindMap from '../components/RevenueSchemeMindMap';
 import { getRevenueScheme } from '../api/revenue-scheme';
 import { useT } from '../lib/i18n';
+import { bandRangeLabel } from '../lib/bonusBands';
 import { useRealtime } from '../realtime';
 import { me as apiMe } from '../api/auth';
 
@@ -723,7 +720,6 @@ function SalaryRosterSection() {
         baseSalary: patch.baseSalary === undefined ? undefined : Number(patch.baseSalary),
         hourlyRate: patch.hourlyRate === undefined ? undefined : Number(patch.hourlyRate),
         bonusPercent: patch.bonusPercent === undefined ? undefined : Number(patch.bonusPercent),
-        overtimeMultiplier: patch.overtimeMultiplier === undefined ? undefined : Number(patch.overtimeMultiplier),
       });
       toast(t('toast.updated'), 'success');
       setEdits((e) => {
@@ -744,23 +740,22 @@ function SalaryRosterSection() {
         {t('settings.salary.title')}
       </h3>
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-        <table className="table" style={{ width: '100%', minWidth: 880 }}>
+        <table className="table" style={{ width: '100%', minWidth: 760 }}>
           <thead>
             <tr>
               <th>{t('salary.field.employee')}</th>
               <th>{t('settings.salary.field.base')}</th>
               <th>{t('settings.salary.field.hourly')}</th>
               <th>{t('settings.salary.field.bonusPercent')}</th>
-              <th>{t('settings.salary.field.overtimeMult')}</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {query.isLoading && (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('common.loading')}</td></tr>
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('common.loading')}</td></tr>
             )}
             {!query.isLoading && items.length === 0 && (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('users.empty')}</td></tr>
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('users.empty')}</td></tr>
             )}
             {items.map((u) => {
               const patch = edits[u.id] || {};
@@ -860,19 +855,6 @@ function SalaryRosterSection() {
                     />
                   </td>
                   <td>
-                    <RosterNumberInput
-                      value={val('overtimeMultiplier', u.overtimeMultiplier ?? 1.5) as any}
-                      onChange={(v) => setField(u.id, 'overtimeMultiplier', v)}
-                      suffix="×"
-                      dirty={has('overtimeMultiplier')}
-                      min={1}
-                      max={5}
-                      step={0.1}
-                      placeholder="1.5"
-                      width={90}
-                    />
-                  </td>
-                  <td>
                     <button
                       className="btn btn-sm btn-primary"
                       onClick={() => save(u)}
@@ -891,95 +873,43 @@ function SalaryRosterSection() {
   );
 }
 
+/**
+ * Действующая комиссионная сетка менеджера — ТОЛЬКО ЧТЕНИЕ.
+ *
+ * Ставки зашиты в коде бэкенда (common/bonus-bands.ts): это договорённость
+ * учредителя, меняется вместе с релизом. Раньше сетка правилась отсюда и
+ * жила в таблице BonusTier — два источника правды давали зазоры между
+ * порогами (объём проваливался мимо всех этапов → бонус 0). Поэтому ручек
+ * «добавить / выключить / удалить» здесь больше нет.
+ *
+ * Полоса, а не прогрессивная шкала: ВЕСЬ объём умножается на ставку ОДНОЙ
+ * полосы, в которую он попал.
+ */
 function BonusTiersSection() {
-  const { toast, confirm } = useUI();
   const { t } = useT();
-  const qc = useQueryClient();
   const query = useQuery({
     queryKey: ['bonus-tiers'],
     queryFn: listBonusTiers,
   });
   const tiers = query.data ?? [];
 
-  const [minAmount, setMinAmount] = useState('');
-  const [maxAmount, setMaxAmount] = useState('');
-  const [percent, setPercent] = useState('');
-  const [comment, setComment] = useState('');
-
-  const add = async () => {
-    try {
-      await createBonusTier({
-        minAmount: parseFloat(minAmount),
-        maxAmount: maxAmount === '' ? null : parseFloat(maxAmount),
-        percent: parseFloat(percent),
-        order: tiers.length + 1,
-        comment: comment || undefined,
-      });
-      setMinAmount(''); setMaxAmount(''); setPercent(''); setComment('');
-      qc.invalidateQueries({ queryKey: ['bonus-tiers'] });
-      toast(t('toast.created'), 'success');
-    } catch (e: any) {
-      toast(e?.response?.data?.message || t('toast.error'), 'error');
-    }
-  };
-
-  const remove = async (tier: BonusTier) => {
-    const ok = await confirm({
-      title: t('common.delete') + '?',
-      message: `${tier.minAmount} - ${tier.maxAmount ?? '∞'} TJS → ${tier.percent}%`,
-      danger: true,
-      confirmText: t('common.delete'),
-    });
-    if (!ok) return;
-    await deleteBonusTier(tier.id);
-    qc.invalidateQueries({ queryKey: ['bonus-tiers'] });
-  };
-
-  const toggleActive = async (tier: BonusTier) => {
-    await updateBonusTier(tier.id, { isActive: !tier.isActive });
-    qc.invalidateQueries({ queryKey: ['bonus-tiers'] });
-  };
-
   return (
     <div>
       <h3 style={{
-        fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16,
+        fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 6,
       }}>
         {t('settings.salary.bonusTiers')}
       </h3>
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-        gap: 8, marginBottom: 16, padding: 12,
-        border: '1px solid var(--border-soft)', borderRadius: 10,
-        background: 'var(--bg-soft)',
-      }}>
-        <Field label={t('settings.salary.tier.from')}>
-          <input type="number" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
-        </Field>
-        <Field label={t('settings.penalties.maxLate')}>
-          <input type="number" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
-        </Field>
-        <Field label={t('settings.salary.tier.percent')}>
-          <input type="number" step="0.1" value={percent} onChange={(e) => setPercent(e.target.value)} />
-        </Field>
-        <Field label={t('common.comment')}>
-          <input value={comment} onChange={(e) => setComment(e.target.value)} />
-        </Field>
-        <button
-          className="btn btn-sm btn-primary"
-          onClick={add}
-          style={{ alignSelf: 'flex-end' }}
-          disabled={!minAmount || !percent}
-        >
-          {t('settings.salary.tier.add')}
-        </button>
+      <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 14, maxWidth: 560, lineHeight: 1.5 }}>
+        {t('settings.salary.bands.hint')}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {tiers.length === 0 && (
-          <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>
-            {t('common.empty')}
-          </div>
+        {query.isLoading && (
+          <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('common.loading')}</div>
+        )}
+        {!query.isLoading && tiers.length === 0 && (
+          <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('common.empty')}</div>
         )}
         {tiers.map((tier) => (
           <div
@@ -987,24 +917,14 @@ function BonusTiersSection() {
             className="settings-row"
             style={{
               padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 8,
-              opacity: tier.isActive ? 1 : 0.5,
             }}
           >
             <div className="settings-row-main">
-              <div style={{ fontWeight: 500 }}>
-                {tier.minAmount.toLocaleString('ru-RU')} - {tier.maxAmount === null ? '∞' : tier.maxAmount.toLocaleString('ru-RU')} {tier.currency}
+              <div style={{ fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+                {bandRangeLabel(tier.minAmount, tier.maxAmount, tier.currency)}
                 {' → '}
-                <b>{tier.percent}%</b>
+                <b style={{ fontSize: 15 }}>{tier.percent}%</b>
               </div>
-              {tier.comment && (
-                <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{tier.comment}</div>
-              )}
-            </div>
-            <div className="settings-row-actions">
-              <button className="btn btn-sm btn-secondary" onClick={() => toggleActive(tier)}>
-                {tier.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
-              </button>
-              <button className="btn btn-sm btn-danger" onClick={() => remove(tier)}>{t('common.delete')}</button>
             </div>
           </div>
         ))}

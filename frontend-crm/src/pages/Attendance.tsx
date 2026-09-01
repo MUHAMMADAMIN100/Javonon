@@ -127,7 +127,6 @@ export default function Attendance() {
                 <th>{t('attendance.col.lunchIn')}</th>
                 <th>{t('attendance.col.out')}</th>
                 <th style={{ textAlign: 'right' }}>{t('attendance.col.late')}</th>
-                <th style={{ textAlign: 'right' }}>{t('attendance.col.overtime')}</th>
               </tr>
             </thead>
             <tbody>
@@ -150,9 +149,6 @@ export default function Attendance() {
                     {e.lateExcuseStatus === 'PENDING' && (
                       <span style={{ fontSize: 10, marginLeft: 4, color: '#fbbf24' }}>· на разборе</span>
                     )}
-                  </td>
-                  <td style={{ textAlign: 'right', color: e.overtimeMinutes > 0 ? '#10b981' : 'var(--text-soft)' }}>
-                    {e.overtimeMinutes > 0 ? `+${e.overtimeMinutes} мин` : '—'}
                   </td>
                 </tr>
               ))}

@@ -2,13 +2,19 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeTrackingService } from '../time-tracking/time-tracking.service';
 import { PenaltiesService } from '../penalties/penalties.service';
-import { SettingsService } from '../settings/settings.service';
-import { tjLocalDay, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
-
-// Сколько рабочих часов в «нормальном» месяце (для расчёта почасовой
-// ставки сотрудника, у которого задан только baseSalary). ТЗ §3:
-// 5 дней × 8 часов × ~4 недели ≈ 160 часов.
-const STANDARD_MONTH_HOURS = 160;
+import {
+  tjEndOfMonth,
+  tjLocalDay,
+  tjParseLocalDate,
+  tjParseLocalDateEnd,
+  tjStartOfMonth,
+} from '../common/tj-time';
+import {
+  MANAGER_BONUS_BANDS,
+  ManagerBonusBand,
+  computeManagerBonus,
+  findManagerBonusBand,
+} from '../common/bonus-bands';
 
 // Единая отчётная валюта модуля зарплат. Должна совпадать с
 // REPORTING_CURRENCY из finance.service.ts — иначе финансовый и
@@ -16,7 +22,7 @@ const STANDARD_MONTH_HOURS = 160;
 // а зарплата брала бонусную базу из смешанных валют.
 // Bonus-inflation-fix (продолжение aff8b00): SubmissionPayment.amount
 // и Transaction.amount складывались без фильтра по валюте, а результат
-// умножался на bonusPercent (или искался в BonusTier, где пороги в TJS)
+// умножался на процент полосы (пороги полос заданы в TJS)
 // и писался в SalaryRecord.bonusAmount с currency='TJS'. Один USD 5000
 // контракт превращался в «5000 TJS» бонусной базы (в ~11 раз меньше
 // корректной, либо в неверный tier). Т.к. SaleSubmission.currency
@@ -45,7 +51,6 @@ export class SalaryService {
     private prisma: PrismaService,
     private timeSvc: TimeTrackingService,
     private penaltiesSvc: PenaltiesService,
-    private settings: SettingsService,
   ) {}
 
   /**
@@ -82,13 +87,29 @@ export class SalaryService {
 
   /**
    * Считает (без сохранения) зарплату сотрудника за период:
-   *   - hours/minutes — берём из TimeEntry
-   *   - sales — сумма APPROVED SubmissionPayment, reviewedAt которых попал в период
-   *     (триггер начисления бонуса — момент одобрения FOUNDER'ом, а не дата получения
-   *     денег менеджером; см. ниже комментарий про bug #22)
-   *   - bonus = sales × bonusPercent
-   *   - penalty = lateMinutes × PENALTY_PER_LATE_MINUTE
-   *   - net = base + bonus + kpi - penalty
+   *   - hours/minutes — берём из TimeEntry за ЗАПРОШЕННЫЙ период
+   *   - объём продаж (бонусная база) — сумма APPROVED SubmissionPayment,
+   *     reviewedAt которых попал в КАЛЕНДАРНЫЙ МЕСЯЦ (Asia/Dushanbe) даты
+   *     начала периода. Триггер начисления — момент одобрения FOUNDER'ом,
+   *     а не дата получения денег менеджером (см. bug #22 ниже).
+   *   - bonus = ВЕСЬ объём × ставка ОДНОЙ полосы (см. common/bonus-bands.ts:
+   *     flat-по-полосе, не прогрессивно)
+   *   - penalty — эффективные штрафы за период (не тронуты этой доработкой)
+   *   - net = base + bonus + kpi − penalty
+   *
+   * ПЕРЕРАБОТКА (overtime) в расчёте больше НЕ участвует — убрана по
+   * решению учредителя. Колонки SalaryRecord.overtimeMinutes / overtimePay
+   * и TimeEntry.overtimeMinutes остались в схеме с историческими данными,
+   * но ничего их не пишет и не читает. Штрафы — отдельная сущность,
+   * остаются как были.
+   *
+   * ДВА ОКНА, ЭТО НАМЕРЕННО:
+   *   - время/штрафы считаются за периодStart..periodEnd (что попросили);
+   *   - продажи и бонус — строго за календарный месяц Asia/Dushanbe,
+   *     содержащий periodStart. Так требует правило комиссии: полоса
+   *     определяется МЕСЯЧНЫМ объёмом, иначе произвольный диапазон
+   *     («две недели») занижал бы ставку. На практике окна совпадают:
+   *     CRM по умолчанию открывает текущий месяц.
    */
   async preview(userId: string, periodStart: Date, periodEnd: Date, kpiBonus = 0) {
     // Валидация дат: невалидные / неверный порядок / слишком далёкое будущее
@@ -122,10 +143,14 @@ export class SalaryService {
     //    финансовой отчётности; reviewedAt — «триггер начисления бонуса».
     //
     // 2) Ручные INCOME-транзакции (импорт / исторические данные /
-    //    операции без сделки) — попадают по date, как раньше. Их легко
-    //    отличить от платежей по сделкам по category != 'TUITION_PAYMENT'
-    //    (approvePayment всегда пишет category='TUITION_PAYMENT'); такой
-    //    фильтр гарантирует отсутствие двойного учёта с (1).
+    //    операции без сделки) — считаются по date и с новым правилом
+    //    комиссии в объём полосы НЕ входят (ТЗ: «объём = одобренные
+    //    платежи по заявкам»). Возвращаем их отдельным полем
+    //    manualSalesAmount, чтобы бухгалтер видел их, а не гадал.
+    //    Их легко отличить от платежей по сделкам по
+    //    category != 'TUITION_PAYMENT' (approvePayment всегда пишет
+    //    category='TUITION_PAYMENT'); такой фильтр гарантирует
+    //    отсутствие двойного учёта с (1).
     //
     //    ИНВАРИАНТ: Transaction.category='TUITION_PAYMENT' ДОЛЖЕН
     //    происходить ТОЛЬКО из approvePayment (submissions.service /
@@ -178,7 +203,7 @@ export class SalaryService {
     // с TJS как безразмерное число, а bonusAmount писался в SalaryRecord
     // с currency='TJS' (см. код ниже) — то есть USD 5000 приносили
     // менеджеру ~11× меньше корректного бонуса или падали не в тот
-    // BonusTier (пороги задаются в TJS через Settings). Пока нет
+    // не в ту полосу (пороги полос заданы в TJS). Пока нет
     // FX-конвертации на write-time, не-TJS суммы НЕ участвуют в
     // bonusAmount / netAmount — та же политика, что в finance.service.ts
     // (REPORTING_CURRENCY=TJS). SubmissionPayment.amount не имеет
@@ -193,10 +218,18 @@ export class SalaryService {
     // Схема SalaryRecord держит один scalar salesAmount/bonusAmount —
     // полноценный per-currency payroll требует schema-миграции и вне
     // scope этого фикса (см. верхний комментарий про SALARY_REPORTING_CURRENCY).
+    //
+    // ОКНО ОБЪЁМА — КАЛЕНДАРНЫЙ МЕСЯЦ Asia/Dushanbe (не запрошенный
+    // период). Границы берём из tj-time (tjStartOfMonth/tjEndOfMonth), а
+    // не из сырого Date: сервер живёт в UTC, и `new Date(y, m, 1)` дал бы
+    // месяц, начинающийся 1-го числа в 05:00 по Душанбе — платежи первой
+    // ночи месяца уехали бы в предыдущий месяц и в чужую полосу.
+    const bonusPeriodStart = tjStartOfMonth(periodStart);
+    const bonusPeriodEnd = tjEndOfMonth(periodStart); // последняя мс месяца, inclusive
     const tjsPaymentCandidates = await this.prisma.submissionPayment.findMany({
       where: {
         status: 'APPROVED',
-        reviewedAt: { gte: periodStart, lte: periodEnd },
+        reviewedAt: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
         submission: {
           managerId: userId,
           status: { not: 'CANCELLED' },
@@ -218,18 +251,27 @@ export class SalaryService {
       }
       return sum + (p.amount || 0);
     }, 0);
+    // ОБЪЁМ ДЛЯ ПОЛОСЫ = только APPROVED-платежи по сделкам (ТЗ):
+    // «объём = сумма одобренных платежей по заявкам за календарный месяц».
+    const salesAmount = submissionSalesSum;
+
+    // Ручные INCOME-транзакции (импорт / исторические данные / операции без
+    // сделки) в бонусную базу по новому правилу НЕ входят — но и не
+    // исчезают молча: отдаём их отдельным информационным полем, по той же
+    // схеме, что nonTjsSales ниже. Если бухгалтеру нужно начислить за них
+    // комиссию — это ручное решение, а не тихая прибавка к полосе.
     const manualSalesAgg = await this.prisma.transaction.aggregate({
       where: {
         managerId: userId,
         type: 'INCOME',
         category: { not: 'TUITION_PAYMENT' },
-        date: { gte: periodStart, lte: periodEnd },
+        date: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
         reversedAt: null,
         currency: SALARY_REPORTING_CURRENCY,
       },
       _sum: { amount: true },
     });
-    const salesAmount = submissionSalesSum + (manualSalesAgg._sum.amount || 0);
+    const manualSalesAmount = manualSalesAgg._sum.amount || 0;
 
     // Разбивка не-TJS продаж за тот же период. Для transaction — обычный
     // groupBy по currency. Для submissionPayment currency лежит у
@@ -241,7 +283,7 @@ export class SalaryService {
     const nonTjsSubmissionPayments = await this.prisma.submissionPayment.findMany({
       where: {
         status: 'APPROVED',
-        reviewedAt: { gte: periodStart, lte: periodEnd },
+        reviewedAt: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
         submission: {
           managerId: userId,
           status: { not: 'CANCELLED' },
@@ -266,7 +308,7 @@ export class SalaryService {
         managerId: userId,
         type: 'INCOME',
         category: { not: 'TUITION_PAYMENT' },
-        date: { gte: periodStart, lte: periodEnd },
+        date: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
         reversedAt: null,
         currency: { not: SALARY_REPORTING_CURRENCY },
       },
@@ -287,23 +329,46 @@ export class SalaryService {
     for (const k of Object.keys(nonTjsSales)) {
       nonTjsSales[k] = round(nonTjsSales[k]);
     }
-    // ТЗ-доработка: комиссия по тарифной сетке BonusTier (Настройки →
-    // Зарплата). Flat-per-tier: сумма продаж попадает в этап, его
-    // процент применяется ко всей сумме. Персональный bonusPercent у
-    // юзера, если > 0, перебивает сетку (ручной override).
+    // КОМИССИЯ МЕНЕДЖЕРА — flat-по-полосе (см. common/bonus-bands.ts).
+    // Весь месячный объём умножается на ставку ОДНОЙ полосы, в которую он
+    // попал. Не прогрессивно, срезы не складываются:
+    //   200 000 → полоса 150 001–225 000 → 6% → 12 000 (а не 9 750).
+    // Полоса определяется ВСЕГДА (даже при персональном проценте) — чтобы
+    // CRM могла показать менеджеру, куда попал его объём.
+    const band = findManagerBonusBand(salesAmount);
+    // Персональный bonusPercent у юзера, если > 0, перебивает сетку
+    // (ручной override FOUNDER'а, существующая функция — не трогаем).
     const personalPct = user.bonusPercent || 0;
-    let bonusPercent = personalPct;
-    let bonusTierId: string | null = null;
-    let bonusTierComment: string | null = null;
-    if (personalPct <= 0) {
-      const tier = await this.settings.findBonusTierForAmount(salesAmount);
-      if (tier) {
-        bonusPercent = tier.percent;
-        bonusTierId = tier.id;
-        bonusTierComment = tier.comment || null;
-      }
-    }
-    const bonusAmount = (salesAmount * bonusPercent) / 100;
+    const usePersonal = personalPct > 0;
+    const bonusPercent = usePersonal ? personalPct : band.percent;
+    /** Комиссия за ВЕСЬ месяц целиком. */
+    const bonusMonthTotal = usePersonal
+      ? round((salesAmount * personalPct) / 100)
+      : computeManagerBonus(salesAmount).amount;
+
+    // ЗАЩИТА ОТ ДВОЙНОГО НАЧИСЛЕНИЯ.
+    // Объём считается за календарный месяц, а зарплатных записей внутри
+    // месяца может быть несколько (аванс + расчёт, две половины месяца).
+    // Без этой поправки каждая такая запись начислила бы ПОЛНЫЙ месячный
+    // бонус — менеджер получил бы комиссию дважды.
+    //
+    // Уже начисленным считаем бонус тех записей, чей periodStart попал в
+    // ЭТОТ ЖЕ месяц: именно так бонус и привязывается к месяцу выше
+    // (окно = месяц даты начала периода). Записи, начавшиеся в прошлом
+    // месяце, относятся к бонусу прошлого месяца и не вычитаются.
+    //
+    // Если объём за месяц вырос и поднял полосу, вторая запись доплатит
+    // разницу — это и есть верное поведение месячной комиссии.
+    const priorBonusAgg = await this.prisma.salaryRecord.aggregate({
+      where: {
+        userId,
+        periodStart: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
+      },
+      _sum: { bonusAmount: true },
+    });
+    const bonusAlreadyPaid = round(priorBonusAgg._sum.bonusAmount || 0);
+    /** К начислению сейчас = месячная комиссия минус уже начисленное. */
+    const bonusAmount = Math.max(0, round(bonusMonthTotal - bonusAlreadyPaid));
 
     const baseSalary = user.baseSalary || 0;
     const hourlyRate = user.hourlyRate || 0;
@@ -311,27 +376,12 @@ export class SalaryService {
     const hours = time.workedMinutes / 60;
     const baseAmount = baseSalary > 0 ? baseSalary : hourlyRate * hours;
 
-    // ТЗ-доработка: оплата переработки. overtimeMinutes пишется в TimeEntry
-    // при clockOut. Почасовая ставка для переработки:
-    //   1) user.hourlyRate (если FOUNDER задал вручную) — приоритет
-    //   2) baseSalary / monthHours по графику сотрудника (динамически)
-    //   3) baseSalary / STANDARD_MONTH_HOURS (legacy fallback) — если
-    //      график не настроен.
-    // Множитель overtimeMultiplier по умолч. 1.5 (FOUNDER может изменить).
-    let effectiveHourlyRate = 0;
-    if (hourlyRate > 0) {
-      effectiveHourlyRate = hourlyRate;
-    } else if (baseSalary > 0) {
-      const { monthHours } = await this.settings.computeMonthlyWorkHoursForUser(userId, periodStart);
-      if (monthHours > 0) {
-        effectiveHourlyRate = baseSalary / monthHours;
-      } else {
-        effectiveHourlyRate = baseSalary / STANDARD_MONTH_HOURS;
-      }
-    }
-    const overtimeMultiplier = (user as any).overtimeMultiplier ?? 1.5;
-    const overtimeMinutes = (time as any).overtimeMinutes || 0;
-    const overtimePay = (overtimeMinutes / 60) * effectiveHourlyRate * overtimeMultiplier;
+    // ПЕРЕРАБОТКА УБРАНА (решение учредителя). Раньше здесь считался
+    // overtimePay = overtimeMinutes/60 × effectiveHourlyRate ×
+    // overtimeMultiplier и прибавлялся к net. Больше не считается и не
+    // прибавляется; User.overtimeMultiplier / TimeEntry.overtimeMinutes /
+    // SalaryRecord.overtimePay остались в схеме с историческими данными,
+    // но не читаются. Штрафы (ниже) — отдельная сущность, остаются.
 
     // Штрафы берутся из таблицы Penalty (auto-cron) — fairness.
     // По ТЗ §5: штраф за опоздание попадает в зарплату ТОЛЬКО если
@@ -341,7 +391,7 @@ export class SalaryService {
     const eff = await this.penaltiesSvc.effectivePenaltiesForUser(userId, periodStart, periodEnd);
     const penalties = eff.effective;
 
-    const net = baseAmount + bonusAmount + kpiBonus + overtimePay - penalties;
+    const net = baseAmount + bonusAmount + kpiBonus - penalties;
 
     return {
       userId,
@@ -350,15 +400,33 @@ export class SalaryService {
       periodEnd,
       workedMinutes: time.workedMinutes,
       lateMinutes: time.lateMinutes,
-      overtimeMinutes,
       baseAmount: round(baseAmount),
       salesAmount: round(salesAmount),
       bonusAmount: round(bonusAmount),
       bonusPercent,
-      bonusTierId,
-      bonusTierComment,
-      overtimePay: round(overtimePay),
-      overtimeMultiplier,
+      /** Комиссия за месяц целиком (до вычета уже начисленного). */
+      bonusMonthTotal: round(bonusMonthTotal),
+      /** Уже начислено бонуса за этот месяц другими записями зарплаты. */
+      bonusAlreadyPaid,
+      // ── ОБЪЯСНЕНИЕ БОНУСА (чтобы менеджер мог проверить цифру сам) ──
+      // CRM показывает: «объём 200 000 → полоса 150 001–225 000 → 6% →
+      // 12 000». Подписи полос локализуются на фронте по bonusBand.key
+      // (ru/tj), числа отдаём как числа — форматирование не наше дело.
+      bonusPeriodStart,
+      bonusPeriodEnd,
+      bonusVolume: round(salesAmount),
+      bonusBand: {
+        key: band.key,
+        minAmount: band.minAmount,
+        maxAmount: band.maxAmount, // null = без верхней границы
+        percent: band.percent,
+      } as ManagerBonusBand,
+      /** 'BAND' — ставка из сетки; 'PERSONAL' — персональный процент юзера. */
+      bonusSource: usePersonal ? ('PERSONAL' as const) : ('BAND' as const),
+      /** Вся сетка целиком — CRM рисует полосы и подсвечивает текущую. */
+      bonusBands: MANAGER_BONUS_BANDS,
+      /** Ручные INCOME-транзакции за месяц: НЕ входят в объём и бонус. */
+      manualSalesAmount: round(manualSalesAmount),
       kpiBonus: round(kpiBonus),
       penalties: round(penalties),
       penaltiesPending: round(eff.pending),
@@ -431,11 +499,11 @@ export class SalaryService {
         periodEnd: end,
         workedMinutes: preview.workedMinutes,
         lateMinutes: preview.lateMinutes,
-        overtimeMinutes: preview.overtimeMinutes || 0,
+        // overtimeMinutes / overtimePay НЕ пишем — переработка убрана.
+        // Колонки остаются в схеме с @default(0) ради исторических строк.
         baseAmount: preview.baseAmount,
         salesAmount: preview.salesAmount,
         bonusAmount: preview.bonusAmount,
-        overtimePay: preview.overtimePay || 0,
         kpiBonus: preview.kpiBonus,
         penalties: preview.penalties,
         netAmount: preview.netAmount,

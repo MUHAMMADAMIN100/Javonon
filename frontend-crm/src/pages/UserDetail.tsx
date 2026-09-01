@@ -139,7 +139,6 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
           <Stat label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
           <Stat label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
-          <Stat label={t('profile.month.overtime')} value={fmtMinutes(attendance.overtimeMinutes)} accent="green" />
           <Stat label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}`} />
           <Stat label={t('profile.month.leadsTotal')} value={String(kpi.totalLeadsMonth)} sub={`${kpi.ownClientsMonth} ${t('profile.month.myOwn')}`} />
           <Stat label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />

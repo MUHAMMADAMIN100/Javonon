@@ -272,7 +272,8 @@ export class UsersController {
   @Roles(Role.FOUNDER)
   updateSalary(
     @Param('id') id: string,
-    @Body() body: { baseSalary?: number; hourlyRate?: number; bonusPercent?: number; overtimeMultiplier?: number },
+    // overtimeMultiplier больше не принимается — переработка убрана.
+    @Body() body: { baseSalary?: number; hourlyRate?: number; bonusPercent?: number },
   ) {
     return this.users.updateSalary(id, body);
   }

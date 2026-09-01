@@ -88,7 +88,6 @@ export interface FullProfile {
   attendance: {
     workedMinutes: number;
     lateMinutes: number;
-    overtimeMinutes: number;
     daysWorked: number;
   };
   kpi: {

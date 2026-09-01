@@ -161,7 +161,8 @@ export class UsersService {
           userId: id,
           date: { gte: monthStart, lte: monthEnd },
         },
-        _sum: { totalMinutes: true, lateMinutes: true, overtimeMinutes: true },
+        // overtimeMinutes не суммируем — переработка убрана из системы.
+        _sum: { totalMinutes: true, lateMinutes: true },
         _count: true,
       }),
       this.prisma.application.count({
@@ -219,7 +220,6 @@ export class UsersService {
       attendance: {
         workedMinutes: timeMonth._sum.totalMinutes || 0,
         lateMinutes: timeMonth._sum.lateMinutes || 0,
-        overtimeMinutes: timeMonth._sum.overtimeMinutes || 0,
         daysWorked: timeMonth._count,
       },
       kpi: {
@@ -706,8 +706,12 @@ export class UsersService {
 
   /**
    * Массовое чтение зарплатных полей — для вкладки «Зарплата» в /settings.
-   * FOUNDER видит всех сотрудников + их baseSalary/hourlyRate/bonusPercent/
-   * overtimeMultiplier. FOUNDER исключаем — у него своя оплата вне системы.
+   * FOUNDER видит всех сотрудников + их baseSalary/hourlyRate/bonusPercent.
+   * FOUNDER исключаем — у него своя оплата вне системы.
+   *
+   * overtimeMultiplier больше НЕ отдаём: настройка существовала только ради
+   * переработки, которая убрана. Колонка User.overtimeMultiplier осталась
+   * в схеме со своими значениями, но не читается и не редактируется.
    */
   async listSalarySettings() {
     const users = await this.prisma.user.findMany({
@@ -716,7 +720,6 @@ export class UsersService {
       select: {
         id: true, fullName: true, email: true, role: true,
         baseSalary: true, hourlyRate: true, bonusPercent: true,
-        overtimeMultiplier: true,
         customRole: { select: { id: true, name: true } },
       },
     });
@@ -746,7 +749,6 @@ export class UsersService {
     baseSalary?: number;
     hourlyRate?: number;
     bonusPercent?: number;
-    overtimeMultiplier?: number;
   }) {
     const target = await this.prisma.user.findUnique({
       where: { id: targetId },
@@ -772,10 +774,8 @@ export class UsersService {
       const p = num(dto.bonusPercent, 'bonusPercent', 100);
       data.bonusPercent = p;
     }
-    if (dto.overtimeMultiplier !== undefined) {
-      const m = num(dto.overtimeMultiplier, 'overtimeMultiplier', 10);
-      data.overtimeMultiplier = m;
-    }
+    // overtimeMultiplier намеренно не принимаем: переработка убрана,
+    // множитель больше ни на что не влияет (колонка в БД сохранена).
 
     return this.prisma.user.update({
       where: { id: targetId },
@@ -783,7 +783,6 @@ export class UsersService {
       select: {
         id: true, fullName: true, email: true, role: true,
         baseSalary: true, hourlyRate: true, bonusPercent: true,
-        overtimeMultiplier: true,
       },
     });
   }

@@ -23,6 +23,16 @@ export interface SalaryRecord {
   user?: { id: string; fullName: string; role: string; email: string };
 }
 
+/** Полоса комиссии менеджера. Границы включительные с обеих сторон. */
+export interface BonusBand {
+  /** Стабильный ключ для i18n-подписи полосы (band1…band5). */
+  key: string;
+  minAmount: number;
+  /** null — верхней границы нет. */
+  maxAmount: number | null;
+  percent: number;
+}
+
 export interface SalaryPreview {
   userId: string;
   user: { id: string; fullName: string; role: string; email: string };
@@ -42,13 +52,37 @@ export interface SalaryPreview {
   penaltiesExcused?: number;
   netAmount: number;
   currency: string;
-  overtimeMinutes?: number;
-  /** Доплата за переработку (overtimeMinutes × hourlyRate × multiplier). */
-  overtimePay?: number;
-  overtimeMultiplier?: number;
-  /** Какой этап тарифной сетки применился (если bonusPercent не override). */
-  bonusTierId?: string | null;
-  bonusTierComment?: string | null;
+
+  // ── Расшифровка комиссии (см. backend/src/common/bonus-bands.ts) ──
+  // Комиссия flat-по-полосе: ВЕСЬ месячный объём × ставка ОДНОЙ полосы.
+  // Объём считается за календарный месяц (Asia/Dushanbe), а не за
+  // произвольный период фильтра — поэтому границы приходят отдельно.
+  /** Начало месяца, за который считался объём (ISO). */
+  bonusPeriodStart?: string;
+  /** Конец месяца, за который считался объём (ISO, включительно). */
+  bonusPeriodEnd?: string;
+  /** Объём продаж за месяц = salesAmount (дублируется явно для расшифровки). */
+  bonusVolume?: number;
+  /** Полоса, в которую попал объём. maxAmount = null → без верхней границы. */
+  bonusBand?: BonusBand;
+  /** Комиссия за месяц целиком, до вычета уже начисленного. */
+  bonusMonthTotal?: number;
+  /**
+   * Уже начислено бонуса за этот месяц другими записями зарплаты
+   * (аванс + расчёт, две половины месяца). bonusAmount = bonusMonthTotal −
+   * bonusAlreadyPaid: месячная комиссия не платится дважды.
+   */
+  bonusAlreadyPaid?: number;
+  /** BAND — ставка из сетки; PERSONAL — персональный процент сотрудника. */
+  bonusSource?: 'BAND' | 'PERSONAL';
+  /** Вся сетка целиком — чтобы подсветить текущую полосу. */
+  bonusBands?: BonusBand[];
+  /**
+   * Ручные INCOME-транзакции за месяц (импорт / операции без сделки).
+   * В объём полосы и в бонус НЕ входят — показываем, чтобы бухгалтер
+   * видел их, а не гадал, куда они делись.
+   */
+  manualSalesAmount?: number;
   /**
    * Разбивка не-TJS продаж (по коду валюты → сумма в исходной валюте).
    * НЕ входят в salesAmount / bonusAmount / netAmount — это

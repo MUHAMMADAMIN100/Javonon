@@ -101,7 +101,6 @@ export class TimeTrackingService {
       }
       // Стейл-сессия — закрываем её. clockOut = время последнего
       // зафиксированного действия (lunchIn / lunchOut / clockIn).
-      // Переработку считаем 0 — мы не знаем сколько он реально работал.
       const lastTouch = active.lunchIn || active.lunchOut || active.clockIn;
       const wallMin = Math.max(0, Math.round((lastTouch.getTime() - active.clockIn.getTime()) / 60000));
       await this.prisma.timeEntry.update({
@@ -110,7 +109,6 @@ export class TimeTrackingService {
           status: TimeEntryStatus.OFF,
           clockOut: lastTouch,
           totalMinutes: Math.max(0, wallMin - active.totalLunchMinutes),
-          overtimeMinutes: 0,
         },
       });
       console.warn(
@@ -152,7 +150,7 @@ export class TimeTrackingService {
     const { weekday, minutesFromMidnight } = localDayAndMinutes(now);
     const sched = await this.settings.getEffectiveScheduleForUser(userId, weekday);
     // Если день нерабочий по графику — lateMinutes=0 (выход в субботу
-    // на переработку не штрафуется).
+    // не штрафуется).
     const lateMinutes = sched.isWorkday
       ? Math.max(0, minutesFromMidnight - sched.startMinute)
       : 0;
@@ -328,22 +326,12 @@ export class TimeTrackingService {
     const totalLunch = active.totalLunchMinutes + extraLunch;
     const totalMs = now.getTime() - active.clockIn.getTime();
     const totalMin = Math.max(0, Math.round(totalMs / 60000) - totalLunch);
-    // Норма рабочего дня берётся из ГРАФИКА сотрудника (по ТЗ §3).
-    // workingDay = end - start - запланированный обед.
-    // Если расписания нет — fallback на 8 часов (480 мин).
-    const { weekday: clockInWeekday } = localDayAndMinutes(active.clockIn);
-    const sched = await this.settings.getEffectiveScheduleForUser(userId, clockInWeekday);
-    // Если рабочий день — норма = длина окна минус запланированный обед.
-    // Если выходной — норма = 0, ВСЕ часы засчитываются как переработка
-    // (по ТЗ §3 «учет переработок»: работа вне графика = overtime).
-    let standardDayMin = 0;
-    if (sched.isWorkday) {
-      const lunch = (sched.lunchStartMinute !== null && sched.lunchEndMinute !== null)
-        ? Math.max(0, sched.lunchEndMinute - sched.lunchStartMinute)
-        : 0;
-      standardDayMin = Math.max(60, sched.endMinute - sched.startMinute - lunch);
-    }
-    const overtimeMinutes = Math.max(0, totalMin - standardDayMin);
+    // ПЕРЕРАБОТКА УБРАНА (решение учредителя): раньше здесь считалась норма
+    // дня по графику и overtimeMinutes = totalMin − норма, и значение
+    // писалось в TimeEntry. Больше не считаем и не пишем — колонка
+    // TimeEntry.overtimeMinutes остаётся в схеме (@default(0)) с
+    // историческими значениями, но её никто не читает. Опоздания
+    // (lateMinutes) и штрафы за них — отдельная механика, не тронуты.
 
     const upd = await this.prisma.timeEntry.update({
       where: { id: active.id },
@@ -352,7 +340,6 @@ export class TimeTrackingService {
         clockOut: now,
         totalMinutes: totalMin,
         totalLunchMinutes: totalLunch,
-        overtimeMinutes,
       },
     });
     this.realtime.emitStaff('attendance:updated', { userId, entryId: upd.id, action: 'clockOut' });
@@ -394,7 +381,8 @@ export class TimeTrackingService {
     });
     const workedMinutes = entries.reduce((s, e) => s + e.totalMinutes, 0);
     const lateMinutes = entries.reduce((s, e) => s + e.lateMinutes, 0);
-    const overtimeMinutes = entries.reduce((s, e) => s + (e.overtimeMinutes || 0), 0);
-    return { workedMinutes, lateMinutes, overtimeMinutes, days: entries.length };
+    // overtimeMinutes здесь больше не суммируется — переработка убрана из
+    // зарплаты и из всех экранов (данные в БД остались, читателей нет).
+    return { workedMinutes, lateMinutes, days: entries.length };
   }
 }
