@@ -126,3 +126,62 @@ export async function listAssignableManagers() {
   const { data } = await api.get<AssignableManager[]>('/applications/managers');
   return data;
 }
+
+/* ===================== массовое назначение менеджера ===================== */
+
+/** Тело PATCH /applications/bulk/manager. */
+export interface BulkAssignManagerInput {
+  ids: string[];
+  managerId: string;
+  /**
+   * true — пользователь уже подтвердил, что часть лидов закреплена за
+   * другими менеджерами и их надо переназначить. Без флага сервер на такой
+   * пачке ничего не меняет и отвечает 409 (см. BulkReassignConflict).
+   */
+  confirmReassign?: boolean;
+}
+
+export interface BulkAssignManagerResult {
+  /** Лиды, у которых менеджер реально сменился (с подгруженным manager). */
+  updated: Application[];
+  changed: number;
+  /** Уже были закреплены за этим же менеджером — не тронуты. */
+  unchanged: number;
+  /** Сколько из changed было отобрано у других менеджеров. */
+  reassigned: number;
+  manager: { id: string; fullName: string };
+}
+
+/**
+ * Тело ответа 409 «нужно подтверждение переназначения». Приходит, когда кеш
+ * CRM отстал от базы: пока человек ставил галочки, коллега успел назначить
+ * часть этих лидов. Сервер видит строки под блокировкой, поэтому разбивка
+ * отсюда точнее той, что CRM посчитала бы по своему списку.
+ */
+export interface BulkReassignConflict {
+  code: 'REASSIGN_CONFIRM_REQUIRED';
+  message: string;
+  total: number;
+  reassignCount: number;
+  conflicts: { managerId: string; managerName: string; count: number }[];
+}
+
+/** Достаёт BulkReassignConflict из ошибки axios; иначе null. */
+export function asBulkReassignConflict(err: unknown): BulkReassignConflict | null {
+  const res = (err as any)?.response;
+  if (res?.status !== 409) return null;
+  const data = res.data;
+  if (data?.code !== 'REASSIGN_CONFIRM_REQUIRED' || !Array.isArray(data?.conflicts)) return null;
+  return data as BulkReassignConflict;
+}
+
+/**
+ * Назначить менеджера пачке лидов одним запросом и одной транзакцией:
+ * либо назначены все, либо никто. N вызовов assignApplicationManager вместо
+ * этого дали бы N уведомлений каждому сотруднику и упёрлись бы в троттлер
+ * (60 запросов в минуту) на середине пачки.
+ */
+export async function bulkAssignApplicationManager(input: BulkAssignManagerInput) {
+  const { data } = await api.patch<BulkAssignManagerResult>('/applications/bulk/manager', input);
+  return data;
+}

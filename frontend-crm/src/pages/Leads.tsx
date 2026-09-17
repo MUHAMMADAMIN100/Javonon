@@ -2,10 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  asBulkReassignConflict,
   assignApplicationManager,
+  bulkAssignApplicationManager,
   createStaffApplication,
   listApplications,
   listAssignableManagers,
+  type BulkAssignManagerInput,
+  type BulkAssignManagerResult,
   type CreateStaffApplicationInput,
 } from '../api/applications';
 import type { Application, ApplicationStatus, Country } from '../api/types';
@@ -76,7 +80,7 @@ type FormErrors = Partial<
 
 export default function Leads() {
   const { t } = useT();
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const countryLabel = useCountryLabel();
   const me = useAuth((s) => s.user);
@@ -106,6 +110,26 @@ export default function Leads() {
   const [serverError, setServerError] = useState<string | null>(null);
 
   const nameRef = useRef<HTMLInputElement | null>(null);
+
+  /**
+   * ПОТЕРЯННЫЙ КЛИК. Форма стоит НАД списком, а поле ФИО берёт фокус при
+   * загрузке. Клик по галочке (или по <select> менеджера) в списке снимал
+   * фокус с ФИО → onBlur помечал поле touched → под ним вырастала ошибка
+   * «Введите ФИО» → форма становилась выше, и список уезжал вниз МЕЖДУ
+   * mousedown и mouseup. Браузер в таком случае шлёт click не в галочку, а
+   * в общего предка (<td>): первый клик по списку после открытия страницы
+   * молча пропадал. Найдено браузерным тестом, воспроизводится и руками.
+   *
+   * Лечится в двух местах:
+   *  1) нетронутое пустое поле по blur не валидируем вовсе — ошибку
+   *     «обязательное поле» человек увидит при отправке формы (submit
+   *     помечает touched всё разом). Ругаться на поле, в которое ничего не
+   *     вводили, — и так плохой тон;
+   *  2) если blur случился, пока кнопка мыши зажата, показ ошибки
+   *     откладываем до её отпускания — к этому моменту click уже доставлен
+   *     по адресу, и сдвиг вёрстки ему не страшен.
+   */
+  const afterPointerRelease = usePointerSafeBlur();
 
   // Границы 14–60 считаем один раз: за время жизни страницы календарные
   // сутки не сдвинутся так, чтобы это было заметно.
@@ -239,6 +263,9 @@ export default function Leads() {
     'application:new': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
     'application:updated': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
     'application:deleted': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
+    // Массовое назначение шлёт ОДНО событие на пачку (а не application:updated
+    // на каждый лид) — иначе 25 лидов = 25 перезапросов списка у каждого.
+    'applications:bulk-updated': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
   });
 
   // Очередь сжалась (лид перевели в работу / удалили) — не оставляем
@@ -272,6 +299,208 @@ export default function Leads() {
     invalidateAlso: [keys.applications.all],
     onError: () => toast(t('leads.toast.assignFailed'), 'error'),
   });
+
+  /* ======================= массовое назначение ======================= */
+
+  /**
+   * Отмеченные лиды. Храним ID, а не индексы строк: список
+   * пересортировывается realtime-событиями, и «строка №3» через секунду —
+   * уже другой человек. Выбор живёт поверх страниц: отметил 10 на первой,
+   * перешёл на вторую, отметил ещё 5 — в пачке 15.
+   */
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [bulkManagerId, setBulkManagerId] = useState('');
+  /** Якорь для Shift+клик — последняя строка, отмеченная вручную. */
+  const lastToggledRef = useRef<string | null>(null);
+
+  // Лид ушёл из очереди (взяли в работу, удалили) — выкидываем его из
+  // выбора. Иначе счётчик «Выбрано: 12» врал бы, а сервер отверг бы всю
+  // пачку из-за одного исчезнувшего id.
+  useEffect(() => {
+    if (!leadsQuery.isSuccess) return;
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const alive = new Set(leads.map((a) => a.id));
+      let dropped = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (alive.has(id)) next.add(id);
+        else dropped = true;
+      });
+      // Тот же объект при отсутствии изменений — иначе эффект крутил бы
+      // перерисовку на каждое обновление списка.
+      return dropped ? next : prev;
+    });
+    // `leads` пересоздаётся на каждый рендер, пока данных нет (?? []), но
+    // эффект идемпотентен: без выпавших id состояние не меняется.
+  }, [leads, leadsQuery.isSuccess]);
+
+  const pageIds = pageItems.map((a) => a.id);
+  const pageSelectedCount = pageIds.reduce((n, id) => n + (selected.has(id) ? 1 : 0), 0);
+  const pageAllSelected = pageIds.length > 0 && pageSelectedCount === pageIds.length;
+  const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
+  const selectedElsewhere = selected.size - pageSelectedCount;
+
+  const toggleOne = (id: string, withRange: boolean) => {
+    // Якорь читаем ДО setSelected: функция-апдейтер выполнится позже, и
+    // к тому моменту ref уже указывал бы на текущую строку.
+    const anchorId = lastToggledRef.current;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const willSelect = !prev.has(id);
+      // Shift+клик — диапазон от якоря до текущей строки В ПРЕДЕЛАХ страницы.
+      if (withRange && anchorId && anchorId !== id) {
+        const from = pageIds.indexOf(anchorId);
+        const to = pageIds.indexOf(id);
+        if (from !== -1 && to !== -1) {
+          const lo = Math.min(from, to);
+          const hi = Math.max(from, to);
+          for (let i = lo; i <= hi; i++) {
+            if (willSelect) next.add(pageIds[i]);
+            else next.delete(pageIds[i]);
+          }
+          return next;
+        }
+      }
+      if (willSelect) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    lastToggledRef.current = id;
+  };
+
+  /** Галочка в шапке: вся ТЕКУЩАЯ страница, выбор на других не трогаем. */
+  const togglePage = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const allOn = pageIds.length > 0 && pageIds.every((id) => prev.has(id));
+      pageIds.forEach((id) => (allOn ? next.delete(id) : next.add(id)));
+      return next;
+    });
+    lastToggledRef.current = null;
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    lastToggledRef.current = null;
+  };
+
+  /** «Саид — 2, Шахноза — 1»: у кого сейчас лиды, которые собираемся забрать. */
+  const formatOwners = (rows: { name: string; count: number }[]) =>
+    rows
+      .sort((a, b) => b.count - a.count)
+      .map((r) => `${r.name} — ${r.count}`)
+      .join(', ');
+
+  const askReassign = (opts: { reassign: number; total: number; owners: string; manager: string }) =>
+    confirm({
+      title: t('leads.bulk.confirm.title'),
+      message: t('leads.bulk.confirm.message')
+        .replace('{k}', String(opts.reassign))
+        .replace('{n}', String(opts.total))
+        .replace('{list}', opts.owners)
+        .replace('{manager}', opts.manager),
+      confirmText: t('leads.bulk.confirm.ok'),
+      danger: true,
+    });
+
+  /**
+   * Оптимистично, как и одиночное назначение: строки перекрашиваются сразу,
+   * откат при ошибке делает обёртка. Запрос один на всю пачку — см.
+   * bulkAssignApplicationManager.
+   */
+  const bulkMut = useOptimisticMutation<BulkAssignManagerResult, BulkAssignManagerInput, Application[]>({
+    mutationFn: bulkAssignApplicationManager,
+    queryKey: LEADS_KEY,
+    applyOptimistic: (cur, vars) => {
+      if (!cur) return cur;
+      const ids = new Set(vars.ids);
+      const m = managers.find((x) => x.id === vars.managerId);
+      return cur.map((a) =>
+        ids.has(a.id)
+          ? {
+              ...a,
+              managerId: vars.managerId,
+              // email в справочнике не приходит; до перечитывания списка он
+              // нигде на этом экране не показывается.
+              manager: m ? { id: m.id, fullName: m.fullName, email: a.manager?.email ?? '' } : a.manager,
+            }
+          : a,
+      );
+    },
+    invalidateAlso: [keys.applications.all],
+    onSuccess: (res) => {
+      clearSelection();
+      // Менеджера сбрасываем намеренно: следующая пачка почти всегда идёт
+      // ДРУГОМУ человеку, и оставленное значение — готовая ошибка «отметил
+      // и не глядя нажал Назначить».
+      setBulkManagerId('');
+      toast(
+        res.changed > 0
+          ? t('leads.bulk.toast.done')
+              .replace('{n}', String(res.changed))
+              .replace('{manager}', res.manager.fullName)
+          : t('leads.bulk.toast.nothing').replace('{manager}', res.manager.fullName),
+        'success',
+      );
+    },
+    onError: async (err: any, vars) => {
+      // Кеш отстал: пока ставили галочки, коллега назначил часть этих лидов.
+      // Сервер ничего не изменил и прислал точную разбивку — спрашиваем по
+      // ней и повторяем уже с подтверждением.
+      const conflict = asBulkReassignConflict(err);
+      if (conflict && !vars.confirmReassign) {
+        const ok = await askReassign({
+          reassign: conflict.reassignCount,
+          total: conflict.total,
+          owners: formatOwners(conflict.conflicts.map((c) => ({ name: c.managerName, count: c.count }))),
+          manager: managers.find((m) => m.id === vars.managerId)?.fullName || '',
+        });
+        if (ok) bulkMut.mutate({ ...vars, confirmReassign: true });
+        return;
+      }
+      const msg = err?.response?.data?.message;
+      toast(
+        (Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : '') ||
+          t('leads.bulk.toast.failed'),
+        'error',
+      );
+    },
+  });
+
+  const runBulkAssign = async () => {
+    if (!bulkManagerId || selected.size === 0 || bulkMut.isPending) return;
+    const target = managers.find((m) => m.id === bulkManagerId);
+    if (!target) return;
+    const picked = leads.filter((a) => selected.has(a.id));
+    if (picked.length === 0) return;
+
+    // Уже закреплённые за ДРУГИМ менеджером — спрашиваем до отправки.
+    const taken = picked.filter((a) => a.managerId && a.managerId !== bulkManagerId);
+    let confirmReassign = false;
+    if (taken.length > 0) {
+      const byOwner = new Map<string, { name: string; count: number }>();
+      for (const a of taken) {
+        const key = a.managerId as string;
+        const row = byOwner.get(key) || {
+          name: a.manager?.fullName || managers.find((m) => m.id === key)?.fullName || '—',
+          count: 0,
+        };
+        row.count += 1;
+        byOwner.set(key, row);
+      }
+      const ok = await askReassign({
+        reassign: taken.length,
+        total: picked.length,
+        owners: formatOwners([...byOwner.values()]),
+        manager: target.fullName,
+      });
+      if (!ok) return;
+      confirmReassign = true;
+    }
+
+    bulkMut.mutate({ ids: picked.map((a) => a.id), managerId: bulkManagerId, confirmReassign });
+  };
 
   if (!canCreate) {
     return (
@@ -311,7 +540,10 @@ export default function Leads() {
                 className={`crm-input${invalid('fullName') ? ' input-error' : ''}`}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                onBlur={() => setTouched((s) => ({ ...s, fullName: true }))}
+                onBlur={() => {
+                  if (!fullName.trim()) return;
+                  afterPointerRelease(() => setTouched((s) => ({ ...s, fullName: true })));
+                }}
                 maxLength={MAX_NAME}
                 autoComplete="off"
               />
@@ -386,7 +618,10 @@ export default function Leads() {
                   className={`crm-select${invalid('country') ? ' input-error' : ''}`}
                   value={country}
                   onChange={(e) => setCountry(e.target.value as Country | '')}
-                  onBlur={() => setTouched((s) => ({ ...s, country: true }))}
+                  onBlur={() => {
+                    if (!country) return;
+                    afterPointerRelease(() => setTouched((s) => ({ ...s, country: true })));
+                  }}
                 >
                   <option value="">{t('leads.field.countryPlaceholder')}</option>
                   {COUNTRIES.map((c) => (
@@ -408,7 +643,10 @@ export default function Leads() {
                 className={`crm-textarea${invalid('comment') ? ' input-error' : ''}`}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                onBlur={() => setTouched((s) => ({ ...s, comment: true }))}
+                onBlur={() => {
+                  if (!comment) return;
+                  afterPointerRelease(() => setTouched((s) => ({ ...s, comment: true })));
+                }}
                 maxLength={MAX_COMMENT}
               />
               {invalid('comment') && <div className="form-error-text">{errors.comment}</div>}
@@ -449,15 +687,112 @@ export default function Leads() {
             ) : (
               <motion.div
                 key="table"
-                className="table-wrap"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
+                {/* Панель массового действия. Вне .table-wrap намеренно: у того
+                    overflow, а sticky внутри overflow-контейнера липнет к нему,
+                    а не к окну, — панель уезжала бы вместе с таблицей.
+
+                    Слот панели есть ВСЕГДА, меняется только содержимое. Если
+                    панель появлялась бы с первой галочкой, она сдвигала бы
+                    список на свою высоту прямо под курсором: человек отметил
+                    строку, а под мышью уже соседняя. Пустой слот заодно
+                    подсказывает, что пачку вообще можно назначить разом. */}
+                {canAssign && (
+                  // Слот держит место в потоке, панель внутри него на узких
+                  // экранах становится fixed (см. index.css): sticky там не
+                  // работает — у .main/.app-layout/body стоит overflow-x:hidden.
+                  <div className={`leads-bulk-slot${selected.size > 0 ? '' : ' is-idle'}`}>
+                  <div
+                    className={`leads-bulk-bar${selected.size > 0 ? '' : ' is-idle'}`}
+                    role="region"
+                    aria-label={t('leads.bulk.region')}
+                  >
+                    {selected.size === 0 ? (
+                      <span className="leads-bulk-hint" data-testid="bulk-hint">
+                        <Icon name="checklist" size={18} />
+                        {t('leads.bulk.hint')}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="leads-bulk-count" data-testid="bulk-count">
+                          {t('leads.bulk.selected').replace('{n}', String(selected.size))}
+                        </span>
+                        {selectedElsewhere > 0 && (
+                          <span className="leads-bulk-note">
+                            {t('leads.bulk.otherPages').replace('{n}', String(selectedElsewhere))}
+                          </span>
+                        )}
+                        <select
+                          className="crm-select"
+                          aria-label={t('leads.bulk.pickManager')}
+                          data-testid="bulk-manager"
+                          value={bulkManagerId}
+                          onChange={(e) => setBulkManagerId(e.target.value)}
+                          disabled={bulkMut.isPending}
+                        >
+                          <option value="">{t('leads.bulk.pickManager')}</option>
+                          {managers.map((m) => (
+                            <option key={m.id} value={m.id}>{m.fullName}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm leads-bulk-assign"
+                          data-testid="bulk-assign"
+                          onClick={runBulkAssign}
+                          disabled={!bulkManagerId || bulkMut.isPending}
+                        >
+                          {bulkMut.isPending ? t('leads.bulk.assigning') : t('leads.bulk.assign')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm leads-bulk-clear"
+                          data-testid="bulk-clear"
+                          onClick={clearSelection}
+                          disabled={bulkMut.isPending}
+                        >
+                          {t('leads.bulk.clear')}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  </div>
+                )}
+
+                {/* На телефоне таблица превращается в карточки и <thead> скрыт —
+                    галочке «вся страница» нужно своё место. */}
+                {canAssign && (
+                  <label className="crm-checkbox-label leads-select-page-mobile">
+                    <SelectAllCheckbox
+                      checked={pageAllSelected}
+                      indeterminate={pageSomeSelected}
+                      onChange={togglePage}
+                      label={t('leads.bulk.selectPage')}
+                    />
+                    <span>{t('leads.bulk.selectPage')}</span>
+                  </label>
+                )}
+
+                <div className="table-wrap">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>{t('app.field.fullName')}</th>
+                      <th>
+                        <div className="lead-name-cell">
+                          {canAssign && (
+                            <SelectAllCheckbox
+                              checked={pageAllSelected}
+                              indeterminate={pageSomeSelected}
+                              onChange={togglePage}
+                              label={t('leads.bulk.selectPage')}
+                            />
+                          )}
+                          {t('app.field.fullName')}
+                        </div>
+                      </th>
                       <th>{t('app.field.phone')}</th>
                       <th>{t('app.field.country')}</th>
                       <th>{t('app.field.manager')}</th>
@@ -466,8 +801,32 @@ export default function Leads() {
                   </thead>
                   <tbody>
                     {pageItems.map((a) => (
-                      <tr key={a.id}>
-                        <td><strong>{a.fullName}</strong></td>
+                      <tr key={a.id} className={selected.has(a.id) ? 'is-selected' : undefined}>
+                        {/* Галочка живёт ВНУТРИ первой ячейки, а не отдельной
+                            колонкой: на телефоне td:first-child — это заголовок
+                            карточки, и колонка из одних галочек заняла бы его
+                            место вместо ФИО. */}
+                        <td>
+                          <div className="lead-name-cell">
+                            {canAssign && (
+                              <input
+                                type="checkbox"
+                                className="crm-checkbox"
+                                checked={selected.has(a.id)}
+                                aria-label={`${t('leads.bulk.selectRow')}: ${a.fullName}`}
+                                // Shift+клик по умолчанию тянет текстовое
+                                // выделение через всю таблицу.
+                                onMouseDown={(e) => {
+                                  if (e.shiftKey) e.preventDefault();
+                                }}
+                                onChange={(e) =>
+                                  toggleOne(a.id, (e.nativeEvent as MouseEvent).shiftKey === true)
+                                }
+                              />
+                            )}
+                            <strong>{a.fullName}</strong>
+                          </div>
+                        </td>
                         <td>{a.phone}</td>
                         <td>
                           {a.country ? (
@@ -520,6 +879,7 @@ export default function Leads() {
                     ))}
                   </tbody>
                 </table>
+                </div>
                 <Pagination
                   page={page}
                   total={leads.length}
@@ -533,4 +893,76 @@ export default function Leads() {
       </div>
     </motion.div>
   );
+}
+
+/**
+ * Галочка «вся страница» с третьим состоянием. `indeterminate` — свойство
+ * DOM-узла, атрибута в HTML у него нет, поэтому через ref.
+ */
+function SelectAllCheckbox({
+  checked,
+  indeterminate,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className="crm-checkbox"
+      checked={checked}
+      onChange={onChange}
+      aria-label={label}
+    />
+  );
+}
+
+
+/**
+ * Возвращает функцию «выполни после отпускания кнопки мыши». Если кнопка не
+ * зажата (фокус ушёл по Tab) — выполняет сразу. Зачем — см. комментарий у
+ * места вызова в форме лида («ПОТЕРЯННЫЙ КЛИК»).
+ */
+function usePointerSafeBlur() {
+  const pointerDownRef = useRef(false);
+  const pendingRef = useRef<Array<() => void>>([]);
+
+  useEffect(() => {
+    const onDown = () => {
+      pointerDownRef.current = true;
+    };
+    const onUp = () => {
+      pointerDownRef.current = false;
+      const queue = pendingRef.current;
+      pendingRef.current = [];
+      if (queue.length === 0) return;
+      // pointerup → mouseup → click приходят одной пачкой; макрозадача
+      // гарантирует, что click уже доставлен, когда вёрстка сдвинется.
+      window.setTimeout(() => queue.forEach((fn) => fn()), 0);
+    };
+    // capture: pointerdown должен выставить флаг ДО того, как blur
+    // (он идёт следом, на mousedown) спросит его значение.
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onUp, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onUp, true);
+    };
+  }, []);
+
+  return (fn: () => void) => {
+    if (pointerDownRef.current) pendingRef.current.push(fn);
+    else fn();
+  };
 }

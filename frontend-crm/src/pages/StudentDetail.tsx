@@ -141,6 +141,10 @@ export default function StudentDetail() {
     'application:updated': (data: any) => {
       if (data?.application?.studentId === id) reload();
     },
+    // Массовое назначение менеджера: в событии только id затронутых.
+    'applications:bulk-updated': (data: any) => {
+      if (id && Array.isArray(data?.studentIds) && data.studentIds.includes(id)) reload();
+    },
   });
 
   // UPDATE — оптимистично патчим student в кеше.

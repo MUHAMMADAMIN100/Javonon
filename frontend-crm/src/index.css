@@ -5223,3 +5223,164 @@ input[type="checkbox"].crm-checkbox:checked {
   .sidebar-2l .sidebar-panel-nav a,
   .sidebar-2l .sidebar-quick a { transition: none; }
 }
+
+/* =====================================================================
+   LEADS — массовый выбор лидов и назначение менеджера пачке
+   ===================================================================== */
+
+/* Галочка + ФИО в одной ячейке. Отдельной колонкой галочку не делаем: на
+   телефоне td:first-child — заголовок карточки, и колонка из одних галочек
+   заняла бы его место вместо ФИО. */
+.lead-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Третье состояние галочки «вся страница»: отмечена часть строк. У
+   .crm-checkbox appearance:none, поэтому браузерный прочерк не рисуется —
+   рисуем сами. !important — по той же причине, что и у :checked выше. */
+.crm-checkbox:indeterminate,
+input.crm-checkbox:indeterminate,
+input[type="checkbox"].crm-checkbox:indeterminate {
+  background: var(--primary) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round'><line x1='6' y1='12' x2='18' y2='12'/></svg>") center / 14px no-repeat !important;
+  border-color: var(--primary) !important;
+}
+
+/* Выбранная строка. Специфичность выше, чем у .table tbody tr:hover, иначе
+   наведение мыши гасило бы подсветку выбора. Тон заметно гуще, чем у hover
+   (--primary-soft ≈ 9%): иначе строку под мышью не отличить от отмеченной. */
+.table tbody tr.is-selected {
+  background: color-mix(in srgb, var(--primary) 13%, white);
+}
+.table tbody tr.is-selected:hover {
+  background: color-mix(in srgb, var(--primary) 17%, white);
+}
+.table tbody tr.is-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* СЛОТ панели. Он есть в потоке ВСЕГДА и всегда одной высоты — и с
+   подсказкой, и с кнопками. Появляйся панель вместе с первой галочкой, она
+   сдвигала бы список на свою высоту прямо под курсором: отметил строку, а
+   под мышью уже соседняя. Равенство высот проверяется браузерным тестом. */
+.leads-bulk-slot {
+  min-height: 62px; /* селект 39 + отступы 20 + рамка 2, с запасом в 1px */
+  margin-bottom: 14px;
+}
+/* Пачку набирают, листая страницу вниз, — активная панель едет следом,
+   иначе «Назначить» уходила бы за экран уже на десятой строке.
+   72px = высота шапки: панель стыкуется с ней вплотную — в любом зазоре
+   мелькали бы проезжающие строки. z-index ниже .topbar (10). */
+.leads-bulk-slot:not(.is-idle) {
+  position: sticky;
+  top: 72px;
+  z-index: 5;
+}
+
+.leads-bulk-bar {
+  box-sizing: border-box;
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 7%, white);
+  box-shadow: 0 6px 18px rgba(1, 54, 139, 0.10);
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+.leads-bulk-bar.is-idle {
+  background: transparent;
+  border: 1px dashed var(--border);
+  box-shadow: none;
+}
+.leads-bulk-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+.leads-bulk-count {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  color: var(--primary-dark, var(--primary));
+}
+.leads-bulk-note {
+  font-size: 12px;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+.leads-bulk-bar .crm-select {
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 340px;
+  background-color: white;
+}
+
+/* Галочка «вся страница» для телефона — на десктопе она живёт в <thead>. */
+.leads-select-page-mobile { display: none; }
+
+/* ≤900px: position:sticky в этой вёрстке НЕ РАБОТАЕТ — у html/body/
+   .app-layout/.main стоит overflow-x:hidden (защита от горизонтального
+   скролла), а это превращает их в scroll-контейнеры, к которым sticky и
+   прилипает; по той же причине на телефоне уезжает и сама .topbar.
+   Поэтому активная панель здесь fixed, а слот остаётся в потоке пустым
+   местом той же высоты — список не сдвигается ни на пиксель.
+   z-index 9: над контентом, но под шапкой (10) с её выпадающими панелями,
+   под шторкой меню (90/100), модалками и тостами. */
+@media (max-width: 900px) {
+  .leads-bulk-slot:not(.is-idle) { position: static; }
+  .leads-bulk-slot:not(.is-idle) .leads-bulk-bar {
+    position: fixed;
+    top: 68px; /* шапка планшета 60px + зазор */
+    left: 16px;
+    right: 16px;
+    z-index: 9;
+    background: color-mix(in srgb, var(--primary) 9%, white);
+    box-shadow: 0 10px 28px rgba(1, 54, 139, 0.22);
+  }
+}
+
+@media (max-width: 720px) {
+  .leads-bulk-slot:not(.is-idle) .leads-bulk-bar {
+    top: 64px; /* мобильная шапка 56px + зазор */
+    left: 12px;
+    right: 12px;
+    padding: 10px 12px;
+    /* Телефон: две строки — «Выбрано · Сбросить» и «менеджер · Назначить». */
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px 10px;
+  }
+  .leads-bulk-count { grid-column: 1; grid-row: 1; }
+  .leads-bulk-clear { grid-column: 2; grid-row: 1; justify-self: end; }
+  .leads-bulk-bar .crm-select {
+    grid-column: 1; grid-row: 2;
+    min-width: 0; max-width: none; width: 100%;
+  }
+  .leads-bulk-assign { grid-column: 2; grid-row: 2; }
+  .leads-bulk-note { grid-column: 1 / -1; grid-row: 3; white-space: normal; }
+
+  .leads-select-page-mobile {
+    display: inline-flex;
+    margin-bottom: 12px;
+  }
+  /* Карточка-строка: у базового правила фон white, поэтому выбранную
+     перекрашиваем явно и обводим. */
+  .table tbody tr.is-selected,
+  .table tbody tr.is-selected:hover {
+    background: color-mix(in srgb, var(--primary) 9%, white);
+    border-color: var(--primary);
+  }
+  .table tbody tr.is-selected td:first-child { box-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leads-bulk-bar { transition: none; }
+}

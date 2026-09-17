@@ -143,6 +143,30 @@ export class ApplicationsController {
     return this.apps.listAssignableManagers(user);
   }
 
+  /**
+   * Массовое назначение менеджера пачке лидов (экран /leads: галочки →
+   * менеджер → «Назначить»). Логика и обоснование — в
+   * ApplicationsService.bulkAssignManager.
+   *
+   * ОБЪЯВЛЕН ДО маршрутов с ':id' НАМЕРЕННО: Nest регистрирует ручки в
+   * порядке объявления, и PATCH /applications/bulk/manager иначе совпал бы
+   * с PATCH ':id/manager' при id='bulk' — запрос молча ушёл бы в одиночное
+   * назначение и упал бы «Заявка не найдена».
+   *
+   * Гвард и пермишен — те же, что у одиночного назначения: это та же
+   * операция, только над пачкой.
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  @Permissions('applications:assign')
+  @Patch('bulk/manager')
+  bulkAssignManager(
+    @Body() body: { ids?: string[]; managerId?: string; confirmReassign?: boolean },
+    @CurrentUser() user: any,
+  ) {
+    return this.apps.bulkAssignManager(body, user);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get(':id')
   one(@Param('id') id: string, @CurrentUser() user: any) {

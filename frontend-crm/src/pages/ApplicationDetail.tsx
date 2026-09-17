@@ -238,6 +238,10 @@ export default function ApplicationDetail() {
     'application:updated': (data: any) => {
       if (data?.application?.id === id || data?.studentId === studentId) reload();
     },
+    // Массовое назначение менеджера: в событии только id затронутых заявок.
+    'applications:bulk-updated': (data: any) => {
+      if (id && Array.isArray(data?.applicationIds) && data.applicationIds.includes(id)) reload();
+    },
     'student:updated': (data: any) => {
       if (data?.studentId && data.studentId === studentId) reload();
     },

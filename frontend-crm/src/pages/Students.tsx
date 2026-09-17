@@ -185,6 +185,8 @@ export default function Students() {
     'student:updated': () => qc.invalidateQueries({ queryKey: keys.students.all }),
     'application:new': () => qc.invalidateQueries({ queryKey: keys.students.all }),
     'application:updated': () => qc.invalidateQueries({ queryKey: keys.students.all }),
+    // Массовое назначение менеджера зеркалится и на студентов пачки.
+    'applications:bulk-updated': () => qc.invalidateQueries({ queryKey: keys.students.all }),
   });
 
   const reportDatesValid =

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Optional } from '@nestjs/common';
 import { ApplicationSource, ApplicationStatus, Country, Direction, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -80,6 +80,50 @@ const MANAGER_INCLUDE = {
   chinaManager: { select: { id: true, fullName: true, email: true } },
   program: true,
 };
+
+/**
+ * Потолок пачки для массового назначения менеджера. Очередь «Новые лиды» —
+ * десятки строк, страница — 25; 200 с запасом покрывает «отметил несколько
+ * страниц», и при этом один запрос не может повесить транзакцию на тысячи
+ * строк под блокировкой.
+ */
+const BULK_ASSIGN_MAX = 200;
+
+/**
+ * Realtime-событие «у пачки заявок сменился менеджер». Payload:
+ * { applicationIds: string[], studentIds: string[], managerId: string }.
+ * Подписчики в CRM: Leads, Applications, ApplicationDetail, Students,
+ * StudentDetail — добавляя нового слушателя application:updated, добавь и это.
+ */
+export const APPLICATIONS_BULK_UPDATED_EVENT = 'applications:bulk-updated';
+
+/** Код ответа 409 «нужно подтвердить переназначение» — его ждёт CRM. */
+export const BULK_REASSIGN_CONFIRM_REQUIRED = 'REASSIGN_CONFIRM_REQUIRED';
+
+/**
+ * Строка ActivityLog о смене менеджера. Одна на оба пути назначения —
+ * одиночный и массовый: отчёты и поиск по журналу читают этот текст, и два
+ * формата одной и той же операции разъехались бы в первом же фильтре.
+ */
+function managerChangeDetails(flag: string, before: string, after: string): string {
+  return `Менеджер ${flag}: ${before} → ${after}`;
+}
+
+/** Лид, у которого массовое назначение реально сменило менеджера. */
+type ChangedLead = {
+  updated: Prisma.ApplicationGetPayload<{ include: typeof MANAGER_INCLUDE }>;
+  /** Имя прежнего менеджера для строки журнала («—», если не было). */
+  beforeManagerName: string;
+};
+
+/** «Назначен 1 лид» / «Назначено 2 лида» / «Назначено 5 лидов». */
+function pluralLeadsAssigned(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `Назначен ${n} лид`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `Назначено ${n} лида`;
+  return `Назначено ${n} лидов`;
+}
 
 type CurrentUser = { id: string; role: Role };
 
@@ -937,24 +981,11 @@ export class ApplicationsService {
       if (!slot) {
         throw new ForbiddenException('Нет изменений');
       }
-      const currentOwner = (existing as any)[slot] as string | null;
-      const requested = patch[slot] as string | null | undefined;
-      // 1) Слот пустой → можно присвоить только себе.
-      if (!currentOwner) {
-        if (requested !== null && requested !== user.id) {
-          throw new ForbiddenException('Можно взять лид только на себя');
-        }
-      } else {
-        // 2) Слот занят:
-        //    a) текущий владелец — я → могу снять (null), но НЕ могу передать другому
-        //    b) текущий владелец — не я → не могу трогать вообще
-        if (currentOwner !== user.id) {
-          throw new ForbiddenException('Лид назначен другому сотруднику — обратись к админу');
-        }
-        if (requested !== null && requested !== user.id) {
-          throw new ForbiddenException('Передать лид другому сотруднику может только админ');
-        }
-      }
+      this.assertOwnSlotChangeOnly(
+        user,
+        (existing as any)[slot] as string | null,
+        patch[slot] as string | null | undefined,
+      );
     }
 
     const data: any = {};
@@ -998,10 +1029,10 @@ export class ApplicationsService {
     const afterChina = updated.chinaManager?.fullName || '—';
     const detailsParts: string[] = [];
     if (patch.managerId !== undefined && existing.managerId !== updated.managerId) {
-      detailsParts.push(`Менеджер 🇹🇯: ${beforeManager} → ${afterManager}`);
+      detailsParts.push(managerChangeDetails('🇹🇯', beforeManager, afterManager));
     }
     if (patch.chinaManagerId !== undefined && existing.chinaManagerId !== updated.chinaManagerId) {
-      detailsParts.push(`Менеджер 🇨🇳: ${beforeChina} → ${afterChina}`);
+      detailsParts.push(managerChangeDetails('🇨🇳', beforeChina, afterChina));
     }
     if (detailsParts.length > 0) {
       const details = detailsParts.join('; ');
@@ -1028,6 +1059,281 @@ export class ApplicationsService {
     }
 
     return updated;
+  }
+
+  /**
+   * ОБЪЁМ прав сотрудника БЕЗ права раздавать лиды (см.
+   * canReassignApplicationManager): взять свободный лид себе или снять
+   * себя — и только. Чужой лид не трогает вообще, свой передать другому не
+   * может (ТЗ §7: переназначение между сотрудниками — только руководство).
+   *
+   * Вынесено из assignManager в отдельный метод, потому что то же правило
+   * обязано стоять и перед массовым назначением: вторая копия условия
+   * разошлась бы с первой при первой же правке, а массовая ручка — это
+   * способ нарушить правило сразу на двадцати пяти лидах.
+   */
+  private assertOwnSlotChangeOnly(
+    user: CurrentUser,
+    currentOwner: string | null,
+    requested: string | null | undefined,
+  ) {
+    // 1) Слот пустой → можно присвоить только себе.
+    if (!currentOwner) {
+      if (requested !== null && requested !== user.id) {
+        throw new ForbiddenException('Можно взять лид только на себя');
+      }
+      return;
+    }
+    // 2) Слот занят:
+    //    a) текущий владелец — я → могу снять (null), но НЕ могу передать другому
+    //    b) текущий владелец — не я → не могу трогать вообще
+    if (currentOwner !== user.id) {
+      throw new ForbiddenException('Лид назначен другому сотруднику — обратись к админу');
+    }
+    if (requested !== null && requested !== user.id) {
+      throw new ForbiddenException('Передать лид другому сотруднику может только админ');
+    }
+  }
+
+  /**
+   * МАССОВОЕ НАЗНАЧЕНИЕ МЕНЕДЖЕРА (экран /leads: отметил галочками пачку
+   * лидов → выбрал менеджера → «Назначить»).
+   *
+   * ПОЧЕМУ ОТДЕЛЬНАЯ РУЧКА, А НЕ N ВЫЗОВОВ PATCH /:id/manager С ФРОНТА.
+   *  • Одиночное назначение шлёт notifyAllStaff («Менеджер изменён») на
+   *    КАЖДЫЙ лид: 25 лидов = 25 уведомлений каждому сотруднику. Здесь —
+   *    одно сводное.
+   *  • Глобальный троттлер режет 60 запросов в минуту: очередь в 73 лида
+   *    упёрлась бы в 429 на середине, оставив пачку назначенной наполовину.
+   *  • Пачка обязана быть атомарной: либо назначены все, либо никто.
+   *    Полуприменённое массовое действие — худший исход: человек не знает,
+   *    какие строки «проскочили», и идёт сверять глазами.
+   *
+   * ЧТО ОБЩЕЕ С ОДИНОЧНЫМ ПУТЁМ (и обязано таким оставаться): те же два
+   * рубежа прав, зеркалирование менеджера на Student, realtime по каждому
+   * лиду (карточка заявки перечитывается по application.id из события),
+   * запись ActivityLog(MANAGER_CHANGE) ПО КАЖДОМУ лиду — аудит по клиенту
+   * остаётся точным, сводным бывает только уведомление.
+   *
+   * ПЕРЕНАЗНАЧЕНИЕ ТРЕБУЕТ ЯВНОГО ПОДТВЕРЖДЕНИЯ. Если среди выбранных есть
+   * лиды, уже закреплённые за ДРУГИМ менеджером, без confirmReassign=true
+   * ручка ничего не меняет и отвечает 409 с разбивкой «у кого сколько».
+   * CRM спрашивает подтверждение сама, по своему кешу, — но кеш может
+   * отстать (лид только что назначил коллега), и тогда молча затёртое
+   * чужое назначение стало бы сюрпризом. Поэтому последнее слово за
+   * сервером: он видит строки под блокировкой, а не снимок минутной давности.
+   *
+   * Массово только НАЗНАЧАЕМ (managerId обязателен). Снять менеджера с пачки
+   * нельзя намеренно: это редкое действие, а цена ошибки — двадцать пять
+   * лидов без хозяина; в строке списка снять по-прежнему можно.
+   */
+  async bulkAssignManager(
+    body: { ids?: unknown; managerId?: unknown; confirmReassign?: unknown },
+    user: CurrentUser,
+  ) {
+    // Рубеж 1 — тот же, что у assignManager.
+    if (!canTouchApplicationManager(user as any)) {
+      throw new ForbiddenException('Недостаточно прав для назначения менеджера');
+    }
+
+    // Тело приходит как есть: у ручки нет DTO-класса (как и у одиночной), и
+    // ValidationPipe его не проверяет. Любой из этих случаев без проверки
+    // превратился бы в 500 из недр Prisma вместо внятного 400.
+    const rawIds = Array.isArray(body?.ids) ? (body.ids as unknown[]) : null;
+    if (!rawIds || rawIds.length === 0) {
+      throw new BadRequestException('Не выбрано ни одного лида');
+    }
+    if (rawIds.some((x) => typeof x !== 'string' || !x.trim())) {
+      throw new BadRequestException('Некорректный список лидов');
+    }
+    // Дубли в списке схлопываем: иначе сверка «нашли столько же, сколько
+    // просили» ниже ложно сработала бы на повторе одного id.
+    const ids = [...new Set((rawIds as string[]).map((x) => x.trim()))];
+    if (ids.length > BULK_ASSIGN_MAX) {
+      throw new BadRequestException(
+        `За один раз можно назначить не больше ${BULK_ASSIGN_MAX} лидов`,
+      );
+    }
+    const managerId = typeof body?.managerId === 'string' ? body.managerId.trim() : '';
+    if (!managerId) throw new BadRequestException('Не выбран менеджер');
+    const confirmReassign = body?.confirmReassign === true;
+
+    const manager = await this.prisma.user.findUnique({
+      where: { id: managerId },
+      select: { id: true, fullName: true, isActive: true },
+    });
+    if (!manager) throw new NotFoundException('Локальный менеджер не найден');
+    // Строже одиночного пути намеренно: деактивированный сотрудник в систему
+    // не войдёт, и пачка лидов, назначенная на него, просто ляжет мёртвым
+    // грузом. Один лид так потерять неприятно, двадцать пять — уже инцидент.
+    if (manager.isActive === false) {
+      throw new BadRequestException('Сотрудник деактивирован — назначить на него лиды нельзя');
+    }
+
+    const canReassign = canReassignApplicationManager(user as any);
+
+    const { changed, unchangedCount, reassignedCount } = await this.prisma.$transaction(
+      async (tx) => {
+        // Блокируем строки ДО чтения: решение «кого переназначаем» и сама
+        // запись обязаны видеть одно и то же состояние. Без FOR UPDATE
+        // коллега мог бы назначить лид между нашим SELECT и UPDATE — и
+        // подтверждение, которое дал пользователь, этого лида не покрывало
+        // бы. ORDER BY — чтобы две пересекающиеся пачки брали блокировки в
+        // одном порядке и не ловили взаимную блокировку.
+        await tx.$queryRaw`SELECT "id" FROM "Application" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`;
+
+        const existing = await tx.application.findMany({
+          where: { id: { in: ids } },
+          include: MANAGER_INCLUDE,
+        });
+        if (existing.length !== ids.length) {
+          // Лид удалили, пока человек ставил галочки. Назначать «тех, что
+          // остались» не станем: пользователь подтверждал другую пачку.
+          throw new ConflictException(
+            'Часть выбранных лидов уже удалена — обновите список и повторите',
+          );
+        }
+
+        // Рубеж 2 — по КАЖДОМУ лиду, тем же правилом, что и одиночный путь.
+        if (!canReassign) {
+          for (const app of existing) {
+            this.assertOwnSlotChangeOnly(user, app.managerId, managerId);
+          }
+        }
+
+        const toChange = existing.filter((a) => a.managerId !== managerId);
+        const reassigned = toChange.filter((a) => !!a.managerId);
+
+        if (reassigned.length > 0 && !confirmReassign) {
+          const byManager = new Map<
+            string,
+            { managerId: string; managerName: string; count: number }
+          >();
+          for (const a of reassigned) {
+            const key = a.managerId as string;
+            const row = byManager.get(key) || {
+              managerId: key,
+              managerName: a.manager?.fullName || '—',
+              count: 0,
+            };
+            row.count += 1;
+            byManager.set(key, row);
+          }
+          throw new ConflictException({
+            statusCode: 409,
+            code: BULK_REASSIGN_CONFIRM_REQUIRED,
+            message:
+              'Часть выбранных лидов уже назначена другим менеджерам — нужно подтверждение',
+            total: existing.length,
+            reassignCount: reassigned.length,
+            conflicts: [...byManager.values()].sort((x, y) => y.count - x.count),
+          });
+        }
+
+        if (toChange.length === 0) {
+          return {
+            changed: [] as ChangedLead[],
+            unchangedCount: existing.length,
+            reassignedCount: 0,
+          };
+        }
+
+        const changeIds = toChange.map((a) => a.id);
+        // Зеркалим менеджера на связанных студентов — как одиночный путь.
+        const studentIds = toChange
+          .map((a) => a.studentId)
+          .filter((x): x is string => !!x);
+        if (studentIds.length > 0) {
+          await tx.student.updateMany({
+            where: { id: { in: studentIds } },
+            data: { managerId },
+          });
+        }
+        await tx.application.updateMany({
+          where: { id: { in: changeIds } },
+          data: { managerId },
+        });
+        const updatedRows = await tx.application.findMany({
+          where: { id: { in: changeIds } },
+          include: MANAGER_INCLUDE,
+        });
+        const beforeById = new Map(toChange.map((a) => [a.id, a]));
+        const changedLeads: ChangedLead[] = updatedRows.map((u) => ({
+          updated: u,
+          beforeManagerName: beforeById.get(u.id)?.manager?.fullName || '—',
+        }));
+        return {
+          changed: changedLeads,
+          unchangedCount: existing.length - toChange.length,
+          reassignedCount: reassigned.length,
+        };
+      },
+      // Пять запросов, но пачка до BULK_ASSIGN_MAX строк и БД за прокси:
+      // дефолтные 5 с интерактивной транзакции оставляют слишком мало запаса.
+      { timeout: 20_000, maxWait: 10_000 },
+    );
+
+    // Всё ниже — ПОСЛЕ коммита: событие про незакоммиченную строку заставило
+    // бы клиента перечитать старое значение.
+    //
+    // ОДНО realtime-событие на всю пачку, а не application:updated на каждый
+    // лид. Списки в CRM на каждое такое событие перечитывают GET
+    // /applications: пачка из 25 лидов превращалась бы в 25 запросов с
+    // КАЖДОГО открытого экрана у КАЖДОГО сотрудника, а глобальный троттлер
+    // даёт 60 запросов в минуту — два массовых назначения подряд выбивали бы
+    // коллегам 429 на их собственной работе. В событии только id: открытая
+    // карточка заявки сверяет свой id со списком и перечитывается сама.
+    if (changed.length > 0) {
+      this.realtime.emitStaff(APPLICATIONS_BULK_UPDATED_EVENT, {
+        applicationIds: changed.map((c) => c.updated.id),
+        studentIds: changed.map((c) => c.updated.studentId).filter((x): x is string => !!x),
+        managerId: manager.id,
+      });
+    }
+    for (const { updated, beforeManagerName } of changed) {
+      if (updated.studentId) {
+        this.realtime.emitStudent(updated.studentId, 'student:updated', {
+          studentId: updated.studentId,
+        });
+      }
+      this.activity
+        .log({
+          actorId: user.id,
+          actorRole: user.role,
+          action: 'MANAGER_CHANGE',
+          studentId: updated.studentId,
+          studentName: updated.fullName,
+          details: `${managerChangeDetails('🇹🇯', beforeManagerName, manager.fullName)} (массовое назначение)`,
+        })
+        .catch(() => undefined);
+    }
+
+    if (changed.length > 0) {
+      // ОДНО сводное уведомление на всю пачку. Тип тот же, что у одиночного
+      // назначения, — колокольчик его уже знает. В payload нет applicationId
+      // намеренно: заявок много, вести клик на одну из них некуда.
+      this.notifications
+        .notifyAllStaff({
+          type: 'MANAGER_CHANGE',
+          title: 'Лиды назначены',
+          message: `${pluralLeadsAssigned(changed.length)} → ${manager.fullName}`,
+          payload: {
+            bulk: true,
+            count: changed.length,
+            managerId: manager.id,
+            applicationIds: changed.map((c) => c.updated.id),
+          },
+        })
+        .catch(() => undefined);
+    }
+
+    return {
+      updated: changed.map((c) => c.updated),
+      changed: changed.length,
+      unchanged: unchangedCount,
+      reassigned: reassignedCount,
+      manager: { id: manager.id, fullName: manager.fullName },
+    };
   }
 
   private async missingRequiredDocs(studentId: string): Promise<string[]> {

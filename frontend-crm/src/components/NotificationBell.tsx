@@ -21,6 +21,10 @@ function notificationHref(n: Notification): string | null {
   }
   if (p.applicationId) return `/applications/${p.applicationId}`;
   if (p.studentId) return `/students/${p.studentId}`;
+  // Сводное уведомление о массовом назначении («Назначено 12 лидов → …»):
+  // заявок много, вести на одну некуда — открываем список. Менеджер увидит в
+  // нём свои (в том числе только что назначенные), руководство — все.
+  if (n.type === 'MANAGER_CHANGE' && p.bulk) return '/applications';
   if (p.taskId) return '/tasks';
   if (n.type === 'TASK_ASSIGNED') return '/tasks';
   if (n.type === 'APPLICATION_NEW') return '/applications';

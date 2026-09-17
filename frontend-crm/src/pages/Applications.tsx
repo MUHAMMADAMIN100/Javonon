@@ -163,6 +163,8 @@ export default function Applications() {
     'application:new': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
     'application:updated': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
     'application:deleted': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
+    // Массовое назначение менеджера (экран /leads): одно событие на пачку.
+    'applications:bulk-updated': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
   });
 
   return (
