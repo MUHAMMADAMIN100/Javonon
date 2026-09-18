@@ -20,7 +20,6 @@ import { isElevated, isFounder } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useApplicationStatusLabel } from '../lib/labels';
 import {
-  boolParam,
   enumParam,
   ignoredParam,
   pageParam,
@@ -85,9 +84,6 @@ export default function Students() {
         isAdmin ? (['all', 'mine'] as const) : (['mine'] as const),
         isAdmin ? 'all' : 'mine',
       ),
-      // Отдельная вкладка «база студентов» по ТЗ — отображаются только
-      // оплатившие (есть хотя бы одна TUITION_PAYMENT транзакция).
-      paid: boolParam(false),
       page: pageParam(),
     },
     { pageKey: 'page' },
@@ -98,7 +94,6 @@ export default function Students() {
     cabinet,
     manager,
     scope,
-    paid: paidOnly,
     page,
   } = values;
   const urlSearch = values.search;
@@ -132,7 +127,9 @@ export default function Students() {
     cabinet: cabinet ? parseInt(cabinet, 10) : undefined,
     mine: scope === 'mine',
     manager: manager || undefined,
-    paid: paidOnly ? true : undefined,
+    // Студент = оплативший (решение учредителя): неоплатившие живут в
+    // «Заявках» и сюда не попадают вовсе. Переключателя нет намеренно.
+    paid: true,
   };
 
   const studentsQuery = useQuery({
@@ -203,7 +200,8 @@ export default function Students() {
     }
     setGenerating(true);
     try {
-      const all = await listStudents({});
+      // Отчёт по студентам — тоже только оплатившие, как и сам список.
+      const all = await listStudents({ paid: true });
       const from = new Date(reportFrom + 'T00:00:00');
       const to = new Date(reportTo + 'T23:59:59');
       const filtered = all.filter((s) => {
@@ -327,16 +325,6 @@ export default function Students() {
               ))}
             </select>
           )}
-          {/* По ТЗ: «база студентов — только оплатившие». Отдельная вкладка. */}
-          <label className="crm-checkbox-label" style={{ flex: '1 1 200px', whiteSpace: 'nowrap', minHeight: 38 }}>
-            <input
-              type="checkbox"
-              className="crm-checkbox"
-              checked={paidOnly}
-              onChange={(e) => setValue('paid', e.target.checked)}
-            />
-            {t('students.paidOnly')}
-          </label>
         </div>
 
         <AnimatePresence mode="wait">

@@ -656,7 +656,13 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .table th, .table td {
   padding: 14px 16px; text-align: left;
   border-bottom: 1px solid var(--border-soft);
-  word-wrap: break-word; overflow-wrap: anywhere;
+  /* break-word, а НЕ anywhere. Разница — в расчёте минимальной ширины
+     колонки: при `anywhere` браузер считает, что ячейку можно ужать до
+     одного символа, и на узком экране так и делал — телефон превращался в
+     столбик «+99 / 290 / 0195 / 533», дата в «18. / 09. / 20 / 26». При
+     `break-word` минимальная ширина — самое длинное слово целиком, а
+     разрыв внутри слова остаётся аварийным случаем (очень длинный e-mail). */
+  word-wrap: break-word; overflow-wrap: break-word;
   font-size: 14px;
 }
 .table th {
@@ -1578,6 +1584,43 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 /* ===== MOBILE (до 720) — DEPRECATED стилизация sidebar-as-toprow.
    Отключена в пользу drawer-pattern (см. @media 900px ниже).
    Оставляем body/sidebar-nav стили для обратной совместимости. */
+/* ===== ТАБЛИЦЫ → КАРТОЧКИ, ≤900px =====
+   Раньше порог был 720px, и на планшетах (721–900px) таблица оставалась
+   таблицей: пять-шесть колонок на 768px не помещались, ячейки сжимались, а
+   телефоны и даты рвались посимвольно. У всех 30 таблиц CRM один класс
+   .table, так что порог поднят здесь — разом для всего проекта. Блок стоит
+   ПЕРЕД блоками ≤720/≤600px: их точечные доводки карточек по-прежнему
+   перекрывают эти правила каскадом. */
+@media (max-width: 900px) {
+  .table-wrap { overflow: visible; }
+  /* min-width: у пары таблиц (посещаемость, оклады) он задан инлайном под
+     десктоп — в режиме карточек он растягивал бы их за край экрана. */
+  .table { min-width: 0 !important; }
+  .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+  .table thead { display: none; }
+  .table tr {
+    background: white; border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .table tr:hover { background: white; }
+  .table td {
+    border: none !important; padding: 4px 0;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; font-size: 14px; white-space: normal;
+  }
+  .table td:first-child {
+    font-size: 16px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border) !important;
+    margin-bottom: 8px; display: block;
+  }
+  .table td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 500; color: var(--text-soft); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.4px;
+  }
+}
+
 @media (max-width: 720px) {
   body { background: #f5f7fb; }
   .app-layout { /* flex-direction теперь row из @media 900px правила */ }
@@ -1638,31 +1681,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .scope-switch { width: 100%; }
   .scope-btn { flex: 1; justify-content: center; }
 
-  /* Таблицы → карточки */
-  .table-wrap { overflow: visible; }
-  .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
-  .table thead { display: none; }
-  .table tr {
-    background: white; border: 1px solid var(--border);
-    border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-  }
-  .table tr:hover { background: white; }
-  .table td {
-    border: none !important; padding: 4px 0;
-    display: flex; justify-content: space-between; align-items: center;
-    gap: 10px; font-size: 14px; white-space: normal;
-  }
-  .table td:first-child {
-    font-size: 16px; padding-bottom: 8px;
-    border-bottom: 1px solid var(--border) !important;
-    margin-bottom: 8px; display: block;
-  }
-  .table td[data-label]::before {
-    content: attr(data-label);
-    font-weight: 500; color: var(--text-soft); font-size: 12px;
-    text-transform: uppercase; letter-spacing: 0.4px;
-  }
+  /* Таблицы → карточки: правило живёт в блоке ≤900px выше. */
 
   /* Детали заявки/студента */
   .detail-photo { aspect-ratio: 1; max-width: 220px; margin: 0 auto; }
@@ -5366,7 +5385,11 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   }
   .leads-bulk-assign { grid-column: 2; grid-row: 2; }
   .leads-bulk-note { grid-column: 1 / -1; grid-row: 3; white-space: normal; }
+}
 
+/* Карточный вид списка лидов — с того же порога, что и карточки таблиц. */
+@media (max-width: 900px) {
+  /* <thead> скрыт — галочке «вся страница» нужно своё место. */
   .leads-select-page-mobile {
     display: inline-flex;
     margin-bottom: 12px;

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PAID_STUDENT_WHERE } from '../common/paid-student';
 import { PrismaService } from '../prisma/prisma.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 import { dateRangeFilter } from '../common/query-date';
@@ -158,6 +159,9 @@ export class KpiService {
             where: {
               OR: [{ managerId: u.id }, { chinaManagerId: u.id }],
               status: 'ACTIVE',
+              // Студент = оплативший (common/paid-student.ts) — как в списке
+              // «Студенты» и на карточке дашборда.
+              ...PAID_STUDENT_WHERE,
               // Период здесь раньше игнорировался молча: на /kpi с
               // выбранными «30 днями» эта колонка одна показывала «за всё
               // время». Режем по дате заведения студента — ровно так

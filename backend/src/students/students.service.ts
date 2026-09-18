@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Optional } from '@nestjs/common';
+import { PAID_STUDENT_WHERE, UNPAID_STUDENT_WHERE } from '../common/paid-student';
 import { Direction, Prisma, Role, StudentStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -224,16 +225,11 @@ export class StudentsService {
     if (filters.direction) where.direction = filters.direction;
     if (filters.status) where.status = filters.status;
     if (filters.cabinet) where.cabinet = filters.cabinet;
-    // «Оплатил» = есть хотя бы одна INCOME-транзакция категории TUITION_PAYMENT,
-    // привязанная к этому студенту.
+    // Определение «оплатил» — общее, см. common/paid-student.ts.
     if (filters.paid === true) {
-      where.transactions = {
-        some: { type: 'INCOME', category: 'TUITION_PAYMENT' },
-      };
+      where.transactions = PAID_STUDENT_WHERE.transactions;
     } else if (filters.paid === false) {
-      where.transactions = {
-        none: { type: 'INCOME', category: 'TUITION_PAYMENT' },
-      };
+      where.transactions = UNPAID_STUDENT_WHERE.transactions;
     }
     const and: Prisma.StudentWhereInput[] = [];
     // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только своих,
@@ -630,9 +626,14 @@ export class StudentsService {
         : undefined;
     // Период накладывается ПОВЕРХ скоупа, не заменяя его.
     const createdAt = dateRangeFilter(range);
-    const where: Prisma.StudentWhereInput | undefined = createdAt
-      ? { ...(scope ?? {}), createdAt }
-      : scope;
+    // Счётчики считают ТОЛЬКО оплативших — то же правило, что у списка
+    // «Студенты» (common/paid-student.ts), иначе цифра над списком с ним
+    // не сойдётся.
+    const where: Prisma.StudentWhereInput = {
+      ...(scope ?? {}),
+      ...(createdAt ? { createdAt } : {}),
+      ...PAID_STUDENT_WHERE,
+    };
     const [total, byCabinet, byDirection, byStatus] = await Promise.all([
       this.prisma.student.count({ where }),
       this.prisma.student.groupBy({

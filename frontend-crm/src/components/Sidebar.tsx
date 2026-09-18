@@ -37,7 +37,7 @@ const PREFETCH_MAP: Record<string, () => Promise<void> | void> = {
     queryClient.prefetchQuery({ queryKey: keys.applications.list({}), queryFn: () => listApplications() });
   },
   '/students': () => {
-    queryClient.prefetchQuery({ queryKey: keys.students.list({}), queryFn: () => listStudents() });
+    queryClient.prefetchQuery({ queryKey: keys.students.list({ paid: true }), queryFn: () => listStudents({ paid: true }) });
     queryClient.prefetchQuery({ queryKey: keys.students.stats(), queryFn: () => studentStats() });
   },
   '/programs': () => {
