@@ -363,10 +363,14 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
           <div>
             <div style={{ fontWeight: 600, fontSize: 16 }}>{studentName}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{p.submission.program.name}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>
-              Менеджер: {p.submission.manager.fullName}
-            </div>
+            {/* Программу и менеджера у сделки могли удалить (обе связи
+                SetNull) — строка не должна ронять весь экран. */}
+            <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{p.submission.program?.name || '—'}</div>
+            {p.submission.manager && (
+              <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>
+                Менеджер: {p.submission.manager.fullName}
+              </div>
+            )}
             {/* Партнёр приходит только руководству — бэкенд не кладёт поле в
                 ответ остальным ролям, поэтому здесь достаточно проверки на
                 наличие. Клиенты без партнёра (их большинство) строку не

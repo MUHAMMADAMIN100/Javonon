@@ -77,9 +77,11 @@ export interface SaleSubmission {
 
 export interface PendingPayment extends SubmissionPayment {
   submission: SaleSubmission & {
-    program: { id: string; name: string; university: string };
+    // null — программу удалили (onDelete: SetNull); сделка при этом остаётся.
+    program: { id: string; name: string; university: string } | null;
     student: { id: string; fullName: string } | null;
-    manager: { id: string; fullName: string };
+    // null — сотрудника удалили (onDelete: SetNull).
+    manager: { id: string; fullName: string } | null;
   };
 }
 
