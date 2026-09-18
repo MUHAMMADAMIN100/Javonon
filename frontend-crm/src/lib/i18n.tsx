@@ -201,7 +201,10 @@ const DICT: Record<Lang, Record<string, string>> = {
     // Названия ПОЛЕЙ формы намеренно переиспользуют app.field.* — это те же
     // поля той же заявки, второй набор ключей разошёлся бы с карточкой.
     'leads.form.title': 'Новый лид',
-    'leads.form.hint': 'Заявки с телефона и из мессенджеров. Поля — те же, что в форме на сайте. После сохранения форма очистится для следующего лида.',
+    'leads.form.hint': 'Заявки с телефона и из мессенджеров. Поля — те же, что в форме на сайте.',
+    'leads.form.closeConfirm.title': 'Закрыть без сохранения?',
+    'leads.form.closeConfirm.message': 'В форме есть введённые данные. Если закрыть окно, они пропадут.',
+    'leads.form.closeConfirm.ok': 'Закрыть',
     'leads.form.submit': 'Сохранить лид',
     'leads.field.sameAsPhone': 'Тот же номер телефона',
     'leads.field.countryPlaceholder': 'Выберите страну',
@@ -1924,7 +1927,10 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== leads (вориди дастии лид, /leads) =====
     'leads.form.title': 'Лиди нав',
-    'leads.form.hint': 'Аризаҳо аз телефон ва мессенҷерҳо. Майдонҳо ҳамон майдонҳои варақаи сайт. Пас аз сабт варақа барои лиди навбатӣ тоза мешавад.',
+    'leads.form.hint': 'Аризаҳо аз телефон ва мессенҷерҳо. Майдонҳо ҳамон майдонҳои варақаи сайт.',
+    'leads.form.closeConfirm.title': 'Бе сабт пӯшем?',
+    'leads.form.closeConfirm.message': 'Дар варақа маълумоти воридшуда ҳаст. Агар равзана пӯшида шавад, он гум мешавад.',
+    'leads.form.closeConfirm.ok': 'Пӯшидан',
     'leads.form.submit': 'Лидро сабт кардан',
     'leads.field.sameAsPhone': 'Ҳамон рақами телефон',
     'leads.field.countryPlaceholder': 'Кишварро интихоб кунед',

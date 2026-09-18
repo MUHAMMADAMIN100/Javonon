@@ -5407,3 +5407,69 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 @media (prefers-reduced-motion: reduce) {
   .leads-bulk-bar { transition: none; }
 }
+
+/* =====================================================================
+   Подпись у галочки внутри .form-group
+   ===================================================================== */
+/* `.form-group label` красит ЛЮБОЙ label как подпись поля: серый
+   моноширинный капс 11px и display:block. Для .crm-checkbox-label это
+   ломало всё сразу: текст становился бледным и мелким, а block отменял
+   inline-flex — пропадал gap, и подпись прилипала к галочке вплотную
+   (форма лида, «Тот же номер телефона»). Возвращаем обычный текст. */
+.form-group label.crm-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+/* =====================================================================
+   LEADS — окно «Новый лид»
+   ===================================================================== */
+.lead-modal-card {
+  max-width: 720px;
+  text-align: left;       /* .dialog-card по умолчанию центрирует текст */
+  padding: 26px 28px 24px;
+}
+.lead-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.lead-modal-close {
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  flex-shrink: 0;
+}
+.lead-modal-close:hover { background: var(--bg-soft); color: var(--text); }
+.lead-modal-card .form-actions { margin-top: 18px; }
+
+@media (max-width: 720px) {
+  /* На телефоне окно — почти во весь экран, прижато к низу. */
+  .lead-modal { padding: 10px !important; align-items: flex-end !important; }
+  .lead-modal-card {
+    max-width: 100%;
+    /* Нижний запас 88px — под плавающую кнопку звонка (56px + отступы): у неё
+       z-index выше любых окон, и без запаса она ложилась прямо на «Отмена». */
+    padding: 20px 16px 88px !important; /* общий .dialog-card на мобиле задаёт padding с !important */
+    max-height: calc(100dvh - 20px);
+    border-radius: 18px 18px 14px 14px;
+  }
+  .lead-modal-card .form-actions { flex-direction: column-reverse; gap: 10px; }
+  .lead-modal-card .form-actions .btn { width: 100%; justify-content: center; min-height: 46px; }
+}

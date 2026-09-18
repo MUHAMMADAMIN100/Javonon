@@ -108,6 +108,8 @@ export default function Leads() {
   const [comment, setComment] = useState('');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [serverError, setServerError] = useState<string | null>(null);
+  /** Форма нового лида живёт в окне: страница начинается сразу со списка. */
+  const [formOpen, setFormOpen] = useState(false);
 
   const nameRef = useRef<HTMLInputElement | null>(null);
 
@@ -199,15 +201,57 @@ export default function Leads() {
     setServerError(null);
   };
 
+  /**
+   * Введено ли в форму хоть что-то. От этого зависит, закрывать окно молча
+   * или переспросить: лид набирают со слуха по телефону, и случайный клик
+   * мимо окна не должен стирать набранное. У телефона считаем цифры ПОСЛЕ
+   * кода страны — сам код («+992») подставляет поле, это не ввод человека.
+   */
+  const formDirty = useMemo(() => {
+    const ownDigits = (value: string) => {
+      const v = (value || '').trim();
+      const code = PHONE_CODES.find((c) => v.startsWith(c.code));
+      return (code ? v.slice(code.code.length) : v).replace(/\D/g, '').length > 0;
+    };
+    return (
+      !!fullName.trim() ||
+      ownDigits(phone) ||
+      ownDigits(whatsappPhone) ||
+      !!birthday ||
+      !!country ||
+      !!comment.trim()
+    );
+  }, [fullName, phone, whatsappPhone, birthday, country, comment]);
+
+  const openForm = () => {
+    resetForm();
+    setFormOpen(true);
+  };
+
+  /** Esc, клик мимо, крестик и «Отмена» — все закрытия идут через это. */
+  const requestCloseForm = async () => {
+    if (createMut.isPending) return;
+    if (formDirty) {
+      const ok = await confirm({
+        title: t('leads.form.closeConfirm.title'),
+        message: t('leads.form.closeConfirm.message'),
+        confirmText: t('leads.form.closeConfirm.ok'),
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    resetForm();
+    setFormOpen(false);
+  };
+
   const createMut = useInvalidatingMutation<Application, CreateStaffApplicationInput>({
     mutationFn: createStaffApplication,
     invalidate: [keys.applications.all],
     onSuccess: () => {
-      // Форма очищается и фокус возвращается в ФИО: следующий лид
-      // набирается сразу, без мыши.
+      // Сохранили — окно закрывается, новая строка появляется в списке.
       resetForm();
+      setFormOpen(false);
       toast(t('leads.toast.created'), 'success');
-      nameRef.current?.focus();
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.message;
@@ -239,6 +283,30 @@ export default function Leads() {
       // Бэкенд подставит OTHER (STAFF_DEFAULT_SOURCE).
     });
   };
+
+  // Esc закрывает окно. Если поверх открыт календарь, список кодов стран или
+  // окно подтверждения, Esc принадлежит им — иначе одно нажатие закрывало бы
+  // и календарь, и всю форму.
+  //
+  // Слушаем в фазе ПЕРЕХВАТА (capture) намеренно: календарь и список стран
+  // ловят Esc на document и закрываются раньше, чем до window дойдёт всплытие,
+  // — обычный обработчик видел бы попап уже закрытым и закрывал окно следом.
+  // Найдено браузерным тестом.
+  const requestCloseRef = useRef(requestCloseForm);
+  requestCloseRef.current = requestCloseForm;
+  useEffect(() => {
+    if (!formOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const popupOpen = [
+        ...document.querySelectorAll('.crm-datepicker-popover, .phone-dropdown, .dialog-card'),
+      ].some((el) => !el.classList.contains('lead-modal-card'));
+      if (popupOpen) return;
+      requestCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [formOpen]);
 
   /* ============================ список ============================ */
 
@@ -522,11 +590,42 @@ export default function Leads() {
       transition={{ duration: 0.3 }}
       style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
     >
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">{t('leads.form.title')}</h2>
-        </div>
-        <div className="card-body">
+      <AnimatePresence>
+        {formOpen && (
+          <motion.div
+            key="lead-modal"
+            className="dialog-backdrop lead-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            // mousedown, а не click: выделил текст в поле и отпустил мышь за
+            // краем окна — это не «клик мимо», закрывать нельзя.
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) requestCloseForm();
+            }}
+          >
+            <motion.div
+              className="dialog-card lead-modal-card"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('leads.form.title')}
+              initial={{ opacity: 0, scale: 0.96, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 16 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="lead-modal-head">
+                <h2 className="card-title" style={{ margin: 0 }}>{t('leads.form.title')}</h2>
+                <button
+                  type="button"
+                  className="lead-modal-close"
+                  aria-label={t('common.close')}
+                  data-testid="lead-modal-close"
+                  onClick={requestCloseForm}
+                >
+                  <Icon name="close" size={20} />
+                </button>
+              </div>
           <p style={{ marginTop: 0, color: 'var(--text-soft)', fontSize: 13 }}>
             {t('leads.form.hint')}
           </p>
@@ -653,21 +752,35 @@ export default function Leads() {
             </div>
 
             <div className="form-actions">
-              <button type="button" className="btn btn-secondary" onClick={resetForm}>
-                {t('common.reset')}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                data-testid="lead-modal-cancel"
+                onClick={requestCloseForm}
+                disabled={createMut.isPending}
+              >
+                {t('common.cancel')}
               </button>
-              <button type="submit" className="btn btn-primary" disabled={createMut.isPending}>
+              <button type="submit" className="btn btn-primary" data-testid="lead-modal-save" disabled={createMut.isPending}>
                 {createMut.isPending ? t('common.saving') : t('leads.form.submit')}
               </button>
             </div>
           </form>
-        </div>
-      </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="card">
         <div className="card-header">
-          <h2 className="card-title">{t('leads.list.title')}</h2>
-          <span style={{ color: 'var(--text-soft)', fontSize: 13 }}>{leads.length}</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+            <h2 className="card-title" style={{ margin: 0 }}>{t('leads.list.title')}</h2>
+            <span style={{ color: 'var(--text-soft)', fontSize: 13 }} data-testid="leads-total">{leads.length}</span>
+          </div>
+          <button type="button" className="btn btn-primary" data-testid="lead-new" onClick={openForm}>
+            <Icon name="add" size={18} />
+            {t('leads.form.title')}
+          </button>
         </div>
         <div className="card-body">
           <AnimatePresence mode="wait">
