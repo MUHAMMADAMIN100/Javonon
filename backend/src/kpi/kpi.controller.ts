@@ -37,6 +37,21 @@ export class KpiController {
     return this.svc.forUser(me.id);
   }
 
+  /**
+   * Подробности по строке рейтинга за тот же период: студенты, платежи,
+   * заявки. Доступ (руководство — любого, сотрудник — себя) проверяет
+   * сервис: правило зависит от того, КОГО открывают, а не только от роли.
+   */
+  @Get(':userId/details')
+  details(
+    @Param('userId') userId: string,
+    @CurrentUser() me: any,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.svc.details(userId, { from: parseDate(from, 'from'), to: parseDate(to, 'to', true) }, me);
+  }
+
   /** KPI любого сотрудника — только админ. */
   @Get(':userId')
   @UseGuards(RolesGuard)

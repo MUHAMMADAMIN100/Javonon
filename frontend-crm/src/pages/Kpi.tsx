@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { KpiRow, leaderboard } from '../api/kpi';
 import { useAuth } from '../store/auth';
@@ -7,6 +7,7 @@ import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
 import { tjLastDaysRange } from '../lib/tjTime';
+import KpiDetailsModal from '../components/KpiDetailsModal';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -36,6 +37,12 @@ export default function Kpi() {
   const roleLabel = useRoleLabel();
   const me = useAuth((s) => s.user);
   const [rangeIdx, setRangeIdx] = useState(2); // 30 days по умолчанию
+  /** Строка, по которой открыто окно подробностей (id, а не объект: после
+   *  перезапроса рейтинга объект строки уже другой). */
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  // Подробности: руководство открывает любого, сотрудник — только себя.
+  // Это UX-слой; настоящая проверка — на сервере (KpiService.details).
+  const canOpenAll = isElevated(me);
 
   const range = RANGE_KEYS[rangeIdx];
   // Границы — календарные дни Asia/Dushanbe (YYYY-MM-DD), как их ждёт
@@ -214,7 +221,26 @@ export default function Kpi() {
             {rows.map((r, i) => {
               const isMe = r.id === me?.id;
               return (
-                <tr key={r.id} style={isMe ? { background: 'var(--primary-soft)' } : undefined}>
+                <tr
+                  key={r.id}
+                  data-testid={`kpi-row-${i}`}
+                  className={canOpenAll || isMe ? 'kpi-row-clickable' : 'kpi-row-static'}
+                  style={isMe ? { background: 'var(--primary-soft)' } : undefined}
+                  {...(canOpenAll || isMe
+                    ? {
+                        role: 'button',
+                        tabIndex: 0,
+                        title: t('kpi.details.open'),
+                        onClick: () => setDetailsId(r.id),
+                        onKeyDown: (e: React.KeyboardEvent) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setDetailsId(r.id);
+                          }
+                        },
+                      }
+                    : {})}
+                >
                   <td style={{
                     fontFamily: 'var(--font-display)',
                     fontWeight: 500,
@@ -265,6 +291,17 @@ export default function Kpi() {
           </tbody>
         </table>
       </div>
+      <AnimatePresence>
+        {detailsId && rows.find((r) => r.id === detailsId) && (
+          <KpiDetailsModal
+            key={detailsId}
+            row={rows.find((r) => r.id === detailsId)!}
+            params={params}
+            rangeLabel={t(range.key)}
+            onClose={() => setDetailsId(null)}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

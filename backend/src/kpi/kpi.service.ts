@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { isElevated, UserWithRoles } from '../auth/role-utils';
 import { PAID_STUDENT_WHERE } from '../common/paid-student';
 import { PrismaService } from '../prisma/prisma.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
@@ -7,6 +9,16 @@ import {
   NonReportingCurrencyBreakdown,
   REPORTING_CURRENCY,
 } from '../common/reporting-currency';
+
+/** Диапазон дат из dateRangeFilter(): undefined — «за всё время». */
+type DateRange = ReturnType<typeof dateRangeFilter>;
+
+/**
+ * Потолок строк в каждом списке окна подробностей. У активного менеджера за
+ * «всё время» тысячи заявок — тащить их все в окно бессмысленно. Итоги при
+ * этом считаются по ВСЕМ записям, обрезается только показ.
+ */
+const DETAILS_LIST_LIMIT = 300;
 
 @Injectable()
 export class KpiService {
@@ -134,56 +146,13 @@ export class KpiService {
           tasksOpen,
           tasksDone,
         ] = await Promise.all([
+          this.prisma.application.count({ where: this.applicationsWhere(u.id, dateFilter) }),
           this.prisma.application.count({
-            where: {
-              OR: [{ managerId: u.id }, { chinaManagerId: u.id }],
-              ...(dateFilter && { createdAt: dateFilter }),
-            },
+            where: { ...this.applicationsWhere(u.id, dateFilter), status: { in: FINISHED_APPLICATION_STATUSES } },
           }),
-          this.prisma.application.count({
-            where: {
-              OR: [{ managerId: u.id }, { chinaManagerId: u.id }],
-              // Не одно значение, а группа: пока не прогнали
-              // migrate-lead-statuses.ts (перенос опт-ин, см.
-              // MIGRATE_LEAD_STATUSES), часть строк носит ENROLLED/COMPLETED,
-              // и строгий матч по SUCCESSFUL_LEAD обнулил бы весь KPI.
-              status: { in: FINISHED_APPLICATION_STATUSES },
-              // Тот же createdAt, что и у знаменателя конверсии выше:
-              // считаем «сколько из назначенных за период заявок уже
-              // дошли до успеха». Подмножество — значит conversionRate
-              // физически не может превысить 100%.
-              ...(dateFilter && { createdAt: dateFilter }),
-            },
-          }),
-          this.prisma.student.count({
-            where: {
-              OR: [{ managerId: u.id }, { chinaManagerId: u.id }],
-              status: 'ACTIVE',
-              // Студент = оплативший (common/paid-student.ts) — как в списке
-              // «Студенты» и на карточке дашборда.
-              ...PAID_STUDENT_WHERE,
-              // Период здесь раньше игнорировался молча: на /kpi с
-              // выбранными «30 днями» эта колонка одна показывала «за всё
-              // время». Режем по дате заведения студента — ровно так
-              // считает карточка 04 «Активные клиенты» (students/stats),
-              // поэтому сумма колонки сходится с ней.
-              ...(dateFilter && { createdAt: dateFilter }),
-            },
-          }),
+          this.prisma.student.count({ where: this.studentsWhere(u.id, dateFilter) }),
           this.prisma.transaction.aggregate({
-            where: {
-              managerId: u.id,
-              type: 'INCOME',
-              // Bug #25: исключаем INCOME-транзакции, помеченные как
-              // reversed (CANCEL сделки или ручной refund), иначе KPI
-              // показывает завышенный salesAmount по отменённым сделкам.
-              reversedAt: null,
-              // Audit HIGH: складывать разные валюты в одно число нельзя —
-              // см. блок «ВАЛЮТА» в шапке метода. Остаток периода в прочих
-              // валютах возвращается в nonTjsSales (агрегируется ниже).
-              currency: REPORTING_CURRENCY,
-              ...(dateFilter && { date: dateFilter }),
-            },
+            where: this.salesWhere(u.id, dateFilter),
             _sum: { amount: true },
           }),
           this.prisma.task.count({
@@ -243,6 +212,155 @@ export class KpiService {
   }
 
   /** KPI одного сотрудника + история по месяцам. */
+  /* ======================================================================
+   *  УСЛОВИЯ ВЫБОРКИ — ОДНИ НА РЕЙТИНГ И НА ОКНО ПОДРОБНОСТЕЙ
+   *
+   *  Окно по клику на строку обязано показывать РОВНО те записи, из которых
+   *  сложились числа строки: «Студентов: 1» — один студент в списке,
+   *  «Продажи 6 000» — платежи в сумме 6 000. Две копии условия разошлись
+   *  бы при первой же правке, и человек увидел бы «в рейтинге 5, в списке
+   *  4». Поэтому и leaderboard(), и details() берут where отсюда.
+   * ==================================================================== */
+
+  /** Заявки сотрудника (любой из двух слотов менеджера), по дате создания. */
+  private applicationsWhere(userId: string, dateFilter: DateRange): Prisma.ApplicationWhereInput {
+    return {
+      OR: [{ managerId: userId }, { chinaManagerId: userId }],
+      ...(dateFilter && { createdAt: dateFilter }),
+    };
+  }
+
+  /** Активные ОПЛАТИВШИЕ студенты сотрудника, по дате заведения карточки. */
+  private studentsWhere(userId: string, dateFilter: DateRange): Prisma.StudentWhereInput {
+    return {
+      OR: [{ managerId: userId }, { chinaManagerId: userId }],
+      status: 'ACTIVE',
+      // Студент = оплативший (common/paid-student.ts) — как в списке
+      // «Студенты» и на карточке дашборда.
+      ...PAID_STUDENT_WHERE,
+      // Режем по дате заведения студента — ровно так считает карточка 04
+      // «Активные клиенты» (students/stats), поэтому суммы сходятся.
+      ...(dateFilter && { createdAt: dateFilter }),
+    };
+  }
+
+  /** Действующие приходы сотрудника в отчётной валюте, по дате платежа. */
+  private salesWhere(userId: string, dateFilter: DateRange): Prisma.TransactionWhereInput {
+    return {
+      managerId: userId,
+      type: 'INCOME',
+      // Исключаем отменённые (reversedAt) — иначе продажи завышены отказами.
+      reversedAt: null,
+      currency: REPORTING_CURRENCY,
+      ...(dateFilter && { date: dateFilter }),
+    };
+  }
+
+  /**
+   * Подробности по строке рейтинга: что именно стоит за числами сотрудника
+   * за тот же период — его студенты, платежи и заявки.
+   *
+   * ДОСТУП. Руководство (FOUNDER/ADMIN/ACCOUNTANT) открывает любого,
+   * сотрудник — только себя. Сам рейтинг видят все, но в нём лишь итоги;
+   * здесь же фамилии чужих клиентов и суммы по каждому платежу — то, что
+   * менеджеру о коллеге знать не положено. Проверка стоит на сервере:
+   * некликабельная строка в интерфейсе защитой не является.
+   */
+  async details(userId: string, filters: { from?: Date; to?: Date }, viewer: UserWithRoles & { id: string }) {
+    if (!isElevated(viewer) && viewer.id !== userId) {
+      throw new ForbiddenException('Подробности по другому сотруднику доступны только руководству');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, fullName: true, role: true },
+    });
+    if (!user) throw new NotFoundException('Сотрудник не найден');
+
+    const dateFilter = dateRangeFilter(filters);
+    const appsWhere = this.applicationsWhere(userId, dateFilter);
+    const salesWhere = this.salesWhere(userId, dateFilter);
+
+    const [students, sales, salesAgg, otherCurrencySales, applications, applicationsTotal, applicationsEnrolled, byStatus] =
+      await Promise.all([
+        this.prisma.student.findMany({
+          where: this.studentsWhere(userId, dateFilter),
+          select: {
+            id: true, fullName: true, direction: true, status: true, cabinet: true, createdAt: true,
+            // Сколько студент оплатил ВСЕГО (действующие платежи за обучение) —
+            // справочно; в «Продажи» периода это число не входит.
+            transactions: {
+              where: { type: 'INCOME', category: 'TUITION_PAYMENT', reversedAt: null, currency: REPORTING_CURRENCY },
+              select: { amount: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: DETAILS_LIST_LIMIT,
+        }),
+        this.prisma.transaction.findMany({
+          where: salesWhere,
+          select: {
+            id: true, amount: true, currency: true, date: true, category: true, comment: true, payerName: true,
+            studentId: true, student: { select: { id: true, fullName: true } },
+          },
+          orderBy: { date: 'desc' },
+          take: DETAILS_LIST_LIMIT,
+        }),
+        this.prisma.transaction.aggregate({ where: salesWhere, _sum: { amount: true }, _count: true }),
+        // Приходы в прочих валютах: в сумму «Продажи» не входят (конвертации
+        // нет), но и молча не пропадают — показываем отдельным списком.
+        this.prisma.transaction.findMany({
+          where: { ...salesWhere, currency: { not: REPORTING_CURRENCY } },
+          select: {
+            id: true, amount: true, currency: true, date: true, category: true, comment: true, payerName: true,
+            studentId: true, student: { select: { id: true, fullName: true } },
+          },
+          orderBy: { date: 'desc' },
+          take: DETAILS_LIST_LIMIT,
+        }),
+        this.prisma.application.findMany({
+          where: appsWhere,
+          select: { id: true, fullName: true, phone: true, status: true, country: true, createdAt: true, studentId: true },
+          orderBy: { createdAt: 'desc' },
+          take: DETAILS_LIST_LIMIT,
+        }),
+        this.prisma.application.count({ where: appsWhere }),
+        this.prisma.application.count({ where: { ...appsWhere, status: { in: FINISHED_APPLICATION_STATUSES } } }),
+        this.prisma.application.groupBy({ by: ['status'], where: appsWhere, _count: true }),
+      ]);
+
+    const studentsTotal =
+      students.length < DETAILS_LIST_LIMIT
+        ? students.length
+        : await this.prisma.student.count({ where: this.studentsWhere(userId, dateFilter) });
+
+    return {
+      user,
+      currency: REPORTING_CURRENCY,
+      /** Списки обрезаются до этого числа строк; итоги считаются по всем. */
+      listLimit: DETAILS_LIST_LIMIT,
+      totals: {
+        applicationsAssigned: applicationsTotal,
+        applicationsEnrolled,
+        studentsCount: studentsTotal,
+        salesAmount: salesAgg._sum.amount || 0,
+        salesCount: salesAgg._count,
+      },
+      students: students.map(({ transactions, ...st }) => ({
+        ...st,
+        paidTotal: Math.round(transactions.reduce((sum, t) => sum + (t.amount || 0), 0) * 100) / 100,
+      })),
+      sales,
+      otherCurrencySales,
+      applications: applications.map((a) => ({
+        ...a,
+        enrolled: (FINISHED_APPLICATION_STATUSES as readonly string[]).includes(a.status),
+      })),
+      applicationsByStatus: byStatus
+        .map((g) => ({ status: g.status, count: g._count }))
+        .sort((x, y) => y.count - x.count),
+    };
+  }
+
   async forUser(userId: string) {
     const board = await this.leaderboard({});
     return board.find((u) => u.id === userId) || null;

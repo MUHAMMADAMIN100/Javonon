@@ -39,3 +39,69 @@ export const myKpi = () => api.get<KpiRow | null>('/kpi/me').then((r) => r.data)
 
 export const userKpi = (userId: string) =>
   api.get<KpiRow | null>(`/kpi/${userId}`).then((r) => r.data);
+
+/* ===================== подробности по строке рейтинга ===================== */
+
+export interface KpiDetailsStudent {
+  id: string;
+  fullName: string;
+  direction: string;
+  status: string;
+  cabinet: number;
+  createdAt: string;
+  /** Сколько студент оплатил всего (действующие платежи за обучение, TJS). */
+  paidTotal: number;
+}
+
+export interface KpiDetailsSale {
+  id: string;
+  amount: number;
+  currency: string;
+  date: string;
+  category: string;
+  comment: string | null;
+  payerName: string | null;
+  studentId: string | null;
+  student: { id: string; fullName: string } | null;
+}
+
+export interface KpiDetailsApplication {
+  id: string;
+  fullName: string;
+  phone: string;
+  status: string;
+  country: string | null;
+  createdAt: string;
+  studentId: string | null;
+  /** Статус из набора «успешно завершённых» — то, что рейтинг считает зачислением. */
+  enrolled: boolean;
+}
+
+/**
+ * Что стоит за числами строки рейтинга за ТОТ ЖЕ период. Сервер собирает
+ * списки теми же условиями, что и сами числа (KpiService, блок «УСЛОВИЯ
+ * ВЫБОРКИ»), поэтому totals обязаны совпадать со строкой. Списки обрезаются
+ * до listLimit строк, итоги считаются по всем записям.
+ */
+export interface KpiDetails {
+  user: { id: string; fullName: string; role: string };
+  currency: string;
+  listLimit: number;
+  totals: {
+    applicationsAssigned: number;
+    applicationsEnrolled: number;
+    studentsCount: number;
+    salesAmount: number;
+    salesCount: number;
+  };
+  students: KpiDetailsStudent[];
+  sales: KpiDetailsSale[];
+  /** Приходы в прочих валютах — в сумму «Продажи» не входят. */
+  otherCurrencySales: KpiDetailsSale[];
+  applications: KpiDetailsApplication[];
+  applicationsByStatus: { status: string; count: number }[];
+}
+
+/** Руководство — любого сотрудника, сотрудник — только себя (иначе 403). */
+export const kpiDetails = (userId: string, params?: { from?: string; to?: string }) =>
+  api.get<KpiDetails>(`/kpi/${userId}/details`, { params }).then((r) => r.data);
