@@ -309,17 +309,7 @@ export default function Finance() {
   const topManagersCurrency = topManagersQuery.data?.currency ?? 'TJS';
   const topManagersNonTjs = topManagersQuery.data?.nonTjsTotals;
 
-  const incomeSourcesQuery = useQuery({
-    queryKey: ['finance', 'income-sources', monthStart],
-    queryFn: () => financeIncomeSources({ from: monthStart }),
-  });
-  const incomeSources = incomeSourcesQuery.data ?? [];
 
-  const incomeByProductQuery = useQuery({
-    queryKey: ['finance', 'income-by-product', monthStart],
-    queryFn: () => financeIncomeByProduct({ from: monthStart }),
-  });
-  const incomeByProduct = incomeByProductQuery.data ?? [];
 
   // === Dashboard breakdown (3 pie charts): source / manager / expense category
   // за выбранный период (This month / Last month / Custom range). Диапазон
@@ -810,54 +800,6 @@ export default function Finance() {
         </div>
       )}
 
-      {/* Диаграммы: источники дохода + доход по продуктам */}
-      {(incomeSources.length > 0 || incomeByProduct.length > 0) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 32 }}>
-          {incomeSources.length > 0 && (
-            <div className="card" style={{ padding: 24 }}>
-              {/* Backend отдаёт только TJS-агрегаты (см. incomeSources в
-                  finance.service.ts). Бэйдж «BASE · TJS» напоминает
-                  пользователю, что валютная активность в этот разрез не
-                  попадает. */}
-              <div style={{
-                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
-                color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
-                display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-              }}>
-                <span>{t('eyebrow.incomeSourcesMonth')}</span>
-                <CurrencyBadge currency="TJS" />
-              </div>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
-                Источники <em style={{ fontFamily: 'Times New Roman, Georgia, serif' }}>дохода.</em>
-              </h3>
-              <BarList
-                items={incomeSources.map((s) => ({ label: s.label, value: s.amount, sub: `${s.count} шт` }))}
-                colors={['#3b82f6', '#06b6d4', '#f59e0b', '#10b981', '#94a3b8']}
-              />
-            </div>
-          )}
-          {incomeByProduct.length > 0 && (
-            <div className="card" style={{ padding: 24 }}>
-              <div style={{
-                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
-                color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
-                display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-              }}>
-                <span>{t('eyebrow.byProductMonth')}</span>
-                <CurrencyBadge currency="TJS" />
-              </div>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
-                {t('finance.byProduct')}
-              </h3>
-              <BarList
-                items={incomeByProduct.map((p) => ({ label: p.product, value: p.amount, sub: `${p.count} шт` }))}
-                colors={['#7c3aed', '#db2777', '#0891b2', '#16a34a', '#ea580c', '#64748b']}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Заявки на оплату от клиентов (от студентов) — ждут подтверждения
           бухгалтера. Backend: POST /payments/:id/confirm|reject доступны
           только ADMIN/ACCOUNTANT/FOUNDER (payments.controller.ts:13). До
@@ -1236,7 +1178,9 @@ export default function Finance() {
             canEdit={hasRole(me, 'FOUNDER')}
             onClose={() => setDetailId(null)}
             onEdit={(tx) => { setDetailId(null); setEditing(tx); }}
-            onDelete={(tx) => { setDetailId(null); onDelete(tx); }}
+            // Карточку закрываем ДО вопроса: иначе подтверждение висит
+            // поверх ещё открытого окна, и на экране два окна разом.
+            onDelete={(tx) => { setDetailId(null); setTimeout(() => onDelete(tx), 0); }}
           />
         )}
       </AnimatePresence>

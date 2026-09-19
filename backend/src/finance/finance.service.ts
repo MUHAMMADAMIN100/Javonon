@@ -305,6 +305,12 @@ export class FinanceService {
   }) {
     return this.prisma.transaction.findMany({
       where: {
+        // Отменённые в журнал не идут: в отчётах их и так нет, а удалить
+        // повторно нельзя — человек видел строку, которая «не удаляется».
+        // Одного условия хватает на обе строки пары: корректирующая
+        // зеркальная запись тоже создаётся с reversedAt (см. remove()).
+        // Для аудита обе остаются в базе и в журнале действий.
+        reversedAt: null,
         ...(filters.type && { type: filters.type }),
         ...(filters.category && { category: filters.category }),
         ...(filters.studentId && { studentId: filters.studentId }),
