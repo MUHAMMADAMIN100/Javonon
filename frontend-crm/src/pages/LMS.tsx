@@ -100,11 +100,6 @@ export default function Lms() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.lms14')}</span>
-        <h2 className="crm-section-title">{t('lms.title')}</h2>
-      </div>
-
       <div className="lms-grid" style={{
         display: 'grid',
         gridTemplateColumns: '320px 1fr',

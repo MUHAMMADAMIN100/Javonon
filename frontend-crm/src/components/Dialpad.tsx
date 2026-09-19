@@ -204,7 +204,7 @@ export default function Dialpad() {
                 fontSize: 10,
                 letterSpacing: '0.16em',
                 color: 'var(--primary-dark)',
-              }}>DIALER</span>
+              }}>{t('eyebrow.dialer')}</span>
               <button
                 onClick={() => setOpen(false)}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-soft)' }}

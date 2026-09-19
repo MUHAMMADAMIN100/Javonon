@@ -14,12 +14,14 @@ import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
 import CrmDatePicker from '../components/CrmDatePicker';
 import Icon from '../Icon';
+import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
 import { isElevated, isFounder } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useApplicationStatusLabel } from '../lib/labels';
 import {
+  dateParam,
   enumParam,
   ignoredParam,
   pageParam,
@@ -71,7 +73,7 @@ export default function Students() {
   // Состояние списка — в query-string (см. lib/useUrlListState): клик по
   // строке уводит на карточку студента, список размонтируется, и «назад»
   // обязан вернуть ту же страницу с теми же фильтрами.
-  const { values, setValue } = useUrlListState(
+  const { values, setValue, reset } = useUrlListState(
     {
       search: stringParam(),
       direction: enumParam(DIRECTION_VALUES),
@@ -84,10 +86,15 @@ export default function Students() {
         isAdmin ? (['all', 'mine'] as const) : (['mine'] as const),
         isAdmin ? 'all' : 'mine',
       ),
+      // Период по дате заведения карточки — приходит ссылкой с дашборда
+      // (разрез «Студенты по кабинетам» считает тот же период).
+      from: dateParam(),
+      to: dateParam(),
       page: pageParam(),
     },
     { pageKey: 'page' },
   );
+  const { from, to } = values;
   const {
     direction,
     status: stageFilter,
@@ -130,6 +137,8 @@ export default function Students() {
     // Студент = оплативший (решение учредителя): неоплатившие живут в
     // «Заявках» и сюда не попадают вовсе. Переключателя нет намеренно.
     paid: true,
+    from: from || undefined,
+    to: to || undefined,
   };
 
   const studentsQuery = useQuery({
@@ -236,8 +245,7 @@ export default function Students() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="card-header">
-        <h2 className="card-title">{t('students.title')}</h2>
+      <div className="card-header is-titleless">
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && (
             <div className="scope-switch">
@@ -326,6 +334,22 @@ export default function Students() {
             </select>
           )}
         </div>
+
+        <ActiveFilterChips
+          chips={
+            from || to
+              ? [{
+                  key: 'period',
+                  label: from && to
+                    ? `${t('list.chip.period')}: ${fmtDay(from)} — ${fmtDay(to)}`
+                    : from
+                      ? `${t('list.chip.periodFrom')} ${fmtDay(from)}`
+                      : `${t('list.chip.periodTo')} ${fmtDay(to)}`,
+                  onClear: () => reset(['from', 'to']),
+                }]
+              : []
+          }
+        />
 
         <AnimatePresence mode="wait">
           {loading ? (

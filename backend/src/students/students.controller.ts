@@ -72,6 +72,11 @@ export class StudentsController {
     @Query('manager') manager?: string,
     @Query('paid') paid?: string,
     @Query('limit') limit?: string,
+    // Период списка (createdAt) — тот же, что у карточки дашборда
+    // «Студенты по кабинетам». Клик по строке обязан открыть ровно тех
+    // студентов, которых карточка посчитала.
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     // QA-fix #45/#48: безопасная валидация enum-фильтров и cabinet.
     const VALID_DIR = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
@@ -113,6 +118,8 @@ export class StudentsController {
       currentUserRoles: user?.roles,
       paid: paid === 'true' ? true : paid === 'false' ? false : undefined,
       limit: limitN,
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to', true),
     });
   }
 

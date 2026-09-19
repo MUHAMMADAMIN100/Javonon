@@ -510,11 +510,6 @@ export default function Finance() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.finance08')}</span>
-        <h2 className="crm-section-title">{t('finance.title')}</h2>
-      </div>
-
       {/* === Дашборд: 3 пироговые диаграммы (источник дохода / менеджеры /
           категория расходов) с переключателем периода. Данные — единый
           агрегат /finance/breakdown. */}
@@ -566,7 +561,7 @@ export default function Finance() {
         marginBottom: 16,
       }}>
         <PieCard
-          eyebrow="INCOME · BY SOURCE"
+          eyebrow={t('eyebrow.incomeBySource')}
           title="Источник дохода"
           items={rollupPieSlices(
             breakdown?.byIncomeSource,
@@ -587,7 +582,7 @@ export default function Finance() {
           focusedKey={pieFocus?.chart === 'source' ? pieFocus.keys[0] ?? null : null}
         />
         <PieCard
-          eyebrow="INCOME · BY MANAGER"
+          eyebrow={t('eyebrow.incomeByManager')}
           title="Клиенты (менеджеры)"
           items={rollupPieSlices(
             breakdown?.byManager,
@@ -613,7 +608,7 @@ export default function Finance() {
           focusedKey={pieFocus?.chart === 'manager' ? pieFocus.keys[0] ?? null : null}
         />
         <PieCard
-          eyebrow="EXPENSE · BY CATEGORY"
+          eyebrow={t('eyebrow.expenseByCategory')}
           title="Категория расходов"
           items={rollupPieSlices(
             breakdown?.byExpenseCategory,
@@ -742,7 +737,7 @@ export default function Finance() {
             color: 'var(--primary-light)',
             marginBottom: 4,
             textTransform: 'uppercase',
-          }}>AI · QUICK ENTRY</div>
+          }}>{t('eyebrow.aiQuickEntry')}</div>
           <div style={{
             fontFamily: 'var(--font-display)',
             fontSize: 16,
@@ -789,7 +784,7 @@ export default function Finance() {
             letterSpacing: '0.16em',
             color: 'var(--primary-dark)',
             marginBottom: 6,
-          }}>REVENUE · WEEKLY</div>
+          }}>{t('eyebrow.revenueWeekly')}</div>
           <h3 style={{
             fontFamily: 'var(--font-display)',
             fontSize: 22,
@@ -831,7 +826,7 @@ export default function Finance() {
               color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
               display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
             }}>
-              <span>TOP MANAGERS · MONTH</span>
+              <span>{t('eyebrow.topManagersMonth')}</span>
               <CurrencyBadge currency={topManagersCurrency} />
             </div>
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
@@ -889,7 +884,7 @@ export default function Finance() {
                 color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
                 display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
               }}>
-                <span>INCOME SOURCES · MONTH</span>
+                <span>{t('eyebrow.incomeSourcesMonth')}</span>
                 <CurrencyBadge currency="TJS" />
               </div>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
@@ -908,7 +903,7 @@ export default function Finance() {
                 color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
                 display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
               }}>
-                <span>BY PRODUCT · MONTH</span>
+                <span>{t('eyebrow.byProductMonth')}</span>
                 <CurrencyBadge currency="TJS" />
               </div>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
@@ -1515,7 +1510,7 @@ function TransactionForm({
           letterSpacing: '0.16em',
           color: 'var(--primary-dark)',
           marginBottom: 6,
-        }}>NEW · TRANSACTION</div>
+        }}>{t('eyebrow.newTransaction')}</div>
         <h3 style={{
           fontFamily: 'var(--font-display)',
           fontSize: 26,
@@ -2462,7 +2457,7 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
           color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
           display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
         }}>
-          <span>DISTRIBUTION · SCHEME</span>
+          <span>{t('eyebrow.distributionScheme')}</span>
           <CurrencyBadge currency={breakdown.currency ?? 'TJS'} />
         </div>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 8 }}>
@@ -2494,7 +2489,7 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
         color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 8,
         display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
       }}>
-        <span>DISTRIBUTION · SCHEME</span>
+        <span>{t('eyebrow.distributionScheme')}</span>
         <CurrencyBadge currency={breakdown.currency ?? 'TJS'} />
       </div>
       <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 8 }}>

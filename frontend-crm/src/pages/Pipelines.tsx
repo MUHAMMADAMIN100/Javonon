@@ -77,11 +77,6 @@ export default function Pipelines() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.salesPipelines')}</span>
-        <h2 className="crm-section-title">{t('pipelines.title')}</h2>
-      </div>
-
       <motion.div
         className="card"
         initial={{ opacity: 0, y: 10 }}

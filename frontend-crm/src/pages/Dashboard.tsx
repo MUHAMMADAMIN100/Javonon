@@ -1,15 +1,16 @@
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { applicationStats } from '../api/applications';
 import { studentStats } from '../api/students';
 import { financeSummary, pendingPayments, type FinanceSummary } from '../api/finance';
 import { leaderboard, type KpiRow } from '../api/kpi';
-import { DIRECTION_LABEL, isFinishedApplicationStatus, isNewLeadApplicationStatus } from '../api/types';
+import { isFinishedApplicationStatus, isNewLeadApplicationStatus } from '../api/types';
 import { useAuth } from '../store/auth';
 import { keys } from '../lib/queryKeys';
 import { isElevated, hasRole } from '../lib/roles';
 import { useT } from '../lib/i18n';
-import { useApplicationStatusLabel, useCountryLabel } from '../lib/labels';
+import { useApplicationStatusLabel, useCountryLabel, useDirectionLabel } from '../lib/labels';
 import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
 
 function fmtMoney(n: number, c = 'TJS') {
@@ -28,6 +29,7 @@ export default function Dashboard() {
   const { t } = useT();
   const countryLabel = useCountryLabel();
   const appStatusLabel = useApplicationStatusLabel();
+  const directionLabel = useDirectionLabel();
   const me = useAuth((s) => s.user);
   const isAdmin = isElevated(me);
   // hasRole учитывает мульти-роли (ТЗ §2). Раньше было `me?.role === 'ACCOUNTANT'`
@@ -143,13 +145,6 @@ export default function Dashboard() {
   if (invalid) {
     return (
       <>
-        <div className="crm-section-head">
-          <span className="crm-section-eyebrow">{t('eyebrow.kpi')}</span>
-          <div className="crm-section-titleline">
-            <h2 className="crm-section-title">{t('dashboard.title')}</h2>
-          </div>
-        </div>
-
         <PeriodSwitcher state={period} busy={busy} />
 
         <div className="card" style={{ padding: 24, color: 'var(--text-soft)', fontSize: 14 }}>
@@ -184,6 +179,30 @@ export default function Dashboard() {
   // плейсхолдер). Они исключены из среза «по направлениям» — показываем их
   // числом рядом, чтобы срез не выглядел «потерявшим» половину заявок.
   const unconfirmedDirections = Number(appStats?.directionUnconfirmed ?? 0);
+  // Сколько заявок пришло без страны: в byCountry такие строки не попадают
+  // (бэкенд отсекает country IS NULL), а показать их надо — иначе сумма
+  // строк карточки меньше «Всего заявок» без всякого объяснения.
+  const countriesCounted = (appStats?.byCountry || [])
+    .reduce((sum: number, c: any) => sum + (c._count || 0), 0);
+  const countryUnset = Math.max(0, Number(appStats?.total ?? 0) - countriesCounted);
+
+  /**
+   * Ссылка из строки разреза в список, отфильтрованный ТЕМ ЖЕ условием и
+   * ТЕМ ЖЕ периодом.
+   *
+   * Период обязателен. Без него клик по «Языковой + бакалавриат · 2»
+   * открывал бы все такие заявки за всё время — человек видел бы семь строк
+   * под цифрой «2» и считал, что дашборд врёт (он не врал: карточка
+   * показывает выбранный период, а список показывал всё).
+   */
+  const listLink = (params: Record<string, string | undefined>, path = '/applications') => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v) q.set(k, v); });
+    if (range.from) q.set('from', range.from);
+    if (range.to) q.set('to', range.to);
+    const qs = q.toString();
+    return qs ? `${path}?${qs}` : path;
+  };
 
   // ТЗ §4 «Активные клиенты» — берём ACTIVE студентов из stuStats.byStatus.
   // Фолбэка на stuStats.total тут быть не должно: Prisma groupBy не возвращает
@@ -213,14 +232,6 @@ export default function Dashboard() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.kpi')}</span>
-        <div className="crm-section-titleline">
-          <h2 className="crm-section-title">{t('dashboard.title')}</h2>
-          <PeriodChip suffix={period.suffix} />
-        </div>
-      </div>
-
       <PeriodSwitcher state={period} busy={busy} />
 
       <div className="bento" style={{ marginBottom: 32, ...staleStyle }}>
@@ -291,7 +302,7 @@ export default function Dashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <span className="bento-num">PROFIT · 06</span>
+              <span className="bento-num">{t('eyebrow.profit')} · 06</span>
               <div style={{ marginTop: 'auto' }}>
                 <div style={{
                   fontFamily: 'var(--font-display)',
@@ -374,7 +385,7 @@ export default function Dashboard() {
                   color: 'var(--text-light)',
                   marginBottom: 8,
                   textTransform: 'uppercase',
-                }}>RANK #{i + 1}</div>
+                }}>{t('eyebrow.rank')} #{i + 1}</div>
                 <div style={{
                   fontFamily: 'var(--font-display)',
                   fontSize: 22,
@@ -396,7 +407,7 @@ export default function Dashboard() {
                   letterSpacing: '0.10em',
                   color: 'var(--text-soft)',
                   textTransform: 'uppercase',
-                }}>{p.applicationsEnrolled} ENROLLED · {p.conversionRate}% CONV</div>
+                }}>{t('kpi.col.enrolled').toUpperCase()} {p.applicationsEnrolled} · {t('kpi.col.conversion').toUpperCase()} {p.conversionRate}%</div>
               </motion.div>
             ))}
           </div>
@@ -420,43 +431,71 @@ export default function Dashboard() {
         <BreakdownCard
           eyebrow={`01 · ${t('eyebrow.countries')}`}
           title={t('dashboard.breakdown.countries')}
-          rows={(appStats?.byCountry || []).map((c: any) => ({
-            label: countryLabel(c.country),
-            value: c._count,
-          }))}
+          total={appStats?.total}
+          rows={[
+            ...(appStats?.byCountry || []).map((c: any) => ({
+              label: countryLabel(c.country),
+              value: c._count,
+              to: listLink({ country: c.country }),
+            })),
+            ...(countryUnset > 0
+              ? [{
+                  label: t('dashboard.breakdown.countryPending'),
+                  value: countryUnset,
+                  to: listLink({ countryPending: 'true' }),
+                  muted: true,
+                }]
+              : []),
+          ]}
         />
         <BreakdownCard
           eyebrow={`02 · ${t('eyebrow.directions')}`}
           title={t('dashboard.breakdown.directions')}
-          // Считаем только подтверждённые направления (бэкенд фильтрует по
-          // directionConfirmed). Сноска объясняет, почему сумма меньше total:
-          // без неё пустой/куцый срез выглядел бы как поломка дашборда.
-          note={
-            unconfirmedDirections > 0
-              ? `${t('dashboard.breakdown.directionsPending')}: ${unconfirmedDirections}`
-              : undefined
-          }
-          rows={(appStats?.byDirection || []).map((d: any) => ({
-            label: DIRECTION_LABEL[d.direction as keyof typeof DIRECTION_LABEL] || d.direction,
-            value: d._count,
-          }))}
+          total={appStats?.total}
+          rows={[
+            // Направления, которые клиент выбрал (или менеджер проставил
+            // руками). Лиды с лендинга сюда не попадают: там плейсхолдер, а
+            // не ответ — иначе весь входящий поток выглядел бы бакалавриатом.
+            ...(appStats?.byDirection || []).map((d: any) => ({
+              label: directionLabel(d.direction),
+              value: d._count,
+              to: listLink({ direction: d.direction }),
+            })),
+            // …а вот и они, отдельной строкой. Раньше это была сноска под
+            // заголовком, и сумма строк не сходилась с «Всего заявок».
+            ...(unconfirmedDirections > 0
+              ? [{
+                  label: t('dashboard.breakdown.directionsPending'),
+                  value: unconfirmedDirections,
+                  to: listLink({ directionPending: 'true' }),
+                  muted: true,
+                }]
+              : []),
+          ]}
         />
         <BreakdownCard
           eyebrow={`03 · ${t('eyebrow.cabinets')}`}
           title={t('dashboard.breakdown.cabinets')}
+          total={stuStats?.total}
           rows={(stuStats?.byCabinet || []).map((c: any) => ({
-            label: `${t('app.field.cabinet')} ${c.cabinet}`,
+            label: c.cabinet == null
+              ? t('dashboard.breakdown.noCabinet')
+              : `${t('app.field.cabinet')} ${c.cabinet}`,
             value: c._count,
+            // Кабинет без номера отфильтровать нечем — такая строка не ссылка.
+            to: c.cabinet == null ? undefined : listLink({ cabinet: String(c.cabinet) }, '/students'),
           }))}
         />
         <BreakdownCard
           eyebrow={`04 · ${t('eyebrow.funnel')}`}
           title={t('dashboard.breakdown.funnel')}
+          total={appStats?.total}
           rows={byStatus.map((s) => ({
             // Через хук, а не через STATUS_LABEL: разрез по статусам обязан
             // переключаться на таджикский вместе с остальным дашбордом.
             label: appStatusLabel(s.status),
             value: s._count,
+            to: listLink({ status: s.status }),
           }))}
         />
       </div>
@@ -517,16 +556,31 @@ function BreakdownCard({
   eyebrow,
   title,
   rows,
+  total,
   note,
 }: {
   eyebrow: string;
   title: string;
-  rows: Array<{ label: string; value: any }>;
+  rows: Array<{
+    label: string;
+    value: any;
+    /** Куда ведёт строка. Без ссылки строка остаётся обычным текстом. */
+    to?: string;
+    /** Приглушённая строка «не указано» — она про отсутствие ответа. */
+    muted?: boolean;
+  }>;
+  /**
+   * От чего считать проценты. Общее число заявок/студентов периода, а не
+   * сумма строк: иначе «2 · 20%» означало бы «20% от тех десяти, у кого
+   * направление проставлено» — доля, которую никто на экране не видит.
+   */
+  total?: number;
   /** Пояснение под заголовком: почему сумма строк меньше общего числа. */
   note?: string;
 }) {
   const { t } = useT();
-  const total = rows.reduce((s, r) => s + (Number(r.value) || 0), 0) || 1;
+  const rowsSum = rows.reduce((s, r) => s + (Number(r.value) || 0), 0);
+  const base = total && total > 0 ? total : rowsSum || 1;
 
   return (
     <motion.div
@@ -570,18 +624,25 @@ function BreakdownCard({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {rows.map((r) => {
-            const pct = Math.round(((Number(r.value) || 0) / total) * 100);
-            return (
-              <div key={r.label} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 14 }}>{r.label}</span>
+            const n = Number(r.value) || 0;
+            const exact = (n / base) * 100;
+            const pct = Math.round(exact);
+            // Доля меньше половины процента округляется в ноль, и строка
+            // «4 · 0%» читается как ошибка. Показываем «<1%»: значение есть,
+            // просто оно мелкое на фоне всего потока заявок.
+            const pctLabel = n > 0 && pct === 0 ? '<1%' : `${pct}%`;
+            const body = (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ fontSize: 14, color: r.muted ? 'var(--text-soft)' : undefined }}>{r.label}</span>
                   <span style={{
                     fontFamily: 'var(--font-mono)',
                     fontSize: 13,
                     fontWeight: 500,
+                    whiteSpace: 'nowrap',
                   }}>
                     {r.value}
-                    <span style={{ color: 'var(--text-light)', marginLeft: 6 }}>· {pct}%</span>
+                    <span style={{ color: 'var(--text-light)', marginLeft: 6 }}>· {pctLabel}</span>
                   </span>
                 </div>
                 <div style={{
@@ -592,7 +653,7 @@ function BreakdownCard({
                 }}>
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${pct}%` }}
+                    animate={{ width: `${Math.max(exact, n > 0 ? 1.5 : 0)}%` }}
                     transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
                     style={{
                       height: '100%',
@@ -601,7 +662,21 @@ function BreakdownCard({
                     }}
                   />
                 </div>
-              </div>
+              </>
+            );
+            // Строка-ссылка, а не onClick на div: работает средняя кнопка
+            // мыши и Ctrl+клик «открыть в новой вкладке», как ждут от списка.
+            return r.to ? (
+              <Link
+                key={r.label}
+                to={r.to}
+                className="breakdown-row is-link"
+                title={t('dashboard.breakdown.openList')}
+              >
+                {body}
+              </Link>
+            ) : (
+              <div key={r.label} className="breakdown-row">{body}</div>
             );
           })}
         </div>

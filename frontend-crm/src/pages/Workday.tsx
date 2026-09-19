@@ -56,11 +56,6 @@ export default function Workday() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.hr')} · {t('workday.title').toUpperCase()}</span>
-        <h2 className="crm-section-title">{t('workday.title')}</h2>
-      </div>
-
       {visibleTabs.length > 1 && (
         <div
           style={{

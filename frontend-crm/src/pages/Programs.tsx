@@ -321,8 +321,7 @@ export default function Programs() {
 
   return (
     <motion.div className="card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-      <div className="card-header">
-        <h2 className="card-title">{t('programs.title')}</h2>
+      <div className="card-header is-titleless">
         {isAdmin && (
           <motion.button
             className="btn btn-primary"

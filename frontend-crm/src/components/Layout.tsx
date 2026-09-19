@@ -12,25 +12,54 @@ import { useAuth } from '../store/auth';
 import { me as apiMe } from '../api/auth';
 import { useT } from '../lib/i18n';
 
-const TITLE_ROUTES: Array<{ path: string; eyebrow: string; titleKey: string }> = [
-  { path: '/dashboard',    eyebrow: 'OVERVIEW · 01', titleKey: 'dashboard.title' },
-  { path: '/applications', eyebrow: 'INBOUND · 02',  titleKey: 'app.title' },
-  { path: '/students',     eyebrow: 'PIPELINE · 03', titleKey: 'students.title' },
-  { path: '/programs',     eyebrow: 'CATALOG · 04',  titleKey: 'programs.title' },
-  { path: '/tasks',        eyebrow: 'WORK · 05',     titleKey: 'tasks.title' },
-  { path: '/activity',     eyebrow: 'AUDIT · 06',    titleKey: 'activity.title' },
-  { path: '/users',        eyebrow: 'TEAM · 07',     titleKey: 'users.title' },
-  { path: '/workday',      eyebrow: 'HR · 04',       titleKey: 'workday.title' },
-  { path: '/time',         eyebrow: 'HR · 04',       titleKey: 'workday.title' },
-  { path: '/finance',      eyebrow: 'FINANCE · 08',  titleKey: 'finance.title' },
-  { path: '/salary',       eyebrow: 'PAYROLL · 09',  titleKey: 'salary.title' },
-  { path: '/kpi',          eyebrow: 'KPI · 10',      titleKey: 'kpi.title' },
-  { path: '/reports',      eyebrow: 'DAILY · 11',    titleKey: 'reports.title' },
-  { path: '/calls',        eyebrow: 'CALLS · 12',    titleKey: 'calls.title' },
-  { path: '/chat',         eyebrow: 'CHAT · 13',     titleKey: 'chat.title' },
-  { path: '/lms',          eyebrow: 'LMS · 14',      titleKey: 'lms.title' },
-  { path: '/partners',     eyebrow: 'PARTNERS · 15', titleKey: 'partners.title' },
-  { path: '/me',           eyebrow: 'PROFILE · 16',  titleKey: 'profile.title' },
+/**
+ * Заголовок страницы — ОДИН, и живёт он здесь.
+ *
+ * Раньше каждая страница дополнительно рисовала свой <h2> с тем же самым
+ * названием, и пользователь видел «Дашборд» дважды подряд. Теперь шапка —
+ * единственное место, где страница называется; внутри остаются только
+ * подзаголовки СЕКЦИЙ («Финансы», «Распределение»), то есть то, что от
+ * названия страницы отличается.
+ *
+ * Отсюда же следует: новый маршрут обязан появиться в этом списке, иначе в
+ * шапке будет стоять дежурное «Javonon» и страница окажется безымянной.
+ *
+ * eyebrowKey — ключ словаря, а не готовая строка: подпись над заголовком
+ * тоже читают, и на таджикском она обязана быть таджикской. Номер рядом —
+ * часть оформления, его не переводим.
+ */
+const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; titleKey: string }> = [
+  { path: '/dashboard',    eyebrowKey: 'eyebrow.overview',       num: '01', titleKey: 'dashboard.title' },
+  { path: '/applications', eyebrowKey: 'eyebrow.inbound',        num: '02', titleKey: 'app.title' },
+  { path: '/students',     eyebrowKey: 'eyebrow.pipeline',       num: '03', titleKey: 'students.title' },
+  { path: '/programs',     eyebrowKey: 'eyebrow.catalog',        num: '04', titleKey: 'programs.title' },
+  { path: '/tasks',        eyebrowKey: 'eyebrow.work',           num: '05', titleKey: 'tasks.title' },
+  { path: '/activity',     eyebrowKey: 'eyebrow.audit',          num: '06', titleKey: 'activity.title' },
+  { path: '/users',        eyebrowKey: 'eyebrow.team',           num: '07', titleKey: 'users.title' },
+  { path: '/finance',      eyebrowKey: 'eyebrow.finance',        num: '08', titleKey: 'finance.title' },
+  { path: '/salary',       eyebrowKey: 'eyebrow.payroll',        num: '09', titleKey: 'salary.title' },
+  { path: '/kpi',          eyebrowKey: 'eyebrow.kpi',            num: '10', titleKey: 'kpi.title' },
+  { path: '/reports',      eyebrowKey: 'eyebrow.daily',          num: '11', titleKey: 'reports.title' },
+  { path: '/calls',        eyebrowKey: 'eyebrow.calls',          num: '12', titleKey: 'calls.title' },
+  { path: '/chat',         eyebrowKey: 'eyebrow.chat',           num: '13', titleKey: 'chat.title' },
+  { path: '/lms',          eyebrowKey: 'eyebrow.lms',            num: '14', titleKey: 'lms.title' },
+  { path: '/partners',     eyebrowKey: 'eyebrow.partners',       num: '15', titleKey: 'partners.title' },
+  { path: '/me',           eyebrowKey: 'eyebrow.profile',        num: '16', titleKey: 'profile.title' },
+  { path: '/leads',        eyebrowKey: 'eyebrow.inbound',        num: '17', titleKey: 'leads.title' },
+  { path: '/submissions',  eyebrowKey: 'eyebrow.sales',          num: '18', titleKey: 'submissions.title' },
+  { path: '/pipelines',    eyebrowKey: 'eyebrow.salesPipelines', num: '19', titleKey: 'pipelines.title' },
+  { path: '/massmail',     eyebrowKey: 'eyebrow.campaigns',      num: '20', titleKey: 'massmail.title' },
+  { path: '/inbox',        eyebrowKey: 'eyebrow.unifiedInbox',   num: '21', titleKey: 'inbox.title' },
+  { path: '/offers',       eyebrowKey: 'eyebrow.legal',          num: '22', titleKey: 'offers.title' },
+  { path: '/groups',       eyebrowKey: 'eyebrow.catalog',        num: '23', titleKey: 'groups.title' },
+  { path: '/schedule',     eyebrowKey: 'eyebrow.catalog',        num: '24', titleKey: 'classes.title' },
+  { path: '/settings',     eyebrowKey: 'eyebrow.system',         num: '25', titleKey: 'settings.title' },
+  // Четыре маршрута одной страницы «Рабочий день» (вкладки табеля,
+  // посещаемости и отгулов) — заголовок у них общий.
+  { path: '/workday',      eyebrowKey: 'eyebrow.hr',             num: '26', titleKey: 'workday.title' },
+  { path: '/time',         eyebrowKey: 'eyebrow.hr',             num: '26', titleKey: 'workday.title' },
+  { path: '/attendance',   eyebrowKey: 'eyebrow.hr',             num: '26', titleKey: 'workday.title' },
+  { path: '/excuses',      eyebrowKey: 'eyebrow.hr',             num: '26', titleKey: 'workday.title' },
 ];
 
 export default function Layout() {
@@ -42,8 +71,8 @@ export default function Layout() {
   const me = useAuth((s) => s.user);
   const route = TITLE_ROUTES.find((r) => loc.pathname.startsWith(r.path));
   const meta = route
-    ? { eyebrow: route.eyebrow, title: t(route.titleKey) }
-    : { eyebrow: 'JAVONON · CRM', title: 'Javonon' };
+    ? { eyebrow: `${t(route.eyebrowKey)} · ${route.num}`, title: t(route.titleKey) }
+    : { eyebrow: t('eyebrow.javononCrm'), title: 'Javonon' };
 
   // По ТЗ §2: «права передаются основателем». Когда FOUNDER меняет
   // мои роли через RolesEditor, бэкенд шлёт `user:roles-updated` в мою

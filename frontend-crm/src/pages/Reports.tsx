@@ -87,11 +87,6 @@ export default function Reports() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.dailyReport11')}</span>
-        <h2 className="crm-section-title">{t('reports.title')}</h2>
-      </div>
-
       <motion.div
         className="card"
         initial={{ opacity: 0, y: 20 }}

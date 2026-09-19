@@ -143,8 +143,7 @@ export default function Users() {
 
   return (
     <div className="card">
-      <div className="card-header">
-        <h2 className="card-title">{t('users.title')}</h2>
+      <div className="card-header is-titleless">
         <button className="btn btn-primary" onClick={openCreate}>+ {t('common.add')}</button>
       </div>
       <div className="card-body">

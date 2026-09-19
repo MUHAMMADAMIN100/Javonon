@@ -75,6 +75,20 @@ export class ApplicationsController {
     @Query('mine') mine?: string,
     @Query('manager') manager?: string,
     @Query('source') source?: string,
+    // Период списка. Появился ради сходимости с дашбордом: клик по строке
+    // «Заявки по направлениям · 2» обязан открыть ровно те 2 заявки, из
+    // которых карточка сложила двойку, а не все за всё время. Разбор дат —
+    // тем же parseDate, что и у stats(): календарные границы по
+    // Asia/Dushanbe, `to` включительно до 23:59:59.999 TJT.
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    // «Без направления» на дашборде — такая же строка, как остальные, и по
+    // ней тоже кликают. Отдельный флаг, а не direction=NONE: направление у
+    // такой заявки ЕСТЬ (плейсхолдер), не подтверждено лишь то, что его
+    // выбрал клиент.
+    @Query('directionPending') directionPending?: string,
+    /** Заявки без указанной страны — строка «Не указано» карточки «Страны». */
+    @Query('countryPending') countryPending?: string,
   ) {
     // QA-fix #45: validate enum query params (раньше bad value → 500).
     // Единый источник истины — Prisma enum'ы. Добавили значение в schema.prisma
@@ -100,6 +114,10 @@ export class ApplicationsController {
       mine: mine === 'true',
       managerUserId: manager || undefined,
       source: source as ApplicationSource | undefined,
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to', true),
+      directionPending: directionPending === 'true' || directionPending === '1',
+      countryPending: countryPending === 'true' || countryPending === '1',
       currentUserId: user?.id,
       currentUserRole: user?.role,
       currentUserRoles: user?.roles,

@@ -12,6 +12,13 @@ export interface AppFilters {
   manager?: string;
   /** Источник заявки — сайт, Instagram, реферал и т.д. */
   source?: ApplicationSource;
+  /** Период по дате создания, календарные дни Asia/Dushanbe (YYYY-MM-DD). */
+  from?: string;
+  to?: string;
+  /** Заявки без подтверждённого направления (строка дашборда). */
+  directionPending?: boolean;
+  /** Заявки, в которых страна не указана (строка дашборда). */
+  countryPending?: boolean;
 }
 
 export async function listApplications(filters: AppFilters = {}) {

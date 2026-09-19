@@ -118,11 +118,6 @@ export default function Schedule() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('groups.eyebrow')}</span>
-        <h2 className="crm-section-title">{t('classes.title')}</h2>
-      </div>
-
       <motion.div
         className="card"
         initial={{ opacity: 0, y: 10 }}

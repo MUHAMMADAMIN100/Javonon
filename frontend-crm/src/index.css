@@ -5557,3 +5557,88 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   .kpi-details-tab { padding: 9px 10px; font-size: 13px; }
 }
 
+
+/* =====================================================================
+   Дашборд · разрезы «Распределение» — строки-ссылки
+   Строка ведёт в список, отфильтрованный тем же условием и тем же
+   периодом, поэтому она обязана выглядеть нажимаемой.
+   ===================================================================== */
+.breakdown-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.breakdown-row.is-link {
+  color: inherit;
+  text-decoration: none;
+  /* Отрицательный внешний отступ гасит внутренний: подсветка при наведении
+     шире текста, а сетка карточки от этого не разъезжается. */
+  padding: 8px 10px;
+  margin: -8px -10px;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+.breakdown-row.is-link:hover { background: var(--bg-soft); }
+.breakdown-row.is-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  background: var(--bg-soft);
+}
+@media (hover: none) {
+  /* На тач-экранах :hover залипает после тапа — подсветку даём нажатию. */
+  .breakdown-row.is-link:hover { background: transparent; }
+  .breakdown-row.is-link:active { background: var(--bg-soft); }
+}
+
+/* Плашки фильтров, пришедших ссылкой (период, «без направления»). */
+.active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 13px;
+  line-height: 1;
+}
+.active-filter-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.active-filter-chip button:hover { background: rgba(0, 0, 0, 0.08); }
+.active-filter-chip button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* Шапка карточки без заголовка: название страницы стоит в топбаре, и второй
+   раз его повторять незачем. Действия при этом обязаны остаться справа, как
+   во всех остальных карточках. */
+.card-header.is-titleless {
+  justify-content: flex-end;
+  /* Без заголовка шапка становится просто полосой с кнопками — высокий
+     отступ превращал бы её в пустое белое поле. */
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+/* У менеджера кнопок в такой шапке может не быть вовсе (переключатель
+   «Мои/Все» — только для руководства). Пустая полоса над фильтрами выглядит
+   как недогрузившийся блок, поэтому её просто нет. */
+.card-header.is-titleless:empty,
+.card-header.is-titleless:not(:has(button, a, input, select, .scope-switch)) {
+  display: none;
+}

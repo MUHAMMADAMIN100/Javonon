@@ -61,11 +61,6 @@ export default function Groups() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('groups.eyebrow')}</span>
-        <h2 className="crm-section-title">{t('groups.title')}</h2>
-      </div>
-
       <motion.div
         className="card"
         initial={{ opacity: 0, y: 10 }}

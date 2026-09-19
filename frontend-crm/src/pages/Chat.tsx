@@ -578,11 +578,6 @@ export default function Chat() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.chat')} · 12</span>
-        <h2 className="crm-section-title">{t('chat.title')}</h2>
-      </div>
-
       <div className={`card chat-card${mobileShowList ? ' show-list' : ' show-thread'}`} style={{
         padding: 0,
         height: 'calc(100vh - 280px)',
@@ -1354,7 +1349,7 @@ export default function Chat() {
                 fontFamily: 'var(--font-mono)', fontSize: 11,
                 letterSpacing: '0.16em', color: 'var(--text-soft)',
                 textTransform: 'uppercase', marginBottom: 8,
-              }}>FORWARD MESSAGE</div>
+              }}>{t('eyebrow.forwardMessage')}</div>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 18 }}>
                 Переслать в чат
               </h3>
@@ -1432,7 +1427,7 @@ export default function Chat() {
                 fontFamily: 'var(--font-mono)', fontSize: 11,
                 letterSpacing: '0.16em', color: 'var(--text-soft)',
                 textTransform: 'uppercase', marginBottom: 8,
-              }}>NEW DIRECT MESSAGE</div>
+              }}>{t('eyebrow.newDirectMessage')}</div>
               <h3 style={{
                 fontFamily: 'var(--font-display)', fontSize: 22,
                 fontWeight: 500, marginBottom: 18,
@@ -1519,7 +1514,7 @@ export default function Chat() {
                 fontFamily: 'var(--font-mono)', fontSize: 11,
                 letterSpacing: '0.16em', color: 'var(--text-soft)',
                 textTransform: 'uppercase', marginBottom: 8,
-              }}>NEW TEAM</div>
+              }}>{t('eyebrow.newTeam')}</div>
               <h3 style={{
                 fontFamily: 'var(--font-display)', fontSize: 22,
                 fontWeight: 500, marginBottom: 18,

@@ -134,11 +134,6 @@ export default function Calls() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.callLog12')}</span>
-        <h2 className="crm-section-title">{t('calls.title')}</h2>
-      </div>
-
       {/* Форма записи звонка */}
       <motion.div
         className="card"
@@ -152,7 +147,7 @@ export default function Calls() {
           letterSpacing: '0.16em',
           color: 'var(--primary-dark)',
           marginBottom: 6,
-        }}>NEW · CALL</div>
+        }}>{t('eyebrow.newCall')}</div>
         <h3 style={{
           fontFamily: 'var(--font-display)',
           fontSize: 26,

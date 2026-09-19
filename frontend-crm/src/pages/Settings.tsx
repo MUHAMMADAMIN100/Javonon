@@ -53,11 +53,6 @@ export default function Settings() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.system')}</span>
-        <h2 className="crm-section-title">{t('settings.title')}</h2>
-      </div>
-
       <div className="card" style={{ padding: 0 }}>
         <div
           className="settings-tabbar"

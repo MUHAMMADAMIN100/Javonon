@@ -76,11 +76,6 @@ export default function Offers() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.legal')}</span>
-        <h2 className="crm-section-title">{t('offers.title')}</h2>
-      </div>
-
       {/* Табы по ролям (по ТЗ §1 — у каждой роли своя оферта). */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         {ROLE_TAB_KEYS.map((rt) => {

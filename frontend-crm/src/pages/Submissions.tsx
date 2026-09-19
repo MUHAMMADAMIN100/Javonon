@@ -54,11 +54,6 @@ export default function Submissions() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">SALES · 06</span>
-        <h2 className="crm-section-title">{t('submissions.title') !== 'submissions.title' ? t('submissions.title') : 'Сделки'}</h2>
-      </div>
-
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {!founder && (
           <button

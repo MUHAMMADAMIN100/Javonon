@@ -220,8 +220,13 @@ export class StudentsService {
     // BUG #16 (HIGH): typeahead-пикеры передают limit, чтобы не тянуть
     // на сервер всю базу (1000+ студентов). Полный список — без limit.
     limit?: number;
+    /** Период по дате заведения карточки — как в stats() и на дашборде. */
+    from?: Date;
+    to?: Date;
   }) {
     const where: Prisma.StudentWhereInput = {};
+    const createdAt = dateRangeFilter({ from: filters.from, to: filters.to });
+    if (createdAt) where.createdAt = createdAt;
     if (filters.direction) where.direction = filters.direction;
     if (filters.status) where.status = filters.status;
     if (filters.cabinet) where.cabinet = filters.cabinet;

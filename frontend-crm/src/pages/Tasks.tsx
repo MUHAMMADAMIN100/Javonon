@@ -163,8 +163,7 @@ export default function Tasks() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="card-header">
-        <h2 className="card-title">{t('tasks.title')}</h2>
+      <div className="card-header is-titleless">
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && (
             <div className="scope-switch">

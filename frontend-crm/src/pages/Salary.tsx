@@ -178,11 +178,6 @@ export default function Salary() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.payroll09')}</span>
-        <h2 className="crm-section-title">{t('salary.title')}</h2>
-      </div>
-
       {/* Калькулятор */}
       <div className="card" style={{ padding: 28, marginBottom: 24 }}>
         <div style={{

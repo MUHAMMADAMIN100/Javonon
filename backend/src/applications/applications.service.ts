@@ -565,6 +565,13 @@ export class ApplicationsService {
     mine?: boolean;
     managerUserId?: string;
     source?: ApplicationSource;
+    /** Период списка (createdAt), тот же, что у дашборда. */
+    from?: Date;
+    to?: Date;
+    /** Только заявки БЕЗ подтверждённого направления (строка дашборда). */
+    directionPending?: boolean;
+    /** Только заявки, в которых страна не указана (строка дашборда). */
+    countryPending?: boolean;
     currentUserId?: string;
     currentUserRole?: Role;
     currentUserRoles?: Role[];
@@ -595,8 +602,20 @@ export class ApplicationsService {
       where.direction = filters.direction;
       where.directionConfirmed = true;
     }
+    // Противоположность фильтра выше: заявки, которым направление ещё не
+    // проставили руками. Взаимоисключающи — при обоих параметрах побеждает
+    // явное направление (там directionConfirmed уже выставлен в true).
+    if (filters.directionPending && !filters.direction) {
+      where.directionConfirmed = false;
+    }
     if (filters.country) where.country = filters.country;
+    else if (filters.countryPending) where.country = null;
     if (filters.source) where.source = filters.source;
+    // Период — по дате создания заявки, ровно как в stats(): иначе клик по
+    // строке дашборда открывал бы другой набор строк, чем тот, что карточка
+    // посчитала.
+    const createdAt = dateRangeFilter({ from: filters.from, to: filters.to });
+    if (createdAt) where.createdAt = createdAt;
     // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только свои
     // заявки. FOUNDER/ADMIN/ACCOUNTANT — все, если только не запросили mine.
     const elevated = canSeeAllApplications({

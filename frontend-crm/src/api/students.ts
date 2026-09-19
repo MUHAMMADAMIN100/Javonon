@@ -11,6 +11,9 @@ export interface StudentFilters {
   manager?: string;
   /** true = только с TUITION_PAYMENT, false = только без, undefined = все. */
   paid?: boolean;
+  /** Период по дате заведения карточки (YYYY-MM-DD, Asia/Dushanbe). */
+  from?: string;
+  to?: string;
   /**
    * BUG #16: typeahead-пикеры (SubmissionForm и пр.) шлют limit, чтобы не
    * тянуть 1000+ студентов на каждый keystroke. Бэк кэпит на 200.

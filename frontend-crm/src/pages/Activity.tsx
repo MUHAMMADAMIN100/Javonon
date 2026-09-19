@@ -116,13 +116,6 @@ export default function Activity() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.audit06')}</span>
-        <h2 className="crm-section-title">
-          Хронология <em>действий.</em>
-        </h2>
-      </div>
-
       {/* Сводка-чипы */}
       {!loading && items.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -151,8 +144,7 @@ export default function Activity() {
       )}
 
       <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">{t('activity.title')}</h2>
+        <div className="card-header is-titleless">
           <button className="btn btn-secondary btn-sm" onClick={reset}>
             <Icon name="filter_alt_off" size={16} style={{ marginRight: 4 }} /> {t('filter.reset')}
           </button>

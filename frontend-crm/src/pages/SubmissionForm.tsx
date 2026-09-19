@@ -312,7 +312,7 @@ export default function SubmissionForm() {
   return (
     <>
       <div className="crm-section-head">
-        <span className="crm-section-eyebrow">SALES · NEW</span>
+        <span className="crm-section-eyebrow">{t('eyebrow.salesNew')}</span>
         <h2 className="crm-section-title">Новая сделка</h2>
       </div>
 

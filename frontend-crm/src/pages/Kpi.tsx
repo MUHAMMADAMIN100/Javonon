@@ -64,11 +64,6 @@ export default function Kpi() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.kpi10')}</span>
-        <h2 className="crm-section-title">{t('kpi.title')}</h2>
-      </div>
-
       <div className="filters" style={{ alignItems: 'center' }}>
         <div className="pagination-controls" style={{ padding: 4 }}>
           {RANGE_KEYS.map((rg, i) => (
@@ -185,7 +180,7 @@ export default function Kpi() {
                 color: 'rgba(255,255,255,0.55)',
                 letterSpacing: '0.10em',
                 marginTop: 6,
-              }}>{top.applicationsEnrolled} ENROLLED · {top.conversionRate}% CONVERSION</div>
+              }}>{t('kpi.col.enrolled').toUpperCase()} {top.applicationsEnrolled} · {t('kpi.col.conversion').toUpperCase()} {top.conversionRate}%</div>
               {nonTjsLine(top) && (
                 <div style={{
                   fontFamily: 'var(--font-mono)',

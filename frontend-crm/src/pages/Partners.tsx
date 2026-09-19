@@ -34,11 +34,6 @@ export default function Partners() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.partners15')}</span>
-        <h2 className="crm-section-title">{t('partners.title')}</h2>
-      </div>
-
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
         <TabBtn active={tab === 'partners'} onClick={() => setTab('partners')}>{t('partners.tab.list')}</TabBtn>
         <TabBtn active={tab === 'commissions'} onClick={() => setTab('commissions')}>{t('partners.tab.commissions')}</TabBtn>

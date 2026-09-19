@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../store/auth';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
+import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
 import { keys } from '../lib/queryKeys';
@@ -25,6 +26,8 @@ import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useApplicationStatusLabel, useCountryLabel } from '../lib/labels';
 import {
+  boolParam,
+  dateParam,
   enumParam,
   ignoredParam,
   pageParam,
@@ -90,11 +93,22 @@ export default function Applications() {
         isAdmin ? (['all', 'mine'] as const) : (['mine'] as const),
         isAdmin ? 'all' : 'mine',
       ),
+      // Период приходит ссылкой с дашборда: карточка «Заявки по
+      // направлениям» показывает цифру за выбранный там период, и список
+      // обязан открыться за него же — иначе под цифрой «2» окажется семь
+      // строк за все месяцы.
+      from: dateParam(),
+      to: dateParam(),
+      // Строки «Без направления» / «Страна не указана» — такие же строки
+      // разреза, по ним тоже кликают.
+      directionPending: boolParam(),
+      countryPending: boolParam(),
       page: pageParam(),
     },
     { pageKey: 'page' },
   );
   const { status, direction, country, source, manager, scope, page } = values;
+  const { from, to, directionPending, countryPending } = values;
   const urlSearch = values.search;
 
   // Инпут поиска держим локально: буквы обязаны появляться мгновенно, а в
@@ -125,6 +139,12 @@ export default function Applications() {
     mine: scope === 'mine',
     manager: manager || undefined,
     source: source || undefined,
+    from: from || undefined,
+    to: to || undefined,
+    // Явное направление сильнее: если выбрано и оно, и «без направления»,
+    // бэкенд берёт направление (см. ApplicationsService.findAll).
+    directionPending: directionPending && !direction ? true : undefined,
+    countryPending: countryPending && !country ? true : undefined,
   };
 
   const appsQuery = useQuery({
@@ -174,8 +194,7 @@ export default function Applications() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="card-header">
-        <h2 className="card-title">{t('app.title')}</h2>
+      <div className="card-header is-titleless">
         {isAdmin && (
           <div className="scope-switch">
             <button
@@ -238,7 +257,7 @@ export default function Applications() {
               <option key={c} value={c}>{countryLabel(c)}</option>
             ))}
           </select>
-          {(searchInput || status || direction || manager || source || country) && (
+          {(searchInput || status || direction || manager || source || country || from || to || directionPending || countryPending) && (
             <button
               type="button"
               className="btn btn-ghost"
@@ -249,7 +268,7 @@ export default function Applications() {
                 setSearchInput('');
                 // scope не трогаем — как и раньше: «Мои/Все» это не фильтр
                 // выборки, а режим просмотра. Страницу reset() сбрасывает сам.
-                reset(['search', 'status', 'direction', 'manager', 'source', 'country']);
+                reset(['search', 'status', 'direction', 'manager', 'source', 'country', 'from', 'to', 'directionPending', 'countryPending']);
               }}
               title={t('common.reset')}
             >
@@ -257,6 +276,36 @@ export default function Applications() {
             </button>
           )}
         </div>
+
+        <ActiveFilterChips
+          chips={[
+            ...(from || to
+              ? [{
+                  key: 'period',
+                  label: from && to
+                    ? `${t('list.chip.period')}: ${fmtDay(from)} — ${fmtDay(to)}`
+                    : from
+                      ? `${t('list.chip.periodFrom')} ${fmtDay(from)}`
+                      : `${t('list.chip.periodTo')} ${fmtDay(to)}`,
+                  onClear: () => reset(['from', 'to']),
+                }]
+              : []),
+            ...(directionPending && !direction
+              ? [{
+                  key: 'directionPending',
+                  label: t('dashboard.breakdown.directionsPending'),
+                  onClear: () => reset(['directionPending']),
+                }]
+              : []),
+            ...(countryPending && !country
+              ? [{
+                  key: 'countryPending',
+                  label: t('dashboard.breakdown.countryPending'),
+                  onClear: () => reset(['countryPending']),
+                }]
+              : []),
+          ]}
+        />
 
         <AnimatePresence mode="wait">
           {loading ? (

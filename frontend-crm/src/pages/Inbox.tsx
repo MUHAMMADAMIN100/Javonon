@@ -38,11 +38,6 @@ export default function Inbox() {
 
   return (
     <>
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.unifiedInbox')}</span>
-        <h2 className="crm-section-title">{t('inbox.title')}</h2>
-      </div>
-
       <div className="inbox-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(280px, 360px) 1fr',
