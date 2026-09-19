@@ -352,7 +352,6 @@ function OfferCard({
           maxHeight: 240, overflowY: 'auto',
           padding: 14,
           background: 'var(--bg-soft)',
-          border: '1px solid var(--border-soft)',
           borderRadius: 10,
           whiteSpace: 'pre-wrap',
           fontSize: 13,

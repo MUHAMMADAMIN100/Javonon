@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/style.css';
 import { format, parse, isValid } from 'date-fns';
+import { useT } from '../lib/i18n';
 import { ru } from 'date-fns/locale';
 
 type Props = {
@@ -43,10 +44,28 @@ function parseDateOnly(value?: string): Date | undefined {
   return isValid(parsed) ? parsed : undefined;
 }
 
+/**
+ * Убирает из className классы, которые рисуют поле ввода.
+ *
+ * Календарь вызывают и так: <CrmDatePicker className="crm-input" />. Раньше
+ * это вешало рамку поля на обёртку, а внутри неё своя рамка была у кнопки —
+ * получалась коробка в коробке. Чинить в девяти местах вызова смысла нет:
+ * следующий вызов написали бы так же, поэтому фильтруем здесь.
+ */
+const FIELD_CLASSES = new Set(['crm-input', 'crm-select', 'crm-textarea', 'input', 'form-control']);
+function stripFieldClasses(className?: string) {
+  return (className || '')
+    .split(' ')
+    .filter((c) => c && !FIELD_CLASSES.has(c))
+    .join(' ');
+}
+
 export default function CrmDatePicker({
   value,
   onChange,
-  placeholder = 'Выберите дату',
+  // Значение по умолчанию берём из словаря ниже: подпись видна на экране,
+  // значит на таджикском она обязана быть таджикской.
+  placeholder,
   disabled,
   showTime,
   className,
@@ -54,6 +73,8 @@ export default function CrmDatePicker({
   min,
   max,
 }: Props) {
+  const { t } = useT();
+  const emptyLabel = placeholder || t('datepicker.placeholder');
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -306,7 +327,11 @@ export default function CrmDatePicker({
   return (
     <div
       ref={wrapperRef}
-      className={'crm-datepicker-wrapper ' + (className || '')}
+      // Классы полей ввода на обёртку не пускаем: рамка и фон уже есть у
+      // самой кнопки ниже, и `crm-input` снаружи давал рамку в рамке —
+      // календарь выглядел вложенным в пустую коробку. Раскладочные
+      // классы (ширина, отступы) пропускаем как есть.
+      className={'crm-datepicker-wrapper ' + stripFieldClasses(className)}
       style={{ position: 'relative', ...(style || {}) }}
     >
       <button
@@ -326,11 +351,13 @@ export default function CrmDatePicker({
           if (disabled || e.detail !== 0) return;
           setOpen((o) => !o);
         }}
-        className={'crm-datepicker-trigger' + (isEmpty ? ' empty' : '')}
+        // `is-empty`, а не `empty`: голый `empty` — это общий класс пустого
+        // состояния списков, и его оформление протекало сюда.
+        className={'crm-datepicker-trigger' + (isEmpty ? ' is-empty' : '')}
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <span>{isEmpty ? placeholder : formattedLabel}</span>
+        <span>{isEmpty ? emptyLabel : formattedLabel}</span>
         <svg
           width="18"
           height="18"

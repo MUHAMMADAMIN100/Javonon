@@ -210,7 +210,9 @@ export default function Activity() {
 
                           {/* карточка события */}
                           <div style={{
-                            background: 'white', border: '1px solid var(--border-soft)',
+                            // Заливка вместо рамки: событие лежит внутри
+                            // карточки, и вторая рамка давала коробку в коробке.
+                            background: 'var(--bg-soft)',
                             borderRadius: 12, padding: '12px 14px',
                           }}>
                             <div style={{

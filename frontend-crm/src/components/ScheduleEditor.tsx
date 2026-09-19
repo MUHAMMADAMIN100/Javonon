@@ -117,8 +117,9 @@ function DayRow({ day, onChange }: { day: ScheduleDay; onChange: (patch: Partial
       className="schedule-day-row"
       style={{
         padding: '10px 12px',
-        border: '1px solid var(--border)',
         borderRadius: 10,
+        // Выходной помечен заливкой, рабочий день — просто строка. Рамка
+        // вокруг строки давала сетку из коробок поверх рамок самих полей.
         background: day.isWorkday ? 'transparent' : 'var(--bg-soft)',
       }}
     >

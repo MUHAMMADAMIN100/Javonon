@@ -1024,6 +1024,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     // потому что менеджер ещё не проставил направление руками.
     'dashboard.breakdown.directionsPending': 'Без направления',
     'dashboard.breakdown.countryPending': 'Страна не указана',
+    'datepicker.placeholder': 'Дата',
     'list.chip.period': 'Период',
     'list.chip.periodFrom': 'С',
     'list.chip.periodTo': 'По',
@@ -2757,6 +2758,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'dashboard.breakdown.directions': 'Аризаҳо аз рӯи самтҳо',
     'dashboard.breakdown.directionsPending': 'Бе самт',
     'dashboard.breakdown.countryPending': 'Кишвар нишон дода нашудааст',
+    'datepicker.placeholder': 'Сана',
     'list.chip.period': 'Давра',
     'list.chip.periodFrom': 'Аз',
     'list.chip.periodTo': 'То',

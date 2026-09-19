@@ -147,7 +147,7 @@ export default function Users() {
         <button className="btn btn-primary" onClick={openCreate}>+ {t('common.add')}</button>
       </div>
       <div className="card-body">
-        <div className="filters">
+        <div className="filters-search">
           <input
             className="crm-input"
             placeholder={t('common.search')}

@@ -708,16 +708,14 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .badge-gray { background: var(--bg); color: var(--text-soft); }
 
 /* Filters */
-.filters {
-  display: flex; gap: 10px; flex-wrap: wrap;
-  margin-bottom: 18px;
-}
+/* Раскладка тулбара живёт ниже, в блоке «FILTERS row» — здесь только
+   оформление полей, чтобы старые экраны без crm-input/crm-select не
+   остались без рамки. */
 .filters input, .filters select {
   padding: 9px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 14px; font-family: inherit;
   background: var(--bg-card);
 }
-.filters input:not([type="checkbox"]) { flex: 1; min-width: 200px; }
 
 /* Login — editorial split layout */
 .login-page {
@@ -1675,9 +1673,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .card-title { font-size: 17px; }
   .card-body { padding: 14px; }
 
-  /* Фильтры — на всю ширину, колонка */
-  .filters { flex-direction: column; gap: 8px; }
-  .filters > * { width: 100%; flex: none; min-width: 0; }
+  /* Фильтры — по два в ряд, раскладку задаёт общий блок @media 1024px. */
+  .filters { gap: 8px; }
   .scope-switch { width: 100%; }
   .scope-btn { flex: 1; justify-content: center; }
 
@@ -2421,13 +2418,49 @@ select.input-error {
 .badge-event     { color: #7c3aed; border-color: rgba(124,58,237,0.28); background: #f5f3ff; }
 
 /* ---------- FILTERS row ---------- */
+/**
+ * Тулбар фильтров.
+ *
+ * Рамки и фона у него нет намеренно: тулбар всегда лежит ВНУТРИ карточки,
+ * и собственная рамка давала коробку в коробке — две почти одинаковые
+ * линии в трёх пикселях друг от друга.
+ *
+ * Раскладка: поиск занимает всю строку сверху (он длинный, его читают и в
+ * него печатают), остальные фильтры идут одной линией под ним по своей
+ * ширине. Без `width: auto` ниже каждый crm-select растягивался бы на
+ * 100% и вставал отдельной строкой — экран превращался в лестницу.
+ */
 .filters {
-  display: flex; gap: 10px; flex-wrap: wrap;
-  margin-bottom: 24px;
-  padding: 16px;
-  background: white;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 20px;
+}
+/* Поиск — своя строка на всю ширину. */
+.filters-search {
+  margin-bottom: 10px;
+}
+.filters-search .crm-input,
+.filters-search input {
+  width: 100%;
+}
+/* Фильтры — по содержимому, а не во всю ширину. */
+.filters > .crm-select,
+.filters > .crm-input,
+.filters > .crm-datepicker-wrapper,
+.filters > label {
+  flex: 0 1 var(--filter-w, 180px);
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+/* Подпись даты в одну строку: перенос делал календарь выше соседних
+   фильтров, и линия фильтров переставала быть линией. */
+.filters > .crm-datepicker-wrapper .crm-datepicker-trigger > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .filters input, .filters select {
   padding: 10px 14px;
@@ -2439,7 +2472,9 @@ select.input-error {
   color: var(--text);
   transition: all .15s;
 }
-.filters input:not([type="checkbox"]) { flex: 1; min-width: 220px; }
+/* Историческое правило «поле тянется на всю строку» осталось только для
+   полей ВНЕ тулбара; внутри ширину задаёт блок выше. */
+.filters input:not([type="checkbox"]):not(.crm-input) { flex: 0 1 180px; min-width: 0; }
 .filters input:focus, .filters select:focus {
   outline: none;
   border-color: var(--primary);
@@ -3575,12 +3610,10 @@ textarea:focus {
     gap: 12px !important;
   }
 
-  /* Фильтры — колонка */
+  /* Фильтры — по два в ряд, раскладку задаёт общий блок @media 1024px. */
   .filters {
-    flex-direction: column;
     gap: 8px;
   }
-  .filters > * { width: 100%; }
 
   /* Inputs — больше для пальца */
   input:not([type="checkbox"]):not([type="radio"]),
@@ -4540,7 +4573,18 @@ input[type="checkbox"].crm-checkbox:checked {
   cursor: not-allowed;
   opacity: 0.7;
 }
-.crm-datepicker-trigger.empty { color: var(--text-soft); }
+.crm-datepicker-trigger.is-empty { color: var(--text-soft); }
+/* Старое имя оставляем на случай кеша сборки — цвет тот же, но общее
+   оформление пустого состояния сюда больше не попадает. */
+.crm-datepicker-trigger.empty {
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 14px;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  padding: 10px 14px;
+}
 .crm-datepicker-popover {
   position: fixed;
   z-index: 9999;
@@ -4740,18 +4784,38 @@ input[type="checkbox"].crm-checkbox:checked {
   }
   .crm-datepicker-popover { padding: 8px !important; border-radius: 10px !important; }
 
-  /* .filters контейнер — стрелы должны быть в столбик и компактные */
+  /* Тулбар на планшете и телефоне: фильтры по два в ряд. Столбик по
+     одному превращал экран в лестницу из пяти строк — до таблицы
+     приходилось прокручивать полполосы. */
   .filters {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 6px !important;
-    padding: 10px !important;
-    margin-bottom: 12px !important;
+    gap: 8px !important;
+    padding: 0 !important;
+    margin-bottom: 14px !important;
   }
-  .filters > * {
-    width: 100% !important;
-    flex: 0 0 auto !important;
+  .filters > .crm-select,
+  .filters > .crm-input,
+  .filters > .crm-datepicker-wrapper,
+  .filters > label {
+    flex: 1 1 calc(50% - 4px) !important;
+    min-width: 0 !important;
     max-width: 100% !important;
+  }
+  /* Поиск и кнопка сброса — всегда на всю ширину. */
+  .filters-search,
+  .filters-search .crm-input,
+  .filters > button {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+}
+
+/* Совсем узкий экран: два фильтра в ряд уже не читаются — по одному. */
+@media (max-width: 380px) {
+  .filters > .crm-select,
+  .filters > .crm-input,
+  .filters > .crm-datepicker-wrapper,
+  .filters > label {
+    flex: 1 1 100% !important;
   }
 }
 
@@ -5312,8 +5376,11 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   transition: background .15s, border-color .15s, box-shadow .15s;
 }
 .leads-bulk-bar.is-idle {
-  background: transparent;
-  border: 1px dashed var(--border);
+  /* Пока ничего не выбрано, это просто подсказка. Рамка превращала её в
+     ещё одну коробку внутри карточки; панелью полоса становится только
+     когда в ней появляются кнопки. */
+  background: var(--bg-soft);
+  border: 1px solid transparent;
   box-shadow: none;
 }
 .leads-bulk-hint {

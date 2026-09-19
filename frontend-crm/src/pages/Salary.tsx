@@ -227,9 +227,9 @@ export default function Salary() {
             style={{
               marginTop: 24,
               padding: 24,
+              // Рамки нет: плашку и так видно по заливке.
               background: 'var(--bg-soft)',
               borderRadius: 18,
-              border: '1px solid var(--border-soft)',
             }}
           >
             <div style={{
@@ -495,7 +495,7 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
       marginBottom: 24,
       padding: 18,
       borderRadius: 14,
-      border: '1px solid var(--border-soft)',
+      // Третья рамка подряд (карточка → плашка → этот блок) — заливки хватает.
       background: 'var(--bg)',
     }}>
       <div style={{

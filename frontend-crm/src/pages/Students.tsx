@@ -288,15 +288,17 @@ export default function Students() {
         </div>
       </div>
       <div className="card-body">
-        <div className="filters" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
-          <input className="crm-input" style={{ flex: '1 1 200px' }} placeholder={t('common.search')} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
-          <select className="crm-select" style={{ flex: '1 1 200px' }} value={direction} onChange={(e) => setValue('direction', e.target.value as Direction | '')}>
+        <div className="filters-search">
+          <input className="crm-input" placeholder={t('common.search')} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+        </div>
+        <div className="filters">
+          <select className="crm-select" value={direction} onChange={(e) => setValue('direction', e.target.value as Direction | '')}>
             <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
           </select>
           <select
             className="crm-select"
-            style={{ flex: '1 1 200px' }}
+           
             value={stageFilter}
             onChange={(e) => setValue('status', e.target.value)}
             title={t('app.filter.status')}
@@ -313,7 +315,7 @@ export default function Students() {
               <option value="ARCHIVED">{studentStatusLabel('ARCHIVED' as any)}</option>
             </optgroup>
           </select>
-          <select className="crm-select" style={{ flex: '1 1 200px' }} value={cabinet} onChange={(e) => setValue('cabinet', e.target.value as typeof CABINET_VALUES[number] | '')}>
+          <select className="crm-select" value={cabinet} onChange={(e) => setValue('cabinet', e.target.value as typeof CABINET_VALUES[number] | '')}>
             <option value="">{t('app.field.cabinet')}</option>
             <option value="1">{t('app.field.cabinet')} 1</option>
             <option value="2">{t('app.field.cabinet')} 2</option>
@@ -322,7 +324,7 @@ export default function Students() {
           {isAdmin && (
             <select
               className="crm-select"
-              style={{ flex: '1 1 200px' }}
+             
               value={manager}
               onChange={(e) => setValue('manager', e.target.value)}
               title={t('app.filter.manager')}

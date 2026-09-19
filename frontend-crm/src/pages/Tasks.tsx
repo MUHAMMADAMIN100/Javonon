@@ -198,7 +198,7 @@ export default function Tasks() {
       </div>
 
       <div className="card-body">
-        <div className="filters">
+        <div className="filters-search">
           <input
             className="crm-input"
             placeholder="Поиск по заголовку или описанию..."

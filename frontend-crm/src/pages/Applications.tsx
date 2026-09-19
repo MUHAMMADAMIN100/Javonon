@@ -215,8 +215,10 @@ export default function Applications() {
         )}
       </div>
       <div className="card-body">
-        <div className="filters">
+        <div className="filters-search">
           <input className="crm-input" placeholder={t('common.search')} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+        </div>
+        <div className="filters">
           <select className="crm-select" value={status} onChange={(e) => setValue('status', e.target.value as ApplicationStatus | '')}>
             <option value="">{t('app.filter.status')}</option>
             {APPLICATION_STATUSES.map((s) => (
