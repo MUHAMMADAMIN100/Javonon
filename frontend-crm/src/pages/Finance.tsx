@@ -1,5 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import CrmSelect from '../components/CrmSelect';
+import { dateParam, pageParam, useUrlListState } from '../lib/useUrlListState';
+import Pagination from '../components/Pagination';
+import PeriodFilter from '../components/PeriodFilter';
+import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -13,6 +17,7 @@ import {
   PRODUCT_CATEGORIES,
   listTransactions,
   createTransaction,
+  updateTransaction,
   deleteTransaction,
   financeSummary,
   pendingPayments,
@@ -119,6 +124,8 @@ function NonTjsStrip({
  * ставим справа от eyebrow, tooltip раскрывает причину.
  */
 function CurrencyBadge({ currency }: { currency: string }) {
+  const { t } = useT();
+  const baseLabel = t('finance.badge.base');
   return (
     <span
       title={`Все суммы посчитаны в ${currency}. Транзакции в других валютах не входят в этот разрез — см. подсказку «В ПЕРИОДЕ ТАКЖЕ» если такие суммы есть.`}
@@ -136,7 +143,7 @@ function CurrencyBadge({ currency }: { currency: string }) {
         lineHeight: 1.2,
       }}
     >
-      BASE · {currency}
+      {baseLabel} · {currency}
     </span>
   );
 }
@@ -191,7 +198,6 @@ export default function Finance() {
   // распознавания. Раз EXPENSE запрещён, оставляем AI-quick-entry только
   // elevated: у них семантика «быстро набросать любой тип», у менеджера —
   // явная форма INCOME.
-  const canUseAiAdd = elevated;
   // POST /finance/transactions на backend: type=EXPENSE разрешён только
   // FOUNDER / ADMIN / ACCOUNTANT (finance.controller.ts:291). Раньше форма
   // «Новая транзакция» показывала EXPENSE всем: SALES_MANAGER выбирал
@@ -207,12 +213,28 @@ export default function Finance() {
   const [filterProductEnum, setFilterProductEnum] = useState<ProductCategoryEnum | ''>('');
   const [filterPaymentPhase, setFilterPaymentPhase] = useState<PaymentPhaseStatus | ''>('');
   const [showForm, setShowForm] = useState(false);
-  const [aiInput, setAiInput] = useState('');
+  // Период журнала и страница — в ссылке, как в остальных списках CRM:
+  // из карточки транзакции возвращаются кнопкой «назад», и выборка должна
+  // остаться той же.
+  const { values: txUrl, setValue: setTxUrl, reset: resetTxUrl } = useUrlListState(
+    { from: dateParam(), to: dateParam(), page: pageParam() },
+    { pageKey: 'page' },
+  );
+  const { from: txFrom, to: txTo, page: txPage } = txUrl;
+  /** Открытая карточка транзакции (id, а не объект: список перезапрашивается). */
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Transaction | null>(null);
 
-  const txKey = keys.finance.transactions(filterType ? { type: filterType, take: 200 } : { take: 200 });
+  const txParams = {
+    ...(filterType ? { type: filterType } : {}),
+    ...(txFrom ? { from: txFrom } : {}),
+    ...(txTo ? { to: txTo } : {}),
+    take: 200,
+  };
+  const txKey = keys.finance.transactions(txParams);
   const txQuery = useQuery({
     queryKey: txKey,
-    queryFn: () => listTransactions(filterType ? { type: filterType, take: 200 } : { take: 200 }),
+    queryFn: () => listTransactions(txParams),
   });
   const allTransactions = txQuery.data ?? [];
   // Клиентская доп-фильтрация по новым Google-Sheet-parity полям
@@ -230,6 +252,18 @@ export default function Finance() {
       return true;
     });
   }, [allTransactions, filterIncomeSource, filterProductEnum, filterPaymentPhase]);
+
+  /** Строк на странице журнала. Десять — как просили: экран не листается. */
+  const TX_PAGE_SIZE = 10;
+  const pagedTransactions = transactions.slice(
+    (txPage - 1) * TX_PAGE_SIZE,
+    txPage * TX_PAGE_SIZE,
+  );
+  // Фильтры могут сократить список так, что текущей страницы уже нет.
+  useEffect(() => {
+    const last = Math.max(1, Math.ceil(transactions.length / TX_PAGE_SIZE));
+    if (txPage > last) setTxUrl('page', 1);
+  }, [transactions.length, txPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const summaryQuery = useQuery({
     queryKey: keys.finance.summary(),
@@ -457,20 +491,6 @@ export default function Finance() {
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
-  const aiMut = useInvalidatingMutation({
-    mutationFn: aiAddTransaction,
-    invalidate: [keys.finance.all],
-    onSuccess: (res: any) => {
-      if (res.ok) {
-        toast(`${res.transaction?.type === 'INCOME' ? '+' : '−'}${res.transaction?.amount}${res.transaction?.currency}`, 'success');
-        setAiInput('');
-      } else {
-        toast(res.error || t('toast.error'), 'error');
-      }
-    },
-    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
-  });
-  const aiBusy = aiMut.isPending;
 
   const onConfirmPayment = async (p: Payment) => {
     const ok = await confirm({
@@ -493,11 +513,6 @@ export default function Finance() {
     rejectPayMut.mutate(p);
   };
 
-  const onAi = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!aiInput.trim() || aiBusy) return;
-    aiMut.mutate(aiInput);
-  };
 
   const onDelete = async (tx: Transaction) => {
     const ok = await confirm({
@@ -523,26 +538,26 @@ export default function Finance() {
           fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
           color: 'var(--primary-dark)', textTransform: 'uppercase',
         }}>
-          BREAKDOWN · PERIOD
+          {t('finance.period.title')}
         </div>
         <div className="pagination-controls" style={{ padding: 4 }}>
           <button
             className={bdPeriod === 'THIS_MONTH' ? 'active' : ''}
             onClick={() => setBdPeriod('THIS_MONTH')}
           >
-            This month
+            {t('finance.period.thisMonth')}
           </button>
           <button
             className={bdPeriod === 'LAST_MONTH' ? 'active' : ''}
             onClick={() => setBdPeriod('LAST_MONTH')}
           >
-            Last month
+            {t('finance.period.lastMonth')}
           </button>
           <button
             className={bdPeriod === 'CUSTOM' ? 'active' : ''}
             onClick={() => setBdPeriod('CUSTOM')}
           >
-            Custom range
+            {t('finance.period.custom')}
           </button>
         </div>
         {bdPeriod === 'CUSTOM' && (
@@ -699,83 +714,6 @@ export default function Finance() {
         </div>
       )}
 
-      {/* AI quick add — только elevated (FOUNDER/ADMIN/ACCOUNTANT).
-          Модель распознавания сама решает, INCOME это или EXPENSE, а
-          POST /finance/transactions блокирует EXPENSE для менеджеров
-          (finance.controller.ts:291). Раньше SALES_MANAGER писал
-          «купили бумагу 200» → форма отправляла EXPENSE → 403 + generic
-          error toast без объяснения, что EXPENSE ему запрещён. */}
-      {canUseAiAdd && (
-      <motion.form
-        onSubmit={onAi}
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{
-          background: 'var(--text)',
-          color: 'white',
-          padding: 18,
-          borderRadius: 18,
-          marginBottom: 24,
-          display: 'flex',
-          gap: 10,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: 'var(--primary)',
-          color: 'white',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <Icon name="auto_awesome" size={18} />
-        </div>
-        <div style={{ flexShrink: 0 }}>
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            letterSpacing: '0.16em',
-            color: 'var(--primary-light)',
-            marginBottom: 4,
-            textTransform: 'uppercase',
-          }}>{t('eyebrow.aiQuickEntry')}</div>
-          <div style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 16,
-            fontWeight: 500,
-          }}>{t('finance.ai.title')}</div>
-        </div>
-        <input
-          value={aiInput}
-          onChange={(e) => setAiInput(e.target.value)}
-          placeholder={t('finance.ai.placeholder')}
-          style={{
-            flex: 1,
-            minWidth: 240,
-            padding: '12px 16px',
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.16)',
-            color: 'white',
-            borderRadius: 100,
-            fontSize: 14,
-            fontFamily: 'inherit',
-          }}
-        />
-        <button
-          type="submit"
-          className="btn"
-          style={{
-            background: 'var(--primary)',
-            color: 'white',
-            border: 'none',
-          }}
-          disabled={aiBusy || !aiInput.trim()}
-        >
-          {aiBusy ? t('common.saving') : t('common.add')} <Icon name="arrow_outward" size={14} />
-        </button>
-      </motion.form>
-      )}
 
       {/* Revenue chart (timeseries) */}
       {series.length > 0 && (
@@ -813,7 +751,7 @@ export default function Finance() {
 
       {/* Распределение по активной FOUNDER-редактируемой схеме + Топ менеджеров */}
       {distribution && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 32 }}>
+        <div className="analytics-row" style={{ marginBottom: 32 }}>
           <RevenueDistributionCard breakdown={distribution} />
 
           <div className="card" style={{ padding: 24 }}>
@@ -1161,6 +1099,12 @@ export default function Finance() {
             )}
           </>
         )}
+        <PeriodFilter
+          from={txFrom}
+          to={txTo}
+          onFrom={(v) => setTxUrl('from', v)}
+          onTo={(v) => setTxUrl('to', v)}
+        />
         <div style={{ flex: 1 }} />
         {/* «Новая транзакция» — гейт по backend @Roles на POST
             /finance/transactions (ADMIN/ACCOUNTANT/SALES_MANAGER/CLIENT_MANAGER)
@@ -1191,6 +1135,22 @@ export default function Finance() {
         )}
       </AnimatePresence>
 
+      <ActiveFilterChips
+        chips={
+          txFrom || txTo
+            ? [{
+                key: 'period',
+                label: txFrom && txTo
+                  ? `${t('list.chip.period')}: ${fmtDay(txFrom)} — ${fmtDay(txTo)}`
+                  : txFrom
+                    ? `${t('list.chip.periodFrom')} ${fmtDay(txFrom)}`
+                    : `${t('list.chip.periodTo')} ${fmtDay(txTo)}`,
+                onClear: () => resetTxUrl(['from', 'to']),
+              }]
+            : []
+        }
+      />
+
       <div className="card" style={{ padding: 0 }}>
         <table className="table" style={{ width: '100%' }}>
           <thead>
@@ -1208,8 +1168,22 @@ export default function Finance() {
             {transactions.length === 0 && (
               <tr><td colSpan={7} className="empty">{t('finance.empty')}</td></tr>
             )}
-            {transactions.map((tx) => (
-              <tr key={tx.id}>
+            {pagedTransactions.map((tx) => (
+              <tr
+                key={tx.id}
+                className="tx-row"
+                data-testid={`tx-row-${tx.id}`}
+                role="button"
+                tabIndex={0}
+                title={t('finance.tx.details')}
+                onClick={() => setDetailId(tx.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setDetailId(tx.id);
+                  }
+                }}
+              >
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtDate(tx.date)}</td>
                 <td>
                   <span className={`badge ${tx.type === 'INCOME' ? 'badge-success' : 'badge-danger'}`}>
@@ -1244,7 +1218,152 @@ export default function Finance() {
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        page={txPage}
+        total={transactions.length}
+        pageSize={TX_PAGE_SIZE}
+        onChange={(n) => setTxUrl('page', n)}
+      />
+
+      {/* Карточка транзакции по клику на строку. Ключ по id: список
+          перезапрашивается после правки, и объект строки уже другой. */}
+      <AnimatePresence>
+        {detailId && transactions.some((x) => x.id === detailId) && (
+          <TransactionDetailModal
+            key={detailId}
+            tx={transactions.find((x) => x.id === detailId)!}
+            canEdit={hasRole(me, 'FOUNDER')}
+            onClose={() => setDetailId(null)}
+            onEdit={(tx) => { setDetailId(null); setEditing(tx); }}
+            onDelete={(tx) => { setDetailId(null); onDelete(tx); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Правка — та же форма, что и создание, но с заполненными полями. */}
+      <AnimatePresence>
+        {editing && (
+          <TransactionForm
+            key={`edit-${editing.id}`}
+            students={students}
+            users={users}
+            preselect={null}
+            canExpense={canExpense}
+            editTx={editing}
+            onClose={() => setEditing(null)}
+            onCreated={() => { setEditing(null); refresh(); }}
+          />
+        )}
+      </AnimatePresence>
     </>
+  );
+}
+
+/**
+ * Карточка транзакции по клику на строку журнала.
+ *
+ * В таблице помещается шесть колонок из пятнадцати полей: способ оплаты,
+ * источник, продукт, чек и плательщик оставались невидимыми, и чтобы их
+ * посмотреть, приходилось открывать правку. Здесь видно всё сразу, а
+ * править может только основатель — см. canEdit.
+ */
+function TransactionDetailModal({
+  tx,
+  canEdit,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  tx: Transaction;
+  canEdit: boolean;
+  onClose: () => void;
+  onEdit: (tx: Transaction) => void;
+  onDelete: (tx: Transaction) => void;
+}) {
+  const { t } = useT();
+  const isIncome = tx.type === 'INCOME';
+  const catLabel = t(`finance.cat.${tx.category}`) !== `finance.cat.${tx.category}`
+    ? t(`finance.cat.${tx.category}`)
+    : TRANSACTION_CATEGORY_LABEL[tx.category];
+
+  const rows: Array<[string, React.ReactNode]> = [
+    [t('finance.col.date'), fmtDate(tx.date)],
+    [t('finance.col.category'), catLabel],
+    [t('finance.col.currency'), tx.currency],
+    // У расхода студента нет — там в этом поле плательщик, и подписывать
+    // его «Студент» значит путать читающего.
+    (tx as any).student?.fullName
+      ? [t('finance.col.student'), (tx as any).student.fullName] as [string, React.ReactNode]
+      : [t('finance.field.payer'), (tx as any).payerName || '—'] as [string, React.ReactNode],
+    [t('finance.col.manager'), (tx as any).manager?.fullName || '—'],
+    [t('finance.paymentChannel'), (tx as any).paymentChannel
+      ? t(`finance.channel.${(tx as any).paymentChannel}`) : '—'],
+    [t('finance.col.comment'), tx.comment || '—'],
+  ];
+
+  return (
+    <FormModal
+      open
+      title={t('finance.tx.details')}
+      onClose={onClose}
+      dirty={false}
+      width={620}
+      testId="tx-detail"
+    >
+      <div className="tx-detail-amount">
+        <span className={`badge ${isIncome ? 'badge-success' : 'badge-danger'}`}>
+          {isIncome ? t('finance.income') : t('finance.expense')}
+        </span>
+        <span
+          data-testid="tx-detail-amount"
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 30,
+            fontWeight: 500,
+            color: isIncome ? 'var(--primary-dark)' : 'var(--danger)',
+          }}
+        >
+          {isIncome ? '+' : '−'} {fmtMoney(tx.amount, tx.currency)}
+        </span>
+      </div>
+
+      <dl className="tx-detail-list">
+        {rows.map(([label, value]) => (
+          <div key={label} className="tx-detail-row">
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="form-actions">
+        {canEdit ? (
+          <>
+            <button
+              type="button"
+              className="btn btn-danger"
+              data-testid="tx-delete"
+              onClick={() => onDelete(tx)}
+            >
+              {t('common.delete')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="tx-edit"
+              onClick={() => onEdit(tx)}
+            >
+              {t('finance.tx.edit')}
+            </button>
+          </>
+        ) : (
+          <span style={{ color: 'var(--text-soft)', fontSize: 13 }}>
+            {t('finance.tx.founderOnly')}
+          </span>
+        )}
+      </div>
+    </FormModal>
   );
 }
 
@@ -1299,12 +1418,15 @@ function TransactionForm({
   users,
   preselect,
   canExpense,
+  editTx,
   onClose,
   onCreated,
 }: {
   students: any[];
   users: any[];
   preselect: any;
+  /** Правим существующую запись, а не создаём новую. */
+  editTx?: Transaction | null;
   // Разрешено ли пользователю выбирать EXPENSE. Backend режет POST
   // /finance/transactions с type=EXPENSE для не-FOUNDER/ADMIN/ACCOUNTANT
   // (finance.controller.ts:291) — форма должна повторять этот контракт,
@@ -1328,22 +1450,24 @@ function TransactionForm({
   // клиенте, чтобы UI совпадал с фактическим поведением backend'а.
   const me = useAuth((s) => s.user);
   const elevated = isElevated(me);
-  const [type, setType] = useState<TransactionType>('INCOME');
-  const [category, setCategory] = useState<TransactionCategory>('TUITION_PAYMENT');
-  const [amount, setAmount] = useState<string>(preselect?.amount ? String(preselect.amount) : '');
-  const [currency, setCurrency] = useState(preselect?.currency || 'TJS');
-  const [studentId, setStudentId] = useState<string>(preselect?.studentId || '');
+  const [type, setType] = useState<TransactionType>(editTx?.type ?? 'INCOME');
+  const [category, setCategory] = useState<TransactionCategory>(editTx?.category ?? 'TUITION_PAYMENT');
+  const [amount, setAmount] = useState<string>(
+    editTx ? String(editTx.amount) : preselect?.amount ? String(preselect.amount) : '',
+  );
+  const [currency, setCurrency] = useState(editTx?.currency || preselect?.currency || 'TJS');
+  const [studentId, setStudentId] = useState<string>(editTx?.studentId || preselect?.studentId || '');
   const [managerId, setManagerId] = useState<string>(() => {
     // Для не-elevated: preselect?.managerId (напр., пришёл из карточки
     // студента с чужим владельцем) игнорируем и сразу форсим self —
     // тогда UI показывает то же, что запишет backend.
     if (!elevated && me?.id) return me.id;
-    return preselect?.managerId || '';
+    return editTx?.managerId || preselect?.managerId || '';
   });
-  const [comment, setComment] = useState('');
+  const [comment, setComment] = useState(editTx?.comment || '');
   // Сегодня — по Asia/Dushanbe (toISOString даёт UTC-день, что после 19:00
   // ТJT уже завтра по UTC и форма открывалась бы с завтрашним числом).
-  const [date, setDate] = useState(tjToday());
+  const [date, setDate] = useState(editTx ? String(editTx.date).slice(0, 10) : tjToday());
   const [submitting, setSubmitting] = useState(false);
   // Синхронный guard от повторной отправки: `setSubmitting(true)` применяется
   // только на следующем React-render, поэтому двойной клик по «Сохранить»
@@ -1355,10 +1479,10 @@ function TransactionForm({
   const inFlight = useRef(false);
 
   // Расширенные поля для финансового модуля
-  const [paymentChannel, setPaymentChannel] = useState<string>('CASH');
+  const [paymentChannel, setPaymentChannel] = useState<string>((editTx as any)?.paymentChannel || 'CASH');
   const [paymentKind, setPaymentKind] = useState<string>('FULL');
   const [productCategory, setProductCategory] = useState<string>('');
-  const [payerName, setPayerName] = useState('');
+  const [payerName, setPayerName] = useState((editTx as any)?.payerName || '');
   const [receiptKind, setReceiptKind] = useState<string>('RECEIPT');
   const [noReceiptReason, setNoReceiptReason] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -1417,14 +1541,17 @@ function TransactionForm({
       toast(t('toast.error'), 'error');
       return;
     }
-    if (type === 'EXPENSE') {
+    // Чек обязателен только при СОЗДАНИИ расхода. При правке он у записи
+    // уже есть — требовать приложить файл заново значит запретить
+    // исправить опечатку в сумме.
+    if (type === 'EXPENSE' && !editTx) {
       if (receiptKind === 'REASON_ONLY') {
         if (!noReceiptReason.trim() || noReceiptReason.trim().length < 5) {
-          toast(t('toast.error'), 'error');
+          toast(t('finance.receipt.reasonRequired'), 'error');
           return;
         }
       } else if (!receiptFile) {
-        toast(t('toast.error'), 'error');
+        toast(t('finance.receipt.fileRequired'), 'error');
         return;
       }
     }
@@ -1477,13 +1604,18 @@ function TransactionForm({
         ...(type === 'INCOME' && paymentPhase && { paymentPhase }),
         ...(type === 'EXPENSE' && paidViaId && { paidViaId }),
         ...(type === 'EXPENSE' && {
-          receiptKind: receiptKind as any,
+          // При правке без нового файла поля чека не трогаем: иначе PATCH
+          // затёр бы уже приложенный чек значением по умолчанию.
+          ...(editTx && !receiptFile && receiptKind !== 'REASON_ONLY'
+            ? {}
+            : { receiptKind: receiptKind as any }),
           receiptUrl,
           ...(receiptKind === 'REASON_ONLY' && { noReceiptReason: noReceiptReason.trim() }),
         }),
       };
-      await createTransaction(dto);
-      toast(t('toast.created'), 'success');
+      if (editTx) await updateTransaction(editTx.id, dto);
+      else await createTransaction(dto);
+      toast(t(editTx ? 'toast.saved' : 'toast.created'), 'success');
       onCreated();
     } catch (e: any) {
       toast(e?.response?.data?.message || t('toast.error'), 'error');
@@ -1494,27 +1626,14 @@ function TransactionForm({
     }
   };
 
-  return (
-    <FormModal
-      open
-      title={t('finance.newTransaction')}
-      onClose={onClose}
-      busy={submitting || uploadingReceipt}
-      testId="finance-form"
-    >
-      <form onSubmit={onSubmit}>
-        <div className="form-grid-2">
-          <div className="form-group">
-            <label>{t('common.type')}</label>
-            <CrmSelect
-              className="crm-select"
-              value={type}
-              onChange={(e) => {
-              const raw = e.target.value as TransactionType;
-              // Defensive: если EXPENSE-option как-то попал в select для
-              // не-elevated (например, кастомная сборка / devtools), молча
-              // игнорируем — форма остаётся на INCOME, чтобы вниз не пошёл
-              // ни один EXPENSE-only stateful path (upload/поля чека).
+  /**
+   * Переключение типа. Поля противоположной ветки сбрасываем: иначе
+   * студент, выбранный для дохода, уехал бы в расходный запрос.
+   */
+  const switchType = (raw: TransactionType) => {
+              // Защита: кнопку «Расход» не-elevated не видит, но если она
+              // как-то нажата (своя сборка, devtools) — молча остаёмся на
+              // доходе, чтобы вниз не ушёл ни один расходный путь.
               const tt: TransactionType = raw === 'EXPENSE' && !canExpense ? 'INCOME' : raw;
               const nextCategory: TransactionCategory = tt === 'INCOME' ? 'TUITION_PAYMENT' : 'SALARY';
               setType(tt);
@@ -1544,18 +1663,45 @@ function TransactionForm({
                 setNoReceiptReason('');
                 setReceiptFile(null);
               }
-            }}>
-              <option value="INCOME">{t('finance.income')}</option>
-              {/* EXPENSE скрываем для не-elevated ролей: backend всё равно
-                  вернёт 403 (finance.controller.ts:291), а до 403 успевает
-                  отработать uploadReceipt → orphan-файл в /uploads/.
-                  Прячем option полностью, а не disable — с disabled
-                  пользователь всё равно спрашивал бы «почему нельзя»,
-                  а видимая-но-мёртвая опция читается как баг. */}
+  };
+
+  return (
+    <FormModal
+      open
+      title={t(editTx ? 'finance.tx.editTitle' : 'finance.newTransaction')}
+      onClose={onClose}
+      busy={submitting || uploadingReceipt}
+      testId="finance-form"
+    >
+      <form onSubmit={onSubmit}>
+        <div className="form-grid-2">
+          {/* Тип — первым и кнопками: в списке среди прочих полей его не
+              замечали и расход вносили как доход. */}
+          <div className="form-group form-span-2">
+            <label>{t('common.type')}</label>
+            <div className="type-switch" role="group" aria-label={t('common.type')}>
+              <button
+                type="button"
+                className={`type-switch-btn${type === 'INCOME' ? ' is-active is-income' : ''}`}
+                data-testid="tx-type-income"
+                onClick={() => switchType('INCOME')}
+              >
+                {t('finance.income')}
+              </button>
+              {/* Расход скрыт для не-elevated: сервер всё равно ответит 403
+                  (finance.controller.ts), а до отказа успевает загрузиться
+                  файл чека — остался бы мусор в /uploads. */}
               {canExpense && (
-                <option value="EXPENSE">{t('finance.expense')}</option>
+                <button
+                  type="button"
+                  className={`type-switch-btn${type === 'EXPENSE' ? ' is-active is-expense' : ''}`}
+                  data-testid="tx-type-expense"
+                  onClick={() => switchType('EXPENSE')}
+                >
+                  {t('finance.expense')}
+                </button>
               )}
-            </CrmSelect>
+            </div>
           </div>
           <div className="form-group">
             <label>{t('finance.col.category')}</label>
@@ -1803,7 +1949,10 @@ function TransactionForm({
                     type="file"
                     accept="image/*,application/pdf"
                     onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-                    required
+                    // Обязательно только при создании: у существующего
+                    // расхода чек уже приложен, и браузер иначе молча
+                    // блокировал отправку правки.
+                    required={!editTx}
                   />
                   {receiptFile && (
                     <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
@@ -1864,8 +2013,20 @@ function RevenueChart({
       увеличивается + вертикальная маркер-линия. */
   focusedKey?: string | null;
 }) {
-  const width = 800;
-  const height = 220;
+  // Ширину берём у контейнера: раньше стояло фиксированное число, и на
+  // широком мониторе половина карточки пустовала.
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(800);
+  useLayoutEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const apply = () => setWidth(Math.max(560, Math.round(el.clientWidth)));
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const height = 190;
   const padding = { top: 16, right: 16, bottom: 28, left: 50 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
@@ -1891,8 +2052,8 @@ function RevenueChart({
   const hitHalf = Math.max(xStep / 2, 12);
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <svg width={width} height={height} style={{ minWidth: 600, display: 'block' }}>
+    <div ref={boxRef} style={{ overflowX: 'auto' }}>
+      <svg width={width} height={height} style={{ display: 'block' }}>
         {/* grid */}
         {[0, 0.25, 0.5, 0.75, 1].map((p) => (
           <g key={p}>
@@ -2313,6 +2474,7 @@ function PieCard({
       и на подсветку строки легенды. */
   focusedKey?: string | null;
 }) {
+  const { t } = useT();
   const total = items.reduce((s, x) => s + x.value, 0);
   return (
     <div className="card" style={{ padding: 24 }}>
@@ -2346,7 +2508,7 @@ function PieCard({
         fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
         color: 'var(--text-soft)', textAlign: 'center',
       }}>
-        TOTAL · {fmtMoney(total, currency)}
+        {t('finance.total')} · {fmtMoney(total, currency)}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
         {items.length === 0 && (
@@ -2361,6 +2523,7 @@ function PieCard({
           const dimmed = focusedKey != null && !focused;
           return (
             <div
+              data-testid="pie-legend-row"
               key={`${it.label}-${i}`}
               onClick={clickable ? () => onSliceClick!(it) : undefined}
               style={{
@@ -2605,10 +2768,11 @@ export interface PieFocus {
   color: string;
 }
 
-function focusEyebrow(kind: PieChartKind): string {
-  if (kind === 'source') return 'FOCUS · ИСТОЧНИК';
-  if (kind === 'manager') return 'FOCUS · МЕНЕДЖЕР';
-  return 'FOCUS · КАТЕГОРИЯ РАСХОДА';
+/** Ключ подписи разбора; сам перевод берёт вызывающий компонент. */
+function focusEyebrowKey(kind: PieChartKind): string {
+  if (kind === 'source') return 'finance.focus.source';
+  if (kind === 'manager') return 'finance.focus.manager';
+  return 'finance.focus.expense';
 }
 
 function BreakdownDetailPanel({
@@ -2620,6 +2784,7 @@ function BreakdownDetailPanel({
   range: { from?: string; to?: string };
   onClose: () => void;
 }) {
+  const { t } = useT();
   const isExpense = focus.chart === 'expense';
   // Server-side pre-filter: если один ключ И это managerId/category —
   // отдаём фильтр бэку, чтоб уменьшить объём. Для чувствительных
@@ -2669,17 +2834,13 @@ function BreakdownDetailPanel({
   const displayCurrency = filtered[0]?.currency || 'TJS';
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      className="card"
-      style={{
-        padding: 24,
-        marginBottom: 32,
-        borderTop: `3px solid ${focus.color}`,
-      }}
+    <FormModal
+      open
+      title={t(focusEyebrowKey(focus.chart))}
+      onClose={onClose}
+      dirty={false}
+      width={760}
+      testId="breakdown-detail"
     >
       <div style={{
         display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
@@ -2690,7 +2851,7 @@ function BreakdownDetailPanel({
             fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
             color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 4,
           }}>
-            {focusEyebrow(focus.chart)}
+            {t(focusEyebrowKey(focus.chart))}
           </div>
           <h3 style={{
             fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
@@ -2760,7 +2921,7 @@ function BreakdownDetailPanel({
           )}
         </div>
       )}
-    </motion.div>
+    </FormModal>
   );
 }
 
@@ -2818,6 +2979,7 @@ function WeekDetailPanel({
   point: TimeseriesPoint;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const range = useMemo(() => weekRangeFromPoint(point), [point]);
   const detailQuery = useQuery({
     queryKey: ['finance', 'week-drilldown', point.key],
@@ -2832,13 +2994,13 @@ function WeekDetailPanel({
   endLabel.setDate(endLabel.getDate() - 1);
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      className="card"
-      style={{ padding: 24, marginBottom: 24, borderTop: '3px solid var(--primary)' }}
+    <FormModal
+      open
+      title={t('finance.focus.week')}
+      onClose={onClose}
+      dirty={false}
+      width={760}
+      testId="week-detail"
     >
       <div style={{
         display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
@@ -2848,7 +3010,7 @@ function WeekDetailPanel({
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
             color: 'var(--primary-dark)', textTransform: 'uppercase', marginBottom: 4,
-          }}>FOCUS · НЕДЕЛЯ</div>
+          }}>{t('finance.focus.week')}</div>
           <h3 style={{
             fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
             letterSpacing: '-0.02em',
@@ -2931,6 +3093,6 @@ function WeekDetailPanel({
           )}
         </div>
       )}
-    </motion.div>
+    </FormModal>
   );
 }

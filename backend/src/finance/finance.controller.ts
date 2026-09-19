@@ -8,7 +8,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { hasRole, isElevated } from '../auth/role-utils';
+import { hasRole, isElevated, isFounder } from '../auth/role-utils';
 import { FinanceService, CreateTransactionDto } from './finance.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -324,12 +324,22 @@ export class FinanceController {
   // не создавая новые. 20 правок/мин на пользователя (per-user
   // обеспечивает UserThrottlerGuard в AppModule; см. коммент на POST).
   @Patch('transactions/:id')
+  @Roles('FOUNDER')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   update(
     @Param('id') id: string,
     @Body() patch: Partial<CreateTransactionDto>,
     @CurrentUser() me: any,
   ) {
+    // Явная проверка в дополнение к @Roles('FOUNDER'): RolesGuard умеет
+    // пропускать по «неявному» разрешению, выведенному из префикса пути
+    // (см. permissions.ts), и носитель кастомной роли с правом на раздел
+    // «Финансы» прошёл бы мимо декоратора. Правка задним числом меняет уже
+    // посчитанные выручку, бонусы и распределение прибыли — право на неё
+    // только у основателя.
+    if (!isFounder(me)) {
+      throw new ForbiddenException('Править транзакции может только основатель');
+    }
     // Передаём actor, чтобы service мог enforce'ить date-bounds
     // (INCOME не может быть в будущем; менеджерам — ±3 суток).
     // Сейчас PATCH доступен только ADMIN/ACCOUNTANT (см. Roles на

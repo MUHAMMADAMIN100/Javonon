@@ -5922,3 +5922,89 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   z-index: 9998;
   background: rgba(10, 15, 13, 0.32);
 }
+
+/* Переключатель «Доход | Расход» в форме транзакции. Кнопками, а не
+   списком: тип определяет весь смысл записи, и его видно сразу. */
+.form-span-2 { grid-column: 1 / -1; }
+.type-switch {
+  display: flex;
+  gap: 8px;
+}
+.type-switch-btn {
+  flex: 1 1 0;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  color: var(--text-soft);
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.type-switch-btn:hover { border-color: var(--primary); }
+.type-switch-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.type-switch-btn.is-active.is-income {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+.type-switch-btn.is-active.is-expense {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Строка журнала транзакций — открывает карточку. */
+.tx-row { cursor: pointer; }
+.tx-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+/* Карточка транзакции: сумма и список полей. */
+.tx-detail-amount {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.tx-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+.tx-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.tx-detail-row:last-child { border-bottom: none; }
+.tx-detail-row dt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+.tx-detail-row dd {
+  margin: 0;
+  text-align: right;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/* Карточки аналитики не тянутся по высоте за самым длинным соседом:
+   пустой блок держал высоту схемы распределения и оставлял полэкрана
+   белого поля. */
+.analytics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
