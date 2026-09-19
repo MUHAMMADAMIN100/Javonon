@@ -14,6 +14,7 @@ import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
 import CrmDatePicker from '../components/CrmDatePicker';
 import Icon from '../Icon';
+import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
@@ -335,6 +336,12 @@ export default function Students() {
               ))}
             </select>
           )}
+          <PeriodFilter
+            from={from}
+            to={to}
+            onFrom={(v) => setValue('from', v)}
+            onTo={(v) => setValue('to', v)}
+          />
         </div>
 
         <ActiveFilterChips

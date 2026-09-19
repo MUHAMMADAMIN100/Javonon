@@ -21,7 +21,7 @@ function EditField({
   const v = value ?? '';
   if (def.kind === 'radio' && def.options) {
     return (
-      <select value={v} onChange={(e) => onChange(e.target.value)}>
+      <select className="crm-select" value={v} onChange={(e) => onChange(e.target.value)}>
         <option value="">—</option>
         {def.options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
@@ -31,7 +31,7 @@ function EditField({
   }
   if ((def as any).options) {
     return (
-      <select value={v} onChange={(e) => onChange(e.target.value)}>
+      <select className="crm-select" value={v} onChange={(e) => onChange(e.target.value)}>
         <option value="">—</option>
         {(def as any).options.map((o: any) => (
           <option key={o.value} value={o.value}>{o.label}</option>

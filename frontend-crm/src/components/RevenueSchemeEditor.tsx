@@ -782,7 +782,7 @@ function NewBucketForm({
       }}
     >
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select
+        <select className="crm-select"
           value={kind}
           onChange={(e) => setKind(e.target.value as BucketKind)}
           style={{

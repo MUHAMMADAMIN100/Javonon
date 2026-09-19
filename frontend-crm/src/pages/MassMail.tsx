@@ -7,6 +7,7 @@ import { useT } from '../lib/i18n';
 import { useDirectionLabel } from '../lib/labels';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import FormModal from '../components/FormModal';
 import {
   MassMailCampaign,
   MassMailChannel,
@@ -87,12 +88,21 @@ export default function MassMail() {
             {t('massmail.subtitle')}
           </p>
           {!creating && (
-            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            <button className="btn btn-primary" data-testid="massmail-new" onClick={() => setCreating(true)}>
               <Icon name="add" size={16} /> {t('massmail.new')}
             </button>
           )}
         </div>
-        {creating && <CreateForm onClose={() => { setCreating(false); invalidate(); }} />}
+        {creating && (
+          <FormModal
+            open
+            title={t('massmail.new')}
+            onClose={() => setCreating(false)}
+            testId="massmail-form"
+          >
+            <CreateForm onClose={() => { setCreating(false); invalidate(); }} />
+          </FormModal>
+        )}
       </motion.div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

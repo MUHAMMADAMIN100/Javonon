@@ -6,6 +6,7 @@ import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import FormModal from '../components/FormModal';
 import {
   Pipeline,
   PipelineStage,
@@ -89,17 +90,24 @@ export default function Pipelines() {
             без явного выбора. Каждая воронка содержит этапы со своим порядком и цветом.
           </p>
           {!creatingNew && (
-            <button className="btn btn-primary" onClick={() => setCreatingNew(true)}>
+            <button className="btn btn-primary" data-testid="pipeline-new" onClick={() => setCreatingNew(true)}>
               <Icon name="add" size={16} /> {t('pipelines.new')}
             </button>
           )}
         </div>
 
         {creatingNew && (
-          <CreateForm
-            onCancel={() => setCreatingNew(false)}
-            onCreate={onCreatePipeline}
-          />
+          <FormModal
+            open
+            title={t('pipelines.new')}
+            onClose={() => setCreatingNew(false)}
+            testId="pipeline-form"
+          >
+            <CreateForm
+              onCancel={() => setCreatingNew(false)}
+              onCreate={onCreatePipeline}
+            />
+          </FormModal>
         )}
       </motion.div>
 

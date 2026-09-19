@@ -9,6 +9,7 @@ import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
+import FormModal from '../components/FormModal';
 import { compose, hasErrors, maxLen, minLen, required, validateAll } from '../utils/validators';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
@@ -112,8 +113,16 @@ export default function Tasks() {
   const assigneesError = form.assigneeIds.length === 0 ? 'Выберите хотя бы одного сотрудника' : '';
   const formInvalid = hasErrors(formErrors) || !!assigneesError;
 
+  // Пока поле не трогали — ошибку по нему не показываем. Проверка сама по
+  // себе остаётся: кнопка «Создать» выключена, и при попытке отправки
+  // подсветятся все незаполненные поля сразу.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (field: string) => setTouched((t) => ({ ...t, [field]: true }));
+  const errorOf = (field: string, message?: string) => (touched[field] ? message || '' : '');
+
   const onCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    setTouched({ title: true, description: true, assignees: true });
     if (formInvalid) {
       toast('Заполните все поля корректно', 'error');
       return;
@@ -186,6 +195,7 @@ export default function Tasks() {
           {isAdmin && !creating && (
             <motion.button
               className="btn btn-primary"
+              data-testid="task-new"
               onClick={() => setCreating(true)}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
@@ -208,14 +218,14 @@ export default function Tasks() {
         </div>
         <AnimatePresence>
           {creating && isAdmin && (
-            <motion.form
-              onSubmit={onCreate}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25 }}
-              style={{ marginBottom: 20, padding: 18, background: 'var(--bg)', borderRadius: 10, overflow: 'hidden' }}
+            <FormModal
+              open
+              title={t('tasks.new')}
+              onClose={() => { setCreating(false); setTouched({}); }}
+              busy={submitting}
+              testId="task-form"
             >
+            <form onSubmit={onCreate}>
               <div className="form-group">
                 <label>{t('tasks.field.title')} *</label>
                 <input
@@ -224,10 +234,11 @@ export default function Tasks() {
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   placeholder="Например: Собрать документы для Иванова"
                   maxLength={200}
-                  className={`crm-input${formErrors.title ? ' input-error' : ''}`}
+                  className={`crm-input${errorOf('title', formErrors.title) ? ' input-error' : ''}`}
+                  onBlur={() => touch('title')}
                   required
                 />
-                {formErrors.title && <div className="form-error-text">{formErrors.title}</div>}
+                {errorOf('title', formErrors.title) && <div className="form-error-text">{formErrors.title}</div>}
               </div>
               <div className="form-group">
                 <label>{t('tasks.field.description')} *</label>
@@ -236,11 +247,12 @@ export default function Tasks() {
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="Что именно нужно сделать..."
                   maxLength={2000}
-                  className={`crm-textarea${formErrors.description ? ' input-error' : ''}`}
+                  className={`crm-textarea${errorOf('description', formErrors.description) ? ' input-error' : ''}`}
+                  onBlur={() => touch('description')}
                   required
                   rows={4}
                 />
-                {formErrors.description && <div className="form-error-text">{formErrors.description}</div>}
+                {errorOf('description', formErrors.description) && <div className="form-error-text">{formErrors.description}</div>}
               </div>
               <div className="form-group">
                 <label>Назначить сотрудников *</label>
@@ -290,7 +302,8 @@ export default function Tasks() {
                   </div>
                 )}
                 <select
-                  className={`crm-select${assigneesError ? ' input-error' : ''}`}
+                  className={`crm-select${errorOf('assignees', assigneesError) ? ' input-error' : ''}`}
+                  onBlur={() => touch('assignees')}
                   value={assigneePicker}
                   onChange={(e) => addAssignee(e.target.value)}
                 >
@@ -307,7 +320,7 @@ export default function Tasks() {
                       </option>
                     ))}
                 </select>
-                {assigneesError && <div className="form-error-text">{assigneesError}</div>}
+                {errorOf('assignees', assigneesError) && <div className="form-error-text">{assigneesError}</div>}
               </div>
               <div className="form-group">
                 <label>Контролёр задачи</label>
@@ -354,7 +367,8 @@ export default function Tasks() {
                   {submitting ? 'Создаём...' : 'Создать'}
                 </button>
               </div>
-            </motion.form>
+            </form>
+            </FormModal>
           )}
         </AnimatePresence>
 

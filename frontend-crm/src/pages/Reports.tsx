@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { reportToday, reportsMine, upsertReport, type DailyReport } from '../api/reports';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import FormModal from '../components/FormModal';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
@@ -15,6 +16,7 @@ function fmtDate(iso: string) {
 export default function Reports() {
   const { toast } = useUI();
   const { t } = useT();
+  const [formOpen, setFormOpen] = useState(false);
   const [calls, setCalls] = useState('0');
   const [meetings, setMeetings] = useState('0');
   const [contacted, setContacted] = useState('0');
@@ -76,6 +78,9 @@ export default function Reports() {
       onlineConsultations: parseInt(onlineConsult, 10) || 0,
       activitySummary: activity.trim() || undefined,
       challenges: challenges.trim() || undefined,
+    }, {
+      // Отчёт сохранён — окно закрываем, история под ним уже обновилась.
+      onSuccess: () => setFormOpen(false),
     });
   };
 
@@ -87,28 +92,23 @@ export default function Reports() {
 
   return (
     <>
-      <motion.div
-        className="card"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{ padding: 28, marginBottom: 24 }}
+      {/* Отчёт сдают раз в день, поэтому форма живёт за кнопкой, а не
+          занимает верх экрана постоянно. Подпись кнопки говорит, отчёт за
+          сегодня уже сдан или ещё нет. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button className="btn btn-primary" data-testid="report-new" onClick={() => setFormOpen(true)}>
+          <Icon name={today ? 'edit' : 'add'} size={16} />
+          {today ? t('reports.editToday') : t('reports.new')}
+        </button>
+      </div>
+
+      <FormModal
+        open={formOpen}
+        title={today ? t('reports.editToday') : t('reports.new')}
+        onClose={() => setFormOpen(false)}
+        busy={saving}
+        testId="report-form"
       >
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.16em',
-          color: 'var(--primary-dark)',
-          marginBottom: 6,
-        }}>{today ? 'EDITED · TODAY' : 'NEW · TODAY'}</div>
-        <h3 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 26,
-          fontWeight: 500,
-          letterSpacing: '-0.02em',
-          marginBottom: 24,
-        }}>
-          {t('reports.new')}
-        </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16 }}>
           <NumberField label={t('reports.field.calls')} value={calls} onChange={setCalls} />
@@ -139,12 +139,15 @@ export default function Reports() {
           />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+        <div className="form-actions">
+          <button type="button" className="btn btn-secondary" onClick={() => setFormOpen(false)}>
+            {t('common.cancel')}
+          </button>
           <button className="btn btn-primary" onClick={onSave} disabled={saving}>
             <Icon name="save" size={16} /> {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
-      </motion.div>
+      </FormModal>
 
       {/* Сводка за период */}
       <div className="bento" style={{ marginBottom: 24 }}>

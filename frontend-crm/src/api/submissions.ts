@@ -192,7 +192,12 @@ export const createSubmission = (data: CreateSubmissionDto) =>
 export const addPayment = (submissionId: string, data: CreatePaymentDto) =>
   api.post<SubmissionPayment>(`/submissions/${submissionId}/payments`, data).then((r) => r.data);
 
-export const listMySubmissions = (params?: { status?: SubmissionStatus }) =>
+export const listMySubmissions = (params?: {
+  status?: SubmissionStatus;
+  /** Период по дате создания сделки (YYYY-MM-DD, Asia/Dushanbe). */
+  from?: string;
+  to?: string;
+}) =>
   api.get<SaleSubmission[]>('/submissions/mine', { params }).then((r) => r.data);
 
 export const listAllSubmissions = (params?: {
@@ -207,6 +212,9 @@ export const listAllSubmissions = (params?: {
    * «Новый»), поэтому находятся и те сделки, где студент ещё не заведён.
    */
   partnerId?: string;
+  /** Период по дате создания сделки (YYYY-MM-DD, Asia/Dushanbe). */
+  from?: string;
+  to?: string;
 }) => api.get<SaleSubmission[]>('/submissions', { params }).then((r) => r.data);
 
 export const listPendingPayments = (params?: {

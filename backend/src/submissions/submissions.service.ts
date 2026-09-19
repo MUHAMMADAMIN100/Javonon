@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException, Optional } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { dateRangeFilter } from '../common/query-date';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ActivityService } from '../activity/activity.service';
 import {
@@ -1258,11 +1259,16 @@ export class SubmissionsService {
   }
 
   /** Список моих сделок (для менеджера). */
-  async listMine(managerId: string, opts: { status?: SubmissionStatus } = {}) {
+  async listMine(
+    managerId: string,
+    opts: { status?: SubmissionStatus; from?: Date; to?: Date } = {},
+  ) {
+    const createdAt = dateRangeFilter({ from: opts.from, to: opts.to });
     return this.prisma.saleSubmission.findMany({
       where: {
         managerId,
         ...(opts.status && { status: opts.status }),
+        ...(createdAt ? { createdAt } : {}),
       },
       include: {
         program: { select: { id: true, name: true, university: true } },
@@ -1282,10 +1288,15 @@ export class SubmissionsService {
     firstApproved?: boolean;
     /** Показать только сделки клиентов, закреплённых за этим партнёром. */
     partnerId?: string;
+    /** Период по дате создания сделки. */
+    from?: Date;
+    to?: Date;
     /** Кто спрашивает — от этого зависит, приложим ли партнёрский блок. */
     viewer?: { role?: string | null; roles?: string[] | null; hasCustomRole?: boolean } | null;
   } = {}) {
     const where: any = {};
+    const createdAt = dateRangeFilter({ from: opts.from, to: opts.to });
+    if (createdAt) where.createdAt = createdAt;
     if (opts.status) where.status = opts.status;
     if (opts.managerId) where.managerId = opts.managerId;
     if (opts.paymentStatus) {

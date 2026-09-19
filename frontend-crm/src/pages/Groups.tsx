@@ -8,6 +8,7 @@ import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import { keys } from '../lib/queryKeys';
 import Icon from '../Icon';
+import FormModal from '../components/FormModal';
 import Loading from '../components/Loading';
 import { listGroups, createGroup, type StudyGroupStatus } from '../api/studyGroups';
 import { listPrograms } from '../api/programs';
@@ -72,18 +73,26 @@ export default function Groups() {
             {t('groups.hint.individual')}
           </p>
           {canAdmin && !creating && (
-            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            <button className="btn btn-primary" data-testid="group-new" onClick={() => setCreating(true)}>
               <Icon name="add" size={16} /> {t('groups.new')}
             </button>
           )}
         </div>
 
         {creating && (
-          <CreateGroupForm
+          <FormModal
+            open
+            title={t('groups.new')}
+            onClose={() => setCreating(false)}
             busy={createMut.isPending}
-            onCancel={() => setCreating(false)}
-            onCreate={(d) => createMut.mutate(d)}
-          />
+            testId="group-form"
+          >
+            <CreateGroupForm
+              busy={createMut.isPending}
+              onCancel={() => setCreating(false)}
+              onCreate={(d) => createMut.mutate(d)}
+            />
+          </FormModal>
         )}
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>

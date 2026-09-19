@@ -28,6 +28,9 @@ import CrmDatePicker from '../components/CrmDatePicker';
 import Pagination from '../components/Pagination';
 import Loading from '../components/Loading';
 import Icon from '../Icon';
+import PeriodFilter from '../components/PeriodFilter';
+import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
+import { dateParam, useUrlListState } from '../lib/useUrlListState';
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds } from '../utils/validators';
 
 /**
@@ -67,7 +70,6 @@ const MAX_COMMENT = 500;
  * пересоздание на каждый рендер ломало бы кеш react-query.
  */
 const LEAD_FILTERS = { status: 'NEW_LEAD' as ApplicationStatus };
-const LEADS_KEY = keys.applications.list(LEAD_FILTERS);
 
 const PAGE_SIZE = 25;
 
@@ -312,9 +314,19 @@ export default function Leads() {
 
   const [page, setPage] = useState(1);
 
+  // Период — в ссылке: экран лидов открывают из уведомления и с дашборда,
+  // и выборка обязана переживать переход в карточку и «назад».
+  const { values: periodValues, setValue: setPeriod, reset: resetPeriod } = useUrlListState({
+    from: dateParam(),
+    to: dateParam(),
+  });
+  const { from, to } = periodValues;
+
+  const leadFilters = { ...LEAD_FILTERS, from: from || undefined, to: to || undefined };
+  const leadsKey = keys.applications.list(leadFilters);
   const leadsQuery = useQuery({
-    queryKey: LEADS_KEY,
-    queryFn: () => listApplications(LEAD_FILTERS),
+    queryKey: leadsKey,
+    queryFn: () => listApplications(leadFilters),
   });
   const leads = leadsQuery.data ?? [];
 
@@ -361,7 +373,7 @@ export default function Leads() {
     Application[]
   >({
     mutationFn: ({ id, managerId }) => assignApplicationManager(id, { managerId }),
-    queryKey: LEADS_KEY,
+    queryKey: leadsKey,
     applyOptimistic: (cur, vars) =>
       optimistic.updateById<Application>(cur, vars.id, { managerId: vars.managerId }),
     invalidateAlso: [keys.applications.all],
@@ -479,7 +491,7 @@ export default function Leads() {
    */
   const bulkMut = useOptimisticMutation<BulkAssignManagerResult, BulkAssignManagerInput, Application[]>({
     mutationFn: bulkAssignApplicationManager,
-    queryKey: LEADS_KEY,
+    queryKey: leadsKey,
     applyOptimistic: (cur, vars) => {
       if (!cur) return cur;
       const ids = new Set(vars.ids);
@@ -783,6 +795,36 @@ export default function Leads() {
           </button>
         </div>
         <div className="card-body">
+          <div className="filters">
+            <PeriodFilter
+              from={from}
+              to={to}
+              onFrom={(v) => setPeriod('from', v)}
+              onTo={(v) => setPeriod('to', v)}
+            />
+            {(from || to) && (
+              <button type="button" className="btn btn-ghost" onClick={() => resetPeriod(['from', 'to'])}>
+                <Icon name="close" size={14} /> {t('common.reset')}
+              </button>
+            )}
+          </div>
+
+          <ActiveFilterChips
+            chips={
+              from || to
+                ? [{
+                    key: 'period',
+                    label: from && to
+                      ? `${t('list.chip.period')}: ${fmtDay(from)} — ${fmtDay(to)}`
+                      : from
+                        ? `${t('list.chip.periodFrom')} ${fmtDay(from)}`
+                        : `${t('list.chip.periodTo')} ${fmtDay(to)}`,
+                    onClear: () => resetPeriod(['from', 'to']),
+                  }]
+                : []
+            }
+          />
+
           <AnimatePresence mode="wait">
             {leadsQuery.isLoading ? (
               <Loading />

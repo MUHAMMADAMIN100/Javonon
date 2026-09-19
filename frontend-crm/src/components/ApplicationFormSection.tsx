@@ -147,7 +147,7 @@ function Field({
           {def.label} <span className="af-label-en">{def.labelEn}</span>
           {!def.optional && <span className="af-required">*</span>}
         </label>
-        <select {...common} className={error ? 'af-input-error' : ''}>
+        <select {...common} className={`crm-select ${error ? 'af-input-error' : ''}`}>
           <option value="">—</option>
           {def.allowPresent && <option value={PRESENT_VALUE}>{PRESENT_LABEL}</option>}
           {Array.from({ length: 60 }, (_, i) => CURRENT_YEAR + 5 - i).map((y) => (
@@ -182,7 +182,7 @@ function Field({
         <select
           {...common}
           value={value || (def.noEmpty ? def.options[0].value : '')}
-          className={error ? 'af-input-error' : ''}
+          className={`crm-select ${error ? 'af-input-error' : ''}`}
         >
           {!def.noEmpty && <option value="">— выберите —</option>}
           {def.options.map((o) => (

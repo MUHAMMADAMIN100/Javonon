@@ -35,6 +35,7 @@ import { listPayments, confirmPayment, rejectPayment, type Payment, PAYMENT_METH
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import CrmDatePicker from '../components/CrmDatePicker';
+import FormModal from '../components/FormModal';
 import { tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
 import { useRealtime } from '../realtime';
@@ -1166,7 +1167,7 @@ export default function Finance() {
             SALES_MANAGER с `finance:read` из custom-роли видел кнопку,
             открывал форму, заполнял и получал 403 на первом клике. */}
         {canCreateTx && (
-          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+          <button className="btn btn-primary" data-testid="finance-new" onClick={() => setShowForm(true)}>
             <Icon name="add" size={18} /> {t('finance.newTransaction')}
           </button>
         )}
@@ -1493,35 +1494,15 @@ function TransactionForm({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      style={{ overflow: 'hidden', marginBottom: 24 }}
+    <FormModal
+      open
+      title={t('finance.newTransaction')}
+      onClose={onClose}
+      busy={submitting || uploadingReceipt}
+      testId="finance-form"
     >
-      <form
-        onSubmit={onSubmit}
-        className="card"
-        style={{ padding: 28 }}
-      >
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.16em',
-          color: 'var(--primary-dark)',
-          marginBottom: 6,
-        }}>{t('eyebrow.newTransaction')}</div>
-        <h3 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 26,
-          fontWeight: 500,
-          letterSpacing: '-0.02em',
-          marginBottom: 24,
-        }}>
-          {t('finance.newTransaction')}
-        </h3>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <form onSubmit={onSubmit}>
+        <div className="form-grid-2">
           <div className="form-group">
             <label>{t('common.type')}</label>
             <select
@@ -1841,7 +1822,7 @@ function TransactionForm({
           </button>
         </div>
       </form>
-    </motion.div>
+    </FormModal>
   );
 }
 

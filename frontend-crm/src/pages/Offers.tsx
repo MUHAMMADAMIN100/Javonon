@@ -6,6 +6,7 @@ import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import FormModal from '../components/FormModal';
 import {
   OfferTemplate,
   OfferSignature,
@@ -118,12 +119,21 @@ export default function Offers() {
             {tab === null ? t('offers.role.all') : roleLabel(tab)}
           </p>
           {!creating && (
-            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            <button className="btn btn-primary" data-testid="offer-new" onClick={() => setCreating(true)}>
               <Icon name="add" size={16} /> {t('offers.new')}
             </button>
           )}
         </div>
-        {creating && <CreateForm role={tab} onClose={() => { setCreating(false); invalidate(); }} />}
+        {creating && (
+          <FormModal
+            open
+            title={t('offers.new')}
+            onClose={() => setCreating(false)}
+            testId="offer-form"
+          >
+            <CreateForm role={tab} onClose={() => { setCreating(false); invalidate(); }} />
+          </FormModal>
+        )}
       </motion.div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

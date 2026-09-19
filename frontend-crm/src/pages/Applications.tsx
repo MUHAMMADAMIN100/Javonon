@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../store/auth';
 import { useRealtime } from '../realtime';
 import Icon from '../Icon';
+import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
@@ -259,6 +260,12 @@ export default function Applications() {
               <option key={c} value={c}>{countryLabel(c)}</option>
             ))}
           </select>
+          <PeriodFilter
+            from={from}
+            to={to}
+            onFrom={(v) => setValue('from', v)}
+            onTo={(v) => setValue('to', v)}
+          />
           {(searchInput || status || direction || manager || source || country || from || to || directionPending || countryPending) && (
             <button
               type="button"

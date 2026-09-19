@@ -21,6 +21,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { parseDate } from '../common/query-date';
 import { SubmissionsService } from './submissions.service';
 import { InstallmentsService } from '../installments/installments.service';
 import { UpdatePaymentStageDto } from '../installments/dto/installments.dto';
@@ -77,11 +78,22 @@ export class SubmissionsController {
   /** Менеджер — список своих сделок. */
   @Get('mine')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
-  listMine(@CurrentUser() me: any, @Query('status') status?: string) {
+  listMine(
+    @CurrentUser() me: any,
+    @Query('status') status?: string,
+    // Период по дате создания сделки — тот же фильтр, что у заявок,
+    // студентов и лидов, чтобы все списки CRM работали одинаково.
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
     const validStatus = status && ['ACTIVE', 'COMPLETED', 'CANCELLED'].includes(status)
       ? (status as SubmissionStatus)
       : undefined;
-    return this.svc.listMine(me.id, { status: validStatus });
+    return this.svc.listMine(me.id, {
+      status: validStatus,
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to', true),
+    });
   }
 
   /** Все сделки — только для FOUNDER/ADMIN (PII сделок: контракты, паспорта, e-mail студентов). */
@@ -95,6 +107,8 @@ export class SubmissionsController {
     @Query('take') take?: string,
     @Query('firstApproved') firstApproved?: string,
     @Query('partnerId') partnerId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     // Доступ ограничен @Roles(FOUNDER, ADMIN) на уровне декоратора —
     // ACCOUNTANT/менеджеры до сюда не дойдут. Раньше здесь был fallback на
@@ -109,6 +123,8 @@ export class SubmissionsController {
       take: take ? parseInt(take, 10) : undefined,
       firstApproved: firstApproved === 'true' || firstApproved === '1' ? true : undefined,
       partnerId: partnerId || undefined,
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to', true),
       // Нужен, чтобы решить, прикладывать ли партнёрский блок к строкам.
       viewer: me,
     });

@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import FormModal from '../components/FormModal';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { isElevated } from '../lib/roles';
@@ -122,21 +123,21 @@ export default function Lms() {
               textTransform: 'uppercase',
             }}>{t('lms.courses')}</div>
             {isAdmin && (
-              <button className="btn btn-sm btn-secondary" onClick={() => setShowNew((v) => !v)}>
+              <button className="btn btn-sm btn-secondary" data-testid="lms-course-new" onClick={() => setShowNew((v) => !v)}>
                 <Icon name="add" size={14} />
               </button>
             )}
           </div>
           <AnimatePresence>
             {showNew && isAdmin && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                style={{ padding: 16, borderBottom: '1px solid var(--border-soft)', overflow: 'hidden' }}
+              <FormModal
+                open
+                title={t('lms.new')}
+                onClose={() => setShowNew(false)}
+                testId="lms-course-form"
               >
                 <NewCourseForm onSubmit={onCreateCourse} onCancel={() => setShowNew(false)} />
-              </motion.div>
+              </FormModal>
             )}
           </AnimatePresence>
           <div>
@@ -368,7 +369,7 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
           textTransform: 'uppercase',
         }}>Уроки · {course.lessons.length}</div>
         {isAdmin && (
-          <button className="btn btn-sm btn-primary" onClick={() => setShowLessonForm((v) => !v)}>
+          <button className="btn btn-sm btn-primary" data-testid="lms-lesson-new" onClick={() => setShowLessonForm((v) => !v)}>
             <Icon name="add" size={14} /> Добавить урок
           </button>
         )}
@@ -376,14 +377,14 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
 
       <AnimatePresence>
         {showLessonForm && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            style={{ marginBottom: 16, overflow: 'hidden' }}
+          <FormModal
+            open
+            title={t('lms.lesson.new')}
+            onClose={() => setShowLessonForm(false)}
+            testId="lms-lesson-form"
           >
             <NewLessonForm onSubmit={onAddLesson} onCancel={() => setShowLessonForm(false)} />
-          </motion.div>
+          </FormModal>
         )}
       </AnimatePresence>
 

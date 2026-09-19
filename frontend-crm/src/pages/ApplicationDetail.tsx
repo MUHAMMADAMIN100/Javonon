@@ -1100,7 +1100,7 @@ function PipelineStageSelector({
       }}>
         {t('app.field.pipeline')} · {currentPipeline.name}
       </div>
-      <select
+      <select className="crm-select"
         value={currentStageId || ''}
         onChange={(e) => onPick(e.target.value)}
         disabled={busy}

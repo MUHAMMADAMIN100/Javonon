@@ -18,6 +18,7 @@ import { keys } from '../lib/queryKeys';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
+import FormModal from '../components/FormModal';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
@@ -83,6 +84,7 @@ export default function Calls() {
   const [minutes, setMinutes] = useState('0');
   const [seconds, setSeconds] = useState('0');
   const [notes, setNotes] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
 
   const onLog = () => {
     if (!clientName.trim()) {
@@ -108,6 +110,8 @@ export default function Calls() {
           setNotes('');
           setDirection('OUTGOING');
           setOutcome('ANSWERED');
+          // Звонок записан — окно закрываем, журнал под ним уже обновлён.
+          setFormOpen(false);
         },
       },
     );
@@ -134,29 +138,22 @@ export default function Calls() {
 
   return (
     <>
-      {/* Форма записи звонка */}
-      <motion.div
-        className="card"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{ padding: 28, marginBottom: 24 }}
+      {/* Кнопка открытия формы: сама форма живёт в окне по центру, как и
+          остальные формы создания в CRM. Раньше она занимала верх экрана
+          всегда, хотя нужна в момент, когда звонок только что закончился. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button className="btn btn-primary" data-testid="call-new" onClick={() => setFormOpen(true)}>
+          <Icon name="call" size={16} /> {t('calls.new')}
+        </button>
+      </div>
+
+      <FormModal
+        open={formOpen}
+        title={t('calls.new')}
+        onClose={() => setFormOpen(false)}
+        busy={createMut.isPending}
+        testId="call-form"
       >
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.16em',
-          color: 'var(--primary-dark)',
-          marginBottom: 6,
-        }}>{t('eyebrow.newCall')}</div>
-        <h3 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 26,
-          fontWeight: 500,
-          letterSpacing: '-0.02em',
-          marginBottom: 24,
-        }}>
-          {t('calls.new')}
-        </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
@@ -225,12 +222,15 @@ export default function Calls() {
           />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+        <div className="form-actions">
+          <button type="button" className="btn btn-secondary" onClick={() => setFormOpen(false)}>
+            {t('common.cancel')}
+          </button>
           <button className="btn btn-primary" onClick={onLog} disabled={createMut.isPending}>
             <Icon name="call" size={16} /> {createMut.isPending ? t('common.saving') : t('calls.new')}
           </button>
         </div>
-      </motion.div>
+      </FormModal>
 
       {/* Моя сводка */}
       <div className="bento" style={{ marginBottom: 24 }}>

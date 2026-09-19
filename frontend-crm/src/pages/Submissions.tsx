@@ -18,6 +18,9 @@ import {
   PAYMENT_STATUS_LABEL,
 } from '../api/submissions';
 import Icon from '../Icon';
+import PeriodFilter from '../components/PeriodFilter';
+import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
+import { dateParam, useUrlListState } from '../lib/useUrlListState';
 import { absFileUrl as absUrl } from '../lib/fileUrl';
 
 const STATUS_COLOR: Record<SubmissionStatus, string> = {
@@ -40,6 +43,13 @@ export default function Submissions() {
   const founder = isFounder(me);
 
   const [tab, setTab] = useState<'mine' | 'pending' | 'all' | 'approved'>(founder ? 'pending' : 'mine');
+  // Период общий на все вкладки: переключая «Мои» → «Все», человек ждёт,
+  // что выбранный период останется, а не сбросится.
+  const { values: period, setValue: setPeriodValue, reset: resetPeriod } = useUrlListState({
+    from: dateParam(),
+    to: dateParam(),
+  });
+  const range = { from: period.from, to: period.to };
 
   // Realtime: бэкенд эмитит submission:new (staff), submission:payment-new (staff),
   // submission:reviewed (staff), submission:approved/rejected (юзеру-менеджеру).
@@ -91,16 +101,56 @@ export default function Submissions() {
         </button>
       </div>
 
-      {tab === 'mine' && <MySubmissions />}
+      {/* Платежи на одобрение периодом не режем: там важно видеть ВСЁ, что
+          ждёт решения, иначе платёж вне периода тихо выпадет из очереди. */}
+      {tab !== 'pending' && (
+        <>
+          <div className="filters">
+            <PeriodFilter
+              from={period.from}
+              to={period.to}
+              onFrom={(v) => setPeriodValue('from', v)}
+              onTo={(v) => setPeriodValue('to', v)}
+            />
+            {(period.from || period.to) && (
+              <button type="button" className="btn btn-ghost" onClick={() => resetPeriod(['from', 'to'])}>
+                <Icon name="close" size={14} /> {t('common.reset')}
+              </button>
+            )}
+          </div>
+          <ActiveFilterChips
+            chips={
+              period.from || period.to
+                ? [{
+                    key: 'period',
+                    label: period.from && period.to
+                      ? `${t('list.chip.period')}: ${fmtDay(period.from)} — ${fmtDay(period.to)}`
+                      : period.from
+                        ? `${t('list.chip.periodFrom')} ${fmtDay(period.from)}`
+                        : `${t('list.chip.periodTo')} ${fmtDay(period.to)}`,
+                    onClear: () => resetPeriod(['from', 'to']),
+                  }]
+                : []
+            }
+          />
+        </>
+      )}
+
+      {tab === 'mine' && <MySubmissions range={range} />}
       {tab === 'pending' && <PendingPayments />}
-      {tab === 'approved' && <ApprovedSubmissions />}
-      {tab === 'all' && <AllSubmissions />}
+      {tab === 'approved' && <ApprovedSubmissions range={range} />}
+      {tab === 'all' && <AllSubmissions range={range} />}
     </>
   );
 }
 
-function MySubmissions() {
-  const query = useQuery({ queryKey: ['submissions', 'mine'], queryFn: () => listMySubmissions() });
+type Range = { from: string; to: string };
+
+function MySubmissions({ range }: { range: Range }) {
+  const query = useQuery({
+    queryKey: ['submissions', 'mine', range.from, range.to],
+    queryFn: () => listMySubmissions({ from: range.from || undefined, to: range.to || undefined }),
+  });
   if (query.isLoading) return <Loading />;
   const items = query.data || [];
   if (items.length === 0) {
@@ -149,11 +199,16 @@ function PartnerFilter({
   );
 }
 
-function AllSubmissions() {
+function AllSubmissions({ range }: { range: Range }) {
   const [partnerId, setPartnerId] = useState('');
   const query = useQuery({
-    queryKey: ['submissions', 'all', partnerId],
-    queryFn: () => listAllSubmissions({ take: 200, partnerId: partnerId || undefined }),
+    queryKey: ['submissions', 'all', partnerId, range.from, range.to],
+    queryFn: () => listAllSubmissions({
+      take: 200,
+      partnerId: partnerId || undefined,
+      from: range.from || undefined,
+      to: range.to || undefined,
+    }),
   });
   const items = query.data || [];
   return (
@@ -170,12 +225,18 @@ function AllSubmissions() {
   );
 }
 
-function ApprovedSubmissions() {
+function ApprovedSubmissions({ range }: { range: Range }) {
   const [partnerId, setPartnerId] = useState('');
   const query = useQuery({
-    queryKey: ['submissions', 'approved', partnerId],
+    queryKey: ['submissions', 'approved', partnerId, range.from, range.to],
     queryFn: () =>
-      listAllSubmissions({ firstApproved: true, take: 200, partnerId: partnerId || undefined }),
+      listAllSubmissions({
+        firstApproved: true,
+        take: 200,
+        partnerId: partnerId || undefined,
+        from: range.from || undefined,
+        to: range.to || undefined,
+      }),
   });
   const items = query.data || [];
   return (
