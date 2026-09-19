@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CrmSelect from './CrmSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   useTranslatedSections,
@@ -147,13 +148,13 @@ function Field({
           {def.label} <span className="af-label-en">{def.labelEn}</span>
           {!def.optional && <span className="af-required">*</span>}
         </label>
-        <select {...common} className={`crm-select ${error ? 'af-input-error' : ''}`}>
+        <CrmSelect {...common} className={`crm-select ${error ? 'af-input-error' : ''}`}>
           <option value="">—</option>
           {def.allowPresent && <option value={PRESENT_VALUE}>{PRESENT_LABEL}</option>}
           {Array.from({ length: 60 }, (_, i) => CURRENT_YEAR + 5 - i).map((y) => (
             <option key={y} value={y}>{y}</option>
           ))}
-        </select>
+        </CrmSelect>
         {error && <div className="af-field-error">{error}</div>}
       </div>
     );
@@ -179,7 +180,7 @@ function Field({
           {def.label} <span className="af-label-en">{def.labelEn}</span>
           {def.optional && <span className="af-optional">— необязательно</span>}
         </label>
-        <select
+        <CrmSelect
           {...common}
           value={value || (def.noEmpty ? def.options[0].value : '')}
           className={`crm-select ${error ? 'af-input-error' : ''}`}
@@ -188,7 +189,7 @@ function Field({
           {def.options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
-        </select>
+        </CrmSelect>
         {error && <div className="af-field-error">{error}</div>}
       </div>
     );

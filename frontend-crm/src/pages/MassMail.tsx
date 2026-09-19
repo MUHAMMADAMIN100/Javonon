@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
@@ -223,12 +224,12 @@ function CreateForm({ onClose }: { onClose: () => void }) {
         </div>
         <div className="form-group">
           <label>{t('massmail.field.channel')}</label>
-          <select className="crm-select" value={channel} onChange={(e) => setChannel(e.target.value as MassMailChannel)}>
+          <CrmSelect className="crm-select" value={channel} onChange={(e) => setChannel(e.target.value as MassMailChannel)}>
             <option value="WHATSAPP">WhatsApp</option>
             <option value="TELEGRAM">Telegram</option>
             <option value="SMS">SMS</option>
             <option value="INSTAGRAM">Instagram</option>
-          </select>
+          </CrmSelect>
         </div>
       </div>
       <div className="form-group" style={{ marginBottom: 12 }}>
@@ -238,16 +239,16 @@ function CreateForm({ onClose }: { onClose: () => void }) {
       <div className="form-grid-2" style={{ gap: 12, marginBottom: 12 }}>
         <div className="form-group">
           <label>{t('massmail.field.audience')}</label>
-          <select className="crm-select" value={audienceType} onChange={(e) => setAudienceType(e.target.value as any)}>
+          <CrmSelect className="crm-select" value={audienceType} onChange={(e) => setAudienceType(e.target.value as any)}>
             <option value="all-leads">{t('massmail.audience.all-leads')}</option>
             <option value="paid-students">{t('massmail.audience.paid-students')}</option>
             <option value="by-direction">{t('app.field.direction')}</option>
-          </select>
+          </CrmSelect>
         </div>
         {audienceType === 'by-direction' && (
           <div className="form-group">
             <label>{t('app.field.direction')}</label>
-            <select className="crm-select" value={audienceValue} onChange={(e) => setAudienceValue(e.target.value)}>
+            <CrmSelect className="crm-select" value={audienceValue} onChange={(e) => setAudienceValue(e.target.value)}>
               <option value="">—</option>
               <option value="BACHELOR">{directionLabel('BACHELOR')}</option>
               <option value="MASTER">{directionLabel('MASTER')}</option>
@@ -255,7 +256,7 @@ function CreateForm({ onClose }: { onClose: () => void }) {
               <option value="LANGUAGE_COLLEGE">{directionLabel('LANGUAGE_COLLEGE')}</option>
               <option value="LANGUAGE_BACHELOR">{directionLabel('LANGUAGE_BACHELOR')}</option>
               <option value="COLLEGE">{directionLabel('COLLEGE')}</option>
-            </select>
+            </CrmSelect>
           </div>
         )}
       </div>

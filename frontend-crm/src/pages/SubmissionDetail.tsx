@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -662,11 +663,11 @@ function AddPaymentModal({
             <input className="crm-input" type="number" min={0} step={50} value={amount} onChange={(e) => setAmount(e.target.value)} />
           </Field>
           <Field label="Метод">
-            <select className="crm-select" value={method} onChange={(e) => setMethod(e.target.value as any)}>
+            <CrmSelect className="crm-select" value={method} onChange={(e) => setMethod(e.target.value as any)}>
               <option value="TRANSFER">Перевод</option>
               <option value="CASH">Наличные</option>
               <option value="OTHER">Прочее</option>
-            </select>
+            </CrmSelect>
           </Field>
           <Field label="Дата оплаты">
             <CrmDatePicker value={paidAt} onChange={setPaidAt} />
@@ -985,7 +986,7 @@ function EditSubmissionModal({
                     </div>
                   </>
                 ) : (
-                  <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                  <CrmSelect className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
                     {/* Легаси-значение, которого нет в списке, показываем как есть —
                         иначе select молча «переключил» бы сделку на первый пункт
                         и отправил чужую валюту в payload. */}
@@ -995,7 +996,7 @@ function EditSubmissionModal({
                     {SUBMISSION_CURRENCIES.map((c) => (
                       <option key={c} value={c}>{SUBMISSION_CURRENCY_LABEL[c] || c}</option>
                     ))}
-                  </select>
+                  </CrmSelect>
                 )}
               </Field>
             </>
@@ -1093,7 +1094,7 @@ function EditSubmissionModal({
               />
             </Field>
             <Field label="Программа">
-              <select
+              <CrmSelect
                 className="crm-select"
                 value={programId}
                 onChange={(e) => setProgramId(e.target.value)}
@@ -1112,7 +1113,7 @@ function EditSubmissionModal({
                 {!frozen && founder && programsQ.data?.map((p) => (
                   <option key={p.id} value={p.id}>{p.name} · {p.university}</option>
                 ))}
-              </select>
+              </CrmSelect>
             </Field>
           </div>
 
@@ -1281,7 +1282,7 @@ function EditPaymentModal({
             />
           </Field>
           <Field label="Метод">
-            <select
+            <CrmSelect
               className="crm-select"
               value={method}
               onChange={(e) => setMethod(e.target.value as SubmissionPaymentMethod)}
@@ -1290,7 +1291,7 @@ function EditPaymentModal({
               <option value="TRANSFER">Перевод</option>
               <option value="CASH">Наличные</option>
               <option value="OTHER">Прочее</option>
-            </select>
+            </CrmSelect>
           </Field>
           <Field label="Дата оплаты">
             <CrmDatePicker value={paidAt} onChange={setPaidAt} disabled={readOnly} />

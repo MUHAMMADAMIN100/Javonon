@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -183,7 +184,7 @@ function PartnerFilter({
   });
   if (partners.length === 0) return null;
   return (
-    <select
+    <CrmSelect
       className="crm-select"
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -195,7 +196,7 @@ function PartnerFilter({
           {p.fullName} · {p.referralCode}
         </option>
       ))}
-    </select>
+    </CrmSelect>
   );
 }
 

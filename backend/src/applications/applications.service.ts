@@ -127,6 +127,9 @@ function pluralLeadsAssigned(n: number): string {
 
 type CurrentUser = { id: string; role: Role };
 
+/** Значение фильтра «менеджер не назначен» (см. findAll). */
+export const UNASSIGNED_MANAGER = 'none';
+
 @Injectable()
 export class ApplicationsService {
   constructor(
@@ -637,7 +640,13 @@ export class ApplicationsService {
     }
     // Фильтр по конкретному менеджеру: показываем заявки где он
     // назначен либо локальным, либо китайским менеджером.
-    if (filters.managerUserId) {
+    //
+    // Особое значение 'none' — «ещё никому не назначено». Нужно на экране
+    // лидов: там первый вопрос как раз «что осталось без хозяина», а id
+    // пустоты не бывает.
+    if (filters.managerUserId === UNASSIGNED_MANAGER) {
+      and.push({ managerId: null, chinaManagerId: null });
+    } else if (filters.managerUserId) {
       and.push({
         OR: [
           { managerId: filters.managerUserId },

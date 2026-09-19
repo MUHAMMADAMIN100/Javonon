@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -337,10 +338,10 @@ export default function Programs() {
         <div className="filters">
           <input className="crm-input" placeholder={t('programs.filter.city')} value={city} onChange={(e) => setCity(e.target.value)} />
           <input className="crm-input" placeholder={t('programs.filter.major')} value={major} onChange={(e) => setMajor(e.target.value)} />
-          <select className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+          <CrmSelect className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as any)}>
             <option value="">{t('programs.filter.direction')}</option>
             <DirectionOptions />
-          </select>
+          </CrmSelect>
         </div>
 
         {/* Таб-бар по странам (ТЗ-доработка п.9). Показываем только если
@@ -547,9 +548,9 @@ export default function Programs() {
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.direction')}</label>
-                  <select className="crm-select" value={editing.direction} onChange={(e) => setEditing({ ...editing, direction: e.target.value as Direction })}>
+                  <CrmSelect className="crm-select" value={editing.direction} onChange={(e) => setEditing({ ...editing, direction: e.target.value as Direction })}>
                     <DirectionOptions />
-                  </select>
+                  </CrmSelect>
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.cost')}</label>
@@ -566,7 +567,7 @@ export default function Programs() {
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.currency')}</label>
-                  <select className="crm-select" value={editing.currency || 'CNY'} onChange={(e) => setEditing({ ...editing, currency: e.target.value })}>
+                  <CrmSelect className="crm-select" value={editing.currency || 'CNY'} onChange={(e) => setEditing({ ...editing, currency: e.target.value })}>
                     <option value="CNY">CNY (юань)</option>
                     <option value="USD">USD</option>
                     <option value="EUR">EUR (евро)</option>
@@ -579,7 +580,7 @@ export default function Programs() {
                     <option value="TJS">TJS</option>
                     <option value="KZT">KZT</option>
                     <option value="UZS">UZS</option>
-                  </select>
+                  </CrmSelect>
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.duration')}</label>
@@ -587,7 +588,7 @@ export default function Programs() {
                 </div>
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label>{t('programs.field.language')}</label>
-                  <select
+                  <CrmSelect
                     className="crm-select"
                     value={editing.language || ''}
                     onChange={(e) => setEditing({ ...editing, language: e.target.value })}
@@ -596,7 +597,7 @@ export default function Programs() {
                     {LANGUAGES.map((l) => (
                       <option key={l} value={l}>{l}</option>
                     ))}
-                  </select>
+                  </CrmSelect>
                 </div>
               </div>
 

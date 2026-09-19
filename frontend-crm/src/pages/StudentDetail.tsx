@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignStudentManager, deleteStudent, ensureStudentApplication, getStudent, regenerateStudentPassword, updateStudent, uploadPhoto } from '../api/students';
@@ -531,7 +532,7 @@ export default function StudentDetail() {
                 <div className="form-grid-2">
                   <div className="form-group">
                     <label>{t('app.field.preferredChannel')}</label>
-                    <select
+                    <CrmSelect
                       className="crm-select"
                       value={form.preferredChannel || ''}
                       onChange={(e) => setForm({ ...form, preferredChannel: e.target.value })}
@@ -542,7 +543,7 @@ export default function StudentDetail() {
                       <option value="INSTAGRAM">{channelLabel('INSTAGRAM' as any)}</option>
                       <option value="TELEGRAM">{channelLabel('TELEGRAM' as any)}</option>
                       <option value="EMAIL">{channelLabel('EMAIL' as any)}</option>
-                    </select>
+                    </CrmSelect>
                   </div>
                   <div className="form-group">
                     <label>{t('app.field.birthday')}</label>
@@ -567,9 +568,9 @@ export default function StudentDetail() {
                 <div className="form-grid-2">
                   <div className="form-group">
                     <label>{t('app.field.direction')}</label>
-                    <select className="crm-select" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
+                    <CrmSelect className="crm-select" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
                       <DirectionOptions />
-                    </select>
+                    </CrmSelect>
                   </div>
                   <div className="form-group">
                     <label>{t('app.field.cabinet')}</label>
@@ -588,22 +589,22 @@ export default function StudentDetail() {
                 <div className="form-grid-2">
                   <div className="form-group">
                     <label>{t('common.status')}</label>
-                    <select className="crm-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
+                    <CrmSelect className="crm-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
                       <option value="ACTIVE">{statusLabel('ACTIVE' as any)}</option>
                       <option value="PAUSED">{statusLabel('PAUSED' as any)}</option>
                       <option value="GRADUATED">{statusLabel('GRADUATED' as any)}</option>
                       <option value="ARCHIVED">{statusLabel('ARCHIVED' as any)}</option>
-                    </select>
+                    </CrmSelect>
                   </div>
                   <div className="form-group">
                     <label>{t('app.field.onboarding')}</label>
-                    <select className="crm-select" value={form.onboardingStage || 'WELCOME'} onChange={(e) => setForm({ ...form, onboardingStage: e.target.value })}>
+                    <CrmSelect className="crm-select" value={form.onboardingStage || 'WELCOME'} onChange={(e) => setForm({ ...form, onboardingStage: e.target.value })}>
                       <option value="WELCOME">{onboardingLabel('WELCOME' as any)}</option>
                       <option value="DOCS_COLLECTED">{onboardingLabel('DOCS_COLLECTED' as any)}</option>
                       <option value="CABINET_OPENED">{onboardingLabel('CABINET_OPENED' as any)}</option>
                       <option value="ACADEMY_INTRO">{onboardingLabel('ACADEMY_INTRO' as any)}</option>
                       <option value="ACTIVE">{onboardingLabel('ACTIVE' as any)}</option>
-                    </select>
+                    </CrmSelect>
                   </div>
                 </div>
                 <div className="form-group">

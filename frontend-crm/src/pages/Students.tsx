@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -293,11 +294,11 @@ export default function Students() {
           <input className="crm-input" placeholder={t('common.search')} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
         </div>
         <div className="filters">
-          <select className="crm-select" value={direction} onChange={(e) => setValue('direction', e.target.value as Direction | '')}>
+          <CrmSelect className="crm-select" value={direction} onChange={(e) => setValue('direction', e.target.value as Direction | '')}>
             <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
-          </select>
-          <select
+          </CrmSelect>
+          <CrmSelect
             className="crm-select"
            
             value={stageFilter}
@@ -315,15 +316,15 @@ export default function Students() {
               <option value="GRADUATED">{studentStatusLabel('GRADUATED' as any)}</option>
               <option value="ARCHIVED">{studentStatusLabel('ARCHIVED' as any)}</option>
             </optgroup>
-          </select>
-          <select className="crm-select" value={cabinet} onChange={(e) => setValue('cabinet', e.target.value as typeof CABINET_VALUES[number] | '')}>
+          </CrmSelect>
+          <CrmSelect className="crm-select" value={cabinet} onChange={(e) => setValue('cabinet', e.target.value as typeof CABINET_VALUES[number] | '')}>
             <option value="">{t('app.field.cabinet')}</option>
             <option value="1">{t('app.field.cabinet')} 1</option>
             <option value="2">{t('app.field.cabinet')} 2</option>
             <option value="3">{t('app.field.cabinet')} 3</option>
-          </select>
+          </CrmSelect>
           {isAdmin && (
-            <select
+            <CrmSelect
               className="crm-select"
              
               value={manager}
@@ -334,7 +335,7 @@ export default function Students() {
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
-            </select>
+            </CrmSelect>
           )}
           <PeriodFilter
             from={from}

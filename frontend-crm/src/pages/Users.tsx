@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -338,7 +339,7 @@ export default function Users() {
                 {/* ТЗ §2: 5 базовых ролей + кастомные роли FOUNDER'а.
                     Составное значение «base:X» / «custom:<id>» — чтобы
                     одним dropdown'ом покрыть оба типа. */}
-                <select
+                <CrmSelect
                   className="crm-select"
                   value={form.customRoleId ? `custom:${form.customRoleId}` : `base:${form.role}`}
                   onChange={(e) => {
@@ -368,7 +369,7 @@ export default function Users() {
                       ))}
                     </optgroup>
                   )}
-                </select>
+                </CrmSelect>
               </div>
 
               <div className="dialog-actions">

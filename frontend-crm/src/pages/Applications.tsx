@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -220,25 +221,25 @@ export default function Applications() {
           <input className="crm-input" placeholder={t('common.search')} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
         </div>
         <div className="filters">
-          <select className="crm-select" value={status} onChange={(e) => setValue('status', e.target.value as ApplicationStatus | '')}>
+          <CrmSelect className="crm-select" value={status} onChange={(e) => setValue('status', e.target.value as ApplicationStatus | '')}>
             <option value="">{t('app.filter.status')}</option>
             {APPLICATION_STATUSES.map((s) => (
               <option key={s} value={s}>{statusLabel(s)}</option>
             ))}
-          </select>
+          </CrmSelect>
           {isAdmin && (
-            <select className="crm-select" value={manager} onChange={(e) => setValue('manager', e.target.value)} title={t('app.filter.manager')}>
+            <CrmSelect className="crm-select" value={manager} onChange={(e) => setValue('manager', e.target.value)} title={t('app.filter.manager')}>
               <option value="">{t('app.filter.manager')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
-            </select>
+            </CrmSelect>
           )}
-          <select className="crm-select" value={direction} onChange={(e) => setValue('direction', e.target.value as Direction | '')}>
+          <CrmSelect className="crm-select" value={direction} onChange={(e) => setValue('direction', e.target.value as Direction | '')}>
             <option value="">{t('app.filter.direction')}</option>
             <DirectionOptions />
-          </select>
-          <select
+          </CrmSelect>
+          <CrmSelect
             className="crm-select"
             value={source}
             onChange={(e) => setValue('source', e.target.value as ApplicationSource | '')}
@@ -248,8 +249,8 @@ export default function Applications() {
             {APPLICATION_SOURCES.map((s) => (
               <option key={s} value={s}>{SOURCE_LABEL[s]}</option>
             ))}
-          </select>
-          <select
+          </CrmSelect>
+          <CrmSelect
             className="crm-select"
             value={country}
             onChange={(e) => setValue('country', e.target.value as Country | '')}
@@ -259,7 +260,7 @@ export default function Applications() {
             {COUNTRIES.map((c) => (
               <option key={c} value={c}>{countryLabel(c)}</option>
             ))}
-          </select>
+          </CrmSelect>
           <PeriodFilter
             from={from}
             to={to}

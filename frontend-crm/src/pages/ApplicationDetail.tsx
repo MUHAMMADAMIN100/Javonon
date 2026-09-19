@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignApplicationManager, deleteApplication, getApplication, updateApplication } from '../api/applications';
@@ -467,7 +468,7 @@ export default function ApplicationDetail() {
             {appStatusLabel(app.status)}
           </span>
           {canAct && (
-            <select
+            <CrmSelect
               className="app-stepper-select"
               style={{ marginLeft: 'auto' }}
               value={app.status}
@@ -484,7 +485,7 @@ export default function ApplicationDetail() {
                   {appStatusLabel(s)}
                 </option>
               ))}
-            </select>
+            </CrmSelect>
           )}
         </div>
 
@@ -712,7 +713,7 @@ export default function ApplicationDetail() {
                     <div className="form-grid-2">
                       <div className="form-group">
                         <label>{t('app.field.preferredChannel')}</label>
-                        <select
+                        <CrmSelect
                           className="crm-select"
                           value={form.preferredChannel || ''}
                           onChange={(e) => setForm({ ...form, preferredChannel: e.target.value })}
@@ -723,7 +724,7 @@ export default function ApplicationDetail() {
                           <option value="INSTAGRAM">{channelLabel('INSTAGRAM' as any)}</option>
                           <option value="TELEGRAM">{channelLabel('TELEGRAM' as any)}</option>
                           <option value="EMAIL">{channelLabel('EMAIL' as any)}</option>
-                        </select>
+                        </CrmSelect>
                       </div>
                       <div className="form-group">
                         <label>{t('app.field.birthday')}</label>
@@ -748,9 +749,9 @@ export default function ApplicationDetail() {
                     <div className="form-grid-2">
                       <div className="form-group">
                         <label>{t('app.field.direction')}</label>
-                        <select className="crm-select" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
+                        <CrmSelect className="crm-select" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
                           <DirectionOptions />
-                        </select>
+                        </CrmSelect>
                       </div>
                       <div className="form-group">
                         <label>{t('app.field.cabinet')}</label>
@@ -768,12 +769,12 @@ export default function ApplicationDetail() {
                     </div>
                     <div className="form-group">
                       <label>{t('common.status')}</label>
-                      <select className="crm-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
+                      <CrmSelect className="crm-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
                         <option value="ACTIVE">{studentStatusLabel('ACTIVE' as any)}</option>
                         <option value="PAUSED">{studentStatusLabel('PAUSED' as any)}</option>
                         <option value="GRADUATED">{studentStatusLabel('GRADUATED' as any)}</option>
                         <option value="ARCHIVED">{studentStatusLabel('ARCHIVED' as any)}</option>
-                      </select>
+                      </CrmSelect>
                     </div>
                     <div className="form-group">
                       <label>{t('app.field.comment')}</label>
@@ -985,14 +986,14 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Предпочтительный канал</label>
-          <select className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
+          <CrmSelect className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
             <option value="">—</option>
             <option value="WHATSAPP">WhatsApp</option>
             <option value="PHONE">Телефон</option>
             <option value="INSTAGRAM">Instagram</option>
             <option value="TELEGRAM">Telegram</option>
             <option value="EMAIL">Email</option>
-          </select>
+          </CrmSelect>
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Email</label>
@@ -1004,14 +1005,14 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
             «по направлениям», ни в фильтр списка. */}
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Направление</label>
-          <select
+          <CrmSelect
             className="crm-select"
             value={direction}
             onChange={(e) => setDirection(e.target.value as Direction | '')}
           >
             <option value="">{t('app.direction.notChosen')}</option>
             <DirectionOptions />
-          </select>
+          </CrmSelect>
         </div>
       </div>
       <div className="form-group" style={{ marginTop: 12 }}>
@@ -1100,7 +1101,7 @@ function PipelineStageSelector({
       }}>
         {t('app.field.pipeline')} · {currentPipeline.name}
       </div>
-      <select className="crm-select"
+      <CrmSelect className="crm-select"
         value={currentStageId || ''}
         onChange={(e) => onPick(e.target.value)}
         disabled={busy}
@@ -1121,7 +1122,7 @@ function PipelineStageSelector({
             {s.name}{s.isClosingStage ? ' ✓' : ''}
           </option>
         ))}
-      </select>
+      </CrmSelect>
     </div>
   );
 }

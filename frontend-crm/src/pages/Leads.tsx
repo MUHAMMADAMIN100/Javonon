@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -30,7 +31,7 @@ import Loading from '../components/Loading';
 import Icon from '../Icon';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
-import { dateParam, useUrlListState } from '../lib/useUrlListState';
+import { dateParam, enumParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds } from '../utils/validators';
 
 /**
@@ -72,6 +73,9 @@ const MAX_COMMENT = 500;
 const LEAD_FILTERS = { status: 'NEW_LEAD' as ApplicationStatus };
 
 const PAGE_SIZE = 25;
+
+/** То же значение, что понимает бэкенд: заявки вообще без менеджера. */
+const UNASSIGNED_MANAGER = 'none';
 
 /** Коды стран по длине убыв. — «+992» должен выигрывать у «+9…». */
 const PHONE_CODES = [...PHONE_COUNTRIES].sort((a, b) => b.code.length - a.code.length);
@@ -301,7 +305,7 @@ export default function Leads() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const popupOpen = [
-        ...document.querySelectorAll('.crm-datepicker-popover, .phone-dropdown, .dialog-card'),
+        ...document.querySelectorAll('.crm-datepicker-popover, .crm-select-popover, .phone-dropdown, .dialog-card'),
       ].some((el) => !el.classList.contains('lead-modal-card'));
       if (popupOpen) return;
       requestCloseRef.current();
@@ -319,10 +323,23 @@ export default function Leads() {
   const { values: periodValues, setValue: setPeriod, reset: resetPeriod } = useUrlListState({
     from: dateParam(),
     to: dateParam(),
+    // id менеджера белым списком не проверить (сотрудники грузятся
+    // асинхронно) — ограничиваем длину, как в списке заявок.
+    manager: stringParam('', 64),
+    country: enumParam(COUNTRIES),
   });
-  const { from, to } = periodValues;
+  const { from, to, manager } = periodValues;
+  // `country` в этом компоненте уже занято полем формы нового лида,
+  // поэтому фильтр списка зовём filterCountry.
+  const filterCountry = periodValues.country;
 
-  const leadFilters = { ...LEAD_FILTERS, from: from || undefined, to: to || undefined };
+  const leadFilters = {
+    ...LEAD_FILTERS,
+    from: from || undefined,
+    to: to || undefined,
+    manager: manager || undefined,
+    country: filterCountry || undefined,
+  };
   const leadsKey = keys.applications.list(leadFilters);
   const leadsQuery = useQuery({
     queryKey: leadsKey,
@@ -725,7 +742,7 @@ export default function Leads() {
               </div>
               <div className="form-group">
                 <label>{t('app.field.country')} *</label>
-                <select
+                <CrmSelect
                   className={`crm-select${invalid('country') ? ' input-error' : ''}`}
                   value={country}
                   onChange={(e) => setCountry(e.target.value as Country | '')}
@@ -738,7 +755,7 @@ export default function Leads() {
                   {COUNTRIES.map((c) => (
                     <option key={c} value={c}>{countryLabel(c)}</option>
                   ))}
-                </select>
+                </CrmSelect>
                 {invalid('country') && <div className="form-error-text">{errors.country}</div>}
               </div>
             </div>
@@ -784,11 +801,11 @@ export default function Leads() {
       </AnimatePresence>
 
       <div className="card">
-        <div className="card-header">
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-            <h2 className="card-title" style={{ margin: 0 }}>{t('leads.list.title')}</h2>
-            <span style={{ color: 'var(--text-soft)', fontSize: 13 }} data-testid="leads-total">{leads.length}</span>
-          </div>
+        <div className="card-header is-titleless">
+          {/* Название страницы стоит в шапке; здесь — только счётчик и кнопка. */}
+          <span style={{ color: 'var(--text-soft)', fontSize: 13 }} data-testid="leads-total">
+            {leads.length}
+          </span>
           <button type="button" className="btn btn-primary" data-testid="lead-new" onClick={openForm}>
             <Icon name="add" size={18} />
             {t('leads.form.title')}
@@ -796,22 +813,51 @@ export default function Leads() {
         </div>
         <div className="card-body">
           <div className="filters">
+            <CrmSelect
+              className="crm-select"
+              value={manager}
+              onChange={(e) => setPeriod('manager', e.target.value)}
+              title={t('app.filter.manager')}
+              data-testid="leads-filter-manager"
+            >
+              <option value="">{t('app.filter.manager')}</option>
+              <option value={UNASSIGNED_MANAGER}>{t('leads.manager.none')}</option>
+              {managers.map((u) => (
+                <option key={u.id} value={u.id}>{u.fullName}</option>
+              ))}
+            </CrmSelect>
+            <CrmSelect
+              className="crm-select"
+              value={filterCountry}
+              onChange={(e) => setPeriod('country', e.target.value as typeof COUNTRIES[number] | '')}
+              title={t('app.field.country')}
+              data-testid="leads-filter-country"
+            >
+              <option value="">{t('app.filter.country')}</option>
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c}>{countryLabel(c)}</option>
+              ))}
+            </CrmSelect>
             <PeriodFilter
               from={from}
               to={to}
               onFrom={(v) => setPeriod('from', v)}
               onTo={(v) => setPeriod('to', v)}
             />
-            {(from || to) && (
-              <button type="button" className="btn btn-ghost" onClick={() => resetPeriod(['from', 'to'])}>
+            {(from || to || manager || filterCountry) && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => resetPeriod(['from', 'to', 'manager', 'country'])}
+              >
                 <Icon name="close" size={14} /> {t('common.reset')}
               </button>
             )}
           </div>
 
           <ActiveFilterChips
-            chips={
-              from || to
+            chips={[
+              ...(from || to
                 ? [{
                     key: 'period',
                     label: from && to
@@ -821,8 +867,20 @@ export default function Leads() {
                         : `${t('list.chip.periodTo')} ${fmtDay(to)}`,
                     onClear: () => resetPeriod(['from', 'to']),
                   }]
-                : []
-            }
+                : []),
+              ...(manager
+                ? [{
+                    key: 'manager',
+                    label: manager === UNASSIGNED_MANAGER
+                      ? t('leads.manager.none')
+                      : managers.find((u) => u.id === manager)?.fullName || t('app.filter.manager'),
+                    onClear: () => resetPeriod(['manager']),
+                  }]
+                : []),
+              ...(filterCountry
+                ? [{ key: 'country', label: countryLabel(filterCountry), onClear: () => resetPeriod(['country']) }]
+                : []),
+            ]}
           />
 
           <AnimatePresence mode="wait">
@@ -880,7 +938,7 @@ export default function Leads() {
                             {t('leads.bulk.otherPages').replace('{n}', String(selectedElsewhere))}
                           </span>
                         )}
-                        <select
+                        <CrmSelect
                           className="crm-select"
                           aria-label={t('leads.bulk.pickManager')}
                           data-testid="bulk-manager"
@@ -892,7 +950,7 @@ export default function Leads() {
                           {managers.map((m) => (
                             <option key={m.id} value={m.id}>{m.fullName}</option>
                           ))}
-                        </select>
+                        </CrmSelect>
                         <button
                           type="button"
                           className="btn btn-primary btn-sm leads-bulk-assign"
@@ -992,7 +1050,7 @@ export default function Leads() {
                         </td>
                         <td>
                           {canAssign ? (
-                            <select
+                            <CrmSelect
                               className="crm-select"
                               style={{ minWidth: 170 }}
                               value={a.managerId ?? ''}
@@ -1020,7 +1078,7 @@ export default function Leads() {
                               {managers.map((m) => (
                                 <option key={m.id} value={m.id}>{m.fullName}</option>
                               ))}
-                            </select>
+                            </CrmSelect>
                           ) : a.manager ? (
                             a.manager.fullName
                           ) : (

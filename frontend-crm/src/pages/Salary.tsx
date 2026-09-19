@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -200,11 +201,11 @@ export default function Salary() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
           <div className="form-group">
             <label>{t('salary.field.employee')}</label>
-            <select className="crm-select" value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <CrmSelect className="crm-select" value={userId} onChange={(e) => setUserId(e.target.value)}>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName} · {displayRoleLabel(u as any)}</option>
               ))}
-            </select>
+            </CrmSelect>
           </div>
           <div className="form-group">
             <label>{t('salary.field.periodFrom')}</label>

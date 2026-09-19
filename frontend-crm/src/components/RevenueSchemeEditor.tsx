@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import CrmSelect from './CrmSelect';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUI } from '../ui/Dialogs';
 import { useT } from '../lib/i18n';
@@ -782,7 +783,7 @@ function NewBucketForm({
       }}
     >
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select className="crm-select"
+        <CrmSelect className="crm-select"
           value={kind}
           onChange={(e) => setKind(e.target.value as BucketKind)}
           style={{
@@ -793,7 +794,7 @@ function NewBucketForm({
         >
           <option value="PERCENTAGE">{t('settings.revenueScheme.percent')}</option>
           <option value="FIXED_SUM">{t('settings.revenueScheme.fixed')}</option>
-        </select>
+        </CrmSelect>
         <input
           placeholder={t('common.name')}
           value={name}

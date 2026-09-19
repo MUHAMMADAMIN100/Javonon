@@ -111,7 +111,7 @@ export default function FormModal({
       // Поверх формы может быть открыт календарь, список стран или другое
       // окно — Esc тогда принадлежит им, а не нам.
       const popupOpen = [
-        ...document.querySelectorAll('.crm-datepicker-popover, .phone-dropdown, .dialog-card'),
+        ...document.querySelectorAll('.crm-datepicker-popover, .crm-select-popover, .phone-dropdown, .dialog-card'),
       ].some((el) => !el.classList.contains('form-modal-card'));
       if (popupOpen) return;
       closeRef.current();

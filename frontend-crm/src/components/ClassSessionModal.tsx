@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import CrmSelect from './CrmSelect';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useT } from '../lib/i18n';
@@ -162,12 +163,12 @@ export default function ClassSessionModal({
         <div style={{ display: 'grid', gap: 10 }}>
           {groupOptions && !editing && (
             <Field label={`${t('classes.field.group')} *`}>
-              <select className="crm-select" value={group} onChange={(e) => setGroup(e.target.value)}>
+              <CrmSelect className="crm-select" value={group} onChange={(e) => setGroup(e.target.value)}>
                 <option value="">{t('classes.selectGroup')}</option>
                 {groupOptions.map((g) => (
                   <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
-              </select>
+              </CrmSelect>
             </Field>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
@@ -186,17 +187,17 @@ export default function ClassSessionModal({
           </Field>
           {canPickTeacher && (
             <Field label={t('classes.field.teacher')}>
-              <select className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
+              <CrmSelect className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
                 <option value="">{t('classes.teacherFromGroup')}</option>
                 {(users.data ?? []).map((u) => (
                   <option key={u.id} value={u.id}>{u.fullName}</option>
                 ))}
-              </select>
+              </CrmSelect>
             </Field>
           )}
           {editing && (
             <Field label={t('common.status')}>
-              <select
+              <CrmSelect
                 className="crm-select"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as ClassSessionStatus)}
@@ -204,7 +205,7 @@ export default function ClassSessionModal({
                 <option value="SCHEDULED">{t('classes.status.SCHEDULED')}</option>
                 <option value="DONE">{t('classes.status.DONE')}</option>
                 <option value="CANCELLED">{t('classes.status.CANCELLED')}</option>
-              </select>
+              </CrmSelect>
             </Field>
           )}
         </div>

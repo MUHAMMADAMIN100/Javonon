@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createStudent } from '../api/students';
@@ -195,14 +196,14 @@ export default function StudentNew() {
           <div className="form-grid-2">
             <div className="form-group">
               <label>{t('app.field.preferredChannel')}</label>
-              <select className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
+              <CrmSelect className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
                 <option value="">—</option>
                 <option value="WHATSAPP">{channelLabel('WHATSAPP' as any)}</option>
                 <option value="PHONE">{channelLabel('PHONE' as any)}</option>
                 <option value="INSTAGRAM">{channelLabel('INSTAGRAM' as any)}</option>
                 <option value="TELEGRAM">{channelLabel('TELEGRAM' as any)}</option>
                 <option value="EMAIL">{channelLabel('EMAIL' as any)}</option>
-              </select>
+              </CrmSelect>
             </div>
             <div className="form-group">
               <label>{t('app.field.birthday')}</label>
@@ -227,14 +228,14 @@ export default function StudentNew() {
           </div>
           <div className="form-group">
             <label>{t('app.field.direction')} *</label>
-            <select className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
+            <CrmSelect className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
               <option value="BACHELOR">{directionLabel('BACHELOR')}</option>
               <option value="MASTER">{directionLabel('MASTER')}</option>
               <option value="LANGUAGE">{directionLabel('LANGUAGE')}</option>
               <option value="LANGUAGE_COLLEGE">{directionLabel('LANGUAGE_COLLEGE')}</option>
               <option value="LANGUAGE_BACHELOR">{directionLabel('LANGUAGE_BACHELOR')}</option>
               <option value="COLLEGE">{directionLabel('COLLEGE')}</option>
-            </select>
+            </CrmSelect>
           </div>
           <div className="form-group">
             <label>{t('app.field.comment')}</label>

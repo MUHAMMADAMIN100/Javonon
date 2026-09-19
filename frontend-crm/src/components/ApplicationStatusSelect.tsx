@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import CrmSelect from './CrmSelect';
 import {
   APPLICATION_STATUSES,
   STATUS_BADGE,
@@ -77,7 +78,7 @@ export default function ApplicationStatusSelect({ application, canEdit, onChange
           </div>
         </div>
         {canEdit && (
-          <select
+          <CrmSelect
             className="app-stepper-select"
             value={current}
             disabled={saving}
@@ -96,7 +97,7 @@ export default function ApplicationStatusSelect({ application, canEdit, onChange
                 {statusLabel(s)}
               </option>
             ))}
-          </select>
+          </CrmSelect>
         )}
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 6 }}>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listActivity, ACTIVITY_LABEL, type ActivityAction, type ActivityEntry } from '../api/activity';
@@ -151,12 +152,12 @@ export default function Activity() {
         </div>
         <div className="card-body">
           <div className="filters">
-            <select className="crm-select" value={action} onChange={(e) => setAction(e.target.value as any)}>
+            <CrmSelect className="crm-select" value={action} onChange={(e) => setAction(e.target.value as any)}>
               <option value="">{t('activity.filter.allActions')}</option>
               {(Object.keys(ACTIVITY_LABEL) as ActivityAction[]).map((k) => (
                 <option key={k} value={k}>{actionLabel(k)}</option>
               ))}
-            </select>
+            </CrmSelect>
             <CrmDatePicker className="crm-input" value={from} onChange={(v) => setFrom(v)} />
             <CrmDatePicker className="crm-input" value={to} onChange={(v) => setTo(v)} />
           </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -389,32 +390,32 @@ function GroupSettings({
         </div>
         <div>
           <label style={labelStyle}>{t('groups.field.program')}</label>
-          <select className="crm-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
+          <CrmSelect className="crm-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
             <option value="">{t('groups.noProgram')}</option>
             {(programs.data ?? []).map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
-          </select>
+          </CrmSelect>
         </div>
         <div>
           <label style={labelStyle}>{t('groups.field.teacher')}</label>
-          <select className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
+          <CrmSelect className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
             <option value="">{t('groups.noTeacher')}</option>
             {(users.data ?? []).map((u) => (
               <option key={u.id} value={u.id}>{u.fullName}</option>
             ))}
-          </select>
+          </CrmSelect>
         </div>
         <div>
           <label style={labelStyle}>{t('groups.field.status')}</label>
-          <select
+          <CrmSelect
             className="crm-select"
             value={status}
             onChange={(e) => setStatus(e.target.value as StudyGroupStatus)}
           >
             <option value="ACTIVE">{t('groups.status.ACTIVE')}</option>
             <option value="ARCHIVED">{t('groups.status.ARCHIVED')}</option>
-          </select>
+          </CrmSelect>
         </div>
       </div>
       <div style={{ marginTop: 10 }}>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -142,20 +143,20 @@ export default function Schedule() {
 
           <div style={{ flex: 1 }} />
 
-          <select className="crm-select" style={{ width: 200 }} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+          <CrmSelect className="crm-select" style={{ width: 200 }} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
             <option value="">{t('classes.allGroups')}</option>
             {groups.map((g) => (
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}
-          </select>
+          </CrmSelect>
 
           {elevated && (
-            <select className="crm-select" style={{ width: 200 }} value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
+            <CrmSelect className="crm-select" style={{ width: 200 }} value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
               <option value="">{t('classes.allTeachers')}</option>
               {(usersQuery.data ?? []).map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
-            </select>
+            </CrmSelect>
           )}
 
           <div style={{ display: 'inline-flex', gap: 4 }}>

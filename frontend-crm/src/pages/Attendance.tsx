@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
@@ -67,12 +68,12 @@ export default function Attendance() {
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ minWidth: 200, margin: 0 }}>
             <label>{t('attendance.col.employee')}</label>
-            <select className="crm-select" value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <CrmSelect className="crm-select" value={userId} onChange={(e) => setUserId(e.target.value)}>
               <option value="">{t('common.all')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
-            </select>
+            </CrmSelect>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label>{t('common.from')}</label>

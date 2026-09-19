@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -530,14 +531,14 @@ export default function SubmissionForm() {
         <Section title="2. Программа и контракт">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             <Field label="Программа *">
-              <select className="crm-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
+              <CrmSelect className="crm-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
                 <option value="">— выберите —</option>
                 {(programsQuery.data || []).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.university})
                   </option>
                 ))}
-              </select>
+              </CrmSelect>
             </Field>
             <Field label="Контракт (PDF/фото) *">
               <MultiFileUpload
@@ -556,11 +557,11 @@ export default function SubmissionForm() {
                   списка бэк отвергает: по валюте сделки считается бонусная
                   база менеджера. Менять валюту можно только до первого
                   одобрения платежа. */}
-              <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              <CrmSelect className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
                 {SUBMISSION_CURRENCIES.map((c) => (
                   <option key={c} value={c}>{SUBMISSION_CURRENCY_LABEL[c] || c}</option>
                 ))}
-              </select>
+              </CrmSelect>
             </Field>
           </div>
         </Section>
@@ -572,11 +573,11 @@ export default function SubmissionForm() {
               <input className="crm-input" type="number" min={0} step={50} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="1000" />
             </Field>
             <Field label="Метод *">
-              <select className="crm-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value as SubmissionPaymentMethod)}>
+              <CrmSelect className="crm-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value as SubmissionPaymentMethod)}>
                 <option value="TRANSFER">Перевод</option>
                 <option value="CASH">Наличные</option>
                 <option value="OTHER">Прочее</option>
-              </select>
+              </CrmSelect>
             </Field>
             <Field label="Дата оплаты *">
               <CrmDatePicker value={payDate} onChange={setPayDate} />

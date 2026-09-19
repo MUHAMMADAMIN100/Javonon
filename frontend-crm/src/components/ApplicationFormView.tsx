@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CrmSelect from './CrmSelect';
 import { countProgress, displayValue, useTranslatedSections, type FieldDef } from '../formSchema';
 import Icon from '../Icon';
 import { useT } from '../lib/i18n';
@@ -21,22 +22,22 @@ function EditField({
   const v = value ?? '';
   if (def.kind === 'radio' && def.options) {
     return (
-      <select className="crm-select" value={v} onChange={(e) => onChange(e.target.value)}>
+      <CrmSelect className="crm-select" value={v} onChange={(e) => onChange(e.target.value)}>
         <option value="">—</option>
         {def.options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
-      </select>
+      </CrmSelect>
     );
   }
   if ((def as any).options) {
     return (
-      <select className="crm-select" value={v} onChange={(e) => onChange(e.target.value)}>
+      <CrmSelect className="crm-select" value={v} onChange={(e) => onChange(e.target.value)}>
         <option value="">—</option>
         {(def as any).options.map((o: any) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
-      </select>
+      </CrmSelect>
     );
   }
   if (def.kind === 'textarea') {

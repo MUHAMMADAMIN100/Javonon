@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -103,7 +104,7 @@ export default function Groups() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select
+          <CrmSelect
             className="crm-select"
             style={{ width: 190 }}
             value={status}
@@ -112,7 +113,7 @@ export default function Groups() {
             <option value="">{t('common.all')}</option>
             <option value="ACTIVE">{t('groups.status.ACTIVE')}</option>
             <option value="ARCHIVED">{t('groups.status.ARCHIVED')}</option>
-          </select>
+          </CrmSelect>
         </div>
       </motion.div>
 
@@ -201,21 +202,21 @@ function CreateGroupForm({
         </div>
         <div>
           <label style={labelStyle}>{t('groups.field.program')}</label>
-          <select className="crm-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
+          <CrmSelect className="crm-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
             <option value="">{t('groups.noProgram')}</option>
             {(programs.data ?? []).map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
-          </select>
+          </CrmSelect>
         </div>
         <div>
           <label style={labelStyle}>{t('groups.field.teacher')}</label>
-          <select className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
+          <CrmSelect className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
             <option value="">{t('groups.noTeacher')}</option>
             {(users.data ?? []).map((u) => (
               <option key={u.id} value={u.id}>{u.fullName}</option>
             ))}
-          </select>
+          </CrmSelect>
         </div>
       </div>
       <div style={{ marginTop: 10 }}>

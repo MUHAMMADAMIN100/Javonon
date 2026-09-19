@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { createPortal } from 'react-dom';
 import { useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -573,13 +574,15 @@ function DocUploader({
 
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <select className="crm-select" value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
+      {/* Ширина по содержимому: в строке с кнопкой «Загрузить» растянутый
+          на весь экран список оставлял пустоту в тысячу пикселей. */}
+      <CrmSelect className="crm-select field-compact" value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
         <option value="PASSPORT">{t('userDoc.PASSPORT')}</option>
         <option value="PHOTO">{t('userDoc.PHOTO')}</option>
         <option value="CONTRACT">{t('userDoc.CONTRACT')}</option>
         <option value="DIPLOMA">{t('userDoc.DIPLOMA')}</option>
         <option value="OTHER">{t('userDoc.OTHER')}</option>
-      </select>
+      </CrmSelect>
       <label className="btn btn-sm btn-secondary" style={{ cursor: uploading ? 'wait' : 'pointer' }}>
         {uploading ? t('common.uploading') : t('common.upload')}
         <input type="file" hidden onChange={upload} disabled={uploading} />
@@ -653,7 +656,7 @@ function AccessSection({ userId, userName }: { userId: string; userName: string 
         {userName}
       </p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        <select
+        <CrmSelect
           className="crm-select"
           value={pickUserId}
           onChange={(e) => setPickUserId(e.target.value)}
@@ -663,7 +666,7 @@ function AccessSection({ userId, userName }: { userId: string; userName: string 
           {users.map((u: any) => (
             <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>
           ))}
-        </select>
+        </CrmSelect>
         <button className="btn btn-sm btn-primary" onClick={grant} disabled={!pickUserId}>
           {t('userDetail.access.grant')}
         </button>
@@ -887,11 +890,11 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
         <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
           {t('userDetail.field.role')}:
         </label>
-        <select className="crm-select" value={primary} onChange={(e) => setPrimary(e.target.value)}>
+        <CrmSelect className="crm-select" value={primary} onChange={(e) => setPrimary(e.target.value)}>
           {ASSIGNABLE_ROLE_VALUES.map((v) => (
             <option key={v} value={v}>{roleLabel(v as any)}</option>
           ))}
-        </select>
+        </CrmSelect>
       </div>
 
       <div style={{ marginBottom: 12 }}>
@@ -1017,12 +1020,12 @@ function CustomRoleEditor({
         <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
           {t('userDetail.field.customRole')}:
         </label>
-        <select className="crm-select" value={selected} onChange={(e) => setSelected(e.target.value)} disabled={rolesQuery.isLoading}>
+        <CrmSelect className="crm-select" value={selected} onChange={(e) => setSelected(e.target.value)} disabled={rolesQuery.isLoading}>
           <option value="">— {t('managerBar.notAssigned')} —</option>
           {roles.filter((r: CustomRole) => r.isActive).map((r: CustomRole) => (
             <option key={r.id} value={r.id}>{r.name} ({r.permissions.length})</option>
           ))}
-        </select>
+        </CrmSelect>
       </div>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>
@@ -1169,14 +1172,14 @@ function DocEditButton({
         >
           <div className="form-group" style={{ marginBottom: 8 }}>
             <label>Тип</label>
-            <select className="crm-select" value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
+            <CrmSelect className="crm-select" value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
               <option value="PASSPORT">Паспорт</option>
               <option value="PHOTO">Фотография</option>
               <option value="CONTRACT">Контракт</option>
               <option value="DIPLOMA">Диплом</option>
               <option value="OFFER">Оферта</option>
               <option value="OTHER">Прочее</option>
-            </select>
+            </CrmSelect>
           </div>
           <div className="form-group" style={{ marginBottom: 8 }}>
             <label>Комментарий</label>

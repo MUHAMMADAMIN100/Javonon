@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -175,19 +176,19 @@ export default function Calls() {
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.direction')}</label>
-            <select className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as CallDirection)}>
+            <CrmSelect className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as CallDirection)}>
               {(Object.keys(CALL_DIRECTION_LABEL) as CallDirection[]).map((d) => (
                 <option key={d} value={d}>{t(`calls.dir.${d}`)}</option>
               ))}
-            </select>
+            </CrmSelect>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.outcome')}</label>
-            <select className="crm-select" value={outcome} onChange={(e) => setOutcome(e.target.value as CallOutcome)}>
+            <CrmSelect className="crm-select" value={outcome} onChange={(e) => setOutcome(e.target.value as CallOutcome)}>
               {(Object.keys(CALL_OUTCOME_LABEL) as CallOutcome[]).map((o) => (
                 <option key={o} value={o}>{t(`calls.out.${o}`)}</option>
               ))}
-            </select>
+            </CrmSelect>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.duration')} ({t('common.time')})</label>

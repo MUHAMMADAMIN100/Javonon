@@ -5794,3 +5794,131 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 @media (max-width: 720px) {
   .form-grid-2 { grid-template-columns: 1fr; gap: 12px; }
 }
+
+/* =====================================================================
+   Выпадающий список CRM (components/CrmSelect)
+   Браузер рисует список вариантов системной панелью, чужой интерфейсу.
+   Здесь — свой список в оформлении остальных полей.
+   ===================================================================== */
+/* Настоящий select остаётся в разметке (значение, отправка формы,
+   проверки), но не виден и не ловит нажатия. */
+.crm-select-native {
+  /* fixed, а не absolute: при absolute поле оставалось на своём месте в
+     потоке и на узком экране вылезало за правый край — появлялась
+     горизонтальная прокрутка всей страницы. Здесь оно 1×1 в углу окна. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+/* Кнопка-поле. Класс .crm-select приходит со страницы, поэтому рамка,
+   отступы и стрелка берутся оттуда — вид ровно как у прежнего списка. */
+.crm-select-trigger {
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  overflow: hidden;
+}
+.crm-select-trigger:disabled { opacity: .6; cursor: not-allowed; }
+.crm-select-trigger.is-open { border-color: var(--primary); }
+.crm-select-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-select-popover {
+  position: fixed;
+  z-index: 9999;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px -12px rgba(10, 15, 13, 0.18);
+  padding: 6px;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.crm-select-search { padding: 4px 4px 8px; }
+.crm-select-search .crm-input { width: 100%; }
+.crm-select-list { overflow-y: auto; min-height: 0; }
+.crm-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  /* Строка списка — цель для курсора и для пальца: не мельче 38px. */
+  min-height: 38px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.3;
+}
+.crm-select-option span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Подсветка идёт за клавиатурой и за мышью одновременно: наведение тоже
+   двигает «активную» строку, поэтому второй подсветки от :hover не нужно. */
+.crm-select-option.is-active { background: var(--bg-soft); }
+.crm-select-option.is-selected { color: var(--primary-dark); font-weight: 600; }
+.crm-select-option:disabled { opacity: .45; cursor: not-allowed; }
+.crm-select-tick { flex-shrink: 0; color: var(--primary); }
+.crm-select-empty {
+  padding: 14px 12px;
+  color: var(--text-soft);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  /* На телефоне список выезжает снизу: попасть пальцем в узкий список под
+     полем почти невозможно, особенно в нижней половине экрана. */
+  .crm-select-popover.is-sheet {
+    border-radius: 16px;
+    max-height: 60dvh;
+    padding: 8px;
+    box-shadow: 0 -8px 40px -12px rgba(10, 15, 13, 0.28);
+  }
+  .crm-select-popover.is-sheet .crm-select-option {
+    padding: 13px 14px;
+    font-size: 15px;
+  }
+}
+
+/* Список внутри таблицы не тянется во всю колонку: между текстом и
+   стрелкой оставалась широкая пустота, а строка читалась как кнопка. */
+.table .crm-select,
+.table .crm-select-trigger {
+  max-width: 220px;
+}
+
+/* Поле по содержимому — для строк, где поле стоит рядом с кнопками и
+   растягиваться на всю ширину ему незачем. */
+.field-compact { max-width: 220px; }
+
+/* Подложка под выезжающим списком на телефоне: отделяет список от
+   страницы и ловит тап мимо. */
+.crm-select-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(10, 15, 13, 0.32);
+}

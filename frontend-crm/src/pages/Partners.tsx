@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -730,7 +731,7 @@ function CommissionsList() {
   return (
     <div className="card" style={{ padding: 0 }}>
       <div style={{ padding: 14, borderBottom: '1px solid var(--border-soft)' }}>
-        <select
+        <CrmSelect
           className="crm-select"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -740,7 +741,7 @@ function CommissionsList() {
           <option value="APPROVED">{t('partners.commission.status.APPROVED')}</option>
           <option value="PAID">{t('partners.commission.status.PAID')}</option>
           <option value="REVERSED">{t('partners.commission.status.REVERSED')}</option>
-        </select>
+        </CrmSelect>
       </div>
       {isLoading ? (
         <div style={{ padding: 24 }}>{t('common.loading')}</div>

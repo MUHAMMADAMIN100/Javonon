@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -1109,7 +1110,7 @@ export default function Finance() {
             имеют смысл (пустые значения = «не выбрано»). */}
         {filterType !== 'EXPENSE' && (
           <>
-            <select
+            <CrmSelect
               className="crm-select"
               value={filterIncomeSource}
               onChange={(e) => setFilterIncomeSource(e.target.value as IncomeSource | '')}
@@ -1120,8 +1121,8 @@ export default function Finance() {
               <option value="NEW_CLIENT">{t('finance.source.NEW_CLIENT')}</option>
               <option value="UP_SALE">{t('finance.source.UP_SALE')}</option>
               <option value="OTHER">{t('finance.source.OTHER')}</option>
-            </select>
-            <select
+            </CrmSelect>
+            <CrmSelect
               className="crm-select"
               value={filterProductEnum}
               onChange={(e) => setFilterProductEnum(e.target.value as ProductCategoryEnum | '')}
@@ -1133,8 +1134,8 @@ export default function Finance() {
               <option value="MASTERCLASS">{t('finance.productEnum.MASTERCLASS')}</option>
               <option value="ACADEMY">{t('finance.productEnum.ACADEMY')}</option>
               <option value="OTHER">{t('finance.productEnum.OTHER')}</option>
-            </select>
-            <select
+            </CrmSelect>
+            <CrmSelect
               className="crm-select"
               value={filterPaymentPhase}
               onChange={(e) => setFilterPaymentPhase(e.target.value as PaymentPhaseStatus | '')}
@@ -1144,7 +1145,7 @@ export default function Finance() {
               <option value="">{t('finance.field.paymentPhase')}: {t('common.all')}</option>
               <option value="PREPAID">{t('finance.phase.PREPAID')}</option>
               <option value="FULL">{t('finance.phase.FULL')}</option>
-            </select>
+            </CrmSelect>
             {(filterIncomeSource || filterProductEnum || filterPaymentPhase) && (
               <button
                 type="button"
@@ -1505,7 +1506,7 @@ function TransactionForm({
         <div className="form-grid-2">
           <div className="form-group">
             <label>{t('common.type')}</label>
-            <select
+            <CrmSelect
               className="crm-select"
               value={type}
               onChange={(e) => {
@@ -1554,11 +1555,11 @@ function TransactionForm({
               {canExpense && (
                 <option value="EXPENSE">{t('finance.expense')}</option>
               )}
-            </select>
+            </CrmSelect>
           </div>
           <div className="form-group">
             <label>{t('finance.col.category')}</label>
-            <select className="crm-select" value={category} onChange={(e) => {
+            <CrmSelect className="crm-select" value={category} onChange={(e) => {
               const nextCategory = e.target.value as TransactionCategory;
               setCategory(nextCategory);
               // Внутри EXPENSE только SALARY показывает employee-селект
@@ -1573,7 +1574,7 @@ function TransactionForm({
                 const label = t(trKey) !== trKey ? t(trKey) : TRANSACTION_CATEGORY_LABEL[c];
                 return <option key={c} value={c}>{label}</option>;
               })}
-            </select>
+            </CrmSelect>
           </div>
           <div className="form-group">
             <label>{t('common.amount')}</label>
@@ -1581,13 +1582,13 @@ function TransactionForm({
           </div>
           <div className="form-group">
             <label>{t('finance.col.currency')}</label>
-            <select className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            <CrmSelect className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
               <option value="CNY">CNY</option>
               <option value="RUB">RUB</option>
               <option value="TJS">TJS</option>
-            </select>
+            </CrmSelect>
           </div>
           <div className="form-group">
             <label>{t('common.date')}</label>
@@ -1596,31 +1597,31 @@ function TransactionForm({
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.col.student')}</label>
-              <select className="crm-select" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
+              <CrmSelect className="crm-select" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
                 <option value="">—</option>
                 {students.map((s) => (
                   <option key={s.id} value={s.id}>{s.fullName}</option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
           {(type === 'EXPENSE' && category === 'SALARY') && (
             <div className="form-group">
               <label>{t('salary.field.employee')}</label>
               {elevated ? (
-                <select className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+                <CrmSelect className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
                   <option value="">—</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>{u.fullName}</option>
                   ))}
-                </select>
+                </CrmSelect>
               ) : (
                 <>
                   {/* Non-elevated: backend всё равно форсит caller.id
                       (finance.service.ts, non-elevated ветка). Показываем
                       disabled-select с собой, чтобы UI не врал про свободу
                       выбора и оператор понимал, что запись пойдёт на него. */}
-                  <select
+                  <CrmSelect
                     className="crm-select"
                     value={me?.id ?? ''}
                     disabled
@@ -1628,7 +1629,7 @@ function TransactionForm({
                     title="Зарплата автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT."
                   >
                     <option value={me?.id ?? ''}>{me?.fullName || me?.email || '—'}</option>
-                  </select>
+                  </CrmSelect>
                   <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4, letterSpacing: '0.02em' }}>
                     Автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT.
                   </div>
@@ -1640,12 +1641,12 @@ function TransactionForm({
             <div className="form-group">
               <label>{t('finance.col.manager')}</label>
               {elevated ? (
-                <select className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+                <CrmSelect className="crm-select" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
                   <option value="">—</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>{u.fullName}</option>
                   ))}
-                </select>
+                </CrmSelect>
               ) : (
                 <>
                   {/* Non-elevated: см. комментарий у employee-select выше.
@@ -1654,7 +1655,7 @@ function TransactionForm({
                       список, менеджер выбирал коллегу, форма молча уходила,
                       а строка ledger'а сохранялась на его имени. Data-loss с
                       точки зрения оператора. Теперь select только для чтения. */}
-                  <select
+                  <CrmSelect
                     className="crm-select"
                     value={me?.id ?? ''}
                     disabled
@@ -1662,7 +1663,7 @@ function TransactionForm({
                     title="Продажа автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT."
                   >
                     <option value={me?.id ?? ''}>{me?.fullName || me?.email || '—'}</option>
-                  </select>
+                  </CrmSelect>
                   <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4, letterSpacing: '0.02em' }}>
                     Продажа автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT.
                   </div>
@@ -1672,42 +1673,42 @@ function TransactionForm({
           )}
           <div className="form-group">
             <label>{t('finance.paymentChannel')}</label>
-            <select className="crm-select" value={paymentChannel} onChange={(e) => setPaymentChannel(e.target.value)}>
+            <CrmSelect className="crm-select" value={paymentChannel} onChange={(e) => setPaymentChannel(e.target.value)}>
               <option value="CASH">{t('finance.channel.CASH')}</option>
               <option value="ALIF_MOBILE">{t('finance.channel.ALIF_MOBILE')}</option>
               <option value="BANK_TRANSFER">{t('finance.channel.BANK_TRANSFER')}</option>
               <option value="CARD">{t('finance.channel.CARD')}</option>
               <option value="CRYPTO">Crypto</option>
               <option value="OTHER">{t('userDoc.OTHER')}</option>
-            </select>
+            </CrmSelect>
           </div>
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.paymentKind')}</label>
-              <select className="crm-select" value={paymentKind} onChange={(e) => setPaymentKind(e.target.value)}>
+              <CrmSelect className="crm-select" value={paymentKind} onChange={(e) => setPaymentKind(e.target.value)}>
                 <option value="FULL">{t('finance.kind.FULL')}</option>
                 <option value="PREPAYMENT">{t('finance.kind.PREPAYMENT')}</option>
                 <option value="ADDITIONAL">{t('finance.kind.ADDITIONAL')}</option>
                 <option value="OWNER_INVESTMENT">{t('finance.kind.OWNER_INVESTMENT')}</option>
-              </select>
+              </CrmSelect>
             </div>
           )}
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.product')}</label>
-              <select className="crm-select" value={productCategory} onChange={(e) => setProductCategory(e.target.value)}>
+              <CrmSelect className="crm-select" value={productCategory} onChange={(e) => setProductCategory(e.target.value)}>
                 <option value="">—</option>
                 {PRODUCT_CATEGORIES.map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
           {/* === Google Sheet parity — INCOME dropdowns === */}
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.field.incomeSource')}</label>
-              <select
+              <CrmSelect
                 className="crm-select"
                 value={incomeSource}
                 onChange={(e) => setIncomeSource(e.target.value as IncomeSource | '')}
@@ -1716,13 +1717,13 @@ function TransactionForm({
                 <option value="NEW_CLIENT">{t('finance.source.NEW_CLIENT')}</option>
                 <option value="UP_SALE">{t('finance.source.UP_SALE')}</option>
                 <option value="OTHER">{t('finance.source.OTHER')}</option>
-              </select>
+              </CrmSelect>
             </div>
           )}
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.field.productEnum')}</label>
-              <select
+              <CrmSelect
                 className="crm-select"
                 value={productCategoryEnum}
                 onChange={(e) => setProductCategoryEnum(e.target.value as ProductCategoryEnum | '')}
@@ -1732,13 +1733,13 @@ function TransactionForm({
                 <option value="MASTERCLASS">{t('finance.productEnum.MASTERCLASS')}</option>
                 <option value="ACADEMY">{t('finance.productEnum.ACADEMY')}</option>
                 <option value="OTHER">{t('finance.productEnum.OTHER')}</option>
-              </select>
+              </CrmSelect>
             </div>
           )}
           {type === 'INCOME' && (
             <div className="form-group">
               <label>{t('finance.field.paymentPhase')}</label>
-              <select
+              <CrmSelect
                 className="crm-select"
                 value={paymentPhase}
                 onChange={(e) => setPaymentPhase(e.target.value as PaymentPhaseStatus | '')}
@@ -1746,14 +1747,14 @@ function TransactionForm({
                 <option value="">—</option>
                 <option value="PREPAID">{t('finance.phase.PREPAID')}</option>
                 <option value="FULL">{t('finance.phase.FULL')}</option>
-              </select>
+              </CrmSelect>
             </div>
           )}
           {/* === EXPENSE: через кого прошёл расход === */}
           {type === 'EXPENSE' && (
             <div className="form-group">
               <label>{t('finance.field.paidVia')}</label>
-              <select
+              <CrmSelect
                 className="crm-select"
                 value={paidViaId}
                 onChange={(e) => setPaidViaId(e.target.value)}
@@ -1762,7 +1763,7 @@ function TransactionForm({
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>{u.fullName}</option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
           {type === 'INCOME' && (

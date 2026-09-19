@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createTask, deleteTask, listTasks, updateTask } from '../api/tasks';
@@ -301,7 +302,7 @@ export default function Tasks() {
                     })}
                   </div>
                 )}
-                <select
+                <CrmSelect
                   className={`crm-select${errorOf('assignees', assigneesError) ? ' input-error' : ''}`}
                   onBlur={() => touch('assignees')}
                   value={assigneePicker}
@@ -319,12 +320,12 @@ export default function Tasks() {
                         {u.fullName} · {displayRoleLabel(u as any)}
                       </option>
                     ))}
-                </select>
+                </CrmSelect>
                 {errorOf('assignees', assigneesError) && <div className="form-error-text">{assigneesError}</div>}
               </div>
               <div className="form-group">
                 <label>Контролёр задачи</label>
-                <select
+                <CrmSelect
                   className="crm-select"
                   value={form.controllerId}
                   onChange={(e) => setForm({ ...form, controllerId: e.target.value })}
@@ -335,7 +336,7 @@ export default function Tasks() {
                       {u.fullName} · {displayRoleLabel(u as any)}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </div>
               <div className="form-group">
                 <label>{t('tasks.field.deadline')}</label>
