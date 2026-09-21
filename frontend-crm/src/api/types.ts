@@ -523,8 +523,10 @@ export interface Task {
   deadline: string | null;
   deadlineReminderSent?: boolean;
   overdueNotified?: boolean;
-  /** Список ID исполнителей — может быть несколько сотрудников на одну задачу. */
-  assigneeIds: string[];
+  /** ID исполнителей. Список задач его НЕ отдаёт — там только assignees. */
+  assigneeIds?: string[];
+  /** Старое поле одного исполнителя (до мультиназначения). */
+  assignedToId?: string | null;
   /** Развёрнутые данные исполнителей (для отрисовки без доп. запросов). */
   assignees: TaskUserSummary[];
   /** Контролёр задачи — опциональный, проверяет выполнение. */

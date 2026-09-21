@@ -239,7 +239,8 @@ export class StudentAuthService {
   /** История оплат студента (ТЗ §3.2 — «История оплат» в кабинете). */
   async myTransactions(studentId: string) {
     return this.prisma.transaction.findMany({
-      where: { studentId, type: 'INCOME' },
+      // Удалённые оплаты (reversedAt) студенту не показываем.
+      where: { studentId, type: 'INCOME', reversedAt: null },
       orderBy: { date: 'desc' },
       select: {
         id: true,

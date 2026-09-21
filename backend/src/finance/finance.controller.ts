@@ -213,10 +213,6 @@ export class FinanceController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('take') take?: string,
-    // Окно карточки дашборда: сводка «Доход/Расход» считает и отменённые
-    // пары, поэтому, чтобы сумма окна сошлась с карточкой, их надо показать
-    // (с пометкой). Журнал «Финансов» по-прежнему без них.
-    @Query('includeReversed') includeReversed?: string,
   ) {
     if (type && !VALID_TX_TYPES.includes(type as TransactionType)) {
       throw new BadRequestException('Неизвестный type');
@@ -232,7 +228,6 @@ export class FinanceController {
       from: parseDate(from, 'from'),
       to: parseDate(to, 'to', true),
       take: parseTake(take),
-      includeReversed: includeReversed === 'true' || includeReversed === '1',
     });
   }
 

@@ -103,6 +103,8 @@ export interface FullProfile {
   sales: {
     monthAmount: number;
     monthCount: number;
+    /** Продажи в других валютах (не входят в monthAmount, он в TJS). */
+    monthOther?: Record<string, number>;
     yearAmount: number;
     yearCount: number;
   };

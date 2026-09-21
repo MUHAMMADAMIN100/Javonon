@@ -116,8 +116,6 @@ export interface Transaction {
   paymentKind?: PaymentKind | null;
   productCategory?: string | null;
   payerName?: string | null;
-  /** Отменена (пара «операция + обратная запись»). Приходит только с includeReversed. */
-  reversedAt?: string | null;
   receiptUrl?: string | null;
   receiptKind?: ReceiptKind | null;
   noReceiptReason?: string | null;
@@ -156,6 +154,8 @@ export interface FinanceSummary {
   netProfit: number;
   incomeCount: number;
   expenseCount: number;
+  /** Всего транзакций во всех валютах — столько строк в журнале за период. */
+  transactionCount?: number;
   /** Валюта, в которой посчитаны все KPI выше (обычно `TJS`). */
   currency: string;
   /** Отброшенные из основного агрегата суммы в иных валютах. */
@@ -193,8 +193,6 @@ export const listTransactions = (params?: {
   from?: string;
   to?: string;
   take?: number;
-  /** С отменёнными (для окна карточки дашборда — там сводка их считает). */
-  includeReversed?: boolean;
 }) => api.get<Transaction[]>('/finance/transactions', { params }).then((r) => r.data);
 
 export const createTransaction = (dto: CreateTransactionDto) =>

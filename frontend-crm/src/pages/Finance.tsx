@@ -747,7 +747,7 @@ export default function Finance() {
 
           <KpiBento eyebrow={`${t('eyebrow.income')} · 02`} label={t('dashboard.finance.income')} value={fmtMoney(summary.totalIncome)} accent />
           <KpiBento eyebrow={`${t('eyebrow.expense')} · 03`} label={t('dashboard.finance.expense')} value={fmtMoney(summary.totalExpense)} />
-          <KpiBento eyebrow={`${t('eyebrow.count')} · 04`} label={t('finance.transactions')} value={String(summary.incomeCount + summary.expenseCount)} span="span-3" />
+          <KpiBento eyebrow={`${t('eyebrow.count')} · 04`} label={t('finance.transactions')} value={String(summary.transactionCount ?? summary.incomeCount + summary.expenseCount)} span="span-3" />
         </div>
       )}
 
@@ -2820,10 +2820,11 @@ function BreakdownDetailPanel({
     });
   }, [detailQuery.data, focus]);
 
-  const total = filtered.reduce((s, tx) => s + tx.amount, 0);
-  // Единая отчётная валюта — та, в которой оформлена первая транзакция
-  // выборки (после client-filter). Если пусто — TJS дефолтом.
-  const displayCurrency = filtered[0]?.currency || 'TJS';
+  // Сумма — в TJS, как у графика, по которому кликнули (там только TJS);
+  // строки в других валютах видны в списке, но в сумму не входят.
+  const total = filtered.filter((tx) => tx.currency === 'TJS').reduce((s, tx) => s + tx.amount, 0);
+  const otherCount = filtered.filter((tx) => tx.currency !== 'TJS').length;
+  const displayCurrency = 'TJS';
 
   return (
     <FormModal
@@ -2888,6 +2889,11 @@ function BreakdownDetailPanel({
           }}>
             {isExpense ? '−' : '+'}{fmtMoney(total, displayCurrency)}
           </div>
+          {otherCount > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--text-soft)' }} data-testid="drill-other-currency">
+              {t('details.otherCurrency').replace('{n}', String(otherCount))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2978,9 +2984,12 @@ function WeekDetailPanel({
     queryFn: () => listTransactions({ from: range.from, to: range.to, take: 500 }),
   });
   const txs = detailQuery.data ?? [];
-  const incomeSum = txs.filter((t) => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
-  const expenseSum = txs.filter((t) => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
-  const displayCurrency = txs[0]?.currency || 'TJS';
+  // Как у точки графика: только TJS; другие валюты — отдельной подписью.
+  const tjsTxs = txs.filter((t) => t.currency === 'TJS');
+  const incomeSum = tjsTxs.filter((t) => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
+  const expenseSum = tjsTxs.filter((t) => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
+  const otherCount = txs.length - tjsTxs.length;
+  const displayCurrency = 'TJS';
 
   const endLabel = new Date(range.to);
   endLabel.setDate(endLabel.getDate() - 1);
@@ -3060,6 +3069,11 @@ function WeekDetailPanel({
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500 }}>
             {txs.length}
           </div>
+          {otherCount > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--text-soft)' }} data-testid="drill-other-currency">
+              {t('details.otherCurrency').replace('{n}', String(otherCount))}
+            </div>
+          )}
         </div>
       </div>
 

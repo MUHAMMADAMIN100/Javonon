@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,8 @@ import { compose, hasErrors, maxLen, minLen, required, validateAll } from '../ut
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
+import ListTotal from '../components/ListTotal';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import CrmDatePicker from '../components/CrmDatePicker';
 import { hasRole, isElevated, displayRoleLabel } from '../lib/roles';
 import { useT } from '../lib/i18n';
@@ -55,6 +57,35 @@ export default function Tasks() {
   });
   const items = tasksQuery.data ?? [];
   const loading = tasksQuery.isLoading;
+  // Всего задач без поиска — для «Найдено: X из N» (тот же кэш, что и список без поиска).
+  const allQuery = useQuery({
+    queryKey: keys.tasks.list({ mine: scope === 'mine', search: undefined }),
+    queryFn: () => listTasks(scope === 'mine', undefined),
+    enabled: !!debouncedSearch,
+  });
+  const narrowed = !!debouncedSearch;
+
+  /** Открытая в окне задача (id — чтобы окно видело свежие данные списка). */
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openTask = items.find((x) => x.id === openId) ?? null;
+  const canChangeTask = (task: Task) =>
+    isAdmin ||
+    (!!me &&
+      // Исполнители приходят списком assignees (assigneeIds API не отдаёт);
+      // assignedToId — старое поле одного исполнителя.
+      ((task.assignees ?? []).some((a) => a.id === me.id) ||
+        task.assignedToId === me.id ||
+        task.controllerId === me.id));
+
+  const sort = useTableSort(items, [
+    { key: 'title', label: t('task.col.task'), value: (x) => x.title },
+    { key: 'assignee', label: t('task.assignee'), value: (x) => (x.assignees ?? []).map((a) => a.fullName).join(', ') || null },
+    { key: 'controller', label: t('task.controller'), value: (x) => x.controller?.fullName ?? null },
+    { key: 'author', label: t('task.author'), value: (x) => x.createdBy?.fullName ?? null },
+    { key: 'deadline', label: t('task.deadline'), type: 'date', value: (x) => x.deadline ?? null },
+    { key: 'createdAt', label: t('task.created'), type: 'date', value: (x) => x.createdAt },
+    { key: 'status', label: t('common.status'), type: 'number', value: (x) => STATUS_ORDER[x.status] },
+  ]);
 
   const usersQuery = useQuery({
     queryKey: keys.users.list(),
@@ -162,6 +193,7 @@ export default function Tasks() {
       danger: true,
     });
     if (!ok) return;
+    setOpenId((cur) => (cur === task.id ? null : cur));
     deleteMut.mutate(task.id);
   };
 
@@ -173,6 +205,13 @@ export default function Tasks() {
       transition={{ duration: 0.3 }}
     >
       <div className="card-header is-titleless">
+        <ListTotal
+          noun="tasks"
+          found={items.length}
+          total={narrowed ? allQuery.data?.length : undefined}
+          filtered={narrowed}
+          testId="tasks-total"
+        />
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && (
             <div className="scope-switch">
@@ -381,53 +420,45 @@ export default function Tasks() {
               {scope === 'mine' ? 'У вас пока нет назначенных задач' : 'Задач пока нет'}
             </motion.div>
           ) : (
-            <motion.div
-              key="list"
-              className="tasks-list"
-              initial="hidden"
-              animate="show"
-              variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
-            >
-              {items.map((task) => {
-                const isAssignee = !!me && task.assigneeIds?.includes(me.id);
-                const isController = !!me && task.controllerId === me.id;
-                const canChange = isAdmin || isAssignee || isController;
-                const statuses: { value: TaskStatus; icon: string; label: string }[] = [
-                  { value: 'TODO', icon: 'radio_button_unchecked', label: t('task.status.TODO') },
-                  { value: 'IN_PROGRESS', icon: 'autorenew', label: t('task.status.IN_PROGRESS') },
-                  { value: 'DONE', icon: 'check_circle', label: t('task.status.DONE') },
-                ];
-                return (
-                  <motion.div
-                    key={task.id}
-                    className={`task-item task-${task.status.toLowerCase()}`}
-                    variants={{
-                      hidden: { opacity: 0, y: 10 },
-                      show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-                    }}
-                    layout
-                  >
-                    <div className="task-head">
-                      <div className="task-title">{task.title}</div>
-                      <div className="task-head-actions">
-                        <div className="task-status-switch" role="group" aria-label={t('common.status')}>
-                          {statuses.map((s) => (
-                            <button
-                              key={s.value}
-                              type="button"
-                              className={`task-status-btn${task.status === s.value ? ' active' : ''} task-status-${s.value.toLowerCase()}`}
-                              onClick={() => canChange && task.status !== s.value && setStatus(task, s.value)}
-                              disabled={!canChange}
-                              aria-pressed={task.status === s.value}
-                              title={s.label}
-                            >
-                              <Icon name={s.icon} size={15} />
-                              <span>{s.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+            <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <SortSelect sort={sort} />
+              <table className="table tasks-table" data-testid="tasks-table">
+                <thead>
+                  <tr>
+                    {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
+                    {canDelete && <th aria-label={t('common.delete')} />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sort.sorted.map((task) => (
+                    <tr
+                      key={task.id}
+                      className={`task-row is-${task.status.toLowerCase()}`}
+                      onClick={() => setOpenId(task.id)}
+                      data-testid="task-row"
+                    >
+                      <td className="task-cell-main">
+                        <div className="task-row-title">{task.title}</div>
+                        {task.description && <div className="task-row-desc">{task.description}</div>}
+                      </td>
+                      <td data-label={t('task.assignee')}>
+                        {(task.assignees ?? []).length > 0
+                          ? task.assignees!.map((a) => a.fullName).join(', ')
+                          : <span className="task-empty">—</span>}
+                      </td>
+                      <td data-label={t('task.controller')}>{task.controller?.fullName ?? <span className="task-empty">—</span>}</td>
+                      <td data-label={t('task.author')}>{task.createdBy?.fullName ?? <span className="task-empty">—</span>}</td>
+                      <td data-label={t('task.deadline')}>
+                        {task.deadline ? <DeadlineBadge deadline={task.deadline} status={task.status} /> : <span className="task-empty">—</span>}
+                      </td>
+                      <td data-label={t('task.created')}>{new Date(task.createdAt).toLocaleDateString('ru-RU')}</td>
+                      {/* Выпадающий список рисуется порталом, но события React идут
+                          по дереву — без stopPropagation выбор статуса открывал бы окно. */}
+                      <td data-label={t('common.status')} onClick={(e) => e.stopPropagation()}>
+                        <TaskStatusSelect task={task} canChange={canChangeTask(task)} onChange={(next) => setStatus(task, next)} />
+                      </td>
                       {canDelete && (
+                        <td className="task-cell-actions" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             className="task-delete-btn"
@@ -437,90 +468,133 @@ export default function Tasks() {
                           >
                             <Icon name="delete" size={18} />
                           </button>
+                        </td>
                       )}
-                    </div>
-                    {task.description && <TaskDescription text={task.description} />}
-                    <div className="task-meta">
-                      {(task.assignees && task.assignees.length > 0) ? (
-                        task.assignees.map((a) => (
-                          <span key={a.id} className="task-meta-item" title={t('task.assignee')}>
-                            <Icon name="person" size={14} />
-                            {a.fullName}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="task-meta-item" title={t('task.assignee')}>
-                          <Icon name="person" size={14} />—
-                        </span>
-                      )}
-                      {task.controller && (
-                        <span className="task-meta-item" title={t('task.controller')}>
-                          <Icon name="verified_user" size={14} />
-                          {t('task.controller')}: {task.controller.fullName}
-                        </span>
-                      )}
-                      {task.createdBy && (
-                        <span className="task-meta-item" title={t('task.author')}>
-                          <Icon name="edit" size={14} />
-                          {task.createdBy.fullName}
-                        </span>
-                      )}
-                      {task.deadline && (() => {
-                        const dl = new Date(task.deadline);
-                        const ms = dl.getTime() - Date.now();
-                        const isOverdue = ms < 0 && task.status !== 'DONE';
-                        const isSoon = ms >= 0 && ms < 24 * 60 * 60 * 1000 && task.status !== 'DONE';
-                        const cls = isOverdue ? 'badge-danger' : isSoon ? 'badge-warning' : 'badge-info';
-                        return (
-                          <span className={`badge ${cls} task-deadline`} title={t('task.deadline')} data-testid="task-deadline">
-                            <Icon name="schedule" size={12} />
-                            {dl.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        );
-                      })()}
-                      <span className="task-meta-item" title={t('task.created')}>
-                        <Icon name="event" size={14} />
-                        {new Date(task.createdAt).toLocaleDateString('ru-RU')}
-                      </span>
-                    </div>
-                  </motion.div>
-                );
-              })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+      <AnimatePresence>
+        {openTask && (
+          <TaskModal
+            task={openTask}
+            canChange={canChangeTask(openTask)}
+            canDelete={canDelete}
+            onStatus={(next) => setStatus(openTask, next)}
+            onDelete={async () => {
+              await onDelete(openTask);
+            }}
+            onClose={() => setOpenId(null)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
 
-/**
- * Описание задачи: не длиннее двух строк, если текст длиннее —
- * «Показать всё» раскрывает его целиком. Кнопка появляется, только когда
- * текст действительно обрезан (меряем после отрисовки и при смене ширины).
- */
-function TaskDescription({ text }: { text: string }) {
-  const { t } = useT();
-  const ref = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [clipped, setClipped] = useState(false);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el || open) return;
-    const measure = () => setClipped(el.scrollHeight > el.clientHeight + 1);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [text, open]);
+/** Порядок статусов для сортировки колонки «Статус». */
+const STATUS_ORDER: Record<TaskStatus, number> = { TODO: 0, IN_PROGRESS: 1, DONE: 2 };
+
+/** Срок: красный — просрочен, жёлтый — меньше суток, у выполненной — обычный. */
+function DeadlineBadge({ deadline, status }: { deadline: string; status: TaskStatus }) {
+  const dl = new Date(deadline);
+  const ms = dl.getTime() - Date.now();
+  const isOverdue = ms < 0 && status !== 'DONE';
+  const isSoon = ms >= 0 && ms < 24 * 60 * 60 * 1000 && status !== 'DONE';
+  const cls = isOverdue ? 'badge-danger' : isSoon ? 'badge-warning' : 'badge-info';
   return (
-    <div className="task-desc-wrap">
-      <div ref={ref} className={`task-desc${open ? '' : ' is-clamped'}`} data-testid="task-desc">{text}</div>
-      {(clipped || open) && (
-        <button type="button" className="task-desc-toggle" onClick={() => setOpen((v) => !v)} data-testid="task-desc-toggle">
-          {open ? t('task.collapse') : t('task.showAll')}
-        </button>
-      )}
-    </div>
+    <span className={`badge ${cls} task-deadline`} data-testid="task-deadline">
+      {dl.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+    </span>
+  );
+}
+
+/** Статус — цветная плашка с выпадающим списком (как статус заявки). */
+function TaskStatusSelect({ task, canChange, onChange }: { task: Task; canChange: boolean; onChange: (s: TaskStatus) => void }) {
+  const { t } = useT();
+  return (
+    <CrmSelect
+      className={`crm-select task-status-select is-${task.status.toLowerCase()}`}
+      value={task.status}
+      onChange={(e) => onChange(e.target.value as TaskStatus)}
+      disabled={!canChange}
+      title={canChange ? t('common.status') : t('task.statusLocked')}
+      data-testid="task-status"
+    >
+      <option value="TODO">{t('task.status.TODO')}</option>
+      <option value="IN_PROGRESS">{t('task.status.IN_PROGRESS')}</option>
+      <option value="DONE">{t('task.status.DONE')}</option>
+    </CrmSelect>
+  );
+}
+
+/** Окно задачи: полный текст, люди, сроки; статус меняется прямо здесь. */
+function TaskModal({
+  task, canChange, canDelete, onStatus, onDelete, onClose,
+}: {
+  task: Task; canChange: boolean; canDelete: boolean;
+  onStatus: (s: TaskStatus) => void; onDelete: () => void; onClose: () => void;
+}) {
+  const { t } = useT();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const people = (task.assignees ?? []).map((a) => a.fullName).join(', ');
+  return (
+    <motion.div
+      className="dialog-backdrop details-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <motion.div
+        className="dialog-card task-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={task.title}
+        data-testid="task-modal"
+        initial={{ opacity: 0, scale: 0.97, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 16 }}
+        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="task-modal-head">
+          <h3 className="task-modal-title">{task.title}</h3>
+          <button type="button" className="lead-modal-close" aria-label={t('common.close')} data-testid="task-modal-close" onClick={onClose}>
+            <Icon name="close" size={20} />
+          </button>
+        </div>
+        {task.description
+          ? <div className="task-modal-desc" data-testid="task-modal-desc">{task.description}</div>
+          : <div className="task-modal-desc task-empty">—</div>}
+        <div className="task-modal-grid">
+          <div><span>{t('common.status')}</span><TaskStatusSelect task={task} canChange={canChange} onChange={onStatus} /></div>
+          <div><span>{t('task.deadline')}</span>{task.deadline ? <DeadlineBadge deadline={task.deadline} status={task.status} /> : <b>—</b>}</div>
+          <div><span>{t('task.assignee')}</span><b>{people || '—'}</b></div>
+          <div><span>{t('task.controller')}</span><b>{task.controller?.fullName ?? '—'}</b></div>
+          <div><span>{t('task.author')}</span><b>{task.createdBy?.fullName ?? '—'}</b></div>
+          <div><span>{t('task.created')}</span><b>{new Date(task.createdAt).toLocaleDateString('ru-RU')}</b></div>
+        </div>
+        <div className="task-modal-actions">
+          {canDelete && (
+            <button type="button" className="btn btn-sm btn-danger" onClick={onDelete} data-testid="task-modal-delete">
+              <Icon name="delete" size={16} /> {t('common.delete')}
+            </button>
+          )}
+          <button type="button" className="btn btn-sm btn-secondary" onClick={onClose}>{t('common.close')}</button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

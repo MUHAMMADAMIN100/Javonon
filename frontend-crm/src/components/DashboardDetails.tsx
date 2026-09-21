@@ -194,7 +194,7 @@ function MoneyDetails({
   onClose: () => void;
 }) {
   const { t } = useT();
-  const params = { from: range.from || undefined, to: range.to || undefined, take: 1000, includeReversed: true };
+  const params = { from: range.from || undefined, to: range.to || undefined, take: 1000 };
   const query = useQuery({
     queryKey: keys.finance.transactions({ ...params, details: true }),
     queryFn: () => listTransactions(params),
@@ -205,7 +205,6 @@ function MoneyDetails({
   // Сводка карточек — только TJS; остальные валюты в сумму не входят.
   const rows = query.data ? all.filter((tx) => inKind(tx) && tx.currency === REPORTING_CURRENCY) : undefined;
   const otherCurrency = all.filter((tx) => inKind(tx) && tx.currency !== REPORTING_CURRENCY).length;
-  const hasReversed = (rows ?? []).some((tx) => !!tx.reversedAt);
   const sum = (type: 'INCOME' | 'EXPENSE') =>
     (rows ?? []).filter((tx) => tx.type === type).reduce((s, tx) => s + Number(tx.amount), 0);
   const income = sum('INCOME');
@@ -237,9 +236,8 @@ function MoneyDetails({
       align: 'right',
       value: (tx) => Number(tx.amount),
       render: (tx) => (
-        <span className={tx.reversedAt ? 'details-reversed' : undefined} style={{ fontWeight: 600, whiteSpace: 'nowrap', color: tx.reversedAt ? undefined : signed(tx) >= 0 ? 'var(--primary-dark)' : 'var(--danger)' }}>
+        <span style={{ fontWeight: 600, whiteSpace: 'nowrap', color: signed(tx) >= 0 ? 'var(--primary-dark)' : 'var(--danger)' }}>
           {signed(tx) >= 0 ? '+' : '−'} {fmtMoney(Number(tx.amount), tx.currency)}
-          {tx.reversedAt && <span style={{ marginLeft: 6, fontSize: 11 }}>({t('details.reversed')})</span>}
         </span>
       ),
     },
@@ -261,12 +259,7 @@ function MoneyDetails({
         }),
       }] : undefined}
       note={
-        (hasReversed || otherCurrency > 0) ? (
-          <>
-            {hasReversed && <div>{t('details.reversedHint')}</div>}
-            {otherCurrency > 0 && <div>{t('details.otherCurrency').replace('{n}', String(otherCurrency))}</div>}
-          </>
-        ) : undefined
+        otherCurrency > 0 ? t('details.otherCurrency').replace('{n}', String(otherCurrency)) : undefined
       }
       rows={rows}
       loading={query.isLoading}

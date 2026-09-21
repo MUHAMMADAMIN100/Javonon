@@ -302,17 +302,15 @@ export class FinanceService {
     from?: Date;
     to?: Date;
     take?: number;
-    /** Включить отменённые (окно карточки дашборда — см. контроллер). */
-    includeReversed?: boolean;
   }) {
     return this.prisma.transaction.findMany({
       where: {
-        // Отменённые в журнал не идут: в отчётах их и так нет, а удалить
-        // повторно нельзя — человек видел строку, которая «не удаляется».
+        // Отменённые в журнал не идут — как и во все суммы (summary,
+        // byCategory, timeseries…): карточка = сумма строк журнала.
         // Одного условия хватает на обе строки пары: корректирующая
         // зеркальная запись тоже создаётся с reversedAt (см. remove()).
         // Для аудита обе остаются в базе и в журнале действий.
-        ...(filters.includeReversed ? {} : { reversedAt: null }),
+        reversedAt: null,
         ...(filters.type && { type: filters.type }),
         ...(filters.category && { category: filters.category }),
         ...(filters.studentId && { studentId: filters.studentId }),
@@ -1382,6 +1380,7 @@ export class FinanceService {
       where: {
         type: 'INCOME',
         currency: REPORTING_CURRENCY,
+        reversedAt: null,
         ...(opts.from || opts.to
           ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
           : {}),
@@ -1415,6 +1414,7 @@ export class FinanceService {
       where: {
         type: 'INCOME',
         currency: REPORTING_CURRENCY,
+        reversedAt: null,
         ...(opts.from || opts.to
           ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
           : {}),
@@ -1968,10 +1968,13 @@ export class FinanceService {
   /** Сводка: общий доход / расход / прибыль за период. */
   async summary(opts: { from?: Date; to?: Date }) {
     this.validateRange(opts);
+    // Удалённые (reversedAt) и их зеркальные записи не считаем нигде —
+    // как журнал транзакций: карточка = сумма строк журнала за период.
     const where = {
       ...(opts.from || opts.to
         ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
         : {}),
+      reversedAt: null,
     };
     // Fix (audit — currency mixing): считаем чистую прибыль в TJS.
     // Иначе `netProfit` = TJS_доход − USD_расход (безразмерное число),
@@ -1992,12 +1995,15 @@ export class FinanceService {
     ]);
     const totalIncome = income._sum.amount || 0;
     const totalExpense = expense._sum.amount || 0;
+    // Всего транзакций — все валюты, как строк в журнале за тот же период.
+    const nonTjsCount = Object.values(nonTjs).reduce((s, v) => s + v.incomeCount + v.expenseCount, 0);
     return {
       totalIncome,
       totalExpense,
       netProfit: totalIncome - totalExpense,
       incomeCount: income._count,
       expenseCount: expense._count,
+      transactionCount: income._count + expense._count + nonTjsCount,
       currency: REPORTING_CURRENCY,
       nonTjsTotals: nonTjs,
     };
@@ -2006,10 +2012,13 @@ export class FinanceService {
   /** Группировка по категориям — для дашборда руководителя. */
   async byCategory(opts: { from?: Date; to?: Date }) {
     this.validateRange(opts);
+    // Удалённые (reversedAt) и их зеркальные записи не считаем нигде —
+    // как журнал транзакций: карточка = сумма строк журнала за период.
     const where = {
       ...(opts.from || opts.to
         ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
         : {}),
+      reversedAt: null,
     };
     // Fix (audit — currency mixing): TJS-only. См. общий комментарий у
     // REPORTING_CURRENCY. Не-TJS в этот эндпоинт не подмешиваем: фронт
@@ -2036,10 +2045,13 @@ export class FinanceService {
   async timeseries(opts: { from?: Date; to?: Date; bucket?: 'day' | 'week' | 'month' }) {
     this.validateRange(opts);
     const bucket = opts.bucket || 'week';
+    // Удалённые (reversedAt) и их зеркальные записи не считаем нигде —
+    // как журнал транзакций: карточка = сумма строк журнала за период.
     const where = {
       ...(opts.from || opts.to
         ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
         : {}),
+      reversedAt: null,
     };
     // Fix (audit — currency mixing): график тоже TJS-only. Раньше
     // USD 5000 tuition-платёж давал пик «5000 сомони» на графике

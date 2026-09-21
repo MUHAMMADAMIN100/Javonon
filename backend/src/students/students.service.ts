@@ -322,7 +322,8 @@ export class StudentsService {
   async paymentsHistory(studentId: string) {
     const [transactions, paymentRequests] = await Promise.all([
       this.prisma.transaction.findMany({
-        where: { studentId, type: 'INCOME' },
+        // Удалённые оплаты (reversedAt) не показываем и не считаем.
+        where: { studentId, type: 'INCOME', reversedAt: null },
         orderBy: { date: 'desc' },
         select: {
           id: true,
@@ -340,8 +341,13 @@ export class StudentsService {
         include: { confirmedBy: { select: { id: true, fullName: true } } },
       }),
     ]);
-    const totalPaid = transactions.reduce((s, t) => s + t.amount, 0);
-    return { transactions, paymentRequests, totalPaid };
+    // «Оплачено» — в TJS; другие валюты отдельно, не складываем с сомони.
+    const totalPaid = transactions.filter((t) => t.currency === 'TJS').reduce((s, t) => s + t.amount, 0);
+    const totalPaidOther: Record<string, number> = {};
+    for (const t of transactions) {
+      if (t.currency !== 'TJS') totalPaidOther[t.currency] = (totalPaidOther[t.currency] ?? 0) + t.amount;
+    }
+    return { transactions, paymentRequests, totalPaid, totalPaidOther };
   }
 
   async update(id: string, dto: UpdateStudentDto, user: CurrentUser) {

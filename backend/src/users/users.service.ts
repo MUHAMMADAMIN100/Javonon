@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { REPORTING_CURRENCY } from '../common/reporting-currency';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -221,7 +222,10 @@ export class UsersService {
         where: { userId: id, applied: false },
         _sum: { amount: true },
       }),
-      this.prisma.transaction.aggregate({
+      // По валютам: сумма «Продаж» — в TJS, другие валюты отдельно (не
+      // складываем 300 USD как 300 TJS); количество — все строки, как в окне.
+      this.prisma.transaction.groupBy({
+        by: ['currency'],
         where: {
           managerId: id,
           type: 'INCOME',
@@ -233,7 +237,8 @@ export class UsersService {
         _sum: { amount: true },
         _count: true,
       }),
-      this.prisma.transaction.aggregate({
+      this.prisma.transaction.groupBy({
+        by: ['currency'],
         where: {
           managerId: id,
           type: 'INCOME',
@@ -328,10 +333,12 @@ export class UsersService {
         pendingTotal: pendingPenaltiesAmount._sum.amount || 0,
       },
       sales: {
-        monthAmount: salesMonthAgg._sum.amount || 0,
-        monthCount: salesMonthAgg._count,
-        yearAmount: salesYearAgg._sum.amount || 0,
-        yearCount: salesYearAgg._count,
+        monthAmount: bySales(salesMonthAgg).tjs,
+        monthCount: bySales(salesMonthAgg).count,
+        monthOther: bySales(salesMonthAgg).other,
+        yearAmount: bySales(salesYearAgg).tjs,
+        yearCount: bySales(salesYearAgg).count,
+        yearOther: bySales(salesYearAgg).other,
       },
       attendance: {
         workedMinutes: timeMonth._sum.totalMinutes || 0,
@@ -903,4 +910,17 @@ export class UsersService {
       },
     });
   }
+}
+
+/** Продажи по валютам → сумма в TJS, количество всех строк, прочие валюты отдельно. */
+function bySales(rows: { currency: string; _sum: { amount: number | null }; _count: number }[]) {
+  let tjs = 0;
+  let count = 0;
+  const other: Record<string, number> = {};
+  for (const r of rows) {
+    count += r._count;
+    if (r.currency === REPORTING_CURRENCY) tjs += r._sum.amount || 0;
+    else other[r.currency] = (other[r.currency] ?? 0) + (r._sum.amount || 0);
+  }
+  return { tjs, count, other };
 }

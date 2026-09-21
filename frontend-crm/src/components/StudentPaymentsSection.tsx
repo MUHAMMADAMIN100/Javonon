@@ -29,7 +29,10 @@ interface PaymentReq {
 interface Response {
   transactions: PaymentTx[];
   paymentRequests: PaymentReq[];
+  /** Оплачено в TJS (удалённые оплаты не входят). */
   totalPaid: number;
+  /** Оплаты в других валютах — отдельно, с сомони не складываются. */
+  totalPaidOther?: Record<string, number>;
 }
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -78,7 +81,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
   }
   if (!data) return null;
 
-  const { transactions, paymentRequests, totalPaid } = data;
+  const { transactions, paymentRequests, totalPaid, totalPaidOther } = data;
   const pendingActive = paymentRequests.filter((p) => p.status === 'PENDING');
 
   return (
@@ -108,14 +111,22 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
           }}>
             {t('payments.title')}
           </h3>
-          <div style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 32,
-            fontWeight: 500,
-            letterSpacing: '-0.03em',
-            color: 'var(--primary-dark)',
-          }}>
-            {fmt(totalPaid, transactions[0]?.currency || 'TJS')}
+          {/* «Оплачено» в TJS, под ним — другие валюты (в сумму не входят). */}
+          <div style={{ textAlign: 'right' }}>
+            <div style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 32,
+              fontWeight: 500,
+              letterSpacing: '-0.03em',
+              color: 'var(--primary-dark)',
+            }}>
+              {fmt(totalPaid, 'TJS')}
+            </div>
+            {Object.entries(totalPaidOther ?? {}).map(([cur, v]) => (
+              <div key={cur} data-testid="paid-other" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-soft)' }}>
+                + {fmt(v, cur)}
+              </div>
+            ))}
           </div>
         </div>
       </div>
