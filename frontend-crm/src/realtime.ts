@@ -30,7 +30,34 @@ const clearDisconnectTimer = () => {
   }
 };
 
+// «Кто в сети»: сервер считает сотрудника «отошедшим», если вкладка открыта,
+// но действий не было 5 минут. Действия (мышь, клавиатура, прокрутка,
+// касание) сообщаем не чаще раза в 30 секунд — этого хватает с запасом и
+// не нагружает сервер. Слушатели ставим один раз на всё приложение.
+const ACTIVITY_EVERY_MS = 30_000;
+let lastActivitySent = 0;
+let activityInstalled = false;
+function reportActivity() {
+  const now = Date.now();
+  if (now - lastActivitySent < ACTIVITY_EVERY_MS) return;
+  if (!socket?.connected) return;
+  lastActivitySent = now;
+  socket.emit('presence:activity');
+}
+function installActivityTracking() {
+  if (activityInstalled || typeof window === 'undefined') return;
+  activityInstalled = true;
+  const opts = { passive: true, capture: true } as const;
+  for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'scroll', 'touchstart']) {
+    window.addEventListener(ev, reportActivity, opts);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') reportActivity();
+  });
+}
+
 export function connectRealtime(token: string) {
+  installActivityTracking();
   try {
     // Если уже подключены тем же токеном — не пересоздавать (StrictMode-safe).
     if (socket && currentToken === token && socket.connected) {
@@ -49,6 +76,8 @@ export function connectRealtime(token: string) {
       timeout: 20000,
     });
     socket.on('connect', () => {
+      // Подключение само по себе — «в сети»; отсчёт пинга начинаем заново.
+      lastActivitySent = Date.now();
       clearDisconnectTimer();
       setState('connected');
     });

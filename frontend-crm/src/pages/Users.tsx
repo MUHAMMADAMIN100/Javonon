@@ -23,6 +23,9 @@ import { stringParam, useUrlListState } from '../lib/useUrlListState';
 import { matchesSearch } from '../lib/listSearch';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
+import { presenceSortValue, presenceText, usePresence } from '../lib/usePresence';
+import type { PresenceState } from '../api/presence';
+import PresenceDot from '../components/PresenceDot';
 
 const EMPTY_FORM = {
   email: '', fullName: '', password: '',
@@ -59,6 +62,7 @@ export default function Users() {
   const { values, setValue, reset } = useUrlListState({
     role: stringParam('', 80),
     search: stringParam('', 200),
+    online: stringParam('', 20),
   });
   const setUrlSearch = useCallback((v: string) => setValue('search', v), [setValue]);
   const { input: searchInput, setInput: setSearchInput, clear: clearSearch } = useUrlSearch(values.search, setUrlSearch);
@@ -71,6 +75,14 @@ export default function Users() {
     queryFn: () => listUsers(),
   });
   const allUsers = usersQuery.data ?? [];
+
+  // «Кто в сети» — только основателю (сервер остальным отвечает 403).
+  const founder = isFounder(me);
+  const presence = usePresence(founder);
+  const presenceOf = (u: User) => presence.byId.get(u.id);
+  const presenceStates: PresenceState[] = ['ONLINE', 'AWAY', 'OFFLINE'];
+  const presenceFilter = founder && presenceStates.includes(values.online as PresenceState) ? (values.online as PresenceState) : '';
+  const presenceCount = (st: PresenceState) => allUsers.filter((u) => (presenceOf(u)?.state ?? 'OFFLINE') === st).length;
 
   /**
    * Роли сотрудника — ровно то, что видно в колонке «Роль»: активная своя
@@ -101,12 +113,16 @@ export default function Users() {
   const items = allUsers.filter(
     (u) =>
       (!roleFilter || roleKeysOf(u).some((r) => r.key === roleFilter)) &&
+      (!presenceFilter || (presenceOf(u)?.state ?? 'OFFLINE') === presenceFilter) &&
       matchesSearch(values.search, [u.fullName, u.email]),
   );
-  const narrowed = !!(roleFilter || values.search);
+  const narrowed = !!(roleFilter || values.search || presenceFilter);
   const roleFilterLabel = roleOptions.find((r) => r.key === roleFilter)?.label;
   const sort = useTableSort(items, [
     { key: 'fullName', label: t('app.field.fullName'), value: (u) => u.fullName },
+    ...(founder
+      ? [{ key: 'presence', label: t('presence.col'), type: 'number' as const, value: (u: User) => presenceSortValue(presenceOf(u)) }]
+      : []),
     { key: 'email', label: t('userDetail.field.email'), value: (u) => u.email },
     {
       key: 'role',
@@ -203,7 +219,15 @@ export default function Users() {
   return (
     <div className="card">
       <div className="card-header is-titleless">
-        <ListTotal noun="users" found={items.length} total={allUsers.length} filtered={narrowed} testId="users-total" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+          <ListTotal noun="users" found={items.length} total={allUsers.length} filtered={narrowed} testId="users-total" />
+          {founder && presence.ready && (
+            <span className="presence-count" data-testid="users-online-count">
+              <PresenceDot state="ONLINE" size={8} />
+              {t('presence.onlineCount').replace('{n}', String(presenceCount('ONLINE')))}
+            </span>
+          )}
+        </div>
         <button className="btn btn-primary" onClick={openCreate}>+ {t('common.add')}</button>
       </div>
       <div className="card-body">
@@ -226,6 +250,23 @@ export default function Users() {
               <option key={r.key} value={r.key}>{`${r.label} (${r.count})`}</option>
             ))}
           </CrmSelect>
+          {founder && (
+            <CrmSelect
+              className="crm-select"
+              value={presenceFilter}
+              onChange={(e) => setValue('online', e.target.value)}
+              style={{ ['--filter-w' as string]: '200px' }}
+              title={t('presence.filter')}
+              data-testid="users-filter-presence"
+            >
+              <option value="">{t('presence.filter.all')}</option>
+              {presenceStates.map((st) => (
+                <option key={st} value={st}>
+                  {`${t(st === 'ONLINE' ? 'presence.online' : st === 'AWAY' ? 'presence.away' : 'presence.offline')} (${presenceCount(st)})`}
+                </option>
+              ))}
+            </CrmSelect>
+          )}
           <SearchField
             value={searchInput}
             onChange={setSearchInput}
@@ -239,7 +280,7 @@ export default function Users() {
               className="btn btn-ghost"
               onClick={() => {
                 setSearchInput('');
-                reset(['role', 'search']);
+                reset(['role', 'search', 'online']);
               }}
             >
               <Icon name="close" size={14} /> {t('common.reset')}
@@ -253,6 +294,13 @@ export default function Users() {
               : []),
             ...(roleFilter
               ? [{ key: 'role', label: `${t('users.chip.role')}: ${roleFilterLabel ?? '…'}`, onClear: () => reset(['role']) }]
+              : []),
+            ...(presenceFilter
+              ? [{
+                  key: 'online',
+                  label: `${t('presence.chip')}: ${t(presenceFilter === 'ONLINE' ? 'presence.online' : presenceFilter === 'AWAY' ? 'presence.away' : 'presence.offline')}`,
+                  onClear: () => reset(['online']),
+                }]
               : []),
           ]}
         />
@@ -283,9 +331,25 @@ export default function Users() {
                   onClick={() => navigate(`/users/${u.id}`)}
                 >
                   <td>
-                    <span style={{ fontWeight: 600 }}>{u.fullName}</span>
+                    <span className="presence-name">
+                      {founder && <PresenceDot state={presenceOf(u)?.state} title={presenceText(presenceOf(u), presence.now, t)} />}
+                      <span style={{ fontWeight: 600 }}>{u.fullName}</span>
+                    </span>
                     {u.id === me?.id && <span style={{ color: '#5b6478', fontSize: 12 }}> (вы)</span>}
                   </td>
+                  {founder && (
+                    <td data-testid="user-presence">
+                      {(() => {
+                        const r = presenceOf(u);
+                        if (!r) return <span style={{ color: 'var(--text-light)' }}>—</span>;
+                        return (
+                          <span className={`presence-cell is-${r.state.toLowerCase()}`}>
+                            {presenceText(r, presence.now, t)}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                  )}
                   <td>{u.email}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

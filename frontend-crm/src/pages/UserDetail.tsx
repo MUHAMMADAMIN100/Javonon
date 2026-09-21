@@ -31,6 +31,9 @@ import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import BackButton from '../components/BackButton';
+import PresenceDot from '../components/PresenceDot';
+import { agoText, presenceText, usePresence } from '../lib/usePresence';
+import { tjFormatDateTime } from '../lib/tjTime';
 import ProfileMonthDetails, { type MonthTile } from '../components/ProfileMonthDetails';
 
 export default function UserDetail() {
@@ -62,6 +65,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       return isAdmin ? mod.getUserFullProfile(userId) : mod.getMyFullProfile();
     },
   });
+
+  // «В сети» / «последний вход» — только основатель, на карточке сотрудника.
+  const presence = usePresence(isAdmin && isFounder(meStore));
 
   /** Какая плитка «Текущий месяц» открыта в окне «подробнее». */
   const [monthTile, setMonthTile] = useState<MonthTile | null>(null);
@@ -149,7 +155,16 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         <span className="crm-section-eyebrow">
           {isAdmin ? `${t('eyebrow.team')} · ${displayRoleLabel(user as any).toUpperCase()}` : t('eyebrow.profile')}
         </span>
-        <h2 className="crm-section-title">{user.fullName}</h2>
+        <h2 className="crm-section-title">
+          {user.fullName}
+          {presence.ready && (
+            <PresenceDot
+              state={presence.byId.get(realId)?.state ?? 'OFFLINE'}
+              title={presenceText(presence.byId.get(realId), presence.now, t)}
+              size={12}
+            />
+          )}
+        </h2>
       </div>
 
       {/* Личные данные и оплата — одна карточка в две колонки: по отдельности
@@ -177,6 +192,28 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <Field label={t('userDetail.field.passport')} value={user.passportNo || '—'} />
           <Field label={t('userDetail.field.hiredAt')} value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
           <Field label={t('profile.field.createdAt')} value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
+          {presence.ready && (() => {
+            const r = presence.byId.get(realId);
+            return (
+              <>
+                <Field
+                  label={t('presence.status')}
+                  value={
+                    <span className={`presence-cell is-${(r?.state ?? 'OFFLINE').toLowerCase()}`} data-testid="profile-presence">
+                      <PresenceDot state={r?.state ?? 'OFFLINE'} size={8} title="" />
+                      {presenceText(r, presence.now, t) || t('presence.never')}
+                    </span>
+                  }
+                  hint={r?.lastSeenAt && r.state !== 'ONLINE' ? tjFormatDateTime(r.lastSeenAt) : undefined}
+                />
+                <Field
+                  label={t('presence.lastLogin')}
+                  value={r?.lastLoginAt ? tjFormatDateTime(r.lastLoginAt) : '—'}
+                  hint={r?.lastLoginAt ? agoText(r.lastLoginAt, presence.now, t) : undefined}
+                />
+              </>
+            );
+          })()}
         </div>
         </div>
         <div>
@@ -438,7 +475,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 // Используем общий словарь из api/userProfile.
 const LABEL = USER_DOCUMENT_LABEL;
 
-function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Field({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
     <div>
       <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>

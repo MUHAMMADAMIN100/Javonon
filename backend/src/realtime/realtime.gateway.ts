@@ -4,11 +4,15 @@ import { JwtService } from '@nestjs/jwt';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
+  SubscribeMessage,
+  ConnectedSocket,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { requireJwtSecret } from '../auth/jwt-secret';
+import { PresenceService } from './presence.service';
 
 type JwtPayload = {
   sub: string;
@@ -87,13 +91,25 @@ function wsCheckOrigin(origin: string | undefined, callback: (err: Error | null,
     credentials: true,
   },
 })
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(RealtimeGateway.name);
 
   @WebSocketServer()
   server: Server;
 
-  constructor(private jwt: JwtService, private config: ConfigService) {}
+  constructor(
+    private jwt: JwtService,
+    private config: ConfigService,
+    private presence: PresenceService,
+  ) {}
+
+  afterInit() {
+    // «Кто в сети» видит только основатель — события присутствия идут
+    // исключительно в комнату 'founders' (REST /users/presence — тот же доступ).
+    this.presence.setNotifier((userId, state, lastSeenAt) => {
+      this.server?.to('founders').emit('presence:update', { userId, state, lastSeenAt });
+    });
+  }
 
   async handleConnection(client: Socket) {
     const token =
@@ -204,6 +220,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
         if (FINANCE_ROLES.has(role)) {
           client.join('finance-staff');
         }
+        if (role === 'FOUNDER' || payload.roles?.includes('FOUNDER')) {
+          client.join('founders');
+        }
+        this.presence.connected(id, client.id);
       } else if (role === 'STUDENT') {
         client.join(`student:${id}`);
         client.join('students');
@@ -226,7 +246,17 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       clearTimeout(data.expiryTimer);
       data.expiryTimer = undefined;
     }
+    if (data.userId && data.role && STAFF_ROLES.has(data.role)) {
+      this.presence.disconnected(data.userId, client.id);
+    }
     this.logger.log(`Disconnected: ${data.role} ${data.userId}`);
+  }
+
+  /** Вкладка сообщает: человек что-то делал (клиент шлёт не чаще раза в 30 с). */
+  @SubscribeMessage('presence:activity')
+  onPresenceActivity(@ConnectedSocket() client: Socket) {
+    const data = (client.data as SocketData) || {};
+    if (data.userId && data.role && STAFF_ROLES.has(data.role)) this.presence.activity(data.userId);
   }
 
   /** Сотрудникам (все админы + сотрудники) */

@@ -33,6 +33,9 @@ export class AuthService {
     // JwtStrategy будет валидировать существование + revokedAt IS NULL.
     // Это единственный способ серверно отозвать конкретный JWT без
     // ротации глобального JWT_SECRET.
+    // «Последний вход» — для основателя в профиле сотрудника.
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
     const session = await this.prisma.session.create({
       data: {
         userId: user.id,

@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -25,6 +26,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { isFounder } from '../auth/role-utils';
 
 // Документы сотрудника (паспорт, фото, контракт, диплом). Whitelist
 // типов: иначе можно было загрузить .html/.exe/.svg и получить stored-XSS
@@ -152,6 +154,18 @@ export class UsersController {
   @Post()
   create(@Body() dto: CreateUserDto) {
     return this.users.create(dto);
+  }
+
+  /**
+   * Кто в сети / отошёл / не в сети + последний вход. Только основатель:
+   * помимо @Roles проверяем явно — RolesGuard пускает и по «неявным»
+   * пермиссиям кастомных ролей для URL /users/*.
+   */
+  @Get('presence')
+  @Roles(Role.FOUNDER)
+  presence(@CurrentUser() me: any) {
+    if (!isFounder(me)) throw new ForbiddenException('Недостаточно прав');
+    return this.users.presenceList();
   }
 
   /** Полный профиль сотрудника (HR + зарплата + KPI + посещаемость + штрафы). */

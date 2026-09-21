@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { PresenceService } from '../realtime/presence.service';
 import { isElevated, isFounder } from '../auth/role-utils';
 import { tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
 import { SettingsService } from '../settings/settings.service';
@@ -29,7 +30,31 @@ export class UsersService {
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
     private settings: SettingsService,
+    private presence: PresenceService,
   ) {}
+
+  /**
+   * «Кто в сети» — только для основателя (проверка в контроллере).
+   * Состояние сейчас — из памяти (открытые вкладки), «был(а) в сети» и
+   * «последний вход» — из базы. Уволенных (isActive=false) не показываем
+   * как «в сети», даже если старая вкладка ещё открыта.
+   */
+  async presenceList() {
+    const users = await this.prisma.user.findMany({
+      select: { id: true, isActive: true, lastSeenAt: true, lastLoginAt: true },
+    });
+    const live = this.presence.snapshot();
+    return users.map((u) => {
+      const now = u.isActive !== false ? live.get(u.id) : undefined;
+      return {
+        userId: u.id,
+        state: now?.state ?? 'OFFLINE',
+        // Пока человек в сети, «последняя активность» точнее из памяти.
+        lastSeenAt: now ? now.lastActivityAt : u.lastSeenAt,
+        lastLoginAt: u.lastLoginAt,
+      };
+    });
+  }
 
   async findAll(filters: { search?: string } = {}) {
     const search = (filters.search || '').trim();
@@ -648,8 +673,9 @@ export class UsersService {
       });
     }
 
-    // Скрываем password из ответа клиенту
-    const { password: _omit, ...safe } = user as any;
+    // Скрываем password из ответа клиенту; присутствие — только основателю
+    // через /users/presence.
+    const { password: _omit, lastSeenAt: _seen, lastLoginAt: _login, ...safe } = user as any;
     return safe;
   }
 
