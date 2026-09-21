@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createTask, deleteTask, listTasks, updateTask } from '../api/tasks';
 import { listUsers } from '../api/users';
 import type { Role, Task, TaskStatus } from '../api/types';
-import { TASK_STATUS_BADGE } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
@@ -16,19 +15,19 @@ import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
 import CrmDatePicker from '../components/CrmDatePicker';
-import { isElevated, displayRoleLabel } from '../lib/roles';
+import { hasRole, isElevated, displayRoleLabel } from '../lib/roles';
 import { useT } from '../lib/i18n';
-import { useTaskStatusLabel } from '../lib/labels';
 
 type Scope = 'all' | 'mine';
 
 export default function Tasks() {
   const { t } = useT();
-  const taskStatusLabel = useTaskStatusLabel();
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
   const isAdmin = isElevated(me);
+  // Удалять — как на сервере (tasks.service remove): основатель и администратор.
+  const canDelete = hasRole(me, 'FOUNDER', 'ADMIN');
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -408,75 +407,82 @@ export default function Tasks() {
                     }}
                     layout
                   >
-                    <div className="task-content">
+                    <div className="task-head">
                       <div className="task-title">{task.title}</div>
-                      <div className="task-desc">{task.description}</div>
-                      <div className="task-meta">
-                        <span className={`badge ${TASK_STATUS_BADGE[task.status]}`}>{taskStatusLabel(task.status)}</span>
-                        {(task.assignees && task.assignees.length > 0) ? (
-                          task.assignees.map((a) => (
-                            <span key={a.id} className="task-meta-item">
-                              <Icon name="person" size={14} />
-                              {a.fullName}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="task-meta-item">
-                            <Icon name="person" size={14} />—
-                          </span>
-                        )}
-                        {task.controller && (
-                          <span className="task-meta-item" title="Контролёр задачи">
-                            <Icon name="verified_user" size={14} />
-                            Контролёр: {task.controller.fullName}
-                          </span>
-                        )}
-                        {task.createdBy && (
-                          <span className="task-meta-item">
-                            <Icon name="edit" size={14} />
-                            {task.createdBy.fullName}
-                          </span>
-                        )}
-                        {task.deadline && (() => {
-                          const dl = new Date(task.deadline);
-                          const now = new Date();
-                          const ms = dl.getTime() - now.getTime();
-                          const isOverdue = ms < 0 && task.status !== 'DONE';
-                          const isSoon = ms >= 0 && ms < 24 * 60 * 60 * 1000 && task.status !== 'DONE';
-                          const cls = isOverdue ? 'badge-danger' : isSoon ? 'badge-warning' : 'badge-info';
-                          return (
-                            <span className={`badge ${cls}`} style={{ fontFamily: 'var(--font-mono)' }}>
-                              <Icon name="schedule" size={12} />
-                              {dl.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          );
-                        })()}
-                        <span className="task-meta-item">
-                          <Icon name="event" size={14} />
-                          {new Date(task.createdAt).toLocaleDateString('ru-RU')}
-                        </span>
+                      <div className="task-head-actions">
+                        <div className="task-status-switch" role="group" aria-label={t('common.status')}>
+                          {statuses.map((s) => (
+                            <button
+                              key={s.value}
+                              type="button"
+                              className={`task-status-btn${task.status === s.value ? ' active' : ''} task-status-${s.value.toLowerCase()}`}
+                              onClick={() => canChange && task.status !== s.value && setStatus(task, s.value)}
+                              disabled={!canChange}
+                              aria-pressed={task.status === s.value}
+                              title={s.label}
+                            >
+                              <Icon name={s.icon} size={15} />
+                              <span>{s.label}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-
-                      <div className="task-status-switch">
-                        {statuses.map((s) => (
+                      {canDelete && (
                           <button
-                            key={s.value}
-                            className={`task-status-btn${task.status === s.value ? ' active' : ''} task-status-${s.value.toLowerCase()}`}
-                            onClick={() => canChange && setStatus(task, s.value)}
-                            disabled={!canChange}
-                            title={s.label}
+                            type="button"
+                            className="task-delete-btn"
+                            onClick={() => onDelete(task)}
+                            title={t('common.delete')}
+                            aria-label={t('common.delete')}
                           >
-                            <Icon name={s.icon} size={16} />
-                            <span>{s.label}</span>
+                            <Icon name="delete" size={18} />
                           </button>
-                        ))}
-                      </div>
+                      )}
                     </div>
-                    {isAdmin && (
-                      <button className="btn btn-sm btn-danger task-delete-btn" onClick={() => onDelete(task)} title={t('common.delete')}>
-                        <Icon name="delete" size={16} />
-                      </button>
-                    )}
+                    {task.description && <TaskDescription text={task.description} />}
+                    <div className="task-meta">
+                      {(task.assignees && task.assignees.length > 0) ? (
+                        task.assignees.map((a) => (
+                          <span key={a.id} className="task-meta-item" title={t('task.assignee')}>
+                            <Icon name="person" size={14} />
+                            {a.fullName}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="task-meta-item" title={t('task.assignee')}>
+                          <Icon name="person" size={14} />—
+                        </span>
+                      )}
+                      {task.controller && (
+                        <span className="task-meta-item" title={t('task.controller')}>
+                          <Icon name="verified_user" size={14} />
+                          {t('task.controller')}: {task.controller.fullName}
+                        </span>
+                      )}
+                      {task.createdBy && (
+                        <span className="task-meta-item" title={t('task.author')}>
+                          <Icon name="edit" size={14} />
+                          {task.createdBy.fullName}
+                        </span>
+                      )}
+                      {task.deadline && (() => {
+                        const dl = new Date(task.deadline);
+                        const ms = dl.getTime() - Date.now();
+                        const isOverdue = ms < 0 && task.status !== 'DONE';
+                        const isSoon = ms >= 0 && ms < 24 * 60 * 60 * 1000 && task.status !== 'DONE';
+                        const cls = isOverdue ? 'badge-danger' : isSoon ? 'badge-warning' : 'badge-info';
+                        return (
+                          <span className={`badge ${cls} task-deadline`} title={t('task.deadline')} data-testid="task-deadline">
+                            <Icon name="schedule" size={12} />
+                            {dl.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        );
+                      })()}
+                      <span className="task-meta-item" title={t('task.created')}>
+                        <Icon name="event" size={14} />
+                        {new Date(task.createdAt).toLocaleDateString('ru-RU')}
+                      </span>
+                    </div>
                   </motion.div>
                 );
               })}
@@ -485,5 +491,36 @@ export default function Tasks() {
         </AnimatePresence>
       </div>
     </motion.div>
+  );
+}
+
+/**
+ * Описание задачи: не длиннее двух строк, если текст длиннее —
+ * «Показать всё» раскрывает его целиком. Кнопка появляется, только когда
+ * текст действительно обрезан (меряем после отрисовки и при смене ширины).
+ */
+function TaskDescription({ text }: { text: string }) {
+  const { t } = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    const measure = () => setClipped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text, open]);
+  return (
+    <div className="task-desc-wrap">
+      <div ref={ref} className={`task-desc${open ? '' : ' is-clamped'}`} data-testid="task-desc">{text}</div>
+      {(clipped || open) && (
+        <button type="button" className="task-desc-toggle" onClick={() => setOpen((v) => !v)} data-testid="task-desc-toggle">
+          {open ? t('task.collapse') : t('task.showAll')}
+        </button>
+      )}
+    </div>
   );
 }

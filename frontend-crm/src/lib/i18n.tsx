@@ -1328,6 +1328,13 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== task status long =====
     'task.status.TODO': 'К выполнению',
+    'task.showAll': 'Показать всё',
+    'task.collapse': 'Свернуть',
+    'task.assignee': 'Исполнитель',
+    'task.controller': 'Контролёр',
+    'task.author': 'Автор',
+    'task.deadline': 'Срок',
+    'task.created': 'Создана',
     'task.status.IN_PROGRESS': 'В работе',
     'task.status.DONE': 'Выполнено',
 
@@ -1530,6 +1537,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'userDetail.tab.salary': 'Зарплата',
     'userDetail.tab.kpi': 'KPI',
     'userDetail.section.personal': 'Личные данные',
+    'profile.section.activity': 'Активность',
+    'profile.edit': 'Изменить',
+    'profile.roles': 'Роли',
     'userDetail.section.hr': 'HR · профиль',
     'userDetail.section.documents': 'Документы сотрудника',
     'userDetail.section.salary': 'Оплата',
@@ -3168,6 +3178,13 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     // ===== task status long =====
     'task.status.TODO': 'Барои иҷро',
+    'task.showAll': 'Ҳамаашро нишон додан',
+    'task.collapse': 'Пӯшидан',
+    'task.assignee': 'Иҷрокунанда',
+    'task.controller': 'Назоратчӣ',
+    'task.author': 'Муаллиф',
+    'task.deadline': 'Мӯҳлат',
+    'task.created': 'Сохта шуд',
     'task.status.IN_PROGRESS': 'Дар ҷараён',
     'task.status.DONE': 'Иҷро шуд',
 
@@ -3365,6 +3382,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'userDetail.tab.salary': 'Маош',
     'userDetail.tab.kpi': 'KPI',
     'userDetail.section.personal': 'Маълумоти шахсӣ',
+    'profile.section.activity': 'Фаъолият',
+    'profile.edit': 'Тағйир додан',
+    'profile.roles': 'Нақшҳо',
     'userDetail.section.hr': 'HR · профил',
     'userDetail.section.documents': 'Ҳуҷҷатҳои корманд',
     'userDetail.section.salary': 'Пардохт',

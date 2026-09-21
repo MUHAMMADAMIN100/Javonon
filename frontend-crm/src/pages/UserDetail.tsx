@@ -31,6 +31,7 @@ import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import BackButton from '../components/BackButton';
+import Icon from '../Icon';
 import PresenceDot from '../components/PresenceDot';
 import { agoText, presenceText, usePresence } from '../lib/usePresence';
 import { tjFormatDateTime } from '../lib/tjTime';
@@ -68,6 +69,12 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
   // «В сети» / «последний вход» — только основатель, на карточке сотрудника.
   const presence = usePresence(isAdmin && isFounder(meStore));
+
+  /** Какая форма правки открыта под «Личными данными / Оплатой». */
+  const [editing, setEditing] = useState<'personal' | 'pay' | 'roles' | 'custom' | null>(null);
+  const toggleEdit = (k: 'personal' | 'pay' | 'roles' | 'custom') => setEditing((cur) => (cur === k ? null : k));
+  const closeEdit = () => setEditing(null);
+  const roleLabel = useRoleLabel();
 
   /** Какая плитка «Текущий месяц» открыта в окне «подробнее». */
   const [monthTile, setMonthTile] = useState<MonthTile | null>(null);
@@ -146,6 +153,24 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   // Тогда даём ему те же возможности — загрузить/удалить свой документ,
   // подписать оферту.
   const isSelf = !isAdmin || meStore?.id === user.id;
+  // Права — как раньше: ФИО/email и роли меняет основатель, кадры и оплату — админ.
+  const canEditNameEmail = isFounder(meStore);
+  const canEditRoles = isFounder(meStore);
+  const isFounderTarget = user.role === 'FOUNDER' || (user.roles || []).includes('FOUNDER' as any);
+  const onEditSaved = () => {
+    setEditing(null);
+    qc.invalidateQueries({ queryKey });
+  };
+  // Роль словами: своя (кастомная) роль, в скобках — базовые.
+  const roleText = (() => {
+    const cr = (user as any).customRole;
+    const base = [user.role, ...(user.roles || [])]
+      .filter((r, i, a) => r && a.indexOf(r) === i)
+      .map((r) => roleLabel(r as any))
+      .join(', ');
+    if (cr?.name && cr.isActive !== false) return base ? `${cr.name} (${base})` : cr.name;
+    return base || '—';
+  })();
   const canManageDocs = isAdmin || isSelf;
 
   return (
@@ -167,101 +192,101 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         </h2>
       </div>
 
-      {/* Личные данные и оплата — одна карточка в две колонки: по отдельности
-          это были две почти пустые широкие полосы. */}
+      {/* Личные данные | Оплата — одна карточка в две колонки, ниже строка
+          «Активность» (видит основатель). Кнопка «Изменить» — у заголовка
+          своей группы; форма правки раскрывается под данными. */}
       <section className="card profile-section" data-testid="profile-main">
         <div className="profile-cols">
-        <div>
-        <h3 className="profile-h">{t('userDetail.section.personal')}</h3>
-        <div className="profile-grid">
-          <Field label={t('userDetail.field.email')} value={user.email} />
-          <Field
-            label={t('userDetail.field.role')}
-            value={(() => {
-              const parts: string[] = [];
-              const cr = (user as any).customRole;
-              if (cr?.name && cr.isActive !== false) parts.push(cr.name);
-              const base = [user.role, ...(user.roles || [])]
-                .filter((r, i, a) => r && a.indexOf(r) === i)
-                .join(', ');
-              if (base) parts.push(parts.length ? `(${base})` : base);
-              return parts.join(' ') || '—';
-            })()}
-          />
-          <Field label={t('userDetail.field.phone')} value={user.phone || '—'} />
-          <Field label={t('userDetail.field.passport')} value={user.passportNo || '—'} />
-          <Field label={t('userDetail.field.hiredAt')} value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
-          <Field label={t('profile.field.createdAt')} value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
-          {presence.ready && (() => {
-            const r = presence.byId.get(realId);
-            return (
-              <>
-                <Field
-                  label={t('presence.status')}
-                  value={
-                    <span className={`presence-cell is-${(r?.state ?? 'OFFLINE').toLowerCase()}`} data-testid="profile-presence">
-                      <PresenceDot state={r?.state ?? 'OFFLINE'} size={8} title="" />
-                      {presenceText(r, presence.now, t) || t('presence.never')}
-                    </span>
-                  }
-                  hint={r?.lastSeenAt && r.state !== 'ONLINE' ? tjFormatDateTime(r.lastSeenAt) : undefined}
-                />
-                <Field
-                  label={t('presence.lastLogin')}
-                  value={r?.lastLoginAt ? tjFormatDateTime(r.lastLoginAt) : '—'}
-                  hint={r?.lastLoginAt ? agoText(r.lastLoginAt, presence.now, t) : undefined}
-                />
-              </>
-            );
-          })()}
+          <div className="profile-group" data-testid="group-personal">
+            <div className="profile-group-head">
+              <h3 className="profile-h">{t('userDetail.section.personal')}</h3>
+              {(canEditNameEmail || isAdmin) && (
+                <EditButton active={editing === 'personal'} testId="edit-personal" onClick={() => toggleEdit('personal')} />
+              )}
+            </div>
+            <div className="profile-grid">
+              <Field label={t('userDetail.field.email')} value={user.email} />
+              <Field
+                label={t('userDetail.field.role')}
+                value={roleText}
+                extra={canEditRoles && !isFounderTarget ? (
+                  <div className="profile-role-actions">
+                    <button type="button" className={`profile-link-btn${editing === 'roles' ? ' is-active' : ''}`} onClick={() => toggleEdit('roles')} data-testid="edit-roles">
+                      {t('profile.roles')}
+                    </button>
+                    <button type="button" className={`profile-link-btn${editing === 'custom' ? ' is-active' : ''}`} onClick={() => toggleEdit('custom')} data-testid="edit-custom-role">
+                      {t('userDetail.field.customRole')}
+                    </button>
+                  </div>
+                ) : undefined}
+              />
+              <Field label={t('userDetail.field.phone')} value={user.phone || '—'} />
+              <Field label={t('userDetail.field.passport')} value={user.passportNo || '—'} />
+              <Field label={t('userDetail.field.hiredAt')} value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
+              <Field label={t('profile.field.createdAt')} value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
+            </div>
+          </div>
+          <div className="profile-group" data-testid="group-pay">
+            <div className="profile-group-head">
+              <h3 className="profile-h">{t('userDetail.section.salary')}</h3>
+              {isAdmin && <EditButton active={editing === 'pay'} testId="edit-pay" onClick={() => toggleEdit('pay')} />}
+            </div>
+            <div className="profile-grid">
+              <Field label={t('userDetail.field.baseSalary')} value={fmtMoney(salary.baseSalary)} />
+              <Field label={t('userDetail.field.hourlyRate')} value={fmtMoney(salary.hourlyRate)} />
+              {/*
+                ДЕЙСТВУЮЩАЯ ставка, а не сырой User.bonusPercent. Последний —
+                персональный override, и у всех, кто сидит на сетке, он равен 0:
+                менеджер читал в своём досье «Бонус % с продаж: 0%», пока
+                учредитель видел 6% на экране Зарплаты. Ниже ещё и откуда
+                взялась цифра: полоса + объём за месяц (или «личный процент»).
+                Старый бэк без bonusPercentEffective — падаем на прежнее поведение.
+              */}
+              <Field
+                label={t('userDetail.field.bonusPercent')}
+                value={`${salary.bonusPercentEffective ?? salary.bonusPercent}%`}
+                hint={
+                  salary.bonusSource === 'PERSONAL'
+                    ? t('userDetail.bonus.personal')
+                    : salary.bonusBand
+                      ? `${t('userDetail.bonus.fromBand')} · ${bandRangeLabel(salary.bonusBand.minAmount, salary.bonusBand.maxAmount)} · ${t('salary.bonus.volume')} ${fmtMoney(salary.bonusVolume ?? 0)}`
+                      : undefined
+                }
+              />
+              <Field label={t('userDetail.field.kpiTarget')} value={`${kpi.targetPct}%`} />
+            </div>
+          </div>
         </div>
-        </div>
-        <div>
-        {/* Зарплата — параметры расчёта */}
-        <h3 className="profile-h">{t('userDetail.section.salary')}</h3>
-        <div className="profile-grid">
-          <Field label={t('userDetail.field.baseSalary')} value={fmtMoney(salary.baseSalary)} />
-          <Field label={t('userDetail.field.hourlyRate')} value={fmtMoney(salary.hourlyRate)} />
-          {/*
-            ДЕЙСТВУЮЩАЯ ставка, а не сырой User.bonusPercent. Последний —
-            персональный override, и у всех, кто сидит на сетке, он равен 0:
-            менеджер читал в своём досье «Бонус % с продаж: 0%», пока
-            учредитель видел 6% на экране Зарплаты. Ниже ещё и откуда
-            взялась цифра: полоса + объём за месяц (или «личный процент»).
-            Старый бэк без bonusPercentEffective — падаем на прежнее поведение.
-          */}
-          <Field
-            label={t('userDetail.field.bonusPercent')}
-            value={`${salary.bonusPercentEffective ?? salary.bonusPercent}%`}
-            hint={
-              salary.bonusSource === 'PERSONAL'
-                ? t('userDetail.bonus.personal')
-                : salary.bonusBand
-                  ? `${t('userDetail.bonus.fromBand')} · ${bandRangeLabel(salary.bonusBand.minAmount, salary.bonusBand.maxAmount)} · ${t('salary.bonus.volume')} ${fmtMoney(salary.bonusVolume ?? 0)}`
-                  : undefined
-            }
-          />
-          <Field
-            label={t('userDetail.field.kpiTarget')}
-            value={`${kpi.targetPct}%`}
-          />
-        </div>
-        </div>
-        </div>
-        {/* Кнопки правки — одним рядом под данными. Открытая форма
-            встаёт отдельной строкой на всю ширину (см. .profile-actions). */}
-        {(isAdmin || isFounder(meStore)) && (
-          <div className="profile-actions">
-            {isFounder(meStore) && (
-              <PersonalInfoEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
+
+        {presence.ready && (() => {
+          const r = presence.byId.get(realId);
+          return (
+            <div className="profile-activity" data-testid="group-activity">
+              <span className="profile-activity-title">{t('profile.section.activity')}</span>
+              <span className={`presence-cell is-${(r?.state ?? 'OFFLINE').toLowerCase()}`} data-testid="profile-presence">
+                <PresenceDot state={r?.state ?? 'OFFLINE'} size={8} title="" />
+                {presenceText(r, presence.now, t) || t('presence.never')}
+                {r?.lastSeenAt && r.state !== 'ONLINE' && (
+                  <span className="profile-activity-sub">({tjFormatDateTime(r.lastSeenAt)})</span>
+                )}
+              </span>
+              <span className="profile-activity-item" data-testid="profile-last-login">
+                {t('presence.lastLogin')}:{' '}
+                <b>{r?.lastLoginAt ? tjFormatDateTime(r.lastLoginAt) : '—'}</b>
+                {r?.lastLoginAt && <span className="profile-activity-sub"> · {agoText(r.lastLoginAt, presence.now, t)}</span>}
+              </span>
+            </div>
+          );
+        })()}
+
+        {editing && (
+          <div className="profile-edit" data-testid={`edit-form-${editing}`}>
+            {editing === 'personal' && (
+              <PersonalEditor user={user} userId={realId} canNameEmail={canEditNameEmail} canHR={isAdmin} onSaved={onEditSaved} onClose={closeEdit} />
             )}
-            {isAdmin && <HREditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />}
-            {isFounder(meStore) && (
-              <RolesEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
-            )}
-            {isFounder(meStore) && (
-              <CustomRoleEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
-            )}
+            {editing === 'pay' && <PayEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
+            {editing === 'roles' && <RolesEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
+            {editing === 'custom' && <CustomRoleEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
           </div>
         )}
       </section>
@@ -475,13 +500,25 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 // Используем общий словарь из api/userProfile.
 const LABEL = USER_DOCUMENT_LABEL;
 
-function Field({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
+function Field({ label, value, hint, extra }: { label: string; value: React.ReactNode; hint?: string; extra?: React.ReactNode }) {
   return (
-    <div>
-      <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontWeight: 500, fontSize: 14, overflowWrap: 'anywhere' }}>{value}</div>
-      {hint && <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>{hint}</div>}
+    <div className="profile-field">
+      <div className="profile-field-label">{label}</div>
+      <div className="profile-field-value">{value}</div>
+      {hint && <div className="profile-field-hint">{hint}</div>}
+      {extra}
     </div>
+  );
+}
+
+/** «✎ Изменить» у заголовка группы; нажата — форма открыта. */
+function EditButton({ active, onClick, testId }: { active: boolean; onClick: () => void; testId: string }) {
+  const { t } = useT();
+  return (
+    <button type="button" className={`profile-edit-btn${active ? ' is-active' : ''}`} onClick={onClick} data-testid={testId} aria-expanded={active}>
+      <Icon name={active ? 'close' : 'edit'} size={15} />
+      {active ? t('common.cancel') : t('profile.edit')}
+    </button>
   );
 }
 
@@ -507,33 +544,46 @@ function Stat({ label, value, sub, accent, ...rest }: {
  * сотрудника (ФИО + email). Отдельно от HR-блока, чтобы было видно,
  * что это «менять как FOUNDER переименовывает аккаунт».
  */
-function PersonalInfoEditor({ user, userId, onSaved }: { user: FullProfile['user']; userId: string; onSaved: () => void }) {
+/** Форма «Личные данные»: ФИО и email (основатель), телефон, паспорт, дата приёма (админ). */
+function PersonalEditor({
+  user, userId, canNameEmail, canHR, onSaved, onClose,
+}: {
+  user: FullProfile['user']; userId: string; canNameEmail: boolean; canHR: boolean; onSaved: () => void; onClose: () => void;
+}) {
   const { toast } = useUI();
   const { t } = useT();
-  const [open, setOpen] = useState(false);
   const [fullName, setFullName] = useState(user.fullName);
   const [email, setEmail] = useState(user.email);
+  const [phone, setPhone] = useState(user.phone || '');
+  const [passportNo, setPassportNo] = useState(user.passportNo || '');
+  const [hiredAt, setHiredAt] = useState(user.hiredAt ? user.hiredAt.slice(0, 10) : '');
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
-    const trimmedName = fullName.trim();
-    const trimmedEmail = email.trim();
-    if (!trimmedName || trimmedName.length < 2) {
-      toast(t('toast.error'), 'error');
-      return;
+    const patch: Record<string, unknown> = {};
+    if (canNameEmail) {
+      const trimmedName = fullName.trim();
+      const trimmedEmail = email.trim();
+      if (!trimmedName || trimmedName.length < 2) {
+        toast(t('toast.error'), 'error');
+        return;
+      }
+      if (!trimmedEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmedEmail)) {
+        toast(t('toast.error'), 'error');
+        return;
+      }
+      patch.fullName = trimmedName;
+      patch.email = trimmedEmail;
     }
-    if (!trimmedEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmedEmail)) {
-      toast(t('toast.error'), 'error');
-      return;
+    if (canHR) {
+      patch.phone = phone || undefined;
+      patch.passportNo = passportNo || undefined;
+      patch.hiredAt = hiredAt ? new Date(hiredAt).toISOString() : undefined;
     }
     setSaving(true);
     try {
-      await updateUser(userId, {
-        fullName: trimmedName,
-        email: trimmedEmail,
-      });
+      await updateUserHR(userId, patch as any);
       toast(t('toast.updated'), 'success');
-      setOpen(false);
       onSaved();
     } catch (e: any) {
       toast(e?.response?.data?.message || t('toast.error'), 'error');
@@ -542,52 +592,33 @@ function PersonalInfoEditor({ user, userId, onSaved }: { user: FullProfile['user
     }
   };
 
-  if (!open) {
-    return (
-      <button className="btn btn-sm btn-secondary" style={{ marginTop: 12, marginRight: 8 }} onClick={() => setOpen(true)}>
-        {t('userDetail.section.personal')} · {t('common.edit')}
-      </button>
-    );
-  }
-
   return (
-    <div style={{ marginTop: 16, padding: 14, border: '1px solid var(--border)', borderRadius: 10 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-        <LabelInput label={t('app.field.fullName')} value={fullName} onChange={setFullName} />
-        <LabelInput label={t('userDetail.field.email')} value={email} onChange={setEmail} type="email" />
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-        <button className="btn btn-sm btn-secondary" onClick={() => { setFullName(user.fullName); setEmail(user.email); setOpen(false); }} disabled={saving}>
-          {t('common.cancel')}
-        </button>
-        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
-          {saving ? t('common.saving') : t('common.save')}
-        </button>
-      </div>
-    </div>
+    <EditForm title={t('userDetail.section.personal')} saving={saving} onSave={save} onCancel={onClose}>
+      {canNameEmail && <LabelInput label={t('app.field.fullName')} value={fullName} onChange={setFullName} />}
+      {canNameEmail && <LabelInput label={t('userDetail.field.email')} value={email} onChange={setEmail} type="email" />}
+      {canHR && <LabelInput label={t('userDetail.field.phone')} value={phone} onChange={setPhone} />}
+      {canHR && <LabelInput label={t('userDetail.field.passport')} value={passportNo} onChange={setPassportNo} />}
+      {canHR && <LabelInput label={t('userDetail.field.hiredAt')} value={hiredAt} onChange={setHiredAt} type="date" />}
+    </EditForm>
   );
 }
 
-function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId: string; onSaved: () => void }) {
+/** Форма «Оплата»: оклад, почасовая, личный бонус, настройки KPI. */
+function PayEditor({ user, userId, onSaved, onClose }: { user: FullProfile['user']; userId: string; onSaved: () => void; onClose: () => void }) {
   const { toast } = useUI();
   const { t } = useT();
-  const [open, setOpen] = useState(false);
-  const [phone, setPhone] = useState(user.phone || '');
-  const [passportNo, setPassportNo] = useState(user.passportNo || '');
-  const [hiredAt, setHiredAt] = useState(user.hiredAt ? user.hiredAt.slice(0, 10) : '');
   const [baseSalary, setBaseSalary] = useState(String(user.baseSalary ?? 0));
   const [hourlyRate, setHourlyRate] = useState(String(user.hourlyRate ?? 0));
   const [bonusPercent, setBonusPercent] = useState(String(user.bonusPercent ?? 0));
   const [kpiTargetPct, setKpiTargetPct] = useState(String(user.kpiTargetPct ?? 1));
   const [kpiAutoStepPct, setKpiAutoStepPct] = useState(String(user.kpiAutoStepPct ?? 0));
   const [kpiMaxPct, setKpiMaxPct] = useState(String(user.kpiMaxPct ?? 3));
+  const [saving, setSaving] = useState(false);
 
   const save = async () => {
+    setSaving(true);
     try {
       await updateUserHR(userId, {
-        phone: phone || undefined,
-        passportNo: passportNo || undefined,
-        hiredAt: hiredAt ? new Date(hiredAt).toISOString() : undefined,
         baseSalary: Number(baseSalary) || 0,
         hourlyRate: Number(hourlyRate) || 0,
         bonusPercent: Number(bonusPercent) || 0,
@@ -596,37 +627,40 @@ function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId
         kpiMaxPct: Number(kpiMaxPct) || 0,
       });
       toast(t('toast.updated'), 'success');
-      setOpen(false);
       onSaved();
     } catch (e: any) {
       toast(e?.response?.data?.message || t('toast.error'), 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
-  if (!open) {
-    return (
-      <button className="btn btn-sm btn-secondary" style={{ marginTop: 12 }} onClick={() => setOpen(true)}>
-        {t('common.edit')}
-      </button>
-    );
-  }
-
   return (
-    <div style={{ marginTop: 16, padding: 14, border: '1px solid var(--border)', borderRadius: 10 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-        <LabelInput label={t('userDetail.field.phone')} value={phone} onChange={setPhone} />
-        <LabelInput label={t('userDetail.field.passport')} value={passportNo} onChange={setPassportNo} />
-        <LabelInput label={t('userDetail.field.hiredAt')} value={hiredAt} onChange={setHiredAt} type="date" />
-        <LabelInput label={t('userDetail.field.baseSalary')} value={baseSalary} onChange={setBaseSalary} type="number" />
-        <LabelInput label={t('userDetail.field.hourlyRate')} value={hourlyRate} onChange={setHourlyRate} type="number" />
-        <LabelInput label={t('userDetail.field.bonusPercentPersonal')} value={bonusPercent} onChange={setBonusPercent} type="number" />
-        <LabelInput label={t('userDetail.field.kpiTarget')} value={kpiTargetPct} onChange={setKpiTargetPct} type="number" />
-        <LabelInput label={t('userDetail.field.kpiAutoStep')} value={kpiAutoStepPct} onChange={setKpiAutoStepPct} type="number" />
-        <LabelInput label={t('userDetail.field.kpiMax')} value={kpiMaxPct} onChange={setKpiMaxPct} type="number" />
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-        <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)}>{t('common.cancel')}</button>
-        <button className="btn btn-sm btn-primary" onClick={save}>{t('common.save')}</button>
+    <EditForm title={t('userDetail.section.salary')} saving={saving} onSave={save} onCancel={onClose}>
+      <LabelInput label={t('userDetail.field.baseSalary')} value={baseSalary} onChange={setBaseSalary} type="number" />
+      <LabelInput label={t('userDetail.field.hourlyRate')} value={hourlyRate} onChange={setHourlyRate} type="number" />
+      <LabelInput label={t('userDetail.field.bonusPercentPersonal')} value={bonusPercent} onChange={setBonusPercent} type="number" />
+      <LabelInput label={t('userDetail.field.kpiTarget')} value={kpiTargetPct} onChange={setKpiTargetPct} type="number" />
+      <LabelInput label={t('userDetail.field.kpiAutoStep')} value={kpiAutoStepPct} onChange={setKpiAutoStepPct} type="number" />
+      <LabelInput label={t('userDetail.field.kpiMax')} value={kpiMaxPct} onChange={setKpiMaxPct} type="number" />
+    </EditForm>
+  );
+}
+
+/** Общая рамка формы правки: заголовок, поля сеткой, «Отмена / Сохранить». */
+function EditForm({ title, saving, onSave, onCancel, children }: {
+  title: string; saving: boolean; onSave: () => void; onCancel: () => void; children: React.ReactNode;
+}) {
+  const { t } = useT();
+  return (
+    <div className="profile-edit-form">
+      <div className="profile-edit-title">{title}</div>
+      <div className="profile-edit-grid">{children}</div>
+      <div className="profile-edit-actions">
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel} disabled={saving}>{t('common.cancel')}</button>
+        <button type="button" className="btn btn-sm btn-primary" onClick={onSave} disabled={saving} data-testid="edit-save">
+          {saving ? t('common.saving') : t('common.save')}
+        </button>
       </div>
     </div>
   );
@@ -634,8 +668,8 @@ function HREditor({ user, userId, onSaved }: { user: FullProfile['user']; userId
 
 function LabelInput({ label, value, onChange, type = 'text' }: any) {
   return (
-    <div>
-      <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
+    <div className="profile-edit-field">
+      <span className="profile-field-label">{label}</span>
       {type === 'date' ? (
         <CrmDatePicker
           className="crm-input"
@@ -911,11 +945,10 @@ function OfferSection() {
  */
 const ASSIGNABLE_ROLE_VALUES: string[] = ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'];
 
-function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; userId: string; onSaved: () => void }) {
+function RolesEditor({ user, userId, onSaved, onClose }: { user: FullProfile['user']; userId: string; onSaved: () => void; onClose: () => void }) {
   const { toast } = useUI();
   const { t } = useT();
   const roleLabel = useRoleLabel();
-  const [open, setOpen] = useState(false);
   const initialRoles = (() => {
     const set = new Set<string>();
     if (user.role && user.role !== 'FOUNDER') set.add(user.role);
@@ -949,7 +982,6 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
       const roles = [primary, ...Array.from(extra).filter((r) => r !== primary)];
       await setUserRoles(userId, roles);
       toast(t('toast.updated'), 'success');
-      setOpen(false);
       onSaved();
     } catch (e: any) {
       toast(e?.response?.data?.message || t('toast.error'), 'error');
@@ -958,55 +990,15 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
     }
   };
 
-  if (isFounderTarget) {
-    return (
-      <div style={{
-        marginTop: 12,
-        padding: 10,
-        background: '#fef3c7',
-        border: '1px solid #fde68a',
-        borderRadius: 8,
-        fontSize: 12,
-        color: '#92400e',
-      }}>
-        {t('userDetail.roles.founderLocked')}
-      </div>
-    );
-  }
-
-  if (!open) {
-    return (
-      <button
-        className="btn btn-sm btn-secondary"
-        style={{ marginTop: 12, marginLeft: 8 }}
-        onClick={() => setOpen(true)}
-      >
-        {t('userDetail.roles.edit')}
-      </button>
-    );
-  }
+  // Роли основателя не меняются (кнопки для него не показываются).
+  if (isFounderTarget) return null;
 
   return (
-    <div style={{
-      marginTop: 16,
-      padding: 14,
-      border: '1px solid var(--primary)',
-      borderRadius: 10,
-      background: 'var(--bg-soft)',
-    }}>
-      <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        letterSpacing: '0.12em',
-        color: 'var(--primary-dark)',
-        marginBottom: 8,
-      }}>
-        FOUNDER · ROLES
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
-          {t('userDetail.field.role')}:
+    <div className="profile-edit-form">
+      <div className="profile-edit-title">{t('profile.roles')}</div>
+      <div style={{ marginBottom: 12, maxWidth: 360 }}>
+        <label className="profile-field-label" style={{ display: 'block', marginBottom: 4 }}>
+          {t('userDetail.field.role')}
         </label>
         <CrmSelect className="crm-select" value={primary} onChange={(e) => setPrimary(e.target.value)}>
           {ASSIGNABLE_ROLE_VALUES.map((v) => (
@@ -1016,8 +1008,8 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>
-          {t('userDetail.field.roles')}:
+        <label className="profile-field-label" style={{ display: 'block', marginBottom: 6 }}>
+          {t('userDetail.field.roles')}
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {ASSIGNABLE_ROLE_VALUES
@@ -1046,11 +1038,11 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>
+      <div className="profile-edit-actions">
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onClose} disabled={saving}>
           {t('common.cancel')}
         </button>
-        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+        <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving} data-testid="edit-save">
           {saving ? t('common.saving') : t('common.save')}
         </button>
       </div>
@@ -1066,35 +1058,31 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
  * только по своим базовым ролям.
  */
 function CustomRoleEditor({
-  user, userId, onSaved,
+  user, userId, onSaved, onClose,
 }: {
   user: FullProfile['user'];
   userId: string;
   onSaved: () => void;
+  onClose: () => void;
 }) {
   const { toast } = useUI();
   const { t } = useT();
-  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string>((user as any).customRoleId || '');
   const [saving, setSaving] = useState(false);
   const rolesQuery = useQuery({
     queryKey: ['custom-roles'],
     queryFn: listCustomRoles,
-    enabled: open,
   });
   const roles = rolesQuery.data ?? [];
 
   const isFounderTarget = user.role === 'FOUNDER' || (user.roles || []).includes('FOUNDER' as any);
   if (isFounderTarget) return null;
 
-  const currentName = (user as any).customRole?.name as string | undefined;
-
   const save = async () => {
     setSaving(true);
     try {
       await setUserCustomRole(userId, selected || null);
       toast(t('toast.updated'), 'success');
-      setOpen(false);
       onSaved();
     } catch (e: any) {
       toast(e?.response?.data?.message || t('toast.error'), 'error');
@@ -1103,35 +1091,10 @@ function CustomRoleEditor({
     }
   };
 
-  if (!open) {
-    return (
-      <button className="btn btn-sm btn-secondary" onClick={() => setOpen(true)}>
-        {currentName ? `${t('userDetail.field.customRole')}: ${currentName}` : t('userDetail.field.customRole')}
-      </button>
-    );
-  }
-
   return (
-    <div style={{
-      marginTop: 16,
-      padding: 14,
-      border: '1px solid var(--primary)',
-      borderRadius: 10,
-      background: 'var(--bg-soft)',
-    }}>
-      <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        letterSpacing: '0.12em',
-        color: 'var(--primary-dark)',
-        marginBottom: 8,
-      }}>
-        FOUNDER · CUSTOM ROLE
-      </div>
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>
-          {t('userDetail.field.customRole')}:
-        </label>
+    <div className="profile-edit-form">
+      <div className="profile-edit-title">{t('userDetail.field.customRole')}</div>
+      <div style={{ marginBottom: 12, maxWidth: 360 }}>
         <CrmSelect className="crm-select" value={selected} onChange={(e) => setSelected(e.target.value)} disabled={rolesQuery.isLoading}>
           <option value="">— {t('managerBar.notAssigned')} —</option>
           {roles.filter((r: CustomRole) => r.isActive).map((r: CustomRole) => (
@@ -1139,11 +1102,11 @@ function CustomRoleEditor({
           ))}
         </CrmSelect>
       </div>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>
+      <div className="profile-edit-actions">
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onClose} disabled={saving}>
           {t('common.cancel')}
         </button>
-        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+        <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving} data-testid="edit-save">
           {saving ? t('common.saving') : t('common.save')}
         </button>
       </div>

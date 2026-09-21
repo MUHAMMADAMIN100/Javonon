@@ -6,7 +6,7 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { isElevated } from '../auth/role-utils';
+import { hasRole, isElevated } from '../auth/role-utils';
 
 type CurrentUser = { id: string; role: Role; roles?: Role[] };
 
@@ -268,8 +268,10 @@ export class TasksService {
   }
 
   async remove(id: string, user: CurrentUser) {
-    if (user.role !== 'ADMIN') {
-      throw new ForbiddenException('Только администратор может удалять задачи');
+    // Основатель и администратор (в т.ч. вторичной ролью). Раньше было
+    // `role === 'ADMIN'` — основатель видел кнопку, но получал 403.
+    if (!hasRole(user as any, 'FOUNDER', 'ADMIN')) {
+      throw new ForbiddenException('Только основатель или администратор может удалять задачи');
     }
     await this.findOne(id);
     await this.prisma.task.delete({ where: { id } });
