@@ -654,14 +654,33 @@ export class ApplicationsService {
         ],
       });
     }
-    if (filters.search) {
-      and.push({
-        OR: [
-          { fullName: { contains: filters.search, mode: 'insensitive' } },
-          { phone: { contains: filters.search, mode: 'insensitive' } },
-          { email: { contains: filters.search, mode: 'insensitive' } },
-        ],
-      });
+    const search = filters.search?.trim();
+    if (search) {
+      // Prisma кладёт `contains` в ILIKE как есть: «%» и «_» там — маски,
+      // и поиск «%» выдавал весь список. Экранируем, ищем буквально.
+      const literal = search.replace(/[\\%_]/g, '\\$&');
+      const or: Prisma.ApplicationWhereInput[] = [
+        { fullName: { contains: literal, mode: 'insensitive' } },
+        { phone: { contains: literal, mode: 'insensitive' } },
+        { whatsappPhone: { contains: literal, mode: 'insensitive' } },
+        { email: { contains: literal, mode: 'insensitive' } },
+      ];
+      // Номер ищем по ОДНИМ цифрам с обеих сторон: человек набирает
+      // «91 899 99 16» или «918-99-99-16», а в базе лежит «+992918999916»
+      // (или с пробелами — DTO их пропускает). Prisma не умеет сравнивать
+      // по выражению над колонкой, поэтому id подходящих строк достаём
+      // отдельным запросом. Только если строка похожа на номер: у «Али 2»
+      // цифра «2» совпала бы с половиной базы.
+      const digits = search.replace(/\D/g, '');
+      if (digits && /^[\d\s+\-().]+$/.test(search)) {
+        const pattern = `%${digits}%`;
+        const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM "Application"
+          WHERE regexp_replace(phone, '[^0-9]', '', 'g') LIKE ${pattern}
+             OR regexp_replace(COALESCE("whatsappPhone", ''), '[^0-9]', '', 'g') LIKE ${pattern}`;
+        if (rows.length) or.push({ id: { in: rows.map((r) => r.id) } });
+      }
+      and.push({ OR: or });
     }
     if (and.length) where.AND = and;
     return this.prisma.application.findMany({

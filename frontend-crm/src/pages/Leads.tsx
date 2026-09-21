@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   asBulkReassignConflict,
   assignApplicationManager,
@@ -327,11 +327,27 @@ export default function Leads() {
     // асинхронно) — ограничиваем длину, как в списке заявок.
     manager: stringParam('', 64),
     country: enumParam(COUNTRIES),
+    // Потолок — как у бэкенда (200 символов, иначе 400).
+    search: stringParam('', 200),
   });
   const { from, to, manager } = periodValues;
   // `country` в этом компоненте уже занято полем формы нового лида,
   // поэтому фильтр списка зовём filterCountry.
   const filterCountry = periodValues.country;
+  const urlSearch = periodValues.search;
+
+  // Поиск — как в списке заявок: буквы в поле появляются сразу, в ссылку
+  // (и в запрос) уезжает значение, простоявшее 300 мс.
+  const [searchInput, setSearchInput] = useState(urlSearch);
+  // Ссылка → поле: «назад», «Сбросить», крестик у плашки.
+  useEffect(() => {
+    setSearchInput(urlSearch);
+  }, [urlSearch]);
+  useEffect(() => {
+    if (searchInput === urlSearch) return;
+    const timer = setTimeout(() => setPeriod('search', searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput, urlSearch, setPeriod]);
 
   const leadFilters = {
     ...LEAD_FILTERS,
@@ -339,13 +355,46 @@ export default function Leads() {
     to: to || undefined,
     manager: manager || undefined,
     country: filterCountry || undefined,
+    search: urlSearch || undefined,
   };
+  /** Список сужен чем-то, кроме самой очереди «Новые лиды». */
+  const narrowed = !!(from || to || manager || filterCountry || urlSearch);
   const leadsKey = keys.applications.list(leadFilters);
   const leadsQuery = useQuery({
     queryKey: leadsKey,
     queryFn: () => listApplications(leadFilters),
+    // Каждая буква поиска — новый ключ. Без плейсхолдера таблица на время
+    // запроса сменялась бы крутилкой и мигала на каждом нажатии.
+    placeholderData: keepPreviousData,
   });
   const leads = leadsQuery.data ?? [];
+
+  /**
+   * Вся очередь без фильтров — нужна только выбору галочками. Отметил лиды,
+   * потом нашёл поиском ещё одного — отмеченные раньше пропали с экрана, но
+   * из пачки выпадать не должны. Без фильтров ключ совпадает с leadsKey
+   * (react-query не различает undefined-поля), и лишнего запроса нет; с
+   * фильтрами очередь грузим, только пока что-то отмечено.
+   */
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const queueQuery = useQuery({
+    queryKey: keys.applications.list(LEAD_FILTERS),
+    queryFn: () => listApplications(LEAD_FILTERS),
+    enabled: !narrowed || selected.size > 0,
+  });
+  // Пока очередь перечитывается, в кеше может лежать старая — без лида,
+  // который только что пришёл и которого уже отметили. Сверять с такой
+  // нельзя: выбор молча потерял бы строку.
+  const queue = narrowed
+    ? queueQuery.isFetching ? undefined : queueQuery.data
+    : leadsQuery.isPlaceholderData || leadsQuery.isFetching ? undefined : leadsQuery.data;
+
+  // Другой фильтр — другая выборка: смотреть её надо с первой страницы.
+  // При открытии экрана страница и так первая — лишний вызов безвреден.
+  const filtersSig = [from, to, manager, filterCountry, urlSearch].join('|');
+  useEffect(() => {
+    setPage(1);
+  }, [filtersSig]);
 
   const managersQuery = useQuery({
     queryKey: ['applications', 'assignable-managers'] as const,
@@ -405,19 +454,19 @@ export default function Leads() {
    * уже другой человек. Выбор живёт поверх страниц: отметил 10 на первой,
    * перешёл на вторую, отметил ещё 5 — в пачке 15.
    */
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkManagerId, setBulkManagerId] = useState('');
   /** Якорь для Shift+клик — последняя строка, отмеченная вручную. */
   const lastToggledRef = useRef<string | null>(null);
 
   // Лид ушёл из очереди (взяли в работу, удалили) — выкидываем его из
   // выбора. Иначе счётчик «Выбрано: 12» врал бы, а сервер отверг бы всю
-  // пачку из-за одного исчезнувшего id.
+  // пачку из-за одного исчезнувшего id. Сверяем с ВСЕЙ очередью, а не с
+  // отфильтрованным списком: лид, скрытый поиском, из очереди не ушёл.
   useEffect(() => {
-    if (!leadsQuery.isSuccess) return;
+    if (!queue) return;
     setSelected((prev) => {
       if (prev.size === 0) return prev;
-      const alive = new Set(leads.map((a) => a.id));
+      const alive = new Set(queue.map((a) => a.id));
       let dropped = false;
       const next = new Set<string>();
       prev.forEach((id) => {
@@ -428,9 +477,8 @@ export default function Leads() {
       // перерисовку на каждое обновление списка.
       return dropped ? next : prev;
     });
-    // `leads` пересоздаётся на каждый рендер, пока данных нет (?? []), но
-    // эффект идемпотентен: без выпавших id состояние не меняется.
-  }, [leads, leadsQuery.isSuccess]);
+    // Эффект идемпотентен: без выпавших id состояние не меняется.
+  }, [queue]);
 
   const pageIds = pageItems.map((a) => a.id);
   const pageSelectedCount = pageIds.reduce((n, id) => n + (selected.has(id) ? 1 : 0), 0);
@@ -569,7 +617,11 @@ export default function Leads() {
     if (!bulkManagerId || selected.size === 0 || bulkMut.isPending) return;
     const target = managers.find((m) => m.id === bulkManagerId);
     if (!target) return;
-    const picked = leads.filter((a) => selected.has(a.id));
+    // Отмеченные могут быть скрыты поиском — берём их из всей очереди.
+    // Видимые строки кладём первыми: в них свежее оптимистичное состояние.
+    const byId = new Map<string, Application>();
+    for (const a of [...leads, ...(queueQuery.data ?? [])]) if (!byId.has(a.id)) byId.set(a.id, a);
+    const picked = [...byId.values()].filter((a) => selected.has(a.id));
     if (picked.length === 0) return;
 
     // Уже закреплённые за ДРУГИМ менеджером — спрашиваем до отправки.
@@ -844,11 +896,57 @@ export default function Leads() {
               onFrom={(v) => setPeriod('from', v)}
               onTo={(v) => setPeriod('to', v)}
             />
-            {(from || to || manager || filterCountry) && (
+            {/* Поиск здесь — в строке фильтров, а не отдельной строкой над
+                ними, как на других списках: у лидов фильтров всего четыре, и
+                справа оставалось пустое место. */}
+            <div className="leads-search">
+              <Icon name="search" size={18} className="leads-search-icon" />
+              <input
+                type="search"
+                className="crm-input"
+                placeholder={t('leads.search.placeholder')}
+                aria-label={t('leads.search.placeholder')}
+                data-testid="leads-search"
+                value={searchInput}
+                maxLength={200}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  // Esc в поле — очистить поиск, а не ждать, пока браузер
+                  // сотрёт текст без события (у type=search так бывает).
+                  if (e.key === 'Escape' && searchInput) {
+                    e.preventDefault();
+                    setSearchInput('');
+                    setPeriod('search', '');
+                  }
+                }}
+                autoComplete="off"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  className="leads-search-clear"
+                  aria-label={t('leads.search.clear')}
+                  title={t('leads.search.clear')}
+                  data-testid="leads-search-clear"
+                  onClick={() => {
+                    setSearchInput('');
+                    setPeriod('search', '');
+                  }}
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              )}
+            </div>
+            {(from || to || manager || filterCountry || searchInput) && (
               <button
                 type="button"
                 className="btn btn-ghost"
-                onClick={() => resetPeriod(['from', 'to', 'manager', 'country'])}
+                onClick={() => {
+                  // Поле гасим сразу: недобежавший дебаунс иначе вернул бы
+                  // текст обратно в ссылку.
+                  setSearchInput('');
+                  resetPeriod(['from', 'to', 'manager', 'country', 'search']);
+                }}
               >
                 <Icon name="close" size={14} /> {t('common.reset')}
               </button>
@@ -857,6 +955,16 @@ export default function Leads() {
 
           <ActiveFilterChips
             chips={[
+              ...(urlSearch
+                ? [{
+                    key: 'search',
+                    label: `${t('list.chip.search')}: «${urlSearch}»`,
+                    onClear: () => {
+                      setSearchInput('');
+                      resetPeriod(['search']);
+                    },
+                  }]
+                : []),
               ...(from || to
                 ? [{
                     key: 'period',
@@ -894,12 +1002,15 @@ export default function Leads() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                <div className="empty-icon"><Icon name="inbox" size={48} /></div>
-                {t('leads.list.empty')}
+                <div className="empty-icon"><Icon name={narrowed ? 'search_off' : 'inbox'} size={48} /></div>
+                {/* «Новых лидов нет» под поиском врало бы: лиды есть, не
+                    нашлись именно эти. */}
+                <span data-testid="leads-empty">{narrowed ? t('common.empty') : t('leads.list.empty')}</span>
               </motion.div>
             ) : (
               <motion.div
                 key="table"
+                className={leadsQuery.isPlaceholderData ? 'leads-list-stale' : undefined}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
