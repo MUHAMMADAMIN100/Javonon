@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../Icon';
 import Loading from './Loading';
+import Pagination from './Pagination';
 import SearchField from './SearchField';
 import { SortSelect, SortTh, useTableSort, type SortColumn } from './TableSort';
 import { matchesSearch } from '../lib/listSearch';
@@ -11,8 +12,9 @@ import { useT } from '../lib/i18n';
 /**
  * Окно «подробнее» по клику на карточку-цифру (дашборд, «Текущий месяц» в
  * профиле сотрудника). Одно на все карточки, чтобы окна были одинаковыми:
- * сверху итоги и разбивки, ниже записи, из которых сложилась цифра, — с
- * поиском и сортировкой; клик по строке открывает карточку записи.
+ * заголовок (и строка итогов, которых нет на самой карточке), разбивки,
+ * ниже записи, из которых сложилась цифра, — с поиском, сортировкой и
+ * страницами по PAGE_SIZE; клик по строке открывает карточку записи.
  *
  * Оформление — то же, что у окна KPI (классы kpi-details-*).
  */
@@ -24,7 +26,10 @@ export type DetailsColumn<T> = SortColumn<T> & {
 };
 
 export type DetailsGroup = { title: string; items: { label: string; value: string }[] };
-export type DetailsTile = { label: string; value: string; sub?: string; accent?: boolean };
+/** Итог в строке под заголовком — только то, чего нет на самой карточке. */
+export type DetailsSummaryItem = { label: string; value: string };
+
+const PAGE_SIZE = 5;
 
 /** Разбивка «по чему-то»: считает строки (или сумму) по ключу, крупные первыми. */
 export function groupBy<T>(
@@ -48,7 +53,7 @@ export function groupBy<T>(
 export default function DetailsModal<T>({
   title,
   subtitle,
-  tiles,
+  summary,
   groups,
   note,
   rows,
@@ -66,7 +71,7 @@ export default function DetailsModal<T>({
 }: {
   title: string;
   subtitle?: string;
-  tiles?: DetailsTile[];
+  summary?: DetailsSummaryItem[];
   groups?: DetailsGroup[];
   note?: ReactNode;
   rows: T[] | undefined;
@@ -88,6 +93,15 @@ export default function DetailsModal<T>({
   const { t } = useT();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  // На телефоне окно во весь экран, и страницы должны уместиться в одну строку.
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 600px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 600px)');
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -102,6 +116,15 @@ export default function DetailsModal<T>({
   );
   // Окно — не страница: сортировку в ссылку не пишем.
   const sort = useTableSort(shown, columns, { persist: false });
+  // Новый поиск или другой порядок — с первой страницы; записей стало
+  // меньше (обновились данные) — не остаёмся на пустой странице.
+  useEffect(() => setPage(1), [search, sort.key, sort.dir]);
+  const pages = Math.max(1, Math.ceil(sort.sorted.length / PAGE_SIZE));
+  const current = Math.min(page, pages);
+  const pageRows = useMemo(
+    () => sort.sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE),
+    [sort.sorted, current],
+  );
 
   return (
     <motion.div
@@ -130,6 +153,15 @@ export default function DetailsModal<T>({
           <div style={{ minWidth: 0 }}>
             <div className="kpi-details-name">{title}</div>
             {subtitle && <div className="kpi-details-sub">{subtitle}</div>}
+            {!loading && !error && summary && summary.length > 0 && (
+              <div className="details-summary" data-testid="details-summary">
+                {summary.map((it) => (
+                  <span key={it.label} data-testid="details-summary-item">
+                    {it.label} <b>{it.value}</b>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <button type="button" className="lead-modal-close" aria-label={t('common.close')} data-testid="details-close" onClick={onClose}>
             <Icon name="close" size={20} />
@@ -141,18 +173,6 @@ export default function DetailsModal<T>({
 
         {!loading && !error && (
           <>
-            {tiles && tiles.length > 0 && (
-              <div className="kpi-details-tiles">
-                {tiles.map((tile) => (
-                  <div key={tile.label} className={`kpi-details-tile${tile.accent ? ' is-accent' : ''}`}>
-                    <div className="kpi-details-tile-label">{tile.label}</div>
-                    <div className="kpi-details-tile-value" data-testid="details-tile-value">{tile.value}</div>
-                    {tile.sub && <div className="kpi-details-tile-sub">{tile.sub}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-
             {groups?.filter((g) => g.items.length > 0).map((g) => (
               <div key={g.title} className="details-group">
                 <div className="details-group-title">{g.title}</div>
@@ -197,7 +217,7 @@ export default function DetailsModal<T>({
                         </tr>
                       </thead>
                       <tbody>
-                        {sort.sorted.map((r) => {
+                        {pageRows.map((r) => {
                           const href = rowHref?.(r) ?? null;
                           return (
                             <tr
@@ -228,6 +248,9 @@ export default function DetailsModal<T>({
                         })}
                       </tbody>
                     </table>
+                    <div data-testid="details-pagination">
+                      <Pagination page={current} total={sort.sorted.length} pageSize={PAGE_SIZE} onChange={setPage} siblings={narrow ? 1 : 2} />
+                    </div>
                   </div>
                 )}
               </>

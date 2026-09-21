@@ -6,13 +6,13 @@ import { useT } from '../lib/i18n';
  * с эллипсисами вокруг текущей. Пример при 50 страницах и текущей 6:
  * `[1, '…', 4, 5, 6, 7, 8, '…', 50]`.
  */
-export function buildPageRange(current: number, total: number): (number | '…')[] {
-  if (total <= 7) {
+export function buildPageRange(current: number, total: number, siblings = 2): (number | '…')[] {
+  if (total <= 3 + siblings * 2) {
     return Array.from({ length: total }, (_, i) => i + 1);
   }
   const out: (number | '…')[] = [1];
-  const start = Math.max(2, current - 2);
-  const end = Math.min(total - 1, current + 2);
+  const start = Math.max(2, current - siblings);
+  const end = Math.min(total - 1, current + siblings);
   if (start > 2) out.push('…');
   for (let i = start; i <= end; i++) out.push(i);
   if (end < total - 1) out.push('…');
@@ -29,6 +29,8 @@ type Props = {
   pageSize: number;
   /** Колбек при выборе страницы */
   onChange: (page: number) => void;
+  /** Сколько соседних номеров вокруг текущей (узкое окно на телефоне — 1). */
+  siblings?: number;
 };
 
 /**
@@ -36,11 +38,11 @@ type Props = {
  * Не показывается, если total <= pageSize (всё умещается на одной странице).
  * Использует CSS-классы `.pagination`, `.pg-btn`, `.pg-num` и т.д.
  */
-export default function Pagination({ page, total, pageSize, onChange }: Props) {
+export default function Pagination({ page, total, pageSize, onChange, siblings = 2 }: Props) {
   const { t } = useT();
   if (total <= pageSize) return null;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const pageRange = buildPageRange(page, totalPages);
+  const pageRange = buildPageRange(page, totalPages, siblings);
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
 

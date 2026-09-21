@@ -95,10 +95,6 @@ export default function ProfileMonthDetails({
             {...common}
             testId="month-hours"
             title={titleCase(t('profile.month.hours'))}
-            tiles={rows ? [
-              { label: t('profile.month.hours'), value: fmtMinutes(rows.reduce((s, e) => s + e.totalMinutes, 0)), accent: true },
-              { label: t('details.daysWorked'), value: String(rows.length) },
-            ] : undefined}
             rows={rows}
             columns={timeCols}
             rowKey={(e) => e.id}
@@ -112,10 +108,7 @@ export default function ProfileMonthDetails({
             {...common}
             testId="month-late"
             title={titleCase(t('profile.month.late'))}
-            tiles={d ? [
-              { label: t('profile.month.late'), value: fmtMinutes(d.time.reduce((s, e) => s + e.lateMinutes, 0)), accent: true },
-              { label: t('details.lateDays'), value: String(rows?.length ?? 0) },
-            ] : undefined}
+            summary={d ? [{ label: t('details.lateDays'), value: String(rows?.length ?? 0) }] : undefined}
             rows={rows}
             columns={[
               ...timeCols.filter((c) => c.key === 'date' || c.key === 'in' || c.key === 'late'),
@@ -141,10 +134,6 @@ export default function ProfileMonthDetails({
             {...common}
             testId="month-sales"
             title={titleCase(t('profile.month.sales'))}
-            tiles={rows ? [
-              { label: t('profile.month.sales'), value: fmtMoney(rows.reduce((s, x) => s + Number(x.amount), 0)), accent: true },
-              { label: t('details.salesCount'), value: String(rows.length) },
-            ] : undefined}
             groups={rows ? [{ title: t('details.byCategory'), items: groupBy(rows, (x) => catLabel(x.category), { sum: (x) => Number(x.amount), format: (n) => fmtMoney(n) }) }] : undefined}
             rows={rows}
             columns={[
@@ -168,10 +157,6 @@ export default function ProfileMonthDetails({
             {...appProps}
             testId="month-leads"
             title={titleCase(t('profile.month.leadsTotal'))}
-            tiles={rows ? [
-              { label: t('details.companyLeads'), value: String(kpi.totalLeadsMonth) },
-              { label: t('details.myLeads'), value: String(rows.length), accent: true },
-            ] : undefined}
             groups={rows ? [{ title: t('details.byStatus'), items: groupBy(rows, (a) => statusLabel(a.status as any)) }] : undefined}
             note={t('details.leadsNote')}
             rows={rows}
@@ -194,17 +179,6 @@ export default function ProfileMonthDetails({
             {...appProps}
             testId={`month-${tile}`}
             title={titleCase(tile === 'kpi' ? t('profile.month.kpiPct') : t('profile.month.enrolled'))}
-            tiles={rows ? (tile === 'kpi'
-              ? [
-                  { label: t('profile.month.kpiPct'), value: `${kpi.achievedPct}%`, accent: true },
-                  { label: t('details.target'), value: `${kpi.targetPct}%` },
-                  { label: t('profile.month.enrolled'), value: String(rows.length) },
-                  { label: t('details.companyLeads'), value: String(kpi.totalLeadsMonth) },
-                ]
-              : [
-                  { label: t('profile.month.enrolled'), value: String(rows.length), accent: true },
-                  { label: t('details.required'), value: String(kpi.requiredClosed) },
-                ]) : undefined}
             note={tile === 'kpi' ? formula : t('details.enrolledNote')}
             rows={rows}
             columns={appCols((a) => a.updatedAt)}
@@ -222,7 +196,6 @@ export default function ProfileMonthDetails({
             {...common}
             testId="month-penalties"
             title={titleCase(t('profile.month.penalties'))}
-            tiles={rows ? [{ label: t('profile.month.penalties'), value: fmtMoney(rows.reduce((s, p) => s + Number(p.amount), 0)), accent: true }] : undefined}
             groups={rows ? [{ title: t('details.byReason'), items: groupBy(rows, (p) => reasonLabel(p.reason)) }] : undefined}
             note={t('details.penaltiesNote')}
             rows={rows}

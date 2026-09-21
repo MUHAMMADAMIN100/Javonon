@@ -110,7 +110,6 @@ function ApplicationsDetails({
       testId={`details-${kind}`}
       title={title}
       subtitle={periodLabel}
-      tiles={rows ? [{ label: title, value: String(rows.length), accent: true }] : undefined}
       groups={rows ? [
         { title: t('details.byManager'), items: groupBy(rows, managerOf, { more }) },
         ...(kind === 'total' || kind === 'pipeline'
@@ -164,7 +163,6 @@ function StudentsDetails({
       testId="details-active"
       title={title}
       subtitle={periodLabel}
-      tiles={rows ? [{ label: title, value: String(rows.length), accent: true }] : undefined}
       groups={rows ? [
         { title: t('details.byManager'), items: groupBy(rows, (s) => s.manager?.fullName || t('details.noManager'), { more }) },
         { title: t('details.byDirection'), items: groupBy(rows, (s) => (s.directionConfirmed === false ? t('details.noValue') : directionLabel(s.direction)), { more }) },
@@ -217,13 +215,14 @@ function MoneyDetails({
     return t(k) !== k ? t(k) : TRANSACTION_CATEGORY_LABEL[tx.category];
   };
   const title = kind === 'income' ? t('dashboard.finance.income') : kind === 'expense' ? t('dashboard.finance.expense') : t('dashboard.finance.netProfit');
-  const tiles = kind === 'profit'
+  // Сумма «Дохода»/«Расхода» уже на карточке; у «Прибыли» — показываем, из чего она.
+  const summary = kind === 'profit'
     ? [
         { label: t('dashboard.finance.income'), value: fmtMoney(income) },
         { label: t('dashboard.finance.expense'), value: fmtMoney(expense) },
-        { label: t('dashboard.finance.netProfit'), value: fmtMoney(income - expense), accent: true },
+        { label: t('dashboard.finance.netProfit'), value: fmtMoney(income - expense) },
       ]
-    : [{ label: title, value: fmtMoney(kind === 'income' ? income : expense), accent: true }];
+    : undefined;
   const signed = (tx: Transaction) => (tx.type === 'INCOME' ? 1 : -1) * Number(tx.amount);
   const columns: DetailsColumn<Transaction>[] = [
     { key: 'date', label: t('finance.col.date'), type: 'date', value: (tx) => tx.date, render: (tx) => tjFormatDate(tx.date) },
@@ -252,7 +251,7 @@ function MoneyDetails({
       testId={`details-${kind}`}
       title={title}
       subtitle={periodLabel}
-      tiles={query.data ? tiles : undefined}
+      summary={summary}
       groups={rows ? [{
         title: t('details.byCategory'),
         items: groupBy(rows, categoryLabel, {
@@ -308,7 +307,6 @@ function DebtDetails({ onClose }: { onClose: () => void }) {
     <DetailsModal
       testId="details-debt"
       title={title}
-      tiles={rows ? [{ label: title, value: String(rows.length), accent: true }] : undefined}
       groups={rows ? [{ title: t('details.byManager'), items: groupBy(rows, (a) => a.manager?.fullName || t('details.noManager'), { more }) }] : undefined}
       rows={rows}
       loading={query.isLoading}
