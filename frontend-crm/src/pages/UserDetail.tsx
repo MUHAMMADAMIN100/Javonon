@@ -129,10 +129,13 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         <h2 className="crm-section-title">{user.fullName}</h2>
       </div>
 
-      {/* HR блок */}
-      <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('userDetail.section.personal')}</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+      {/* Личные данные и оплата — одна карточка в две колонки: по отдельности
+          это были две почти пустые широкие полосы. */}
+      <section className="card profile-section" data-testid="profile-main">
+        <div className="profile-cols">
+        <div>
+        <h3 className="profile-h">{t('userDetail.section.personal')}</h3>
+        <div className="profile-grid">
           <Field label={t('userDetail.field.email')} value={user.email} />
           <Field
             label={t('userDetail.field.role')}
@@ -152,22 +155,11 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <Field label={t('userDetail.field.hiredAt')} value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
           <Field label={t('profile.field.createdAt')} value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
         </div>
-        {isFounder(meStore) && (
-          <PersonalInfoEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
-        )}
-        {isAdmin && <HREditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />}
-        {isFounder(meStore) && (
-          <RolesEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
-        )}
-        {isFounder(meStore) && (
-          <CustomRoleEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
-        )}
-      </section>
-
-      {/* Зарплата — параметры расчёта */}
-      <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('userDetail.section.salary')}</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+        </div>
+        <div>
+        {/* Зарплата — параметры расчёта */}
+        <h3 className="profile-h">{t('userDetail.section.salary')}</h3>
+        <div className="profile-grid">
           <Field label={t('userDetail.field.baseSalary')} value={fmtMoney(salary.baseSalary)} />
           <Field label={t('userDetail.field.hourlyRate')} value={fmtMoney(salary.hourlyRate)} />
           {/*
@@ -194,6 +186,24 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
             value={`${kpi.targetPct}%`}
           />
         </div>
+        </div>
+        </div>
+        {/* Кнопки правки — одним рядом под данными. Открытая форма
+            встаёт отдельной строкой на всю ширину (см. .profile-actions). */}
+        {(isAdmin || isFounder(meStore)) && (
+          <div className="profile-actions">
+            {isFounder(meStore) && (
+              <PersonalInfoEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
+            )}
+            {isAdmin && <HREditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />}
+            {isFounder(meStore) && (
+              <RolesEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
+            )}
+            {isFounder(meStore) && (
+              <CustomRoleEditor user={user} userId={realId} onSaved={() => qc.invalidateQueries({ queryKey })} />
+            )}
+          </div>
+        )}
       </section>
 
       {/* График работы теперь всегда общий для компании — редактируется
@@ -201,9 +211,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           чтобы FOUNDER не мог случайно рассинхронизировать сотрудников. */}
 
       {/* Текущий месяц — фактика */}
-      <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('profile.month.current')}</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+      <section className="card profile-section">
+        <h3 className="profile-h">{t('profile.month.current')}</h3>
+        <div className="profile-stats">
           <Stat label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
           <Stat label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
           <Stat label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}`} />
@@ -215,10 +225,10 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       </section>
 
       {/* История зарплат */}
-      <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('profile.salaryHistory')}</h3>
+      <section className={`card profile-section${salary.records.length === 0 ? ' is-empty' : ''}`}>
+        <h3 className="profile-h">{t('profile.salaryHistory')}</h3>
         {salary.records.length === 0 ? (
-          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>{t('profile.salaryEmpty')}</div>
+          <div className="profile-empty">{t('profile.salaryEmpty')}</div>
         ) : (
           <div className="table-wrap">
             <SortSelect sort={salarySort} />
@@ -257,10 +267,10 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       </section>
 
       {/* Штрафы */}
-      <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('profile.month.penalties')}</h3>
+      <section className={`card profile-section${penalties.list.length === 0 ? ' is-empty' : ''}`}>
+        <h3 className="profile-h">{t('profile.month.penalties')}</h3>
         {penalties.list.length === 0 ? (
-          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>{t('common.empty')}</div>
+          <div className="profile-empty">{t('profile.penaltiesEmpty')}</div>
         ) : (
           <div className="table-wrap">
             <SortSelect sort={penaltiesSort} />
@@ -292,8 +302,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       {!isAdmin && <OfferSection />}
 
       {/* Документы */}
-      <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('userDetail.section.documents')}</h3>
+      {/* Документы: без права загрузки и без файлов — одной строкой. */}
+      <section className={`card profile-section${documents.length === 0 && !canManageDocs ? ' is-empty' : ''}`}>
+        <h3 className="profile-h">{t('userDetail.section.documents')}</h3>
         {canManageDocs && (
           <DocUploader
             userId={realId}
@@ -302,7 +313,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           />
         )}
         {documents.length === 0 ? (
-          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center', marginTop: 8 }}>{t('common.empty')}</div>
+          <div className="profile-empty" style={{ marginTop: canManageDocs ? 8 : 0 }}>{t('profile.documentsEmpty')}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
             {documents.map((d) => (
@@ -362,10 +373,10 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       {isAdmin && <AccessSection userId={realId} userName={user.fullName} />}
 
       {/* Ежедневные отчёты текущего месяца */}
-      <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>{t('profile.reportsMonth')}</h3>
+      <section className={`card profile-section${dailyReports.length === 0 ? ' is-empty' : ''}`}>
+        <h3 className="profile-h">{t('profile.reportsMonth')}</h3>
         {dailyReports.length === 0 ? (
-          <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>{t('profile.reportsEmpty')}</div>
+          <div className="profile-empty">{t('profile.reportsEmpty')}</div>
         ) : (
           <div className="table-wrap">
             <SortSelect sort={reportsSort} />
@@ -400,8 +411,8 @@ const LABEL = USER_DOCUMENT_LABEL;
 function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
-      <div style={{ fontSize: 11, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontWeight: 500 }}>{value}</div>
+      <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontWeight: 500, fontSize: 14, overflowWrap: 'anywhere' }}>{value}</div>
       {hint && <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>{hint}</div>}
     </div>
   );
@@ -410,9 +421,9 @@ function Field({ label, value, hint }: { label: string; value: string; hint?: st
 function Stat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'green' | 'red' }) {
   const color = accent === 'green' ? '#15803d' : accent === 'red' ? '#b91c1c' : undefined;
   return (
-    <div style={{ padding: 14, border: '1px solid var(--border)', borderRadius: 12 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500, color, marginTop: 4 }}>{value}</div>
+    <div style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, minWidth: 0 }}>
+      <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, color, marginTop: 2 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
@@ -682,8 +693,8 @@ function AccessSection({ userId, userName }: { userId: string; userName: string 
   };
 
   return (
-    <section className="card" style={{ padding: 22, marginBottom: 14 }}>
-      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 6 }}>
+    <section className="card profile-section">
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, marginBottom: 6 }}>
         {t('userDetail.access.title')}
       </h3>
       <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 14 }}>
@@ -752,7 +763,7 @@ function OfferSection() {
   const data = query.data;
 
   if (query.isLoading) {
-    return <section className="card" style={{ padding: 22, marginBottom: 14 }}>{t('common.loading')}</section>;
+    return <section className="card profile-section">{t('common.loading')}</section>;
   }
   if (!data) return null;
 
@@ -770,9 +781,9 @@ function OfferSection() {
   };
 
   return (
-    <section className="card" style={{ padding: 22, marginBottom: 14 }}>
+    <section className="card profile-section">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, margin: 0 }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, margin: 0 }}>
           {t('userDetail.section.offer')} · v{data.offer.version}
         </h3>
         {data.signed && (
@@ -1021,15 +1032,9 @@ function CustomRoleEditor({
 
   if (!open) {
     return (
-      <div style={{ marginTop: 12 }}>
-        <button
-          className="btn btn-sm btn-secondary"
-          onClick={() => setOpen(true)}
-          style={{ marginLeft: 8 }}
-        >
-          {currentName ? `${t('userDetail.field.customRole')}: ${currentName}` : t('userDetail.field.customRole')}
-        </button>
-      </div>
+      <button className="btn btn-sm btn-secondary" onClick={() => setOpen(true)}>
+        {currentName ? `${t('userDetail.field.customRole')}: ${currentName}` : t('userDetail.field.customRole')}
+      </button>
     );
   }
 

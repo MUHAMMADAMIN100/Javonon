@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -16,6 +16,11 @@ import ChangePasswordModal from '../components/ChangePasswordModal';
 import PasswordInput from '../components/PasswordInput';
 import Icon from '../Icon';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import SearchField, { useUrlSearch } from '../components/SearchField';
+import ListTotal from '../components/ListTotal';
+import ActiveFilterChips from '../components/ActiveFilterChips';
+import { stringParam, useUrlListState } from '../lib/useUrlListState';
+import { matchesSearch } from '../lib/listSearch';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
@@ -36,8 +41,6 @@ export default function Users() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [pwdTarget, setPwdTarget] = useState<User | null>(null);
 
   const formErrors = validateAll(
@@ -51,17 +54,57 @@ export default function Users() {
   const showErr = (k: keyof typeof formErrors) => touched[k] && formErrors[k];
   const formInvalid = hasErrors(formErrors);
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
+  // Роль и поиск — в ссылке: из карточки сотрудника возвращаются «назад»,
+  // и выборка должна остаться.
+  const { values, setValue, reset } = useUrlListState({
+    role: stringParam('', 80),
+    search: stringParam('', 200),
+  });
+  const setUrlSearch = useCallback((v: string) => setValue('search', v), [setValue]);
+  const { input: searchInput, setInput: setSearchInput, clear: clearSearch } = useUrlSearch(values.search, setUrlSearch);
 
-  const listKey = ['users', 'list', { search: debouncedSearch || undefined }] as const;
+  // Сотрудников немного — грузим всех и фильтруем в браузере: так счётчик
+  // «Найдено: X из N» и список ролей с числами считаются сразу.
+  const listKey = ['users', 'list', {}] as const;
   const usersQuery = useQuery({
     queryKey: listKey,
-    queryFn: () => listUsers(debouncedSearch || undefined),
+    queryFn: () => listUsers(),
   });
-  const items = usersQuery.data ?? [];
+  const allUsers = usersQuery.data ?? [];
+
+  /**
+   * Роли сотрудника — ровно то, что видно в колонке «Роль»: активная своя
+   * роль заменяет базовые, иначе все базовые (их может быть несколько).
+   */
+  const roleKeysOf = (u: User): { key: string; label: string }[] => {
+    const custom = (u as any).customRole;
+    if (custom && custom.isActive !== false) return [{ key: `custom:${custom.id}`, label: custom.name }];
+    return Array.from(new Set([u.role, ...((u as any).roles || [])]))
+      .filter(Boolean)
+      .map((r) => ({ key: `base:${r}`, label: roleLabel(r as string) }));
+  };
+  // Роли в фильтре — только те, у кого есть люди, с их числом.
+  const roleOptions = (() => {
+    const map = new Map<string, { label: string; count: number }>();
+    for (const u of allUsers) {
+      for (const r of roleKeysOf(u)) {
+        const row = map.get(r.key) || { label: r.label, count: 0 };
+        row.count += 1;
+        map.set(r.key, row);
+      }
+    }
+    return [...map.entries()]
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ru'));
+  })();
+  const roleFilter = values.role;
+  const items = allUsers.filter(
+    (u) =>
+      (!roleFilter || roleKeysOf(u).some((r) => r.key === roleFilter)) &&
+      matchesSearch(values.search, [u.fullName, u.email]),
+  );
+  const narrowed = !!(roleFilter || values.search);
+  const roleFilterLabel = roleOptions.find((r) => r.key === roleFilter)?.label;
   const sort = useTableSort(items, [
     { key: 'fullName', label: t('app.field.fullName'), value: (u) => u.fullName },
     { key: 'email', label: t('userDetail.field.email'), value: (u) => u.email },
@@ -160,17 +203,66 @@ export default function Users() {
   return (
     <div className="card">
       <div className="card-header is-titleless">
+        <ListTotal noun="users" found={items.length} total={allUsers.length} filtered={narrowed} testId="users-total" />
         <button className="btn btn-primary" onClick={openCreate}>+ {t('common.add')}</button>
       </div>
       <div className="card-body">
-        <div className="filters-search">
-          <input
-            className="crm-input"
-            placeholder={t('common.search')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+        <div className="filters">
+          <CrmSelect
+            className="crm-select"
+            value={roleFilter}
+            onChange={(e) => setValue('role', e.target.value)}
+            style={{ ['--filter-w' as string]: '230px' }}
+            title={t('users.filter.role')}
+            data-testid="users-filter-role"
+          >
+            <option value="">{t('users.filter.allRoles')}</option>
+            {/* Роль из старой ссылки, у которой уже нет людей, — чтобы список
+                не показывал «Все роли» при включённом фильтре. */}
+            {roleFilter && !roleOptions.some((r) => r.key === roleFilter) && (
+              <option value={roleFilter}>{roleFilter.replace(/^(base|custom):/, '')} (0)</option>
+            )}
+            {roleOptions.map((r) => (
+              <option key={r.key} value={r.key}>{`${r.label} (${r.count})`}</option>
+            ))}
+          </CrmSelect>
+          <SearchField
+            value={searchInput}
+            onChange={setSearchInput}
+            onClear={clearSearch}
+            placeholder={t('users.search.placeholder')}
+            testId="users-search"
           />
+          {(narrowed || searchInput) && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setSearchInput('');
+                reset(['role', 'search']);
+              }}
+            >
+              <Icon name="close" size={14} /> {t('common.reset')}
+            </button>
+          )}
         </div>
+        <ActiveFilterChips
+          chips={[
+            ...(values.search
+              ? [{ key: 'search', label: `${t('list.chip.search')}: «${values.search}»`, onClear: clearSearch }]
+              : []),
+            ...(roleFilter
+              ? [{ key: 'role', label: `${t('users.chip.role')}: ${roleFilterLabel ?? '…'}`, onClear: () => reset(['role']) }]
+              : []),
+          ]}
+        />
+        {!usersQuery.isLoading && items.length === 0 && (
+          <div className="empty" data-testid="users-empty">
+            <div className="empty-icon"><Icon name={narrowed ? 'search_off' : 'group'} size={48} /></div>
+            {narrowed ? t('common.empty') : t('users.empty')}
+          </div>
+        )}
+        {items.length > 0 && (
         <div className="table-wrap">
           {items.length > 0 && <SortSelect sort={sort} />}
           <table className="table">
@@ -261,6 +353,7 @@ export default function Users() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
       <AnimatePresence>
         {creating && (

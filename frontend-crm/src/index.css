@@ -6152,3 +6152,63 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 @media (max-width: 900px) {
   .payment-actions { flex-wrap: wrap; justify-content: flex-start; width: 100%; }
 }
+
+/* ===== Карточка сотрудника / «Мой профиль» (pages/UserDetail) — плотнее ===== */
+.profile-section { padding: 16px 18px; margin-bottom: 10px; }
+.profile-h {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+/* Личные данные | Оплата — две колонки; на узком экране одна под другой. */
+.profile-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 20px 32px;
+}
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px 16px;
+}
+/* Кнопки правки — один ряд. Инлайновые отступы у кнопок-редакторов
+   рассчитаны на старую раскладку, поэтому сбрасываем их. Открытая форма
+   редактора (div) встаёт отдельной строкой на всю ширину. */
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+.profile-actions > .btn { margin: 0 !important; }
+.profile-actions > div { flex: 1 1 100%; margin-top: 0 !important; }
+/* Плитки «Текущий месяц» — все семь в одну строку. */
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+/* Пустой блок — одной строкой: заголовок и «пока нет» рядом. */
+.profile-section.is-empty {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+}
+.profile-section.is-empty .profile-h { margin: 0; }
+.profile-empty { color: var(--text-soft); font-size: 13px; }
+@media (max-width: 1100px) {
+  .profile-stats { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+}
+@media (max-width: 900px) {
+  .profile-cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .profile-section { padding: 14px; }
+  .profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .profile-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
