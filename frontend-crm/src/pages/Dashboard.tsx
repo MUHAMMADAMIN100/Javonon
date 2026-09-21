@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -12,6 +13,7 @@ import { isElevated, hasRole } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useApplicationStatusLabel, useCountryLabel, useDirectionLabel } from '../lib/labels';
 import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
+import DashboardDetails, { type DashboardDetailKind } from '../components/DashboardDetails';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -44,6 +46,22 @@ export default function Dashboard() {
   // разворачивает их в моменты (backend/src/common/query-date.ts).
   const period = useDashboardPeriod();
   const { range, invalid } = period;
+  /** Какая карточка открыта в окне «подробнее». */
+  const [detail, setDetail] = useState<DashboardDetailKind | null>(null);
+  /** Карточка-кнопка: клик, Enter и пробел открывают окно подробностей. */
+  const openable = (kind: DashboardDetailKind) => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    title: t('details.clickHint'),
+    'data-testid': `card-${kind}`,
+    onClick: () => setDetail(kind),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setDetail(kind);
+      }
+    },
+  });
 
   // Период — часть каждого queryKey, значит ЛЮБОЕ переключение это промах
   // кеша, а глобальный keepPreviousData снят (lib/queryClient.ts, он ломал
@@ -220,25 +238,28 @@ export default function Dashboard() {
     eyebrow: string; label: string; value: any; em?: string;
     accent?: 'feature' | 'accent' | undefined;
     span: string; row?: string;
+    detail: DashboardDetailKind;
   }> = [
-    { eyebrow: `${t('eyebrow.total')} · 01`, label: t('dashboard.kpi.total'), value: appStats?.total ?? '—', accent: 'feature', span: 'span-4', row: 'row-2' },
+    { eyebrow: `${t('eyebrow.total')} · 01`, label: t('dashboard.kpi.total'), value: appStats?.total ?? '—', accent: 'feature', span: 'span-4', row: 'row-2', detail: 'total' },
     // `?? '—'` не ловит 0: настоящий ноль периода остаётся нулём, «—» видно
     // только пока данных нет.
-    { eyebrow: `${t('eyebrow.new')} · 02`, label: t('dashboard.kpi.new'), value: newCount ?? '—', span: 'span-2' },
-    { eyebrow: `${t('eyebrow.pipeline')} · 03`, label: t('dashboard.kpi.pipeline'), value: inProgress ?? '—', accent: 'accent', span: 'span-2' },
-    { eyebrow: `${t('eyebrow.active')} · 04`, label: t('dashboard.kpi.active'), value: activeStudents ?? '—', span: 'span-3' },
-    { eyebrow: `${t('eyebrow.win')} · 05`, label: t('dashboard.kpi.enrolled'), value: enrolled ?? '—', span: 'span-3' },
+    { eyebrow: `${t('eyebrow.new')} · 02`, label: t('dashboard.kpi.new'), value: newCount ?? '—', span: 'span-2', detail: 'new' },
+    { eyebrow: `${t('eyebrow.pipeline')} · 03`, label: t('dashboard.kpi.pipeline'), value: inProgress ?? '—', accent: 'accent', span: 'span-2', detail: 'pipeline' },
+    { eyebrow: `${t('eyebrow.active')} · 04`, label: t('dashboard.kpi.active'), value: activeStudents ?? '—', span: 'span-3', detail: 'active' },
+    { eyebrow: `${t('eyebrow.win')} · 05`, label: t('dashboard.kpi.enrolled'), value: enrolled ?? '—', span: 'span-3', detail: 'enrolled' },
   ];
 
   return (
     <>
       <PeriodSwitcher state={period} busy={busy} />
+      <DashboardDetails kind={detail} range={range} periodLabel={period.suffix} onClose={() => setDetail(null)} />
 
       <div className="bento" style={{ marginBottom: 32, ...staleStyle }}>
         {kpis.map((k, i) => (
           <motion.div
             key={k.label}
-            className={`bento-card${k.accent ? ' ' + k.accent : ''} ${k.span}${k.row ? ' ' + k.row : ''}`}
+            className={`bento-card is-clickable${k.accent ? ' ' + k.accent : ''} ${k.span}${k.row ? ' ' + k.row : ''}`}
+            {...openable(k.detail)}
             variants={fadeUp}
             custom={i}
             initial="hidden"
@@ -298,7 +319,9 @@ export default function Dashboard() {
           </div>
           <div className="bento" style={{ marginBottom: 32, ...staleStyle }}>
             <motion.div
-              className="bento-card feature span-3 row-2"
+              className="bento-card feature span-3 row-2 is-clickable"
+              {...openable('profit')}
+              whileHover={{ y: -3 }}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
@@ -327,17 +350,20 @@ export default function Dashboard() {
               label={t('dashboard.finance.income')}
               value={fmtMoney(finance.totalIncome)}
               accent
+              detail={openable('income')}
             />
             <SmallBento
               eyebrow={`${t('eyebrow.expense')} · 08`}
               label={t('dashboard.finance.expense')}
               value={fmtMoney(finance.totalExpense)}
+              detail={openable('expense')}
             />
             <SmallBento
               eyebrow={`${t('dashboard.finance.debt')} · 09`}
               label={t('dashboard.finance.debtNow')}
               value={String(pending.length)}
               span="span-3"
+              detail={openable('debt')}
             />
           </div>
         </>
@@ -520,12 +546,15 @@ function PeriodChip({ suffix }: { suffix: string }) {
   return <span className="crm-period-chip">{suffix}</span>;
 }
 
-function SmallBento({ eyebrow, label, value, accent, span = 'span-3' }: {
+function SmallBento({ eyebrow, label, value, accent, span = 'span-3', detail }: {
   eyebrow: string; label: string; value: string; accent?: boolean; span?: string;
+  /** Свойства карточки-кнопки (окно подробностей), см. openable() в Dashboard. */
+  detail?: Record<string, unknown>;
 }) {
   return (
     <motion.div
-      className={`bento-card ${accent ? 'accent' : ''} ${span}`}
+      className={`bento-card ${accent ? 'accent' : ''} ${span}${detail ? ' is-clickable' : ''}`}
+      {...(detail ?? {})}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -3 }}

@@ -6212,3 +6212,32 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   .profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .profile-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ===== Окно «подробнее» по карточке-цифре (components/DetailsModal) ===== */
+.details-modal { max-height: calc(100vh - 48px); overflow-y: auto; }
+.details-group { margin-bottom: 10px; }
+.details-group-title {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.10em;
+  text-transform: uppercase; color: var(--text-soft); margin-bottom: 6px;
+}
+.details-modal .kpi-details-note { margin: 0 0 12px; }
+.details-modal .details-row-link { cursor: pointer; }
+.details-modal .details-row-link:hover { background: var(--bg-soft); }
+.details-modal .kpi-details-body .table tbody tr.details-row-link { cursor: pointer; }
+.details-footer { display: flex; justify-content: flex-end; margin-top: 14px; }
+.details-reversed { color: var(--text-light); text-decoration: line-through; }
+.kpi-details-tile.is-accent .kpi-details-tile-value { color: var(--primary-dark); }
+/* Карточка-цифра, по которой открывается окно подробностей. */
+.is-clickable { cursor: pointer; }
+.is-clickable:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 600px) {
+  /* На телефоне — на весь экран, без полей вокруг. */
+  .details-backdrop { padding: 0 !important; align-items: stretch !important; }
+  .details-modal {
+    width: 100% !important; max-width: 100% !important;
+    height: 100%; max-height: 100vh; border-radius: 0 !important;
+    padding: 18px 16px !important;
+  }
+}
+.profile-tile.is-clickable { transition: border-color .15s, box-shadow .15s; }
+.profile-tile.is-clickable:hover { border-color: var(--primary) !important; box-shadow: 0 2px 10px rgba(1, 54, 139, 0.08); }

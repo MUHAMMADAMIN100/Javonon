@@ -31,6 +31,7 @@ import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import BackButton from '../components/BackButton';
+import ProfileMonthDetails, { type MonthTile } from '../components/ProfileMonthDetails';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -59,6 +60,22 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
     queryFn: async () => {
       const mod = await import('../api/userProfile');
       return isAdmin ? mod.getUserFullProfile(userId) : mod.getMyFullProfile();
+    },
+  });
+
+  /** Какая плитка «Текущий месяц» открыта в окне «подробнее». */
+  const [monthTile, setMonthTile] = useState<MonthTile | null>(null);
+  const tileProps = (tile: MonthTile) => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    title: t('details.clickHint'),
+    'data-testid': `tile-${tile}`,
+    onClick: () => setMonthTile(tile),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setMonthTile(tile);
+      }
     },
   });
 
@@ -220,14 +237,21 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       <section className="card profile-section">
         <h3 className="profile-h">{t('profile.month.current')}</h3>
         <div className="profile-stats">
-          <Stat label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
-          <Stat label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
-          <Stat label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}`} />
-          <Stat label={t('profile.month.leadsTotal')} value={String(kpi.totalLeadsMonth)} sub={`${kpi.ownClientsMonth} ${t('profile.month.myOwn')}`} />
-          <Stat label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />
-          <Stat label={t('profile.month.kpiPct')} value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.target')} ${kpi.targetPct}%`} />
-          <Stat label={t('profile.month.penalties')} value={fmtMoney(penalties.pendingTotal)} accent="red" />
+          <Stat {...tileProps('hours')} label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
+          <Stat {...tileProps('late')} label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
+          <Stat {...tileProps('sales')} label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}`} />
+          <Stat {...tileProps('leads')} label={t('profile.month.leadsTotal')} value={String(kpi.totalLeadsMonth)} sub={`${kpi.ownClientsMonth} ${t('profile.month.myOwn')}`} />
+          <Stat {...tileProps('enrolled')} label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />
+          <Stat {...tileProps('kpi')} label={t('profile.month.kpiPct')} value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.target')} ${kpi.targetPct}%`} />
+          <Stat {...tileProps('penalties')} label={t('profile.month.penalties')} value={fmtMoney(penalties.pendingTotal)} accent="red" />
         </div>
+        <ProfileMonthDetails
+          tile={monthTile}
+          userId={userId}
+          userName={user.fullName}
+          kpi={kpi}
+          onClose={() => setMonthTile(null)}
+        />
       </section>
 
       {/* История зарплат */}
@@ -424,10 +448,16 @@ function Field({ label, value, hint }: { label: string; value: string; hint?: st
   );
 }
 
-function Stat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'green' | 'red' }) {
+function Stat({ label, value, sub, accent, ...rest }: {
+  label: string; value: string; sub?: string; accent?: 'green' | 'red';
+} & React.HTMLAttributes<HTMLDivElement>) {
   const color = accent === 'green' ? '#15803d' : accent === 'red' ? '#b91c1c' : undefined;
   return (
-    <div style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, minWidth: 0 }}>
+    <div
+      {...rest}
+      className={rest.onClick ? 'profile-tile is-clickable' : undefined}
+      style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, minWidth: 0 }}
+    >
       <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, color, marginTop: 2 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>{sub}</div>}

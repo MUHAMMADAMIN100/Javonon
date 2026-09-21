@@ -139,6 +139,31 @@ export const getMyFullProfile = () =>
 export const getUserFullProfile = (id: string) =>
   api.get<FullProfile>(`/me/profile/${id}`).then((r) => r.data);
 
+/** Записи за месяц для окон плиток «Текущий месяц» (те же условия, что у плиток). */
+export interface MonthDetails {
+  periodStart: string;
+  periodEnd: string;
+  time: Array<{
+    id: string; date: string; clockIn: string; lunchOut: string | null; lunchIn: string | null;
+    clockOut: string | null; status: string; totalMinutes: number; totalLunchMinutes: number;
+    lateMinutes: number; lateExcuseReason: string | null; lateExcuseStatus: string | null;
+  }>;
+  sales: Array<{
+    id: string; date: string; amount: number; currency: string; category: string;
+    payerName: string | null; comment: string | null; student: { id: string; fullName: string } | null;
+  }>;
+  ownApplications: MonthApplication[];
+  enrolled: MonthApplication[];
+  pendingPenalties: Array<{ id: string; date: string; reason: string; amount: number; details: string; applied: boolean }>;
+}
+export interface MonthApplication {
+  id: string; fullName: string; phone: string; status: string; country: string | null;
+  createdAt: string; updatedAt: string;
+}
+/** 'me' — свой профиль, иначе id сотрудника (доступ — как у профиля). */
+export const getMonthDetails = (userId: string) =>
+  api.get<MonthDetails>(userId === 'me' ? '/me/month-details' : `/me/profile/${userId}/month-details`).then((r) => r.data);
+
 export const updateUserHR = (id: string, patch: Partial<{
   phone: string;
   passportNo: string;

@@ -74,6 +74,63 @@ export class UsersService {
    * Параметр `selfOnly` режет финансовую инфу для self-view? Нет, сотрудник
    * имеет право видеть свою зарплату и штрафы. Скрываем только ROLE-permissions.
    */
+  /**
+   * Записи за текущий месяц, из которых сложились плитки «Текущий месяц»
+   * профиля (окна «подробнее»). Условия выборки — ТЕ ЖЕ, что в fullProfile()
+   * ниже, поэтому число в окне сходится с плиткой по построению. Меняешь
+   * условие там — меняй и здесь.
+   *
+   * «Заявок всего» — счёт по всей компании; список здесь только СВОИХ
+   * заявок сотрудника («N моих»): чужих клиентов в профиле не показываем.
+   */
+  async monthDetails(id: string) {
+    const now = new Date();
+    const monthStart = tjStartOfMonth(now);
+    const monthEnd = tjEndOfMonth(now);
+    const appSelect = {
+      id: true, fullName: true, phone: true, status: true, country: true,
+      createdAt: true, updatedAt: true,
+    } as const;
+    const [time, sales, ownApplications, enrolled, pendingPenalties] = await Promise.all([
+      this.prisma.timeEntry.findMany({
+        where: { userId: id, date: { gte: monthStart, lte: monthEnd } },
+        orderBy: { date: 'desc' },
+        select: {
+          id: true, date: true, clockIn: true, lunchOut: true, lunchIn: true, clockOut: true,
+          status: true, totalMinutes: true, totalLunchMinutes: true, lateMinutes: true,
+          lateExcuseReason: true, lateExcuseStatus: true,
+        },
+      }),
+      this.prisma.transaction.findMany({
+        where: { managerId: id, type: 'INCOME', reversedAt: null, date: { gte: monthStart, lte: monthEnd } },
+        orderBy: { date: 'desc' },
+        select: {
+          id: true, date: true, amount: true, currency: true, category: true, payerName: true, comment: true,
+          student: { select: { id: true, fullName: true } },
+        },
+      }),
+      this.prisma.application.findMany({
+        where: { managerId: id, createdAt: { gte: monthStart, lte: monthEnd } },
+        orderBy: { createdAt: 'desc' },
+        select: appSelect,
+      }),
+      this.prisma.application.findMany({
+        where: {
+          managerId: id,
+          status: { in: FINISHED_APPLICATION_STATUSES },
+          updatedAt: { gte: monthStart, lte: monthEnd },
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: appSelect,
+      }),
+      this.prisma.penalty.findMany({
+        where: { userId: id, applied: false },
+        orderBy: { date: 'desc' },
+      }),
+    ]);
+    return { periodStart: monthStart, periodEnd: monthEnd, time, sales, ownApplications, enrolled, pendingPenalties };
+  }
+
   async fullProfile(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },

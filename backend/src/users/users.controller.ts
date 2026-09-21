@@ -65,6 +65,22 @@ export class MeController {
     return this.users.fullProfile(me.id);
   }
 
+  /** Записи за месяц для окон плиток «Текущий месяц» — свой профиль. */
+  @Get('month-details')
+  myMonthDetails(@CurrentUser() me: any) {
+    return this.users.monthDetails(me.id);
+  }
+
+  /** То же для чужого профиля — тот же доступ, что у самого профиля. */
+  @Get('profile/:id/month-details')
+  async profileMonthDetails(@Param('id') id: string, @CurrentUser() me: any) {
+    const ok = await this.users.canViewProfile(me.id, me.role, id, me.roles);
+    if (!ok) {
+      throw new BadRequestException('Нет доступа к данным этого сотрудника');
+    }
+    return this.users.monthDetails(id);
+  }
+
   /** Профиль другого сотрудника — доступ через canViewProfile. */
   @Get('profile/:id')
   async viewProfile(@Param('id') id: string, @CurrentUser() me: any) {

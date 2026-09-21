@@ -302,6 +302,8 @@ export class FinanceService {
     from?: Date;
     to?: Date;
     take?: number;
+    /** Включить отменённые (окно карточки дашборда — см. контроллер). */
+    includeReversed?: boolean;
   }) {
     return this.prisma.transaction.findMany({
       where: {
@@ -310,7 +312,7 @@ export class FinanceService {
         // Одного условия хватает на обе строки пары: корректирующая
         // зеркальная запись тоже создаётся с reversedAt (см. remove()).
         // Для аудита обе остаются в базе и в журнале действий.
-        reversedAt: null,
+        ...(filters.includeReversed ? {} : { reversedAt: null }),
         ...(filters.type && { type: filters.type }),
         ...(filters.category && { category: filters.category }),
         ...(filters.studentId && { studentId: filters.studentId }),

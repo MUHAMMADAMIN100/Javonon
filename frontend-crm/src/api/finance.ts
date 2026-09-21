@@ -116,6 +116,8 @@ export interface Transaction {
   paymentKind?: PaymentKind | null;
   productCategory?: string | null;
   payerName?: string | null;
+  /** Отменена (пара «операция + обратная запись»). Приходит только с includeReversed. */
+  reversedAt?: string | null;
   receiptUrl?: string | null;
   receiptKind?: ReceiptKind | null;
   noReceiptReason?: string | null;
@@ -191,6 +193,8 @@ export const listTransactions = (params?: {
   from?: string;
   to?: string;
   take?: number;
+  /** С отменёнными (для окна карточки дашборда — там сводка их считает). */
+  includeReversed?: boolean;
 }) => api.get<Transaction[]>('/finance/transactions', { params }).then((r) => r.data);
 
 export const createTransaction = (dto: CreateTransactionDto) =>
