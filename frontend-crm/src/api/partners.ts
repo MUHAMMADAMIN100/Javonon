@@ -263,3 +263,13 @@ export function fmtCommissionRate(cents: number): string {
   });
   return `${v} TJS`;
 }
+
+/**
+ * Ключ сортировки колонки «Ставка» у комиссий. В колонке две разные
+ * величины: фиксированная сумма («Фикс 190 TJS», percent = 0) и процент.
+ * Сравнивать их напрямую бессмысленно, поэтому фиксированные идут группой
+ * первыми (по сумме), проценты — следом (по проценту).
+ */
+export function commissionRateSortKey(c: { percent: number; amountCents: number }): number {
+  return c.percent === 0 ? c.amountCents : 1e12 + c.percent;
+}

@@ -1639,7 +1639,7 @@ function NewTeamForm({ users, onCreate, onCancel }: {
             >
               <div style={{
                 width: 18, height: 18, borderRadius: 4,
-                border: `1.5px solid ${isSel ? 'var(--primary)' : 'var(--border)'}`,
+                border: `1.5px solid ${isSel ? 'var(--primary)' : 'var(--input-border)'}`,
                 background: isSel ? 'var(--primary)' : 'transparent',
                 color: 'white',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',

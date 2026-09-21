@@ -11,6 +11,7 @@ import { keys } from '../lib/queryKeys';
 import Icon from '../Icon';
 import FormModal from '../components/FormModal';
 import Loading from '../components/Loading';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { listGroups, createGroup, type StudyGroupStatus } from '../api/studyGroups';
 import { listPrograms } from '../api/programs';
 import { listUsers } from '../api/users';
@@ -49,6 +50,15 @@ export default function Groups() {
     queryFn: () => listGroups(filters),
   });
   const groups = query.data ?? [];
+
+  const sort = useTableSort(groups, [
+    { key: 'name', label: t('groups.field.name'), value: (g) => g.name },
+    { key: 'program', label: t('groups.field.program'), value: (g) => g.program?.name },
+    { key: 'teacher', label: t('groups.field.teacher'), value: (g) => g.teacher?.fullName },
+    { key: 'members', label: t('groups.membersCount'), type: 'number', value: (g) => g._count?.members ?? 0 },
+    { key: 'sessions', label: t('groups.sessionsCount'), type: 'number', value: (g) => g._count?.sessions ?? 0 },
+    { key: 'status', label: t('common.status'), value: (g) => t(`groups.status.${g.status}`) },
+  ]);
 
   const createMut = useMutation({
     mutationFn: createGroup,
@@ -124,20 +134,22 @@ export default function Groups() {
           {t('groups.empty')}
         </div>
       ) : (
+        <>
+        <SortSelect sort={sort} />
         <div className="card table-wrap" style={{ padding: 0, overflowX: 'auto' }}>
           <table className="table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th>{t('groups.field.name')}</th>
-                <th>{t('groups.field.program')}</th>
-                <th>{t('groups.field.teacher')}</th>
-                <th style={{ textAlign: 'right' }}>{t('groups.membersCount')}</th>
-                <th style={{ textAlign: 'right' }}>{t('groups.sessionsCount')}</th>
-                <th>{t('common.status')}</th>
+                <SortTh sort={sort} col="name" />
+                <SortTh sort={sort} col="program" />
+                <SortTh sort={sort} col="teacher" />
+                <SortTh sort={sort} col="members" style={{ textAlign: 'right' }} />
+                <SortTh sort={sort} col="sessions" style={{ textAlign: 'right' }} />
+                <SortTh sort={sort} col="status" />
               </tr>
             </thead>
             <tbody>
-              {groups.map((g) => (
+              {sort.sorted.map((g) => (
                 <tr
                   key={g.id}
                   style={{ cursor: 'pointer' }}
@@ -162,6 +174,7 @@ export default function Groups() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </>
   );

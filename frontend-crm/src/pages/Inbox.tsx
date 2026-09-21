@@ -153,7 +153,7 @@ function ChannelTab({ active, onClick, label, color }: { active: boolean; onClic
         padding: '6px 12px',
         borderRadius: 999,
         border: '1.5px solid',
-        borderColor: active ? (color || 'var(--primary)') : 'var(--border)',
+        borderColor: active ? (color || 'var(--primary)') : 'var(--input-border)',
         background: active ? `${color || 'var(--primary)'}20` : 'transparent',
         color: active ? (color || 'var(--primary-dark)') : 'var(--text-soft)',
         fontSize: 12, fontWeight: 600, cursor: 'pointer',

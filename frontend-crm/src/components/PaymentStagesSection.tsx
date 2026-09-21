@@ -7,6 +7,7 @@ import { keys } from '../lib/queryKeys';
 import { tjDateInput, tjFormatDate } from '../lib/tjTime';
 import Icon from '../Icon';
 import CrmDatePicker from './CrmDatePicker';
+import { SortSelect, SortTh, useTableSort } from './TableSort';
 import {
   listSubmissionStages,
   updatePaymentStage,
@@ -69,6 +70,17 @@ export default function PaymentStagesSection({
     queryFn: () => listSubmissionStages(submissionId),
   });
   const data = query.data;
+  const sort = useTableSort(
+    data?.stages ?? [],
+    [
+      { key: 'order', label: t('stages.col.order'), type: 'number', value: (s) => s.order },
+      { key: 'title', label: t('stages.col.title'), value: (s) => s.title || `${t('stages.col.title')} ${s.order}` },
+      { key: 'due', label: t('stages.col.due'), type: 'date', value: (s) => s.dueDate },
+      { key: 'amount', label: t('stages.col.amount'), type: 'number', value: (s) => s.amount },
+      { key: 'status', label: t('stages.col.status'), value: (s) => t(`stages.status.${s.status}`) },
+    ],
+    { param: 'sortStages' },
+  );
 
   // Рассрочки у сделки может не быть вовсе (у программы пустой шаблон) —
   // это норма, а не ошибка: платят разом.
@@ -151,19 +163,20 @@ export default function PaymentStagesSection({
           </div>
 
           <div className="table-wrap" style={{ overflowX: 'auto' }}>
+            <SortSelect sort={sort} />
             <table className="table" style={{ width: '100%' }}>
               <thead>
                 <tr>
-                  <th style={{ width: 44 }}>{t('stages.col.order')}</th>
-                  <th>{t('stages.col.title')}</th>
-                  <th>{t('stages.col.due')}</th>
-                  <th style={{ textAlign: 'right' }}>{t('stages.col.amount')}</th>
-                  <th>{t('stages.col.status')}</th>
+                  <SortTh sort={sort} col="order" style={{ width: 44 }} />
+                  <SortTh sort={sort} col="title" />
+                  <SortTh sort={sort} col="due" />
+                  <SortTh sort={sort} col="amount" style={{ textAlign: 'right' }} />
+                  <SortTh sort={sort} col="status" />
                   {canEdit && <th style={{ width: 40 }} />}
                 </tr>
               </thead>
               <tbody>
-                {stages.map((s) => (
+                {sort.sorted.map((s) => (
                   <tr
                     key={s.id}
                     style={

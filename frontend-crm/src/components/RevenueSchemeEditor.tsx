@@ -359,7 +359,7 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
             fontSize: 15,
             fontWeight: 600,
             padding: '4px 8px',
-            border: '1px solid var(--border)',
+            border: '1px solid var(--input-border)',
             borderRadius: 6,
             background: 'transparent',
           }}
@@ -436,7 +436,7 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
               style={{
                 width: 70,
                 padding: '4px 8px',
-                border: '1px solid var(--border)',
+                border: '1px solid var(--input-border)',
                 borderRadius: 6,
                 fontFamily: 'var(--font-mono, monospace)',
                 textAlign: 'right',
@@ -652,9 +652,11 @@ function BucketItemRow({
           flex: '1 1 140px',
           minWidth: 0,
           padding: '4px 8px',
-          border: '1px solid transparent',
+          // Раньше рамка была прозрачной, и название выглядело простым
+          // текстом — не было видно, что его можно править.
+          border: '1px solid var(--input-border)',
           borderRadius: 4,
-          background: 'transparent',
+          background: 'white',
           fontSize: 13,
         }}
       />
@@ -674,7 +676,7 @@ function BucketItemRow({
                 width: 90,
                 minWidth: 60,
                 padding: '4px 6px',
-                border: '1px solid var(--border)',
+                border: '1px solid var(--input-border)',
                 borderRadius: 4,
                 fontFamily: 'var(--font-mono, monospace)',
                 textAlign: 'right',
@@ -788,7 +790,7 @@ function NewBucketForm({
           onChange={(e) => setKind(e.target.value as BucketKind)}
           style={{
             padding: '6px 10px',
-            border: '1px solid var(--border)',
+            border: '1px solid var(--input-border)',
             borderRadius: 6,
           }}
         >
@@ -802,7 +804,7 @@ function NewBucketForm({
           style={{
             flex: '1 1 180px',
             padding: '6px 10px',
-            border: '1px solid var(--border)',
+            border: '1px solid var(--input-border)',
             borderRadius: 6,
           }}
         />
@@ -815,7 +817,7 @@ function NewBucketForm({
             style={{
               width: 80,
               padding: '6px 10px',
-              border: '1px solid var(--border)',
+              border: '1px solid var(--input-border)',
               borderRadius: 6,
               fontFamily: 'var(--font-mono, monospace)',
               textAlign: 'right',
@@ -903,7 +905,7 @@ function NewItemForm({
         style={{
           flex: '1 1 160px',
           padding: '4px 8px',
-          border: '1px solid var(--border)',
+          border: '1px solid var(--input-border)',
           borderRadius: 4,
           fontSize: 13,
         }}
@@ -920,7 +922,7 @@ function NewItemForm({
             style={{
               width: 110,
               padding: '4px 8px',
-              border: '1px solid var(--border)',
+              border: '1px solid var(--input-border)',
               borderRadius: 4,
               fontFamily: 'var(--font-mono, monospace)',
               textAlign: 'right',

@@ -234,9 +234,10 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
     flexWrap: 'nowrap',
     width: '100%',
     boxSizing: 'border-box',
-    border: `1px solid ${error ? 'var(--danger, #dc2626)' : 'var(--border, #e5e7eb)'}`,
+    // Рамку и фон задаёт .phone-input-wrap в index.css — там же ошибка и
+    // фокус. Инлайн-рамка перебивала их: поле оставалось бледным, как до
+    // общего затемнения рамок, и не синело при фокусе.
     borderRadius: 8,
-    background: error ? '#fef2f2' : '#fff',
     isolation: 'isolate',
   };
   const btnStyle: React.CSSProperties = {

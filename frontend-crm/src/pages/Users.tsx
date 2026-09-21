@@ -15,6 +15,7 @@ import { compose, email as emailRule, hasErrors, maxLen, minLen, passwordRule, r
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import PasswordInput from '../components/PasswordInput';
 import Icon from '../Icon';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 
@@ -61,6 +62,20 @@ export default function Users() {
     queryFn: () => listUsers(debouncedSearch || undefined),
   });
   const items = usersQuery.data ?? [];
+  const sort = useTableSort(items, [
+    { key: 'fullName', label: t('app.field.fullName'), value: (u) => u.fullName },
+    { key: 'email', label: t('userDetail.field.email'), value: (u) => u.email },
+    {
+      key: 'role',
+      label: t('userDetail.field.role'),
+      // То же, что видно в ячейке: активная своя роль, иначе базовая.
+      value: (u) => {
+        const custom = (u as any).customRole;
+        return custom && custom.isActive !== false ? custom.name : roleLabel(u.role as string);
+      },
+    },
+    { key: 'createdAt', label: t('profile.field.createdAt'), type: 'date', value: (u) => u.createdAt },
+  ]);
 
   // Кастомные роли (Настройки → Роли и доступы). Read-эндпоинт открыт
   // FOUNDER/ADMIN/ACCOUNTANT — все они могут создавать сотрудников и им
@@ -157,12 +172,16 @@ export default function Users() {
           />
         </div>
         <div className="table-wrap">
+          {items.length > 0 && <SortSelect sort={sort} />}
           <table className="table">
             <thead>
-              <tr><th>{t('app.field.fullName')}</th><th>{t('userDetail.field.email')}</th><th>{t('userDetail.field.role')}</th><th>{t('profile.field.createdAt')}</th><th></th></tr>
+              <tr>
+                {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
+                <th></th>
+              </tr>
             </thead>
             <tbody>
-              {items.map((u) => {
+              {sort.sorted.map((u) => {
                 const customRole = (u as any).customRole;
                 const hasActiveCustom = customRole && customRole.isActive !== false;
                 return (

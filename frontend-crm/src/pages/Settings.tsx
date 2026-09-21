@@ -32,6 +32,7 @@ import RevenueSchemeEditor from '../components/RevenueSchemeEditor';
 import RevenueSchemeMindMap from '../components/RevenueSchemeMindMap';
 import { getRevenueScheme } from '../api/revenue-scheme';
 import { useT } from '../lib/i18n';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { useRealtime } from '../realtime';
 import { me as apiMe } from '../api/auth';
@@ -638,7 +639,7 @@ function RosterNumberInput({
         alignItems: 'center',
         gap: 6,
         padding: '6px 10px',
-        border: `1.5px solid ${dirty ? 'var(--primary, #4f46e5)' : 'var(--border, #e2e8f0)'}`,
+        border: `1.5px solid ${dirty ? 'var(--primary, #4f46e5)' : 'var(--input-border)'}`,
         borderRadius: 10,
         background: dirty ? 'var(--primary-light, #eef2ff)' : 'white',
         boxShadow: dirty ? '0 0 0 3px rgba(79,70,229,0.08)' : 'none',
@@ -698,6 +699,23 @@ function SalaryRosterSection() {
     queryFn: listSalarySettings,
   });
   const items = query.data ?? [];
+  // Сортируем по СОХРАНЁННЫМ значениям: пока человек печатает в поле,
+  // строка не должна уезжать из-под курсора.
+  const sort = useTableSort(
+    items,
+    [
+      { key: 'employee', label: t('salary.field.employee'), value: (u) => u.fullName },
+      { key: 'base', label: t('settings.salary.field.base'), type: 'number', value: (u) => u.baseSalary || 0 },
+      {
+        key: 'hourly',
+        label: t('settings.salary.field.hourly'),
+        type: 'number',
+        value: (u) => (u.monthHours && u.baseSalary ? u.baseSalary / u.monthHours : null),
+      },
+      { key: 'bonusPercent', label: t('settings.salary.field.bonusPercent'), type: 'number', value: (u) => u.bonusPercent || 0 },
+    ],
+    { param: 'sortSalary' },
+  );
 
   // Локальные «черновики» полей по userId — чтобы можно было править
   // несколько строк без авто-сохранения на каждый keystroke.
@@ -734,14 +752,12 @@ function SalaryRosterSection() {
       }}>
         {t('settings.salary.title')}
       </h3>
+      {items.length > 0 && <SortSelect sort={sort} />}
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
         <table className="table" style={{ width: '100%', minWidth: 760 }}>
           <thead>
             <tr>
-              <th>{t('salary.field.employee')}</th>
-              <th>{t('settings.salary.field.base')}</th>
-              <th>{t('settings.salary.field.hourly')}</th>
-              <th>{t('settings.salary.field.bonusPercent')}</th>
+              {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
               <th></th>
             </tr>
           </thead>
@@ -752,7 +768,7 @@ function SalaryRosterSection() {
             {!query.isLoading && items.length === 0 && (
               <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('users.empty')}</td></tr>
             )}
-            {items.map((u) => {
+            {sort.sorted.map((u) => {
               const patch = edits[u.id] || {};
               const has = (k: keyof UserSalarySettings) => k in patch;
               /** Значение для input: если значение 0/null/undefined —

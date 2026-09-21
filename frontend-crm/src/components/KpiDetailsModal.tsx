@@ -14,6 +14,7 @@ import {
 import { tjFormatDate } from '../lib/tjTime';
 import Loading from './Loading';
 import Icon from '../Icon';
+import { SortSelect, SortTh, sortRows, useTableSort } from './TableSort';
 
 /**
  * Окно «что стоит за числами» по клику на строку рейтинга KPI.
@@ -197,21 +198,34 @@ function StudentsTab({ d }: { d: KpiDetails }) {
   const { t } = useT();
   const directionLabel = useDirectionLabel();
   const statusLabel = useStudentStatusLabel();
+  // Окно — не страница: сортировку в ссылку не пишем.
+  const sort = useTableSort(
+    d.students,
+    [
+      { key: 'fullName', label: t('app.field.fullName'), value: (s) => s.fullName },
+      { key: 'direction', label: t('app.field.direction'), value: (s) => directionLabel(s.direction) },
+      { key: 'status', label: t('kpi.details.col.status'), value: (s) => statusLabel(s.status) },
+      { key: 'paidTotal', label: t('kpi.details.col.paidTotal'), type: 'number', value: (s) => s.paidTotal },
+      { key: 'createdAt', label: t('reports.col.date'), type: 'date', value: (s) => s.createdAt },
+    ],
+    { persist: false },
+  );
   if (d.students.length === 0) return <Empty text={t('kpi.details.empty.students')} />;
   return (
     <>
+      <SortSelect sort={sort} />
       <table className="table" style={{ width: '100%' }} data-testid="kpi-students">
         <thead>
           <tr>
-            <th>{t('app.field.fullName')}</th>
-            <th>{t('app.field.direction')}</th>
-            <th>{t('kpi.details.col.status')}</th>
-            <th style={{ textAlign: 'right' }}>{t('kpi.details.col.paidTotal')}</th>
-            <th>{t('reports.col.date')}</th>
+            <SortTh sort={sort} col="fullName" />
+            <SortTh sort={sort} col="direction" />
+            <SortTh sort={sort} col="status" />
+            <SortTh sort={sort} col="paidTotal" style={{ textAlign: 'right' }} />
+            <SortTh sort={sort} col="createdAt" />
           </tr>
         </thead>
         <tbody>
-          {d.students.map((s) => (
+          {sort.sorted.map((s) => (
             <tr key={s.id}>
               <td><Link to={`/students/${s.id}`} className="kpi-details-link">{s.fullName}</Link></td>
               <td data-label={t('app.field.direction')}>{directionLabel(s.direction)}</td>
@@ -251,21 +265,35 @@ function SalesRows({ rows }: { rows: KpiDetailsSale[] }) {
 
 function SalesTab({ d }: { d: KpiDetails }) {
   const { t } = useT();
+  const sort = useTableSort(
+    d.sales,
+    [
+      { key: 'date', label: t('reports.col.date'), type: 'date', value: (x) => x.date },
+      { key: 'payer', label: t('kpi.details.col.payer'), value: (x) => x.student?.fullName || x.payerName },
+      { key: 'category', label: t('kpi.details.col.category'), value: (x) => t(`finance.cat.${x.category}`) },
+      { key: 'amount', label: t('kpi.details.col.amount'), type: 'number', value: (x) => x.amount },
+    ],
+    { persist: false },
+  );
+  // Таблица продаж в другой валюте идёт без своих заголовков — порядок
+  // берёт у основной.
+  const otherSorted = sortRows(d.otherCurrencySales, sort.columns.find((c) => c.key === sort.key), sort.dir);
   if (d.sales.length === 0 && d.otherCurrencySales.length === 0) return <Empty text={t('kpi.details.empty.sales')} />;
   return (
     <>
       {d.sales.length > 0 && (
         <>
+          <SortSelect sort={sort} />
           <table className="table" style={{ width: '100%' }} data-testid="kpi-sales">
             <thead>
               <tr>
-                <th>{t('reports.col.date')}</th>
-                <th>{t('kpi.details.col.payer')}</th>
-                <th>{t('kpi.details.col.category')}</th>
-                <th style={{ textAlign: 'right' }}>{t('kpi.details.col.amount')}</th>
+                <SortTh sort={sort} col="date" />
+                <SortTh sort={sort} col="payer" />
+                <SortTh sort={sort} col="category" />
+                <SortTh sort={sort} col="amount" style={{ textAlign: 'right' }} />
               </tr>
             </thead>
-            <tbody><SalesRows rows={d.sales} /></tbody>
+            <tbody><SalesRows rows={sort.sorted} /></tbody>
           </table>
           <div className="kpi-details-sum" data-testid="kpi-sales-sum">
             {t('kpi.details.salesTotal')}: <b>{fmtMoney(d.totals.salesAmount, d.currency)}</b>
@@ -277,7 +305,7 @@ function SalesTab({ d }: { d: KpiDetails }) {
         <>
           <div className="kpi-details-note" style={{ marginTop: 18 }}>{t('kpi.details.otherCurrency')}</div>
           <table className="table" style={{ width: '100%' }}>
-            <tbody><SalesRows rows={d.otherCurrencySales} /></tbody>
+            <tbody><SalesRows rows={otherSorted} /></tbody>
           </table>
         </>
       )}
@@ -289,6 +317,17 @@ function ApplicationsTab({ d }: { d: KpiDetails }) {
   const { t } = useT();
   const statusLabel = useApplicationStatusLabel();
   const countryLabel = useCountryLabel();
+  const sort = useTableSort(
+    d.applications,
+    [
+      { key: 'fullName', label: t('app.field.fullName'), value: (a) => a.fullName },
+      { key: 'phone', label: t('app.field.phone'), value: (a) => a.phone },
+      { key: 'country', label: t('app.field.country'), value: (a) => (a.country ? countryLabel(a.country) : null) },
+      { key: 'status', label: t('kpi.details.col.status'), value: (a) => statusLabel(a.status) },
+      { key: 'createdAt', label: t('reports.col.date'), type: 'date', value: (a) => a.createdAt },
+    ],
+    { persist: false },
+  );
   if (d.applications.length === 0) return <Empty text={t('kpi.details.empty.applications')} />;
   return (
     <>
@@ -299,18 +338,15 @@ function ApplicationsTab({ d }: { d: KpiDetails }) {
           </span>
         ))}
       </div>
+      <SortSelect sort={sort} />
       <table className="table" style={{ width: '100%' }} data-testid="kpi-applications">
         <thead>
           <tr>
-            <th>{t('app.field.fullName')}</th>
-            <th>{t('app.field.phone')}</th>
-            <th>{t('app.field.country')}</th>
-            <th>{t('kpi.details.col.status')}</th>
-            <th>{t('reports.col.date')}</th>
+            {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
           </tr>
         </thead>
         <tbody>
-          {d.applications.map((a) => (
+          {sort.sorted.map((a) => (
             <tr key={a.id}>
               <td><Link to={`/applications/${a.id}`} className="kpi-details-link">{a.fullName}</Link></td>
               <td data-label={t('app.field.phone')}>{a.phone}</td>

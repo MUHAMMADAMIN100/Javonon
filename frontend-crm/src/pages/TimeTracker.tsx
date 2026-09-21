@@ -20,6 +20,7 @@ import { useOptimisticMutation } from '../lib/optimistic';
 import { useRealtimeEvent } from '../realtime';
 import { tjFormatTime, TJ_TZ } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 function fmtMin(min: number): string {
   if (min <= 0) return '0м';
@@ -35,6 +36,13 @@ function fmtTime(iso: string | null): string {
   // независимо от того в каком TZ открыл CRM.
   if (!iso) return '—';
   return tjFormatTime(iso);
+}
+
+/** Минуты от полуночи по Душанбе: «Приход»/«Уход» сортируем по часам, а не по дате. */
+function minutesOfDay(iso: string | null): number | null {
+  if (!iso) return null;
+  const [h, m] = tjFormatTime(iso).split(':').map(Number);
+  return Number.isNaN(h) || Number.isNaN(m) ? null : h * 60 + m;
 }
 
 function fmtDate(iso: string): string {
@@ -103,6 +111,20 @@ export default function TimeTracker() {
     toast(t('excuses.status.REJECTED'), 'error');
   });
   const history = historyQuery.data ?? [];
+  const sort = useTableSort(history, [
+    { key: 'date', label: t('workday.col.date'), type: 'date', value: (h) => h.clockIn },
+    { key: 'arrival', label: t('workday.col.arrival'), type: 'number', value: (h) => minutesOfDay(h.clockIn) },
+    { key: 'lunch', label: t('workday.col.lunch'), type: 'number', value: (h) => h.totalLunchMinutes },
+    { key: 'leave', label: t('workday.col.leave'), type: 'number', value: (h) => minutesOfDay(h.clockOut) },
+    { key: 'late', label: t('workday.col.late'), type: 'number', value: (h) => h.lateMinutes },
+    {
+      key: 'worked',
+      label: t('workday.col.worked'),
+      type: 'number',
+      // Незакрытый день в ячейке — «…», считать нечего.
+      value: (h) => (h.status === 'OFF' ? h.totalMinutes : null),
+    },
+  ]);
 
   const status = today?.status || 'OFF';
   const isWorking = status === 'WORKING';
@@ -405,16 +427,12 @@ export default function TimeTracker() {
         </h2>
       </div>
 
+      {history.length > 0 && <SortSelect sort={sort} />}
       <div className="card" style={{ padding: 0 }}>
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>{t('workday.col.date')}</th>
-              <th>{t('workday.col.arrival')}</th>
-              <th>{t('workday.col.lunch')}</th>
-              <th>{t('workday.col.leave')}</th>
-              <th>{t('workday.col.late')}</th>
-              <th>{t('workday.col.worked')}</th>
+              {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
             </tr>
           </thead>
           <tbody>
@@ -424,7 +442,7 @@ export default function TimeTracker() {
                   <td colSpan={6} className="empty">{t('common.empty')}</td>
                 </tr>
               )}
-              {history.map((h) => (
+              {sort.sorted.map((h) => (
                 <motion.tr
                   key={h.id}
                   initial={{ opacity: 0 }}

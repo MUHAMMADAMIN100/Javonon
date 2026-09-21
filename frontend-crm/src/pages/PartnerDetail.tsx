@@ -9,6 +9,7 @@ import {
   adminListPayouts,
   fmtCommissionRate,
   fmtMoneyCents,
+  commissionRateSortKey,
   type PartnerAttribution,
 } from '../api/partners';
 import { useT } from '../lib/i18n';
@@ -18,6 +19,7 @@ import Icon from '../Icon';
 import Loading from '../components/Loading';
 import BackButton from '../components/BackButton';
 import QrCode from '../components/QrCode';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 type Tab = 'clients' | 'commissions' | 'payouts' | 'clicks';
 
@@ -355,6 +357,35 @@ function ClientsTab({ partnerId }: { partnerId: string }) {
     queryFn: () => adminGetPartnerAttributions(partnerId, { take: PAGE_SIZE, skip }),
   });
 
+  // Эту вкладку сервер отдаёт страницами по PAGE_SIZE — сортируется
+  // загруженная страница.
+  const sort = useTableSort(
+    q.data?.items ?? [],
+    [
+      { key: 'createdAt', label: t('partners.commission.col.createdAt'), type: 'date', value: (a) => a.createdAt },
+      {
+        key: 'fullName',
+        label: t('common.fullName'),
+        value: (a) =>
+          a.application?.fullName ||
+          a.student?.fullName ||
+          (a.telegramUserId ? `tg:${a.telegramUserId}` : a.emailHint),
+      },
+      { key: 'phone', label: t('partners.col.phone'), value: (a) => a.application?.phone || a.student?.phone },
+      {
+        key: 'direction',
+        label: t('app.field.direction'),
+        value: (a) => (a.application ? directionLabel(a.application.direction) : null),
+      },
+      {
+        key: 'status',
+        label: t('partners.commission.col.status'),
+        value: (a) => (a.application ? appStatusLabel(a.application.status) : null),
+      },
+    ],
+    { param: 'sortAttr' },
+  );
+
   if (q.isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
   if (q.isError || !q.data) return <div className="card" style={{ padding: 24 }}>{t('common.error')}</div>;
 
@@ -372,19 +403,16 @@ function ClientsTab({ partnerId }: { partnerId: string }) {
   return (
     <div className="card" style={{ padding: 0 }}>
       <div className="table-wrap">
+        <SortSelect sort={sort} />
         <table className="table">
           <thead>
             <tr>
-              <th>{t('partners.commission.col.createdAt')}</th>
-              <th>{t('common.fullName')}</th>
-              <th>{t('partners.col.phone')}</th>
-              <th>{t('app.field.direction')}</th>
-              <th>{t('partners.commission.col.status')}</th>
+              {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {items.map((a) => {
+            {sort.sorted.map((a) => {
               const type = attributionType(a);
               const clickable = !!(a.application || a.student);
               return (
@@ -467,25 +495,33 @@ function CommissionsTab({ partnerId }: { partnerId: string }) {
     queryFn: () => adminListCommissions({ partnerId }),
   });
 
-  if (q.isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
   const items = q.data ?? [];
+  const sort = useTableSort(
+    items,
+    [
+      { key: 'createdAt', label: t('partners.commission.col.createdAt'), type: 'date', value: (c) => c.createdAt },
+      { key: 'base', label: t('partners.commission.col.base'), type: 'number', value: (c) => c.baseAmountCents },
+      { key: 'rate', label: t('partners.commission.col.rate'), type: 'number', value: commissionRateSortKey },
+      { key: 'amount', label: t('partners.commission.col.amount'), type: 'number', value: (c) => c.amountCents },
+      { key: 'status', label: t('partners.commission.col.status'), value: (c) => t(`partners.commission.status.${c.status}`) },
+    ],
+    { param: 'sortComm' },
+  );
+  if (q.isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
   if (items.length === 0) return <div className="card" style={{ padding: 24 }}>{t('common.empty')}</div>;
 
   return (
     <div className="card" style={{ padding: 0 }}>
       <div className="table-wrap">
+        <SortSelect sort={sort} />
         <table className="table">
           <thead>
             <tr>
-              <th>{t('partners.commission.col.createdAt')}</th>
-              <th>{t('partners.commission.col.base')}</th>
-              <th>{t('partners.commission.col.rate')}</th>
-              <th>{t('partners.commission.col.amount')}</th>
-              <th>{t('partners.commission.col.status')}</th>
+              {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
             </tr>
           </thead>
           <tbody>
-            {items.map((c) => (
+            {sort.sorted.map((c) => (
               <tr key={c.id}>
                 <td>{new Date(c.createdAt).toLocaleString('ru-RU')}</td>
                 <td>{fmtMoneyCents(c.baseAmountCents, c.baseCurrency ?? c.currency)}</td>
@@ -516,25 +552,33 @@ function PayoutsTab({ partnerId }: { partnerId: string }) {
     queryFn: () => adminListPayouts({ partnerId }),
   });
 
-  if (q.isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
   const items = q.data ?? [];
+  const sort = useTableSort(
+    items,
+    [
+      { key: 'requestedAt', label: t('partners.payout.col.requestedAt'), type: 'date', value: (p) => p.requestedAt },
+      { key: 'amount', label: t('partners.payout.col.amount'), type: 'number', value: (p) => p.amountCents },
+      { key: 'method', label: t('partners.payout.col.method'), value: (p) => p.method },
+      { key: 'details', label: t('partners.payout.col.details'), value: (p) => p.details },
+      { key: 'status', label: t('partners.payout.col.status'), value: (p) => t(`partners.payout.status.${p.status}`) },
+    ],
+    { param: 'sortPay' },
+  );
+  if (q.isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
   if (items.length === 0) return <div className="card" style={{ padding: 24 }}>{t('common.empty')}</div>;
 
   return (
     <div className="card" style={{ padding: 0 }}>
       <div className="table-wrap">
+        <SortSelect sort={sort} />
         <table className="table">
           <thead>
             <tr>
-              <th>{t('partners.payout.col.requestedAt')}</th>
-              <th>{t('partners.payout.col.amount')}</th>
-              <th>{t('partners.payout.col.method')}</th>
-              <th>{t('partners.payout.col.details')}</th>
-              <th>{t('partners.payout.col.status')}</th>
+              {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
             </tr>
           </thead>
           <tbody>
-            {items.map((p) => (
+            {sort.sorted.map((p) => (
               <tr key={p.id}>
                 <td>{new Date(p.requestedAt).toLocaleString('ru-RU')}</td>
                 <td>{fmtMoneyCents(p.amountCents, p.currency)}</td>
@@ -558,24 +602,32 @@ function ClicksTab({
   clicks: { id: string; createdAt: string; source?: string | null; ip?: string | null; userAgent?: string | null; referer?: string | null }[];
 }) {
   const { t } = useT();
+  const sort = useTableSort(
+    clicks,
+    [
+      { key: 'createdAt', label: t('partners.commission.col.createdAt'), type: 'date', value: (c) => c.createdAt },
+      { key: 'source', label: 'Source', value: (c) => c.source },
+      { key: 'ip', label: 'IP', value: (c) => c.ip },
+      { key: 'referer', label: 'Referer', value: (c) => c.referer },
+      { key: 'userAgent', label: 'User-Agent', value: (c) => c.userAgent },
+    ],
+    { param: 'sortClicks' },
+  );
   if (clicks.length === 0) {
     return <div className="card" style={{ padding: 24 }}>{t('partners.detail.empty.clicks')}</div>;
   }
   return (
     <div className="card" style={{ padding: 0 }}>
       <div className="table-wrap">
+        <SortSelect sort={sort} />
         <table className="table">
           <thead>
             <tr>
-              <th>{t('partners.commission.col.createdAt')}</th>
-              <th>Source</th>
-              <th>IP</th>
-              <th>Referer</th>
-              <th>User-Agent</th>
+              {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
             </tr>
           </thead>
           <tbody>
-            {clicks.map((c) => (
+            {sort.sorted.map((c) => (
               <tr key={c.id}>
                 <td>{new Date(c.createdAt).toLocaleString('ru-RU')}</td>
                 <td>{c.source || '—'}</td>

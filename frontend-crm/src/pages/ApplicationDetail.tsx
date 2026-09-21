@@ -1109,7 +1109,7 @@ function PipelineStageSelector({
           padding: '6px 12px',
           borderRadius: 999,
           border: '1.5px solid',
-          borderColor: currentStage?.color || 'var(--border)',
+          borderColor: currentStage?.color || 'var(--input-border)',
           background: currentStage?.color ? `${currentStage.color}20` : 'white',
           fontSize: 13,
           fontWeight: 600,

@@ -31,6 +31,7 @@ import Loading from '../components/Loading';
 import Icon from '../Icon';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { dateParam, enumParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds } from '../utils/validators';
 
@@ -422,7 +423,22 @@ export default function Leads() {
     if (page > totalPages) setPage(totalPages);
   }, [leadsQuery.isSuccess, leads.length, page]);
 
-  const pageItems = leads.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const sort = useTableSort<Application>(
+    leads,
+    [
+      { key: 'fullName', label: t('app.field.fullName'), value: (a) => a.fullName },
+      { key: 'phone', label: t('app.field.phone'), value: (a) => a.phone },
+      { key: 'country', label: t('app.field.country'), value: (a) => (a.country ? countryLabel(a.country) : null) },
+      {
+        key: 'manager',
+        label: t('app.field.manager'),
+        value: (a) => a.manager?.fullName || managers.find((m) => m.id === a.managerId)?.fullName || null,
+      },
+      { key: 'createdAt', label: t('reports.col.date'), type: 'date', value: (a) => a.createdAt },
+    ],
+    { onChange: () => setPage(1) },
+  );
+  const pageItems = sort.sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   /**
    * Назначение менеджера — тем же PATCH /applications/:id/manager, что и
@@ -1100,27 +1116,30 @@ export default function Leads() {
                   </label>
                 )}
 
+                <SortSelect sort={sort} />
                 <div className="table-wrap">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>
-                        <div className="lead-name-cell">
-                          {canAssign && (
+                      <SortTh
+                        sort={sort}
+                        col="fullName"
+                        wrapClassName="lead-name-cell"
+                        before={
+                          canAssign && (
                             <SelectAllCheckbox
                               checked={pageAllSelected}
                               indeterminate={pageSomeSelected}
                               onChange={togglePage}
                               label={t('leads.bulk.selectPage')}
                             />
-                          )}
-                          {t('app.field.fullName')}
-                        </div>
-                      </th>
-                      <th>{t('app.field.phone')}</th>
-                      <th>{t('app.field.country')}</th>
-                      <th>{t('app.field.manager')}</th>
-                      <th>{t('reports.col.date')}</th>
+                          )
+                        }
+                      />
+                      <SortTh sort={sort} col="phone" />
+                      <SortTh sort={sort} col="country" />
+                      <SortTh sort={sort} col="manager" />
+                      <SortTh sort={sort} col="createdAt" />
                     </tr>
                   </thead>
                   <tbody>

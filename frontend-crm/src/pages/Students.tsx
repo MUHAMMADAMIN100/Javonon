@@ -17,6 +17,7 @@ import CrmDatePicker from '../components/CrmDatePicker';
 import Icon from '../Icon';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
 import { isElevated, isFounder } from '../lib/roles';
@@ -175,7 +176,31 @@ export default function Students() {
     if (page > totalPages) setValue('page', totalPages, { replace: true });
   }, [studentsQuery.isSuccess, filteredItems.length, page, setValue]);
 
-  const pagedItems = filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const sort = useTableSort(
+    filteredItems,
+    [
+      { key: 'fullName', label: t('app.field.fullName'), value: (s) => s.fullName },
+      { key: 'phones', label: t('app.field.phones'), value: (s) => s.phones[0] },
+      {
+        key: 'direction',
+        label: t('app.field.direction'),
+        value: (s) => (s.directionConfirmed === false ? null : directionLabel(s.direction)),
+      },
+      { key: 'cabinet', label: t('app.field.cabinet'), type: 'number', value: (s) => s.cabinet },
+      { key: 'manager', label: t('app.field.manager'), value: (s) => s.manager?.fullName },
+      {
+        key: 'status',
+        label: t('common.status'),
+        // Та же подпись, что в ячейке: у активного студента — этап заявки.
+        value: (s) => {
+          const appStatus = s.applications?.[0]?.status;
+          return s.status !== 'ACTIVE' || !appStatus ? studentStatusLabel(s.status) : appStatusLabel(appStatus);
+        },
+      },
+    ],
+    { pageParam: 'page' },
+  );
+  const pagedItems = sort.sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const usersQuery = useQuery({
     queryKey: keys.users.list(),
@@ -371,10 +396,11 @@ export default function Students() {
             </motion.div>
           ) : (
             <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <SortSelect sort={sort} />
               <table className="table">
                 <thead>
                   <tr>
-                    <th>{t('app.field.fullName')}</th><th>{t('app.field.phones')}</th><th>{t('app.field.direction')}</th><th>{t('app.field.cabinet')}</th><th>{t('app.field.manager')}</th><th>{t('common.status')}</th>
+                    {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
                   </tr>
                 </thead>
                 <motion.tbody

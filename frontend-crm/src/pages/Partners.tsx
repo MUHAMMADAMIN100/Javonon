@@ -16,6 +16,7 @@ import {
   adminUpdatePartner,
   fmtCommissionRate,
   fmtMoneyCents,
+  commissionRateSortKey,
   type AdminCreatePartnerResponse,
   type Partner,
 } from '../api/partners';
@@ -26,6 +27,7 @@ import { hasRole } from '../lib/roles';
 import { useAuth } from '../store/auth';
 import Icon from '../Icon';
 import QrCode from '../components/QrCode';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 type Tab = 'partners' | 'commissions' | 'payouts';
 
@@ -122,6 +124,21 @@ function PartnersList() {
     queryKey: ['admin', 'partners'],
     queryFn: () => adminListPartners(),
   });
+  const sort = useTableSort(
+    partners,
+    [
+      { key: 'name', label: t('common.name'), value: (p) => p.fullName },
+      { key: 'email', label: t('partners.col.email'), value: (p) => p.email },
+      { key: 'code', label: t('partners.col.code'), value: (p) => p.referralCode },
+      { key: 'commission', label: t('partners.col.commission'), type: 'number', value: (p) => p.commissionAmountCents },
+      // Колонка «клики / привлечённые / комиссии» — сортируем по привлечённым.
+      { key: 'referrals', label: t('partners.col.referrals'), type: 'number', value: (p) => p._count?.attributions ?? 0 },
+      { key: 'balance', label: t('partners.col.balance'), type: 'number', value: (p) => p.balanceCents },
+      { key: 'earned', label: t('partners.col.earned'), type: 'number', value: (p) => p.totalEarnedCents },
+      { key: 'status', label: t('partners.col.status'), value: (p) => t(`partners.status.${p.status}`) },
+    ],
+    { param: 'sortPartners' },
+  );
 
   const [addOpen, setAddOpen] = useState(false);
   const [shareData, setShareData] = useState<{
@@ -234,22 +251,16 @@ function PartnersList() {
         <div style={{ padding: 24 }}>{t('partners.empty')}</div>
       ) : (
         <div className="table-wrap">
+          <SortSelect sort={sort} />
           <table className="table">
             <thead>
               <tr>
-                <th>{t('common.name')}</th>
-                <th>{t('partners.col.email')}</th>
-                <th>{t('partners.col.code')}</th>
-                <th>{t('partners.col.commission')}</th>
-                <th>{t('partners.col.referrals')}</th>
-                <th>{t('partners.col.balance')}</th>
-                <th>{t('partners.col.earned')}</th>
-                <th>{t('partners.col.status')}</th>
+                {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {partners.map((p) => {
+              {sort.sorted.map((p) => {
                 const stop = (fn: () => void) => (e: React.MouseEvent) => {
                   e.stopPropagation();
                   fn();
@@ -695,6 +706,18 @@ function CommissionsList() {
     queryKey: ['admin', 'commissions', statusFilter],
     queryFn: () => adminListCommissions(statusFilter ? { status: statusFilter as any } : undefined),
   });
+  const sort = useTableSort(
+    commissions,
+    [
+      { key: 'createdAt', label: t('partners.commission.col.createdAt'), type: 'date', value: (c) => c.createdAt },
+      { key: 'partner', label: t('partners.tab.list'), value: (c) => c.partner?.fullName },
+      { key: 'base', label: t('partners.commission.col.base'), type: 'number', value: (c) => c.baseAmountCents },
+      { key: 'rate', label: t('partners.commission.col.rate'), type: 'number', value: commissionRateSortKey },
+      { key: 'amount', label: t('partners.commission.col.amount'), type: 'number', value: (c) => c.amountCents },
+      { key: 'status', label: t('partners.commission.col.status'), value: (c) => t(`partners.commission.status.${c.status}`) },
+    ],
+    { param: 'sortComm' },
+  );
 
   const approve = async (id: string) => {
     const ok = await confirm({
@@ -749,20 +772,16 @@ function CommissionsList() {
         <div style={{ padding: 24 }}>{t('common.empty')}</div>
       ) : (
         <div className="table-wrap">
+          <SortSelect sort={sort} />
           <table className="table">
             <thead>
               <tr>
-                <th>{t('partners.commission.col.createdAt')}</th>
-                <th>{t('partners.tab.list')}</th>
-                <th>{t('partners.commission.col.base')}</th>
-                <th>{t('partners.commission.col.rate')}</th>
-                <th>{t('partners.commission.col.amount')}</th>
-                <th>{t('partners.commission.col.status')}</th>
+                {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {commissions.map((c) => (
+              {sort.sorted.map((c) => (
                 <tr key={c.id}>
                   <td>{new Date(c.createdAt).toLocaleString('ru-RU')}</td>
                   <td>{c.partner?.fullName} <span style={{ color: 'var(--text-soft)', fontSize: 12 }}>({c.partner?.email})</span></td>
@@ -822,6 +841,18 @@ function PayoutsList() {
     queryKey: ['admin', 'payouts'],
     queryFn: () => adminListPayouts(),
   });
+  const sort = useTableSort(
+    payouts,
+    [
+      { key: 'requestedAt', label: t('partners.payout.col.requestedAt'), type: 'date', value: (p) => p.requestedAt },
+      { key: 'partner', label: t('partners.tab.list'), value: (p) => p.partner?.fullName },
+      { key: 'amount', label: t('partners.payout.col.amount'), type: 'number', value: (p) => p.amountCents },
+      { key: 'method', label: t('partners.payout.col.method'), value: (p) => p.method },
+      { key: 'details', label: t('partners.payout.col.details'), value: (p) => p.details },
+      { key: 'status', label: t('partners.payout.col.status'), value: (p) => t(`partners.payout.status.${p.status}`) },
+    ],
+    { param: 'sortPay' },
+  );
 
   const pay = async (id: string) => {
     const ok = await confirm({
@@ -862,20 +893,16 @@ function PayoutsList() {
   return (
     <div className="card" style={{ padding: 0 }}>
       <div className="table-wrap">
+        <SortSelect sort={sort} />
         <table className="table">
           <thead>
             <tr>
-              <th>{t('partners.payout.col.requestedAt')}</th>
-              <th>{t('partners.tab.list')}</th>
-              <th>{t('partners.payout.col.amount')}</th>
-              <th>{t('partners.payout.col.method')}</th>
-              <th>{t('partners.payout.col.details')}</th>
-              <th>{t('partners.payout.col.status')}</th>
+              {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {payouts.map((p) => (
+            {sort.sorted.map((p) => (
               <tr key={p.id}>
                 <td>{new Date(p.requestedAt).toLocaleString('ru-RU')}</td>
                 <td>{p.partner?.fullName}</td>

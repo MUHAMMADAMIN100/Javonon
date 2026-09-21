@@ -20,6 +20,7 @@ import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import FormModal from '../components/FormModal';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
@@ -127,6 +128,28 @@ export default function Calls() {
     });
     if (ok) deleteMut.mutate(c.id);
   };
+
+  const statsSort = useTableSort(
+    stats,
+    [
+      { key: 'employee', label: t('kpi.col.employee'), value: (s) => s.user.fullName },
+      { key: 'total', label: t('calls.col.totalCalls'), type: 'number', value: (s) => s.totalCalls },
+      { key: 'seconds', label: t('calls.col.onLineLabel'), type: 'number', value: (s) => s.totalSeconds },
+      { key: 'conversions', label: t('calls.col.conversions'), type: 'number', value: (s) => s.conversions },
+    ],
+    { param: 'sortTeam' },
+  );
+  const callsSort = useTableSort(calls, [
+    { key: 'when', label: t('calls.col.when'), type: 'date', value: (c) => c.occurredAt },
+    { key: 'client', label: t('calls.col.client'), value: (c) => c.clientName },
+    ...(isAdmin
+      ? [{ key: 'employee', label: t('kpi.col.employee'), value: (c: CallLog) => c.user?.fullName }]
+      : []),
+    { key: 'direction', label: t('calls.col.direction'), value: (c) => t(`calls.dir.${c.direction}`) },
+    { key: 'outcome', label: t('calls.col.outcome'), value: (c) => t(`calls.out.${c.outcome}`) },
+    { key: 'duration', label: t('calls.col.duration'), type: 'number', value: (c) => c.durationSeconds },
+    { key: 'notes', label: t('calls.field.notes'), value: (c) => c.notes },
+  ]);
 
   // --- Сводка по моим звонкам ---
   const mine = useMemo(() => {
@@ -248,18 +271,16 @@ export default function Calls() {
             <span className="crm-section-eyebrow">{t('eyebrow.teamPerformance')}</span>
             <h2 className="crm-section-title">{t('calls.team.title')}</h2>
           </div>
+          <SortSelect sort={statsSort} />
           <div className="card" style={{ padding: 0, marginBottom: 24 }}>
             <table className="table" style={{ width: '100%' }}>
               <thead>
                 <tr>
-                  <th>{t('kpi.col.employee')}</th>
-                  <th>{t('calls.col.totalCalls')}</th>
-                  <th>{t('calls.col.onLineLabel')}</th>
-                  <th>{t('calls.col.conversions')}</th>
+                  {statsSort.columns.map((c) => <SortTh key={c.key} sort={statsSort} col={c.key} />)}
                 </tr>
               </thead>
               <tbody>
-                {stats.map((s) => (
+                {statsSort.sorted.map((s) => (
                   <tr key={s.user.id}>
                     <td style={{ fontWeight: 500 }}>{s.user.fullName}</td>
                     <td style={{ fontFamily: 'var(--font-mono)' }}>{s.totalCalls}</td>
@@ -282,17 +303,12 @@ export default function Calls() {
         <span className="crm-section-eyebrow">{t('eyebrow.history')}</span>
         <h2 className="crm-section-title">{t('calls.recent')}</h2>
       </div>
+      {calls.length > 0 && <SortSelect sort={callsSort} />}
       <div className="card" style={{ padding: 0 }}>
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>{t('calls.col.when')}</th>
-              <th>{t('calls.col.client')}</th>
-              {isAdmin && <th>{t('kpi.col.employee')}</th>}
-              <th>{t('calls.col.direction')}</th>
-              <th>{t('calls.col.outcome')}</th>
-              <th>{t('calls.col.duration')}</th>
-              <th>{t('calls.field.notes')}</th>
+              {callsSort.columns.map((c) => <SortTh key={c.key} sort={callsSort} col={c.key} />)}
               <th />
             </tr>
           </thead>
@@ -300,7 +316,7 @@ export default function Calls() {
             {calls.length === 0 && (
               <tr><td colSpan={isAdmin ? 8 : 7} className="empty">{t('common.empty')}</td></tr>
             )}
-            {calls.map((c) => (
+            {callsSort.sorted.map((c) => (
               <tr key={c.id}>
                 <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{fmtDateTime(c.occurredAt)}</td>
                 <td>

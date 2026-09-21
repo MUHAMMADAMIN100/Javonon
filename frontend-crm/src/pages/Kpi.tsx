@@ -8,6 +8,7 @@ import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
 import { tjLastDaysRange } from '../lib/tjTime';
 import KpiDetailsModal from '../components/KpiDetailsModal';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -57,6 +58,19 @@ export default function Kpi() {
     queryFn: () => leaderboard(params),
   });
   const rows = kpiQuery.data ?? [];
+  // Место в рейтинге — порядок, в котором строки пришли с сервера. При
+  // сортировке по другой колонке медали остаются у своих людей.
+  const rankOf = new Map(rows.map((r, i) => [r.id, i]));
+  const sort = useTableSort(rows, [
+    { key: 'rank', label: t('kpi.col.rank'), type: 'number', value: (r) => rankOf.get(r.id) },
+    { key: 'employee', label: t('kpi.col.employee'), value: (r) => r.fullName },
+    { key: 'applications', label: t('kpi.col.applications'), type: 'number', value: (r) => r.applicationsAssigned },
+    { key: 'enrolled', label: t('kpi.col.enrolled'), type: 'number', value: (r) => r.applicationsEnrolled },
+    { key: 'conversion', label: t('kpi.col.conversion'), type: 'number', value: (r) => r.conversionRate },
+    { key: 'students', label: t('kpi.col.students'), type: 'number', value: (r) => r.studentsCount },
+    { key: 'sales', label: t('kpi.col.sales'), type: 'number', value: (r) => r.salesAmount },
+    { key: 'tasks', label: t('kpi.col.tasks'), type: 'number', value: (r) => r.tasksDone },
+  ]);
 
   const top = rows[0];
   const myRow = rows.find((r) => r.id === me?.id);
@@ -195,26 +209,21 @@ export default function Kpi() {
         </motion.div>
       )}
 
+      {rows.length > 0 && <SortSelect sort={sort} />}
       <div className="card" style={{ padding: 0 }}>
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>{t('kpi.col.rank')}</th>
-              <th>{t('kpi.col.employee')}</th>
-              <th>{t('kpi.col.applications')}</th>
-              <th>{t('kpi.col.enrolled')}</th>
-              <th>{t('kpi.col.conversion')}</th>
-              <th>{t('kpi.col.students')}</th>
-              <th>{t('kpi.col.sales')}</th>
-              <th>{t('kpi.col.tasks')}</th>
+              {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr><td colSpan={8} className="empty">{t('kpi.empty')}</td></tr>
             )}
-            {rows.map((r, i) => {
+            {sort.sorted.map((r, i) => {
               const isMe = r.id === me?.id;
+              const rank = rankOf.get(r.id) ?? i;
               return (
                 <tr
                   key={r.id}
@@ -241,9 +250,9 @@ export default function Kpi() {
                     fontWeight: 500,
                     fontSize: 18,
                     letterSpacing: '-0.02em',
-                    color: i < 3 ? 'var(--primary-dark)' : 'var(--text-light)',
+                    color: rank < 3 ? 'var(--primary-dark)' : 'var(--text-light)',
                   }}>
-                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                    {rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : `#${rank + 1}`}
                   </td>
                   <td>
                     <div style={{ fontWeight: 500 }}>{r.fullName} {isMe && <span style={{ fontFamily: 'Times New Roman, Georgia, serif', fontStyle: 'italic', color: 'var(--primary-dark)' }}>{t('kpi.label.itsYou')}</span>}</div>

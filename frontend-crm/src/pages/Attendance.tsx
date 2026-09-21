@@ -10,6 +10,7 @@ import { listUsers } from '../api/users';
 import { tjFormatTime, tjFormatDate, tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
 import CrmDatePicker from '../components/CrmDatePicker';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 function fmtTime(iso: string | null): string {
   // По ТЗ — время в зоне Asia/Dushanbe, а не браузера. Если FOUNDER
@@ -20,6 +21,13 @@ function fmtTime(iso: string | null): string {
 
 function fmtDate(iso: string): string {
   return tjFormatDate(iso);
+}
+
+/** Минуты от полуночи по Душанбе — колонки времени сортируем по часам, а не по дате. */
+function minutesOfDay(iso: string | null): number | null {
+  if (!iso) return null;
+  const [h, m] = tjFormatTime(iso).split(':').map(Number);
+  return Number.isNaN(h) || Number.isNaN(m) ? null : h * 60 + m;
 }
 
 export default function Attendance() {
@@ -50,6 +58,16 @@ export default function Attendance() {
     }),
   });
   const items = query.data || [];
+
+  const sort = useTableSort(items, [
+    { key: 'employee', label: t('attendance.col.employee'), value: (e) => e.user.fullName },
+    { key: 'date', label: t('attendance.col.date'), type: 'date', value: (e) => e.clockIn },
+    { key: 'in', label: t('attendance.col.in'), type: 'number', value: (e) => minutesOfDay(e.clockIn) },
+    { key: 'lunchOut', label: t('attendance.col.lunchOut'), type: 'number', value: (e) => minutesOfDay(e.lunchOut) },
+    { key: 'lunchIn', label: t('attendance.col.lunchIn'), type: 'number', value: (e) => minutesOfDay(e.lunchIn) },
+    { key: 'out', label: t('attendance.col.out'), type: 'number', value: (e) => minutesOfDay(e.clockOut) },
+    { key: 'late', label: t('attendance.col.late'), type: 'number', value: (e) => e.lateMinutes },
+  ]);
 
   // По ТЗ — когда сотрудник начал работу/обед/закончил день — таблица
   // у основателя обновляется мгновенно без релоада.
@@ -117,21 +135,23 @@ export default function Attendance() {
           {t('attendance.empty')}
         </div>
       ) : (
+        <>
+        <SortSelect sort={sort} />
         <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
           <table className="table" style={{ minWidth: 920 }}>
             <thead>
               <tr>
-                <th>{t('attendance.col.employee')}</th>
-                <th>{t('attendance.col.date')}</th>
-                <th>{t('attendance.col.in')}</th>
-                <th>{t('attendance.col.lunchOut')}</th>
-                <th>{t('attendance.col.lunchIn')}</th>
-                <th>{t('attendance.col.out')}</th>
-                <th style={{ textAlign: 'right' }}>{t('attendance.col.late')}</th>
+                <SortTh sort={sort} col="employee" />
+                <SortTh sort={sort} col="date" />
+                <SortTh sort={sort} col="in" />
+                <SortTh sort={sort} col="lunchOut" />
+                <SortTh sort={sort} col="lunchIn" />
+                <SortTh sort={sort} col="out" />
+                <SortTh sort={sort} col="late" style={{ textAlign: 'right' }} />
               </tr>
             </thead>
             <tbody>
-              {items.map((e) => (
+              {sort.sorted.map((e) => (
                 <tr key={e.id}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{e.user.fullName}</div>
@@ -156,6 +176,7 @@ export default function Attendance() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </>
   );

@@ -19,6 +19,11 @@
   --primary-glow: rgba(1, 54, 139, 0.32);
   --border: #e2e8f0;
   --border-soft: #eef2f7;
+  /* Рамка ПОЛЕЙ (ввод, списки, даты, телефон, галочки). Отдельно от
+     --border: светлая #e2e8f0 годится карточкам и разделителям, но поле
+     с ней сливается с белым фоном — не видно, что сюда можно вводить. */
+  --input-border: #a9b6c6;
+  --input-border-hover: #8494a8;
   /* SUCCESS остаётся зелёным — для статусов "оплачено / зачислено / готово" */
   --success: #16a34a;
   --success-soft: #f0fdf4;
@@ -426,7 +431,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .notif-filters input[type="date"] {
   flex: 1; min-width: 110px; padding: 6px 8px; font-size: 12px;
-  border: 1px solid var(--border); border-radius: 6px;
+  border: 1px solid var(--input-border); border-radius: 6px;
 }
 .notif-only-unread {
   display: inline-flex; align-items: center; gap: 6px;
@@ -610,7 +615,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .form-group input, .form-group select, .form-group textarea {
   width: 100%; padding: 12px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border);
   border-radius: 10px; font-size: 14px; font-family: inherit;
   /* Только цвет: сокращённое `background` стирает стрелку у .crm-select. */
   background-color: var(--bg-card); transition: all .15s;
@@ -675,6 +680,48 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   letter-spacing: 0.10em;
   background: var(--bg-soft);
 }
+/* Заголовок с сортировкой (components/TableSort.tsx): кнопка во весь
+   текст заголовка, шрифт и регистр — от <th>. */
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background-color: transparent;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  user-select: none;
+}
+.th-sort:hover, .th-sort.is-active { color: var(--text); }
+.th-sort:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+.th-sort-icon { opacity: 0.35; transition: opacity .15s; }
+.th-sort:hover .th-sort-icon { opacity: 0.75; }
+.th-sort.is-active .th-sort-icon { opacity: 1; color: var(--primary); }
+/* Сортировка списком — только там, где таблица становится карточками. */
+.sort-mobile { display: none; }
+@media (max-width: 900px) {
+  .sort-mobile {
+    display: flex;
+    position: relative;
+    margin-bottom: 10px;
+  }
+  .sort-mobile > .crm-select { flex: 1 1 100%; width: 100%; padding-left: 36px !important; }
+  .sort-mobile-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-light);
+    pointer-events: none;
+    z-index: 1;
+  }
+}
 .table tbody tr {
   cursor: pointer;
   transition: all .15s;
@@ -713,7 +760,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
    оформление полей, чтобы старые экраны без crm-input/crm-select не
    остались без рамки. */
 .filters input, .filters select {
-  padding: 9px 12px; border: 1px solid var(--border);
+  padding: 9px 12px; border: 1px solid var(--input-border);
   border-radius: 8px; font-size: 14px; font-family: inherit;
   /* Только цвет: сокращённое `background` стёрло бы стрелку у .crm-select. */
   background-color: var(--bg-card);
@@ -972,7 +1019,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .task-status-switch {
   display: flex; gap: 4px; margin-top: 12px;
   padding: 4px; background: var(--bg);
-  border: 1px solid var(--border); border-radius: 10px;
+  border: 1px solid var(--input-border); border-radius: 10px;
   flex-wrap: nowrap;
   max-width: 100%; box-sizing: border-box; min-width: 0;
   overflow-x: auto;
@@ -1000,7 +1047,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 /* Scope switch (Мои / Все) */
 .scope-switch {
   display: inline-flex; background: var(--bg); border-radius: 8px; padding: 3px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border);
 }
 .scope-btn {
   display: flex; align-items: center; gap: 6px;
@@ -1756,7 +1803,7 @@ select.input-error {
   display: flex !important; flex-direction: row !important;
   align-items: stretch !important; flex-wrap: nowrap !important;
   width: 100%;
-  border: 1.5px solid var(--border); border-radius: 8px;
+  border: 1.5px solid var(--input-border); border-radius: 8px;
   background: white; position: relative;
   /* NOTE: overflow must stay `visible` — the country picker `.phone-dropdown`
      is `position: absolute; top: calc(100% + 4px)` and would be clipped
@@ -1818,7 +1865,7 @@ select.input-error {
 }
 .phone-dropdown-search input {
   width: 100%; padding: 7px 10px; font-size: 13px;
-  border: 1px solid var(--border); border-radius: 6px; outline: none;
+  border: 1px solid var(--input-border); border-radius: 6px; outline: none;
   background: white;
 }
 .phone-dropdown-search input:focus { border-color: var(--primary); }
@@ -1916,7 +1963,7 @@ select.input-error {
 .app-stepper-title { font-size: 13px; color: var(--text-soft); margin-bottom: 4px; }
 .app-stepper-current .badge { font-size: 13px; padding: 4px 10px; }
 .app-stepper-select {
-  padding: 8px 12px; border: 1.5px solid var(--border);
+  padding: 8px 12px; border: 1.5px solid var(--input-border);
   border-radius: 8px; font-size: 14px;
   /* Стрелка у переключателя статуса — своя, рисуем её здесь же. */
   background-color: white;
@@ -2091,7 +2138,7 @@ select.input-error {
 }
 .af-field input, .af-field textarea, .af-field select {
   width: 100%; padding: 10px 12px;
-  border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--input-border); border-radius: 8px;
   font-size: 14px;
   /* Только цвет — иначе пропадает стрелка у .crm-select. */
   background-color: white;
@@ -2134,7 +2181,7 @@ select.input-error {
 .af-chip {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 7px 12px; border-radius: 8px;
-  background: white; border: 1.5px solid var(--border);
+  background: white; border: 1.5px solid var(--input-border);
   font-size: 13px; font-weight: 500; cursor: pointer;
   transition: all .15s;
 }
@@ -2534,7 +2581,7 @@ select.input-error {
 }
 .filters input, .filters select {
   padding: 10px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border);
   border-radius: 10px;
   font-size: 14px;
   font-family: inherit;
@@ -3170,7 +3217,7 @@ select.input-error {
 }
 .notif-filters input[type="date"] {
   flex: 1; min-width: 110px; padding: 7px 10px; font-size: 12px;
-  border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--input-border); border-radius: 8px;
   font-family: var(--font-mono);
   background: white;
 }
@@ -4483,7 +4530,7 @@ textarea:focus {
    ================================================================ */
 .crm-input {
   padding: 10px 14px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--input-border);
   border-radius: 10px;
   background: white;
   font-size: 14px;
@@ -4505,7 +4552,7 @@ textarea:focus {
 }
 .crm-textarea {
   padding: 10px 14px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--input-border);
   border-radius: 10px;
   background: white;
   font-size: 14px;
@@ -4525,7 +4572,7 @@ textarea:focus {
 }
 .crm-select {
   padding: 10px 36px 10px 14px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--input-border);
   border-radius: 10px;
   background: white url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>") no-repeat right 12px center;
   background-size: 14px;
@@ -4545,6 +4592,19 @@ textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
 }
+/* Наведение — рамка темнеет ещё: видно, что поле живое. Фокус (синий) и
+   ошибка (красная, с !important) этим правилом не перекрываются. */
+.crm-input:hover:not(:disabled):not(:focus):not(.input-error),
+.crm-textarea:hover:not(:disabled):not(:focus):not(.input-error),
+.crm-select:hover:not(:disabled):not(:focus):not(.input-error):not(.is-open),
+.phone-input-wrap:hover:not(:focus-within):not(.input-error),
+.form-group input:not([type="checkbox"]):not([type="radio"]):hover:not(:disabled):not(:focus):not(.input-error),
+.form-group select:hover:not(:disabled):not(:focus):not(.input-error),
+.form-group textarea:hover:not(:disabled):not(:focus):not(.input-error),
+.filters input:not([type="checkbox"]):hover:not(:disabled):not(:focus),
+.crm-checkbox:hover:not(:disabled):not(:checked):not(:indeterminate) {
+  border-color: var(--input-border-hover);
+}
 /* .crm-checkbox — стандартный квадратный чекбокс на ВСЕХ ширинах.
    !important нужен потому что легаси-правило `.filters input { flex: 1;
    min-width: 220px }` (line ~663) перебивает обычные width/height и
@@ -4563,7 +4623,7 @@ input[type="checkbox"].crm-checkbox,
   flex: 0 0 20px !important;
   appearance: none;
   -webkit-appearance: none;
-  border: 2px solid var(--border);
+  border: 2px solid var(--input-border);
   border-radius: 5px;
   background: white;
   cursor: pointer;
@@ -4617,7 +4677,7 @@ input[type="checkbox"].crm-checkbox:checked {
 /* CrmDatePicker — beautiful date input replacing native browser date picker */
 .crm-datepicker-trigger {
   padding: 10px 14px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--input-border);
   border-radius: 10px;
   background: white;
   font-size: 14px;
@@ -4740,7 +4800,7 @@ input[type="checkbox"].crm-checkbox:checked {
 .rdp-month_caption { padding-right: 76px; }
 .rdp-dropdowns { gap: 6px; }
 .rdp-dropdown_root {
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   background: var(--bg-soft, #f8fafc);
   padding: 4px 8px 4px 10px;
@@ -4845,7 +4905,7 @@ input[type="checkbox"].crm-checkbox:checked {
     min-height: 38px !important;
     height: auto !important;
     padding: 8px 12px !important;
-    border: 1.5px solid var(--border);
+    border: 1.5px solid var(--input-border);
     border-radius: 8px !important;
     background: white;
     display: flex !important;
@@ -5990,7 +6050,7 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   flex: 1 1 0;
   min-height: 44px;
   padding: 10px 16px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--input-border);
   border-radius: 10px;
   background: white;
   color: var(--text-soft);

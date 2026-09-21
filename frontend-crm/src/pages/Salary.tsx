@@ -22,6 +22,7 @@ import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../l
 import { tjStartOfMonthStr, tjEndOfMonthStr, tjFormatDate } from '../lib/tjTime';
 import { bandRangeLabel } from '../lib/bonusBands';
 import CrmDatePicker from '../components/CrmDatePicker';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 // Отказы бэкенда при фиксации расчёта приходят как 400 с русским текстом
 // (Nest не отдаёт машиночитаемых кодов ошибок в этом модуле). Сопоставляем
@@ -95,6 +96,23 @@ export default function Salary() {
     queryFn: () => listSalaries(),
   });
   const records: SalaryRecord[] = recordsQuery.data ?? [];
+  const periodLabel = t('common.period') !== 'common.period' ? t('common.period') : 'Период';
+  const sort = useTableSort(records, [
+    { key: 'employee', label: t('salary.field.employee'), value: (r) => r.user?.fullName },
+    { key: 'period', label: periodLabel, type: 'date', value: (r) => r.periodStart },
+    { key: 'hours', label: t('salary.cell.hours'), type: 'number', value: (r) => r.workedMinutes },
+    { key: 'income', label: t('finance.summary.income'), type: 'number', value: (r) => r.salesAmount },
+    { key: 'base', label: t('salary.cell.base'), type: 'number', value: (r) => r.baseAmount },
+    { key: 'bonus', label: t('salary.cell.bonus'), type: 'number', value: (r) => r.bonusAmount },
+    { key: 'kpi', label: t('salary.cell.kpi'), type: 'number', value: (r) => r.kpiBonus },
+    { key: 'penalties', label: t('salary.cell.penalties'), type: 'number', value: (r) => r.penalties },
+    { key: 'net', label: t('salary.cell.net'), type: 'number', value: (r) => r.netAmount },
+    {
+      key: 'status',
+      label: t('common.status'),
+      value: (r) => (r.status === 'PAID' ? t('salary.status.PAID') : t('salary.status.DRAFT')),
+    },
+  ]);
 
   // Live-preview через useQuery (кешируется по параметрам, мгновенно при возврате).
   const previewQuery = useQuery<SalaryPreview>({
@@ -348,6 +366,7 @@ export default function Salary() {
           сохранённого при создании записи (SalaryRecord.bonus* в
           api/salary.ts) — то есть переживает выплату, в отличие от
           live-превью сверху. */}
+      {records.length > 0 && <SortSelect sort={sort} />}
       <div className="card" style={{ padding: 0 }}>
         {/* Колонок стало 11 — на узком экране таблица должна скроллиться
             внутри карточки, а не растягивать страницу. */}
@@ -355,16 +374,7 @@ export default function Salary() {
           <table className="table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th>{t('salary.field.employee')}</th>
-                <th>{t('common.period') !== 'common.period' ? t('common.period') : 'Период'}</th>
-                <th>{t('salary.cell.hours')}</th>
-                <th>{t('finance.summary.income')}</th>
-                <th>{t('salary.cell.base')}</th>
-                <th>{t('salary.cell.bonus')}</th>
-                <th>{t('salary.cell.kpi')}</th>
-                <th>{t('salary.cell.penalties')}</th>
-                <th>{t('salary.cell.net')}</th>
-                <th>{t('common.status')}</th>
+                {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
                 <th></th>
               </tr>
             </thead>
@@ -372,7 +382,7 @@ export default function Salary() {
               {records.length === 0 && (
                 <tr><td colSpan={HISTORY_COLUMNS} className="empty">{t('salary.empty')}</td></tr>
               )}
-              {records.map((r) => {
+              {sort.sorted.map((r) => {
                 const expanded = expandedId === r.id;
                 return (
                   <Fragment key={r.id}>
@@ -482,6 +492,19 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
   // Период длиннее месяца: у каждого месяца своя полоса, одной строки
   // «объём → полоса → ставка» для него не существует.
   const multi = months.length > 1;
+  // Маленькая расшифровка, а не список: в ссылку не пишем. Карточками на
+  // телефоне она не становится (класса .table нет), заголовки видны всегда.
+  const monthsSort = useTableSort(
+    months,
+    [
+      { key: 'month', label: t('salary.bonus.month'), type: 'date', value: (m) => m.periodStart },
+      { key: 'volume', label: t('salary.bonus.volume'), type: 'number', value: (m) => m.volume },
+      { key: 'band', label: t('salary.bonus.band'), type: 'number', value: (m) => m.band.minAmount },
+      { key: 'percent', label: '%', type: 'number', value: (m) => m.percent },
+      { key: 'due', label: t('salary.bonus.due'), type: 'number', value: (m) => m.due },
+    ],
+    { persist: false },
+  );
 
   // Старый бэк (или ошибка) — не рисуем пустую рамку.
   if (!band && !multi) return null;
@@ -518,15 +541,15 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
             <thead>
               <tr style={{ color: 'var(--text-soft)', textAlign: 'left' }}>
-                <th style={{ padding: '4px 10px 4px 0', fontWeight: 400 }}>{t('salary.bonus.month')}</th>
-                <th style={{ padding: '4px 10px', fontWeight: 400 }}>{t('salary.bonus.volume')}</th>
-                <th style={{ padding: '4px 10px', fontWeight: 400 }}>{t('salary.bonus.band')}</th>
-                <th style={{ padding: '4px 10px', fontWeight: 400, textAlign: 'right' }}>%</th>
-                <th style={{ padding: '4px 0 4px 10px', fontWeight: 400, textAlign: 'right' }}>{t('salary.bonus.due')}</th>
+                <SortTh sort={monthsSort} col="month" style={{ padding: '4px 10px 4px 0', fontWeight: 400 }} />
+                <SortTh sort={monthsSort} col="volume" style={{ padding: '4px 10px', fontWeight: 400 }} />
+                <SortTh sort={monthsSort} col="band" style={{ padding: '4px 10px', fontWeight: 400 }} />
+                <SortTh sort={monthsSort} col="percent" style={{ padding: '4px 10px', fontWeight: 400, textAlign: 'right' }} />
+                <SortTh sort={monthsSort} col="due" style={{ padding: '4px 0 4px 10px', fontWeight: 400, textAlign: 'right' }} />
               </tr>
             </thead>
             <tbody>
-              {months.map((m) => (
+              {monthsSort.sorted.map((m) => (
                 <tr key={m.periodStart} style={{ borderTop: '1px solid var(--border-soft)' }}>
                   <td style={{ padding: '5px 10px 5px 0' }}>{tjFormatDate(m.periodStart)}</td>
                   <td style={{ padding: '5px 10px' }}>{fmtMoney(m.volume)}</td>

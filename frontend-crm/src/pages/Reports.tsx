@@ -5,6 +5,7 @@ import { reportToday, reportsMine, upsertReport, type DailyReport } from '../api
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import FormModal from '../components/FormModal';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
@@ -40,6 +41,15 @@ export default function Reports() {
     queryFn: () => reportsMine({ take: 30 }),
   });
   const history = historyQuery.data ?? [];
+  const sort = useTableSort(history, [
+    { key: 'date', label: t('reports.col.date'), type: 'date', value: (r) => r.date },
+    { key: 'calls', label: t('reports.field.calls'), type: 'number', value: (r) => r.callsCount },
+    { key: 'meetings', label: t('reports.field.meetings'), type: 'number', value: (r) => r.meetingsCount },
+    { key: 'applications', label: t('reports.field.applications'), type: 'number', value: (r) => r.applicationsContacted },
+    { key: 'salesCount', label: t('reports.field.salesCount'), type: 'number', value: (r) => r.salesCount },
+    { key: 'salesAmount', label: t('reports.field.salesAmount'), type: 'number', value: (r) => r.salesAmount },
+    { key: 'activity', label: t('reports.field.activity'), value: (r) => r.activitySummary },
+  ]);
 
   // При загрузке/обновлении today — синкаем форму.
   useEffect(() => {
@@ -163,22 +173,17 @@ export default function Reports() {
         <span className="crm-section-eyebrow">{t('eyebrow.historyLast30')}</span>
         <h2 className="crm-section-title">{t('reports.history')}</h2>
       </div>
+      {history.length > 0 && <SortSelect sort={sort} />}
       <div className="card" style={{ padding: 0 }}>
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>{t('reports.col.date')}</th>
-              <th>{t('reports.field.calls')}</th>
-              <th>{t('reports.field.meetings')}</th>
-              <th>{t('reports.field.applications')}</th>
-              <th>{t('reports.field.salesCount')}</th>
-              <th>{t('reports.field.salesAmount')}</th>
-              <th>{t('reports.field.activity')}</th>
+              {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
             </tr>
           </thead>
           <tbody>
             {history.length === 0 && <tr><td colSpan={7} className="empty">{t('reports.empty')}</td></tr>}
-            {history.map((r) => (
+            {sort.sorted.map((r) => (
               <tr key={r.id}>
                 <td style={{ fontWeight: 500 }}>{fmtDate(r.date)}</td>
                 <td style={{ fontFamily: 'var(--font-mono)' }}>{r.callsCount}</td>

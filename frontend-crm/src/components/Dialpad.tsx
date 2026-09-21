@@ -217,7 +217,7 @@ export default function Dialpad() {
             <div style={{
               padding: '12px 14px',
               background: 'var(--bg-soft)',
-              border: '1px solid var(--border-soft)',
+              border: '1px solid var(--input-border)',
               borderRadius: 10,
               marginBottom: 10,
             }}>

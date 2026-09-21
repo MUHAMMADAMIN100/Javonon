@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listApplications } from '../api/applications';
 import { listUsers } from '../api/users';
-import type { ApplicationSource, ApplicationStatus, Country, Direction } from '../api/types';
+import type { Application, ApplicationSource, ApplicationStatus, Country, Direction } from '../api/types';
 import {
   APPLICATION_SOURCES,
   APPLICATION_STATUSES,
@@ -20,6 +20,7 @@ import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
 import { keys } from '../lib/queryKeys';
@@ -179,7 +180,26 @@ export default function Applications() {
     if (page > totalPages) setValue('page', totalPages, { replace: true });
   }, [appsQuery.isSuccess, items.length, page, setValue]);
 
-  const pagedItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const sort = useTableSort<Application>(
+    items,
+    [
+      { key: 'fullName', label: t('app.field.fullName'), value: (a) => a.fullName },
+      { key: 'phone', label: t('app.field.phone'), value: (a) => a.phone },
+      { key: 'country', label: t('app.field.country'), value: (a) => (a.country ? countryLabel(a.country) : null) },
+      {
+        key: 'direction',
+        label: t('app.field.direction'),
+        // Неподтверждённое направление в таблице — прочерк, в сортировке тоже пусто.
+        value: (a) => (a.directionConfirmed === false ? null : directionLabel(a.direction)),
+      },
+      { key: 'manager', label: t('app.field.manager'), value: (a) => a.manager?.fullName },
+      { key: 'source', label: t('app.field.source'), value: (a) => SOURCE_LABEL[a.source ?? 'OTHER'] },
+      { key: 'status', label: t('common.status'), value: (a) => statusLabel(a.status) },
+      { key: 'createdAt', label: t('reports.col.date'), type: 'date', value: (a) => a.createdAt },
+    ],
+    { pageParam: 'page' },
+  );
+  const pagedItems = sort.sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   useRealtime({
     'application:new': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
@@ -327,10 +347,11 @@ export default function Applications() {
             </motion.div>
           ) : (
             <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <SortSelect sort={sort} />
               <table className="table">
                 <thead>
                   <tr>
-                    <th>{t('app.field.fullName')}</th><th>{t('app.field.phone')}</th><th>{t('app.field.country')}</th><th>{t('app.field.direction')}</th><th>{t('app.field.manager')}</th><th>{t('app.field.source')}</th><th>{t('common.status')}</th><th>{t('reports.col.date')}</th>
+                    {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
                   </tr>
                 </thead>
                 <motion.tbody

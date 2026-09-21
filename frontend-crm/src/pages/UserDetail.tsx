@@ -29,6 +29,7 @@ import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
 import { bandRangeLabel } from '../lib/bonusBands';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -59,6 +60,52 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       return isAdmin ? mod.getUserFullProfile(userId) : mod.getMyFullProfile();
     },
   });
+
+  const penaltyReason = (reason: string) => {
+    const key = `penalty.reason.${reason}`;
+    return t(key) !== key ? t(key) : reason;
+  };
+  const salarySort = useTableSort(
+    data?.salary.records ?? [],
+    [
+      { key: 'period', label: t('common.period'), type: 'date', value: (r) => r.periodStart },
+      { key: 'hours', label: t('profile.month.hours'), type: 'number', value: (r) => r.workedMinutes },
+      { key: 'base', label: t('settings.salary.field.base'), type: 'number', value: (r) => r.baseAmount },
+      { key: 'sales', label: t('profile.month.sales'), type: 'number', value: (r) => r.salesAmount },
+      { key: 'bonus', label: t('partners.tab.commissions'), type: 'number', value: (r) => r.bonusAmount },
+      { key: 'kpi', label: 'KPI', type: 'number', value: (r) => r.kpiBonus },
+      { key: 'penalties', label: t('profile.month.penalties'), type: 'number', value: (r) => r.penalties },
+      { key: 'net', label: t('finance.paymentForPay'), type: 'number', value: (r) => r.netAmount },
+      {
+        key: 'status',
+        label: t('common.status'),
+        value: (r) => (r.status === 'PAID' ? t('partners.payout.status.PAID') : t('massmail.status.DRAFT')),
+      },
+    ],
+    { param: 'sortSalary' },
+  );
+  const penaltiesSort = useTableSort(
+    data?.penalties.list ?? [],
+    [
+      { key: 'date', label: t('profile.penaltyCol.date'), type: 'date', value: (p) => p.date },
+      { key: 'reason', label: t('profile.penaltyCol.reason'), value: (p) => penaltyReason(p.reason) },
+      { key: 'amount', label: t('profile.penaltyCol.amount'), type: 'number', value: (p) => p.amount },
+      // Применённые — первыми при «по убыванию».
+      { key: 'applied', label: t('profile.penaltyCol.applied'), type: 'number', value: (p) => (p.applied ? 1 : 0) },
+    ],
+    { param: 'sortPenalties' },
+  );
+  const reportsSort = useTableSort(
+    data?.dailyReports ?? [],
+    [
+      { key: 'date', label: t('common.date'), type: 'date', value: (r) => r.date },
+      { key: 'calls', label: t('eyebrow.calls'), type: 'number', value: (r) => r.callsCount ?? 0 },
+      { key: 'meetings', label: t('eyebrow.meetings'), type: 'number', value: (r) => r.meetingsCount ?? 0 },
+      { key: 'deals', label: t('reports.up.dealsClosed'), type: 'number', value: (r) => r.salesCount ?? 0 },
+      { key: 'amount', label: t('common.amount'), type: 'number', value: (r) => r.salesAmount || null },
+    ],
+    { param: 'sortReports' },
+  );
 
   if (isLoading) return <div className="card" style={{ padding: 24 }}>Загружаем…</div>;
   if (error || !data) {
@@ -174,22 +221,15 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>{t('profile.salaryEmpty')}</div>
         ) : (
           <div className="table-wrap">
+            <SortSelect sort={salarySort} />
             <table className="table">
               <thead>
                 <tr>
-                  <th>{t('common.period')}</th>
-                  <th>{t('profile.month.hours')}</th>
-                  <th>{t('settings.salary.field.base')}</th>
-                  <th>{t('profile.month.sales')}</th>
-                  <th>{t('partners.tab.commissions')}</th>
-                  <th>KPI</th>
-                  <th>{t('profile.month.penalties')}</th>
-                  <th>{t('finance.paymentForPay')}</th>
-                  <th>{t('common.status')}</th>
+                  {salarySort.columns.map((c) => <SortTh key={c.key} sort={salarySort} col={c.key} />)}
                 </tr>
               </thead>
               <tbody>
-                {salary.records.map((r) => (
+                {salarySort.sorted.map((r) => (
                   <tr key={r.id}>
                     <td>{new Date(r.periodStart).toLocaleDateString('ru-RU')} – {new Date(r.periodEnd).toLocaleDateString('ru-RU')}</td>
                     <td>{fmtMinutes(r.workedMinutes)}</td>
@@ -223,19 +263,16 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>{t('common.empty')}</div>
         ) : (
           <div className="table-wrap">
+            <SortSelect sort={penaltiesSort} />
             <table className="table">
               <thead>
                 <tr>
-                  <th>{t('profile.penaltyCol.date')}</th>
-                  <th>{t('profile.penaltyCol.reason')}</th>
-                  <th>{t('profile.penaltyCol.amount')}</th>
-                  <th>{t('profile.penaltyCol.applied')}</th>
+                  {penaltiesSort.columns.map((c) => <SortTh key={c.key} sort={penaltiesSort} col={c.key} />)}
                 </tr>
               </thead>
               <tbody>
-                {penalties.list.map((p) => {
-                  const reasonKey = `penalty.reason.${p.reason}`;
-                  const reasonLbl = t(reasonKey) !== reasonKey ? t(reasonKey) : p.reason;
+                {penaltiesSort.sorted.map((p) => {
+                  const reasonLbl = penaltyReason(p.reason);
                   return (
                   <tr key={p.id}>
                     <td>{new Date(p.date).toLocaleDateString('ru-RU')}</td>
@@ -331,18 +368,15 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <div style={{ color: 'var(--text-soft)', padding: 16, textAlign: 'center' }}>{t('profile.reportsEmpty')}</div>
         ) : (
           <div className="table-wrap">
+            <SortSelect sort={reportsSort} />
             <table className="table">
               <thead>
                 <tr>
-                  <th>{t('common.date')}</th>
-                  <th>{t('eyebrow.calls')}</th>
-                  <th>{t('eyebrow.meetings')}</th>
-                  <th>{t('reports.up.dealsClosed')}</th>
-                  <th>{t('common.amount')}</th>
+                  {reportsSort.columns.map((c) => <SortTh key={c.key} sort={reportsSort} col={c.key} />)}
                 </tr>
               </thead>
               <tbody>
-                {dailyReports.map((r) => (
+                {reportsSort.sorted.map((r) => (
                   <tr key={r.id}>
                     <td>{new Date(r.date).toLocaleDateString('ru-RU')}</td>
                     <td>{r.callsCount ?? 0}</td>
@@ -915,7 +949,7 @@ function RolesEditor({ user, userId, onSaved }: { user: FullProfile['user']; use
                     padding: '6px 12px',
                     borderRadius: 999,
                     border: '1.5px solid',
-                    borderColor: on ? 'var(--primary)' : 'var(--border)',
+                    borderColor: on ? 'var(--primary)' : 'var(--input-border)',
                     background: on ? 'var(--primary-light)' : 'white',
                     color: on ? 'var(--primary-dark)' : 'var(--text-soft)',
                     fontSize: 12, fontWeight: 600, cursor: 'pointer',

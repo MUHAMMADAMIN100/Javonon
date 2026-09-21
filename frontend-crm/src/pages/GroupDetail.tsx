@@ -11,6 +11,7 @@ import { keys } from '../lib/queryKeys';
 import { tjFormatDate, tjFormatFull, tjFormatTime } from '../lib/tjTime';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import ClassSessionModal from '../components/ClassSessionModal';
 import {
   getGroup,
@@ -92,6 +93,12 @@ export default function GroupDetail() {
       past: list.filter((s) => new Date(s.endsAt).getTime() < now).reverse(),
     };
   }, [g?.sessions]);
+
+  const membersSort = useTableSort(g?.members ?? [], [
+    { key: 'fullName', label: t('common.fullName'), value: (m) => m.student.fullName },
+    { key: 'phone', label: t('common.phone'), value: (m) => m.student.phones?.[0] },
+    { key: 'joinedAt', label: t('groups.joinedAt'), type: 'date', value: (m) => m.joinedAt },
+  ]);
 
   if (!id) return null;
   if (query.isLoading) return <Loading />;
@@ -190,17 +197,16 @@ export default function GroupDetail() {
           <div style={{ color: 'var(--text-soft)', fontSize: 13, padding: '12px 0' }}>{t('groups.noMembers')}</div>
         ) : (
           <div className="table-wrap" style={{ overflowX: 'auto', marginTop: 12 }}>
+            <SortSelect sort={membersSort} />
             <table className="table" style={{ width: '100%' }}>
               <thead>
                 <tr>
-                  <th>{t('common.fullName')}</th>
-                  <th>{t('common.phone')}</th>
-                  <th>{t('groups.joinedAt')}</th>
+                  {membersSort.columns.map((c) => <SortTh key={c.key} sort={membersSort} col={c.key} />)}
                   {canAdmin && <th style={{ width: 40 }} />}
                 </tr>
               </thead>
               <tbody>
-                {g.members.map((m) => (
+                {membersSort.sorted.map((m) => (
                   <tr key={m.id}>
                     <td>
                       <span

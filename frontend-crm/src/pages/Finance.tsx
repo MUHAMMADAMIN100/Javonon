@@ -4,6 +4,7 @@ import { dateParam, pageParam, useUrlListState } from '../lib/useUrlListState';
 import Pagination from '../components/Pagination';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -255,7 +256,31 @@ export default function Finance() {
 
   /** Строк на странице журнала. Десять — как просили: экран не листается. */
   const TX_PAGE_SIZE = 10;
-  const pagedTransactions = transactions.slice(
+  const categoryLabel = (tx: Transaction) =>
+    t(`finance.cat.${tx.category}`) !== `finance.cat.${tx.category}`
+      ? t(`finance.cat.${tx.category}`)
+      : TRANSACTION_CATEGORY_LABEL[tx.category];
+  const txSort = useTableSort(
+    transactions,
+    [
+      { key: 'date', label: t('finance.col.date'), type: 'date', value: (tx) => tx.date },
+      {
+        key: 'type',
+        label: t('finance.col.type'),
+        value: (tx) => (tx.type === 'INCOME' ? t('finance.income') : t('finance.expense')),
+      },
+      { key: 'category', label: t('finance.col.category'), value: categoryLabel },
+      { key: 'amount', label: t('finance.col.amount'), type: 'number', value: (tx) => Number(tx.amount) },
+      {
+        key: 'student',
+        label: t('finance.col.student'),
+        value: (tx) => tx.student?.fullName || tx.manager?.fullName,
+      },
+      { key: 'comment', label: t('finance.col.comment'), value: (tx) => tx.comment },
+    ],
+    { pageParam: 'page' },
+  );
+  const pagedTransactions = txSort.sorted.slice(
     (txPage - 1) * TX_PAGE_SIZE,
     txPage * TX_PAGE_SIZE,
   );
@@ -382,6 +407,28 @@ export default function Finance() {
     queryFn: () => listStudents({}),
   });
   const students = studentsQuery.data ?? [];
+
+  const paymentsSort = useTableSort(
+    paymentRequests,
+    [
+      { key: 'date', label: t('common.date'), type: 'date', value: (p) => p.createdAt },
+      { key: 'student', label: t('finance.col.student'), value: (p) => p.student?.fullName },
+      { key: 'amount', label: t('common.amount'), type: 'number', value: (p) => Number(p.amount) },
+      { key: 'type', label: t('common.type'), value: (p) => PAYMENT_METHOD_LABEL[p.method] },
+      { key: 'comment', label: t('common.comment'), value: (p) => p.comment },
+    ],
+    { param: 'sortRequests' },
+  );
+  const pendingSort = useTableSort(
+    pending,
+    [
+      { key: 'student', label: t('finance.col.student'), value: (a) => a.fullName },
+      { key: 'program', label: t('sidebar.programs'), value: (a) => a.program?.name },
+      { key: 'amount', label: t('common.amount'), type: 'number', value: (a) => (a.program ? Number(a.program.cost) : null) },
+      { key: 'manager', label: t('finance.col.manager'), value: (a) => a.manager?.fullName },
+    ],
+    { param: 'sortDebts' },
+  );
 
   const usersQuery = useQuery({
     queryKey: keys.users.list(),
@@ -813,6 +860,7 @@ export default function Finance() {
             <span className="crm-section-eyebrow" style={{ color: 'var(--primary-dark)' }}>{t('eyebrow.paymentRequests')}</span>
             <h2 className="crm-section-title">{t('finance.paymentRequests')}</h2>
           </div>
+          <SortSelect sort={paymentsSort} />
           <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
             <table className="table" style={{ width: '100%', tableLayout: 'fixed' }}>
               {/* QA-fix #5: фиксируем ширины и no-wrap для заголовков
@@ -828,16 +876,14 @@ export default function Finance() {
               </colgroup>
               <thead>
                 <tr>
-                  <th style={{ whiteSpace: 'nowrap' }}>{t('common.date')}</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>{t('finance.col.student')}</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>{t('common.amount')}</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>{t('common.type')}</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>{t('common.comment')}</th>
+                  {paymentsSort.columns.map((c) => (
+                    <SortTh key={c.key} sort={paymentsSort} col={c.key} style={{ whiteSpace: 'nowrap' }} />
+                  ))}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {paymentRequests.map((p) => (
+                {paymentsSort.sorted.map((p) => (
                   <tr key={p.id}>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'nowrap' }}>{fmtDate(p.createdAt)}</td>
                     <td style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.student?.fullName}</td>
@@ -903,13 +949,18 @@ export default function Finance() {
         ) : pending.length === 0 ? (
           <div className="card" style={{ color: 'var(--text-light)' }}>{t('finance.outstanding.empty')}</div>
         ) : (
+          <>
+          <SortSelect sort={pendingSort} />
           <div className="card" style={{ padding: 0 }}>
             <table className="table" style={{ width: '100%' }}>
               <thead>
-                <tr><th>{t('finance.col.student')}</th><th>{t('sidebar.programs')}</th><th>{t('common.amount')}</th><th>{t('finance.col.manager')}</th><th></th></tr>
+                <tr>
+                  {pendingSort.columns.map((c) => <SortTh key={c.key} sort={pendingSort} col={c.key} />)}
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
-                {pending.map((app) => (
+                {pendingSort.sorted.map((app) => (
                   <tr key={app.id}>
                     <td style={{ fontWeight: 500 }}>{app.fullName}</td>
                     <td>{app.program?.name || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
@@ -955,6 +1006,7 @@ export default function Finance() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
@@ -1093,16 +1145,12 @@ export default function Finance() {
         }
       />
 
+      {transactions.length > 0 && <SortSelect sort={txSort} />}
       <div className="card" style={{ padding: 0 }}>
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>{t('finance.col.date')}</th>
-              <th>{t('finance.col.type')}</th>
-              <th>{t('finance.col.category')}</th>
-              <th>{t('finance.col.amount')}</th>
-              <th>{t('finance.col.student')}</th>
-              <th>{t('finance.col.comment')}</th>
+              {txSort.columns.map((c) => <SortTh key={c.key} sort={txSort} col={c.key} />)}
               <th></th>
             </tr>
           </thead>
@@ -1132,7 +1180,7 @@ export default function Finance() {
                     {tx.type === 'INCOME' ? t('finance.income') : t('finance.expense')}
                   </span>
                 </td>
-                <td>{t(`finance.cat.${tx.category}`) !== `finance.cat.${tx.category}` ? t(`finance.cat.${tx.category}`) : TRANSACTION_CATEGORY_LABEL[tx.category]}</td>
+                <td>{categoryLabel(tx)}</td>
                 <td style={{
                   fontFamily: 'var(--font-display)',
                   fontWeight: 500,
@@ -1927,7 +1975,7 @@ function RadioBtn({ label, active, onClick }: { label: string; active: boolean; 
       onClick={onClick}
       style={{
         padding: '6px 12px',
-        border: `1.5px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+        border: `1.5px solid ${active ? 'var(--primary)' : 'var(--input-border)'}`,
         borderRadius: 999,
         background: active ? 'var(--primary-soft)' : 'white',
         color: active ? 'var(--primary-dark)' : 'var(--text)',

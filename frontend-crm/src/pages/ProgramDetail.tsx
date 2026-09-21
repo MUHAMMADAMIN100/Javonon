@@ -11,6 +11,7 @@ import {
 import { DIRECTION_LABEL } from '../api/types';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { MiniMarkdown } from '../lib/miniMarkdown';
 import InstallmentTemplateSection from '../components/InstallmentTemplateSection';
 import { useAuth } from '../store/auth';
@@ -36,6 +37,20 @@ export default function ProgramDetail() {
   });
   const p = query.data;
   const [activePhoto, setActivePhoto] = useState(0);
+
+  // Стипендии — свободный текст из админки: «Сумма» и «Дедлайн» бывают
+  // словами, поэтому все колонки по алфавиту (цифры внутри — по величине).
+  const scholarshipsSort = useTableSort(
+    ((p as any)?.scholarships as any[] | undefined) ?? [],
+    [
+      { key: 'name', label: 'Название', value: (s) => s.name },
+      { key: 'coverage', label: 'Покрытие', value: (s) => s.coverage },
+      { key: 'amount', label: 'Сумма', value: (s) => s.amount },
+      { key: 'includes', label: 'Что включено', value: (s) => s.includes },
+      { key: 'requirements', label: 'Требования', value: (s) => s.requirements },
+      { key: 'deadline', label: 'Дедлайн', value: (s) => s.deadline },
+    ],
+  );
 
   if (!id) return null;
   if (query.isLoading) return <Loading />;
@@ -138,20 +153,18 @@ export default function ProgramDetail() {
       {scholarships && scholarships.length > 0 && (
         <div className="card" style={{ padding: 20, marginTop: 16 }}>
           <h3 style={{ marginBottom: 12 }}>🎓 Стипендии и гранты ({scholarships.length})</h3>
+          <SortSelect sort={scholarshipsSort} />
           <table className="table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th>Название</th>
-                <th>Покрытие</th>
-                <th>Сумма</th>
-                <th>Что включено</th>
-                <th>Требования</th>
-                <th>Дедлайн</th>
+                {scholarshipsSort.columns.map((c) => (
+                  <SortTh key={c.key} sort={scholarshipsSort} col={c.key} />
+                ))}
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {scholarships.map((s: any) => (
+              {scholarshipsSort.sorted.map((s: any) => (
                 <tr key={s.id}>
                   <td style={{ fontWeight: 600 }}>{s.name}</td>
                   <td>{s.coverage || '—'}</td>

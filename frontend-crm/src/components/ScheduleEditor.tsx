@@ -173,7 +173,7 @@ function TimeField({ label, value, onChange, disabled }: { label: string; value:
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        style={{ padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, width: '100%', minWidth: 0 }}
+        style={{ padding: '6px 8px', border: '1px solid var(--input-border)', borderRadius: 6, fontSize: 13, width: '100%', minWidth: 0 }}
       />
     </div>
   );
