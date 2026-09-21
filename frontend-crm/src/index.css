@@ -6139,3 +6139,16 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   gap: 16px;
   align-items: start;
 }
+
+/* Действия в строке таблицы платежей сделки: в одну линию справа, на
+   телефоне (строка — карточка) переносятся и растягиваются на всю ширину. */
+.payment-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+.payments-table td { vertical-align: middle; }
+@media (max-width: 900px) {
+  .payment-actions { flex-wrap: wrap; justify-content: flex-start; width: 100%; }
+}

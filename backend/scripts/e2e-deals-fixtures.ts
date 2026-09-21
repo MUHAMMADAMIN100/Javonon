@@ -99,6 +99,27 @@ async function main() {
       });
     }
   }
+  // --- таблица платежей: у «Латипова» платежи во всех состояниях ---
+  const latipov = await prisma.saleSubmission.findFirstOrThrow({ where: { notes: MARK, newStudentName: 'Латипов Зайдулло' } });
+  await prisma.submissionPayment.updateMany({
+    where: { submissionId: latipov.id },
+    data: { depositProofUrls: ['/uploads/e2e-deposit.jpg'], nextDueDate: sep(28), nextDueAmount: 6000 },
+  });
+  await prisma.submissionPayment.create({
+    data: {
+      submissionId: latipov.id, amount: 3000, paidAt: sep(1), status: 'APPROVED', paymentMethod: 'TRANSFER',
+      receiptUrls: ['/uploads/e2e-receipt-1.jpg', '/uploads/e2e-receipt-2.jpg'], notes: 'Первый взнос, перевод Alif',
+    },
+  });
+  await prisma.submissionPayment.create({
+    data: {
+      submissionId: latipov.id, amount: 500, paidAt: sep(3), status: 'REJECTED', paymentMethod: 'CASH',
+      rejectReason: 'Чек не читается',
+    },
+  });
+  // Телефон партнёра — для поиска по номеру на «Партнёрах».
+  await prisma.partner.update({ where: { id: partner.id }, data: { phone: '+992 90 123 45 67' } });
+
   console.log('OK: сделки для проверки поиска и фильтров созданы');
 }
 

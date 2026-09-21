@@ -37,6 +37,7 @@ import PaymentStagesSection from '../components/PaymentStagesSection';
 import { absFileUrl as absUrl } from '../lib/fileUrl';
 import { keys } from '../lib/queryKeys';
 import { useT } from '../lib/i18n';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: '#0ea5e9',
@@ -147,6 +148,20 @@ export default function SubmissionDetail() {
     onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
   });
 
+  const paySort = useTableSort(
+    s?.payments ?? [],
+    [
+      { key: 'amount', label: 'Сумма', type: 'number', value: (p) => p.amount },
+      { key: 'paidAt', label: 'Дата оплаты', type: 'date', value: (p) => p.paidAt },
+      { key: 'method', label: 'Способ', value: (p) => PAYMENT_METHOD_LABEL[p.paymentMethod] },
+      { key: 'files', label: 'Файлы', type: 'number', value: (p) => (p.receiptUrls?.length ?? 0) + (p.depositProofUrls?.length ?? 0) },
+      { key: 'next', label: 'Следующий платёж', type: 'date', value: (p) => p.nextDueDate },
+      { key: 'comment', label: 'Комментарий', value: (p) => p.rejectReason || p.notes },
+      { key: 'status', label: 'Статус', value: (p) => PAYMENT_STATUS_LABEL[p.status] },
+    ],
+    { param: 'sortPayments' },
+  );
+
   if (query.isLoading) return <div className="card" style={{ padding: 24 }}>Загружаем…</div>;
   if (!s) return <div className="card" style={{ padding: 24 }}>Сделка не найдена</div>;
 
@@ -178,13 +193,17 @@ export default function SubmissionDetail() {
     }
   };
 
-  const onDeletePayment = (p: SubmissionPayment) => {
-    const msg = p.status === 'APPROVED'
-      ? `Одобренный платёж будет откачен: EXPENSE-транзакция на ${p.amount.toLocaleString('ru-RU')} создастся. Продолжить?`
-      : 'Удалить платёж?';
-    if (window.confirm(msg)) {
-      deletePaymentMut.mutate(p.id);
-    }
+  // Окно подтверждения — своё, как во всей CRM, а не серое браузерное.
+  const onDeletePayment = async (p: SubmissionPayment) => {
+    const ok = await confirm({
+      title: 'Удалить платёж?',
+      message: p.status === 'APPROVED'
+        ? `Платёж уже одобрен: доход по нему будет отменён обратной записью на ${p.amount.toLocaleString('ru-RU')} ${s?.currency ?? ''}.`
+        : `${p.amount.toLocaleString('ru-RU')} ${s?.currency ?? ''} от ${new Date(p.paidAt).toLocaleDateString('ru-RU')}`,
+      confirmText: 'Удалить',
+      danger: true,
+    });
+    if (ok) deletePaymentMut.mutate(p.id);
   };
 
   return (
@@ -335,8 +354,21 @@ export default function SubmissionDetail() {
 
       {/* Платежи */}
       <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 12 }}>Платежи ({s.payments.length})</h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {s.payments.map((p) => (
+      {/* Таблицей, а не карточкой на платёж: у карточки половина места
+          уходила на пустые поля и отдельные полосы под кнопки. */}
+      {s.payments.length > 0 && (
+      <div className="card" style={{ padding: 0 }}>
+      <div className="table-wrap">
+      <SortSelect sort={paySort} />
+      <table className="table payments-table" data-testid="payments-table">
+        <thead>
+          <tr>
+            {paySort.columns.map((c) => <SortTh key={c.key} sort={paySort} col={c.key} />)}
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+        {paySort.sorted.map((p) => (
           <PaymentRow
             key={p.id}
             p={p}
@@ -358,7 +390,11 @@ export default function SubmissionDetail() {
             manageBusy={deletePaymentMut.isPending}
           />
         ))}
+        </tbody>
+      </table>
       </div>
+      </div>
+      )}
 
       {showAddPayment && (
         <AddPaymentModal
@@ -456,116 +492,114 @@ function PaymentRow({
   onDelete: () => void;
   manageBusy: boolean;
 }) {
+  const muted = { color: 'var(--text-light)' };
   return (
-    <motion.div
-      className="card"
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      style={{ padding: 16 }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 18 }}>
-            {p.amount.toLocaleString('ru-RU')} {currency}
+    <tr data-testid={`payment-row-${p.id}`}>
+      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+        {p.amount.toLocaleString('ru-RU')} {currency}
+      </td>
+      <td data-label="Дата оплаты" style={{ whiteSpace: 'nowrap' }}>{new Date(p.paidAt).toLocaleDateString('ru-RU')}</td>
+      <td data-label="Способ">{PAYMENT_METHOD_LABEL[p.paymentMethod]}</td>
+      <td data-label="Файлы">
+        {(p.receiptUrls?.length ?? 0) + (p.depositProofUrls?.length ?? 0) === 0 ? (
+          <span style={muted}>—</span>
+        ) : (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {p.receiptUrls?.map((u, i) => (
+              <a key={`receipt-${i}`} href={absUrl(u)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
+                <Icon name="image" size={14} /> Чек{p.receiptUrls.length > 1 ? ` ${i + 1}` : ''}
+              </a>
+            ))}
+            {p.depositProofUrls?.map((u, i) => (
+              <a key={`deposit-${i}`} href={absUrl(u)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
+                <Icon name="image" size={14} /> Депозит{p.depositProofUrls.length > 1 ? ` ${i + 1}` : ''}
+              </a>
+            ))}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 2 }}>
-            {new Date(p.paidAt).toLocaleDateString('ru-RU')} · {PAYMENT_METHOD_LABEL[p.paymentMethod]}
+        )}
+      </td>
+      <td data-label="Следующий платёж" style={{ whiteSpace: 'nowrap' }}>
+        {p.nextDueDate ? (
+          <>
+            {new Date(p.nextDueDate).toLocaleDateString('ru-RU')}
+            {p.nextDueAmount ? (
+              <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
+                {p.nextDueAmount.toLocaleString('ru-RU')} {currency}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <span style={muted}>—</span>
+        )}
+      </td>
+      <td data-label="Комментарий" style={{ fontSize: 13, maxWidth: 260 }}>
+        {p.rejectReason && (
+          <div style={{ color: '#b91c1c' }}>
+            <strong>Отклонено:</strong> {p.rejectReason}
           </div>
-        </div>
+        )}
+        {p.notes && <div style={{ color: 'var(--text-soft)' }}>{p.notes}</div>}
+        {!p.rejectReason && !p.notes && <span style={muted}>—</span>}
+      </td>
+      <td data-label="Статус">
         <span
           style={{
-            padding: '4px 10px',
+            padding: '3px 10px',
             borderRadius: 999,
             background: STATUS_COLOR[p.status] + '22',
             color: STATUS_COLOR[p.status],
             fontSize: 12,
             fontWeight: 600,
             border: `1.5px solid ${STATUS_COLOR[p.status]}`,
+            whiteSpace: 'nowrap',
           }}
         >
           {PAYMENT_STATUS_LABEL[p.status]}
         </span>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-        {p.receiptUrls?.map((u, i) => (
-          <a
-            key={`receipt-${i}`}
-            href={absUrl(u)}
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-sm btn-secondary"
-          >
-            <Icon name="image" size={14} /> Чек{p.receiptUrls.length > 1 ? ` ${i + 1}` : ''}
-          </a>
-        ))}
-        {p.depositProofUrls?.map((u, i) => (
-          <a
-            key={`deposit-${i}`}
-            href={absUrl(u)}
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-sm btn-secondary"
-          >
-            <Icon name="image" size={14} /> Депозит{p.depositProofUrls.length > 1 ? ` ${i + 1}` : ''}
-          </a>
-        ))}
-      </div>
-
-      {p.nextDueDate && (
-        <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 8 }}>
-          Следующий платёж: {new Date(p.nextDueDate).toLocaleDateString('ru-RU')}
-          {p.nextDueAmount ? ` · ${p.nextDueAmount.toLocaleString('ru-RU')} ${currency}` : ''}
-        </div>
-      )}
-
-      {p.rejectReason && (
-        <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 8, padding: 8, background: '#fef2f2', borderRadius: 6 }}>
-          <strong>Отклонено:</strong> {p.rejectReason}
-        </div>
-      )}
-
-      {p.notes && (
-        <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 8 }}>
-          {p.notes}
-        </div>
-      )}
-
-      {canReview && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 10 }}>
-          <button className="btn btn-sm btn-danger" onClick={onReject} disabled={busy}>
-            <Icon name="close" size={14} /> Отклонить
-          </button>
-          <button className="btn btn-sm btn-primary" onClick={onApprove} disabled={busy}>
-            <Icon name="check" size={14} /> Одобрить
-          </button>
-        </div>
-      )}
-
-      {(canManage || canDelete) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid var(--border-soft)', paddingTop: 10, marginTop: 10 }}>
-          {canManage && (
-            <button
-              className="btn btn-sm btn-secondary"
-              onClick={onEdit}
-              disabled={manageBusy || p.status === 'REJECTED'}
-              title={p.status === 'REJECTED' ? 'Отклонённый платёж редактировать нельзя' : undefined}
-            >
-              <Icon name="edit" size={14} /> Редактировать
-            </button>
-          )}
-          {canDelete && (
-            <button
-              className="btn btn-sm btn-danger"
-              onClick={onDelete}
-              disabled={manageBusy}
-            >
-              <Icon name="delete" size={14} /> Удалить
-            </button>
-          )}
-        </div>
-      )}
-    </motion.div>
+      </td>
+      <td>
+        {/* Все действия — в одну строку в конце: одобрить/отклонить
+            (руководство, пока платёж на рассмотрении), править и удалить. */}
+        {(canReview || canManage || canDelete) && (
+          <div className="payment-actions">
+            {canReview && (
+              <>
+                <button className="btn btn-sm btn-danger" onClick={onReject} disabled={busy} data-testid="payment-reject">
+                  <Icon name="close" size={14} /> Отклонить
+                </button>
+                <button className="btn btn-sm btn-primary" onClick={onApprove} disabled={busy} data-testid="payment-approve">
+                  <Icon name="check" size={14} /> Одобрить
+                </button>
+              </>
+            )}
+            {canManage && (
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={onEdit}
+                disabled={manageBusy || p.status === 'REJECTED'}
+                title={p.status === 'REJECTED' ? 'Отклонённый платёж редактировать нельзя' : 'Редактировать'}
+                aria-label="Редактировать"
+                data-testid="payment-edit"
+              >
+                <Icon name="edit" size={14} />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={onDelete}
+                disabled={manageBusy}
+                title="Удалить"
+                aria-label="Удалить"
+                data-testid="payment-delete"
+              >
+                <Icon name="delete" size={14} />
+              </button>
+            )}
+          </div>
+        )}
+      </td>
+    </tr>
   );
 }
 
@@ -1199,9 +1233,22 @@ function EditPaymentModal({
     mut.mutate();
   };
 
+  // Изменено ли хоть что-то. Раньше «Закрыть без сохранения? Изменения
+  // будут потеряны» спрашивали всегда — даже если окно просто открыли
+  // посмотреть и нажали «Отмена».
+  const dirty =
+    amount !== String(payment.amount ?? '') ||
+    method !== payment.paymentMethod ||
+    paidAt !== (payment.paidAt ? new Date(payment.paidAt).toISOString().slice(0, 10) : paidAt) ||
+    receiptUrls.join('|') !== (payment.receiptUrls || []).join('|') ||
+    depositProofUrls.join('|') !== (payment.depositProofUrls || []).join('|') ||
+    nextDueDate !== (payment.nextDueDate ? new Date(payment.nextDueDate).toISOString().slice(0, 10) : '') ||
+    nextDueAmount !== (payment.nextDueAmount != null ? String(payment.nextDueAmount) : '') ||
+    notes !== (payment.notes || '');
+
   const attemptClose = async () => {
     if (mut.isPending) return;
-    if (readOnly) {
+    if (readOnly || !dirty) {
       onClose();
       return;
     }
@@ -1225,7 +1272,7 @@ function EditPaymentModal({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mut.isPending, readOnly]);
+  }, [mut.isPending, readOnly, dirty]);
 
   return (
     <motion.div

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -28,32 +28,154 @@ import { useAuth } from '../store/auth';
 import Icon from '../Icon';
 import QrCode from '../components/QrCode';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import SearchField, { useUrlSearch } from '../components/SearchField';
+import ListTotal, { type ListNoun } from '../components/ListTotal';
+import ActiveFilterChips from '../components/ActiveFilterChips';
+import { enumParam, stringParam, useUrlListState } from '../lib/useUrlListState';
+import { matchesSearch } from '../lib/listSearch';
 
 type Tab = 'partners' | 'commissions' | 'payouts';
+const COMMISSION_STATUSES = ['PENDING', 'APPROVED', 'PAID', 'REVERSED'] as const;
+
+/** Поиск вкладки: текст в поле, значение из ссылки и «очистить сейчас». */
+type SearchCtl = {
+  value: string;
+  input: string;
+  setInput: (v: string) => void;
+  clear: () => void;
+};
 
 export default function Partners() {
   const { t } = useT();
-  const [tab, setTab] = useState<Tab>('partners');
+  // Вкладка, поиск и статус комиссий — в ссылке: из карточки партнёра
+  // возвращаются кнопкой «назад», и открыться должна та же выборка. Поиск
+  // общий на три вкладки: нашли «Faiziddin» в партнёрах — на «Комиссиях»
+  // сразу видны его комиссии.
+  const { values, setValue, reset } = useUrlListState({
+    tab: enumParam<Tab, Tab>(['partners', 'commissions', 'payouts'], 'partners'),
+    search: stringParam('', 200),
+    status: enumParam(COMMISSION_STATUSES),
+  });
+  const { tab } = values;
+  const setUrlSearch = useCallback((v: string) => setValue('search', v), [setValue]);
+  const { input, setInput, clear } = useUrlSearch(values.search, setUrlSearch);
+  const search: SearchCtl = { value: values.search, input, setInput, clear };
 
   return (
     <>
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
-        <TabBtn active={tab === 'partners'} onClick={() => setTab('partners')}>{t('partners.tab.list')}</TabBtn>
-        <TabBtn active={tab === 'commissions'} onClick={() => setTab('commissions')}>{t('partners.tab.commissions')}</TabBtn>
-        <TabBtn active={tab === 'payouts'} onClick={() => setTab('payouts')}>{t('partners.tab.payouts')}</TabBtn>
+        <TabBtn active={tab === 'partners'} onClick={() => setValue('tab', 'partners')} testId="partners-tab-partners">{t('partners.tab.list')}</TabBtn>
+        <TabBtn active={tab === 'commissions'} onClick={() => setValue('tab', 'commissions')} testId="partners-tab-commissions">{t('partners.tab.commissions')}</TabBtn>
+        <TabBtn active={tab === 'payouts'} onClick={() => setValue('tab', 'payouts')} testId="partners-tab-payouts">{t('partners.tab.payouts')}</TabBtn>
       </div>
 
-      {tab === 'partners' && <PartnersList />}
-      {tab === 'commissions' && <CommissionsList />}
-      {tab === 'payouts' && <PayoutsList />}
+      {tab === 'partners' && <PartnersList search={search} />}
+      {tab === 'commissions' && (
+        <CommissionsList
+          search={search}
+          status={values.status}
+          onStatus={(v) => setValue('status', v)}
+          onResetStatus={() => reset(['status'])}
+        />
+      )}
+      {tab === 'payouts' && <PayoutsList search={search} />}
     </>
   );
 }
 
-function TabBtn({ active, onClick, children }: any) {
+/**
+ * Каркас списка вкладки — один на «Партнёров», «Комиссии» и «Выплаты», чтобы
+ * они выглядели одинаково: в шапке счётчик слева и кнопка справа, под ней
+ * строка фильтров с поиском, «Сбросить» и плашки, дальше таблица.
+ */
+function ListShell({
+  noun,
+  found,
+  total,
+  search,
+  placeholder,
+  filters,
+  extraActive = false,
+  onResetExtra,
+  action,
+  loading,
+  emptyText,
+  children,
+}: {
+  noun: ListNoun;
+  found: number;
+  /** Сколько всего без фильтров; нужен, только когда что-то отфильтровано. */
+  total?: number;
+  search: SearchCtl;
+  placeholder: string;
+  /** Свои фильтры вкладки — встают в строку перед поиском. */
+  filters?: ReactNode;
+  extraActive?: boolean;
+  onResetExtra?: () => void;
+  action?: ReactNode;
+  loading: boolean;
+  emptyText: string;
+  children: ReactNode;
+}) {
+  const { t } = useT();
+  const narrowed = !!search.value || extraActive;
+  return (
+    <div className="card">
+      <div className="card-header is-titleless">
+        <ListTotal noun={noun} found={found} total={total} filtered={narrowed} testId="partners-total" />
+        {action}
+      </div>
+      <div className="card-body">
+        <div className="filters">
+          {filters}
+          <SearchField
+            value={search.input}
+            onChange={search.setInput}
+            onClear={search.clear}
+            placeholder={placeholder}
+            testId="partners-search"
+          />
+          {(narrowed || search.input) && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                search.clear();
+                onResetExtra?.();
+              }}
+            >
+              <Icon name="close" size={14} /> {t('common.reset')}
+            </button>
+          )}
+        </div>
+        <ActiveFilterChips
+          chips={
+            search.value
+              ? [{ key: 'search', label: `${t('list.chip.search')}: «${search.value}»`, onClear: search.clear }]
+              : []
+          }
+        />
+        {loading ? (
+          <div style={{ padding: 24 }}>{t('common.loading')}</div>
+        ) : found === 0 ? (
+          <div className="empty" data-testid="partners-empty">
+            <div className="empty-icon"><Icon name={narrowed ? 'search_off' : 'inbox'} size={48} /></div>
+            {/* Под фильтром «пусто» было бы неправдой: есть, но не нашлись эти. */}
+            {narrowed ? t('common.empty') : emptyText}
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TabBtn({ active, onClick, children, testId }: any) {
   return (
     <button
       onClick={onClick}
+      data-testid={testId}
       className={active ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
       style={{ minWidth: 120 }}
     >
@@ -115,7 +237,7 @@ function referralUrlOf(p: Partner): string {
   return p.referralUrl || buildReferralUrl(p.referralCode);
 }
 
-function PartnersList() {
+function PartnersList({ search }: { search: SearchCtl }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { toast, confirm } = useUI();
@@ -124,8 +246,12 @@ function PartnersList() {
     queryKey: ['admin', 'partners'],
     queryFn: () => adminListPartners(),
   });
+  // Список партнёров приходит целиком — ищем в браузере.
+  const shown = partners.filter((p) =>
+    matchesSearch(search.value, [p.fullName, p.email, p.referralCode], [p.phone]),
+  );
   const sort = useTableSort(
-    partners,
+    shown,
     [
       { key: 'name', label: t('common.name'), value: (p) => p.fullName },
       { key: 'email', label: t('partners.col.email'), value: (p) => p.email },
@@ -225,31 +351,21 @@ function PartnersList() {
   };
 
   return (
-    <div className="card" style={{ padding: 0 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: 14,
-          borderBottom: '1px solid var(--border-soft)',
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ fontSize: 13, color: 'var(--text-soft)' }}>
-          {isLoading ? t('common.loading') : `${partners.length} ${t('partners.tab.list').toLowerCase()}`}
-        </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setAddOpen(true)}>
+    <>
+    <ListShell
+      noun="partners"
+      found={shown.length}
+      total={partners.length}
+      search={search}
+      placeholder={t('partners.search.placeholder')}
+      action={
+        <button className="btn btn-primary btn-sm" data-testid="partner-add" onClick={() => setAddOpen(true)}>
           <Icon name="add" size={14} /> {t('partners.add')}
         </button>
-      </div>
-
-      {isLoading ? (
-        <div style={{ padding: 24 }}>{t('common.loading')}</div>
-      ) : partners.length === 0 ? (
-        <div style={{ padding: 24 }}>{t('partners.empty')}</div>
-      ) : (
+      }
+      loading={isLoading}
+      emptyText={t('partners.empty')}
+    >
         <div className="table-wrap">
           <SortSelect sort={sort} />
           <table className="table">
@@ -340,7 +456,7 @@ function PartnersList() {
             </tbody>
           </table>
         </div>
-      )}
+    </ListShell>
 
       <AddPartnerModal
         open={addOpen}
@@ -351,7 +467,7 @@ function PartnersList() {
         data={shareData}
         onClose={() => setShareData(null)}
       />
-    </div>
+    </>
   );
 }
 
@@ -691,11 +807,20 @@ function ShareLinkModal({ data, onClose }: ShareModalProps) {
   );
 }
 
-function CommissionsList() {
+function CommissionsList({
+  search,
+  status: statusFilter,
+  onStatus,
+  onResetStatus,
+}: {
+  search: SearchCtl;
+  status: '' | (typeof COMMISSION_STATUSES)[number];
+  onStatus: (v: '' | (typeof COMMISSION_STATUSES)[number]) => void;
+  onResetStatus: () => void;
+}) {
   const qc = useQueryClient();
   const { toast, confirm } = useUI();
   const { t } = useT();
-  const [statusFilter, setStatusFilter] = useState<'' | 'PENDING' | 'APPROVED' | 'PAID' | 'REVERSED'>('');
   // POST commissions/:id/approve is @Roles('FOUNDER','ADMIN') — the accountant
   // executes payouts but does not authorise them. Mirror that here so the
   // button is not offered to someone who would only get a 403.
@@ -706,8 +831,16 @@ function CommissionsList() {
     queryKey: ['admin', 'commissions', statusFilter],
     queryFn: () => adminListCommissions(statusFilter ? { status: statusFilter as any } : undefined),
   });
+  // Все комиссии без статуса — для «Найдено: X из N»; без фильтра это тот же
+  // запрос, что выше.
+  const { data: allCommissions } = useQuery({
+    queryKey: ['admin', 'commissions', ''],
+    queryFn: () => adminListCommissions(),
+    enabled: !!statusFilter,
+  });
+  const shown = commissions.filter((c) => matchesSearch(search.value, [c.partner?.fullName, c.partner?.email]));
   const sort = useTableSort(
-    commissions,
+    shown,
     [
       { key: 'createdAt', label: t('partners.commission.col.createdAt'), type: 'date', value: (c) => c.createdAt },
       { key: 'partner', label: t('partners.tab.list'), value: (c) => c.partner?.fullName },
@@ -752,12 +885,18 @@ function CommissionsList() {
   };
 
   return (
-    <div className="card" style={{ padding: 0 }}>
-      <div style={{ padding: 14, borderBottom: '1px solid var(--border-soft)' }}>
+    <ListShell
+      noun="commissions"
+      found={shown.length}
+      total={statusFilter ? allCommissions?.length : commissions.length}
+      search={search}
+      placeholder={t('partners.search.byPartner')}
+      filters={
         <CrmSelect
           className="crm-select"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as any)}
+          onChange={(e) => onStatus(e.target.value as any)}
+          data-testid="commissions-filter-status"
         >
           <option value="">{t('common.all')}</option>
           <option value="PENDING">{t('partners.commission.status.PENDING')}</option>
@@ -765,12 +904,12 @@ function CommissionsList() {
           <option value="PAID">{t('partners.commission.status.PAID')}</option>
           <option value="REVERSED">{t('partners.commission.status.REVERSED')}</option>
         </CrmSelect>
-      </div>
-      {isLoading ? (
-        <div style={{ padding: 24 }}>{t('common.loading')}</div>
-      ) : commissions.length === 0 ? (
-        <div style={{ padding: 24 }}>{t('common.empty')}</div>
-      ) : (
+      }
+      extraActive={!!statusFilter}
+      onResetExtra={onResetStatus}
+      loading={isLoading}
+      emptyText={t('common.empty')}
+    >
         <div className="table-wrap">
           <SortSelect sort={sort} />
           <table className="table">
@@ -828,12 +967,11 @@ function CommissionsList() {
             </tbody>
           </table>
         </div>
-      )}
-    </div>
+    </ListShell>
   );
 }
 
-function PayoutsList() {
+function PayoutsList({ search }: { search: SearchCtl }) {
   const qc = useQueryClient();
   const { toast, confirm } = useUI();
   const { t } = useT();
@@ -841,8 +979,9 @@ function PayoutsList() {
     queryKey: ['admin', 'payouts'],
     queryFn: () => adminListPayouts(),
   });
+  const shown = payouts.filter((p) => matchesSearch(search.value, [p.partner?.fullName, p.partner?.email]));
   const sort = useTableSort(
-    payouts,
+    shown,
     [
       { key: 'requestedAt', label: t('partners.payout.col.requestedAt'), type: 'date', value: (p) => p.requestedAt },
       { key: 'partner', label: t('partners.tab.list'), value: (p) => p.partner?.fullName },
@@ -887,11 +1026,16 @@ function PayoutsList() {
     }
   };
 
-  if (isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
-  if (payouts.length === 0) return <div className="card" style={{ padding: 24 }}>{t('common.empty')}</div>;
-
   return (
-    <div className="card" style={{ padding: 0 }}>
+    <ListShell
+      noun="payouts"
+      found={shown.length}
+      total={payouts.length}
+      search={search}
+      placeholder={t('partners.search.byPartner')}
+      loading={isLoading}
+      emptyText={t('common.empty')}
+    >
       <div className="table-wrap">
         <SortSelect sort={sort} />
         <table className="table">
@@ -923,6 +1067,6 @@ function PayoutsList() {
           </tbody>
         </table>
       </div>
-    </div>
+    </ListShell>
   );
 }
