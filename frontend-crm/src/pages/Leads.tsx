@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { AnimatePresence, motion } from 'framer-motion';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -32,6 +32,8 @@ import Icon from '../Icon';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import SearchField, { useUrlSearch } from '../components/SearchField';
+import ListTotal from '../components/ListTotal';
 import { dateParam, enumParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds } from '../utils/validators';
 
@@ -337,18 +339,8 @@ export default function Leads() {
   const filterCountry = periodValues.country;
   const urlSearch = periodValues.search;
 
-  // Поиск — как в списке заявок: буквы в поле появляются сразу, в ссылку
-  // (и в запрос) уезжает значение, простоявшее 300 мс.
-  const [searchInput, setSearchInput] = useState(urlSearch);
-  // Ссылка → поле: «назад», «Сбросить», крестик у плашки.
-  useEffect(() => {
-    setSearchInput(urlSearch);
-  }, [urlSearch]);
-  useEffect(() => {
-    if (searchInput === urlSearch) return;
-    const timer = setTimeout(() => setPeriod('search', searchInput), 300);
-    return () => clearTimeout(timer);
-  }, [searchInput, urlSearch, setPeriod]);
+  const setUrlSearch = useCallback((v: string) => setPeriod('search', v), [setPeriod]);
+  const { input: searchInput, setInput: setSearchInput, clear: clearSearch } = useUrlSearch(urlSearch, setUrlSearch);
 
   const leadFilters = {
     ...LEAD_FILTERS,
@@ -371,17 +363,16 @@ export default function Leads() {
   const leads = leadsQuery.data ?? [];
 
   /**
-   * Вся очередь без фильтров — нужна только выбору галочками. Отметил лиды,
-   * потом нашёл поиском ещё одного — отмеченные раньше пропали с экрана, но
-   * из пачки выпадать не должны. Без фильтров ключ совпадает с leadsKey
-   * (react-query не различает undefined-поля), и лишнего запроса нет; с
-   * фильтрами очередь грузим, только пока что-то отмечено.
+   * Вся очередь без фильтров. Нужна дважды: счётчику («Найдено: 12 из 93»)
+   * и выбору галочками — отметил лиды, потом нашёл поиском ещё одного,
+   * отмеченные раньше пропали с экрана, но из пачки выпадать не должны. Без
+   * фильтров ключ совпадает с leadsKey (react-query не различает
+   * undefined-поля), и лишнего запроса нет.
    */
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const queueQuery = useQuery({
     queryKey: keys.applications.list(LEAD_FILTERS),
     queryFn: () => listApplications(LEAD_FILTERS),
-    enabled: !narrowed || selected.size > 0,
   });
   // Пока очередь перечитывается, в кеше может лежать старая — без лида,
   // который только что пришёл и которого уже отметили. Сверять с такой
@@ -870,10 +861,14 @@ export default function Leads() {
 
       <div className="card">
         <div className="card-header is-titleless">
-          {/* Название страницы стоит в шапке; здесь — только счётчик и кнопка. */}
-          <span style={{ color: 'var(--text-soft)', fontSize: 13 }} data-testid="leads-total">
-            {leads.length}
-          </span>
+          {/* Название страницы стоит в шапке; здесь — счётчик слева и кнопка справа. */}
+          <ListTotal
+            noun="leads"
+            found={leads.length}
+            total={queueQuery.data?.length}
+            filtered={narrowed}
+            testId="leads-total"
+          />
           <button type="button" className="btn btn-primary" data-testid="lead-new" onClick={openForm}>
             <Icon name="add" size={18} />
             {t('leads.form.title')}
@@ -915,44 +910,13 @@ export default function Leads() {
             {/* Поиск здесь — в строке фильтров, а не отдельной строкой над
                 ними, как на других списках: у лидов фильтров всего четыре, и
                 справа оставалось пустое место. */}
-            <div className="leads-search">
-              <Icon name="search" size={18} className="leads-search-icon" />
-              <input
-                type="search"
-                className="crm-input"
-                placeholder={t('leads.search.placeholder')}
-                aria-label={t('leads.search.placeholder')}
-                data-testid="leads-search"
-                value={searchInput}
-                maxLength={200}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => {
-                  // Esc в поле — очистить поиск, а не ждать, пока браузер
-                  // сотрёт текст без события (у type=search так бывает).
-                  if (e.key === 'Escape' && searchInput) {
-                    e.preventDefault();
-                    setSearchInput('');
-                    setPeriod('search', '');
-                  }
-                }}
-                autoComplete="off"
-              />
-              {searchInput && (
-                <button
-                  type="button"
-                  className="leads-search-clear"
-                  aria-label={t('leads.search.clear')}
-                  title={t('leads.search.clear')}
-                  data-testid="leads-search-clear"
-                  onClick={() => {
-                    setSearchInput('');
-                    setPeriod('search', '');
-                  }}
-                >
-                  <Icon name="close" size={16} />
-                </button>
-              )}
-            </div>
+            <SearchField
+              value={searchInput}
+              onChange={setSearchInput}
+              onClear={clearSearch}
+              placeholder={t('leads.search.placeholder')}
+              testId="leads-search"
+            />
             {(from || to || manager || filterCountry || searchInput) && (
               <button
                 type="button"
@@ -975,10 +939,7 @@ export default function Leads() {
                 ? [{
                     key: 'search',
                     label: `${t('list.chip.search')}: «${urlSearch}»`,
-                    onClear: () => {
-                      setSearchInput('');
-                      resetPeriod(['search']);
-                    },
+                    onClear: clearSearch,
                   }]
                 : []),
               ...(from || to
@@ -1026,7 +987,7 @@ export default function Leads() {
             ) : (
               <motion.div
                 key="table"
-                className={leadsQuery.isPlaceholderData ? 'leads-list-stale' : undefined}
+                className={leadsQuery.isPlaceholderData ? 'list-stale' : undefined}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}

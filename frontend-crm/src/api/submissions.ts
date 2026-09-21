@@ -197,6 +197,8 @@ export const listMySubmissions = (params?: {
   /** Период по дате создания сделки (YYYY-MM-DD, Asia/Dushanbe). */
   from?: string;
   to?: string;
+  /** Поиск: ФИО клиента, телефон (по цифрам), менеджер, программа. */
+  search?: string;
 }) =>
   api.get<SaleSubmission[]>('/submissions/mine', { params }).then((r) => r.data);
 
@@ -215,6 +217,8 @@ export const listAllSubmissions = (params?: {
   /** Период по дате создания сделки (YYYY-MM-DD, Asia/Dushanbe). */
   from?: string;
   to?: string;
+  /** Поиск: ФИО клиента, телефон (по цифрам), менеджер, программа. */
+  search?: string;
 }) => api.get<SaleSubmission[]>('/submissions', { params }).then((r) => r.data);
 
 export const listPendingPayments = (params?: {
@@ -225,6 +229,11 @@ export const listPendingPayments = (params?: {
    * (а на вкладке «На рассмотрении» их большинство) не нашлись бы.
    */
   partnerId?: string;
+  /** Период по ДАТЕ ОПЛАТЫ платежа (YYYY-MM-DD, Asia/Dushanbe). */
+  from?: string;
+  to?: string;
+  /** Поиск по сделке платежа: клиент, телефон, менеджер, программа. */
+  search?: string;
 }) => api.get<PendingPayment[]>('/submissions/pending-payments', { params }).then((r) => r.data);
 
 /**

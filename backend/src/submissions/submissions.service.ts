@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, InternalServerErro
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { dateRangeFilter } from '../common/query-date';
+import { likeLiteral, phoneDigitsPattern } from '../common/search';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ActivityService } from '../activity/activity.service';
 import {
@@ -1258,17 +1259,60 @@ export class SubmissionsService {
     return payment;
   }
 
+  /**
+   * Поиск по сделкам — одинаковый на всех вкладках экрана «Сделки»: ФИО
+   * клиента, его телефон, менеджер, программа. Ровно то, что написано в
+   * карточке списка.
+   *
+   * Клиент у сделки лежит в разных местах: существующий студент (имя и
+   * phones[]), новый клиент прямо в сделке (newStudentName/Phone) или заявка
+   * (applicationId / sourceApplicationId) — ищем по всем.
+   */
+  private async searchWhere(raw?: string): Promise<Prisma.SaleSubmissionWhereInput | null> {
+    const search = raw?.trim();
+    if (!search) return null;
+    const literal = likeLiteral(search);
+    const text = { contains: literal, mode: 'insensitive' as const };
+    const or: Prisma.SaleSubmissionWhereInput[] = [
+      { student: { fullName: text } },
+      { newStudentName: text },
+      { newStudentPhone: text },
+      { manager: { fullName: text } },
+      { program: { name: text } },
+    ];
+    // Номер — по одним цифрам, во всех местах, где он может лежать.
+    const pattern = phoneDigitsPattern(search);
+    if (pattern) {
+      const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT s.id FROM "SaleSubmission" s
+        LEFT JOIN "Student" st ON st.id = s."studentId"
+        LEFT JOIN "Application" a ON a.id = s."applicationId"
+        LEFT JOIN "Application" sa ON sa.id = s."sourceApplicationId"
+        WHERE regexp_replace(COALESCE(s."newStudentPhone", ''), '[^0-9]', '', 'g') LIKE ${pattern}
+           OR regexp_replace(COALESCE(a.phone, ''), '[^0-9]', '', 'g') LIKE ${pattern}
+           OR regexp_replace(COALESCE(sa.phone, ''), '[^0-9]', '', 'g') LIKE ${pattern}
+           OR EXISTS (
+             SELECT 1 FROM unnest(st.phones) AS ph
+             WHERE regexp_replace(ph, '[^0-9]', '', 'g') LIKE ${pattern}
+           )`;
+      if (rows.length) or.push({ id: { in: rows.map((r) => r.id) } });
+    }
+    return { OR: or };
+  }
+
   /** Список моих сделок (для менеджера). */
   async listMine(
     managerId: string,
-    opts: { status?: SubmissionStatus; from?: Date; to?: Date } = {},
+    opts: { status?: SubmissionStatus; from?: Date; to?: Date; search?: string } = {},
   ) {
     const createdAt = dateRangeFilter({ from: opts.from, to: opts.to });
+    const search = await this.searchWhere(opts.search);
     return this.prisma.saleSubmission.findMany({
       where: {
         managerId,
         ...(opts.status && { status: opts.status }),
         ...(createdAt ? { createdAt } : {}),
+        ...(search ? { AND: [search] } : {}),
       },
       include: {
         program: { select: { id: true, name: true, university: true } },
@@ -1291,12 +1335,18 @@ export class SubmissionsService {
     /** Период по дате создания сделки. */
     from?: Date;
     to?: Date;
+    /** Поиск: клиент, телефон, менеджер, программа (см. searchWhere). */
+    search?: string;
     /** Кто спрашивает — от этого зависит, приложим ли партнёрский блок. */
     viewer?: { role?: string | null; roles?: string[] | null; hasCustomRole?: boolean } | null;
   } = {}) {
     const where: any = {};
     const createdAt = dateRangeFilter({ from: opts.from, to: opts.to });
     if (createdAt) where.createdAt = createdAt;
+    // Через AND, а не OR на верхнем уровне: OR ниже уже занят фильтром
+    // по партнёру, и одно затёрло бы другое.
+    const search = await this.searchWhere(opts.search);
+    if (search) where.AND = [search];
     if (opts.status) where.status = opts.status;
     if (opts.managerId) where.managerId = opts.managerId;
     if (opts.paymentStatus) {
@@ -1367,12 +1417,27 @@ export class SubmissionsService {
   async listPendingPayments(opts: {
     /** Показать только платежи клиентов, закреплённых за этим партнёром. */
     partnerId?: string;
+    /**
+     * Период — по ДАТЕ ОПЛАТЫ (paidAt): карточка на этой вкладке — платёж,
+     * и дата, которую человек видит в ней, — именно дата оплаты. По умолчанию
+     * период пуст, и очередь видна целиком.
+     */
+    from?: Date;
+    to?: Date;
+    /** Поиск по сделке платежа: клиент, телефон, менеджер, программа. */
+    search?: string;
     /** Кто спрашивает — от этого зависит, приложим ли партнёрский блок. */
     viewer?: UserWithRoles | null;
   } = {}) {
     const where: Prisma.SubmissionPaymentWhereInput = {
       status: SubmissionPaymentStatus.PENDING,
     };
+    const paidAt = dateRangeFilter({ from: opts.from, to: opts.to });
+    if (paidAt) where.paidAt = paidAt;
+    const search = await this.searchWhere(opts.search);
+    // Сделку платежа ниже может сузить ещё и фильтр по партнёру — поэтому
+    // поиск кладём в AND платежа, а не в where.submission.
+    if (search) where.AND = [{ submission: search }];
 
     // Фильтр по партнёру — ровно тот же способ, что в listAll: клиент сделки
     // лежит в трёх разных полях (студент, заявка, заявка-источник), поэтому

@@ -22,6 +22,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { parseDate } from '../common/query-date';
+import { checkSearch } from '../common/search';
 import { SubmissionsService } from './submissions.service';
 import { InstallmentsService } from '../installments/installments.service';
 import { UpdatePaymentStageDto } from '../installments/dto/installments.dto';
@@ -85,6 +86,7 @@ export class SubmissionsController {
     // студентов и лидов, чтобы все списки CRM работали одинаково.
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('search') search?: string,
   ) {
     const validStatus = status && ['ACTIVE', 'COMPLETED', 'CANCELLED'].includes(status)
       ? (status as SubmissionStatus)
@@ -93,6 +95,7 @@ export class SubmissionsController {
       status: validStatus,
       from: parseDate(from, 'from'),
       to: parseDate(to, 'to', true),
+      search: checkSearch(search),
     });
   }
 
@@ -109,6 +112,7 @@ export class SubmissionsController {
     @Query('partnerId') partnerId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('search') search?: string,
   ) {
     // Доступ ограничен @Roles(FOUNDER, ADMIN) на уровне декоратора —
     // ACCOUNTANT/менеджеры до сюда не дойдут. Раньше здесь был fallback на
@@ -125,6 +129,7 @@ export class SubmissionsController {
       partnerId: partnerId || undefined,
       from: parseDate(from, 'from'),
       to: parseDate(to, 'to', true),
+      search: checkSearch(search),
       // Нужен, чтобы решить, прикладывать ли партнёрский блок к строкам.
       viewer: me,
     });
@@ -133,9 +138,19 @@ export class SubmissionsController {
   /** FOUNDER/ADMIN — pending платежи на одобрение. */
   @Get('pending-payments')
   @Roles(Role.FOUNDER, Role.ADMIN)
-  pending(@CurrentUser() me: any, @Query('partnerId') partnerId?: string) {
+  pending(
+    @CurrentUser() me: any,
+    @Query('partnerId') partnerId?: string,
+    // Период — по дате оплаты платежа (см. listPendingPayments).
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('search') search?: string,
+  ) {
     return this.svc.listPendingPayments({
       partnerId: partnerId || undefined,
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to', true),
+      search: checkSearch(search),
       // Нужен, чтобы решить, прикладывать ли партнёрский блок к строкам.
       viewer: me,
     });

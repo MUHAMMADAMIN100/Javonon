@@ -18,6 +18,7 @@ import Icon from '../Icon';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import ListTotal from '../components/ListTotal';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
 import { isElevated, isFounder } from '../lib/roles';
@@ -166,6 +167,19 @@ export default function Students() {
       })
     : items;
 
+  // Для счётчика «Найдено: N из M»: сколько всего без фильтров. «Мои/Все» —
+  // режим просмотра, «оплатившие» — само определение студента: это не
+  // фильтры, в общем числе они остаются.
+  const narrowed =
+    !!stageFilter ||
+    Object.entries(filters).some(([k, v]) => k !== 'mine' && k !== 'paid' && v !== undefined && v !== '');
+  const allFilters = { mine: scope === 'mine', paid: true };
+  const totalQuery = useQuery({
+    queryKey: keys.students.list(allFilters),
+    queryFn: () => listStudents(allFilters),
+    enabled: narrowed,
+  });
+
   // Кламп страницы под сократившийся список. Только после успешной
   // загрузки: пока данных нет, filteredItems пуст, и наивный кламп сбросил
   // бы восстановленный из URL ?page=3 в единицу. replace — коррекция, а не
@@ -273,6 +287,13 @@ export default function Students() {
       transition={{ duration: 0.3 }}
     >
       <div className="card-header is-titleless">
+        <ListTotal
+          noun="students"
+          found={filteredItems.length}
+          total={totalQuery.data?.length}
+          filtered={narrowed}
+          testId="students-total"
+        />
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && (
             <div className="scope-switch">

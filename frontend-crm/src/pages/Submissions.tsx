@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import CrmSelect from '../components/CrmSelect';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
@@ -21,7 +21,9 @@ import {
 import Icon from '../Icon';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
-import { dateParam, useUrlListState } from '../lib/useUrlListState';
+import SearchField, { useUrlSearch } from '../components/SearchField';
+import ListTotal, { type ListNoun } from '../components/ListTotal';
+import { dateParam, enumParam, ignoredParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { absFileUrl as absUrl } from '../lib/fileUrl';
 
 const STATUS_COLOR: Record<SubmissionStatus, string> = {
@@ -36,6 +38,11 @@ const PAYMENT_STATUS_COLOR: Record<string, string> = {
   REJECTED: '#ef4444',
 };
 
+type Tab = 'mine' | 'pending' | 'all' | 'approved';
+
+/** Фильтры экрана — одни на все вкладки. */
+type DealFilters = { partner: string; from: string; to: string; search: string };
+
 export default function Submissions() {
   const me = useAuth((s) => s.user);
   const { t } = useT();
@@ -43,18 +50,40 @@ export default function Submissions() {
   const qc = useQueryClient();
   const founder = isFounder(me);
 
-  const [tab, setTab] = useState<'mine' | 'pending' | 'all' | 'approved'>(founder ? 'pending' : 'mine');
-  // Период общий на все вкладки: переключая «Мои» → «Все», человек ждёт,
-  // что выбранный период останется, а не сбросится.
-  const { values: period, setValue: setPeriodValue, reset: resetPeriod } = useUrlListState({
+  // Вкладка и фильтры — в ссылке: из карточки сделки возвращаются кнопкой
+  // «назад», и открыться должна та же вкладка с той же выборкой. Фильтры
+  // ОБЩИЕ на все вкладки: переключая «На рассмотрении» → «Все», человек
+  // ждёт, что партнёр, период и поиск останутся.
+  const { values, setValue, reset } = useUrlListState({
+    tab: founder
+      ? enumParam<Tab, Tab>(['pending', 'approved', 'all'], 'pending')
+      : enumParam<Tab, Tab>(['mine'], 'mine'),
+    // id партнёра белым списком не проверить (список грузится асинхронно) —
+    // ограничиваем длину, как в остальных списках.
+    partner: founder ? stringParam('', 64) : ignoredParam(''),
     from: dateParam(),
     to: dateParam(),
+    search: stringParam('', 200),
   });
-  const range = { from: period.from, to: period.to };
+  const { tab } = values;
+  const f: DealFilters = { partner: values.partner, from: values.from, to: values.to, search: values.search };
+  const narrowed = !!(f.partner || f.from || f.to || f.search);
+
+  const setUrlSearch = useCallback((v: string) => setValue('search', v), [setValue]);
+  const { input: searchInput, setInput: setSearchInput, clear: clearSearch } = useUrlSearch(values.search, setUrlSearch);
+
+  // Партнёры — для фильтра и для подписи плашки. Эндпоинт админский, поэтому
+  // только основателю (ему же видны и вкладки со всеми сделками).
+  const partnersQuery = useQuery({
+    queryKey: ['admin', 'partners'],
+    queryFn: () => adminListPartners(),
+    enabled: founder,
+  });
+  const partners = partnersQuery.data ?? [];
 
   // Realtime: бэкенд эмитит submission:new (staff), submission:payment-new (staff),
   // submission:reviewed (staff), submission:approved/rejected (юзеру-менеджеру).
-  // Инвалидируем весь префикс ['submissions'] — он покрывает 'mine'/'all'/'pending'.
+  // Инвалидируем весь префикс ['submissions'] — он покрывает все вкладки.
   useRealtime({
     'submission:new': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
     'submission:payment-new': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
@@ -63,37 +92,25 @@ export default function Submissions() {
     'submission:rejected': () => qc.invalidateQueries({ queryKey: ['submissions'] }),
   });
 
+  const tabBtn = (key: Tab, label: string) => (
+    <button
+      className={`btn btn-sm ${tab === key ? 'btn-primary' : 'btn-secondary'}`}
+      data-testid={`deals-tab-${key}`}
+      onClick={() => setValue('tab', key)}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {!founder && (
-          <button
-            className={`btn btn-sm ${tab === 'mine' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setTab('mine')}
-          >
-            Мои сделки
-          </button>
-        )}
+        {!founder && tabBtn('mine', 'Мои сделки')}
         {founder && (
           <>
-            <button
-              className={`btn btn-sm ${tab === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setTab('pending')}
-            >
-              На рассмотрении
-            </button>
-            <button
-              className={`btn btn-sm ${tab === 'approved' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setTab('approved')}
-            >
-              Одобренные
-            </button>
-            <button
-              className={`btn btn-sm ${tab === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setTab('all')}
-            >
-              Все сделки
-            </button>
+            {tabBtn('pending', 'На рассмотрении')}
+            {tabBtn('approved', 'Одобренные')}
+            {tabBtn('all', 'Все сделки')}
           </>
         )}
         <div style={{ flex: 1 }} />
@@ -102,186 +119,245 @@ export default function Submissions() {
         </button>
       </div>
 
-      {/* Платежи на одобрение периодом не режем: там важно видеть ВСЁ, что
-          ждёт решения, иначе платёж вне периода тихо выпадет из очереди. */}
-      {tab !== 'pending' && (
-        <>
-          <div className="filters">
-            <PeriodFilter
-              from={period.from}
-              to={period.to}
-              onFrom={(v) => setPeriodValue('from', v)}
-              onTo={(v) => setPeriodValue('to', v)}
-            />
-            {(period.from || period.to) && (
-              <button type="button" className="btn btn-ghost" onClick={() => resetPeriod(['from', 'to'])}>
-                <Icon name="close" size={14} /> {t('common.reset')}
-              </button>
-            )}
-          </div>
-          <ActiveFilterChips
-            chips={
-              period.from || period.to
-                ? [{
-                    key: 'period',
-                    label: period.from && period.to
-                      ? `${t('list.chip.period')}: ${fmtDay(period.from)} — ${fmtDay(period.to)}`
-                      : period.from
-                        ? `${t('list.chip.periodFrom')} ${fmtDay(period.from)}`
-                        : `${t('list.chip.periodTo')} ${fmtDay(period.to)}`,
-                    onClear: () => resetPeriod(['from', 'to']),
-                  }]
-                : []
-            }
-          />
-        </>
-      )}
+      {/* Одна строка фильтров на все вкладки. На «На рассмотрении» период —
+          по дате оплаты (в карточке платежа видна именно она), на остальных —
+          по дате создания сделки. По умолчанию период пуст, и очередь на
+          одобрение видна целиком. */}
+      <div className="filters">
+        {founder && partners.length > 0 && (
+          <CrmSelect
+            className="crm-select"
+            value={f.partner}
+            onChange={(e) => setValue('partner', e.target.value)}
+            style={{ ['--filter-w' as string]: '220px' }}
+            title={t('deals.partner.all')}
+            data-testid="deals-filter-partner"
+          >
+            <option value="">{t('deals.partner.all')}</option>
+            {partners.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.fullName} · {p.referralCode}
+              </option>
+            ))}
+          </CrmSelect>
+        )}
+        <PeriodFilter
+          from={f.from}
+          to={f.to}
+          onFrom={(v) => setValue('from', v)}
+          onTo={(v) => setValue('to', v)}
+        />
+        <SearchField
+          value={searchInput}
+          onChange={setSearchInput}
+          onClear={clearSearch}
+          placeholder={t('deals.search.placeholder')}
+          testId="deals-search"
+        />
+        {(narrowed || searchInput) && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              // Поле гасим сразу: недобежавший дебаунс иначе вернул бы
+              // текст обратно в ссылку.
+              setSearchInput('');
+              reset(['partner', 'from', 'to', 'search']);
+            }}
+          >
+            <Icon name="close" size={14} /> {t('common.reset')}
+          </button>
+        )}
+      </div>
+      <ActiveFilterChips
+        chips={[
+          ...(f.search
+            ? [{ key: 'search', label: `${t('list.chip.search')}: «${f.search}»`, onClear: clearSearch }]
+            : []),
+          ...(f.partner
+            ? [{
+                key: 'partner',
+                label: `${t('list.chip.partner')}: ${partners.find((p) => p.id === f.partner)?.fullName ?? '…'}`,
+                onClear: () => reset(['partner']),
+              }]
+            : []),
+          ...(f.from || f.to
+            ? [{
+                key: 'period',
+                label: f.from && f.to
+                  ? `${t('list.chip.period')}: ${fmtDay(f.from)} — ${fmtDay(f.to)}`
+                  : f.from
+                    ? `${t('list.chip.periodFrom')} ${fmtDay(f.from)}`
+                    : `${t('list.chip.periodTo')} ${fmtDay(f.to)}`,
+                onClear: () => reset(['from', 'to']),
+              }]
+            : []),
+        ]}
+      />
 
-      {tab === 'mine' && <MySubmissions range={range} />}
-      {tab === 'pending' && <PendingPayments />}
-      {tab === 'approved' && <ApprovedSubmissions range={range} />}
-      {tab === 'all' && <AllSubmissions range={range} />}
+      {tab === 'mine' && <MySubmissions f={f} narrowed={narrowed} />}
+      {tab === 'pending' && <PendingPayments f={f} narrowed={narrowed} />}
+      {tab === 'approved' && <ApprovedSubmissions f={f} narrowed={narrowed} />}
+      {tab === 'all' && <AllSubmissions f={f} narrowed={narrowed} />}
     </>
   );
 }
 
-type Range = { from: string; to: string };
-
-function MySubmissions({ range }: { range: Range }) {
-  const query = useQuery({
-    queryKey: ['submissions', 'mine', range.from, range.to],
-    queryFn: () => listMySubmissions({ from: range.from || undefined, to: range.to || undefined }),
-  });
-  if (query.isLoading) return <Loading />;
-  const items = query.data || [];
-  if (items.length === 0) {
-    return <Empty>У вас пока нет сделок. Нажмите «Новая сделка», чтобы оформить первую.</Empty>;
-  }
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {items.map((s) => <SubmissionCard key={s.id} s={s} />)}
-    </div>
-  );
+/** Параметры запроса из фильтров экрана; пустые поля не шлём. */
+function params(f: DealFilters) {
+  return {
+    partnerId: f.partner || undefined,
+    from: f.from || undefined,
+    to: f.to || undefined,
+    search: f.search || undefined,
+  };
 }
 
 /**
- * Выпадающий фильтр «партнёр». Нужен ровно для одной задачи: перед выплатой
- * открыть список сделок конкретного партнёра и посчитать, сколько ему должны.
- *
- * Список партнёров тянем только когда фильтр вообще показывается — эндпоинт
- * админский, и дёргать его на вкладках, где он не нужен, незачем.
+ * Список вкладки: счётчик, загрузка, пусто/ничего не найдено, карточки. Один
+ * на все вкладки, чтобы они выглядели и вели себя одинаково.
  */
-function PartnerFilter({
-  value,
-  onChange,
+function DealsList<T>({
+  noun,
+  query,
+  totalQuery,
+  narrowed,
+  emptyText,
+  render,
 }: {
-  value: string;
-  onChange: (v: string) => void;
+  noun: ListNoun;
+  query: { data?: T[]; isLoading: boolean; isPlaceholderData: boolean };
+  totalQuery: { data?: T[] };
+  narrowed: boolean;
+  emptyText: string;
+  render: (item: T) => ReactNode;
 }) {
-  const { data: partners = [] } = useQuery({
-    queryKey: ['admin', 'partners'],
-    queryFn: () => adminListPartners(),
-  });
-  if (partners.length === 0) return null;
+  const { t } = useT();
+  const items = query.data ?? [];
+  if (query.isLoading) return <Loading />;
   return (
-    <CrmSelect
-      className="crm-select"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      style={{ maxWidth: 260 }}
-    >
-      <option value="">Все партнёры</option>
-      {partners.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.fullName} · {p.referralCode}
-        </option>
-      ))}
-    </CrmSelect>
+    <>
+      <div className="list-total-row">
+        <ListTotal
+          noun={noun}
+          found={items.length}
+          total={totalQuery.data?.length}
+          filtered={narrowed}
+          testId="deals-total"
+        />
+      </div>
+      {items.length === 0 ? (
+        // Под фильтром «пока нет» было бы неправдой: сделки есть, не нашлись эти.
+        <Empty>{narrowed ? t('common.empty') : emptyText}</Empty>
+      ) : (
+        <div
+          className={query.isPlaceholderData ? 'list-stale' : undefined}
+          style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+          data-testid="deals-list"
+        >
+          {items.map(render)}
+        </div>
+      )}
+    </>
   );
 }
 
-function AllSubmissions({ range }: { range: Range }) {
-  const [partnerId, setPartnerId] = useState('');
+function MySubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
+  const p = params(f);
   const query = useQuery({
-    queryKey: ['submissions', 'all', partnerId, range.from, range.to],
-    queryFn: () => listAllSubmissions({
-      take: 200,
-      partnerId: partnerId || undefined,
-      from: range.from || undefined,
-      to: range.to || undefined,
-    }),
+    queryKey: ['submissions', 'mine', p],
+    queryFn: () => listMySubmissions({ from: p.from, to: p.to, search: p.search }),
+    placeholderData: keepPreviousData,
   });
-  const items = query.data || [];
+  const totalQuery = useQuery({
+    queryKey: ['submissions', 'mine', {}],
+    queryFn: () => listMySubmissions(),
+    enabled: narrowed,
+  });
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <PartnerFilter value={partnerId} onChange={setPartnerId} />
-      {query.isLoading ? (
-        <Loading />
-      ) : items.length === 0 ? (
-        <Empty>{partnerId ? 'У этого партнёра сделок нет.' : 'Сделок пока нет.'}</Empty>
-      ) : (
-        items.map((s) => <SubmissionCard key={s.id} s={s} showManager />)
-      )}
-    </div>
+    <DealsList
+      noun="deals"
+      query={query}
+      totalQuery={narrowed ? totalQuery : query}
+      narrowed={narrowed}
+      emptyText="У вас пока нет сделок. Нажмите «Новая сделка», чтобы оформить первую."
+      render={(s: SaleSubmission) => <SubmissionCard key={s.id} s={s} />}
+    />
   );
 }
 
-function ApprovedSubmissions({ range }: { range: Range }) {
-  const [partnerId, setPartnerId] = useState('');
+function AllSubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
+  const p = params(f);
   const query = useQuery({
-    queryKey: ['submissions', 'approved', partnerId, range.from, range.to],
-    queryFn: () =>
-      listAllSubmissions({
-        firstApproved: true,
-        take: 200,
-        partnerId: partnerId || undefined,
-        from: range.from || undefined,
-        to: range.to || undefined,
-      }),
+    queryKey: ['submissions', 'all', p],
+    queryFn: () => listAllSubmissions({ take: 200, ...p }),
+    placeholderData: keepPreviousData,
   });
-  const items = query.data || [];
+  const totalQuery = useQuery({
+    queryKey: ['submissions', 'all', {}],
+    queryFn: () => listAllSubmissions({ take: 200 }),
+    enabled: narrowed,
+  });
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <PartnerFilter value={partnerId} onChange={setPartnerId} />
-      {query.isLoading ? (
-        <Loading />
-      ) : items.length === 0 ? (
-        <Empty>
-          {partnerId ? 'У этого партнёра одобренных сделок нет.' : 'Одобренных сделок пока нет.'}
-        </Empty>
-      ) : (
-        items.map((s) => <SubmissionCard key={s.id} s={s} showManager />)
-      )}
-    </div>
+    <DealsList
+      noun="deals"
+      query={query}
+      totalQuery={narrowed ? totalQuery : query}
+      narrowed={narrowed}
+      emptyText="Сделок пока нет."
+      render={(s: SaleSubmission) => <SubmissionCard key={s.id} s={s} showManager />}
+    />
   );
 }
 
-function PendingPayments() {
-  // Тот же фильтр, что на «Всех» и «Одобренных», и по той же причине: перед
-  // выплатой партнёру нужно видеть не только уже одобренные сделки, но и то,
-  // что вот-вот одобрят, — иначе сумма к выплате считается по неполной
-  // картине.
-  const [partnerId, setPartnerId] = useState('');
+function ApprovedSubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
+  const p = params(f);
   const query = useQuery({
-    queryKey: ['submissions', 'pending', partnerId],
-    queryFn: () => listPendingPayments({ partnerId: partnerId || undefined }),
+    queryKey: ['submissions', 'approved', p],
+    queryFn: () => listAllSubmissions({ firstApproved: true, take: 200, ...p }),
+    placeholderData: keepPreviousData,
   });
-  const items = query.data || [];
+  const totalQuery = useQuery({
+    queryKey: ['submissions', 'approved', {}],
+    queryFn: () => listAllSubmissions({ firstApproved: true, take: 200 }),
+    enabled: narrowed,
+  });
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <PartnerFilter value={partnerId} onChange={setPartnerId} />
-      {query.isLoading ? (
-        <Loading />
-      ) : items.length === 0 ? (
-        <Empty>
-          {partnerId
-            ? 'У этого партнёра платежей на рассмотрении нет.'
-            : 'Нет платежей на рассмотрении.'}
-        </Empty>
-      ) : (
-        items.map((p) => <PendingPaymentCard key={p.id} p={p} />)
-      )}
-    </div>
+    <DealsList
+      noun="deals"
+      query={query}
+      totalQuery={narrowed ? totalQuery : query}
+      narrowed={narrowed}
+      emptyText="Одобренных сделок пока нет."
+      render={(s: SaleSubmission) => <SubmissionCard key={s.id} s={s} showManager />}
+    />
+  );
+}
+
+function PendingPayments({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
+  // Партнёр здесь нужен по той же причине, что на «Всех» и «Одобренных»:
+  // перед выплатой партнёру надо видеть и то, что вот-вот одобрят, — иначе
+  // сумма к выплате считается по неполной картине.
+  const p = params(f);
+  const query = useQuery({
+    queryKey: ['submissions', 'pending', p],
+    queryFn: () => listPendingPayments(p),
+    placeholderData: keepPreviousData,
+  });
+  const totalQuery = useQuery({
+    queryKey: ['submissions', 'pending', {}],
+    queryFn: () => listPendingPayments(),
+    enabled: narrowed,
+  });
+  return (
+    <DealsList
+      noun="payments"
+      query={query}
+      totalQuery={narrowed ? totalQuery : query}
+      narrowed={narrowed}
+      emptyText="Нет платежей на рассмотрении."
+      render={(pp: PendingPayment) => <PendingPaymentCard key={pp.id} p={pp} />}
+    />
   );
 }
 

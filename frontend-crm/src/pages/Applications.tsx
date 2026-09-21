@@ -21,6 +21,7 @@ import Icon from '../Icon';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import ListTotal from '../components/ListTotal';
 import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
 import { keys } from '../lib/queryKeys';
@@ -157,6 +158,16 @@ export default function Applications() {
   const items = appsQuery.data ?? [];
   const loading = appsQuery.isLoading;
 
+  // Для счётчика «Найдено: N из M»: сколько всего без фильтров. «Мои/Все» —
+  // режим просмотра, а не фильтр, поэтому он в общем числе остаётся.
+  const narrowed = Object.entries(filters).some(([k, v]) => k !== 'mine' && v !== undefined && v !== '');
+  const allFilters = { mine: scope === 'mine' };
+  const totalQuery = useQuery({
+    queryKey: keys.applications.list(allFilters),
+    queryFn: () => listApplications(allFilters),
+    enabled: narrowed,
+  });
+
   const usersQuery = useQuery({
     queryKey: keys.users.list(),
     queryFn: () => listUsers(),
@@ -217,6 +228,13 @@ export default function Applications() {
       transition={{ duration: 0.3 }}
     >
       <div className="card-header is-titleless">
+        <ListTotal
+          noun="applications"
+          found={items.length}
+          total={totalQuery.data?.length}
+          filtered={narrowed}
+          testId="applications-total"
+        />
         {isAdmin && (
           <div className="scope-switch">
             <button

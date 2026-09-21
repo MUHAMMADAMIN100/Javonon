@@ -2504,21 +2504,21 @@ select.input-error {
 .filters-search input {
   width: 100%;
 }
-/* Поиск лидов стоит В строке фильтров и забирает всё место справа. */
-.filters > .leads-search {
+/* Поиск В строке фильтров (лиды, сделки — components/SearchField) забирает всё место справа. */
+.filters > .list-search {
   position: relative;
   display: flex;
   flex: 1 1 240px;
   min-width: 200px;
 }
-.leads-search .crm-input {
+.list-search .crm-input {
   height: 100%;
   padding-left: 38px;
   padding-right: 36px;
 }
 /* Свой крестик вместо браузерного — у Chrome и Safari он разный. */
-.leads-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
-.leads-search-icon {
+.list-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.list-search-icon {
   position: absolute;
   left: 12px;
   top: 50%;
@@ -2526,7 +2526,7 @@ select.input-error {
   color: var(--text-light);
   pointer-events: none;
 }
-.leads-search-clear {
+.list-search-clear {
   position: absolute;
   right: 6px;
   top: 50%;
@@ -2542,20 +2542,20 @@ select.input-error {
   color: var(--text-soft);
   cursor: pointer;
 }
-.leads-search-clear:hover { background-color: var(--bg-soft); color: var(--text); }
+.list-search-clear:hover { background-color: var(--bg-soft); color: var(--text); }
 /* Пока едет ответ на новый поиск, на экране прошлые строки — приглушаем. */
-.leads-list-stale { opacity: 0.55; transition: opacity .15s; }
+.list-stale { opacity: 0.55; transition: opacity .15s; }
 @media (max-width: 1024px) {
   /* На телефоне и планшете поиск — первой строкой на всю ширину,
      фильтры под ним по два в ряд. */
-  .filters > .leads-search {
+  .filters > .list-search {
     order: -1;
     flex: 1 1 100% !important;
     min-width: 0;
   }
   /* Общее мобильное правило ставит полям padding: 8px 12px !important —
      без этого текст заезжал под лупу. */
-  .filters > .leads-search .crm-input {
+  .filters > .list-search .crm-input {
     padding-left: 36px !important;
     padding-right: 34px !important;
   }
@@ -5837,8 +5837,23 @@ input[type="checkbox"].crm-checkbox:indeterminate {
    «Мои/Все» — только для руководства). Пустая полоса над фильтрами выглядит
    как недогрузившийся блок, поэтому её просто нет. */
 .card-header.is-titleless:empty,
-.card-header.is-titleless:not(:has(button, a, input, select, .scope-switch)) {
+.card-header.is-titleless:not(:has(button, a, input, select, .scope-switch, .list-total)) {
   display: none;
+}
+/* Счётчик списка (components/ListTotal) — в левом углу шапки, всё
+   остальное в шапке прижато вправо. */
+.list-total {
+  margin-right: auto;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+/* Счётчик над карточками — там, где шапки-карточки нет (сделки). */
+.list-total-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 /* =====================================================================
