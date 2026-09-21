@@ -34,6 +34,7 @@ import Icon from '../Icon';
 import CrmDatePicker from '../components/CrmDatePicker';
 import PartnerAttributionCard from '../components/PartnerAttributionCard';
 import PaymentStagesSection from '../components/PaymentStagesSection';
+import BackButton from '../components/BackButton';
 import { absFileUrl as absUrl } from '../lib/fileUrl';
 import { keys } from '../lib/queryKeys';
 import { useT } from '../lib/i18n';
@@ -163,7 +164,14 @@ export default function SubmissionDetail() {
   );
 
   if (query.isLoading) return <div className="card" style={{ padding: 24 }}>Загружаем…</div>;
-  if (!s) return <div className="card" style={{ padding: 24 }}>Сделка не найдена</div>;
+  if (!s) {
+    return (
+      <>
+        <BackButton fallback="/submissions" />
+        <div className="card" style={{ padding: 24 }}>Сделка не найдена</div>
+      </>
+    );
+  }
 
   const studentName = s.student?.fullName || s.newStudentName || '—';
   const totalPaid = s.payments.filter((p) => p.status === 'APPROVED').reduce((sum, p) => sum + p.amount, 0);
@@ -208,11 +216,7 @@ export default function SubmissionDetail() {
 
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
-        <button className="btn btn-secondary" onClick={() => navigate('/submissions')}>
-          <Icon name="arrow_back" size={16} /> Назад к списку
-        </button>
-      </div>
+      <BackButton fallback="/submissions" />
 
       <motion.div
         className="card"

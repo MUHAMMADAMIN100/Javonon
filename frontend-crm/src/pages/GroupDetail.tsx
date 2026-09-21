@@ -11,6 +11,7 @@ import { keys } from '../lib/queryKeys';
 import { tjFormatDate, tjFormatFull, tjFormatTime } from '../lib/tjTime';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
+import BackButton from '../components/BackButton';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import ClassSessionModal from '../components/ClassSessionModal';
 import {
@@ -104,12 +105,12 @@ export default function GroupDetail() {
   if (query.isLoading) return <Loading />;
   if (query.isError || !g) {
     return (
-      <div className="card" style={{ padding: 28 }}>
-        <button className="btn btn-secondary" onClick={() => navigate('/groups')}>
-          <Icon name="arrow_back" size={16} /> {t('groups.back')}
-        </button>
-        <h2 style={{ marginTop: 16 }}>{t('groups.notFound')}</h2>
-      </div>
+      <>
+        <BackButton fallback="/groups" />
+        <div className="card" style={{ padding: 28 }}>
+          <h2>{t('groups.notFound')}</h2>
+        </div>
+      </>
     );
   }
 
@@ -135,11 +136,7 @@ export default function GroupDetail() {
 
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
-        <button className="btn btn-secondary" onClick={() => navigate('/groups')}>
-          <Icon name="arrow_back" size={16} /> {t('groups.back')}
-        </button>
-      </div>
+      <BackButton fallback="/groups" />
 
       <motion.div
         className="card"

@@ -21,6 +21,7 @@ import { listPrograms } from '../api/programs';
 import type { Student } from '../api/types';
 import Icon from '../Icon';
 import CrmDatePicker from '../components/CrmDatePicker';
+import BackButton from '../components/BackButton';
 import { useT } from '../lib/i18n';
 
 type Mode = 'existing' | 'new';
@@ -312,6 +313,7 @@ export default function SubmissionForm() {
 
   return (
     <>
+      <BackButton fallback="/submissions" />
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">{t('eyebrow.salesNew')}</span>
         <h2 className="crm-section-title">Новая сделка</h2>

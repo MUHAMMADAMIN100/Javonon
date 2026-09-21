@@ -79,7 +79,7 @@ export default function PartnerDetail() {
   if (detailQuery.isError || !detailQuery.data) {
     return (
       <div>
-        <BackButton fallback="/partners" label={t('partners.detail.back')} />
+        <BackButton fallback="/partners" />
         <div className="card" style={{ padding: 24 }}>
           {t('common.error')}
         </div>
@@ -115,7 +115,7 @@ export default function PartnerDetail() {
 
   return (
     <div>
-      <BackButton fallback="/partners" label={t('partners.detail.back')} />
+      <BackButton fallback="/partners" />
 
       {/* Header card: name + status + email + phone */}
       <div className="card" style={{ marginTop: 12 }}>

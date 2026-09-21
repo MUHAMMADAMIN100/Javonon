@@ -11,6 +11,7 @@ import {
 import { DIRECTION_LABEL } from '../api/types';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
+import BackButton from '../components/BackButton';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { MiniMarkdown } from '../lib/miniMarkdown';
 import InstallmentTemplateSection from '../components/InstallmentTemplateSection';
@@ -56,10 +57,12 @@ export default function ProgramDetail() {
   if (query.isLoading) return <Loading />;
   if (query.isError || !p) {
     return (
-      <motion.div className="card" style={{ padding: 28 }}>
-        <Link to="/programs">{t('programs.cta.back')}</Link>
-        <h2 style={{ marginTop: 16 }}>Программа не найдена</h2>
-      </motion.div>
+      <>
+        <BackButton fallback="/programs" />
+        <motion.div className="card" style={{ padding: 28 }}>
+          <h2>Программа не найдена</h2>
+        </motion.div>
+      </>
     );
   }
 
@@ -69,11 +72,9 @@ export default function ProgramDetail() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <BackButton fallback="/programs" />
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>
-        <Link to="/programs" style={{ fontSize: 13, color: 'var(--text-soft)' }}>
-          {t('programs.cta.back')}
-        </Link>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 240 }}>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, marginBottom: 6 }}>{p.name}</h1>
             <div style={{ fontSize: 18, color: 'var(--text-soft)' }}>{p.university}</div>

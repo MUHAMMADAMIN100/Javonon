@@ -19,11 +19,14 @@ export default function BackButton({ fallback = '/', label }: Props) {
   const text = label ?? t('common.back').replace(/^[←\s]+/, '');
 
   const onClick = () => {
-    // window.history.length > 1 не всегда надёжно (включает первую загрузку),
-    // но если есть state.idx > 0 — точно есть куда назад. Берём простой
-    // эвристический вариант: пробуем navigate(-1), если страница не сменится
-    // — браузер сам проигнорирует.
-    if (window.history.length > 1) {
+    // Назад по истории — только если до этой страницы были шаги ВНУТРИ CRM:
+    // тогда вернёмся в список с теми же фильтрами, поиском и вкладкой (они в
+    // ссылке). react-router нумерует свои записи в history.state.idx; 0 —
+    // первая страница CRM в этой вкладке. window.history.length тут не
+    // годится: он считает и чужие сайты, и «Назад» уводил из CRM туда,
+    // откуда человек пришёл по ссылке.
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (idx > 0) {
       navigate(-1);
     } else {
       navigate(fallback);

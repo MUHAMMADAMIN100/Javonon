@@ -30,6 +30,7 @@ import { useAuth } from '../store/auth';
 import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import BackButton from '../components/BackButton';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -107,9 +108,13 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
     { param: 'sortReports' },
   );
 
-  if (isLoading) return <div className="card" style={{ padding: 24 }}>Загружаем…</div>;
+  // «Назад» — на карточке сотрудника; «Мой профиль» открывают из меню,
+  // возвращаться там некуда.
+  const back = userId !== 'me' ? <BackButton fallback="/users" /> : null;
+
+  if (isLoading) return <>{back}<div className="card" style={{ padding: 24 }}>Загружаем…</div></>;
   if (error || !data) {
-    return <div className="card" style={{ padding: 24 }}>Не удалось загрузить профиль</div>;
+    return <>{back}<div className="card" style={{ padding: 24 }}>Не удалось загрузить профиль</div></>;
   }
 
   const { user, salary, penalties, sales, attendance, kpi, documents, dailyReports } = data;
@@ -122,6 +127,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
   return (
     <>
+      {back}
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">
           {isAdmin ? `${t('eyebrow.team')} · ${displayRoleLabel(user as any).toUpperCase()}` : t('eyebrow.profile')}
