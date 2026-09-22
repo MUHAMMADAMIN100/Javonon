@@ -50,11 +50,11 @@ export default function Lms() {
     mutationFn: createCourse,
     invalidate: [keys.lms.all],
     onSuccess: (c) => {
-      toast('Курс создан', 'success');
+      toast(t('lms.toast.created'), 'success');
       setShowNew(false);
       setSelectedId(c.id);
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   // Toggle publish — оптимистично переключаем флаг.
@@ -63,8 +63,8 @@ export default function Lms() {
     queryKey: coursesKey,
     applyOptimistic: (cur, c) => optimistic.updateById(cur, c.id, { published: !c.published } as Partial<Course>),
     invalidateAlso: [keys.lms.all],
-    onSuccess: (_d, c) => toast(c.published ? 'Снято с публикации' : 'Опубликовано', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: (_d, c) => toast(c.published ? t('lms.toast.unpublished') : t('lms.toast.published'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const deleteCourseMut = useOptimisticMutation<unknown, string, Course[]>({
@@ -73,10 +73,10 @@ export default function Lms() {
     applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
     invalidateAlso: [keys.lms.all],
     onSuccess: () => {
-      toast('Курс удалён', 'success');
+      toast(t('lms.toast.deleted'), 'success');
       setSelectedId(null);
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const onCreateCourse = (data: { title: string; description?: string }) => {
@@ -88,7 +88,7 @@ export default function Lms() {
   const onDeleteCourse = async (c: Course) => {
     const ok = await confirm({
       title: t('lms.confirm.deleteCourse'),
-      message: `«${c.title}» — все уроки и прогресс будут удалены`,
+      message: t('lms.deleteCourse.message').replace('{name}', c.title),
       danger: true,
       confirmText: t('common.delete'),
     });
@@ -264,14 +264,14 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
 
   const saveMeta = async () => {
     await updateCourse(course.id, { title, description });
-    toast('Сохранено', 'success');
+    toast(t('toast.saved'), 'success');
     setEditingMeta(false);
     onChange();
   };
 
   const onAddLesson = async (data: { title: string; content?: string; videoUrl?: string }) => {
     await addLesson(course.id, data);
-    toast('Урок добавлен', 'success');
+    toast(t('lms.toast.lessonAdded'), 'success');
     setShowLessonForm(false);
     onChange();
   };
@@ -285,13 +285,13 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
     });
     if (!ok) return;
     await deleteLesson(l.id);
-    toast('Урок удалён', 'success');
+    toast(t('lms.toast.lessonDeleted'), 'success');
     onChange();
   };
 
   const onSaveLesson = async (l: Lesson) => {
     await updateLesson(l.id, { title: l.title, content: l.content || '', videoUrl: l.videoUrl || '' });
-    toast('Сохранено', 'success');
+    toast(t('toast.saved'), 'success');
     setEditingLesson(null);
     onChange();
   };
@@ -303,16 +303,16 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
           {editingMeta ? (
             <>
               <div className="form-group">
-                <label>Название</label>
+                <label>{t('common.name')}</label>
                 <input className="crm-input" value={title} onChange={(e) => setTitle(e.target.value)} />
               </div>
               <div className="form-group">
-                <label>Описание</label>
+                <label>{t('common.description')}</label>
                 <textarea className="crm-textarea" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn btn-sm btn-secondary" onClick={() => { setEditingMeta(false); setTitle(course.title); setDescription(course.description || ''); }}>Отмена</button>
-                <button className="btn btn-sm btn-primary" onClick={saveMeta}>Сохранить</button>
+                <button className="btn btn-sm btn-secondary" onClick={() => { setEditingMeta(false); setTitle(course.title); setDescription(course.description || ''); }}>{t('common.cancel')}</button>
+                <button className="btn btn-sm btn-primary" onClick={saveMeta}>{t('common.save')}</button>
               </div>
             </>
           ) : (
@@ -341,10 +341,10 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
         {isAdmin && !editingMeta && (
           <div className="lms-course-actions" style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
             <button className="btn btn-sm btn-secondary" onClick={() => setEditingMeta(true)}>
-              <Icon name="edit" size={14} /> Изменить
+              <Icon name="edit" size={14} /> {t('common.edit')}
             </button>
             <button className="btn btn-sm btn-secondary" onClick={onTogglePublish}>
-              {course.published ? 'Снять' : 'Опубликовать'}
+              {course.published ? t('lms.unpublish') : t('lms.publish')}
             </button>
             <button className="btn btn-sm btn-danger" onClick={onDelete}>
               <Icon name="delete" size={14} />
@@ -367,10 +367,10 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
           letterSpacing: '0.12em',
           color: 'var(--text-soft)',
           textTransform: 'uppercase',
-        }}>Уроки · {course.lessons.length}</div>
+        }}>{t('lms.lessonsTitle')} · {course.lessons.length}</div>
         {isAdmin && (
           <button className="btn btn-sm btn-primary" data-testid="lms-lesson-new" onClick={() => setShowLessonForm((v) => !v)}>
-            <Icon name="add" size={14} /> Добавить урок
+            <Icon name="add" size={14} /> {t('lms.addLesson')}
           </button>
         )}
       </div>
@@ -430,7 +430,7 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
                       marginTop: 6,
                       display: 'inline-block',
                     }}>
-                      <Icon name="play_circle" size={12} style={{ verticalAlign: 'middle' }} /> Видео
+                      <Icon name="play_circle" size={12} style={{ verticalAlign: 'middle' }} /> {t('lms.video')}
                     </a>
                   )}
                 </>
@@ -457,6 +457,7 @@ function NewLessonForm({ onSubmit, onCancel }: {
   onSubmit: (data: { title: string; content?: string; videoUrl?: string }) => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
@@ -466,20 +467,20 @@ function NewLessonForm({ onSubmit, onCancel }: {
       style={{ background: 'var(--bg-soft)', padding: 18, borderRadius: 14, border: '1px solid var(--border-soft)' }}
     >
       <div className="form-group">
-        <label>Название урока</label>
+        <label>{t('lms.lessonTitle')}</label>
         <input className="crm-input" value={title} onChange={(e) => setTitle(e.target.value)} required />
       </div>
       <div className="form-group">
-        <label>Текст урока (Markdown)</label>
+        <label>{t('lms.lessonText')}</label>
         <textarea className="crm-textarea" value={content} onChange={(e) => setContent(e.target.value)} rows={4} />
       </div>
       <div className="form-group">
-        <label>Ссылка на видео</label>
+        <label>{t('lms.videoLink')}</label>
         <input className="crm-input" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://youtube.com/..." />
       </div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>Отмена</button>
-        <button type="submit" className="btn btn-sm btn-primary" disabled={!title.trim()}>Добавить</button>
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
+        <button type="submit" className="btn btn-sm btn-primary" disabled={!title.trim()}>{t('common.add')}</button>
       </div>
     </form>
   );
@@ -491,23 +492,24 @@ function LessonEditForm({ lesson, onChange, onSave, onCancel }: {
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   return (
     <div>
       <div className="form-group">
-        <label>Название</label>
+        <label>{t('common.name')}</label>
         <input className="crm-input" value={lesson.title} onChange={(e) => onChange({ ...lesson, title: e.target.value })} />
       </div>
       <div className="form-group">
-        <label>Текст</label>
+        <label>{t('lms.text')}</label>
         <textarea className="crm-textarea" value={lesson.content || ''} onChange={(e) => onChange({ ...lesson, content: e.target.value })} rows={4} />
       </div>
       <div className="form-group">
-        <label>Видео</label>
+        <label>{t('lms.video')}</label>
         <input className="crm-input" value={lesson.videoUrl || ''} onChange={(e) => onChange({ ...lesson, videoUrl: e.target.value })} />
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn btn-sm btn-secondary" onClick={onCancel}>Отмена</button>
-        <button className="btn btn-sm btn-primary" onClick={onSave}>Сохранить</button>
+        <button className="btn btn-sm btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
+        <button className="btn btn-sm btn-primary" onClick={onSave}>{t('common.save')}</button>
       </div>
     </div>
   );

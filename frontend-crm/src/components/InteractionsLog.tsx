@@ -1,3 +1,4 @@
+import { fmtDateText, TJ_TZ } from '../lib/tjTime';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
 import { useState } from 'react';
@@ -33,7 +34,7 @@ function fmtRelative(iso: string) {
   if (diffH < 24) return `${diffH} ч назад`;
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD} д назад`;
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' });
+  return fmtDateText(d, { day: '2-digit', month: 'short', year: 'numeric', timeZone: TJ_TZ });
 }
 
 export default function InteractionsLog({ studentId, canEdit = true }: { studentId: string; canEdit?: boolean }) {

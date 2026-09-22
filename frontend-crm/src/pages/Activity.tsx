@@ -1,3 +1,4 @@
+import { fmtDateText } from '../lib/tjTime';
 import { useEffect, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { motion } from 'framer-motion';
@@ -52,7 +53,7 @@ function groupByDay(items: ActivityEntry[]) {
     let label: string;
     if (d.getTime() === today.getTime()) label = 'Сегодня';
     else if (d.getTime() === yesterday.getTime()) label = 'Вчера';
-    else label = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    else label = fmtDateText(d, { day: 'numeric', month: 'long', year: 'numeric' });
     if (!map.has(label)) { map.set(label, []); groups.push({ label, items: map.get(label)! }); }
     map.get(label)!.push(e);
   }

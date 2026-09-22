@@ -1,3 +1,4 @@
+import { localized } from '../lib/i18n';
 import { api } from './client';
 
 export type TransactionType = 'INCOME' | 'EXPENSE';
@@ -14,7 +15,7 @@ export type TransactionCategory =
   | 'OTHER_INCOME'
   | 'OTHER_EXPENSE';
 
-export const TRANSACTION_CATEGORY_LABEL: Record<TransactionCategory, string> = {
+export const TRANSACTION_CATEGORY_LABEL: Record<TransactionCategory, string> = localized('finance.cat', {
   TUITION_PAYMENT: 'Оплата обучения',
   ADDITIONAL_FEE: 'Доплата',
   SALARY: 'Зарплата',
@@ -26,7 +27,7 @@ export const TRANSACTION_CATEGORY_LABEL: Record<TransactionCategory, string> = {
   TARGETED_ADS: 'Target (реклама)',
   OTHER_INCOME: 'Прочий доход',
   OTHER_EXPENSE: 'Прочие расходы',
-};
+});
 // Алиас для совместимости с новым именованием (см. запросы UI).
 export const CATEGORY_LABEL = TRANSACTION_CATEGORY_LABEL;
 
@@ -53,40 +54,54 @@ export type IncomeSource = 'NEW_CLIENT' | 'UP_SALE' | 'OTHER';
 export type ProductCategoryEnum = 'CONTRACT' | 'MASTERCLASS' | 'ACADEMY' | 'OTHER';
 export type PaymentPhaseStatus = 'PREPAID' | 'FULL';
 
-export const INCOME_SOURCE_LABEL: Record<IncomeSource, string> = {
+export const INCOME_SOURCE_LABEL: Record<IncomeSource, string> = localized('finance.source', {
   NEW_CLIENT: 'Новый клиент',
   UP_SALE: 'Апселл',
   OTHER: 'Прочее',
-};
-export const PRODUCT_CATEGORY_LABEL: Record<ProductCategoryEnum, string> = {
+});
+export const PRODUCT_CATEGORY_LABEL: Record<ProductCategoryEnum, string> = localized('finance.productEnum', {
   CONTRACT: 'Контракт',
   MASTERCLASS: 'Мастер-класс',
   ACADEMY: 'Академия',
   OTHER: 'Другое',
-};
-export const PAYMENT_PHASE_LABEL: Record<PaymentPhaseStatus, string> = {
+});
+export const PAYMENT_PHASE_LABEL: Record<PaymentPhaseStatus, string> = localized('finance.phase', {
   PREPAID: 'Предоплата',
   FULL: 'Полная оплата',
-};
+});
 
 export type PaymentChannel = 'ALIF_MOBILE' | 'CASH' | 'BANK_TRANSFER' | 'CARD' | 'CRYPTO' | 'OTHER';
 export type PaymentKind = 'FULL' | 'PREPAYMENT' | 'ADDITIONAL' | 'OWNER_INVESTMENT';
 export type ReceiptKind = 'RECEIPT' | 'CASH_PHOTO' | 'REASON_ONLY';
 
-export const PAYMENT_CHANNEL_LABEL: Record<PaymentChannel, string> = {
+export const PAYMENT_CHANNEL_LABEL: Record<PaymentChannel, string> = localized('finance.channel', {
   ALIF_MOBILE: 'АлифМобайл',
   CASH: 'Наличные',
   BANK_TRANSFER: 'Банк. перевод',
   CARD: 'Карта',
   CRYPTO: 'Crypto',
   OTHER: 'Другое',
-};
-export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = {
+});
+export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = localized('finance.kind', {
   FULL: 'Полная',
   PREPAYMENT: 'Предоплата',
   ADDITIONAL: 'Доплата',
   OWNER_INVESTMENT: 'Вложение собственника',
-};
+});
+
+/**
+ * Подпись продуктовой категории на языке интерфейса. Значение (оно же
+ * хранится в транзакции) остаётся русским — переводится только показ.
+ */
+export const PRODUCT_CATEGORY_TEXT: Record<string, string> = localized('finance.productCat', {
+  'Академия': 'Академия',
+  'Канада': 'Канада',
+  'США': 'США',
+  'Китай': 'Китай',
+  'Языковые курсы': 'Языковые курсы',
+  'Колледж': 'Колледж',
+  'Другое': 'Другое',
+});
 
 // Продуктовые категории дохода (можно расширять)
 export const PRODUCT_CATEGORIES = [

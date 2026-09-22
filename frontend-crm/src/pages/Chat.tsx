@@ -1,3 +1,4 @@
+import { fmtDateText, TJ_TZ } from '../lib/tjTime';
 import { absFileUrl } from '../lib/fileUrl';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -37,7 +38,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
+  return fmtDateText(iso, { day: '2-digit', month: 'short', timeZone: TJ_TZ });
 }
 function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
@@ -204,7 +205,7 @@ export default function Chat() {
     setTypingByRoom((cur) => {
       const room = { ...(cur[data.roomId] || {}) };
       if (data.typing) {
-        room[data.userId] = { name: data.userName || 'Кто-то', expiresAt: Date.now() + 5000 };
+        room[data.userId] = { name: data.userName || t('chat.someone'), expiresAt: Date.now() + 5000 };
       } else {
         delete room[data.userId];
       }
@@ -638,10 +639,10 @@ export default function Chat() {
                     )
                   : null;
                 return r.type === 'GENERAL'
-                  ? 'Команда Javonon'
+                  ? t('chat.general')
                   : r.type === 'DIRECT'
                     ? otherMember?.user.fullName || r.title || t('chat.title')
-                    : r.title || 'Команда';
+                    : r.title || t('chat.team');
               };
 
               const renderRoom = (r: typeof rooms[number]) => {
@@ -707,9 +708,9 @@ export default function Chat() {
               const directs = rooms.filter((r) => r.type === 'DIRECT');
 
               const folders: Array<{ key: string; icon: string; label: string; list: typeof rooms }> = [
-                { key: 'GENERAL', icon: 'campaign', label: 'Общий', list: general },
-                { key: 'TEAM', icon: 'groups', label: 'Команды', list: teams },
-                { key: 'DIRECT', icon: 'person', label: 'Личные', list: directs },
+                { key: 'GENERAL', icon: 'campaign', label: t('chat.tab.general'), list: general },
+                { key: 'TEAM', icon: 'groups', label: t('chat.tab.teams'), list: teams },
+                { key: 'DIRECT', icon: 'person', label: t('chat.tab.direct'), list: directs },
               ];
 
               return folders.map((f) => {
@@ -758,7 +759,7 @@ export default function Chat() {
                 type="button"
                 className="chat-back-btn"
                 onClick={() => setMobileShowList(true)}
-                aria-label="Назад к списку чатов"
+                aria-label={t('chat.backToList')}
               >
                 <Icon name="arrow_back" size={22} />
               </button>
@@ -780,7 +781,7 @@ export default function Chat() {
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}>
-                  {activeRoom.type === 'GENERAL' ? 'Команда Javonon' :
+                  {activeRoom.type === 'GENERAL' ? t('chat.general') :
                     activeRoom.type === 'DIRECT'
                       ? (() => {
                           // Берём member'а который НЕ текущий пользователь.
@@ -851,13 +852,13 @@ export default function Chat() {
                         textTransform: 'uppercase',
                         display: 'inline-flex', alignItems: 'center', gap: 4,
                       }}>
-                        <span>{isBot ? 'Javonon AI · BOT' : (isMine ? 'Вы' : m.author?.fullName)} · {fmtTime(m.createdAt)}</span>
-                        {m.isPinned && <span title="Закреплено">📌</span>}
+                        <span>{isBot ? 'Javonon AI · BOT' : (isMine ? t('chat.you') : m.author?.fullName)} · {fmtTime(m.createdAt)}</span>
+                        {m.isPinned && <span title={t('chat.pinned')}>📌</span>}
                         {/* Telegram-style read receipts: только для своих сообщений */}
                         {isMine && !isBot && (() => {
                           // tmp- = ещё не доставлено серверу → часы
                           if (m.id.startsWith('tmp-')) {
-                            return <span title="Отправляется"><Icon name="schedule" size={12} /></span>;
+                            return <span title={t('chat.sending')}><Icon name="schedule" size={12} /></span>;
                           }
                           // Прочитано если хоть один другой участник
                           // имеет lastReadAt >= createdAt сообщения
@@ -866,7 +867,7 @@ export default function Chat() {
                           const isRead = others.some((mm) => mm.lastReadAt && new Date(mm.lastReadAt).getTime() >= created);
                           return (
                             <span
-                              title={isRead ? 'Прочитано' : 'Доставлено'}
+                              title={isRead ? t('chat.read') : t('chat.delivered')}
                               style={{ color: isRead ? 'var(--primary, #01368B)' : 'var(--text-light)', display: 'inline-flex' }}
                             >
                               <Icon name={isRead ? 'done_all' : 'done'} size={14} />
@@ -914,7 +915,7 @@ export default function Chat() {
                           <div style={{
                             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
                           }}>
-                            {m.replyTo.deletedAt ? 'удалённое сообщение' : (m.replyTo.text || (m.replyTo.attachments?.length ? '📎 Вложение' : ''))}
+                            {m.replyTo.deletedAt ? t('chat.deletedMessage') : (m.replyTo.text || (m.replyTo.attachments?.length ? `📎 ${t('chat.attachment')}` : ''))}
                           </div>
                         </div>
                       )}
@@ -924,7 +925,7 @@ export default function Chat() {
                           fontSize: 11, marginBottom: 6, opacity: 0.75,
                           fontStyle: 'italic',
                         }}>
-                          ↪ Переслано от {m.forwardedFrom.author?.fullName || 'кого-то'}
+                          ↪ {t('chat.forwardedFrom')} {m.forwardedFrom.author?.fullName || t('chat.someoneGen')}
                         </div>
                       )}
                       {/* Attachments */}
@@ -1009,7 +1010,7 @@ export default function Chat() {
                           })}
                         </div>
                       )}
-                      {m.deletedAt ? <span>сообщение удалено</span> : renderMessageWithMentions(m.text)}
+                      {m.deletedAt ? <span>{t('chat.messageDeleted')}</span> : renderMessageWithMentions(m.text)}
                     </div>
                     {/* Reactions chips */}
                     {!m.deletedAt && m.reactions && m.reactions.length > 0 && (
@@ -1060,9 +1061,9 @@ export default function Chat() {
                 </span>
                 {(() => {
                   const names = Object.values(typingByRoom[activeId]).map((u) => u.name);
-                  if (names.length === 1) return `${names[0]} печатает…`;
-                  if (names.length === 2) return `${names[0]} и ${names[1]} печатают…`;
-                  return `${names.length} человек печатают…`;
+                  if (names.length === 1) return t('chat.typing.one').replace('{a}', names[0]);
+                  if (names.length === 2) return t('chat.typing.two').replace('{a}', names[0]).replace('{b}', names[1]);
+                  return t('chat.typing.many').replace('{n}', String(names.length));
                 })()}
               </motion.div>
             )}
@@ -1088,10 +1089,10 @@ export default function Chat() {
                 <Icon name="reply" size={16} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--primary, #01368B)' }}>
-                    Ответ {replyTo.author?.fullName || ''}
+                    {t('chat.replyTo')} {replyTo.author?.fullName || ''}
                   </div>
                   <div style={{ fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-soft)' }}>
-                    {replyTo.text || (replyTo.attachments?.length ? '📎 Вложение' : '')}
+                    {replyTo.text || (replyTo.attachments?.length ? `📎 ${t('chat.attachment')}` : '')}
                   </div>
                 </div>
                 <button type="button" onClick={() => setReplyTo(null)} style={{
@@ -1157,7 +1158,7 @@ export default function Chat() {
                   textTransform: 'uppercase',
                   borderBottom: '1px solid var(--border-soft)',
                 }}>
-                  Упомянуть · ↑↓ выбрать · Enter / Tab вставить · Esc закрыть
+                  {t('chat.mentionHint')}
                 </div>
                 {mentionCandidates.map((u: any, i: number) => (
                   <button
@@ -1197,7 +1198,7 @@ export default function Chat() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              title="Прикрепить файл"
+              title={t('chat.attach')}
               style={{
                 width: 40, height: 40, borderRadius: '50%',
                 background: 'var(--bg-soft, #f1f5f9)',
@@ -1294,11 +1295,11 @@ export default function Chat() {
             </div>
             {/* Actions */}
             {[
-              { icon: 'reply', label: 'Ответить', show: !contextMenu.msg.deletedAt, onClick: () => setReplyTo(contextMenu.msg) },
-              { icon: 'push_pin', label: contextMenu.msg.isPinned ? 'Открепить' : 'Закрепить', show: isElevated(me) && !contextMenu.msg.deletedAt, onClick: () => pinMut.mutate({ messageId: contextMenu.msg.id }) },
-              { icon: 'content_copy', label: 'Копировать текст', show: !!contextMenu.msg.text && !contextMenu.msg.deletedAt, onClick: () => copyText(contextMenu.msg.text) },
-              { icon: 'forward', label: 'Переслать', show: !contextMenu.msg.deletedAt, onClick: () => setForwardSource(contextMenu.msg) },
-              { icon: 'delete', label: 'Удалить', show: !contextMenu.msg.deletedAt && (contextMenu.msg.authorId === me?.id || isElevated(me)), onClick: () => deleteMut.mutate({ messageId: contextMenu.msg.id }), danger: true },
+              { icon: 'reply', label: t('chat.menu.reply'), show: !contextMenu.msg.deletedAt, onClick: () => setReplyTo(contextMenu.msg) },
+              { icon: 'push_pin', label: contextMenu.msg.isPinned ? t('chat.menu.unpin') : t('chat.menu.pin'), show: isElevated(me) && !contextMenu.msg.deletedAt, onClick: () => pinMut.mutate({ messageId: contextMenu.msg.id }) },
+              { icon: 'content_copy', label: t('chat.menu.copy'), show: !!contextMenu.msg.text && !contextMenu.msg.deletedAt, onClick: () => copyText(contextMenu.msg.text) },
+              { icon: 'forward', label: t('chat.menu.forward'), show: !contextMenu.msg.deletedAt, onClick: () => setForwardSource(contextMenu.msg) },
+              { icon: 'delete', label: t('common.delete'), show: !contextMenu.msg.deletedAt && (contextMenu.msg.authorId === me?.id || isElevated(me)), onClick: () => deleteMut.mutate({ messageId: contextMenu.msg.id }), danger: true },
             ].filter((a) => a.show).map((a) => (
               <button
                 key={a.label}
@@ -1352,18 +1353,18 @@ export default function Chat() {
                 textTransform: 'uppercase', marginBottom: 8,
               }}>{t('eyebrow.forwardMessage')}</div>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, marginBottom: 18 }}>
-                Переслать в чат
+                {t('chat.forwardTo')}
               </h3>
               <div style={{ flex: 1, overflowY: 'auto', margin: '-4px -4px 12px' }}>
                 {rooms.filter((r) => r.id !== activeId).map((r) => {
                   const title = r.type === 'GENERAL'
-                    ? 'Команда Javonon'
+                    ? t('chat.general')
                     : r.type === 'DIRECT'
                       ? r.members.find((mm) =>
                           (me?.id ? mm.userId !== me.id : true)
                           && (me?.fullName ? mm.user.fullName !== me.fullName : true),
                         )?.user.fullName || r.title || t('chat.title')
-                      : r.title || 'Команда';
+                      : r.title || t('chat.team');
                   return (
                     <button
                       key={r.id}
@@ -1393,7 +1394,7 @@ export default function Chat() {
                 })}
               </div>
               <button className="btn btn-secondary" onClick={() => setForwardSource(null)} style={{ alignSelf: 'flex-end' }}>
-                Отмена
+                {t('common.cancel')}
               </button>
             </motion.div>
           </motion.div>
@@ -1433,15 +1434,15 @@ export default function Chat() {
                 fontFamily: 'var(--font-display)', fontSize: 22,
                 fontWeight: 500, marginBottom: 18,
               }}>
-                Выбери <em style={{
+                {t('chat.pick.a')} <em style={{
                   fontFamily: 'Times New Roman, Georgia, serif',
                   fontWeight: 400, color: 'var(--primary-dark)',
-                }}>собеседника.</em>
+                }}>{t('chat.pick.b')}</em>
               </h3>
               <div style={{ flex: 1, overflowY: 'auto', margin: '-4px -4px 12px' }}>
                 {users.filter((u: any) => u.id !== me?.id).length === 0 ? (
                   <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-soft)' }}>
-                    Нет доступных пользователей
+                    {t('chat.noUsers')}
                   </div>
                 ) : (
                   users.filter((u: any) => u.id !== me?.id).map((u: any) => (
@@ -1480,7 +1481,7 @@ export default function Chat() {
                 onClick={() => setShowNewDirect(false)}
                 style={{ alignSelf: 'flex-end' }}
               >
-                Отмена
+                {t('common.cancel')}
               </button>
             </motion.div>
           </motion.div>
@@ -1520,10 +1521,10 @@ export default function Chat() {
                 fontFamily: 'var(--font-display)', fontSize: 22,
                 fontWeight: 500, marginBottom: 18,
               }}>
-                Создай <em style={{
+                {t('chat.create.a')} <em style={{
                   fontFamily: 'Times New Roman, Georgia, serif',
                   fontWeight: 400, color: 'var(--primary-dark)',
-                }}>команду.</em>
+                }}>{t('chat.create.b')}</em>
               </h3>
               <NewTeamForm
                 users={users.filter((u: any) => u.id !== me?.id)}
@@ -1616,7 +1617,7 @@ function NewTeamForm({ users, onCreate, onCancel }: {
         color: 'var(--text-soft)',
         margin: '4px 4px 8px',
         textTransform: 'uppercase',
-      }}>Участники · {selected.length}</div>
+      }}>{t('chat.members')} · {selected.length}</div>
       <div style={{ maxHeight: 280, overflowY: 'auto', marginBottom: 12 }}>
         {users.map((u) => {
           const isSel = selected.includes(u.id);
@@ -1652,14 +1653,14 @@ function NewTeamForm({ users, onCreate, onCancel }: {
         })}
       </div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>Отмена</button>
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
         <button
           type="button"
           className="btn btn-sm btn-primary"
           disabled={!title.trim() || selected.length === 0}
           onClick={() => onCreate(title.trim(), selected)}
         >
-          Создать
+          {t('common.create')}
         </button>
       </div>
     </div>

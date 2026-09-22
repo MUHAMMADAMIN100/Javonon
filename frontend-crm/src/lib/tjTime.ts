@@ -8,7 +8,38 @@
  * как Asia/Dushanbe.
  */
 
+import { currentLang, tr } from './i18n';
 export const TJ_TZ = 'Asia/Dushanbe';
+
+const WEEKDAY_KEY: Record<string, string> = { Sun: 'sun', Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu', Fri: 'fri', Sat: 'sat' };
+
+/**
+ * Дата с названием месяца («22 сент. 2026 г.», «22 сентябр 2026») на языке
+ * интерфейса. Опции — как у Intl.DateTimeFormat. Для русского это обычный
+ * Intl 'ru-RU'. Таджикского в браузерах нет, поэтому берём русскую раскладку
+ * частей и подставляем месяц и день недели из словаря (month.N,
+ * weekday.short.*), русское «г.» убираем.
+ */
+export function fmtDateText(input: string | number | Date, opts: Intl.DateTimeFormatOptions): string {
+  const d = input instanceof Date ? input : new Date(input);
+  if (isNaN(d.getTime())) return '';
+  const f = new Intl.DateTimeFormat('ru-RU', opts);
+  if (currentLang() !== 'tg') return f.format(d);
+  const en = new Intl.DateTimeFormat('en-US', { timeZone: opts.timeZone, month: 'numeric', weekday: 'short' }).formatToParts(d);
+  const monthNo = Number(en.find((p) => p.type === 'month')?.value);
+  const wd = WEEKDAY_KEY[en.find((p) => p.type === 'weekday')?.value ?? ''] ?? '';
+  const month = tr(`month.${monthNo}`);
+  return f
+    .formatToParts(d)
+    .map((p) => {
+      if (p.type === 'month') return opts.month === 'long' ? month : month.slice(0, 3).toLowerCase();
+      if (p.type === 'weekday') return tr(`weekday.short.${wd}`);
+      if (p.type === 'literal') return p.value.replace(/\s*г\./, '');
+      return p.value;
+    })
+    .join('')
+    .trim();
+}
 
 /** Сегодняшняя YYYY-MM-DD в Asia/Dushanbe. */
 export function tjToday(): string {
@@ -42,13 +73,13 @@ export function tjFormatDateTime(input: string | Date | null | undefined): strin
   if (!input) return '';
   const d = typeof input === 'string' ? new Date(input) : input;
   if (isNaN(d.getTime())) return '';
-  return new Intl.DateTimeFormat('ru-RU', {
+  return fmtDateText(d, {
     timeZone: TJ_TZ,
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(d);
+  });
 }
 
 /** «01.06.2026» в TJ-времени. */

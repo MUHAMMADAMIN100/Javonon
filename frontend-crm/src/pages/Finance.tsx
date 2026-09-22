@@ -15,6 +15,7 @@ import {
   EXPENSE_CATEGORIES,
   CreateTransactionDto,
   PRODUCT_CATEGORIES,
+  PRODUCT_CATEGORY_TEXT,
   listTransactions,
   createTransaction,
   updateTransaction,
@@ -42,7 +43,7 @@ import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import CrmDatePicker from '../components/CrmDatePicker';
 import FormModal from '../components/FormModal';
-import { TJ_TZ, tjToday } from '../lib/tjTime';
+import { fmtDateText, TJ_TZ, tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
 import { useRealtime } from '../realtime';
 import { useAuth } from '../store/auth';
@@ -58,7 +59,7 @@ function fmtDate(iso: string): string {
   // а не по часам браузера (иначе операция в 01:00 по Душанбе у бухгалтера
   // в другом поясе попадала бы во вчера).
   const dayOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso);
-  return new Date(dayOnly ? `${iso}T00:00:00Z` : iso).toLocaleDateString('ru-RU', {
+  return fmtDateText(dayOnly ? `${iso}T00:00:00Z` : iso, {
     day: '2-digit', month: 'short', year: 'numeric', timeZone: dayOnly ? 'UTC' : TJ_TZ,
   });
 }
@@ -84,6 +85,7 @@ function NonTjsStrip({
   color?: string;
   kind?: 'income' | 'expense';
 }) {
+  const { t } = useT();
   if (!totals) return null;
   const entries = Object.entries(totals);
   if (entries.length === 0) return null;
@@ -112,9 +114,9 @@ function NonTjsStrip({
         color,
         textTransform: 'uppercase',
       }}
-      title="Валютные транзакции в периоде — обрабатываются бухгалтером вручную, не входят в TJS-агрегаты выше"
+      title={t('finance.nonTjs.hint')}
     >
-      В периоде также · {parts.join(' · ')}
+      {t('finance.nonTjs.alsoInPeriod')} · {parts.join(' · ')}
     </div>
   );
 }
@@ -134,7 +136,7 @@ function CurrencyBadge({ currency }: { currency: string }) {
   const baseLabel = t('finance.badge.base');
   return (
     <span
-      title={`Все суммы посчитаны в ${currency}. Транзакции в других валютах не входят в этот разрез — см. подсказку «В ПЕРИОДЕ ТАКЖЕ» если такие суммы есть.`}
+      title={t('finance.badge.hint').replace('{currency}', currency)}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -571,11 +573,11 @@ export default function Finance() {
       }}>
         <PieCard
           eyebrow={t('eyebrow.incomeBySource')}
-          title="Источник дохода"
+          title={t('finance.pie.source')}
           items={rollupPieSlices(
             breakdown?.byIncomeSource,
-            (s) => ({ label: s.label, value: s.amount, count: s.count, key: s.source }),
-            'Прочее',
+            (s) => ({ label: t(`finance.source.${s.source}`) !== `finance.source.${s.source}` ? t(`finance.source.${s.source}`) : s.label, value: s.amount, count: s.count, key: s.source }),
+            t('finance.pie.other'),
           )}
           currency={breakdown?.currency ?? 'TJS'}
           nonTjsTotals={breakdown?.nonTjsTotals}
@@ -592,16 +594,16 @@ export default function Finance() {
         />
         <PieCard
           eyebrow={t('eyebrow.incomeByManager')}
-          title="Клиенты (менеджеры)"
+          title={t('finance.pie.managers')}
           items={rollupPieSlices(
             breakdown?.byManager,
             (m) => ({
-              label: m.manager?.fullName || 'Без менеджера',
+              label: m.manager?.fullName || t('finance.pie.noManager'),
               value: m.amount,
               count: m.count,
               key: m.managerId ?? '_none',
             }),
-            'Прочие менеджеры',
+            t('finance.pie.otherManagers'),
           )}
           currency={breakdown?.currency ?? 'TJS'}
           nonTjsTotals={breakdown?.nonTjsTotals}
@@ -618,7 +620,7 @@ export default function Finance() {
         />
         <PieCard
           eyebrow={t('eyebrow.expenseByCategory')}
-          title="Категория расходов"
+          title={t('finance.pie.expenseCategory')}
           items={rollupPieSlices(
             breakdown?.byExpenseCategory,
             (c) => ({
@@ -629,7 +631,7 @@ export default function Finance() {
               count: c.count,
               key: String(c.category),
             }),
-            'Прочие категории',
+            t('finance.pie.otherCategories'),
           )}
           currency={breakdown?.currency ?? 'TJS'}
           nonTjsTotals={breakdown?.nonTjsTotals}
@@ -1698,12 +1700,12 @@ function TransactionForm({
                     value={me?.id ?? ''}
                     disabled
                     aria-disabled="true"
-                    title="Зарплата автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT."
+                    title={t('finance.form.salaryBound')}
                   >
                     <option value={me?.id ?? ''}>{me?.fullName || me?.email || '—'}</option>
                   </CrmSelect>
                   <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4, letterSpacing: '0.02em' }}>
-                    Автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT.
+                    {t('finance.form.autoBound')}
                   </div>
                 </>
               )}
@@ -1732,12 +1734,12 @@ function TransactionForm({
                     value={me?.id ?? ''}
                     disabled
                     aria-disabled="true"
-                    title="Продажа автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT."
+                    title={t('finance.form.saleBound')}
                   >
                     <option value={me?.id ?? ''}>{me?.fullName || me?.email || '—'}</option>
                   </CrmSelect>
                   <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 4, letterSpacing: '0.02em' }}>
-                    Продажа автоматически привязывается к вам — переназначить может только ADMIN/ACCOUNTANT.
+                    {t('finance.form.saleBound')}
                   </div>
                 </>
               )}
@@ -1771,7 +1773,7 @@ function TransactionForm({
               <CrmSelect className="crm-select" value={productCategory} onChange={(e) => setProductCategory(e.target.value)}>
                 <option value="">—</option>
                 {PRODUCT_CATEGORIES.map((p) => (
-                  <option key={p} value={p}>{p}</option>
+                  <option key={p} value={p}>{PRODUCT_CATEGORY_TEXT[p] ?? p}</option>
                 ))}
               </CrmSelect>
             </div>
@@ -1852,12 +1854,12 @@ function TransactionForm({
           {type === 'EXPENSE' && (
             <div className="form-group" style={{ gridColumn: '1 / -1', padding: 14, background: 'var(--bg-soft)', borderRadius: 12 }}>
               <label style={{ fontWeight: 600, marginBottom: 8 }}>
-                Подтверждение расхода (обязательно)
+                {t('finance.receipt.title')}
               </label>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                <RadioBtn label="📄 Чек" active={receiptKind === 'RECEIPT'} onClick={() => setReceiptKind('RECEIPT')} />
-                <RadioBtn label="💵 Фото наличных" active={receiptKind === 'CASH_PHOTO'} onClick={() => setReceiptKind('CASH_PHOTO')} />
-                <RadioBtn label="📝 Только причина" active={receiptKind === 'REASON_ONLY'} onClick={() => setReceiptKind('REASON_ONLY')} />
+                <RadioBtn label={`📄 ${t('finance.receipt.RECEIPT')}`} active={receiptKind === 'RECEIPT'} onClick={() => setReceiptKind('RECEIPT')} />
+                <RadioBtn label={`💵 ${t('finance.receipt.CASH_PHOTO')}`} active={receiptKind === 'CASH_PHOTO'} onClick={() => setReceiptKind('CASH_PHOTO')} />
+                <RadioBtn label={`📝 ${t('finance.receipt.REASON_ONLY')}`} active={receiptKind === 'REASON_ONLY'} onClick={() => setReceiptKind('REASON_ONLY')} />
               </div>
               {receiptKind === 'REASON_ONLY' ? (
                 <input
@@ -1865,7 +1867,7 @@ function TransactionForm({
                   type="text"
                   value={noReceiptReason}
                   onChange={(e) => setNoReceiptReason(e.target.value)}
-                  placeholder="Почему нет чека (мин. 5 символов)"
+                  placeholder={t('finance.receipt.reasonPlaceholder')}
                   required
                 />
               ) : (
@@ -1882,7 +1884,7 @@ function TransactionForm({
                   />
                   {receiptFile && (
                     <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
-                      {receiptFile.name} · {(receiptFile.size / 1024).toFixed(0)} КБ
+                      {receiptFile.name} · {(receiptFile.size / 1024).toFixed(0)} {t('finance.kb')}
                     </div>
                   )}
                 </div>
@@ -1892,9 +1894,9 @@ function TransactionForm({
         </div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
           <button type="submit" className="btn btn-primary" disabled={submitting || uploadingReceipt}>
-            {uploadingReceipt ? 'Загружаем чек...' : submitting ? 'Сохраняем...' : 'Сохранить'}
+            {uploadingReceipt ? t('finance.receipt.uploading') : submitting ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </form>
@@ -1939,6 +1941,7 @@ function RevenueChart({
       увеличивается + вертикальная маркер-линия. */
   focusedKey?: string | null;
 }) {
+  const { t } = useT();
   // Ширину берём у контейнера: раньше стояло фиксированное число, и на
   // широком мониторе половина карточки пустовала.
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -2073,7 +2076,7 @@ function RevenueChart({
                   onClick={() => onPointClick!(p, i)}
                 >
                   <title>
-                    {p.key} · доход {p.income.toLocaleString('ru-RU')} · расход {p.expense.toLocaleString('ru-RU')}
+                    {p.key} · {t('finance.chart.income').toLowerCase()} {p.income.toLocaleString('ru-RU')} · {t('finance.chart.expense').toLowerCase()} {p.expense.toLocaleString('ru-RU')}
                   </title>
                 </rect>
               )}
@@ -2091,15 +2094,15 @@ function RevenueChart({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 10, height: 2, background: 'var(--primary)' }} />
-          ДОХОДЫ
+          {t('finance.chart.incomes')}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 10, height: 2, background: 'var(--danger)' }} />
-          РАСХОДЫ
+          {t('finance.chart.expenses')}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 10, height: 10, background: 'rgba(1, 54, 139,0.3)' }} />
-          ПРИБЫЛЬ
+          {t('finance.chart.profit')}
         </div>
       </div>
     </div>
@@ -2111,9 +2114,10 @@ function BarList({ items, colors }: {
   items: Array<{ label: string; value: number; sub?: string }>;
   colors: string[];
 }) {
+  const { t } = useT();
   const total = items.reduce((s, x) => s + x.value, 0);
   if (total === 0) {
-    return <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 16 }}>Нет данных</div>;
+    return <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 16 }}>{t('finance.noData')}</div>;
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -2256,6 +2260,7 @@ function PieChart({
    */
   focusedKey?: string | null;
 }) {
+  const { t } = useT();
   const total = items.reduce((s, x) => s + x.value, 0);
   // Отступ для «выпрыгивающего» сектора: рисуем svg на 16px больше, чем
   // circle, чтобы pop-out не обрезался viewBox'ом.
@@ -2282,7 +2287,7 @@ function PieChart({
           margin: '0 auto',
         }}
       >
-        Нет данных
+        {t('finance.noData')}
       </div>
     );
   }
@@ -2439,7 +2444,7 @@ function PieCard({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
         {items.length === 0 && (
           <div style={{ color: 'var(--text-soft)', fontSize: 12, textAlign: 'center' }}>
-            Нет данных за период
+            {t('finance.noDataPeriod')}
           </div>
         )}
         {items.map((it, i) => {
@@ -2535,7 +2540,7 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
           {t('finance.dist.title')}
         </h3>
         <div style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12 }}>
-          Схема не настроена — Настройки → Схема распределения
+          {t('finance.dist.notConfigured')}
         </div>
         <NonTjsStrip totals={breakdown.nonTjsTotals} />
       </div>
@@ -2794,11 +2799,11 @@ function BreakdownDetailPanel({
         <button
           className="btn"
           onClick={onClose}
-          aria-label="Сбросить фокус"
-          title="Сбросить фокус"
+          aria-label={t('finance.focus.reset')}
+          title={t('finance.focus.reset')}
           style={{ padding: '6px 10px' }}
         >
-          <Icon name="close" size={14} /> Сбросить
+          <Icon name="close" size={14} /> {t('common.reset')}
         </button>
       </div>
 
@@ -2807,7 +2812,7 @@ function BreakdownDetailPanel({
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
             color: 'var(--text-soft)', textTransform: 'uppercase',
-          }}>Транзакций</div>
+          }}>{t('finance.focus.txCount')}</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500 }}>
             {filtered.length}
           </div>
@@ -2816,7 +2821,7 @@ function BreakdownDetailPanel({
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
             color: 'var(--text-soft)', textTransform: 'uppercase',
-          }}>Сумма</div>
+          }}>{t('common.amount')}</div>
           <div style={{
             fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500,
             color: isExpense ? 'var(--danger)' : focus.color,
@@ -2832,11 +2837,11 @@ function BreakdownDetailPanel({
       </div>
 
       {detailQuery.isLoading && (
-        <div style={{ color: 'var(--text-soft)', fontSize: 13, padding: 12 }}>Загрузка...</div>
+        <div style={{ color: 'var(--text-soft)', fontSize: 13, padding: 12 }}>{t('common.loading')}</div>
       )}
       {!detailQuery.isLoading && filtered.length === 0 && (
         <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 16 }}>
-          Транзакций не найдено в этом срезе.
+          {t('finance.focus.emptySlice')}
         </div>
       )}
       {filtered.length > 0 && (
@@ -2848,7 +2853,7 @@ function BreakdownDetailPanel({
             <div style={{
               color: 'var(--text-soft)', fontSize: 12, textAlign: 'center', marginTop: 8,
             }}>
-              Показано 100 из {filtered.length}. Сузьте период для полного списка.
+              {t('finance.focus.shown100').replace('{n}', String(filtered.length))}
             </div>
           )}
         </div>
@@ -2954,11 +2959,11 @@ function WeekDetailPanel({
         <button
           className="btn"
           onClick={onClose}
-          aria-label="Сбросить фокус"
-          title="Сбросить фокус"
+          aria-label={t('finance.focus.reset')}
+          title={t('finance.focus.reset')}
           style={{ padding: '6px 10px' }}
         >
-          <Icon name="close" size={14} /> Сбросить
+          <Icon name="close" size={14} /> {t('common.reset')}
         </button>
       </div>
 
@@ -2967,7 +2972,7 @@ function WeekDetailPanel({
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
             color: 'var(--text-soft)', textTransform: 'uppercase',
-          }}>Доход</div>
+          }}>{t('finance.chart.income')}</div>
           <div style={{
             fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
             color: 'var(--primary-dark)',
@@ -2977,7 +2982,7 @@ function WeekDetailPanel({
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
             color: 'var(--text-soft)', textTransform: 'uppercase',
-          }}>Расход</div>
+          }}>{t('finance.chart.expense')}</div>
           <div style={{
             fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
             color: 'var(--danger)',
@@ -2987,7 +2992,7 @@ function WeekDetailPanel({
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
             color: 'var(--text-soft)', textTransform: 'uppercase',
-          }}>Прибыль</div>
+          }}>{t('finance.chart.profitShort')}</div>
           <div style={{
             fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
             color: incomeSum - expenseSum >= 0 ? '#15803d' : '#b91c1c',
@@ -2997,7 +3002,7 @@ function WeekDetailPanel({
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
             color: 'var(--text-soft)', textTransform: 'uppercase',
-          }}>Транзакций</div>
+          }}>{t('finance.focus.txCount')}</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500 }}>
             {txs.length}
           </div>
@@ -3010,11 +3015,11 @@ function WeekDetailPanel({
       </div>
 
       {detailQuery.isLoading && (
-        <div style={{ color: 'var(--text-soft)', fontSize: 13, padding: 12 }}>Загрузка...</div>
+        <div style={{ color: 'var(--text-soft)', fontSize: 13, padding: 12 }}>{t('common.loading')}</div>
       )}
       {!detailQuery.isLoading && txs.length === 0 && (
         <div style={{ color: 'var(--text-soft)', textAlign: 'center', padding: 16 }}>
-          Транзакций в этой неделе не найдено.
+          {t('finance.focus.emptyWeek')}
         </div>
       )}
       {txs.length > 0 && (
@@ -3026,7 +3031,7 @@ function WeekDetailPanel({
             <div style={{
               color: 'var(--text-soft)', fontSize: 12, textAlign: 'center', marginTop: 8,
             }}>
-              Показано 100 из {txs.length}.
+              {t('finance.focus.shown100short').replace('{n}', String(txs.length))}
             </div>
           )}
         </div>

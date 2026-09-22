@@ -1,22 +1,23 @@
 import { api } from './client';
+import { localized } from '../lib/i18n';
 
 export type PaymentStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'CANCELLED';
 export type PaymentMethod = 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'CRYPTO' | 'OTHER';
 
-export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = localized('payments.status', {
   PENDING: 'Ожидает',
   CONFIRMED: 'Подтверждена',
   REJECTED: 'Отклонена',
   CANCELLED: 'Отменена',
-};
+});
 
-export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = localized('payments.method', {
   CARD: 'Карта',
   BANK_TRANSFER: 'Банковский перевод',
   CASH: 'Наличные',
   CRYPTO: 'Криптовалюта',
   OTHER: 'Другое',
-};
+});
 
 export interface Payment {
   id: string;

@@ -19,7 +19,7 @@ import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import DirectionOptions from '../components/DirectionOptions';
 import { compose, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
-import { useT } from '../lib/i18n';
+import { tr, useT } from '../lib/i18n';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
@@ -39,7 +39,7 @@ function wrapAtCursor(
   setEditing: (v: any) => void,
   open: string,
   close: string,
-  placeholder = 'текст',
+  placeholder = tr('programs.md.text'),
 ) {
   const cur = editing?.description || '';
   if (!ta) {
@@ -237,10 +237,10 @@ export default function Programs() {
     },
     invalidate: [keys.programs.all],
     onSuccess: (_data, vars) => {
-      toast(vars.editing.id ? 'Программа обновлена' : 'Программа создана', 'success');
+      toast(vars.editing.id ? t('programs.toast.updated') : t('programs.toast.created'), 'success');
       closeEditor();
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка сохранения', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('programs.toast.saveError'), 'error'),
   });
   const saving = saveMut.isPending;
 
@@ -249,8 +249,8 @@ export default function Programs() {
     queryKey: filteredKey,
     applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
     invalidateAlso: [keys.programs.all],
-    onSuccess: () => toast('Программа удалена', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('programs.toast.deleted'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const uploadImageMut = useInvalidatingMutation({
@@ -258,9 +258,9 @@ export default function Programs() {
     invalidate: [keys.programs.all],
     onSuccess: (data) => {
       setEditing((cur) => (cur ? { ...cur, imageUrl: data.imageUrl } : cur));
-      toast('Картинка загружена', 'success');
+      toast(t('programs.toast.imageUploaded'), 'success');
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка загрузки', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('dealForm.uploadError'), 'error'),
     onSettled: () => {
       setUploadingImage(false);
       if (imageInputRef.current) imageInputRef.current.value = '';
@@ -280,8 +280,8 @@ export default function Programs() {
           cost: editing.cost ?? '',
         },
         {
-          name: compose(required('Введите название'), minLen(2), maxLen(200)),
-          university: compose(required('Введите университет'), minLen(2), maxLen(200)),
+          name: compose(required(t('programs.err.name')), minLen(2), maxLen(200)),
+          university: compose(required(t('programs.err.university')), minLen(2), maxLen(200)),
           city: maxLen(100),
           major: maxLen(200),
           cost: numberRule({ min: 0, max: 10_000_000 }),
@@ -312,7 +312,7 @@ export default function Programs() {
   const onDelete = async (p: Program) => {
     const ok = await confirm({
       title: t('common.delete') + ' ' + t('programs.title').toLowerCase(),
-      message: `«${p.name}» будет удалена. Студенты, привязанные к ней, останутся без программы.`,
+      message: t('programs.delete.message').replace('{name}', p.name),
       confirmText: t('common.delete'),
       danger: true,
     });
@@ -437,7 +437,7 @@ export default function Programs() {
                     {p.englishLevel && <span><Icon name="record_voice_over" size={14} /> {p.englishLevel}</span>}
                     {p.avgAdmissionScore && <span><Icon name="grade" size={14} /> {p.avgAdmissionScore}</span>}
                     {p.applicationDeadline && <span><Icon name="event" size={14} /> {p.applicationDeadline}</span>}
-                    {typeof p.intakesPerYear === 'number' && <span><Icon name="repeat" size={14} /> {p.intakesPerYear}× в год</span>}
+                    {typeof p.intakesPerYear === 'number' && <span><Icon name="repeat" size={14} /> {p.intakesPerYear}× {t('programs.perYear')}</span>}
                   </div>
                   {p.hasGrant && (
                     <div style={{
@@ -446,12 +446,12 @@ export default function Programs() {
                       padding: '3px 10px', fontSize: 12, fontWeight: 600, marginTop: 6,
                       maxWidth: '100%', overflowWrap: 'anywhere', wordBreak: 'break-word',
                     }}>
-                      🎓 Грант{p.grantDetails ? ` · ${p.grantDetails}` : ''}
+                      🎓 {t('programs.grant')}{p.grantDetails ? ` · ${p.grantDetails}` : ''}
                     </div>
                   )}
                   <div className="program-card-cost">
-                    {p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : 'Бесплатно / уточняется'}
-                    {p.cost ? <span> / год</span> : null}
+                    {p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : t('programs.costUnknown')}
+                    {p.cost ? <span> / {t('programs.year')}</span> : null}
                   </div>
                   {p.universityWebsiteUrl && (
                     <a
@@ -462,10 +462,10 @@ export default function Programs() {
                       className="btn btn-sm btn-secondary"
                       style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     >
-                      🌐 Официальный сайт
+                      🌐 {t('programs.officialSite')}
                     </a>
                   )}
-                  {!p.published && <div className="program-card-draft">Скрыто на лендинге</div>}
+                  {!p.published && <div className="program-card-draft">{t('programs.hiddenOnLanding')}</div>}
                 </motion.div>
               ))}
             </motion.div>
@@ -496,7 +496,7 @@ export default function Programs() {
                   onChange={(e) => setEditing({ ...editing, name: safeText(e.target.value) })}
                   className={`crm-input${formErrors.name ? ' input-error' : ''}`}
                   maxLength={200}
-                  placeholder="Erasmus Mundus Joint Masters / Совместная магистратура"
+                  placeholder={t('programs.ph.name')}
                   required
                 />
                 {formErrors.name && <div className="form-error-text">{formErrors.name}</div>}
@@ -509,7 +509,7 @@ export default function Programs() {
                     onChange={(e) => setEditing({ ...editing, university: safeText(e.target.value) })}
                     className={`crm-input${formErrors.university ? ' input-error' : ''}`}
                     maxLength={200}
-                    placeholder="Tsinghua University / МГУ"
+                    placeholder={t('programs.ph.university')}
                     required
                   />
                   {formErrors.university && <div className="form-error-text">{formErrors.university}</div>}
@@ -521,7 +521,7 @@ export default function Programs() {
                     value={editing.country || ''}
                     onChange={(e) => setEditing({ ...editing, country: safeText(e.target.value) })}
                     maxLength={100}
-                    placeholder="США / Китай / Корея / Канада / ..."
+                    placeholder={t('programs.ph.country')}
                   />
                 </div>
                 <div className="form-group">
@@ -531,7 +531,7 @@ export default function Programs() {
                     onChange={(e) => setEditing({ ...editing, city: safeText(e.target.value) })}
                     className={`crm-input${formErrors.city ? ' input-error' : ''}`}
                     maxLength={100}
-                    placeholder="Пекин / Beijing / 北京"
+                    placeholder={t('programs.ph.city')}
                   />
                   {formErrors.city && <div className="form-error-text">{formErrors.city}</div>}
                 </div>
@@ -542,7 +542,7 @@ export default function Programs() {
                     onChange={(e) => setEditing({ ...editing, major: safeText(e.target.value) })}
                     className={`crm-input${formErrors.major ? ' input-error' : ''}`}
                     maxLength={200}
-                    placeholder="Информатика / Computer Science"
+                    placeholder={t('programs.ph.major')}
                   />
                   {formErrors.major && <div className="form-error-text">{formErrors.major}</div>}
                 </div>
@@ -568,14 +568,14 @@ export default function Programs() {
                 <div className="form-group">
                   <label>{t('programs.field.currency')}</label>
                   <CrmSelect className="crm-select" value={editing.currency || 'CNY'} onChange={(e) => setEditing({ ...editing, currency: e.target.value })}>
-                    <option value="CNY">CNY (юань)</option>
+                    <option value="CNY">{t('programs.currency.CNY')}</option>
                     <option value="USD">USD</option>
-                    <option value="EUR">EUR (евро)</option>
-                    <option value="KRW">KRW (вона)</option>
-                    <option value="JPY">JPY (йена)</option>
-                    <option value="GBP">GBP (фунт)</option>
-                    <option value="CAD">CAD (канадский $)</option>
-                    <option value="MYR">MYR (ринггит)</option>
+                    <option value="EUR">{t('programs.currency.EUR')}</option>
+                    <option value="KRW">{t('programs.currency.KRW')}</option>
+                    <option value="JPY">{t('programs.currency.JPY')}</option>
+                    <option value="GBP">{t('programs.currency.GBP')}</option>
+                    <option value="CAD">{t('programs.currency.CAD')}</option>
+                    <option value="MYR">{t('programs.currency.MYR')}</option>
                     <option value="RUB">RUB</option>
                     <option value="TJS">TJS</option>
                     <option value="KZT">KZT</option>
@@ -584,7 +584,7 @@ export default function Programs() {
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.duration')}</label>
-                  <input className="crm-input" value={editing.duration || ''} placeholder="4 года" onChange={(e) => setEditing({ ...editing, duration: e.target.value })} />
+                  <input className="crm-input" value={editing.duration || ''} placeholder={t('programs.ph.duration')} onChange={(e) => setEditing({ ...editing, duration: e.target.value })} />
                 </div>
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label>{t('programs.field.language')}</label>
@@ -626,7 +626,7 @@ export default function Programs() {
                   <input
                     className="crm-input"
                     value={editing.applicationDeadline || ''}
-                    placeholder="1 марта / круглый год"
+                    placeholder={t('programs.ph.deadline')}
                     onChange={(e) => setEditing({ ...editing, applicationDeadline: e.target.value })}
                   />
                 </div>
@@ -651,22 +651,22 @@ export default function Programs() {
                     checked={!!editing.hasGrant}
                     onChange={(e) => setEditing({ ...editing, hasGrant: e.target.checked })}
                   />
-                  Есть грант / стипендия
+                  {t('programs.hasGrant')}
                 </label>
               </div>
               {editing.hasGrant && (
                 <div className="form-grid-2">
                   <div className="form-group">
-                    <label>Что покрывает грант</label>
+                    <label>{t('programs.grantCovers')}</label>
                     <input
                       className="crm-input"
                       value={editing.grantDetails || ''}
-                      placeholder="Обучение + проживание + стипендия"
+                      placeholder={t('programs.ph.grantCovers')}
                       onChange={(e) => setEditing({ ...editing, grantDetails: e.target.value })}
                     />
                   </div>
                   <div className="form-group">
-                    <label>Уровень англ. для гранта</label>
+                    <label>{t('programs.grantEnglish')}</label>
                     <input
                       className="crm-input"
                       value={editing.grantEnglishLevel || ''}
@@ -706,21 +706,21 @@ export default function Programs() {
               <div className="form-group">
                 <label>{t('programs.field.description')}</label>
                 <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
-                  <button type="button" className="btn btn-sm btn-secondary" title="Жирный"
+                  <button type="button" className="btn btn-sm btn-secondary" title={t('programs.md.bold')}
                     onClick={() => wrapAtCursor(descRef.current, editing, setEditing, '**', '**')}>
-                    <b>Ж</b>
+                    <b>{t('programs.md.boldLetter')}</b>
                   </button>
-                  <button type="button" className="btn btn-sm btn-secondary" title="Курсив"
+                  <button type="button" className="btn btn-sm btn-secondary" title={t('programs.md.italic')}
                     onClick={() => wrapAtCursor(descRef.current, editing, setEditing, '*', '*')}>
-                    <i>К</i>
+                    <i>{t('programs.md.italicLetter')}</i>
                   </button>
-                  <button type="button" className="btn btn-sm btn-secondary" title="Маркированный список"
+                  <button type="button" className="btn btn-sm btn-secondary" title={t('programs.md.list')}
                     onClick={() => insertAtCursor(descRef.current, editing, setEditing, '\n- ')}>
-                    • Список
+                    • {t('programs.md.listShort')}
                   </button>
-                  <button type="button" className="btn btn-sm btn-secondary" title="Ссылка"
-                    onClick={() => wrapAtCursor(descRef.current, editing, setEditing, '[', '](https://)', 'текст')}>
-                    🔗 Ссылка
+                  <button type="button" className="btn btn-sm btn-secondary" title={t('programs.md.link')}
+                    onClick={() => wrapAtCursor(descRef.current, editing, setEditing, '[', '](https://)', t('programs.md.text'))}>
+                    🔗 {t('programs.md.link')}
                   </button>
                 </div>
                 <textarea
@@ -729,7 +729,7 @@ export default function Programs() {
                   rows={10}
                   style={{ minHeight: 250, fontFamily: 'inherit' }}
                   value={editing.description || ''}
-                  placeholder={`Подробное описание программы.\n\nПоддерживается markdown: **жирный**, *курсив*, - список, [ссылка](https://...)`}
+                  placeholder={t('programs.ph.description')}
                   onChange={(e) => setEditing({ ...editing, description: e.target.value })}
                 />
               </div>
@@ -770,7 +770,7 @@ export default function Programs() {
                   </button>
                   {!editing.id && pendingImage && (
                     <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>
-                      Картинка отправится вместе с программой при сохранении.
+                      {t('programs.imagePending')}
                     </div>
                   )}
                 </div>
@@ -820,7 +820,7 @@ export default function Programs() {
                   type="submit"
                   className="btn btn-primary"
                   disabled={saving || formInvalid}
-                  title={formInvalid ? 'Исправьте ошибки в форме' : ''}
+                  title={formInvalid ? t('programs.fixErrors') : ''}
                 >
                   {saving ? t('common.loading') : t('common.save')}
                 </button>
@@ -885,12 +885,12 @@ function TagsInput({
               add();
             }
           }}
-          placeholder={placeholder || 'Введите и Enter'}
+          placeholder={placeholder || tr('programs.tags.placeholder')}
           maxLength={100}
           style={{ flex: 1 }}
         />
         <button type="button" className="btn btn-sm btn-secondary" onClick={add} disabled={!draft.trim()}>
-          + Добавить
+          + {tr('common.add')}
         </button>
       </div>
     </div>
@@ -913,9 +913,9 @@ function ProgramGallery({
     try {
       const updated = await uploadProgramGalleryImage(programId, file);
       onChange(updated.imageUrls || []);
-      toast('Фото добавлено', 'success');
+      toast(t('programs.toast.photoAdded'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка загрузки', 'error');
+      toast(e?.response?.data?.message || t('dealForm.uploadError'), 'error');
     } finally {
       setUploading(false);
     }
@@ -925,7 +925,7 @@ function ProgramGallery({
       const updated = await removeProgramGalleryImage(programId, url);
       onChange(updated.imageUrls || []);
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
   return (
@@ -942,7 +942,7 @@ function ProgramGallery({
             <button
               type="button"
               onClick={() => onRemove(u)}
-              title="Удалить"
+              title={t('common.delete')}
               style={{
                 position: 'absolute', top: 4, right: 4,
                 width: 24, height: 24, borderRadius: '50%',
@@ -990,14 +990,14 @@ function ScholarshipsEditor({ programId }: { programId: string }) {
   const [draft, setDraft] = useState<Partial<ProgramScholarship>>({});
 
   const onAdd = async () => {
-    if (!draft.name?.trim()) return toast('Укажите название стипендии', 'error');
+    if (!draft.name?.trim()) return toast(t('programs.err.scholarshipName'), 'error');
     try {
       await addProgramScholarship(programId, draft);
       setDraft({});
       setCreating(false);
       qc.invalidateQueries({ queryKey: ['program-scholarships', programId] });
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
   const onRemove = async (s: ProgramScholarship) => {
@@ -1043,19 +1043,19 @@ function ScholarshipsEditor({ programId }: { programId: string }) {
           border: '1px solid var(--primary)', borderRadius: 8, background: 'var(--bg-soft)',
         }}>
           <div className="form-grid-2" style={{ gap: 8 }}>
-            <input className="crm-input" placeholder="Название (CSC Scholarship)" value={draft.name || ''}
+            <input className="crm-input" placeholder={t('programs.ph.schName')} value={draft.name || ''}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            <input className="crm-input" placeholder="Покрытие (Полное / Частичное)" value={draft.coverage || ''}
+            <input className="crm-input" placeholder={t('programs.ph.schCoverage')} value={draft.coverage || ''}
               onChange={(e) => setDraft({ ...draft, coverage: e.target.value })} />
-            <input className="crm-input" placeholder="Сумма (5000 USD/год)" value={draft.amount || ''}
+            <input className="crm-input" placeholder={t('programs.ph.schAmount')} value={draft.amount || ''}
               onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
-            <input className="crm-input" placeholder="Что включено" value={draft.includes || ''}
+            <input className="crm-input" placeholder={t('programs.ph.schIncludes')} value={draft.includes || ''}
               onChange={(e) => setDraft({ ...draft, includes: e.target.value })} />
-            <input className="crm-input" placeholder="Требования (GPA 3.5, IELTS 6.0)" value={draft.requirements || ''}
+            <input className="crm-input" placeholder={t('programs.ph.schRequirements')} value={draft.requirements || ''}
               onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} />
-            <input className="crm-input" placeholder="Дедлайн (1 марта)" value={draft.deadline || ''}
+            <input className="crm-input" placeholder={t('programs.ph.schDeadline')} value={draft.deadline || ''}
               onChange={(e) => setDraft({ ...draft, deadline: e.target.value })} />
-            <input className="crm-input" style={{ gridColumn: '1 / -1' }} placeholder="Ссылка (https://...)" value={draft.link || ''}
+            <input className="crm-input" style={{ gridColumn: '1 / -1' }} placeholder={t('programs.ph.schLink')} value={draft.link || ''}
               onChange={(e) => setDraft({ ...draft, link: e.target.value })} />
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
@@ -1146,7 +1146,7 @@ function ProgramGalleryPending({
       </button>
       {files.length > 0 && (
         <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 6 }}>
-          Фото загрузятся после сохранения программы.
+          {t('programs.photosPending')}
         </div>
       )}
     </div>
@@ -1235,7 +1235,7 @@ function ScholarshipsPending({
       )}
       {items.length > 0 && (
         <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 6 }}>
-          Стипендии создадутся после сохранения программы.
+          {t('programs.scholarshipsPending')}
         </div>
       )}
     </div>

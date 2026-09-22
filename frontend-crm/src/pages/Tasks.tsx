@@ -1,3 +1,4 @@
+import { fmtDateText, TJ_TZ } from '../lib/tjTime';
 import { useEffect, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -106,12 +107,12 @@ export default function Tasks() {
     mutationFn: createTask,
     invalidate: [keys.tasks.all, keys.tasks.stats()],
     onSuccess: () => {
-      toast('Задача создана. Сотрудник получит email и уведомление.', 'success');
+      toast(t('tasks.toast.created'), 'success');
       setForm({ title: '', description: '', assigneeIds: [], controllerId: '', deadline: '' });
       setAssigneePicker('');
       setCreating(false);
     },
-    onError: (err: any) => toast(err?.response?.data?.message || 'Ошибка создания', 'error'),
+    onError: (err: any) => toast(err?.response?.data?.message || t('tasks.toast.createError'), 'error'),
   });
 
   // UPDATE STATUS — горячий UX, делаем оптимистично (мгновенное переключение).
@@ -120,7 +121,7 @@ export default function Tasks() {
     queryKey: listKey,
     applyOptimistic: (cur, { id, patch }) => optimistic.updateById(cur, id, patch as Partial<Task>),
     invalidateAlso: [keys.tasks.stats()],
-    onError: (err: any) => toast(err?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (err: any) => toast(err?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   // DELETE — оптимистично убираем из списка.
@@ -129,19 +130,19 @@ export default function Tasks() {
     queryKey: listKey,
     applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
     invalidateAlso: [keys.tasks.stats()],
-    onSuccess: () => toast('Задача удалена', 'success'),
-    onError: (err: any) => toast(err?.response?.data?.message || 'Ошибка удаления', 'error'),
+    onSuccess: () => toast(t('tasks.toast.deleted'), 'success'),
+    onError: (err: any) => toast(err?.response?.data?.message || t('tasks.toast.deleteError'), 'error'),
   });
 
   const formErrors = validateAll(
     { title: form.title, description: form.description },
     {
-      title: compose(required('Введите заголовок'), minLen(3, 'Минимум 3 символа'), maxLen(200)),
-      description: compose(required('Опишите задачу'), minLen(5, 'Минимум 5 символов'), maxLen(2000)),
+      title: compose(required(t('tasks.err.title')), minLen(3, t('tasks.err.min3')), maxLen(200)),
+      description: compose(required(t('tasks.err.description')), minLen(5, t('tasks.err.min5')), maxLen(2000)),
     },
   );
   // assigneeIds валидируем отдельно: массив, а validateAll работает со строками.
-  const assigneesError = form.assigneeIds.length === 0 ? 'Выберите хотя бы одного сотрудника' : '';
+  const assigneesError = form.assigneeIds.length === 0 ? t('tasks.err.assignees') : '';
   const formInvalid = hasErrors(formErrors) || !!assigneesError;
 
   // Пока поле не трогали — ошибку по нему не показываем. Проверка сама по
@@ -155,7 +156,7 @@ export default function Tasks() {
     e.preventDefault();
     setTouched({ title: true, description: true, assignees: true });
     if (formInvalid) {
-      toast('Заполните все поля корректно', 'error');
+      toast(t('tasks.err.fillAll'), 'error');
       return;
     }
     createMut.mutate({
@@ -177,12 +178,12 @@ export default function Tasks() {
   const userById = (id: string) => users.find((u) => u.id === id);
   const submitting = createMut.isPending;
 
-  const setStatus = (t: Task, next: TaskStatus) => {
-    if (t.status === next) return;
-    if (next === 'DONE') toast('Задача выполнена', 'success');
-    else if (next === 'IN_PROGRESS') toast('Задача взята в работу', 'success');
-    else toast('Задача возвращена в очередь', 'info');
-    updateMut.mutate({ id: t.id, patch: { status: next } });
+  const setStatus = (task: Task, next: TaskStatus) => {
+    if (task.status === next) return;
+    if (next === 'DONE') toast(t('tasks.toast.done'), 'success');
+    else if (next === 'IN_PROGRESS') toast(t('tasks.toast.inProgress'), 'success');
+    else toast(t('tasks.toast.todo'), 'info');
+    updateMut.mutate({ id: task.id, patch: { status: next } });
   };
 
   const onDelete = async (task: Task) => {
@@ -220,14 +221,14 @@ export default function Tasks() {
                 onClick={() => setScope('mine')}
               >
                 <Icon name="person" size={16} />
-                Мои
+                {t('scope.mine')}
               </button>
               <button
                 className={`scope-btn${scope === 'all' ? ' active' : ''}`}
                 onClick={() => setScope('all')}
               >
                 <Icon name="groups" size={16} />
-                Все
+                {t('common.all')}
               </button>
             </div>
           )}
@@ -250,7 +251,7 @@ export default function Tasks() {
         <div className="filters-search">
           <input
             className="crm-input"
-            placeholder="Поиск по заголовку или описанию..."
+            placeholder={t('tasks.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -271,7 +272,7 @@ export default function Tasks() {
                   type="text"
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder="Например: Собрать документы для Иванова"
+                  placeholder={t('tasks.ph.title')}
                   maxLength={200}
                   className={`crm-input${errorOf('title', formErrors.title) ? ' input-error' : ''}`}
                   onBlur={() => touch('title')}
@@ -284,7 +285,7 @@ export default function Tasks() {
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Что именно нужно сделать..."
+                  placeholder={t('tasks.ph.description')}
                   maxLength={2000}
                   className={`crm-textarea${errorOf('description', formErrors.description) ? ' input-error' : ''}`}
                   onBlur={() => touch('description')}
@@ -294,7 +295,7 @@ export default function Tasks() {
                 {errorOf('description', formErrors.description) && <div className="form-error-text">{formErrors.description}</div>}
               </div>
               <div className="form-group">
-                <label>Назначить сотрудников *</label>
+                <label>{t('tasks.assignees')} *</label>
                 {form.assigneeIds.length > 0 && (
                   <div
                     style={{
@@ -323,7 +324,7 @@ export default function Tasks() {
                           <button
                             type="button"
                             onClick={() => removeAssignee(id)}
-                            aria-label="Убрать"
+                            aria-label={t('tasks.remove')}
                             style={{
                               background: 'transparent',
                               border: 'none',
@@ -348,8 +349,8 @@ export default function Tasks() {
                 >
                   <option value="">
                     {form.assigneeIds.length === 0
-                      ? '— Выберите сотрудника —'
-                      : '+ Добавить ещё сотрудника'}
+                      ? t('tasks.pickEmployee')
+                      : t('tasks.addEmployee')}
                   </option>
                   {users
                     .filter((u) => !form.assigneeIds.includes(u.id))
@@ -362,13 +363,13 @@ export default function Tasks() {
                 {errorOf('assignees', assigneesError) && <div className="form-error-text">{assigneesError}</div>}
               </div>
               <div className="form-group">
-                <label>Контролёр задачи</label>
+                <label>{t('tasks.controller')}</label>
                 <CrmSelect
                   className="crm-select"
                   value={form.controllerId}
                   onChange={(e) => setForm({ ...form, controllerId: e.target.value })}
                 >
-                  <option value="">Выберите контролёра (необязательно)</option>
+                  <option value="">{t('tasks.pickController')}</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.fullName} · {displayRoleLabel(u as any)}
@@ -401,9 +402,9 @@ export default function Tasks() {
                   type="submit"
                   className="btn btn-primary"
                   disabled={submitting || formInvalid}
-                  title={formInvalid ? 'Исправьте ошибки в форме' : ''}
+                  title={formInvalid ? t('programs.fixErrors') : ''}
                 >
-                  {submitting ? 'Создаём...' : 'Создать'}
+                  {submitting ? t('tasks.creating') : t('common.create')}
                 </button>
               </div>
             </form>
@@ -417,7 +418,7 @@ export default function Tasks() {
           ) : items.length === 0 ? (
             <motion.div key="empty" className="empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="empty-icon"><Icon name="task_alt" size={48} /></div>
-              {scope === 'mine' ? 'У вас пока нет назначенных задач' : 'Задач пока нет'}
+              {scope === 'mine' ? t('tasks.empty.mine') : t('tasks.empty.all')}
             </motion.div>
           ) : (
             <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -508,7 +509,7 @@ function DeadlineBadge({ deadline, status }: { deadline: string; status: TaskSta
   const cls = isOverdue ? 'badge-danger' : isSoon ? 'badge-warning' : 'badge-info';
   return (
     <span className={`badge ${cls} task-deadline`} data-testid="task-deadline">
-      {dl.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+      {fmtDateText(dl, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: TJ_TZ })}
     </span>
   );
 }

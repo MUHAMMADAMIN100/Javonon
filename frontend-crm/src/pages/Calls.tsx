@@ -1,3 +1,4 @@
+import { fmtDateText, TJ_TZ } from '../lib/tjTime';
 import { useMemo, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { motion } from 'framer-motion';
@@ -25,8 +26,8 @@ import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
 function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('ru-RU', {
-    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  return fmtDateText(iso, {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: TJ_TZ,
   });
 }
 

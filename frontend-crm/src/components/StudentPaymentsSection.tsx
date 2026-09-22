@@ -1,3 +1,4 @@
+import { fmtDateText, TJ_TZ } from '../lib/tjTime';
 import { useRealtime } from '../realtime';
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -178,7 +179,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 500, fontSize: 14 }}>{fmt(p.amount, p.currency)}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
-                    {new Date(p.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}
+                    {fmtDateText(p.createdAt, { day: '2-digit', month: 'short', timeZone: TJ_TZ })}
                     {p.comment && ` · ${p.comment}`}
                   </div>
                 </div>
@@ -227,7 +228,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
                   {t(`payments.cat.${tx.category}`) !== `payments.cat.${tx.category}` ? t(`payments.cat.${tx.category}`) : (CATEGORY_LABEL[tx.category] || tx.category)}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
-                  {new Date(tx.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {fmtDateText(tx.date, { day: '2-digit', month: 'short', year: 'numeric', timeZone: TJ_TZ })}
                   {tx.comment && ` · ${tx.comment}`}
                   {tx.recordedBy && ` · ${tx.recordedBy.fullName}`}
                 </div>

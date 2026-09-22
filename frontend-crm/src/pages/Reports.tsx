@@ -1,3 +1,4 @@
+import { fmtDateText, TJ_TZ } from '../lib/tjTime';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -11,7 +12,7 @@ import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', weekday: 'short' });
+  return fmtDateText(iso, { day: '2-digit', month: 'short', weekday: 'short', timeZone: TJ_TZ });
 }
 
 export default function Reports() {

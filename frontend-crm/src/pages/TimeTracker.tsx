@@ -18,16 +18,16 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { useOptimisticMutation } from '../lib/optimistic';
 import { useRealtimeEvent } from '../realtime';
-import { tjFormatTime, TJ_TZ } from '../lib/tjTime';
-import { useT } from '../lib/i18n';
+import { fmtDateText, tjFormatTime, TJ_TZ } from '../lib/tjTime';
+import { tr, useT } from '../lib/i18n';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 function fmtMin(min: number): string {
-  if (min <= 0) return '0м';
+  if (min <= 0) return `0${tr('time.m')}`;
   const h = Math.floor(min / 60);
   const m = min % 60;
-  if (h > 0) return `${h}ч ${m}м`;
-  return `${m}м`;
+  if (h > 0) return `${h}${tr('time.h')} ${m}${tr('time.m')}`;
+  return `${m}${tr('time.m')}`;
 }
 
 function fmtTime(iso: string | null): string {
@@ -46,12 +46,12 @@ function minutesOfDay(iso: string | null): number | null {
 }
 
 function fmtDate(iso: string): string {
-  return new Intl.DateTimeFormat('ru-RU', {
+  return fmtDateText(iso, {
     timeZone: TJ_TZ,
     day: '2-digit',
     month: 'short',
     weekday: 'short',
-  }).format(new Date(iso));
+  });
 }
 
 export default function TimeTracker() {
@@ -157,7 +157,7 @@ export default function TimeTracker() {
       },
       invalidateAlso: [historyKey, keys.time.team()],
       onSuccess: () => toast(successMsg, 'success'),
-      onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+      onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
     });
 
   // clockIn — отдельный с TVars=ClockInArgs (lat/lon/proofUrl)
@@ -182,10 +182,10 @@ export default function TimeTracker() {
       return { ...cur, ...patch } as TimeEntry;
     },
     invalidateAlso: [historyKey, keys.time.team()],
-    onSuccess: () => toast('Рабочий день начат', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('time.toast.started'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
-  const lunchOutMut = buildMut(apiLunchOut, { status: 'ON_LUNCH', lunchOut: new Date().toISOString() }, 'Ушли на обед');
+  const lunchOutMut = buildMut(apiLunchOut, { status: 'ON_LUNCH', lunchOut: new Date().toISOString() }, t('time.toast.lunchOut'));
   // lunchInMut — отдельный, чтобы поймать requiresLunchExcuse в ответе
   // и открыть модалку объяснения если опоздание с обеда >= 10 мин.
   const lunchInMut = useOptimisticMutation<any, void, TimeEntry | null>({
@@ -197,14 +197,14 @@ export default function TimeTracker() {
     },
     invalidateAlso: [historyKey, keys.time.team()],
     onSuccess: (data: any) => {
-      toast('Вернулись с обеда', 'success');
+      toast(t('time.toast.lunchIn'), 'success');
       if (data?.requiresLunchExcuse && data?.id) {
         setShowLunchExcuseModal(true);
       }
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
-  const clockOutMut = buildMut(apiClockOut, { status: 'OFF', clockOut: new Date().toISOString() }, 'Рабочий день завершён');
+  const clockOutMut = buildMut(apiClockOut, { status: 'OFF', clockOut: new Date().toISOString() }, t('time.toast.finished'));
 
   const loading = clockInMut.isPending || lunchOutMut.isPending || lunchInMut.isPending || clockOutMut.isPending;
   void qc; // reserved for future cross-key invalidations
@@ -314,14 +314,14 @@ export default function TimeTracker() {
           }}>
             <div>
               <div style={{ fontWeight: 600, color: '#b45309' }}>
-                ⚠️ Опоздание {today.lateMinutes} минут
+                ⚠️ {t('time.late')} {today.lateMinutes} {t('common.minutes')}
               </div>
               <div style={{ fontSize: 13, color: '#92400e', marginTop: 4 }}>
-                Объясни причину — иначе сегодня вечером будет начислен штраф (прогрессивный, +50 TJS за каждое следующее опоздание).
+                {t('time.lateWarning')}
               </div>
             </div>
             <button className="btn btn-primary" onClick={() => setShowExcuseModal(true)}>
-              Объяснить причину
+              {t('time.explain')}
             </button>
           </div>
         )}
@@ -334,10 +334,10 @@ export default function TimeTracker() {
           const isApproved = status === 'APPROVED';
           const isRejected = status === 'REJECTED';
           const style = isApproved
-            ? { bg: '#dcfce7', border: '#86efac', color: '#15803d', text: '✓ Причина одобрена — штраф не будет начислен' }
+            ? { bg: '#dcfce7', border: '#86efac', color: '#15803d', text: `✓ ${t('time.excuse.approved')}` }
             : isRejected
-            ? { bg: '#fee2e2', border: '#fca5a5', color: '#991b1b', text: '✕ Причина отклонена — штраф будет начислен' }
-            : { bg: '#fef3c7', border: '#fcd34d', color: '#92400e', text: '⏳ Ваша причина на рассмотрении у основателя' };
+            ? { bg: '#fee2e2', border: '#fca5a5', color: '#991b1b', text: `✕ ${t('time.excuse.rejected')}` }
+            : { bg: '#fef3c7', border: '#fcd34d', color: '#92400e', text: `⏳ ${t('time.excuse.pending')}` };
           return (
             <div style={{
               marginTop: 20,
@@ -521,6 +521,7 @@ function ClockInModal({
   onCancel: () => void;
   onConfirm: (vars: { lat?: number; lon?: number; proofUrl?: string }) => void;
 }) {
+  const { t } = useT();
   const { toast } = useUI();
   const [geoLoading, setGeoLoading] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
@@ -529,7 +530,7 @@ function ClockInModal({
 
   const detectLocation = () => {
     if (!navigator.geolocation) {
-      toast('Геолокация недоступна в этом браузере', 'error');
+      toast(t('time.geo.unavailable'), 'error');
       return;
     }
     setGeoLoading(true);
@@ -540,7 +541,7 @@ function ClockInModal({
       },
       (err) => {
         setGeoLoading(false);
-        toast(`Геолокация: ${err.message}`, 'error');
+        toast(`${t('time.geo.label')}: ${err.message}`, 'error');
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
@@ -548,7 +549,7 @@ function ClockInModal({
 
   const submit = async () => {
     if (!coords && !proofFile) {
-      toast('Нужно подтверждение: геолокация или фото/видео', 'error');
+      toast(t('time.proof.required'), 'error');
       return;
     }
     let proofUrl: string | undefined;
@@ -558,7 +559,7 @@ function ClockInModal({
         const r = await uploadTimeProof(proofFile);
         proofUrl = r.url;
       } catch (e: any) {
-        toast(e?.response?.data?.message || 'Ошибка загрузки', 'error');
+        toast(e?.response?.data?.message || t('dealForm.uploadError'), 'error');
         setUploading(false);
         return;
       }
@@ -584,10 +585,10 @@ function ClockInModal({
         style={{ maxWidth: 480 }}
       >
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 8 }}>
-          Подтверди присутствие
+          {t('time.proof.title')}
         </h3>
         <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 20 }}>
-          Чтобы начать рабочий день нужно либо разрешить геолокацию, либо приложить фото/видео рабочего места.
+          {t('time.proof.text')}
         </p>
 
         <div style={{ marginBottom: 16 }}>
@@ -598,12 +599,12 @@ function ClockInModal({
             style={{ width: '100%' }}
           >
             <Icon name={coords ? 'check_circle' : 'location_on'} size={18} />
-            {geoLoading ? 'Определяем...' : coords ? `📍 ${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}` : 'Использовать геолокацию'}
+            {geoLoading ? t('time.geo.detecting') : coords ? `📍 ${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}` : t('time.geo.use')}
           </button>
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>ИЛИ ФОТО/ВИДЕО РАБОЧЕГО МЕСТА</div>
+          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>{t('time.proof.orMedia')}</div>
           <input
             type="file"
             accept="image/*,video/*"
@@ -613,15 +614,15 @@ function ClockInModal({
           />
           {proofFile && (
             <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
-              ✓ {proofFile.name} ({(proofFile.size / 1024).toFixed(0)} КБ)
+              ✓ {proofFile.name} ({(proofFile.size / 1024).toFixed(0)} {t('finance.kb')})
             </div>
           )}
         </div>
 
         <div className="dialog-actions">
-          <button className="btn btn-secondary" onClick={onCancel} disabled={uploading}>Отмена</button>
+          <button className="btn btn-secondary" onClick={onCancel} disabled={uploading}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={submit} disabled={uploading || (!coords && !proofFile)}>
-            {uploading ? 'Загружаем...' : 'Начать работу'}
+            {uploading ? t('common.uploading') : t('time.startWork')}
           </button>
         </div>
       </motion.div>
@@ -640,13 +641,14 @@ function ExcuseModal({
   onDone: () => void;
   onError: (msg: string) => void;
 }) {
+  const { t } = useT();
   const [reason, setReason] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
     if (!reason.trim() && !file) {
-      onError('Укажи причину или приложи фото/видео');
+      onError(t('time.excuse.required'));
       return;
     }
     setSubmitting(true);
@@ -662,7 +664,7 @@ function ExcuseModal({
       });
       onDone();
     } catch (e: any) {
-      onError(e?.response?.data?.message || 'Ошибка');
+      onError(e?.response?.data?.message || t('toast.error'));
     } finally {
       setSubmitting(false);
     }
@@ -685,22 +687,22 @@ function ExcuseModal({
         style={{ maxWidth: 480 }}
       >
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 8 }}>
-          Объяснение опоздания
+          {t('time.excuse.title')}
         </h3>
         <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 20 }}>
-          Опоздал на {entry.lateMinutes} мин. Если объяснишь причину — штраф не начислится.
+          {t('time.excuse.text').replace('{n}', String(entry.lateMinutes))}
         </p>
 
         <textarea
           className="crm-textarea"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Причина (минимум 5 символов)"
+          placeholder={t('time.excuse.placeholder')}
           rows={3}
           style={{ width: '100%', marginBottom: 12 }}
         />
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>ФОТО / ВИДЕО (опционально)</div>
+          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>{t('time.excuse.media')}</div>
           <input
             type="file"
             accept="image/*,video/*"
@@ -715,9 +717,9 @@ function ExcuseModal({
         </div>
 
         <div className="dialog-actions">
-          <button className="btn btn-secondary" onClick={onCancel} disabled={submitting}>Отмена</button>
+          <button className="btn btn-secondary" onClick={onCancel} disabled={submitting}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={submit} disabled={submitting}>
-            {submitting ? 'Отправляем...' : 'Отправить'}
+            {submitting ? t('common.sending') : t('common.send')}
           </button>
         </div>
       </motion.div>
@@ -738,13 +740,14 @@ function LunchExcuseModal({
   onDone: () => void;
   onError: (msg: string) => void;
 }) {
+  const { t } = useT();
   const [reason, setReason] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
     if (!reason.trim() && !file) {
-      onError('Укажи причину или приложи фото/видео');
+      onError(t('time.excuse.required'));
       return;
     }
     setSubmitting(true);
@@ -760,7 +763,7 @@ function LunchExcuseModal({
       });
       onDone();
     } catch (e: any) {
-      onError(e?.response?.data?.message || 'Ошибка');
+      onError(e?.response?.data?.message || t('toast.error'));
     } finally {
       setSubmitting(false);
     }
@@ -783,22 +786,22 @@ function LunchExcuseModal({
         style={{ maxWidth: 480 }}
       >
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 8 }}>
-          Объяснение опоздания с обеда
+          {t('time.lunchExcuse.title')}
         </h3>
         <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 20 }}>
-          Опоздал с обеда на {entry.lateLunchMinutes ?? 0} мин. Объяснение причины <b>обязательно</b>. Если основатель одобрит — штраф не начислится.
+          {t('time.lunchExcuse.text').replace('{n}', String(entry.lateLunchMinutes ?? 0))}
         </p>
 
         <textarea
           className="crm-textarea"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Причина (минимум 5 символов)"
+          placeholder={t('time.excuse.placeholder')}
           rows={3}
           style={{ width: '100%', marginBottom: 12 }}
         />
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>ФОТО / ВИДЕО (опционально)</div>
+          <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>{t('time.excuse.media')}</div>
           <input
             type="file"
             accept="image/*,video/*"
@@ -814,7 +817,7 @@ function LunchExcuseModal({
 
         <div className="dialog-actions" style={{ justifyContent: 'flex-end' }}>
           <button className="btn btn-primary" onClick={submit} disabled={submitting}>
-            {submitting ? 'Отправляем...' : 'Отправить'}
+            {submitting ? t('common.sending') : t('common.send')}
           </button>
         </div>
       </motion.div>
