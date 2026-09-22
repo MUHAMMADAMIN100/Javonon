@@ -1762,136 +1762,60 @@ export class FinanceService {
    * Отменённые (reversedAt != null) исключаем, чтобы структура не искажалась
    * отказниками — та же логика, что в topManagers.
    *
-   * === BONUS-RECONCILE FIX (audit CRITICAL, follow-up bug #22) ===========
-   * Ранее byManager/byIncomeSource считали ВСЮ INCOME по Transaction.date,
-   * а salary.preview — TUITION_PAYMENT-приход по SubmissionPayment.reviewedAt
-   * (bug #22 фикс, см. salary.service.ts:112). Одна и та же продажа с
-   * paidAt в одном периоде и reviewedAt в следующем попадала в разные
-   * месяцы у двух отчётов: FOUNDER видел в /finance/breakdown у Amir'а
-   * 15 000 TJS в ноябре, а в квитке зарплаты — 10 000 TJS. Разницу
-   * невозможно было отследить без ручной сверки платежей.
+   * Весь INCOME — по Transaction.date, как журнал и карточка «Доход»:
+   * сумма byIncomeSource = сумме byManager + без менеджера = «Доход» за
+   * тот же период. Оплаты по сделкам приходят сюда своей транзакцией
+   * (approvePayment пишет date = paidAt), поэтому с базой бонуса в
+   * зарплате (SubmissionPayment.paidAt) это одни и те же деньги. Раньше
+   * tuition брался только через одобренный SubmissionPayment, и оплата
+   * без привязки (импорт, старые данные) выпадала из разбивки.
    *
-   * Fix: разбиваем INCOME на два куска (те же, что использует salary):
-   *   1) TUITION_PAYMENT-транзакции — берём через SubmissionPayment
-   *      .paidAt-период (тот же якорь, что даёт бонус). Так суммарный
-   *      byManager amount === salary.preview.salesAmount для одного
-   *      менеджера/периода. Якорь переехал с reviewedAt на paidAt вместе
-   *      с бонусом — см. common/manager-bonus-volume.ts.
-   *   2) Ручные INCOME (category != TUITION_PAYMENT) — по Transaction
-   *      .date, как раньше. У них нет SubmissionPayment вообще,
-   *      триггер начисления = сам факт транзакции.
-   *
-   * byExpenseCategory остаётся по Transaction.date — расходы к
-   * SubmissionPayment не привязаны, триггер всегда сам факт транзакции.
-   *
-   * Двойной парити-якорь с salary: TUITION_PAYMENT-транзакции с
-   * reversedAt != null исключаем даже если payment ещё status=APPROVED
-   * (случай ручной корректировки без CANCEL сделки). См. ANCHOR-PARITY-FIX
-   * в salary.service.ts.
+   * byExpenseCategory — тоже по Transaction.date.
    */
   async breakdown(opts: { from?: Date; to?: Date }) {
     this.validateRange(opts);
     const dateRange = opts.from || opts.to
       ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
       : {};
-    // Якорь tuition-прихода — paidAt, тот же, что у бонусной базы
-    // (common/manager-bonus-volume.ts). Совпадает с Transaction.date:
-    // approvePayment пишет date = payment.paidAt, поэтому byManager здесь
-    // и salesAmount в зарплате дают одно и то же число.
-    const paidRange = opts.from || opts.to
-      ? { paidAt: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
-      : {};
+    // Весь «живой» INCOME в TJS по дате транзакции — ровно то, что лежит в
+    // журнале и в карточке «Доход» за тот же период. Раньше оплаты за
+    // обучение брались только через одобренный SubmissionPayment: оплата
+    // без привязки (импорт, старые данные) выпадала, и «по менеджерам /
+    // по источникам» в сумме не сходилось с «Доходом». Для обычных оплат
+    // по сделкам ничего не меняется: approvePayment пишет date = paidAt.
     const liveWhere = { ...dateRange, reversedAt: null } as const;
-    // Fix (audit — currency mixing, CRITICAL): все три groupBy
-    // считались `_sum: { amount: true }` без фильтра по валюте.
-    // Один USD 5000 tuition-платёж превращал 200 USD/TJS смешанной
-    // выручки в «200 сомони» на пирогах. Теперь фильтруем по TJS,
-    // а не-TJS активности отдаём в `nonTjsTotals` — фронт может
-    // показать баннер «в периоде были ещё платежи в USD/EUR».
+    // Fix (audit — currency mixing, CRITICAL): только TJS; не-TJS
+    // активности отдаём в `nonTjsTotals`.
     const tjsWhere = { ...liveWhere, currency: REPORTING_CURRENCY } as const;
+    const incomeWhere = { ...tjsWhere, type: 'INCOME' as const };
 
-    // Шаг 1: собираем финансовые транзакции, порождённые SubmissionPayment
-    // одобрениями, попавшими в период по reviewedAt (тот же скоуп, что
-    // salary — TJS-сделки, не CANCELLED). Prisma не даёт back-relation
-    // Transaction → SubmissionPayment (в schema.prisma только @unique-FK),
-    // поэтому идём в 2 шага: сначала payment-ids → tx-ids, потом
-    // groupBy по Transaction c `id in (...)`.
-    const reviewedPayments = await this.prisma.submissionPayment.findMany({
-      where: {
-        status: 'APPROVED',
-        ...paidRange,
-        submission: {
-          currency: REPORTING_CURRENCY,
-          status: { not: 'CANCELLED' },
-        },
-        financeTransactionId: { not: null },
-      },
-      select: { financeTransactionId: true },
-    });
-    const reviewedTxIds = reviewedPayments
-      .map((p) => p.financeTransactionId)
-      .filter((id): id is string => id !== null);
-
-    // Where-фильтр «tuition-транзакции, попавшие в период по reviewedAt».
-    // reversedAt: null — второй якорь parity с salary (см. заголовок).
-    // Пустой набор id → Prisma вернёт 0 строк без ошибки.
-    const submissionSourcedWhere = {
-      id: { in: reviewedTxIds },
-      reversedAt: null,
-      type: 'INCOME' as const,
-      currency: REPORTING_CURRENCY,
-    };
-
-    // Ручной INCOME — старый date-based фильтр, но с исключением
-    // TUITION_PAYMENT (эти теперь считаются через reviewedAt-ветку выше,
-    // чтобы не задвоить). По инварианту, ручное создание Transaction с
-    // category=TUITION_PAYMENT запрещено, но фильтр — defense-in-depth.
-    const manualIncomeWhere = {
-      ...tjsWhere,
-      type: 'INCOME' as const,
-      category: { not: 'TUITION_PAYMENT' as const },
-    };
-
-    const [bySrcManual, bySrcSub, byMgrManual, byMgrSub, byCat, mgrList, nonTjs] =
-      await Promise.all([
-        this.prisma.transaction.groupBy({
-          by: ['incomeSource'],
-          where: manualIncomeWhere,
-          _sum: { amount: true },
-          _count: true,
-        }),
-        this.prisma.transaction.groupBy({
-          by: ['incomeSource'],
-          where: submissionSourcedWhere,
-          _sum: { amount: true },
-          _count: true,
-        }),
-        this.prisma.transaction.groupBy({
-          by: ['managerId'],
-          where: { ...manualIncomeWhere, managerId: { not: null } },
-          _sum: { amount: true },
-          _count: true,
-        }),
-        this.prisma.transaction.groupBy({
-          by: ['managerId'],
-          where: { ...submissionSourcedWhere, managerId: { not: null } },
-          _sum: { amount: true },
-          _count: true,
-        }),
-        this.prisma.transaction.groupBy({
-          by: ['category'],
-          where: { ...tjsWhere, type: 'EXPENSE' },
-          _sum: { amount: true },
-          _count: true,
-          orderBy: { _sum: { amount: 'desc' } },
-        }),
-        // Единичный дозапрос за именами менеджеров — findMany быстрее чем
-        // N отдельных `include`, а groupBy relation'ы не поддерживает.
-        this.prisma.user.findMany({
-          select: { id: true, fullName: true, email: true },
-        }),
-        this.nonTjsTotals(liveWhere),
-      ]);
+    const [bySrc, byMgr, byCat, mgrList, nonTjs] = await Promise.all([
+      this.prisma.transaction.groupBy({
+        by: ['incomeSource'],
+        where: incomeWhere,
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['managerId'],
+        where: { ...incomeWhere, managerId: { not: null } },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['category'],
+        where: { ...tjsWhere, type: 'EXPENSE' },
+        _sum: { amount: true },
+        _count: true,
+        orderBy: { _sum: { amount: 'desc' } },
+      }),
+      // Единичный дозапрос за именами менеджеров — findMany быстрее чем
+      // N отдельных `include`, а groupBy relation'ы не поддерживает.
+      this.prisma.user.findMany({
+        select: { id: true, fullName: true, email: true },
+      }),
+      this.nonTjsTotals(liveWhere),
+    ]);
 
     const INCOME_SRC_LABEL: Record<string, string> = {
       NEW_CLIENT: 'Новый клиент',
@@ -1901,20 +1825,19 @@ export class FinanceService {
     };
     const userMap = new Map(mgrList.map((u) => [u.id, u]));
 
-    // Мёрж двух источников INCOME по incomeSource. Ключ null → '_none'
-    // при выводе, но в Map держим null, чтобы не спутать с валидным enum.
+    // INCOME по incomeSource. Ключ null → '_none' при выводе, но в Map
+    // держим null, чтобы не спутать с валидным enum.
     const srcMap = new Map<string | null, { amount: number; count: number }>();
-    for (const g of [...bySrcManual, ...bySrcSub]) {
+    for (const g of bySrc) {
       const key = g.incomeSource ?? null;
       const cur = srcMap.get(key) ?? { amount: 0, count: 0 };
       cur.amount += g._sum.amount || 0;
       cur.count += g._count;
       srcMap.set(key, cur);
     }
-    // Тот же мёрж для byManager. Если один менеджер имеет и ручной, и
-    // submission-приход в периоде — суммируем; иначе была бы дубль-строка.
+    // То же для byManager.
     const mgrMap = new Map<string, { amount: number; count: number }>();
-    for (const g of [...byMgrManual, ...byMgrSub]) {
+    for (const g of byMgr) {
       if (!g.managerId) continue; // managerId filter выше уже режет null
       const cur = mgrMap.get(g.managerId) ?? { amount: 0, count: 0 };
       cur.amount += g._sum.amount || 0;
@@ -1953,7 +1876,7 @@ export class FinanceService {
       // самой транзакции». Помогает при сверке с /salary/preview,
       // если менеджер спрашивает «почему разные числа?».
       incomeAnchor: {
-        tuition: 'submissionPayment.paidAt',
+        tuition: 'transaction.date',
         manual: 'transaction.date',
       },
     };
