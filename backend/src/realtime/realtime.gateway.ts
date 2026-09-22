@@ -96,6 +96,9 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     // исключительно в комнату 'founders' (REST /users/presence — тот же доступ).
     this.presence.setNotifier((userId, state, lastSeenAt) => {
       this.server?.to('founders').emit('presence:update', { userId, state, lastSeenAt });
+      // В чате «в сети / был(а) …» видят все сотрудники (решение заказчика) —
+      // только это, без «отошёл» и истории входов.
+      this.server?.to('staff').emit('chat:presence', { userId, online: state === 'ONLINE', lastSeenAt });
     });
   }
 

@@ -1,16 +1,48 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { PresenceService } from '../realtime/presence.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AiService } from '../ai/ai.service';
 import { FinanceService } from '../finance/finance.service';
 import { ChatRoomType } from '@prisma/client';
+
+/**
+ * Что отдаём о сообщении — везде одинаково: и в переписке, и в событиях
+ * сокета. forwardedFrom — автор оригинала для подписи «Переслано от …»
+ * (раньше его не было в переписке, и подпись пропадала после перезагрузки).
+ */
+const MESSAGE_INCLUDE = {
+  author: { select: { id: true, fullName: true, role: true } },
+  replyTo: {
+    select: {
+      id: true, text: true, authorId: true, attachments: true, deletedAt: true,
+      author: { select: { id: true, fullName: true } },
+    },
+  },
+  forwardedFrom: {
+    select: { id: true, authorId: true, author: { select: { id: true, fullName: true } } },
+  },
+  reactions: { select: { id: true, emoji: true, userId: true } },
+} as const;
+
+/** Сколько сообщений в одной порции переписки (остальное — при прокрутке вверх). */
+const PAGE_SIZE = 80;
+/** Сколько живут кеши участников, комнат и сотрудников. */
+const CACHE_MS = 30_000;
+
+type RoomMeta = { id: string; type: ChatRoomType; title: string | null; createdById: string | null; deletedAt: Date | null };
+type UserLite = { id: string; fullName: string; email: string; isFounder: boolean };
 
 @Injectable()
 export class ChatService implements OnModuleInit {
   private readonly logger = new Logger(ChatService.name);
   /** Участники комнат — для адресной рассылки событий (кеш на 30 с). */
   private readonly membersCache = new Map<string, { ids: string[]; at: number }>();
+  /** Тип, админ и удалена ли комната — проверяется на каждом сообщении. */
+  private readonly roomCache = new Map<string, { room: RoomMeta | null; at: number }>();
+  /** Сотрудники (имена, упоминания, основатель) — одна выборка на 30 с. */
+  private usersCache: { list: UserLite[]; byId: Map<string, UserLite>; at: number } | null = null;
   /**
    * Уже отправленные черновики: clientId → сообщение (2 мин). Если сокет
    * принял сообщение, а подтверждение потерялось, клиент повторит отправку
@@ -20,6 +52,7 @@ export class ChatService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
+    private presence: PresenceService,
     private notifications: NotificationsService,
     private ai: AiService,
     private finance: FinanceService,
@@ -46,14 +79,67 @@ export class ChatService implements OnModuleInit {
     });
   }
 
+  // ============ КЕШИ И ПРАВА ============
+
   /** id участников комнаты (кеш 30 с — «печатает…» шлётся часто). */
   private async memberIds(roomId: string): Promise<string[]> {
     const hit = this.membersCache.get(roomId);
-    if (hit && Date.now() - hit.at < 30_000) return hit.ids;
+    if (hit && Date.now() - hit.at < CACHE_MS) return hit.ids;
     const rows = await this.prisma.chatMember.findMany({ where: { roomId }, select: { userId: true } });
     const ids = rows.map((r) => r.userId);
     this.membersCache.set(roomId, { ids, at: Date.now() });
     return ids;
+  }
+
+  private async roomMeta(roomId: string): Promise<RoomMeta | null> {
+    const hit = this.roomCache.get(roomId);
+    if (hit && Date.now() - hit.at < CACHE_MS) return hit.room;
+    const room = await this.prisma.chatRoom.findUnique({
+      where: { id: roomId },
+      select: { id: true, type: true, title: true, createdById: true, deletedAt: true },
+    });
+    // Несуществующую комнату не запоминаем: её id мог прийти раньше, чем она создана.
+    if (room) this.roomCache.set(roomId, { room, at: Date.now() });
+    return room;
+  }
+
+  private forgetRoom(roomId: string) {
+    this.membersCache.delete(roomId);
+    this.roomCache.delete(roomId);
+  }
+
+  private async usersIndex() {
+    if (this.usersCache && Date.now() - this.usersCache.at < CACHE_MS) return this.usersCache;
+    const rows = await this.prisma.user.findMany({ select: { id: true, fullName: true, email: true, role: true, roles: true } });
+    const list = rows.map((u) => ({
+      id: u.id,
+      fullName: u.fullName,
+      email: u.email,
+      isFounder: u.role === 'FOUNDER' || (u.roles || []).includes('FOUNDER'),
+    }));
+    this.usersCache = { list, byId: new Map(list.map((u) => [u.id, u])), at: Date.now() };
+    return this.usersCache;
+  }
+
+  /**
+   * Админ чата: основатель — во всех чатах, в команде — ещё и тот, кто её
+   * создал. Админ удаляет чужие сообщения, закрепляет и удаляет команду.
+   * В общем чате админ только основатель; в личном — оба собеседника
+   * равны (каждый удаляет только своё).
+   */
+  private async isRoomAdmin(room: RoomMeta, userId: string) {
+    const me = (await this.usersIndex()).byId.get(userId);
+    if (me?.isFounder) return true;
+    return room.type === 'TEAM' && !!room.createdById && room.createdById === userId;
+  }
+
+  /** Комната существует, не удалена и человек в ней состоит. */
+  private async requireAccess(roomId: string, userId: string): Promise<RoomMeta> {
+    const [room, ids] = await Promise.all([this.roomMeta(roomId), this.memberIds(roomId)]);
+    if (!room || room.deletedAt || !ids.includes(userId)) {
+      throw new NotFoundException('Чат не найден или вы не участник');
+    }
+    return room;
   }
 
   /**
@@ -63,6 +149,13 @@ export class ChatService implements OnModuleInit {
   private async emitRoom(roomId: string, event: string, payload: any) {
     this.realtime.emitUsers(await this.memberIds(roomId), event, payload);
   }
+
+  /** Удалённое сообщение без вложений — их не видно никому. */
+  private shape<T extends { deletedAt: Date | null; attachments?: any }>(m: T): T {
+    return m.deletedAt ? { ...m, text: '', attachments: null } : m;
+  }
+
+  // ============ КОМНАТЫ ============
 
   /** Гарантирует, что общий чат компании существует, и возвращает его. */
   async ensureGeneralRoom() {
@@ -92,8 +185,8 @@ export class ChatService implements OnModuleInit {
 
   async listRooms(userId: string) {
     await this.ensureGeneralRoom();
-    return this.prisma.chatRoom.findMany({
-      where: { members: { some: { userId } } },
+    const rooms = await this.prisma.chatRoom.findMany({
+      where: { deletedAt: null, members: { some: { userId } } },
       orderBy: { updatedAt: 'desc' },
       include: {
         members: {
@@ -106,49 +199,107 @@ export class ChatService implements OnModuleInit {
         },
       },
     });
+    // «Удалил чат у себя» — чат скрыт, пока в нём не появится что-то новое;
+    // старая переписка (и её последнее сообщение в списке) остаётся скрытой.
+    const out: typeof rooms = [];
+    for (const r of rooms) {
+      const cleared = r.members.find((m) => m.userId === userId)?.clearedAt;
+      if (!cleared) { out.push(r); continue; }
+      if (r.updatedAt <= cleared) continue;
+      out.push({ ...r, messages: r.messages.filter((m) => m.createdAt > cleared) });
+    }
+    return out.map((r) => ({ ...r, messages: r.messages.map((m) => this.shape(m)) }));
   }
 
-  async getRoom(roomId: string, userId: string) {
+  /**
+   * Переписка порциями: без before — последние сообщения (и чат отмечается
+   * прочитанным), с before — более старые, для прокрутки вверх и поиска.
+   */
+  async getRoom(roomId: string, userId: string, before?: string) {
+    await this.requireAccess(roomId, userId);
     const member = await this.prisma.chatMember.findUnique({
       where: { roomId_userId: { roomId, userId } },
+      select: { clearedAt: true },
     });
-    if (!member) throw new NotFoundException('Чат не найден или вы не участник');
+    const beforeDate = before ? new Date(before) : null;
+    if (beforeDate && Number.isNaN(beforeDate.getTime())) throw new BadRequestException('Некорректная дата');
+    const createdAt: { gt?: Date; lt?: Date } = {};
+    if (member?.clearedAt) createdAt.gt = member.clearedAt;
+    if (beforeDate) createdAt.lt = beforeDate;
 
-    // QA-fix: раньше брали 200 СТАРЕЙШИХ (orderBy asc + take 200),
-    // и в чатах с историей >200 сообщений пользователь видел древнюю переписку
-    // вместо последних. Теперь берём 200 ПОСЛЕДНИХ и переворачиваем для UI (asc).
     const recent = await this.prisma.chatMessage.findMany({
-      where: { roomId },
+      where: { roomId, ...(createdAt.gt || createdAt.lt ? { createdAt } : {}) },
       orderBy: { createdAt: 'desc' },
-      include: {
-        author: { select: { id: true, fullName: true, role: true } },
-        replyTo: {
-          select: {
-            id: true, text: true, authorId: true, attachments: true, deletedAt: true,
-            author: { select: { id: true, fullName: true } },
-          },
-        },
-        reactions: { select: { id: true, emoji: true, userId: true } },
-      },
-      take: 200,
+      include: MESSAGE_INCLUDE,
+      take: PAGE_SIZE + 1,
     });
-    const messages = recent.reverse();
-    // Mark as read + emit для собеседника чтобы у него галочки стали ✓✓ сразу.
-    const lastReadAt = new Date();
-    await this.prisma.chatMember.update({
+    const hasMore = recent.length > PAGE_SIZE;
+    const messages = recent.slice(0, PAGE_SIZE).reverse().map((m) => this.shape(m));
+    if (!beforeDate) {
+      // Прочитал — собеседник сразу видит ✓✓.
+      const lastReadAt = new Date();
+      await this.prisma.chatMember.update({
+        where: { roomId_userId: { roomId, userId } },
+        data: { lastReadAt },
+      });
+      await this.emitRoom(roomId, 'chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
+    }
+    return { messages, hasMore };
+  }
+
+  /** Поиск по переписке комнаты (без удалённых и скрытых «удалить у себя»). */
+  async searchMessages(roomId: string, userId: string, q: string) {
+    await this.requireAccess(roomId, userId);
+    const query = (q || '').trim();
+    if (query.length < 2) return [];
+    const member = await this.prisma.chatMember.findUnique({
       where: { roomId_userId: { roomId, userId } },
-      data: { lastReadAt },
+      select: { clearedAt: true },
     });
-    await this.emitRoom(roomId, 'chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
-    return { messages };
+    return this.prisma.chatMessage.findMany({
+      where: {
+        roomId,
+        deletedAt: null,
+        text: { contains: query.slice(0, 100), mode: 'insensitive' },
+        ...(member?.clearedAt ? { createdAt: { gt: member.clearedAt } } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { id: true, text: true, createdAt: true, authorId: true, author: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  /**
+   * Участники чата и кто из них в сети — видят все участники (решение
+   * заказчика). Подробная история входов остаётся только у основателя.
+   */
+  async roomMembers(roomId: string, userId: string) {
+    const room = await this.requireAccess(roomId, userId);
+    const rows = await this.prisma.chatMember.findMany({
+      where: { roomId },
+      select: { user: { select: { id: true, fullName: true, role: true, roles: true, isActive: true, lastSeenAt: true } } },
+    });
+    const live = this.presence.snapshot();
+    const idx = await this.usersIndex();
+    return rows
+      .map(({ user: u }) => {
+        const now = u.isActive !== false ? live.get(u.id) : undefined;
+        return {
+          id: u.id,
+          fullName: u.fullName,
+          role: u.role,
+          roles: u.roles,
+          online: now?.state === 'ONLINE',
+          lastSeenAt: now ? now.lastActivityAt : u.lastSeenAt,
+          isAdmin: !!idx.byId.get(u.id)?.isFounder || (room.type === 'TEAM' && room.createdById === u.id),
+        };
+      })
+      .sort((a, b) => Number(b.online) - Number(a.online) || Number(b.isAdmin) - Number(a.isAdmin) || a.fullName.localeCompare(b.fullName, 'ru'));
   }
 
   /** Telegram-style: пометить как прочитано (повторно, при scroll/focus). */
   async markRoomRead(roomId: string, userId: string) {
-    const member = await this.prisma.chatMember.findUnique({
-      where: { roomId_userId: { roomId, userId } },
-    });
-    if (!member) throw new NotFoundException('Чат не найден');
+    await this.requireAccess(roomId, userId);
     const lastReadAt = new Date();
     await this.prisma.chatMember.update({
       where: { roomId_userId: { roomId, userId } },
@@ -158,6 +309,14 @@ export class ChatService implements OnModuleInit {
     return { ok: true, lastReadAt: lastReadAt.toISOString() };
   }
 
+  // ============ СООБЩЕНИЯ ============
+
+  /**
+   * Отправка. Скорость — главное: до рассылки собеседникам остаётся одна
+   * запись в базу (само сообщение). Участники, комната и сотрудники берутся
+   * из кеша, проверка ответа и упоминаний идут параллельно, а обновление
+   * списка чатов, уведомления и AI — уже после рассылки.
+   */
   async sendMessage(
     roomId: string,
     authorId: string,
@@ -176,67 +335,33 @@ export class ChatService implements OnModuleInit {
     if (!trimmed && !hasAttachments) throw new BadRequestException('Пустое сообщение');
     if (trimmed.length > 4000) throw new BadRequestException('Слишком длинное сообщение');
 
-    const member = await this.prisma.chatMember.findUnique({
-      where: { roomId_userId: { roomId, userId: authorId } },
-    });
-    if (!member) throw new NotFoundException('Чат не найден');
+    const [room, , resolved] = await Promise.all([
+      this.requireAccess(roomId, authorId),
+      // Ответ — только на сообщение из этой же комнаты.
+      options.replyToId
+        ? this.prisma.chatMessage
+            .findUnique({ where: { id: options.replyToId }, select: { roomId: true } })
+            .then((orig) => {
+              if (!orig || orig.roomId !== roomId) {
+                throw new BadRequestException('Невозможно ответить: исходное сообщение не найдено');
+              }
+            })
+        : Promise.resolve(),
+      this.resolveMentions(trimmed, mentionsIds, authorId),
+    ]);
 
-    // Validate replyToId — должен быть из этой же комнаты.
-    if (options.replyToId) {
-      const orig = await this.prisma.chatMessage.findUnique({
-        where: { id: options.replyToId },
-        select: { roomId: true },
-      });
-      if (!orig || orig.roomId !== roomId) {
-        throw new BadRequestException('Невозможно ответить: исходное сообщение не найдено');
-      }
-    }
-
-    // Парсим @mentions (форматы: @full-name, @ID, @firstname.lastname)
-    let resolvedMentions = mentionsIds.length ? mentionsIds : await this.resolveMentionsFromText(trimmed);
-    resolvedMentions = Array.from(new Set(resolvedMentions)).filter((id) => id !== authorId);
-    // QA-fix #36: фильтруем mentionsIds по реально существующим юзерам —
-    // раньше fake-id давал FK-500 при notifications.notifyUser.
-    if (resolvedMentions.length) {
-      const realUsers = await this.prisma.user.findMany({
-        where: { id: { in: resolvedMentions } },
-        select: { id: true },
-      });
-      const realIds = new Set(realUsers.map((u) => u.id));
-      resolvedMentions = resolvedMentions.filter((id) => realIds.has(id));
-    }
-
-    const author = await this.prisma.user.findUnique({
-      where: { id: authorId },
-      select: { fullName: true },
-    });
-
-    // Создаём сообщение с минимальным include — author + replyTo + reactions.
-    // reactions всегда пустой для нового сообщения, но Prisma требует include
-    // если фронт ожидает поле в результате (для типизации).
     const msg = await this.prisma.chatMessage.create({
       data: {
         roomId,
         authorId,
         text: trimmed,
-        mentionsIds: resolvedMentions,
+        mentionsIds: resolved,
         replyToId: options.replyToId || null,
         attachments: hasAttachments ? (options.attachments as any) : undefined,
       },
-      include: {
-        author: { select: { id: true, fullName: true, role: true } },
-        replyTo: {
-          select: {
-            id: true, text: true, authorId: true, attachments: true,
-            author: { select: { id: true, fullName: true } },
-          },
-        },
-        reactions: { select: { id: true, emoji: true, userId: true } },
-      },
+      include: MESSAGE_INCLUDE,
     });
 
-    // КРИТИЧНО ДЛЯ СКОРОСТИ: сначала broadcast — собеседник видит сообщение
-    // мгновенно. Потом параллельно: room.updatedAt + уведомления.
     if (options.clientId) {
       const now = Date.now();
       for (const [k, v] of this.sentByClientId) if (now - v.at > 120_000) this.sentByClientId.delete(k);
@@ -246,78 +371,31 @@ export class ChatService implements OnModuleInit {
     // на это сообщение, даже если сокет-событие пришло раньше ответа.
     await this.emitRoom(roomId, 'chat:message', { roomId, message: msg, clientId: options.clientId });
 
-    // Всё остальное — fire-and-forget в фоне, без await чтобы не задерживать
-    // ответ автору и не мешать broadcast'у.
-    this.afterSendBackground(msg, roomId, authorId, trimmed, resolvedMentions, author?.fullName).catch(
+    // Всё остальное — в фоне, без await: не задерживает ни автора, ни рассылку.
+    this.afterSendBackground(msg, room, authorId, trimmed, resolved, msg.author?.fullName).catch(
       (err) => this.logger.error(`afterSendBackground failed: ${err?.message}`),
     );
 
     return msg;
   }
 
-  /** Фоновая работа после emit'а: room update + notifications + AI parse. */
-  private async afterSendBackground(
-    msg: { id: string },
-    roomId: string,
-    authorId: string,
-    trimmed: string,
-    resolvedMentions: string[],
-    authorName?: string,
-  ) {
-    // 1) bump room updatedAt — не блокирует доставку
-    await this.prisma.chatRoom.update({
-      where: { id: roomId },
-      data: { updatedAt: new Date() },
-    });
-
-    // 2) Notifications + AI — параллельно
-    const mentionedSet = new Set(resolvedMentions);
-    const [allMembers, room] = await Promise.all([
-      this.prisma.chatMember.findMany({ where: { roomId }, select: { userId: true } }),
-      this.prisma.chatRoom.findUnique({ where: { id: roomId }, select: { type: true, title: true } }),
-    ]);
-    const roomLabel = room?.type === 'GENERAL'
-      ? 'Команда Javonon'
-      : room?.type === 'TEAM'
-        ? room.title || 'Команда'
-        : authorName || 'Чат';
-
-    // Все notifications в параллель — Promise.all вместо for-await.
-    const tasks: Promise<unknown>[] = [];
-    for (const mid of resolvedMentions) {
-      tasks.push(this.notifications.notifyUser(mid, {
-        type: 'CHAT_MENTION',
-        title: `💬 Вас упомянул ${authorName || 'кто-то'}`,
-        message: trimmed.slice(0, 140),
-        payload: { roomId, messageId: msg.id, authorId },
-      }));
-    }
-    for (const m of allMembers) {
-      if (m.userId === authorId) continue;
-      if (mentionedSet.has(m.userId)) continue;
-      tasks.push(this.notifications.notifyUser(m.userId, {
-        type: 'CHAT_MESSAGE',
-        title: `${authorName || 'Кто-то'} · ${roomLabel}`,
-        message: trimmed.slice(0, 140),
-        payload: { roomId, messageId: msg.id, authorId },
-      }));
-    }
-    await Promise.all(tasks);
-
-    // AI-обработка: если в сообщении есть команда «добавь расход» — парсим.
-    await this.tryAiAction(roomId, authorId, trimmed);
+  /**
+   * Упомянутые сотрудники: из списка клиента или из текста (@имя-фамилия,
+   * @id, @почта). Только реально существующие и не сам автор — выдуманный
+   * id раньше давал FK-500 при уведомлении.
+   */
+  private async resolveMentions(text: string, fromClient: string[], authorId: string): Promise<string[]> {
+    if (!fromClient.length && !text.includes('@')) return [];
+    const idx = await this.usersIndex();
+    let ids = fromClient.length ? fromClient : this.mentionsFromText(text, idx.list);
+    ids = Array.from(new Set(ids)).filter((id) => id !== authorId && idx.byId.has(id));
+    return ids;
   }
 
-  /**
-   * Резолв @mentions: парсим из текста все @<word> и пробуем найти соответствующего юзера.
-   * Поддерживает: @id, @firstname-lastname, @firstname (если уникален).
-   */
-  private async resolveMentionsFromText(text: string): Promise<string[]> {
+  /** Парсим из текста все @<word> и ищем соответствующего сотрудника. */
+  private mentionsFromText(text: string, users: UserLite[]): string[] {
     const matches = text.match(/@([\wа-яА-ЯёЁ.\-]+)/g);
     if (!matches?.length) return [];
-    const users = await this.prisma.user.findMany({
-      select: { id: true, fullName: true, email: true },
-    });
     const found = new Set<string>();
     for (const raw of matches) {
       const handle = raw.slice(1).toLowerCase();
@@ -329,6 +407,54 @@ export class ChatService implements OnModuleInit {
       if (user) found.add(user.id);
     }
     return Array.from(found);
+  }
+
+  /** Фоновая работа после рассылки: порядок в списке чатов, уведомления, AI. */
+  private async afterSendBackground(
+    msg: { id: string },
+    room: RoomMeta,
+    authorId: string,
+    trimmed: string,
+    resolvedMentions: string[],
+    authorName?: string,
+  ) {
+    const roomId = room.id;
+    await this.prisma.chatRoom.update({
+      where: { id: roomId },
+      data: { updatedAt: new Date() },
+    });
+
+    const mentionedSet = new Set(resolvedMentions);
+    const allMembers = await this.memberIds(roomId);
+    const roomLabel = room.type === 'GENERAL'
+      ? 'Команда Javonon'
+      : room.type === 'TEAM'
+        ? room.title || 'Команда'
+        : authorName || 'Чат';
+
+    const tasks: Promise<unknown>[] = [];
+    for (const mid of resolvedMentions) {
+      tasks.push(this.notifications.notifyUser(mid, {
+        type: 'CHAT_MENTION',
+        title: `💬 Вас упомянул ${authorName || 'кто-то'}`,
+        message: trimmed.slice(0, 140),
+        payload: { roomId, messageId: msg.id, authorId },
+      }));
+    }
+    for (const uid of allMembers) {
+      if (uid === authorId) continue;
+      if (mentionedSet.has(uid)) continue;
+      tasks.push(this.notifications.notifyUser(uid, {
+        type: 'CHAT_MESSAGE',
+        title: `${authorName || 'Кто-то'} · ${roomLabel}`,
+        message: trimmed.slice(0, 140),
+        payload: { roomId, messageId: msg.id, authorId },
+      }));
+    }
+    await Promise.all(tasks);
+
+    // AI-обработка: если в сообщении есть команда «добавь расход» — парсим.
+    await this.tryAiAction(roomId, authorId, trimmed);
   }
 
   /**
@@ -409,7 +535,7 @@ export class ChatService implements OnModuleInit {
         // Префикс mentionsIds = ['__BOT__'] — фронт распознаёт и рисует как бот-сообщение
         mentionsIds: ['__BOT__'],
       },
-      include: { author: { select: { id: true, fullName: true, role: true } } },
+      include: MESSAGE_INCLUDE,
     });
     await this.emitRoom(roomId, 'chat:message', { roomId, message: msg });
   }
@@ -443,13 +569,14 @@ export class ChatService implements OnModuleInit {
       data: {
         type: ChatRoomType.TEAM,
         title: title.trim() || 'Команда',
+        createdById: creatorId,
         members: { create: ids.map((id) => ({ userId: id })) },
       },
       include: {
         members: { include: { user: { select: { id: true, fullName: true, role: true } } } },
       },
     });
-    this.membersCache.delete(room.id);
+    this.forgetRoom(room.id);
     this.realtime.emitUsers(ids, 'chat:room', { room });
     return room;
   }
@@ -482,7 +609,14 @@ export class ChatService implements OnModuleInit {
         },
         include: includeAll,
       });
-      if (existing) return existing;
+      if (existing) {
+        // Чат был «удалён у себя» — снова открываем его (старая переписка
+        // остаётся скрытой): поднимаем, чтобы он вернулся в список.
+        if (existing.members.some((m) => m.userId === creatorId && m.clearedAt)) {
+          return tx.chatRoom.update({ where: { id: existing.id }, data: { updatedAt: new Date() }, include: includeAll });
+        }
+        return existing;
+      }
       const room = await tx.chatRoom.create({
         data: {
           type: 'DIRECT',
@@ -495,6 +629,48 @@ export class ChatService implements OnModuleInit {
       this.realtime.emitUsers([creatorId, otherUserId], 'chat:room', { room });
       return room;
     });
+  }
+
+  /**
+   * «Удалить чат».
+   *  - Общий чат удалить нельзя.
+   *  - Личный: «только у меня» — переписка скрывается у меня; «у обоих» —
+   *    у обоих. Чат вернётся в список с новым сообщением. В базе всё остаётся.
+   *  - Команда: удаляет только админ (у всех); остальные могут только выйти.
+   */
+  async deleteRoom(roomId: string, userId: string, forAll: boolean) {
+    const room = await this.requireAccess(roomId, userId);
+    if (room.type === 'GENERAL') throw new BadRequestException('Общий чат удалить нельзя');
+    const now = new Date();
+    if (room.type === 'DIRECT') {
+      const ids = forAll ? await this.memberIds(roomId) : [userId];
+      await this.prisma.chatMember.updateMany({
+        where: { roomId, userId: { in: ids } },
+        data: { clearedAt: now, lastReadAt: now },
+      });
+      this.realtime.emitUsers(ids, 'chat:room:removed', { roomId });
+      return { ok: true };
+    }
+    if (!(await this.isRoomAdmin(room, userId))) {
+      throw new ForbiddenException('Удалить команду может только её админ. Вы можете выйти из команды.');
+    }
+    const ids = await this.memberIds(roomId);
+    await this.prisma.chatRoom.update({ where: { id: roomId }, data: { deletedAt: now } });
+    this.forgetRoom(roomId);
+    this.realtime.emitUsers(ids, 'chat:room:removed', { roomId });
+    return { ok: true };
+  }
+
+  /** Выйти из команды (в общем и личном чате — нельзя). */
+  async leaveRoom(roomId: string, userId: string) {
+    const room = await this.requireAccess(roomId, userId);
+    if (room.type !== 'TEAM') throw new BadRequestException('Выйти можно только из команды');
+    await this.prisma.chatMember.delete({ where: { roomId_userId: { roomId, userId } } });
+    this.forgetRoom(roomId);
+    this.realtime.emitUser(userId, 'chat:room:removed', { roomId });
+    // Остальным — обновить список участников.
+    this.realtime.emitUsers(await this.memberIds(roomId), 'chat:room', { roomId });
+    return { ok: true };
   }
 
   /** QA-fix #6: одноразовая зачистка существующих дублей direct-room.
@@ -532,11 +708,13 @@ export class ChatService implements OnModuleInit {
       SELECT m."roomId", COUNT(msg.id) AS unread,
              COUNT(msg.id) FILTER (WHERE ${userId} = ANY(msg."mentionsIds")) AS mentions
       FROM "ChatMember" m
+      JOIN "ChatRoom" r ON r.id = m."roomId" AND r."deletedAt" IS NULL
       LEFT JOIN "ChatMessage" msg
         ON msg."roomId" = m."roomId"
        AND msg."authorId" <> m."userId"
        AND msg."deletedAt" IS NULL
        AND (m."lastReadAt" IS NULL OR msg."createdAt" > m."lastReadAt")
+       AND (m."clearedAt" IS NULL OR msg."createdAt" > m."clearedAt")
       WHERE m."userId" = ${userId}
       GROUP BY m."roomId"`;
     return rows.map((r) => ({ roomId: r.roomId, unread: Number(r.unread), mentions: Number(r.mentions) }));
@@ -552,11 +730,7 @@ export class ChatService implements OnModuleInit {
       select: { roomId: true },
     });
     if (!msg) throw new NotFoundException('Сообщение не найдено');
-    // Проверяем что юзер — участник комнаты.
-    const member = await this.prisma.chatMember.findUnique({
-      where: { roomId_userId: { roomId: msg.roomId, userId } },
-    });
-    if (!member) throw new NotFoundException('Чат не найден');
+    await this.requireAccess(msg.roomId, userId);
 
     const existing = await this.prisma.chatReaction.findUnique({
       where: { messageId_userId_emoji: { messageId, userId, emoji } },
@@ -573,54 +747,85 @@ export class ChatService implements OnModuleInit {
     return { ok: true, action };
   }
 
-  /** Soft-delete: text="", deletedAt=now. Можно автору ИЛИ ADMIN. */
-  async deleteMessage(messageId: string, userId: string) {
-    const msg = await this.prisma.chatMessage.findUnique({
-      where: { id: messageId },
-      select: { authorId: true, roomId: true, deletedAt: true },
+  /**
+   * Удалить сообщения (одно или несколько выбранных). Soft-delete: текст
+   * стирается, deletedAt ставится, у всех видно «Сообщение удалено».
+   * Свои — может каждый; чужие — только админ чата (создатель команды,
+   * основатель). Раньше чужие мог удалить любой администратор CRM.
+   */
+  async deleteMessages(messageIds: string[], userId: string) {
+    const ids = Array.from(new Set((messageIds || []).filter((x) => typeof x === 'string'))).slice(0, 200);
+    if (!ids.length) throw new BadRequestException('Не выбраны сообщения');
+    const msgs = await this.prisma.chatMessage.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, authorId: true, roomId: true, deletedAt: true },
     });
-    if (!msg) throw new NotFoundException('Сообщение не найдено');
-    if (msg.deletedAt) return { ok: true };
-    // Мульти-роли (ТЗ §2): admin'ом считается primary=ADMIN ИЛИ ADMIN в
-    // roles[]. FOUNDER тоже модерирует (расширенные права). Раньше было
-    // строго `role === 'ADMIN'`, мульти-роль не работала.
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true, roles: true },
-    });
-    const isModerator = user && (
-      user.role === 'ADMIN' || user.role === 'FOUNDER' ||
-      (user.roles || []).some((r) => r === 'ADMIN' || r === 'FOUNDER')
-    );
-    if (msg.authorId !== userId && !isModerator) {
-      throw new BadRequestException('Можно удалять только свои сообщения');
+    if (msgs.length !== ids.length) throw new NotFoundException('Сообщение не найдено');
+    const roomId = msgs[0].roomId;
+    if (msgs.some((m) => m.roomId !== roomId)) throw new BadRequestException('Сообщения из разных чатов');
+    const room = await this.requireAccess(roomId, userId);
+    const foreign = msgs.some((m) => m.authorId !== userId);
+    if (foreign && !(await this.isRoomAdmin(room, userId))) {
+      throw new ForbiddenException('Чужие сообщения может удалить только админ группы');
     }
-    await this.prisma.chatMessage.update({
-      where: { id: messageId },
-      data: { text: '', attachments: undefined, deletedAt: new Date() },
-    });
-    await this.emitRoom(msg.roomId, 'chat:message:deleted', { roomId: msg.roomId, messageId });
-    return { ok: true };
+    const toDelete = msgs.filter((m) => !m.deletedAt).map((m) => m.id);
+    if (toDelete.length) {
+      await this.prisma.chatMessage.updateMany({
+        where: { id: { in: toDelete } },
+        data: { text: '', deletedAt: new Date() },
+      });
+      await this.emitRoom(roomId, 'chat:message:deleted', { roomId, messageIds: toDelete, messageId: toDelete[0] });
+    }
+    return { ok: true, deleted: toDelete.length };
   }
 
-  /** Pin/unpin сообщение в комнате. ADMIN-only. */
-  async togglePin(messageId: string, userId: string) {
-    // Та же мульти-ролевая логика что и в deleteMessage — pin/unpin
-    // должен быть доступен ADMIN (primary или roles[]) и FOUNDER.
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true, roles: true },
+  deleteMessage(messageId: string, userId: string) {
+    return this.deleteMessages([messageId], userId);
+  }
+
+  /** Изменить своё сообщение — у всех обновляется сразу, с пометкой «изменено». */
+  async editMessage(messageId: string, userId: string, text: string) {
+    const msg = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      select: { authorId: true, roomId: true, deletedAt: true, attachments: true, mentionsIds: true, text: true },
     });
-    const canPin = user && (
-      user.role === 'ADMIN' || user.role === 'FOUNDER' ||
-      (user.roles || []).some((r) => r === 'ADMIN' || r === 'FOUNDER')
-    );
-    if (!canPin) throw new BadRequestException('Только администратор может закреплять');
+    if (!msg || msg.deletedAt) throw new NotFoundException('Сообщение не найдено');
+    await this.requireAccess(msg.roomId, userId);
+    if (msg.authorId !== userId || msg.mentionsIds.includes('__BOT__')) {
+      throw new ForbiddenException('Изменять можно только свои сообщения');
+    }
+    const trimmed = (text || '').trim();
+    const hasAttachments = Array.isArray(msg.attachments) && (msg.attachments as any[]).length > 0;
+    if (!trimmed && !hasAttachments) throw new BadRequestException('Пустое сообщение');
+    if (trimmed.length > 4000) throw new BadRequestException('Слишком длинное сообщение');
+    if (trimmed === msg.text) return { ok: true, id: messageId, text: msg.text };
+    const mentionsIds = await this.resolveMentions(trimmed, [], userId);
+    const updated = await this.prisma.chatMessage.update({
+      where: { id: messageId },
+      data: { text: trimmed, mentionsIds, editedAt: new Date() },
+      select: { id: true, text: true, editedAt: true, mentionsIds: true },
+    });
+    await this.emitRoom(msg.roomId, 'chat:message:edited', {
+      roomId: msg.roomId,
+      messageId,
+      text: updated.text,
+      editedAt: updated.editedAt,
+      mentionsIds: updated.mentionsIds,
+    });
+    return { ok: true, ...updated };
+  }
+
+  /** Закрепить/открепить: в группе — админ чата, в личном — любой из двоих. */
+  async togglePin(messageId: string, userId: string) {
     const msg = await this.prisma.chatMessage.findUnique({
       where: { id: messageId },
       select: { roomId: true, isPinned: true },
     });
     if (!msg) throw new NotFoundException('Сообщение не найдено');
+    const room = await this.requireAccess(msg.roomId, userId);
+    if (room.type !== 'DIRECT' && !(await this.isRoomAdmin(room, userId))) {
+      throw new ForbiddenException('Закреплять может только админ группы');
+    }
     const updated = await this.prisma.chatMessage.update({
       where: { id: messageId },
       data: { isPinned: !msg.isPinned },
@@ -630,28 +835,26 @@ export class ChatService implements OnModuleInit {
     return { ok: true, isPinned: updated.isPinned };
   }
 
-  /** Forward — копируем текст + attachments в другую комнату с forwardedFromId. */
+  /**
+   * Переслать — копия текста и вложений с forwardedFromId. Пересылка
+   * пересланного указывает на оригинал: «Переслано от» — настоящий автор.
+   */
   async forwardMessage(messageId: string, authorId: string, targetRoomId: string) {
     const orig = await this.prisma.chatMessage.findUnique({
       where: { id: messageId },
-      include: { author: { select: { fullName: true } } },
+      select: { id: true, roomId: true, text: true, attachments: true, deletedAt: true, forwardedFromId: true },
     });
     if (!orig || orig.deletedAt) throw new NotFoundException('Сообщение не найдено');
-    // Security: user must be a member of BOTH rooms (source AND target).
-    // Без проверки source комнаты можно было forward'ить сообщение из
-    // приватного чата куда у нас нет доступа (если знаем messageId).
-    const [sourceMember, targetMember] = await Promise.all([
-      this.prisma.chatMember.findUnique({
-        where: { roomId_userId: { roomId: orig.roomId, userId: authorId } },
-      }),
-      this.prisma.chatMember.findUnique({
-        where: { roomId_userId: { roomId: targetRoomId, userId: authorId } },
-      }),
-    ]);
-    if (!sourceMember) {
+    // Нужен доступ к обоим чатам: иначе, зная id, можно было бы вытащить
+    // сообщение из чужого личного чата.
+    try {
+      await this.requireAccess(orig.roomId, authorId);
+    } catch {
       throw new NotFoundException('Нет доступа к исходному сообщению');
     }
-    if (!targetMember) {
+    try {
+      await this.requireAccess(targetRoomId, authorId);
+    } catch {
       throw new NotFoundException('Целевая комната не найдена');
     }
     const fwd = await this.prisma.chatMessage.create({
@@ -660,57 +863,34 @@ export class ChatService implements OnModuleInit {
         authorId,
         text: orig.text,
         attachments: orig.attachments as any,
-        forwardedFromId: orig.id,
+        forwardedFromId: orig.forwardedFromId || orig.id,
       },
-      include: {
-        author: { select: { id: true, fullName: true, role: true } },
-        forwardedFrom: {
-          select: {
-            id: true, text: true, authorId: true,
-            author: { select: { id: true, fullName: true } },
-          },
-        },
-        reactions: { select: { id: true, emoji: true, userId: true } },
-      },
+      include: MESSAGE_INCLUDE,
     });
+    await this.emitRoom(targetRoomId, 'chat:message', { roomId: targetRoomId, message: fwd });
     await this.prisma.chatRoom.update({
       where: { id: targetRoomId },
       data: { updatedAt: new Date() },
     });
-    await this.emitRoom(targetRoomId, 'chat:message', { roomId: targetRoomId, message: fwd });
     return fwd;
   }
 
   /** Typing-indicator: эфемерное состояние, не сохраняется в БД.
-   *  Просто транслируется в комнату staff. Auto-expire — на стороне клиента. */
+   *  Только участникам комнаты. Auto-expire — на стороне клиента. */
   async setTyping(roomId: string, userId: string, typing: boolean) {
-    const member = await this.prisma.chatMember.findUnique({
-      where: { roomId_userId: { roomId, userId } },
-      select: { user: { select: { fullName: true } } },
-    });
-    if (!member) throw new NotFoundException('Чат не найден');
-    await this.emitRoom(roomId, 'chat:typing', {
-      roomId,
-      userId,
-      userName: member.user?.fullName || '',
-      typing,
-    });
+    await this.requireAccess(roomId, userId);
+    const name = (await this.usersIndex()).byId.get(userId)?.fullName || '';
+    await this.emitRoom(roomId, 'chat:typing', { roomId, userId, userName: name, typing });
     return { ok: true };
   }
 
   /** Список закреплённых сообщений в комнате. */
   async listPinned(roomId: string, userId: string) {
-    const member = await this.prisma.chatMember.findUnique({
-      where: { roomId_userId: { roomId, userId } },
-    });
-    if (!member) throw new NotFoundException('Чат не найден');
+    await this.requireAccess(roomId, userId);
     return this.prisma.chatMessage.findMany({
       where: { roomId, isPinned: true, deletedAt: null },
       orderBy: { createdAt: 'desc' },
-      include: {
-        author: { select: { id: true, fullName: true, role: true } },
-        reactions: { select: { id: true, emoji: true, userId: true } },
-      },
+      include: MESSAGE_INCLUDE,
     });
   }
 }

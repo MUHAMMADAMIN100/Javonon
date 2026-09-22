@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -33,6 +34,16 @@ const chatStorage = diskStorage({
 const CHAT_MIME_RE =
   /^(image\/(jpeg|jpg|png|webp|heic|heif|gif)|video\/(mp4|quicktime|x-msvideo|webm|x-matroska|mpeg|3gpp|3gpp2)|audio\/(mpeg|mp3|mp4|wav|ogg|webm|aac)|application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|vnd\.ms-excel|vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.presentationml\.presentation|zip|x-zip-compressed|x-rar-compressed|vnd\.rar|x-7z-compressed)|text\/plain)$/i;
 
+/**
+ * multer читает имя файла как latin1, и «заметка.txt» превращалось в
+ * «Ð·Ð°Ð¼ÐµÑÐºÐ°.txt». Перекодируем в UTF-8, если это действительно UTF-8.
+ */
+function utf8Name(name: string) {
+  if (!name || !/[\u0080-ÿ]/.test(name)) return name;
+  const fixed = Buffer.from(name, 'latin1').toString('utf8');
+  return fixed.includes('�') ? name : fixed;
+}
+
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
 export class ChatController {
@@ -56,9 +67,34 @@ export class ChatController {
     return this.svc.unreadCounts(me.id);
   }
 
+  /** Переписка: последние сообщения; ?before=ISO — более старые (прокрутка вверх). */
   @Get('rooms/:id')
-  room(@Param('id') id: string, @CurrentUser() me: any) {
-    return this.svc.getRoom(id, me.id);
+  room(@Param('id') id: string, @CurrentUser() me: any, @Query('before') before?: string) {
+    return this.svc.getRoom(id, me.id, before || undefined);
+  }
+
+  /** Участники чата и кто в сети. */
+  @Get('rooms/:id/members')
+  members(@Param('id') id: string, @CurrentUser() me: any) {
+    return this.svc.roomMembers(id, me.id);
+  }
+
+  /** Поиск по переписке. */
+  @Get('rooms/:id/search')
+  search(@Param('id') id: string, @CurrentUser() me: any, @Query('q') q?: string) {
+    return this.svc.searchMessages(id, me.id, q || '');
+  }
+
+  /** Удалить чат: личный — ?for=all у обоих, иначе у себя; команду — только админ. */
+  @Delete('rooms/:id')
+  removeRoom(@Param('id') id: string, @CurrentUser() me: any, @Query('for') forWho?: string) {
+    return this.svc.deleteRoom(id, me.id, forWho === 'all');
+  }
+
+  /** Выйти из команды. */
+  @Post('rooms/:id/leave')
+  leave(@Param('id') id: string, @CurrentUser() me: any) {
+    return this.svc.leaveRoom(id, me.id);
   }
 
   @Get('rooms/:id/pinned')
@@ -93,7 +129,7 @@ export class ChatController {
     const attachments = (files || []).map((f) => ({
       url: `/uploads/${f.filename}`,
       filename: f.filename,
-      originalName: f.originalname,
+      originalName: utf8Name(f.originalname),
       mimeType: f.mimetype,
       size: f.size,
     }));
@@ -116,6 +152,19 @@ export class ChatController {
   @Delete('messages/:id')
   remove(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.deleteMessage(id, me.id);
+  }
+
+  /** Удалить несколько выбранных сообщений разом. */
+  @Post('messages/delete')
+  removeMany(@CurrentUser() me: any, @Body() body: { ids?: string[] }) {
+    if (!Array.isArray(body?.ids)) throw new BadRequestException('ids обязателен');
+    return this.svc.deleteMessages(body.ids, me.id);
+  }
+
+  /** Изменить своё сообщение. */
+  @Patch('messages/:id')
+  edit(@Param('id') id: string, @CurrentUser() me: any, @Body() body: { text?: string }) {
+    return this.svc.editMessage(id, me.id, typeof body?.text === 'string' ? body.text : '');
   }
 
   @Patch('messages/:id/pin')

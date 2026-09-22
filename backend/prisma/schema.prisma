@@ -1176,6 +1176,11 @@ model ChatRoom {
   id        String        @id @default(uuid())
   type      ChatRoomType
   title     String? // для TEAM/DIRECT — имя комнаты
+  // Админ команды — тот, кто её создал (удаляет чужие сообщения и саму
+  // команду). Основатель — админ во всех чатах. У старых команд пусто.
+  createdById String?
+  // Команду удалил её админ: чат пропадает у всех, переписка остаётся в базе.
+  deletedAt DateTime?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   members   ChatMember[]
@@ -1191,6 +1196,9 @@ model ChatMember {
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastReadAt DateTime?
+  // «Удалить чат» (личный): переписка до этого момента скрыта у участника,
+  // а сам чат пропадает из списка до нового сообщения. В базе всё остаётся.
+  clearedAt  DateTime?
   joinedAt   DateTime  @default(now())
 
   @@unique([roomId, userId])

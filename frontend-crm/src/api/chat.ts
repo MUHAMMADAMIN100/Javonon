@@ -39,7 +39,7 @@ export interface ChatMessage {
   replyToId?: string | null;
   replyTo?: ChatMessageReplyTo | null;
   forwardedFromId?: string | null;
-  forwardedFrom?: ChatMessageReplyTo | null;
+  forwardedFrom?: { id: string; authorId: string; author?: { id: string; fullName: string } } | null;
   isPinned?: boolean;
   deletedAt?: string | null;
   reactions?: ChatReaction[];
@@ -50,20 +50,50 @@ export interface ChatMember {
   userId: string;
   user: { id: string; fullName: string; role: string };
   lastReadAt: string | null;
+  clearedAt?: string | null;
 }
 
 export interface ChatRoom {
   id: string;
   type: ChatRoomType;
   title: string | null;
+  /** Создатель команды — её админ (вместе с основателем). */
+  createdById?: string | null;
   members: ChatMember[];
   messages: ChatMessage[];
   updatedAt: string;
 }
 
 export const listChatRooms = () => api.get<ChatRoom[]>('/chat/rooms').then((r) => r.data);
-export const getChatRoom = (id: string) =>
-  api.get<{ messages: ChatMessage[] }>(`/chat/rooms/${id}`).then((r) => r.data);
+/** Переписка порциями: без before — последние, с before — более старые. */
+export const getChatRoom = (id: string, before?: string) =>
+  api.get<{ messages: ChatMessage[]; hasMore: boolean }>(`/chat/rooms/${id}`, { params: before ? { before } : undefined }).then((r) => r.data);
+
+export interface ChatRoomMember {
+  id: string;
+  fullName: string;
+  role: string;
+  roles?: string[];
+  online: boolean;
+  lastSeenAt: string | null;
+  isAdmin: boolean;
+}
+export const getChatRoomMembers = (roomId: string) =>
+  api.get<ChatRoomMember[]>(`/chat/rooms/${roomId}/members`).then((r) => r.data);
+export interface ChatSearchHit {
+  id: string;
+  text: string;
+  createdAt: string;
+  authorId: string;
+  author?: { id: string; fullName: string };
+}
+export const searchChatMessages = (roomId: string, q: string) =>
+  api.get<ChatSearchHit[]>(`/chat/rooms/${roomId}/search`, { params: { q } }).then((r) => r.data);
+/** Удалить чат: личный — у себя или у обоих (forAll), команду — только админ. */
+export const deleteChatRoom = (roomId: string, forAll = false) =>
+  api.delete<{ ok: boolean }>(`/chat/rooms/${roomId}`, { params: forAll ? { for: 'all' } : undefined }).then((r) => r.data);
+export const leaveChatRoom = (roomId: string) =>
+  api.post<{ ok: boolean }>(`/chat/rooms/${roomId}/leave`).then((r) => r.data);
 
 /** Telegram-style: можно прикрепить files (multipart) и replyToId. */
 export const sendChatMessage = (
@@ -96,6 +126,10 @@ export const reactToMessage = (messageId: string, emoji: string) =>
   api.post<{ ok: boolean; action: 'added' | 'removed' }>(`/chat/messages/${messageId}/react`, { emoji }).then((r) => r.data);
 export const deleteChatMessage = (messageId: string) =>
   api.delete<{ ok: boolean }>(`/chat/messages/${messageId}`).then((r) => r.data);
+export const deleteChatMessages = (ids: string[]) =>
+  api.post<{ ok: boolean; deleted: number }>('/chat/messages/delete', { ids }).then((r) => r.data);
+export const editChatMessage = (messageId: string, text: string) =>
+  api.patch<{ ok: boolean; id: string; text: string; editedAt: string }>(`/chat/messages/${messageId}`, { text }).then((r) => r.data);
 export const pinChatMessage = (messageId: string) =>
   api.patch<{ ok: boolean; isPinned: boolean }>(`/chat/messages/${messageId}/pin`).then((r) => r.data);
 export const forwardChatMessage = (messageId: string, targetRoomId: string) =>

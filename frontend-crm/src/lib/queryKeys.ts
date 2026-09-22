@@ -56,6 +56,7 @@ export const keys = {
     rooms: () => ['chat', 'rooms'] as const,
     room: (id: string) => ['chat', 'room', id] as const,
     unread: () => ['chat', 'unread'] as const,
+    members: (id: string) => ['chat', 'members', id] as const,
   },
   lms: {
     all: ['lms'] as const,

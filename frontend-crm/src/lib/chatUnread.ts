@@ -4,6 +4,7 @@ import { chatUnread } from '../api/chat';
 import { keys } from './queryKeys';
 import { useRealtime, useRealtimeConnState } from '../realtime';
 import { useAuth } from '../store/auth';
+import { playChatSound } from './chatSound';
 
 /**
  * Непрочитанные сообщения чата — одно место на всё приложение.
@@ -15,6 +16,9 @@ import { useAuth } from '../store/auth';
  *
  * mentions — сколько из непрочитанных упоминают этого человека: по ним
  * рисуется значок «@» (в списке чатов и в меню).
+ *
+ * Звук: новое сообщение, которое попало в непрочитанные (вкладка не активна
+ * или открыт другой чат/другая страница).
  */
 type Unread = Array<{ roomId: string; unread: number; mentions?: number }>;
 export type RoomUnread = { unread: number; mentions: number };
@@ -63,6 +67,7 @@ export function useChatUnreadSync() {
       if (isViewing(d.roomId)) return;
       const mentioned = !!me?.id && Array.isArray(d.message.mentionsIds) && d.message.mentionsIds.includes(me.id);
       setRoom(d.roomId, (r) => ({ unread: r.unread + 1, mentions: r.mentions + (mentioned ? 1 : 0) }));
+      playChatSound();
     },
     // Прочитал я (в этой вкладке или в другой) — обнуляем комнату вместе с «@».
     'chat:read': (d: any) => {
@@ -70,6 +75,10 @@ export function useChatUnreadSync() {
     },
     'chat:message:deleted': () => qc.invalidateQueries({ queryKey: keys.chat.unread() }),
     'chat:room': () => qc.invalidateQueries({ queryKey: keys.chat.unread() }),
+    // Чат удалили (у меня или у всех) / я вышел из команды — его счётчик больше не нужен.
+    'chat:room:removed': (d: any) => {
+      if (d?.roomId) qc.setQueryData<Unread>(keys.chat.unread(), (cur) => (cur ?? []).filter((u) => u.roomId !== d.roomId));
+    },
   });
 
   // После переподключения сокета события могли потеряться — сверяемся с сервером.
