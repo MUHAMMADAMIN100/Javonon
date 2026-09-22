@@ -27,6 +27,23 @@ import {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
+  /**
+   * Кто правит сотрудников:
+   *  - founder — основатель: всё;
+   *  - staff   — ADMIN/ACCOUNTANT по БАЗОВОЙ роли (без активной кастомной):
+   *              кадры и оплата, но не роли и не основатель;
+   *  - custom  — сотрудник с кастомной ролью (права «Сотрудники — …»):
+   *              только карточка (ФИО, телефон, паспорт, дата приёма) и
+   *              создание менеджеров; ни ролей, ни окладов, ни паролей.
+   * Кастомная роль ЗАМЕНЯЕТ базовую (см. RolesGuard.skipBaseRole), поэтому
+   * «ADMIN + кастомная роль» — это custom.
+   */
+  static actorLevel(a?: { role?: string; roles?: string[]; hasCustomRole?: boolean } | null): 'founder' | 'staff' | 'custom' {
+    if (a && isFounder(a as any)) return 'founder';
+    if (a && !a.hasCustomRole && isElevated(a as any)) return 'staff';
+    return 'custom';
+  }
+
   constructor(
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
@@ -155,6 +172,43 @@ export class UsersService {
       }),
     ]);
     return { periodStart: monthStart, periodEnd: monthEnd, time, sales, ownApplications, enrolled, pendingPenalties };
+  }
+
+  /**
+   * Полный профиль для руководства (GET /users/:id/full). Кастомной роли
+   * блок «Оплата» не отдаём: оклады видят основатель, админ, бухгалтер
+   * (и сам сотрудник — через /me/full).
+   */
+  async fullProfileFor(id: string, actor: { id: string; role?: string; roles?: string[]; hasCustomRole?: boolean; permissions?: string[] }) {
+    const access = await this.profileAccess(actor, id);
+    if (!access) throw new ForbiddenException('Нет доступа к данным этого сотрудника');
+    const profile: any = await this.fullProfile(id);
+    if (access === 'noPay') profile.salary = null;
+    return profile;
+  }
+
+  /**
+   * Кто и как видит чужой профиль (одно правило для /users/:id/full и
+   * /me/profile/:id):
+   *  - 'full'  — сам сотрудник, основатель, админ/бухгалтер по базовой роли,
+   *              и тот, кому основатель выдал доступ (DataAccessGrant);
+   *  - 'noPay' — кастомная роль с правами «Сотрудники — …»: карточка без
+   *              блока «Оплата»;
+   *  - null    — нет доступа.
+   */
+  async profileAccess(
+    actor: { id: string; role?: string; roles?: string[]; hasCustomRole?: boolean; permissions?: string[] },
+    targetId: string,
+  ): Promise<'full' | 'noPay' | null> {
+    if (actor.id === targetId) return 'full';
+    const level = UsersService.actorLevel(actor);
+    if (level !== 'custom') return 'full';
+    const grant = await this.prisma.dataAccessGrant.findUnique({
+      where: { grantedToId_targetUserId: { grantedToId: actor.id, targetUserId: targetId } },
+    });
+    if (grant) return 'full';
+    if ((actor.permissions || []).some((p) => p.startsWith('users:'))) return 'noPay';
+    return null;
   }
 
   async fullProfile(id: string) {
@@ -430,23 +484,6 @@ export class UsersService {
    *  - сам сотрудник — свой профиль
    *  - есть активный DataAccessGrant
    */
-  async canViewProfile(
-    viewerId: string,
-    viewerRole: string,
-    targetId: string,
-    viewerRoles?: string[],
-  ) {
-    // Elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли). Раньше строго
-    // `viewerRole === 'ADMIN'` — FOUNDER не мог открыть чужой профиль,
-    // secondary-ADMIN/ACCOUNTANT тоже обходился.
-    if (isElevated({ role: viewerRole, roles: viewerRoles } as any)) return true;
-    if (viewerId === targetId) return true;
-    const grant = await this.prisma.dataAccessGrant.findUnique({
-      where: { grantedToId_targetUserId: { grantedToId: viewerId, targetUserId: targetId } },
-    });
-    return !!grant;
-  }
-
   /** Выдать доступ к данным targetUserId пользователю grantedToId. */
   async grantAccess(grantedToId: string, targetUserId: string, grantedById: string) {
     if (grantedToId === targetUserId) {
@@ -487,9 +524,30 @@ export class UsersService {
     }));
   }
 
-  async create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto, actor?: { id: string; role?: string; roles?: string[]; hasCustomRole?: boolean }) {
     const email = (dto.email || '').trim().toLowerCase();
     const rawPassword = (dto.password || '').trim();
+
+    // Раньше роль принималась любой: бухгалтер создавал второй аккаунт
+    // FOUNDER и получал доступ ко всему. Роль «Основатель» не выдаётся
+    // через API вообще (основатель в системе один — сидер), кастомную роль
+    // назначает только основатель, оклады задают основатель/админ/бухгалтер.
+    const level = UsersService.actorLevel(actor);
+    if (dto.role === 'FOUNDER') {
+      throw new ForbiddenException('Роль «Основатель» назначить нельзя');
+    }
+    if (dto.customRoleId && level !== 'founder') {
+      throw new ForbiddenException('Кастомную роль назначает только основатель');
+    }
+    if (level === 'custom') {
+      if (dto.role !== 'SALES_MANAGER' && dto.role !== 'CLIENT_MANAGER') {
+        throw new ForbiddenException('Можно создать только менеджера');
+      }
+      const payFields = ['baseSalary', 'hourlyRate', 'bonusPercent', 'kpiTargetPct', 'kpiAutoStepPct', 'kpiMaxPct'] as const;
+      if (payFields.some((f) => (dto as any)[f] !== undefined)) {
+        throw new ForbiddenException('Оклад и KPI задают основатель, админ или бухгалтер');
+      }
+    }
 
     const exists = await this.prisma.user.findUnique({ where: { email } });
     if (exists) throw new ConflictException('Email уже занят');
@@ -539,8 +597,29 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, dto: UpdateUserDto, requester?: { id: string; role?: string; roles?: string[] }) {
+  async update(id: string, dto: UpdateUserDto, requester?: { id: string; role?: string; roles?: string[]; hasCustomRole?: boolean }) {
     const target = await this.findOne(id);
+
+    // Роль меняет только основатель (как PUT /users/:id/roles), «Основатель»
+    // не выдаётся вообще. Оклады/KPI, пароль и email чужого сотрудника —
+    // основатель, админ, бухгалтер; кастомная роль правит только карточку.
+    if (requester) {
+      const level = UsersService.actorLevel(requester);
+      const isSelf = requester.id === id;
+      if (dto.role !== undefined && dto.role !== target.role) {
+        if (dto.role === 'FOUNDER') throw new ForbiddenException('Роль «Основатель» назначить нельзя');
+        if (level !== 'founder') throw new ForbiddenException('Роль меняет только основатель');
+      }
+      if (level === 'custom') {
+        const locked = ['baseSalary', 'hourlyRate', 'bonusPercent', 'kpiTargetPct', 'kpiAutoStepPct', 'kpiMaxPct', 'email'] as const;
+        if (locked.some((f) => (dto as any)[f] !== undefined)) {
+          throw new ForbiddenException('Оклад, KPI и email меняют основатель, админ или бухгалтер');
+        }
+        if (dto.password && !isSelf) {
+          throw new ForbiddenException('Пароль сотрудника меняют основатель, админ или бухгалтер');
+        }
+      }
+    }
 
     // КРИТИЧНАЯ ЗАЩИТА: аккаунт FOUNDER может править ТОЛЬКО сам FOUNDER.
     // Без этой проверки любой ADMIN/ACCOUNTANT мог бы сменить пароль

@@ -3,12 +3,15 @@ import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { Permissions } from '../auth/permissions.decorator';
 import { AttendanceService } from './attendance.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
 @Controller('attendance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.FOUNDER)
+// Кастомная роль с этим правом тоже (см. RolesGuard: «только основатель»).
+@Permissions('attendance:read')
 export class AttendanceController {
   constructor(private svc: AttendanceService) {}
 

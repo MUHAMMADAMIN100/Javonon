@@ -1,62 +1,58 @@
 /**
- * Базовый сидер: учётки FOUNDER/ADMIN + (опционально) демо-заявки.
+ * Базовый сидер: первый основатель (только в пустой базе) + (опционально)
+ * демо-заявки.
  *
- * Учётки сидятся ВСЕГДА — это upsert по email, он идемпотентен и нужен,
- * чтобы на новом окружении было кем залогиниться.
+ * `start:prod` запускает этот скрипт при КАЖДОМ деплое, поэтому он:
+ *  - НЕ трогает существующие учётки (раньше upsert каждый раз ставил
+ *    founder@javonon.local роль FOUNDER, а admin@javonon.local существовал
+ *    с зашитым паролем admin123);
+ *  - создаёт основателя, только если в базе нет ни одного FOUNDER, и только
+ *    с паролем из FOUNDER_PASSWORD (не короче 12 символов) — пароля по
+ *    умолчанию нет;
+ *  - не создаёт демо-админа;
+ *  - не печатает пароли в лог.
  *
- * Демо-заявки — за флагом SEED_DEMO_APPLICATIONS=1. Почему за флагом:
- * `start:prod` дёргает этот скрипт на КАЖДОМ старте прода, а единственной
- * защитой был `findFirst({ phone })`. Стоило удалить/отредактировать демо-строки
- * (или поднять чистое окружение) — и прод снова получал три фейковых лида
- * в общий список заявок. Прод демо-данные получать не должен.
+ * Демо-заявки — за флагом SEED_DEMO_APPLICATIONS=1: прод демо-данные
+ * получать не должен.
  */
 import { PrismaClient, Role, Direction, ApplicationStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-/**
- * Демо-заявки создаём только по явному запросу (локальная разработка,
- * демо-стенд). `start:prod` этот флаг не выставляет — см. package.json.
- */
 const SEED_DEMO_APPLICATIONS = process.env.SEED_DEMO_APPLICATIONS === '1';
 
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // FOUNDER — единственный, кто раздаёт роли. Если пароль не задан через env,
-  // используем дефолтный (нужно сменить через /me).
-  const founderEmail = 'founder@javonon.local';
-  const founderPassword = await bcrypt.hash(
-    process.env.FOUNDER_PASSWORD || 'founder123',
-    10,
-  );
-  await prisma.user.upsert({
-    where: { email: founderEmail },
-    update: { role: Role.FOUNDER },
-    create: {
-      email: founderEmail,
-      password: founderPassword,
-      fullName: 'Основатель Javonon',
-      role: Role.FOUNDER,
-      roles: [Role.FOUNDER],
-    },
+  const founders = await prisma.user.count({
+    where: { OR: [{ role: Role.FOUNDER }, { roles: { has: Role.FOUNDER } }] },
   });
-
-  // ADMIN — legacy seed для совместимости со старыми инструкциями.
-  const adminEmail = 'admin@javonon.local';
-  const adminPassword = await bcrypt.hash('admin123', 10);
-  await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {},
-    create: {
-      email: adminEmail,
-      password: adminPassword,
-      fullName: 'Главный администратор',
-      role: Role.ADMIN,
-      roles: [Role.ADMIN],
-    },
-  });
+  if (founders > 0) {
+    console.log('   Основатель уже есть — учётки не трогаем.');
+  } else {
+    const email = (process.env.FOUNDER_EMAIL || 'founder@javonon.local').trim().toLowerCase();
+    const raw = (process.env.FOUNDER_PASSWORD || '').trim();
+    if (raw.length < 12) {
+      console.log('   Основателя нет: задайте FOUNDER_PASSWORD (не короче 12 символов) и перезапустите — пароля по умолчанию нет.');
+    } else {
+      const exists = await prisma.user.findUnique({ where: { email } });
+      if (exists) {
+        console.log(`   ${email} уже существует — роль не меняем, основателя назначьте вручную.`);
+      } else {
+        await prisma.user.create({
+          data: {
+            email,
+            password: await bcrypt.hash(raw, 10),
+            fullName: 'Основатель',
+            role: Role.FOUNDER,
+            roles: [Role.FOUNDER],
+          },
+        });
+        console.log(`   Создан основатель ${email} (пароль — из FOUNDER_PASSWORD).`);
+      }
+    }
+  }
 
   // Несколько демо-заявок (международные направления).
   //
@@ -109,8 +105,6 @@ async function main() {
   }
 
   console.log('✅ Seed complete.');
-  console.log(`   Founder: ${founderEmail} / ${process.env.FOUNDER_PASSWORD || 'founder123'} (change in /me)`);
-  console.log(`   Admin:   ${adminEmail} / admin123`);
 }
 
 main()

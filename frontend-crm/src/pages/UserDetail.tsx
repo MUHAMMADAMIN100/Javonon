@@ -57,14 +57,19 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   const { toast, confirm } = useUI();
   const { t } = useT();
   const meStore = useAuth((s) => s.user);
-  const queryKey = isAdmin ? ['user', userId, 'full'] : ['me', 'full'];
+  // Свой профиль — /me/full; чужой — /me/profile/:id (права проверяет
+  // сервер). Раньше без прав руководства по адресу чужого сотрудника
+  // молча открывался СВОЙ профиль.
+  const own = userId === 'me' || userId === meStore?.id;
+  const queryKey = own ? ['me', 'full'] : ['user', userId, 'full'];
 
   const { data, isLoading, error } = useQuery<FullProfile>({
     queryKey,
     queryFn: async () => {
       const mod = await import('../api/userProfile');
-      return isAdmin ? mod.getUserFullProfile(userId) : mod.getMyFullProfile();
+      return own ? mod.getMyFullProfile() : mod.getUserFullProfile(userId);
     },
+    retry: false,
   });
 
   // «В сети» / «последний вход» — только основатель, на карточке сотрудника.
@@ -97,7 +102,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
     return t(key) !== key ? t(key) : reason;
   };
   const salarySort = useTableSort(
-    data?.salary.records ?? [],
+    data?.salary?.records ?? [],
     [
       { key: 'period', label: t('common.period'), type: 'date', value: (r) => r.periodStart },
       { key: 'hours', label: t('profile.month.hours'), type: 'number', value: (r) => r.workedMinutes },
@@ -144,7 +149,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
   if (isLoading) return <>{back}<div className="card" style={{ padding: 24 }}>Загружаем…</div></>;
   if (error || !data) {
-    return <>{back}<div className="card" style={{ padding: 24 }}>Не удалось загрузить профиль</div></>;
+    // 403 — нет прав на этого сотрудника: показываем причину с сервера.
+    const msg = (error as any)?.response?.status === 403 ? (error as any)?.response?.data?.message : null;
+    return <>{back}<div className="card" style={{ padding: 24 }} data-testid="profile-error">{msg || 'Не удалось загрузить профиль'}</div></>;
   }
 
   const { user, salary, penalties, sales, attendance, kpi, documents, dailyReports } = data;
@@ -196,7 +203,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           «Активность» (видит основатель). Кнопка «Изменить» — у заголовка
           своей группы; форма правки раскрывается под данными. */}
       <section className="card profile-section" data-testid="profile-main">
-        <div className="profile-cols">
+        <div className={`profile-cols${salary ? '' : ' is-single'}`}>
           <div className="profile-group" data-testid="group-personal">
             <div className="profile-group-head">
               <h3 className="profile-h">{t('userDetail.section.personal')}</h3>
@@ -226,6 +233,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
               <Field label={t('profile.field.createdAt')} value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
             </div>
           </div>
+          {/* Оплата — только основателю, админу, бухгалтеру (сервер не отдаёт её кастомной роли). */}
+          {salary && (
           <div className="profile-group" data-testid="group-pay">
             <div className="profile-group-head">
               <h3 className="profile-h">{t('userDetail.section.salary')}</h3>
@@ -256,6 +265,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
               <Field label={t('userDetail.field.kpiTarget')} value={`${kpi.targetPct}%`} />
             </div>
           </div>
+          )}
         </div>
 
         {presence.ready && (() => {
@@ -316,6 +326,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         />
       </section>
 
+      {salary && (
+      <>
       {/* История зарплат */}
       <section className={`card profile-section${salary.records.length === 0 ? ' is-empty' : ''}`}>
         <h3 className="profile-h">{t('profile.salaryHistory')}</h3>
@@ -357,6 +369,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           </div>
         )}
       </section>
+      </>
+      )}
 
       {/* Штрафы */}
       <section className={`card profile-section${penalties.list.length === 0 ? ' is-empty' : ''}`}>

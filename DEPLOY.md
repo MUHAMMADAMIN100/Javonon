@@ -70,7 +70,7 @@ Backend при старте автоматически запустит seed п�
 npm run seed
 ```
 
-После этого логин админа: **admin@javonon.local** / **admin123**.
+Основатель создаётся при первом запуске на пустой базе из переменных `FOUNDER_EMAIL` / `FOUNDER_PASSWORD` (пароль не короче 12 символов). Паролей по умолчанию нет, в лог они не печатаются.
 
 ---
 
@@ -107,7 +107,7 @@ VITE_API_URL=https://javonon-production.up.railway.app/api
 ```
 
 6. **Deploy** → получишь `https://javonon-crm.vercel.app`
-7. Открой `https://javonon-crm.vercel.app/admin/login` — войди как `admin@javonon.local` / `admin123`
+7. Открой `https://javonon-crm.vercel.app/admin/login` — войди основателем (FOUNDER_EMAIL / FOUNDER_PASSWORD)
 
 ---
 

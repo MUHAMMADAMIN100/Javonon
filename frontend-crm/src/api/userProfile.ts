@@ -87,7 +87,7 @@ export interface FullProfile {
     bonusVolume?: number;
     bonusPeriodStart?: string;
     bonusPeriodEnd?: string;
-  };
+  } | null;
   penalties: {
     list: Array<{
       id: string;

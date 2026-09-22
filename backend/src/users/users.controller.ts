@@ -76,21 +76,17 @@ export class MeController {
   /** То же для чужого профиля — тот же доступ, что у самого профиля. */
   @Get('profile/:id/month-details')
   async profileMonthDetails(@Param('id') id: string, @CurrentUser() me: any) {
-    const ok = await this.users.canViewProfile(me.id, me.role, id, me.roles);
-    if (!ok) {
-      throw new BadRequestException('Нет доступа к данным этого сотрудника');
+    if (!(await this.users.profileAccess(me, id))) {
+      throw new ForbiddenException('Нет доступа к данным этого сотрудника');
     }
     return this.users.monthDetails(id);
   }
 
-  /** Профиль другого сотрудника — доступ через canViewProfile. */
+  /** Профиль другого сотрудника — доступ через UsersService.profileAccess. */
   @Get('profile/:id')
-  async viewProfile(@Param('id') id: string, @CurrentUser() me: any) {
-    const ok = await this.users.canViewProfile(me.id, me.role, id, me.roles);
-    if (!ok) {
-      throw new BadRequestException('Нет доступа к данным этого сотрудника');
-    }
-    return this.users.fullProfile(id);
+  viewProfile(@Param('id') id: string, @CurrentUser() me: any) {
+    // Оклад — только тем, кому положено (см. UsersService.profileAccess).
+    return this.users.fullProfileFor(id, me);
   }
 
   /**
@@ -152,8 +148,8 @@ export class UsersController {
   }
 
   @Post()
-  create(@Body() dto: CreateUserDto) {
-    return this.users.create(dto);
+  create(@Body() dto: CreateUserDto, @CurrentUser() me: any) {
+    return this.users.create(dto, me);
   }
 
   /**
@@ -170,8 +166,8 @@ export class UsersController {
 
   /** Полный профиль сотрудника (HR + зарплата + KPI + посещаемость + штрафы). */
   @Get(':id/full')
-  fullProfile(@Param('id') id: string) {
-    return this.users.fullProfile(id);
+  fullProfile(@Param('id') id: string, @CurrentUser() me: any) {
+    return this.users.fullProfileFor(id, me);
   }
 
   @Patch(':id')

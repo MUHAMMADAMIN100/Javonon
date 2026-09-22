@@ -536,7 +536,8 @@ export default function Users() {
                     <option value="base:SALES_MANAGER">{roleLabel('SALES_MANAGER' as any)}</option>
                     <option value="base:CLIENT_MANAGER">{roleLabel('CLIENT_MANAGER' as any)}</option>
                   </optgroup>
-                  {customRoles.length > 0 && (
+                  {/* Кастомную роль назначает только основатель (так же проверяет сервер). */}
+                  {founder && customRoles.length > 0 && (
                     <optgroup label={t('userDetail.field.customRole')}>
                       {customRoles.map((r) => (
                         <option key={r.id} value={`custom:${r.id}`}>

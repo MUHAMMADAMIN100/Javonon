@@ -30,6 +30,18 @@ export class RolesGuard implements CanActivate {
     // FOUNDER — неявный супер-доступ.
     if (isFounder(user)) return true;
 
+    // Адрес «только основатель» (@Roles(FOUNDER) и больше никаких ролей).
+    // Неявные пермиссии по префиксу URL сюда НЕ пускают: иначе право
+    // «Сотрудники — редактирование» (префикс /users) открывало смену ролей
+    // и окладов, а «Сделки — оформление» (префикс /submissions) — одобрение
+    // платежей. Кастомная роль проходит, только если нужное право ЯВНО
+    // указано на этом адресе через @Permissions(...).
+    const founderOnly = requiredRoles.length > 0 && requiredRoles.every((r) => r === 'FOUNDER');
+    if (founderOnly) {
+      if (requiredPerms.length > 0 && hasPermission(user, ...requiredPerms)) return true;
+      throw new ForbiddenException('Недостаточно прав');
+    }
+
     // ТЗ-доработка: если у юзера активная кастомная роль (например «Таргетолог»),
     // base role в БД — техническая «подложка» и НЕ должна давать доступа
     // через @Roles(). Кастомная роль ЗАМЕНЯЕТ базу для целей авторизации:

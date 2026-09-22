@@ -6131,6 +6131,7 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 }
 /* Группа данных: заголовок и «✎ Изменить» в одной строке. */
 .profile-group { min-width: 0; }
+.profile-cols.is-single { grid-template-columns: minmax(0, 1fr); }
 .profile-group + .profile-group { padding-left: 32px; border-left: 1px solid var(--border-soft); }
 .profile-group-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;

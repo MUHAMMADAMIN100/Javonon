@@ -7,8 +7,6 @@
  * НЕ удаляет данные — только UPDATE поля password у одного юзера.
  *
  * Запуск:
- *   # default — admin@javonon.local → admin123
- *   ts-node prisma/reset-admin-password.ts
  *
  *   # custom через env
  *   RESET_EMAIL=foo@bar.com RESET_PASSWORD=newpass123 ts-node prisma/reset-admin-password.ts
@@ -23,15 +21,22 @@ import * as bcrypt from 'bcryptjs';
 async function main() {
   const prisma = new PrismaClient();
 
-  const rawEmail = process.env.RESET_EMAIL || 'admin@javonon.local';
-  const rawPassword = process.env.RESET_PASSWORD || 'admin123';
+  // Ни email, ни пароля по умолчанию: раньше без переменных скрипт ставил
+  // admin@javonon.local известный пароль admin123.
+  const rawEmail = process.env.RESET_EMAIL || '';
+  const rawPassword = process.env.RESET_PASSWORD || '';
+  if (!rawEmail || !rawPassword) {
+    console.error('❌ Задайте RESET_EMAIL и RESET_PASSWORD');
+    await prisma.$disconnect();
+    process.exit(1);
+  }
 
   // Нормализуем так же, как делает login() в auth.service.
   const email = rawEmail.trim().toLowerCase();
   const password = rawPassword.trim();
 
-  if (password.length < 8 && password !== 'admin123') {
-    console.error('❌ Пароль должен быть минимум 8 символов (исключение: admin123 для сидов)');
+  if (password.length < 12) {
+    console.error('❌ Пароль должен быть не короче 12 символов');
     await prisma.$disconnect();
     process.exit(1);
   }
@@ -51,7 +56,6 @@ async function main() {
   });
 
   console.log(`✅ Пароль для "${email}" (${user.fullName}, ${user.role}) сброшен.`);
-  console.log(`   Новый пароль: "${password}"`);
   console.log('   Войди в CRM с этими данными и сразу смени пароль на свой.');
 
   await prisma.$disconnect();

@@ -3,12 +3,15 @@ import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { Permissions } from '../auth/permissions.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ExcusesService } from './excuses.service';
 
 @Controller('excuses')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.FOUNDER)
+// Кастомная роль с этим правом тоже (см. RolesGuard: «только основатель»).
+@Permissions('excuses:write')
 export class ExcusesController {
   constructor(private svc: ExcusesService) {}
 
