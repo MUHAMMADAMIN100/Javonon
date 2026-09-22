@@ -14,6 +14,8 @@ export interface KpiRow {
   conversionRate: number;
   studentsCount: number;
   salesAmount: number;
+  /** Ручные приходы по менеджеру — в «Продажи» не входят. */
+  otherIncome?: number;
   /**
    * Валюта, в которой посчитан `salesAmount`. Бэк считает KPI только в
    * отчётной валюте (TJS) — см. KpiService.leaderboard, блок «ВАЛЮТА».
@@ -93,6 +95,8 @@ export interface KpiDetails {
     studentsCount: number;
     salesAmount: number;
     salesCount: number;
+    otherIncome?: number;
+    otherIncomeCount?: number;
   };
   students: KpiDetailsStudent[];
   sales: KpiDetailsSale[];

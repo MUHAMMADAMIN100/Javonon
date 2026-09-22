@@ -3,7 +3,7 @@ import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { createUser, deleteUser, listUsers, updateUser } from '../api/users';
+import { createUser, dismissUser, listUsers, restoreUser, updateUser } from '../api/users';
 import { type Role, type User } from '../api/types';
 import { listCustomRoles } from '../api/customRoles';
 import { useAuth } from '../store/auth';
@@ -63,6 +63,7 @@ export default function Users() {
     role: stringParam('', 80),
     search: stringParam('', 200),
     online: stringParam('', 20),
+    state: stringParam('', 20),
   });
   const setUrlSearch = useCallback((v: string) => setValue('search', v), [setValue]);
   const { input: searchInput, setInput: setSearchInput, clear: clearSearch } = useUrlSearch(values.search, setUrlSearch);
@@ -72,9 +73,15 @@ export default function Users() {
   const listKey = ['users', 'list', {}] as const;
   const usersQuery = useQuery({
     queryKey: listKey,
-    queryFn: () => listUsers(),
+    queryFn: () => listUsers(undefined, true),
   });
-  const allUsers = usersQuery.data ?? [];
+  // «Действующие» (по умолчанию) или «Уволенные» — счётчики и фильтры
+  // ниже считаются по выбранному набору.
+  const dismissedView = values.state === 'dismissed';
+  const everyone = usersQuery.data ?? [];
+  const activeCount = everyone.filter((u) => u.isActive !== false).length;
+  const dismissedCount = everyone.length - activeCount;
+  const allUsers = everyone.filter((u) => (u.isActive === false) === dismissedView);
 
   // «Кто в сети» — только основателю (сервер остальным отвечает 403).
   const founder = isFounder(me);
@@ -168,11 +175,18 @@ export default function Users() {
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
-  const deleteMut = useOptimisticMutation<unknown, string, User[]>({
-    mutationFn: deleteUser,
+  const dismissMut = useOptimisticMutation<unknown, string, User[]>({
+    mutationFn: dismissUser,
     queryKey: listKey,
-    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
-    onSuccess: () => toast(t('toast.deleted'), 'success'),
+    applyOptimistic: (cur, id) => optimistic.updateById(cur, id, { isActive: false } as Partial<User>),
+    onSuccess: () => toast(t('users.dismiss.done'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
+  });
+  const restoreMut = useOptimisticMutation<unknown, string, User[]>({
+    mutationFn: restoreUser,
+    queryKey: listKey,
+    applyOptimistic: (cur, id) => optimistic.updateById(cur, id, { isActive: true } as Partial<User>),
+    onSuccess: () => toast(t('users.restore.done'), 'success'),
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
@@ -201,19 +215,19 @@ export default function Users() {
     setError(null);
   };
 
-  const onDelete = async (u: User) => {
+  const onDismiss = async (u: User) => {
     if (u.id === me?.id) {
       toast(t('toast.error'), 'error');
       return;
     }
     const ok = await confirm({
-      title: t('common.delete'),
-      message: `«${u.fullName}»`,
-      confirmText: t('common.delete'),
+      title: `${t('users.dismiss')} «${u.fullName}»?`,
+      message: t('users.dismiss.confirm'),
+      confirmText: t('users.dismiss'),
       danger: true,
     });
     if (!ok) return;
-    deleteMut.mutate(u.id);
+    dismissMut.mutate(u.id);
   };
 
   return (
@@ -232,6 +246,17 @@ export default function Users() {
       </div>
       <div className="card-body">
         <div className="filters">
+          <CrmSelect
+            className="crm-select"
+            value={values.state === 'dismissed' ? 'dismissed' : ''}
+            onChange={(e) => setValue('state', e.target.value)}
+            style={{ ['--filter-w' as string]: '200px' }}
+            title={t('users.filter.state')}
+            data-testid="users-filter-state"
+          >
+            <option value="">{`${t('users.filter.active')} (${activeCount})`}</option>
+            <option value="dismissed">{`${t('users.filter.dismissed')} (${dismissedCount})`}</option>
+          </CrmSelect>
           <CrmSelect
             className="crm-select"
             value={roleFilter}
@@ -334,6 +359,7 @@ export default function Users() {
                     <span className="presence-name">
                       {founder && <PresenceDot state={presenceOf(u)?.state} title={presenceText(presenceOf(u), presence.now, t)} />}
                       <span style={{ fontWeight: 600 }}>{u.fullName}</span>
+                      {u.isActive === false && <span className="badge badge-gray" data-testid="user-dismissed-badge">{t('users.dismissed')}</span>}
                     </span>
                     {u.id === me?.id && <span style={{ color: '#5b6478', fontSize: 12 }}> (вы)</span>}
                   </td>
@@ -399,16 +425,24 @@ export default function Users() {
                   <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('ru-RU') : '—'}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => setPwdTarget(u)}
-                        title={t('login.password')}
-                      >
-                        {t('login.password')}
-                      </button>
-                      <button className="btn btn-sm btn-danger" onClick={() => onDelete(u)} disabled={u.id === me?.id}>
-                        {t('common.delete')}
-                      </button>
+                      {u.isActive === false ? (
+                        <button className="btn btn-sm btn-secondary" data-testid="user-restore" onClick={() => restoreMut.mutate(u.id)}>
+                          {t('users.restore')}
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => setPwdTarget(u)}
+                            title={t('login.password')}
+                          >
+                            {t('login.password')}
+                          </button>
+                          <button className="btn btn-sm btn-danger" data-testid="user-dismiss" onClick={() => onDismiss(u)} disabled={u.id === me?.id}>
+                            {t('users.dismiss')}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

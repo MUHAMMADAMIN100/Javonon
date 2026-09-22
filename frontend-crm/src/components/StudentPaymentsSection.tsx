@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useRealtime } from '../realtime';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../api/client';
 import Icon from '../Icon';
@@ -64,13 +65,29 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
   const [data, setData] = useState<Response | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!studentId) return;
     api.get<Response>(`/students/${studentId}/payments`)
       .then((r) => setData(r.data))
       .catch(() => setData({ transactions: [], paymentRequests: [], totalPaid: 0 }))
       .finally(() => setLoading(false));
   }, [studentId]);
+  useEffect(load, [load]);
+
+  // Живое обновление: подтвердили/отклонили/внесли платёж, одобрили оплату по
+  // сделке, изменили транзакцию — блок перечитывается сам. Раньше менеджер
+  // видел «Ожидает», пока не перезагрузит страницу.
+  const mine = (p: any) =>
+    !p || p?.payment?.studentId === studentId || p?.transaction?.studentId === studentId || p?.studentId === studentId;
+  useRealtime({
+    'payment:pending': (p: any) => mine(p) && load(),
+    'payment:confirmed': (p: any) => mine(p) && load(),
+    'payment:rejected': (p: any) => mine(p) && load(),
+    'submission:reviewed': () => load(),
+    'transaction:new': (p: any) => mine(p) && load(),
+    'transaction:updated': (p: any) => mine(p) && load(),
+    'transaction:deleted': () => load(),
+  });
 
   if (loading) {
     return (

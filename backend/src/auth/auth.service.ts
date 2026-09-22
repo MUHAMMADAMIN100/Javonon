@@ -1,3 +1,5 @@
+import { FILE_TOKEN_TTL_SEC, fileTokenSecret } from '../common/uploads-auth.middleware';
+import { requireJwtSecret } from './jwt-secret';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -9,6 +11,20 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
   ) {}
+
+  /**
+   * Файловый токен для ссылок на /uploads (см. UploadsAuthMiddleware): 10
+   * минут, отдельный ключ, только {sub, sid, role} — основной токен в адрес
+   * ссылки больше не кладётся.
+   */
+  async issueFileToken(user: { id: string; sid: string; role?: string; roles?: string[] }) {
+    const secret = fileTokenSecret(requireJwtSecret(process.env.JWT_SECRET));
+    const token = await this.jwt.signAsync(
+      { sub: user.id, sid: user.sid, role: user.role, roles: user.roles || [], typ: 'file' },
+      { secret, expiresIn: FILE_TOKEN_TTL_SEC },
+    );
+    return { token, expiresIn: FILE_TOKEN_TTL_SEC };
+  }
 
   async login(email: string, password: string, ctx?: { ip?: string | null; userAgent?: string | null }) {
     // Нормализуем email и пароль одинаково на login и change-password,

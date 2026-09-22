@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { User } from '../api/types';
 import { login as apiLogin, me as apiMe } from '../api/auth';
 import { connectRealtime, disconnectRealtime } from '../realtime';
+import { startFileTokenRefresh, stopFileTokenRefresh } from '../lib/fileUrl';
 import { queryClient } from '../lib/queryClient';
 
 const TOKEN_KEY = 'javonon_token';
@@ -230,6 +231,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     // login response is as fresh as /auth/me by construction.
     writeMeCache(user);
     connectRealtime(token);
+        startFileTokenRefresh();
     // Login response carries the full user, so we are fully hydrated by
     // definition. Sidebar/permission gates flip off their skeleton on this.
     set({ user, hydrated: true });
@@ -242,6 +244,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     // bootstrap) with the previous user's fullName/permissions.
     clearMeCache();
     disconnectRealtime();
+    stopFileTokenRefresh();
     // Drop every cached query so user-A's data can't leak into user-B's
     // session on same-browser logout→login. staleTime is 30s and gcTime is
     // 5min (see lib/queryClient.ts), so without this the next user briefly
@@ -291,6 +294,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         } as User,
       });
       connectRealtime(token);
+        startFileTokenRefresh();
     }
 
     // Race /auth/me (with retries) against a soft timer. Before this fix
@@ -332,6 +336,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     const applyMeResult = (result: MeResult, alreadyReady: boolean): void => {
       if (result.ok) {
         connectRealtime(token);
+        startFileTokenRefresh();
         writeMeCache(result.user);
         set(alreadyReady
           ? { user: result.user, hydrated: true }
@@ -355,6 +360,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       const cached = readMeCache();
       if (cached) {
         connectRealtime(token);
+        startFileTokenRefresh();
         set(alreadyReady
           ? { user: cached, hydrated: true }
           : { user: cached, ready: true, initialized: true, hydrated: true });

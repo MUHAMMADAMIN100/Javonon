@@ -140,11 +140,11 @@ export class UsersController {
   constructor(private users: UsersService) {}
 
   @Get()
-  list(@Query('search') search?: string) {
+  list(@Query('search') search?: string, @Query('includeInactive') includeInactive?: string) {
     if (search && search.length > 200) {
       throw new BadRequestException('Поисковая строка слишком длинная');
     }
-    return this.users.findAll({ search });
+    return this.users.findAll({ search, includeInactive: includeInactive === '1' || includeInactive === 'true' });
   }
 
   @Post()
@@ -180,13 +180,26 @@ export class UsersController {
     return this.users.update(id, dto, me);
   }
 
+  /** «Уволить» (история сохраняется). DELETE оставлен для совместимости. */
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() me: any) {
-    // QA-fix #44: админ не может удалить сам себя — это ломает систему.
     if (id === me.id) {
-      throw new BadRequestException('Нельзя удалить собственный аккаунт');
+      throw new BadRequestException('Нельзя уволить самого себя');
     }
-    return this.users.remove(id, me);
+    return this.users.dismiss(id, me);
+  }
+
+  @Post(':id/dismiss')
+  dismiss(@Param('id') id: string, @CurrentUser() me: any) {
+    if (id === me.id) {
+      throw new BadRequestException('Нельзя уволить самого себя');
+    }
+    return this.users.dismiss(id, me);
+  }
+
+  @Post(':id/restore')
+  restore(@Param('id') id: string) {
+    return this.users.restore(id);
   }
 
   /** Загрузить документ сотрудника (паспорт/контракт/диплом). */

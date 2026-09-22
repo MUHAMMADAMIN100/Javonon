@@ -1,10 +1,8 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
-import { join } from 'path';
 import { UploadsAuthMiddleware } from './common/uploads-auth.middleware';
 import { UserThrottlerGuard } from './common/user-throttler.guard';
 import { PrismaThrottlerStorage } from './common/throttler-prisma.storage';
@@ -68,10 +66,6 @@ import { InstallmentsModule } from './installments/installments.module';
     // JWT_SECRET, без него не верифицируем подписи.
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'dev-only-fallback-do-not-use-in-prod',
-    }),
-    ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), process.env.UPLOADS_DIR || './uploads'),
-      serveRoot: '/uploads',
     }),
     // Глобальные rate-limits. Точечные более жёсткие лимиты — через @Throttle()
     // на конкретных публичных эндпоинтах (POST /applications/public,
@@ -163,9 +157,10 @@ export class AppModule implements NestModule {
    * отдаст файл. Без этого паспорта/контракты/чеки раздавались любому со
    * ссылкой — см. UploadsAuthMiddleware за подробностями.
    */
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(UploadsAuthMiddleware)
-      .forRoutes({ path: 'uploads/*', method: RequestMethod.ALL });
+  configure(_consumer: MiddlewareConsumer) {
+    // /uploads/* — проверка доступа и раздача файлов подключены в main.ts
+    // явной цепочкой (UploadsAuthMiddleware → express.static): раньше
+    // ServeStaticModule отдавал файл РАНЬШЕ этой мидлвари, и проверка не
+    // срабатывала.
   }
 }

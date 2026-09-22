@@ -187,8 +187,9 @@ export class ApplicationsController {
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
-  one(@Param('id') id: string, @CurrentUser() user: any) {
-    // user нужен сервису только чтобы решить, отдавать ли блок «Партнёр»
+  async one(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.apps.assertCanView(id, user);
+    // user нужен сервису ещё и чтобы решить, отдавать ли блок «Партнёр»
     // (руководству — да, менеджерам — поля в ответе нет вообще).
     return this.apps.findOne(id, user);
   }

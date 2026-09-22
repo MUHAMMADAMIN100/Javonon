@@ -105,6 +105,9 @@ export interface FullProfile {
     monthCount: number;
     /** Продажи в других валютах (не входят в monthAmount, он в TJS). */
     monthOther?: Record<string, number>;
+    /** «Прочие приходы» — ручные доходы по менеджеру, в продажи не входят. */
+    monthOtherIncome?: number;
+    monthOtherIncomeCount?: number;
     yearAmount: number;
     yearCount: number;
   };
@@ -150,9 +153,12 @@ export interface MonthDetails {
     clockOut: string | null; status: string; totalMinutes: number; totalLunchMinutes: number;
     lateMinutes: number; lateExcuseReason: string | null; lateExcuseStatus: string | null;
   }>;
+  /** DEAL — оплата по сделке (входит в «Продажи»), OTHER — прочий приход. */
   sales: Array<{
+    kind: 'DEAL' | 'OTHER';
     id: string; date: string; amount: number; currency: string; category: string;
     payerName: string | null; comment: string | null; student: { id: string; fullName: string } | null;
+    submissionId?: string | null;
   }>;
   ownApplications: MonthApplication[];
   enrolled: MonthApplication[];

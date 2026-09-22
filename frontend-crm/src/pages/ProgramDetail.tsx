@@ -1,3 +1,4 @@
+import { absFileUrl } from '../lib/fileUrl';
 import { useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,7 +22,7 @@ import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
-const fileUrl = (u: string) => (u.startsWith('http') ? u : `${API_BASE}${u}`);
+const fileUrl = (u: string) => absFileUrl(u);
 
 /**
  * Детальная страница программы (ТЗ-доработка п.7). Открывается по клику

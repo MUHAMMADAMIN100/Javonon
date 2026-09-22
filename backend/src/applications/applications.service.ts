@@ -443,7 +443,9 @@ export class ApplicationsService {
     const birthdayText = app.birthday ? app.birthday.toISOString().slice(0, 10) : null;
     const headline = countryText || '—';
 
-    await this.notifications.notifyAllStaff({
+    // Новая заявка (ФИО, телефон) — только тем, кто видит все заявки, и
+    // назначенным менеджерам; раньше — каждому сотруднику.
+    await this.notifications.notifyAudience('applications', [app.managerId, app.chinaManagerId], {
       type: 'APPLICATION_NEW',
       title: 'Новая заявка',
       message: `${app.fullName} — ${headline}, ${app.phone}`,
@@ -483,7 +485,7 @@ export class ApplicationsService {
       )
       .catch(() => undefined);
 
-    this.realtime.emitStaff('application:new', { application: app });
+    this.realtime.emitApplication('application:new', app, { application: app });
     return app;
   }
 
@@ -525,7 +527,7 @@ export class ApplicationsService {
       source: dto.source || STAFF_DEFAULT_SOURCE,
       autoAssignManager: false,
     });
-    this.realtime.emitStaff('application:new', { application: app });
+    this.realtime.emitApplication('application:new', app, { application: app });
     return app;
   }
 
@@ -714,17 +716,28 @@ export class ApplicationsService {
     return { ...app, partnerAttribution };
   }
 
+  /**
+   * Кто видит и правит заявку — то же правило, что у списка (findAll):
+   * кто видит все заявки (canSeeAllApplications) — любую; остальные — только
+   * те, где они назначены (TJ или CN). Раньше карточка по прямой ссылке
+   * открывалась любому сотруднику, а заявку без менеджера мог править любой.
+   */
+  canAccess(app: { managerId: string | null; chinaManagerId?: string | null }, user: CurrentUser) {
+    if (canSeeAllApplications(user as any)) return true;
+    return app.managerId === user.id || app.chinaManagerId === user.id;
+  }
+
+  async assertCanView(id: string, user: CurrentUser) {
+    const a = await this.prisma.application.findUnique({ where: { id }, select: { managerId: true, chinaManagerId: true } });
+    if (!a) throw new NotFoundException('Заявка не найдена');
+    if (!this.canAccess(a, user)) throw new ForbiddenException('Нет доступа к этой заявке');
+  }
+
   private ensureCanEdit(
     app: { managerId: string | null; chinaManagerId?: string | null },
     user: CurrentUser,
   ) {
-    // Elevated (FOUNDER/ADMIN/ACCOUNTANT, мульти-роли учтены) могут
-    // редактировать любую заявку. Раньше было `user.role === 'ADMIN'`
-    // — блокировало FOUNDER и игнорировало мульти-роли.
-    if (isElevated(user as any)) return;
-    const assigned = app.managerId || app.chinaManagerId;
-    if (!assigned) return; // ещё не назначен — любой может взять в работу
-    if (app.managerId === user.id || app.chinaManagerId === user.id) return;
+    if (this.canAccess(app, user)) return;
     throw new ForbiddenException(
       'Только назначенные менеджеры или администратор могут редактировать эту заявку',
     );
@@ -865,7 +878,7 @@ export class ApplicationsService {
         }
       }
 
-      this.realtime.emitStaff('application:updated', { application: updated });
+      this.realtime.emitApplication('application:updated', updated, { application: updated }, [existing.managerId, existing.chinaManagerId]);
       if (updated.studentId) {
         this.realtime.emitStudent(updated.studentId, 'student:updated', { studentId: updated.studentId });
       }
@@ -926,7 +939,7 @@ export class ApplicationsService {
         .catch(() => undefined);
     }
 
-    this.realtime.emitStaff('application:updated', { application: updated });
+    this.realtime.emitApplication('application:updated', updated, { application: updated }, [existing.managerId, existing.chinaManagerId]);
     if (updated.studentId) {
       this.realtime.emitStudent(updated.studentId, 'student:updated', { studentId: updated.studentId });
       this.realtime.emitStudent(updated.studentId, 'application:updated', { application: updated });
@@ -1035,6 +1048,7 @@ export class ApplicationsService {
       if (patch.managerId) {
         const exists = await this.prisma.user.findUnique({ where: { id: patch.managerId } });
         if (!exists) throw new NotFoundException('Локальный менеджер не найден');
+        if (exists.isActive === false) throw new BadRequestException('Менеджер уволен');
       }
       data.managerId = patch.managerId;
     }
@@ -1042,6 +1056,7 @@ export class ApplicationsService {
       if (patch.chinaManagerId) {
         const exists = await this.prisma.user.findUnique({ where: { id: patch.chinaManagerId } });
         if (!exists) throw new NotFoundException('Китайский менеджер не найден');
+        if (exists.isActive === false) throw new BadRequestException('Менеджер уволен');
       }
       data.chinaManagerId = patch.chinaManagerId;
     }
@@ -1059,7 +1074,7 @@ export class ApplicationsService {
       data,
       include: MANAGER_INCLUDE,
     });
-    this.realtime.emitStaff('application:updated', { application: updated });
+    this.realtime.emitApplication('application:updated', updated, { application: updated }, [existing.managerId, existing.chinaManagerId]);
     if (updated.studentId) {
       this.realtime.emitStudent(updated.studentId, 'student:updated', { studentId: updated.studentId });
     }
@@ -1089,9 +1104,9 @@ export class ApplicationsService {
         })
         .catch(() => undefined);
 
-      // Уведомления staff (всем) о переназначении
+      // О переназначении — руководству, старому и новому менеджеру.
       this.notifications
-        .notifyAllStaff({
+        .notifyAudience('applications', [updated.managerId, updated.chinaManagerId, existing.managerId, existing.chinaManagerId], {
           type: 'MANAGER_CHANGE',
           title: 'Менеджер изменён',
           message: `${updated.fullName}: ${details}`,
@@ -1355,7 +1370,7 @@ export class ApplicationsService {
       // назначения, — колокольчик его уже знает. В payload нет applicationId
       // намеренно: заявок много, вести клик на одну из них некуда.
       this.notifications
-        .notifyAllStaff({
+        .notifyAudience('applications', [manager.id], {
           type: 'MANAGER_CHANGE',
           title: 'Лиды назначены',
           message: `${pluralLeadsAssigned(changed.length)} → ${manager.fullName}`,

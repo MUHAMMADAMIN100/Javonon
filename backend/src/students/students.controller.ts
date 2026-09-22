@@ -139,14 +139,16 @@ export class StudentsController {
   }
 
   @Get(':id')
-  one(@Param('id') id: string, @CurrentUser() user: any) {
-    // user нужен сервису только чтобы решить, отдавать ли блок «Партнёр»
+  async one(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.students.assertCanView(id, user);
+    // user нужен сервису ещё и чтобы решить, отдавать ли блок «Партнёр»
     // (руководству — да, менеджерам — поля в ответе нет вообще).
     return this.students.findOne(id, user);
   }
 
   @Get(':id/payments')
-  payments(@Param('id') id: string) {
+  async payments(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.students.assertCanView(id, user);
     return this.students.paymentsHistory(id);
   }
 

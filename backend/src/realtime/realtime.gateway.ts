@@ -13,6 +13,9 @@ import {
 import { Server, Socket } from 'socket.io';
 import { requireJwtSecret } from '../auth/jwt-secret';
 import { PresenceService } from './presence.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { AUDIENCE_USER_SELECT, canSeeFinance, toUserWithRoles } from '../common/audience';
+import { canSeeAllApplications } from '../applications/application-access';
 
 type JwtPayload = {
   sub: string;
@@ -101,6 +104,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     private jwt: JwtService,
     private config: ConfigService,
     private presence: PresenceService,
+    private prisma: PrismaService,
   ) {}
 
   afterInit() {
@@ -215,12 +219,22 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       // менеджер мог `socket.on('transaction:new', ...)` в DevTools и
       // сливать чужие суммы/комиссии/расходы.
       if (STAFF_ROLES.has(role)) {
+        // Права — из БД, а не из токена: токен живёт долго, а сотрудника
+        // могли уволить, сменить ему роль или дать кастомную (которая
+        // заменяет базовую). Уволенного не пускаем вовсе.
+        const u = await this.prisma.user.findUnique({ where: { id }, select: AUDIENCE_USER_SELECT });
+        if (!u || !u.isActive) {
+          this.logger.warn(`Socket rejected for inactive/missing user ${id}`);
+          client.disconnect(true);
+          return;
+        }
+        const who = toUserWithRoles(u as any);
         client.join('staff');
         client.join(`user:${id}`);
-        if (FINANCE_ROLES.has(role)) {
-          client.join('finance-staff');
-        }
-        if (role === 'FOUNDER' || payload.roles?.includes('FOUNDER')) {
+        if (canSeeFinance(who)) client.join('finance-staff');
+        // Все заявки/студенты — только тем, кто видит их все (как список).
+        if (canSeeAllApplications(who)) client.join('apps-all');
+        if (u.role === 'FOUNDER' || (u.roles || []).includes('FOUNDER')) {
           client.join('founders');
         }
         this.presence.connected(id, client.id);
@@ -259,6 +273,30 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     if (data.userId && data.role && STAFF_ROLES.has(data.role)) this.presence.activity(data.userId);
   }
 
+  /**
+   * Событие заявки с полными данными (ФИО, телефон, комментарий) — только
+   * тем, кто видит все заявки (комната apps-all), и назначенным на неё
+   * менеджерам (+ extraUserIds: например, прежний менеджер после смены).
+   * Раньше шло в общую комнату staff — каждому сотруднику.
+   */
+  emitApplication(
+    event: string,
+    app: { managerId?: string | null; chinaManagerId?: string | null },
+    payload: any,
+    extraUserIds: (string | null | undefined)[] = [],
+    extraRooms: string[] = [],
+  ) {
+    const rooms = new Set<string>(['apps-all', ...extraRooms]);
+    for (const uid of [app.managerId, app.chinaManagerId, ...extraUserIds]) if (uid) rooms.add(`user:${uid}`);
+    this.server?.to([...rooms]).emit(event, payload);
+  }
+
+  /** Отключить все сокеты сотрудника (увольнение, смена пароля). */
+  disconnectUser(userId: string, reason: string) {
+    this.server?.to(`user:${userId}`).emit('auth:expired', { reason });
+    this.server?.in(`user:${userId}`).disconnectSockets(true);
+  }
+
   /** Сотрудникам (все админы + сотрудники) */
   emitStaff(event: string, payload: any) {
     this.server?.to('staff').emit(event, payload);
@@ -291,9 +329,26 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     this.server?.to('students').emit(event, payload);
   }
 
-  /** Всем кто касается этого студента — и сам студент, и staff */
+  /**
+   * Событие карточки студента: самому студенту и тем сотрудникам, кто его
+   * видит (все заявки/студенты — apps-all, и его менеджеры). Раньше шло всей
+   * комнате staff — вместе со ссылками на документы (паспорт и т.п.).
+   */
   emitStudentAndStaff(studentId: string, event: string, payload: any) {
-    this.emitStaff(event, payload);
     this.emitStudent(studentId, event, payload);
+    void this.emitStudentScoped(studentId, event, payload);
+  }
+
+  /** То же, но только сотрудникам (руководству и менеджерам студента). */
+  async emitStudentScoped(studentId: string, event: string, payload: any, extraRooms: string[] = []) {
+    try {
+      const s = await this.prisma.student.findUnique({
+        where: { id: studentId },
+        select: { managerId: true, chinaManagerId: true },
+      });
+      this.emitApplication(event, s || {}, payload, [], extraRooms);
+    } catch (err) {
+      this.logger.warn(`emitStudentScoped failed: ${(err as Error).message}`);
+    }
   }
 }

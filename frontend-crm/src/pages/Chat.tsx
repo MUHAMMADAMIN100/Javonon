@@ -1,3 +1,4 @@
+import { absFileUrl } from '../lib/fileUrl';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -938,7 +939,7 @@ export default function Chat() {
                             const isImg = a.mimeType?.startsWith('image/') || extIsImg;
                             const isVid = a.mimeType?.startsWith('video/');
                             const isAud = a.mimeType?.startsWith('audio/');
-                            const url = a.url.startsWith('http') ? a.url : `${API_BASE}${a.url}`;
+                            const url = absFileUrl(a.url);
                             if (isImg) {
                               return (
                                 <img

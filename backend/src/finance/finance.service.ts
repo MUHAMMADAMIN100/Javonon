@@ -1122,8 +1122,10 @@ export class FinanceService {
       // финотдела. Тот же pattern (notifyAllStaff) в applications.service
       // при MANAGER_CHANGE. Best-effort.
       if (this.notifications) {
+        // Сумма и менеджеры — только финансовым ролям и двум затронутым
+        // менеджерам (раньше — каждому сотруднику).
         this.notifications
-          .notifyAllStaff({
+          .notifyAudience('finance', [before.managerId, updated.managerId], {
             type: 'TRANSACTION_MANAGER_CHANGE',
             title: 'Менеджер транзакции изменён',
             message: details,

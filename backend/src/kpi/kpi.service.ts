@@ -1,3 +1,4 @@
+import { managerSales } from '../common/manager-sales';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { isElevated, UserWithRoles } from '../auth/role-utils';
@@ -106,35 +107,10 @@ export class KpiService {
       select: { id: true, fullName: true, role: true, email: true, bonusPercent: true },
     });
 
-    // Разбивка не-TJS приходов — ОДИН groupBy на всех пользователей, а не
-    // ещё один запрос внутри цикла по users: лидерборд и так делает шесть
-    // запросов на человека, седьмой удвоил бы стоимость экрана ради поля,
-    // которое в чисто-сомонёвой базе всегда пустое. Фильтры совпадают с
-    // TJS-агрегатом выше один в один (type / reversedAt / период) — иначе
-    // «остаток» разошёлся бы с основной цифрой по причинам помимо валюты.
-    const nonTjsGrouped = await this.prisma.transaction.groupBy({
-      by: ['managerId', 'currency'],
-      where: {
-        managerId: { in: users.map((u) => u.id) },
-        type: 'INCOME',
-        reversedAt: null,
-        currency: { not: REPORTING_CURRENCY },
-        ...(dateFilter && { date: dateFilter }),
-      },
-      _sum: { amount: true },
-    });
-    const nonTjsByUser = new Map<string, NonReportingCurrencyBreakdown>();
-    for (const g of nonTjsGrouped) {
-      if (!g.managerId) continue; // отсечено в where, но типы этого не знают
-      const bucket = nonTjsByUser.get(g.managerId) || {};
-      // currency — свободная строка в схеме; пустую подписываем UNKNOWN,
-      // ровно как nonTjsTotals() в finance.service.ts.
-      const cur = g.currency || 'UNKNOWN';
-      // Округление до копеек — как round() в salary.service: сложение Float
-      // даёт хвосты вида 4999.999999999999.
-      bucket[cur] = Math.round(((bucket[cur] || 0) + (g._sum.amount || 0)) * 100) / 100;
-      nonTjsByUser.set(g.managerId, bucket);
-    }
+    // «Продажи» — по правилу зарплаты (common/manager-sales.ts): одобренные
+    // платежи по сделкам в TJS; ручные приходы — отдельно «Прочие приходы»;
+    // прочие валюты — nonTjsSales. Сразу по всем сотрудникам.
+    const sales = await managerSales(this.prisma, users.map((u) => u.id), filters);
 
     const result = await Promise.all(
       users.map(async (u) => {
@@ -142,7 +118,6 @@ export class KpiService {
           applicationsAssigned,
           applicationsEnrolled,
           studentsCount,
-          salesAgg,
           tasksOpen,
           tasksDone,
         ] = await Promise.all([
@@ -151,10 +126,6 @@ export class KpiService {
             where: { ...this.applicationsWhere(u.id, dateFilter), status: { in: FINISHED_APPLICATION_STATUSES } },
           }),
           this.prisma.student.count({ where: this.studentsWhere(u.id, dateFilter) }),
-          this.prisma.transaction.aggregate({
-            where: this.salesWhere(u.id, dateFilter),
-            _sum: { amount: true },
-          }),
           this.prisma.task.count({
             where: {
               assignedToId: u.id,
@@ -190,7 +161,10 @@ export class KpiService {
           applicationsEnrolled,
           conversionRate,
           studentsCount,
-          salesAmount: salesAgg._sum.amount || 0,
+          salesAmount: sales.get(u.id)?.deals ?? 0,
+          salesCount: sales.get(u.id)?.dealsCount ?? 0,
+          // Ручные приходы по менеджеру — в продажи не входят.
+          otherIncome: sales.get(u.id)?.other ?? 0,
           // Валюта, в которой посчитан salesAmount. Отдаём явно, чтобы фронт
           // не хардкодил 'TJS' в fmtMoney — та же форма ответа, что у
           // finance summary/breakdown.
@@ -198,7 +172,7 @@ export class KpiService {
           // Пустой объект = период был чисто в сомони, фронту нечего
           // дорисовывать. Непустой — подсказка «была ещё выручка в USD/…,
           // в рейтинг она не входит».
-          nonTjsSales: nonTjsByUser.get(u.id) || {},
+          nonTjsSales: sales.get(u.id)?.nonTjs ?? {},
           tasksOpen,
           tasksDone,
         };
@@ -245,16 +219,6 @@ export class KpiService {
   }
 
   /** Действующие приходы сотрудника в отчётной валюте, по дате платежа. */
-  private salesWhere(userId: string, dateFilter: DateRange): Prisma.TransactionWhereInput {
-    return {
-      managerId: userId,
-      type: 'INCOME',
-      // Исключаем отменённые (reversedAt) — иначе продажи завышены отказами.
-      reversedAt: null,
-      currency: REPORTING_CURRENCY,
-      ...(dateFilter && { date: dateFilter }),
-    };
-  }
 
   /**
    * Подробности по строке рейтинга: что именно стоит за числами сотрудника
@@ -278,9 +242,10 @@ export class KpiService {
 
     const dateFilter = dateRangeFilter(filters);
     const appsWhere = this.applicationsWhere(userId, dateFilter);
-    const salesWhere = this.salesWhere(userId, dateFilter);
+    const salesMap = await managerSales(this.prisma, [userId], filters);
+    const sm = salesMap.get(userId)!;
 
-    const [students, sales, salesAgg, otherCurrencySales, applications, applicationsTotal, applicationsEnrolled, byStatus] =
+    const [students, applications, applicationsTotal, applicationsEnrolled, byStatus] =
       await Promise.all([
         this.prisma.student.findMany({
           where: this.studentsWhere(userId, dateFilter),
@@ -294,27 +259,6 @@ export class KpiService {
             },
           },
           orderBy: { createdAt: 'desc' },
-          take: DETAILS_LIST_LIMIT,
-        }),
-        this.prisma.transaction.findMany({
-          where: salesWhere,
-          select: {
-            id: true, amount: true, currency: true, date: true, category: true, comment: true, payerName: true,
-            studentId: true, student: { select: { id: true, fullName: true } },
-          },
-          orderBy: { date: 'desc' },
-          take: DETAILS_LIST_LIMIT,
-        }),
-        this.prisma.transaction.aggregate({ where: salesWhere, _sum: { amount: true }, _count: true }),
-        // Приходы в прочих валютах: в сумму «Продажи» не входят (конвертации
-        // нет), но и молча не пропадают — показываем отдельным списком.
-        this.prisma.transaction.findMany({
-          where: { ...salesWhere, currency: { not: REPORTING_CURRENCY } },
-          select: {
-            id: true, amount: true, currency: true, date: true, category: true, comment: true, payerName: true,
-            studentId: true, student: { select: { id: true, fullName: true } },
-          },
-          orderBy: { date: 'desc' },
           take: DETAILS_LIST_LIMIT,
         }),
         this.prisma.application.findMany({
@@ -342,15 +286,19 @@ export class KpiService {
         applicationsAssigned: applicationsTotal,
         applicationsEnrolled,
         studentsCount: studentsTotal,
-        salesAmount: salesAgg._sum.amount || 0,
-        salesCount: salesAgg._count,
+        salesAmount: sm.deals,
+        salesCount: sm.dealsCount,
+        otherIncome: sm.other,
+        otherIncomeCount: sm.otherCount,
       },
       students: students.map(({ transactions, ...st }) => ({
         ...st,
         paidTotal: Math.round(transactions.reduce((sum, t) => sum + (t.amount || 0), 0) * 100) / 100,
       })),
-      sales,
-      otherCurrencySales,
+      // Строки «Продаж» (DEAL) и «Прочих приходов» (OTHER) в TJS; прочие
+      // валюты — отдельно. Те же записи, из которых сложились итоги.
+      sales: sm.rows.filter((r) => r.currency === REPORTING_CURRENCY).slice(0, DETAILS_LIST_LIMIT),
+      otherCurrencySales: sm.rows.filter((r) => r.currency !== REPORTING_CURRENCY).slice(0, DETAILS_LIST_LIMIT),
       applications: applications.map((a) => ({
         ...a,
         enrolled: (FINISHED_APPLICATION_STATUSES as readonly string[]).includes(a.status),

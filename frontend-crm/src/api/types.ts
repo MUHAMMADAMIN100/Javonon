@@ -291,6 +291,8 @@ export interface User {
     permissions?: string[];
   } | null;
   createdAt?: string;
+  /** false — уволен (история сохранена, войти не может). */
+  isActive?: boolean;
 }
 
 export interface ManagerInfo {

@@ -43,6 +43,13 @@ export class AuthController {
     });
   }
 
+  /** Короткий токен для ссылок на файлы (/uploads?ft=…), живёт 10 минут. */
+  @UseGuards(JwtAuthGuard)
+  @Get('file-token')
+  fileToken(@CurrentUser() user: any) {
+    return this.auth.issueFileToken(user);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@CurrentUser() user: { sub: string }) {

@@ -83,7 +83,8 @@ export class PaymentsService {
         payload: { paymentId: payment.id },
       });
     }
-    this.realtime.emitStaff('payment:pending', { payment });
+    // Руководству, менеджерам студента и финансовым ролям (не всем сотрудникам).
+    void this.realtime.emitStudentScoped(payment.studentId, 'payment:pending', { payment }, ['finance-staff']);
     return payment;
   }
 
@@ -164,7 +165,7 @@ export class PaymentsService {
     });
 
     this.realtime.emitStudent(payment.studentId, 'payment:confirmed', { payment: result.updated, transaction: result.transaction });
-    this.realtime.emitStaff('payment:confirmed', { payment: result.updated });
+    void this.realtime.emitStudentScoped(payment.studentId, 'payment:confirmed', { payment: result.updated }, ['finance-staff']);
 
     // ── Партнёрская комиссия ──────────────────────────────────────────────
     //
@@ -257,6 +258,8 @@ export class PaymentsService {
       },
     });
     this.realtime.emitStudent(payment.studentId, 'payment:rejected', { payment: updated });
+    // Сотрудникам тоже: раньше блок «Платежи» у менеджера так и висел «Ожидает».
+    void this.realtime.emitStudentScoped(payment.studentId, 'payment:rejected', { payment: updated }, ['finance-staff']);
     return updated;
   }
 

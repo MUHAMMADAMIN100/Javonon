@@ -276,6 +276,11 @@ export default function Kpi() {
                     color: 'var(--primary-dark)',
                   }}>
                     {fmtMoney(r.salesAmount, r.currency)}
+                    {(r.otherIncome ?? 0) > 0 && (
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-soft)' }} data-testid="kpi-other-income">
+                        {t('sales.otherIncome')}: {fmtMoney(r.otherIncome!, r.currency)}
+                      </div>
+                    )}
                     {nonTjsLine(r) && (
                       <div style={{
                         fontFamily: 'var(--font-mono)',

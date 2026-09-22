@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { AUDIENCE_USER_SELECT, inAudience, toUserWithRoles, type AudienceKind } from '../common/audience';
 
 interface NotifyPayload {
   type: string;
@@ -13,8 +14,39 @@ interface NotifyPayload {
 export class NotificationsService {
   constructor(private prisma: PrismaService, private realtime: RealtimeGateway) {}
 
+  /**
+   * Уведомление «кому положено» (common/audience.ts): те, кто видит весь
+   * раздел (заявки или финансы), + перечисленные сотрудники (назначенные
+   * менеджеры, старый/новый менеджер). Уволенные не получают ничего.
+   * Раньше такие уведомления шли notifyAllStaff — всем подряд.
+   */
+  async notifyAudience(kind: AudienceKind, extraUserIds: (string | null | undefined)[], data: NotifyPayload) {
+    const extra = new Set(extraUserIds.filter((x): x is string => !!x));
+    const users = await this.prisma.user.findMany({ where: { isActive: true }, select: AUDIENCE_USER_SELECT });
+    const ids = users.filter((u) => extra.has(u.id) || inAudience(kind, toUserWithRoles(u as any))).map((u) => u.id);
+    if (!ids.length) return;
+    await this.prisma.notification.createMany({
+      data: ids.map((userId) => ({
+        userId,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        payload: data.payload ?? undefined,
+      })),
+    });
+    for (const id of ids) {
+      this.realtime.emitUser(id, 'notification:new', {
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        payload: data.payload,
+      });
+    }
+  }
+
   async notifyAllStaff(data: NotifyPayload) {
-    const users = await this.prisma.user.findMany({ select: { id: true } });
+    // Только действующим сотрудникам (уволенным — ничего).
+    const users = await this.prisma.user.findMany({ where: { isActive: true }, select: { id: true } });
     if (!users.length) return;
     await this.prisma.notification.createMany({
       data: users.map((u) => ({
@@ -25,13 +57,14 @@ export class NotificationsService {
         payload: data.payload ?? undefined,
       })),
     });
-    // Realtime — всем сотрудникам
-    this.realtime.emitStaff('notification:new', {
-      type: data.type,
-      title: data.title,
-      message: data.message,
-      payload: data.payload,
-    });
+    for (const u of users) {
+      this.realtime.emitUser(u.id, 'notification:new', {
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        payload: data.payload,
+      });
+    }
   }
 
   async notifyAdmins(data: NotifyPayload) {

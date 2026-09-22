@@ -1,9 +1,12 @@
 import { NestFactory } from '@nestjs/core';
+import { StripSecretsInterceptor } from './common/strip-secrets.interceptor';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
-import { json, urlencoded } from 'express';
+import { json, urlencoded, static as expressStatic } from 'express';
+import { resolve } from 'path';
+import { UploadsAuthMiddleware } from './common/uploads-auth.middleware';
 
 // Последний рубеж: НИ ОДИН незакрытый промис не имеет права уронить процесс.
 //
@@ -140,6 +143,9 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Хеши паролей и tokenVersion не уходят ни в один ответ (см. интерцептор).
+  app.useGlobalInterceptors(new StripSecretsInterceptor());
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -149,6 +155,23 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('api');
+
+  // /uploads/* — сначала проверка доступа (сессия жива, сотрудник не уволен,
+  // файловый или основной токен), потом раздача. Порядок задан явно: раньше
+  // ServeStaticModule отдавал файл до проверки. resolve(), а не join():
+  // абсолютный UPLOADS_DIR (том Railway) тоже должен работать.
+  const uploadsAuth = app.get(UploadsAuthMiddleware);
+  const uploadsRoot = resolve(process.cwd(), process.env.UPLOADS_DIR || './uploads');
+  app.use(
+    '/uploads',
+    (req: any, res: any, next: any) => {
+      uploadsAuth.use(req, res, next).catch((e: any) => {
+        const status = typeof e?.getStatus === 'function' ? e.getStatus() : 401;
+        res.status(status).json({ statusCode: status, message: e?.message || 'Нет доступа' });
+      });
+    },
+    expressStatic(uploadsRoot, { index: false, dotfiles: 'deny', fallthrough: false }),
+  );
 
   const port = parseInt(config.get<string>('PORT') || '3001', 10);
   await app.listen(port);

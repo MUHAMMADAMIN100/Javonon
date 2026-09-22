@@ -248,6 +248,7 @@ function SalesRows({ rows }: { rows: KpiDetailsSale[] }) {
       {rows.map((x) => (
         <tr key={x.id}>
           <td data-label={t('reports.col.date')}>{tjFormatDate(x.date)}</td>
+          <td data-label={t('sales.kind')} data-testid="kpi-sale-kind">{t(`sales.kind.${(x as any).kind || 'DEAL'}`)}</td>
           <td>
             {x.student ? (
               <Link to={`/students/${x.student.id}`} className="kpi-details-link">{x.student.fullName}</Link>
@@ -269,6 +270,7 @@ function SalesTab({ d }: { d: KpiDetails }) {
     d.sales,
     [
       { key: 'date', label: t('reports.col.date'), type: 'date', value: (x) => x.date },
+      { key: 'kind', label: t('sales.kind'), value: (x) => t(`sales.kind.${(x as any).kind || 'DEAL'}`) },
       { key: 'payer', label: t('kpi.details.col.payer'), value: (x) => x.student?.fullName || x.payerName },
       { key: 'category', label: t('kpi.details.col.category'), value: (x) => t(`finance.cat.${x.category}`) },
       { key: 'amount', label: t('kpi.details.col.amount'), type: 'number', value: (x) => x.amount },
@@ -288,6 +290,7 @@ function SalesTab({ d }: { d: KpiDetails }) {
             <thead>
               <tr>
                 <SortTh sort={sort} col="date" />
+                <SortTh sort={sort} col="kind" />
                 <SortTh sort={sort} col="payer" />
                 <SortTh sort={sort} col="category" />
                 <SortTh sort={sort} col="amount" style={{ textAlign: 'right' }} />
@@ -297,8 +300,11 @@ function SalesTab({ d }: { d: KpiDetails }) {
           </table>
           <div className="kpi-details-sum" data-testid="kpi-sales-sum">
             {t('kpi.details.salesTotal')}: <b>{fmtMoney(d.totals.salesAmount, d.currency)}</b>
+            {(d.totals.otherIncome ?? 0) > 0 && (
+              <> · {t('sales.otherIncome')}: <b>{fmtMoney(d.totals.otherIncome!, d.currency)}</b></>
+            )}
           </div>
-          <Truncated shown={d.sales.length} total={d.totals.salesCount} />
+          <Truncated shown={d.sales.length} total={d.totals.salesCount + (d.totals.otherIncomeCount ?? 0)} />
         </>
       )}
       {d.otherCurrencySales.length > 0 && (

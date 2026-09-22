@@ -1,9 +1,10 @@
 import { api } from './client';
 import type { Role, User } from './types';
 
-export async function listUsers(search?: string) {
+/** includeInactive — вместе с уволенными (экран «Сотрудники»); по умолчанию только действующие. */
+export async function listUsers(search?: string, includeInactive?: boolean) {
   const { data } = await api.get<User[]>('/users', {
-    params: { search: search ? search : undefined },
+    params: { search: search ? search : undefined, includeInactive: includeInactive ? 1 : undefined },
   });
   return data;
 }
@@ -25,7 +26,13 @@ export async function updateUser(id: string, payload: Partial<{ email: string; f
   return data;
 }
 
-export async function deleteUser(id: string) {
-  const { data } = await api.delete(`/users/${id}`);
+/** «Уволить»: вход закрыт, сессии отозваны, история сохраняется. */
+export async function dismissUser(id: string) {
+  const { data } = await api.post(`/users/${id}/dismiss`);
+  return data;
+}
+
+export async function restoreUser(id: string) {
+  const { data } = await api.post(`/users/${id}/restore`);
   return data;
 }

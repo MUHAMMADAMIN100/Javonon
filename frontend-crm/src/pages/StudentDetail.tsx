@@ -1,3 +1,4 @@
+import { absFileUrl } from '../lib/fileUrl';
 import { useEffect, useRef, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -383,7 +384,7 @@ export default function StudentDetail() {
           <div>
             <div className={`detail-photo${isEnrolled ? ' is-enrolled' : ''}`}>
               {student.photoUrl
-                ? <img src={`${API_BASE}${student.photoUrl}`} alt="" />
+                ? <img src={absFileUrl(student.photoUrl)} alt="" />
                 : <Icon name="person" size={80} style={{ color: 'var(--text-light)' }} />}
             </div>
             {isEnrolled && (

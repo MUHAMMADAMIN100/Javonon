@@ -59,17 +59,30 @@ export class StudentsService {
     @Optional() private referrals?: ReferralsService,
   ) {}
 
+  /**
+   * Кто видит и правит студента — то же правило, что у списка (findAll):
+   * руководство (FOUNDER/ADMIN/ACCOUNTANT) — всех; остальные — только тех,
+   * где они назначены менеджером (TJ или CN). Раньше список был «только
+   * свои», а карточка, платежи и правка по прямой ссылке — чьи угодно
+   * (правка — любого студента без менеджера).
+   */
+  canAccess(student: { managerId: string | null; chinaManagerId?: string | null }, user: CurrentUser) {
+    if (isElevated(user as any)) return true;
+    return student.managerId === user.id || student.chinaManagerId === user.id;
+  }
+
+  /** Карточка/платежи по прямой ссылке — только тем, кто видит студента в списке. */
+  async assertCanView(id: string, user: CurrentUser) {
+    const s = await this.prisma.student.findUnique({ where: { id }, select: { managerId: true, chinaManagerId: true } });
+    if (!s) throw new NotFoundException('Студент не найден');
+    if (!this.canAccess(s, user)) throw new ForbiddenException('Нет доступа к этому студенту');
+  }
+
   private ensureCanEdit(
     student: { managerId: string | null; chinaManagerId?: string | null },
     user: CurrentUser,
   ) {
-    // Elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли) пропускаем.
-    // Раньше primary `=== 'ADMIN'` не давало пройти FOUNDER и
-    // secondary-ADMIN'ам (ТЗ §2).
-    if (isElevated(user as any)) return;
-    const assigned = student.managerId || student.chinaManagerId;
-    if (!assigned) return;
-    if (student.managerId === user.id || student.chinaManagerId === user.id) return;
+    if (this.canAccess(student, user)) return;
     throw new ForbiddenException(
       'Только назначенные менеджеры или администратор могут редактировать этого студента',
     );
@@ -107,6 +120,9 @@ export class StudentsService {
         cabinet,
         status: dto.status ?? StudentStatus.ACTIVE,
         comment: dto.comment || null,
+        // Создал менеджер — он и ведёт студента (иначе своего же студента
+        // он не видел бы в списке и не мог бы править).
+        ...(_user && !isElevated(_user as any) ? { managerId: _user.id } : {}),
       },
       include: STUDENT_INCLUDE,
     });
@@ -132,7 +148,7 @@ export class StudentsService {
 
     // Сообщаем staff, что появилась новая заявка — чтобы открытый /applications
     // у других менеджеров обновился без F5
-    this.realtime.emitStaff('application:new', { application });
+    this.realtime.emitApplication('application:new', application, { application });
     this.realtime.emitStaff('student:created', { studentId: student.id });
 
     // Перечитываем студента уже с заявкой
@@ -176,7 +192,7 @@ export class StudentsService {
         studentId: id,
       },
     });
-    this.realtime.emitStaff('application:new', { application: created });
+    this.realtime.emitApplication('application:new', created, { application: created });
     this.realtime.emitStudent(id, 'student:updated', { studentId: id });
     return created;
   }

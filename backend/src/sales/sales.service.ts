@@ -88,6 +88,8 @@ export class SalesService {
     // менеджером — раньше auto-distribute их пропускал.
     const managers = await this.prisma.user.findMany({
       where: {
+        // Уволенным лиды не распределяются.
+        isActive: true,
         OR: [
           { role: 'SALES_MANAGER' },
           { roles: { has: 'SALES_MANAGER' } },
@@ -145,6 +147,7 @@ export class SalesService {
     if (newManagerId) {
       const u = await this.prisma.user.findUnique({ where: { id: newManagerId } });
       if (!u) throw new BadRequestException('Менеджер не найден');
+      if (u.isActive === false) throw new BadRequestException('Менеджер уволен');
     }
     return this.prisma.application.update({
       where: { id: applicationId },

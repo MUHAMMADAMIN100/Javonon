@@ -134,10 +134,15 @@ export default function ProfileMonthDetails({
             {...common}
             testId="month-sales"
             title={titleCase(t('profile.month.sales'))}
-            groups={rows ? [{ title: t('details.byCategory'), items: groupBy(rows, (x) => catLabel(x.category), { sum: (x) => Number(x.amount), format: (n) => fmtMoney(n) }) }] : undefined}
+            groups={rows ? [{ title: t('details.byCategory'), items: groupBy(rows.filter((x) => x.currency === 'TJS'), (x) => (x.kind === 'DEAL' ? t('sales.kind.DEAL') : catLabel(x.category)), { sum: (x) => Number(x.amount), format: (n) => fmtMoney(n) }) }] : undefined}
             rows={rows}
+            summary={rows ? [
+              { label: t('profile.month.sales'), value: fmtMoney(rows.filter((x) => x.kind === 'DEAL' && x.currency === 'TJS').reduce((sum, x) => sum + Number(x.amount), 0)) },
+              ...(rows.some((x) => x.kind === 'OTHER') ? [{ label: t('sales.otherIncome'), value: fmtMoney(rows.filter((x) => x.kind === 'OTHER' && x.currency === 'TJS').reduce((sum, x) => sum + Number(x.amount), 0)) }] : []),
+            ] : undefined}
             columns={[
               { key: 'date', label: t('finance.col.date'), type: 'date', value: (x) => x.date, render: (x) => tjFormatDate(x.date) },
+              { key: 'kind', label: t('sales.kind'), value: (x) => t(`sales.kind.${x.kind}`) },
               { key: 'amount', label: t('finance.col.amount'), type: 'number', align: 'right', value: (x) => Number(x.amount), render: (x) => fmtMoney(Number(x.amount), x.currency) },
               { key: 'category', label: t('finance.col.category'), value: (x) => catLabel(x.category) },
               { key: 'who', label: t('finance.col.student'), value: (x) => x.student?.fullName || x.payerName },

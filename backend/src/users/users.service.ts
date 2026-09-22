@@ -1,3 +1,4 @@
+import { managerSales } from '../common/manager-sales';
 import {
   Injectable,
   BadRequestException,
@@ -74,21 +75,27 @@ export class UsersService {
     });
   }
 
-  async findAll(filters: { search?: string } = {}) {
+  async findAll(filters: { search?: string; includeInactive?: boolean } = {}) {
     const search = (filters.search || '').trim();
-    const where = search
-      ? {
-          OR: [
-            { email: { contains: search, mode: 'insensitive' as const } },
-            { fullName: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
+    // Уволенные — только по явному запросу (экран «Сотрудники»): иначе они
+    // попадали бы в выбор исполнителей задач, назначение заявок и т.п.
+    const where: any = {
+      ...(filters.includeInactive ? {} : { isActive: true }),
+      ...(search
+        ? {
+            OR: [
+              { email: { contains: search, mode: 'insensitive' as const } },
+              { fullName: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
     const users = await this.prisma.user.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true, email: true, fullName: true, role: true, createdAt: true,
+        isActive: true,
         customRoleId: true,
         customRole: { select: { id: true, name: true, isActive: true } },
       },
@@ -144,14 +151,9 @@ export class UsersService {
           lateExcuseReason: true, lateExcuseStatus: true,
         },
       }),
-      this.prisma.transaction.findMany({
-        where: { managerId: id, type: 'INCOME', reversedAt: null, date: { gte: monthStart, lte: monthEnd } },
-        orderBy: { date: 'desc' },
-        select: {
-          id: true, date: true, amount: true, currency: true, category: true, payerName: true, comment: true,
-          student: { select: { id: true, fullName: true } },
-        },
-      }),
+      // Продажи (DEAL) и прочие приходы (OTHER) — по правилу зарплаты,
+      // ровно те записи, из которых сложилась плитка.
+      managerSales(this.prisma, [id], { from: monthStart, to: monthEnd }).then((m) => m.get(id)!.rows),
       this.prisma.application.findMany({
         where: { managerId: id, createdAt: { gte: monthStart, lte: monthEnd } },
         orderBy: { createdAt: 'desc' },
@@ -249,8 +251,8 @@ export class UsersService {
       salaryRecords,
       penalties,
       pendingPenaltiesAmount,
-      salesMonthAgg,
-      salesYearAgg,
+      salesMonthMap,
+      salesYearMap,
       timeMonth,
       enrolledMonth,
       dailyReportsThisMonth,
@@ -276,32 +278,8 @@ export class UsersService {
         where: { userId: id, applied: false },
         _sum: { amount: true },
       }),
-      // По валютам: сумма «Продаж» — в TJS, другие валюты отдельно (не
-      // складываем 300 USD как 300 TJS); количество — все строки, как в окне.
-      this.prisma.transaction.groupBy({
-        by: ['currency'],
-        where: {
-          managerId: id,
-          type: 'INCOME',
-          // Bug #25: исключаем reversed INCOME (CANCEL сделки / ручной refund),
-          // иначе профиль показывает завышенные «продажи за месяц».
-          reversedAt: null,
-          date: { gte: monthStart, lte: monthEnd },
-        },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['currency'],
-        where: {
-          managerId: id,
-          type: 'INCOME',
-          reversedAt: null,
-          date: { gte: yearStart },
-        },
-        _sum: { amount: true },
-        _count: true,
-      }),
+      managerSales(this.prisma, [id], { from: monthStart, to: monthEnd }),
+      managerSales(this.prisma, [id], { from: yearStart }),
       this.prisma.timeEntry.aggregate({
         where: {
           userId: id,
@@ -386,14 +364,19 @@ export class UsersService {
         list: penalties,
         pendingTotal: pendingPenaltiesAmount._sum.amount || 0,
       },
-      sales: {
-        monthAmount: bySales(salesMonthAgg).tjs,
-        monthCount: bySales(salesMonthAgg).count,
-        monthOther: bySales(salesMonthAgg).other,
-        yearAmount: bySales(salesYearAgg).tjs,
-        yearCount: bySales(salesYearAgg).count,
-        yearOther: bySales(salesYearAgg).other,
-      },
+      // «Продажи» — по правилу зарплаты (common/manager-sales.ts);
+      // ручные приходы — отдельно (monthOtherIncome), валюты — monthOther.
+      sales: (({ m: salesMonth, y: salesYear }) => ({
+        monthAmount: salesMonth.deals,
+        monthCount: salesMonth.dealsCount,
+        monthOther: salesMonth.nonTjs,
+        monthOtherIncome: salesMonth.other,
+        monthOtherIncomeCount: salesMonth.otherCount,
+        yearAmount: salesYear.deals,
+        yearCount: salesYear.dealsCount,
+        yearOther: salesYear.nonTjs,
+        yearOtherIncome: salesYear.other,
+      }))({ m: salesMonthMap.get(id)!, y: salesYearMap.get(id)! }),
       attendance: {
         workedMinutes: timeMonth._sum.totalMinutes || 0,
         lateMinutes: timeMonth._sum.lateMinutes || 0,
@@ -754,9 +737,13 @@ export class UsersService {
     // активности). Эмитим тот же realtime event, что и при смене роли —
     // фронт делает logout, юзер вынужден залогиниться новым паролем.
     if (dto.password && (!requester || requester.id !== id)) {
+      // Старые сессии закрываем сразу: иначе тот, кто знал старый пароль,
+      // оставался в системе до истечения токена.
+      await this.prisma.session.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
       this.realtime.emitUser(id, 'user:roles-updated', {
         reason: 'password-changed-by-admin',
       });
+      this.realtime.disconnectUser(id, 'password-changed');
     }
 
     // Скрываем password из ответа клиенту; присутствие — только основателю
@@ -765,60 +752,51 @@ export class UsersService {
     return safe;
   }
 
+  /**
+   * «Уволить» вместо удаления. Раньше DELETE стирал сотрудника каскадом —
+   * вместе с выплаченными зарплатами, штрафами, учётом времени, документами
+   * и сообщениями. Теперь: isActive=false, все сессии отозваны, сокет
+   * отключён, из распределения лидов и назначений он пропадает. История
+   * остаётся; вернуть — restore().
+   */
   async remove(id: string, requester?: { id: string; role?: string; roles?: string[] }) {
+    return this.dismiss(id, requester);
+  }
+
+  async dismiss(id: string, requester?: { id: string; role?: string; roles?: string[] }) {
     const target = await this.findOne(id);
 
-    // FOUNDER аккаунт может удалить только сам FOUNDER (через CLI/сидер).
-    if (isFounder(target as any) && requester) {
-      const isRequesterFounder = requester.role === 'FOUNDER' || (requester.roles || []).includes('FOUNDER');
-      if (!isRequesterFounder) {
-        throw new ForbiddenException('Удалить FOUNDER может только FOUNDER');
+    if (isFounder(target as any)) {
+      throw new ForbiddenException('Основателя уволить нельзя');
+    }
+    // Нельзя уволить последнего действующего администратора.
+    const isAdminTarget = target.role === 'ADMIN' || ((target as any).roles || []).includes('ADMIN');
+    if (isAdminTarget) {
+      const adminCount = await this.prisma.user.count({
+        where: { isActive: true, OR: [{ role: 'ADMIN' }, { roles: { has: 'ADMIN' } }] },
+      });
+      if (adminCount <= 1) {
+        throw new BadRequestException('Нельзя уволить последнего администратора');
       }
     }
 
-    // Защита: нельзя удалить последнего ADMIN
-    if (target.role === 'ADMIN') {
-      // Мульти-роли (ТЗ §2): юзер с ADMIN в roles[] тоже считается админом.
-      // Без OR на roles[] эта защита блокировала легитимный сценарий, когда
-      // у компании primary-ADMIN один, но есть юзер с ADMIN как secondary.
-      const adminCount = await this.prisma.user.count({
-        where: {
-          OR: [
-            { role: 'ADMIN' },
-            { roles: { has: 'ADMIN' } },
-          ],
-        },
-      });
-      if (adminCount <= 1) {
-        throw new BadRequestException(
-          'Нельзя удалить последнего администратора',
-        );
-      }
-    }
-    // То же для FOUNDER — isFounder() учитывает мульти-роли.
-    if (isFounder(target as any)) {
-      // FOUNDER может быть и в roles[] (multi-role grant). Считаем общее
-      // число «эффективных FOUNDER» — единственный быть не должен.
-      const founderCount = await this.prisma.user.count({
-        where: {
-          OR: [
-            { role: 'FOUNDER' },
-            { roles: { has: 'FOUNDER' } },
-          ],
-        },
-      });
-      if (founderCount <= 1) {
-        throw new BadRequestException('Нельзя удалить единственного FOUNDER');
-      }
-    }
-    // Шлём kick ПЕРЕД delete (после уже не сможем emit — у пользователя
-    // удалена сессия в БД, гейтвей всё равно дойдёт по WS), чтобы Bob,
-    // залогиненный в браузере, моментально получил logout. Без этого его
-    // JWT работал бы до истечения (~7 дней) — «удалённый» сотрудник
-    // продолжает иметь доступ.
-    this.realtime.emitUser(id, 'user:deleted', { reason: 'removed-by-admin' });
-    await this.prisma.user.delete({ where: { id } });
-    return { ok: true };
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id }, data: { isActive: false } }),
+      this.prisma.session.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
+    // Мгновенно выкидываем из открытых вкладок: событие → фронт делает logout,
+    // затем рвём сокеты (сокет больше не получает ни одного события).
+    this.realtime.emitUser(id, 'user:deleted', { reason: 'dismissed' });
+    this.realtime.disconnectUser(id, 'dismissed');
+    this.logger.log(`User ${id} dismissed by ${requester?.id ?? 'system'}`);
+    return { ok: true, isActive: false };
+  }
+
+  /** Вернуть уволенного сотрудника (войти он сможет заново). */
+  async restore(id: string) {
+    await this.findOne(id);
+    await this.prisma.user.update({ where: { id }, data: { isActive: true } });
+    return { ok: true, isActive: true };
   }
 
   /**
@@ -989,17 +967,4 @@ export class UsersService {
       },
     });
   }
-}
-
-/** Продажи по валютам → сумма в TJS, количество всех строк, прочие валюты отдельно. */
-function bySales(rows: { currency: string; _sum: { amount: number | null }; _count: number }[]) {
-  let tjs = 0;
-  let count = 0;
-  const other: Record<string, number> = {};
-  for (const r of rows) {
-    count += r._count;
-    if (r.currency === REPORTING_CURRENCY) tjs += r._sum.amount || 0;
-    else other[r.currency] = (other[r.currency] ?? 0) + (r._sum.amount || 0);
-  }
-  return { tjs, count, other };
 }

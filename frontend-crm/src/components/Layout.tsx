@@ -1,3 +1,4 @@
+import { useFileToken } from '../lib/fileUrl';
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -69,6 +70,8 @@ export default function Layout() {
   const { t } = useT();
   const logout = useAuth((s) => s.logout);
   const me = useAuth((s) => s.user);
+  // Свежий файловый токен → страница перерисовывается, ссылки на файлы не устаревают.
+  useFileToken();
   const route = TITLE_ROUTES.find((r) => loc.pathname.startsWith(r.path));
   const meta = route
     ? { eyebrow: `${t(route.eyebrowKey)} · ${route.num}`, title: t(route.titleKey) }

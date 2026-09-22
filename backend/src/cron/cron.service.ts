@@ -545,7 +545,7 @@ export class CronService {
       // сутки раньше. Исторические строки чинит prisma/migrate-birthdays-utc.ts.
       // Postgres extract: where extract(month from birthday)=$1 AND day=$2
       const students = await this.prisma.$queryRawUnsafe<any[]>(
-        `SELECT id, "fullName", phones FROM "Student"
+        `SELECT id, "fullName", phones, "managerId", "chinaManagerId" FROM "Student"
          WHERE birthday IS NOT NULL
            AND EXTRACT(MONTH FROM birthday) = $1
            AND EXTRACT(DAY FROM birthday) = $2`,
@@ -560,7 +560,8 @@ export class CronService {
 
       for (const s of students) {
         // 1) Уведомление сотрудникам — менеджер может позвонить лично.
-        await this.notifications.notifyAllStaff({
+        // Руководству и менеджерам этого студента (раньше — всем сотрудникам).
+        await this.notifications.notifyAudience('applications', [s.managerId, s.chinaManagerId], {
           type: 'STUDENT_BIRTHDAY',
           title: '🎂 День рождения у студента',
           message: `Сегодня день рождения у ${s.fullName}. Позвоните поздравить!`,

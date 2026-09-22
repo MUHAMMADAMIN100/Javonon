@@ -311,7 +311,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         <div className="profile-stats">
           <Stat {...tileProps('hours')} label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
           <Stat {...tileProps('late')} label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
-          <Stat {...tileProps('sales')} label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}${otherCurrencies(sales.monthOther)}`} />
+          <Stat {...tileProps('sales')} label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}${(sales.monthOtherIncome ?? 0) > 0 ? ` · ${t('sales.otherIncome').toLowerCase()} ${fmtMoney(sales.monthOtherIncome!)}` : ''}${otherCurrencies(sales.monthOther)}`} />
           <Stat {...tileProps('leads')} label={t('profile.month.leadsTotal')} value={String(kpi.totalLeadsMonth)} sub={`${kpi.ownClientsMonth} ${t('profile.month.myOwn')}`} />
           <Stat {...tileProps('enrolled')} label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />
           <Stat {...tileProps('kpi')} label={t('profile.month.kpiPct')} value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.target')} ${kpi.targetPct}%`} />

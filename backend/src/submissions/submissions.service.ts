@@ -2118,7 +2118,9 @@ export class SubmissionsService {
           date: payment.paidAt,
           comment: finTxComment,
           studentId: studentId,
-          managerId: submission.managerId,
+          // Тот же менеджер, кому засчитан платёж в зарплате (снапшот под
+          // локом выше), — финансы «по менеджерам» и зарплата не разъедутся.
+          managerId: creditedManagerId,
           recordedById: reviewerId,
           // Google Sheet-parity: подробнее см. блок вычислений выше.
           productCategoryEnum,
