@@ -73,8 +73,8 @@ export default function Reports() {
     queryKey: todayKey,
     applyOptimistic: (cur, dto) => optimistic.patch(cur || ({} as DailyReport), dto as Partial<DailyReport>),
     invalidateAlso: [historyKey],
-    onSuccess: () => toast('Отчёт сохранён', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('reports.toast.saved'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
   const saving = upsertMut.isPending;
 

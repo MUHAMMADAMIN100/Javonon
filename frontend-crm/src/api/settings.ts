@@ -1,8 +1,9 @@
+import { localized } from '../lib/i18n';
 import { api } from './client';
 
 export type Weekday = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
 
-export const WEEKDAY_LABEL: Record<Weekday, string> = {
+export const WEEKDAY_LABEL: Record<Weekday, string> = localized('weekday', {
   MON: 'Понедельник',
   TUE: 'Вторник',
   WED: 'Среда',
@@ -10,7 +11,7 @@ export const WEEKDAY_LABEL: Record<Weekday, string> = {
   FRI: 'Пятница',
   SAT: 'Суббота',
   SUN: 'Воскресенье',
-};
+});
 
 export interface ScheduleDay {
   id: string | null;

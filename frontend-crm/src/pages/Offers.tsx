@@ -247,11 +247,11 @@ function OfferCard({
     setBusy(true);
     try {
       await offerPatch(offer.id, { title, content });
-      toast('Оферта обновлена', 'success');
+      toast(t('offers.toast.updated'), 'success');
       setEditing(false);
       onChanged();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setBusy(false);
     }
@@ -311,14 +311,14 @@ function OfferCard({
                     document.execCommand('copy');
                     document.body.removeChild(ta);
                   }
-                  toast('Скопировано', 'success');
+                  toast(t('common.copied'), 'success');
                 } catch {
                   toast(t('toast.error'), 'error');
                 }
               }}
-              title="Скопировать текст оферты"
+              title={t('offers.copyTitle')}
             >
-              <Icon name="content_copy" size={14} /> Копировать
+              <Icon name="content_copy" size={14} /> {t('common.copy')}
             </button>
           )}
           {canEdit && !editing && (
@@ -396,7 +396,7 @@ function OfferCard({
 
       {!canEdit && offer.isActive && signCount > 0 && (
         <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-soft)' }}>
-          ⚠️ Эту версию уже подписали ({signCount}). Чтобы изменить — создай новую версию.
+          ⚠️ {t('offers.signedWarning').replace('{n}', String(signCount))}
         </div>
       )}
     </motion.div>
@@ -404,6 +404,7 @@ function OfferCard({
 }
 
 function SignaturesModal({ offer, onClose }: { offer: OfferTemplate; onClose: () => void }) {
+  const { t } = useT();
   const query = useQuery({
     queryKey: ['offers', offer.id, 'signatures'],
     queryFn: () => offerSignatures(offer.id),
@@ -435,16 +436,16 @@ function SignaturesModal({ offer, onClose }: { offer: OfferTemplate; onClose: ()
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18 }}>
-            Подписи · «{offer.title}» v{offer.version}
+            {t('offers.signatures')} · «{offer.title}» v{offer.version}
           </h3>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
             <Icon name="close" size={20} />
           </button>
         </div>
-        {query.isLoading && <div>Загружаем…</div>}
+        {query.isLoading && <div>{t('common.loading')}</div>}
         {signatures.length === 0 && !query.isLoading && (
           <div style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 32 }}>
-            Никто ещё не подписал эту версию.
+            {t('offers.noSignatures')}
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

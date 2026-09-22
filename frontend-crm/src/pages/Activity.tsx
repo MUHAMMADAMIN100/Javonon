@@ -10,7 +10,7 @@ import { isFounder } from '../lib/roles';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
 import CrmDatePicker from '../components/CrmDatePicker';
-import { useT } from '../lib/i18n';
+import { tr, useT } from '../lib/i18n';
 
 // Каждое действие — своя иконка + цвет (для визуального timeline'а).
 const ACTION_VISUAL: Record<ActivityAction, { icon: string; color: string; bg: string }> = {
@@ -51,8 +51,8 @@ function groupByDay(items: ActivityEntry[]) {
   for (const e of items) {
     const d = new Date(e.createdAt); d.setHours(0, 0, 0, 0);
     let label: string;
-    if (d.getTime() === today.getTime()) label = 'Сегодня';
-    else if (d.getTime() === yesterday.getTime()) label = 'Вчера';
+    if (d.getTime() === today.getTime()) label = tr('common.today');
+    else if (d.getTime() === yesterday.getTime()) label = tr('common.yesterday');
     else label = fmtDateText(d, { day: 'numeric', month: 'long', year: 'numeric' });
     if (!map.has(label)) { map.set(label, []); groups.push({ label, items: map.get(label)! }); }
     map.get(label)!.push(e);
@@ -67,7 +67,7 @@ export default function Activity() {
   // по ТЗ §3.4). ADMIN/ACCOUNTANT видят пункт в сайдбаре скрытым, а прямой
   // переход по /activity здесь блокируется явной карточкой-отказом.
   if (!isFounder(me)) {
-    return <div className="card" style={{ padding: 28 }}>Доступ только для основателя.</div>;
+    return <div className="card" style={{ padding: 28 }}>{t('common.founderOnly')}</div>;
   }
   const qc = useQueryClient();
   const [action, setAction] = useState<ActivityAction | ''>('');
@@ -238,7 +238,7 @@ export default function Activity() {
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                 <Icon name="person" size={13} /> {e.actorName}
                                 <span style={{ color: 'var(--text-light)' }}>
-                                  ({e.actorRole === 'ADMIN' ? 'Админ' : 'Сотрудник'})
+                                  ({e.actorRole === 'ADMIN' ? t('role.ADMIN') : t('activity.employee')})
                                 </span>
                               </span>
                               {e.studentName && (

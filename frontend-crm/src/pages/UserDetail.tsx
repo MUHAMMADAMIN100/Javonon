@@ -147,11 +147,11 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   // возвращаться там некуда.
   const back = userId !== 'me' ? <BackButton fallback="/users" /> : null;
 
-  if (isLoading) return <>{back}<div className="card" style={{ padding: 24 }}>Загружаем…</div></>;
+  if (isLoading) return <>{back}<div className="card" style={{ padding: 24 }}>{t('common.loading')}</div></>;
   if (error || !data) {
     // 403 — нет прав на этого сотрудника: показываем причину с сервера.
     const msg = (error as any)?.response?.status === 403 ? (error as any)?.response?.data?.message : null;
-    return <>{back}<div className="card" style={{ padding: 24 }} data-testid="profile-error">{msg || 'Не удалось загрузить профиль'}</div></>;
+    return <>{back}<div className="card" style={{ padding: 24 }} data-testid="profile-error">{msg || t('profile.loadError')}</div></>;
   }
 
   const { user, salary, penalties, sales, attendance, kpi, documents, dailyReports } = data;
@@ -431,7 +431,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                   <div style={{ fontWeight: 500 }}>{LABEL[d.type]}{d.originalName ? ` · ${d.originalName}` : ''}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>
                     {new Date(d.createdAt).toLocaleDateString('ru-RU')}
-                    {d.size ? ` · ${(d.size / 1024).toFixed(0)} КБ` : ''}
+                    {d.size ? ` · ${(d.size / 1024).toFixed(0)} ${t('finance.kb')}` : ''}
                     {d.comment ? ` · ${d.comment}` : ''}
                   </div>
                 </div>
@@ -1151,6 +1151,7 @@ function DocEditButton({
   useSelfApi: boolean;
   onSaved: () => void;
 }) {
+  const { t } = useT();
   const { toast } = useUI();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<UserDocumentType>(doc.type);
@@ -1228,11 +1229,11 @@ function DocEditButton({
       } else {
         await updateUserDocument(userId, doc.id, { type, comment });
       }
-      toast('Документ обновлён', 'success');
+      toast(t('profile.docUpdated'), 'success');
       setOpen(false);
       onSaved();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setSaving(false);
     }
@@ -1244,11 +1245,11 @@ function DocEditButton({
         ref={triggerRef}
         className="btn btn-sm btn-secondary"
         onClick={() => setOpen((o) => !o)}
-        title="Изменить тип / комментарий"
+        title={t('profile.docEditTitle')}
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        Изменить
+        {t('common.edit')}
       </button>
       {open && createPortal(
         <div
@@ -1268,24 +1269,24 @@ function DocEditButton({
           }}
         >
           <div className="form-group" style={{ marginBottom: 8 }}>
-            <label>Тип</label>
+            <label>{t('common.type')}</label>
             <CrmSelect className="crm-select" value={type} onChange={(e) => setType(e.target.value as UserDocumentType)}>
-              <option value="PASSPORT">Паспорт</option>
-              <option value="PHOTO">Фотография</option>
-              <option value="CONTRACT">Контракт</option>
-              <option value="DIPLOMA">Диплом</option>
-              <option value="OFFER">Оферта</option>
-              <option value="OTHER">Прочее</option>
+              <option value="PASSPORT">{t('userDoc.PASSPORT')}</option>
+              <option value="PHOTO">{t('userDoc.PHOTO')}</option>
+              <option value="CONTRACT">{t('userDoc.CONTRACT')}</option>
+              <option value="DIPLOMA">{t('userDoc.DIPLOMA')}</option>
+              <option value="OFFER">{t('userDoc.OFFER')}</option>
+              <option value="OTHER">{t('userDoc.OTHER')}</option>
             </CrmSelect>
           </div>
           <div className="form-group" style={{ marginBottom: 8 }}>
-            <label>Комментарий</label>
+            <label>{t('common.comment')}</label>
             <input className="crm-input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="—" />
           </div>
           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-            <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>Отмена</button>
+            <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>{t('common.cancel')}</button>
             <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
-              {saving ? 'Сохраняем…' : 'Сохранить'}
+              {saving ? t('common.saving') : t('common.save')}
             </button>
           </div>
         </div>,

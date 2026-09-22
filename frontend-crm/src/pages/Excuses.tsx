@@ -17,17 +17,17 @@ import {
   type ExcuseStatus,
 } from '../api/excuses';
 import { tjFormatDateTime, tjFormatFull } from '../lib/tjTime';
-import { useT } from '../lib/i18n';
+import { localized, useT } from '../lib/i18n';
 // Файлы лежат на backend (Railway), а не на фронте (Vercel) — нужен
 // абсолютный URL. Audit fix #11: /uploads защищён JWT, токен подставляется
 // в query внутри absFileUrl().
 import { absFileUrl as absUrl } from '../lib/fileUrl';
 
-const STATUS_LABEL: Record<ExcuseStatus, string> = {
+const STATUS_LABEL: Record<ExcuseStatus, string> = localized('excuses.status', {
   PENDING: 'Ожидает',
   APPROVED: 'Одобрено',
   REJECTED: 'Отклонено',
-};
+});
 
 const STATUS_COLOR: Record<ExcuseStatus, string> = {
   PENDING: '#fbbf24',
@@ -39,7 +39,7 @@ export default function Excuses() {
   const me = useAuth((s) => s.user);
   const { t } = useT();
   if (!isFounder(me)) {
-    return <div className="card" style={{ padding: 28 }}>Доступ только для основателя.</div>;
+    return <div className="card" style={{ padding: 28 }}>{t('common.founderOnly')}</div>;
   }
 
   const [tab, setTab] = useState<'pending' | 'history'>('pending');
@@ -89,26 +89,26 @@ function PendingTab() {
     onSuccess: (data) => {
       toast(
         data.penaltiesRemoved > 0
-          ? `Причина одобрена, штраф (${data.penaltiesRemoved}) отменён`
-          : 'Причина одобрена, штраф не списывался',
+          ? t('excuses.toast.approvedRemoved').replace('{n}', String(data.penaltiesRemoved))
+          : t('excuses.toast.approvedNone'),
         'success',
       );
       qc.invalidateQueries({ queryKey: ['excuses'] });
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const rejectMut = useMutation({
     mutationFn: ({ id, kind }: { id: string; kind: 'arrival' | 'lunch' }) =>
       kind === 'lunch' ? rejectLunchExcuse(id) : rejectExcuse(id),
     onSuccess: () => {
-      toast('Причина отклонена, штраф остаётся', 'success');
+      toast(t('excuses.toast.rejected'), 'success');
       qc.invalidateQueries({ queryKey: ['excuses'] });
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
-  if (query.isLoading) return <div className="card" style={{ padding: 24 }}>Загружаем…</div>;
+  if (query.isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
   const items = query.data || [];
   if (items.length === 0) {
     return (
@@ -176,8 +176,8 @@ function ExcuseCard({
   const minutes = isLunch ? (entry.lateLunchMinutes ?? 0) : entry.lateMinutes;
   const reviewedAt = isLunch ? entry.lunchLateExcuseReviewedAt : entry.lateExcuseReviewedAt;
   const kindLabel = isLunch
-    ? (t('excuses.kind.lunch') !== 'excuses.kind.lunch' ? t('excuses.kind.lunch') : 'С обеда')
-    : (t('excuses.kind.arrival') !== 'excuses.kind.arrival' ? t('excuses.kind.arrival') : 'Утром');
+    ? (t('excuses.kind.lunch') !== 'excuses.kind.lunch' ? t('excuses.kind.lunch') : t('excuses.kind.lunch'))
+    : (t('excuses.kind.arrival') !== 'excuses.kind.arrival' ? t('excuses.kind.arrival') : t('excuses.kind.arrival'));
   const isPending = status === 'PENDING';
   return (
     <motion.div

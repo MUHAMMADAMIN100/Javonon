@@ -1,3 +1,4 @@
+import { CONTACT_CHANNEL_LABEL, type ContactChannel } from '../api/types';
 import { absFileUrl } from '../lib/fileUrl';
 import { useEffect, useRef, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
@@ -216,15 +217,15 @@ export default function ApplicationDetail() {
     ? validateAll(
         { fullName: form.fullName, phones: form.phones, email: form.email, cabinet: form.cabinet, comment: form.comment },
         {
-          fullName: compose(required('Введите ФИО'), minLen(2), maxLen(100)),
+          fullName: compose(required(t('app.err.fullName')), minLen(2), maxLen(100)),
           phones: (v) => {
             const s = String(v ?? '').trim();
             if (!s) return undefined;
             const parts = s.split(',').map((p: string) => p.trim()).filter(Boolean);
             for (const p of parts) {
               const digits = p.replace(/\D/g, '');
-              if (digits.length < 7) return `Номер «${p}» слишком короткий (мин. 7 цифр)`;
-              if (digits.length > 15) return `Номер «${p}» слишком длинный (макс. 15 цифр)`;
+              if (digits.length < 7) return t('app.err.phoneShort').replace('{p}', p);
+              if (digits.length > 15) return t('app.err.phoneLong').replace('{p}', p);
             }
             return undefined;
           },
@@ -827,6 +828,7 @@ export default function ApplicationDetail() {
  * for posting a new comment and an "Отправить" button.
  */
 function CommentsSection({ applicationId }: { applicationId: string }) {
+  const { t } = useT();
   const { toast } = useUI();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -838,10 +840,10 @@ function CommentsSection({ applicationId }: { applicationId: string }) {
     try {
       // Best-effort: comment posting endpoint may not yet be wired; UI is ready.
       await Promise.resolve();
-      toast('Комментарий отправлен', 'success');
+      toast(t('app.comments.sent'), 'success');
       setText('');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setSending(false);
     }
@@ -849,7 +851,7 @@ function CommentsSection({ applicationId }: { applicationId: string }) {
 
   return (
     <div style={{ marginTop: 28 }} data-testid={`comments-section-${applicationId}`}>
-      <h3 style={{ margin: '0 0 12px 0', fontSize: 16 }}>Комментарии</h3>
+      <h3 style={{ margin: '0 0 12px 0', fontSize: 16 }}>{t('app.comments.title')}</h3>
       <div className="form-group" style={{ marginBottom: 8 }}>
         <textarea
           className="crm-textarea"
@@ -857,7 +859,7 @@ function CommentsSection({ applicationId }: { applicationId: string }) {
           onChange={(e) => setText(e.target.value)}
           rows={3}
           style={{ resize: 'none' }}
-          placeholder="Напишите комментарий…"
+          placeholder={t('app.comments.placeholder')}
         />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
@@ -867,7 +869,7 @@ function CommentsSection({ applicationId }: { applicationId: string }) {
           onClick={send}
           disabled={sending || !text.trim()}
         >
-          {sending ? 'Отправляем…' : 'Отправить'}
+          {sending ? t('common.sending') : t('common.send')}
         </button>
       </div>
     </div>
@@ -913,11 +915,11 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
         direction: (direction || undefined) as any,
         comment: comment.trim() || undefined,
       } as any);
-      toast('Сохранено', 'success');
+      toast(t('toast.saved'), 'success');
       setEdit(false);
       onSaved();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setSaving(false);
     }
@@ -926,10 +928,10 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
   if (!edit) {
     return (
       <>
-        <div className="detail-row"><div className="detail-label">Телефон</div><div className="detail-value">{app.phone}</div></div>
+        <div className="detail-row"><div className="detail-label">{t('app.field.phone')}</div><div className="detail-value">{app.phone}</div></div>
         {app.secondaryPhone && (
           <div className="detail-row">
-            <div className="detail-label">Доп. телефон</div>
+            <div className="detail-label">{t('app.field.secondaryPhone')}</div>
             <div className="detail-value">
               {app.secondaryPhone}
               {app.secondaryContactLabel && (
@@ -942,13 +944,13 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
         )}
         {app.preferredChannel && (
           <div className="detail-row">
-            <div className="detail-label">Канал связи</div>
-            <div className="detail-value">{app.preferredChannel}</div>
+            <div className="detail-label">{t('app.field.preferredChannel')}</div>
+            <div className="detail-value">{CONTACT_CHANNEL_LABEL[app.preferredChannel as ContactChannel] ?? app.preferredChannel}</div>
           </div>
         )}
         <div className="detail-row"><div className="detail-label">Email</div><div className="detail-value">{app.email || '—'}</div></div>
         <div className="detail-row">
-          <div className="detail-label">Направление</div>
+          <div className="detail-label">{t('app.field.direction')}</div>
           {/* Плейсхолдер не выдаём за ответ клиента: форма лендинга
               направление не спрашивает (спрашивает страну), бэкенд ставит
               туда DEFAULT_DIRECTION и помечает directionConfirmed=false. */}
@@ -960,10 +962,10 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
             )}
           </div>
         </div>
-        <div className="detail-row"><div className="detail-label">Комментарий</div><div className="detail-value">{app.comment || '—'}</div></div>
+        <div className="detail-row"><div className="detail-label">{t('app.field.comment')}</div><div className="detail-value">{app.comment || '—'}</div></div>
         <div style={{ marginTop: 10 }}>
           <button className="btn btn-sm btn-secondary" onClick={() => setEdit(true)}>
-            Изменить заявку
+            {t('app.edit')}
           </button>
         </div>
       </>
@@ -974,23 +976,23 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
     <div style={{ padding: 14, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg-soft)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>Основной телефон</label>
+          <label>{t('app.field.mainPhone')}</label>
           <input className="crm-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>Доп. телефон (мать/отец/др.)</label>
+          <label>{t('app.field.secondaryPhoneHint')}</label>
           <input className="crm-input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="+992 ..." />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>Подпись доп. контакта</label>
-          <input className="crm-input" value={secondaryContactLabel} onChange={(e) => setSecondaryContactLabel(e.target.value)} placeholder="Отец, Мать..." />
+          <label>{t('app.field.secondaryLabel')}</label>
+          <input className="crm-input" value={secondaryContactLabel} onChange={(e) => setSecondaryContactLabel(e.target.value)} placeholder={t('app.field.secondaryLabelPh')} />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>Предпочтительный канал</label>
+          <label>{t('app.field.preferredChannel')}</label>
           <CrmSelect className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
             <option value="">—</option>
             <option value="WHATSAPP">WhatsApp</option>
-            <option value="PHONE">Телефон</option>
+            <option value="PHONE">{t('channel.PHONE')}</option>
             <option value="INSTAGRAM">Instagram</option>
             <option value="TELEGRAM">Telegram</option>
             <option value="EMAIL">Email</option>
@@ -1005,7 +1007,7 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
             directionConfirmed=false и не попадала бы ни в срез дашборда
             «по направлениям», ни в фильтр списка. */}
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>Направление</label>
+          <label>{t('app.field.direction')}</label>
           <CrmSelect
             className="crm-select"
             value={direction}
@@ -1017,7 +1019,7 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
         </div>
       </div>
       <div className="form-group" style={{ marginTop: 12 }}>
-        <label>Комментарий</label>
+        <label>{t('app.field.comment')}</label>
         <textarea
           className="crm-textarea"
           value={comment}
@@ -1027,9 +1029,9 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
         />
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginTop: 10 }}>
-        <button className="btn btn-sm btn-secondary" onClick={() => setEdit(false)} disabled={saving}>Отмена</button>
+        <button className="btn btn-sm btn-secondary" onClick={() => setEdit(false)} disabled={saving}>{t('common.cancel')}</button>
         <button className="btn btn-sm btn-primary" style={{ alignSelf: 'center' }} onClick={save} disabled={saving}>
-          {saving ? 'Сохраняем…' : 'Сохранить'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
       </div>
     </div>

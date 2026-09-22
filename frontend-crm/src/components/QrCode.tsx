@@ -1,3 +1,4 @@
+import { tr } from '../lib/i18n';
 /**
  * Self-contained QR-code generator (byte mode, error-correction level M,
  * versions 1..40 auto-selected).
@@ -540,7 +541,7 @@ export default function QrCode({ value, size = 240, margin = 4, className }: Pro
           textAlign: 'center',
         }}
       >
-        QR: слишком длинная строка
+        QR: {tr('qr.tooLong')}
       </div>
     );
   }

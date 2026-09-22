@@ -1,3 +1,4 @@
+import { tr } from '../lib/i18n';
 import axios from 'axios';
 import { readToken, clearToken, useAuth } from '../store/auth';
 
@@ -47,8 +48,8 @@ api.interceptors.response.use(
       // формы читают его в onError после response.data.message.
       err.userMessage =
         err.code === 'ECONNABORTED'
-          ? 'Превышено время ожидания. Проверьте интернет и попробуйте ещё раз.'
-          : 'Нет связи с сервером. Проверьте интернет.';
+          ? tr('net.timeout')
+          : tr('net.offline');
     }
     return Promise.reject(err);
   },

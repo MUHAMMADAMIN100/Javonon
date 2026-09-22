@@ -1,14 +1,15 @@
+import { localized } from '../lib/i18n';
 import { api } from './client';
 
 export type PenaltyReason = 'LATE_ARRIVAL' | 'LATE_FROM_LUNCH' | 'ABSENCE' | 'TASK_OVERDUE' | 'CUSTOM';
 
-export const PENALTY_REASON_LABEL: Record<PenaltyReason, string> = {
+export const PENALTY_REASON_LABEL: Record<PenaltyReason, string> = localized('penalty.reason', {
   LATE_ARRIVAL: 'Опоздание',
   LATE_FROM_LUNCH: 'Опоздание с обеда',
   ABSENCE: 'Прогул',
   TASK_OVERDUE: 'Просроченная задача',
   CUSTOM: 'Прочее',
-};
+});
 
 export interface Penalty {
   id: string;

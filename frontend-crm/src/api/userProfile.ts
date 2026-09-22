@@ -1,3 +1,4 @@
+import { localized, tr } from '../lib/i18n';
 import { api } from './client';
 
 export type UserDocumentType =
@@ -8,14 +9,14 @@ export type UserDocumentType =
   | 'OFFER'
   | 'OTHER';
 
-export const USER_DOCUMENT_LABEL: Record<UserDocumentType, string> = {
+export const USER_DOCUMENT_LABEL: Record<UserDocumentType, string> = localized('userDoc', {
   PASSPORT: 'Паспорт',
   PHOTO: 'Фотография',
   CONTRACT: 'Контракт',
   DIPLOMA: 'Диплом',
   OFFER: 'Оферта',
   OTHER: 'Прочее',
-};
+});
 
 export interface UserDocument {
   id: string;
@@ -241,8 +242,8 @@ export const revokeUserAccess = (id: string, granteeId: string) =>
 export function fmtMinutes(m: number) {
   const h = Math.floor(m / 60);
   const min = m % 60;
-  if (h === 0) return `${min}м`;
-  return min ? `${h}ч ${min}м` : `${h}ч`;
+  if (h === 0) return `${min}${tr('time.m')}`;
+  return min ? `${h}${tr('time.hShort')} ${min}${tr('time.m')}` : `${h}${tr('time.hShort')}`;
 }
 
 export function fmtMoney(amount: number, currency = 'TJS') {

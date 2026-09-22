@@ -65,18 +65,18 @@ export default function Calls() {
     mutationFn: createCall,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.calls.all });
-      toast('Звонок записан', 'success');
+      toast(t('calls.toast.saved'), 'success');
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const deleteMut = useMutation({
     mutationFn: deleteCall,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.calls.all });
-      toast('Звонок удалён', 'info');
+      toast(t('calls.toast.deleted'), 'info');
     },
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   // --- Форма ---
@@ -91,7 +91,7 @@ export default function Calls() {
 
   const onLog = () => {
     if (!clientName.trim()) {
-      toast('Укажи имя клиента', 'error');
+      toast(t('calls.err.clientName'), 'error');
       return;
     }
     const dur = (parseInt(minutes, 10) || 0) * 60 + (parseInt(seconds, 10) || 0);
@@ -123,7 +123,7 @@ export default function Calls() {
   const onDelete = async (c: CallLog) => {
     const ok = await confirm({
       title: t('common.delete') + '?',
-      message: `Звонок с «${c.clientName}» будет удалён без возможности восстановления.`,
+      message: t('calls.deleteMessage').replace('{name}', c.clientName),
       danger: true,
       confirmText: t('common.delete'),
     });

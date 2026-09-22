@@ -1,3 +1,4 @@
+import { tr } from '../lib/i18n';
 import { useState, forwardRef } from 'react';
 import type { InputHTMLAttributes } from 'react';
 import Icon from '../Icon';
@@ -27,7 +28,7 @@ const PasswordInput = forwardRef<HTMLInputElement, Props>(function PasswordInput
         type="button"
         className="password-toggle"
         onClick={() => setShow((s) => !s)}
-        aria-label={show ? 'Скрыть пароль' : 'Показать пароль'}
+        aria-label={show ? tr('password.hide') : tr('password.show')}
         tabIndex={-1}
       >
         <Icon name={show ? 'visibility_off' : 'visibility'} size={20} />

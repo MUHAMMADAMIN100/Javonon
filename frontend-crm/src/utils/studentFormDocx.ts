@@ -1,3 +1,4 @@
+import { tr } from '../lib/i18n';
 import { FORM_SECTIONS, displayValue } from '../formSchema';
 
 export async function generateStudentFormDocx(studentName: string, form: any): Promise<Blob> {
@@ -178,7 +179,7 @@ export async function generateStudentFormDocx(studentName: string, form: any): P
       } else {
         children.push(
           new Paragraph({
-            children: [new TextRun({ text: '— не заполнено —', italics: true, color: '9CA3AF', size: 18 })],
+            children: [new TextRun({ text: `— ${tr('docx.empty')} —`, italics: true, color: '9CA3AF', size: 18 })],
           }),
         );
       }

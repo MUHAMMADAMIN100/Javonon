@@ -1,8 +1,9 @@
+import { localized } from '../lib/i18n';
 import { api } from './client';
 
 export type InteractionType = 'CALL' | 'EMAIL' | 'MEETING' | 'NOTE' | 'SMS' | 'TELEGRAM' | 'WHATSAPP';
 
-export const INTERACTION_LABEL: Record<InteractionType, string> = {
+export const INTERACTION_LABEL: Record<InteractionType, string> = localized('interactions.type', {
   CALL: 'Звонок',
   EMAIL: 'Email',
   MEETING: 'Встреча',
@@ -10,7 +11,7 @@ export const INTERACTION_LABEL: Record<InteractionType, string> = {
   SMS: 'SMS',
   TELEGRAM: 'Telegram',
   WHATSAPP: 'WhatsApp',
-};
+});
 
 export const INTERACTION_ICON: Record<InteractionType, string> = {
   CALL: 'call',

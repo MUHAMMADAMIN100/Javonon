@@ -114,25 +114,25 @@ export default function NotificationBell() {
     'submission:new': () => {
       qc.invalidateQueries({ queryKey: keys.notifications.all });
       if (founder) {
-        showBrowserNotif('Новая сделка', 'Поступила сделка на рассмотрение', () => navigate('/submissions?tab=pending'));
+        showBrowserNotif(t('notif.newDeal.title'), t('notif.newDeal.body'), () => navigate('/submissions?tab=pending'));
       }
     },
     'submission:payment-new': () => {
       qc.invalidateQueries({ queryKey: keys.notifications.all });
       if (founder) {
-        showBrowserNotif('Новый платёж', 'Платёж ожидает одобрения', () => navigate('/submissions?tab=pending'));
+        showBrowserNotif(t('notif.newPayment.title'), t('notif.newPayment.body'), () => navigate('/submissions?tab=pending'));
       }
     },
     'submission:approved': () => {
       qc.invalidateQueries({ queryKey: keys.notifications.all });
       if (manager) {
-        showBrowserNotif('Платёж одобрен', 'Ваш платёж по сделке одобрен', () => navigate('/submissions'));
+        showBrowserNotif(t('notif.approved.title'), t('notif.approved.body'), () => navigate('/submissions'));
       }
     },
     'submission:rejected': () => {
       qc.invalidateQueries({ queryKey: keys.notifications.all });
       if (manager) {
-        showBrowserNotif('Платёж отклонён', 'Ваш платёж по сделке отклонён', () => navigate('/submissions'));
+        showBrowserNotif(t('notif.rejected.title'), t('notif.rejected.body'), () => navigate('/submissions'));
       }
     },
   });

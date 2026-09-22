@@ -1,4 +1,5 @@
 import { saveAs } from 'file-saver';
+import { tr } from '../lib/i18n';
 import type { Student } from '../api/types';
 import { DIRECTION_LABEL, STUDENT_STATUS_LABEL } from '../api/types';
 
@@ -30,7 +31,7 @@ export async function generateStudentsReport(params: {
     PageNumber,
   } = await import('docx');
 
-  const periodText = `за период ${fmtDate(from)} — ${fmtDate(to)}`;
+  const periodText = `${tr('report.forPeriod')} ${fmtDate(from)} — ${fmtDate(to)}`;
   const generatedAt = new Date().toLocaleString('ru-RU');
 
   const byStatus = students.reduce<Record<string, number>>((acc, s) => {
@@ -43,7 +44,7 @@ export async function generateStudentsReport(params: {
   // «По направлениям» показывает выдуманную структуру потока. Сводим их
   // в отдельную строку.
   const DIRECTION_UNCONFIRMED_KEY = '__unconfirmed__';
-  const DIRECTION_UNCONFIRMED_LABEL = 'Направление не подтверждено';
+  const DIRECTION_UNCONFIRMED_LABEL = tr('report.directionUnconfirmed');
   const byDirection = students.reduce<Record<string, number>>((acc, s) => {
     const key = s.directionConfirmed === false ? DIRECTION_UNCONFIRMED_KEY : s.direction;
     acc[key] = (acc[key] || 0) + 1;
@@ -94,13 +95,13 @@ export async function generateStudentsReport(params: {
       tableHeader: true,
       children: [
         headerCell('№', 0),
-        headerCell('ФИО', 1),
-        headerCell('Направление', 2),
-        headerCell('Кабинет', 3),
-        headerCell('Статус', 4),
-        headerCell('Телефон', 5),
-        headerCell('Менеджер', 6),
-        headerCell('Дата', 7),
+        headerCell(tr('common.fullName'), 1),
+        headerCell(tr('app.field.direction'), 2),
+        headerCell(tr('app.field.cabinet'), 3),
+        headerCell(tr('common.status'), 4),
+        headerCell(tr('common.phone'), 5),
+        headerCell(tr('deal.manager'), 6),
+        headerCell(tr('common.date'), 7),
       ],
     }),
     ...students.map(
@@ -128,7 +129,7 @@ export async function generateStudentsReport(params: {
 
   const doc = new Document({
     creator: 'Javonon CRM',
-    title: `Отчёт по студентам ${periodText}`,
+    title: `${tr('report.title')} ${periodText}`,
     styles: {
       default: {
         document: {
@@ -150,7 +151,7 @@ export async function generateStudentsReport(params: {
               new Paragraph({
                 alignment: AlignmentType.RIGHT,
                 children: [
-                  new TextRun({ text: 'Javonon — Отчёт по студентам', color: '888888', size: 16 }),
+                  new TextRun({ text: `Javonon — ${tr('report.title')}`, color: '888888', size: 16 }),
                 ],
               }),
             ],
@@ -161,10 +162,10 @@ export async function generateStudentsReport(params: {
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: `Сформировано: ${generatedAt}`, color: '888888', size: 16 }),
-                  new TextRun({ text: '\tСтр. ', color: '888888', size: 16 }),
+                  new TextRun({ text: `${tr('report.generated')}: ${generatedAt}`, color: '888888', size: 16 }),
+                  new TextRun({ text: `\t${tr('report.page')} `, color: '888888', size: 16 }),
                   new TextRun({ children: [PageNumber.CURRENT], color: '888888', size: 16 }),
-                  new TextRun({ text: ' из ', color: '888888', size: 16 }),
+                  new TextRun({ text: ` ${tr('report.of')} `, color: '888888', size: 16 }),
                   new TextRun({ children: [PageNumber.TOTAL_PAGES], color: '888888', size: 16 }),
                 ],
               }),
@@ -177,7 +178,7 @@ export async function generateStudentsReport(params: {
           }),
           new Paragraph({
             heading: HeadingLevel.HEADING_1,
-            children: [new TextRun({ text: 'Отчёт по студентам', bold: true, size: 32 })],
+            children: [new TextRun({ text: tr('report.title'), bold: true, size: 32 })],
           }),
           new Paragraph({
             children: [new TextRun({ text: periodText, color: '5B6478', size: 22 })],
@@ -185,10 +186,10 @@ export async function generateStudentsReport(params: {
           }),
 
           new Paragraph({
-            children: [new TextRun({ text: `Всего студентов: ${students.length}`, bold: true, size: 22 })],
+            children: [new TextRun({ text: `${tr('report.total')}: ${students.length}`, bold: true, size: 22 })],
           }),
           new Paragraph({
-            children: [new TextRun({ text: 'По статусам:', bold: true, size: 20 })],
+            children: [new TextRun({ text: `${tr('report.byStatus')}:`, bold: true, size: 20 })],
             spacing: { before: 100 },
           }),
           ...Object.entries(byStatus).map(
@@ -204,7 +205,7 @@ export async function generateStudentsReport(params: {
               }),
           ),
           new Paragraph({
-            children: [new TextRun({ text: 'По направлениям:', bold: true, size: 20 })],
+            children: [new TextRun({ text: `${tr('report.byDirection')}:`, bold: true, size: 20 })],
             spacing: { before: 100 },
           }),
           ...Object.entries(byDirection).map(

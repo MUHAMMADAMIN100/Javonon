@@ -1,20 +1,21 @@
 // Универсальные валидаторы для форм CRM. Каждая функция возвращает
 // строку-ошибку или undefined, если значение валидно.
 
+import { tr } from '../lib/i18n';
 import { tjYMD } from '../lib/tjTime';
 
 export type Rule = (v: any) => string | undefined;
 
-export const required = (msg = 'Обязательное поле'): Rule =>
+export const required = (msg = tr('appForm.err.required')): Rule =>
   (v) => (v === undefined || v === null || String(v).trim() === '' ? msg : undefined);
 
 export const minLen = (n: number, msg?: string): Rule =>
-  (v) => (String(v ?? '').trim().length < n ? (msg || `Минимум ${n} символов`) : undefined);
+  (v) => (String(v ?? '').trim().length < n ? (msg || tr('validate.minChars').replace('{n}', String(n))) : undefined);
 
 export const maxLen = (n: number, msg?: string): Rule =>
-  (v) => (String(v ?? '').length > n ? (msg || `Максимум ${n} символов`) : undefined);
+  (v) => (String(v ?? '').length > n ? (msg || tr('validate.maxChars').replace('{n}', String(n))) : undefined);
 
-export const email = (msg = 'Некорректный email'): Rule => (v) => {
+export const email = (msg = tr('appForm.err.email')): Rule => (v) => {
   const s = String(v ?? '').trim();
   if (!s) return undefined;
   return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(s) ? undefined : msg;
@@ -23,14 +24,14 @@ export const email = (msg = 'Некорректный email'): Rule => (v) => {
 export const numberRule = (opts: { min?: number; max?: number; integer?: boolean } = {}): Rule => (v) => {
   if (v === '' || v === null || v === undefined) return undefined;
   const n = Number(v);
-  if (!Number.isFinite(n)) return 'Должно быть числом';
-  if (opts.integer && !Number.isInteger(n)) return 'Должно быть целым числом';
-  if (opts.min !== undefined && n < opts.min) return `Не меньше ${opts.min}`;
-  if (opts.max !== undefined && n > opts.max) return `Не больше ${opts.max}`;
+  if (!Number.isFinite(n)) return tr('appForm.err.number');
+  if (opts.integer && !Number.isInteger(n)) return tr('validate.integer');
+  if (opts.min !== undefined && n < opts.min) return `${tr('validate.notLess')} ${opts.min}`;
+  if (opts.max !== undefined && n > opts.max) return `${tr('validate.notMore')} ${opts.max}`;
   return undefined;
 };
 
-export const positive = (msg = 'Должно быть больше нуля'): Rule => (v) => {
+export const positive = (msg = tr('validate.positive')): Rule => (v) => {
   if (v === '' || v === null || v === undefined) return undefined;
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) return msg;
@@ -38,24 +39,24 @@ export const positive = (msg = 'Должно быть больше нуля'): R
 };
 
 // Телефон по E.164: от 7 до 15 цифр всего (с учётом кода страны).
-export const phoneRule = (msg = 'Некорректный номер телефона'): Rule => (v) => {
+export const phoneRule = (msg = tr('validate.phone')): Rule => (v) => {
   const s = String(v ?? '').trim();
   if (!s) return undefined;
   const digits = s.replace(/\D/g, '');
-  if (digits.length < 7) return 'Номер слишком короткий';
+  if (digits.length < 7) return tr('validate.phoneShort');
   if (digits.length > 15) return msg;
   return undefined;
 };
 
-export const passwordRule = (msg = 'Минимум 8 символов, буквы и цифры'): Rule => (v) => {
+export const passwordRule = (msg = tr('validate.password')): Rule => (v) => {
   const s = String(v ?? '');
   if (!s) return undefined;
-  if (s.length < 8) return 'Минимум 8 символов';
+  if (s.length < 8) return tr('validate.min8');
   if (!/[A-Za-z]/.test(s) || !/\d/.test(s)) return msg;
   return undefined;
 };
 
-export const noBadChars = (msg = 'Недопустимые символы'): Rule => (v) => {
+export const noBadChars = (msg = tr('appForm.err.badChars')): Rule => (v) => {
   const s = String(v ?? '');
   if (/[<>{}[\]\\]/.test(s)) return msg;
   return undefined;

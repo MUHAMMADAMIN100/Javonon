@@ -5,7 +5,7 @@ import type { Document } from '../api/types';
 import { deleteDocument, uploadDocument } from '../api/students';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
-import { useT } from '../lib/i18n';
+import { tr, useT } from '../lib/i18n';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 
@@ -23,9 +23,9 @@ export const REQUIRED_DOCUMENTS: { type: string; label: string; hint?: string }[
 ];
 
 const fmtBytes = (b: number) => {
-  if (b < 1024) return `${b} Б`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} КБ`;
-  return `${(b / 1024 / 1024).toFixed(2)} МБ`;
+  if (b < 1024) return `${b} ${tr('size.b')}`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} ${tr('finance.kb')}`;
+  return `${(b / 1024 / 1024).toFixed(2)} ${tr('size.mb')}`;
 };
 
 type Props = {
@@ -94,7 +94,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
         try {
           const { generateStudentFormDocx } = await import('../utils/studentFormDocx');
           const formBlob = await generateStudentFormDocx(studentName || 'Student', applicationForm);
-          zip.file('00_Анкета_Студента.docx', formBlob);
+          zip.file(`00_${t('docs.zip.form')}.docx`, formBlob);
         } catch (err) {
           console.error('Failed to generate form docx:', err);
         }
@@ -119,7 +119,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
 
       // Прочие документы — в папке "Прочее"
       if (otherDocs.length > 0) {
-        const otherFolder = zip.folder('Прочее');
+        const otherFolder = zip.folder(t('docs.zip.other'));
         for (const doc of otherDocs) {
           const res = await fetch(absFileUrl(doc.url));
           if (!res.ok) continue;
@@ -131,7 +131,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
       const blob = await zip.generateAsync({ type: 'blob' });
       const date = new Date().toISOString().slice(0, 10);
       const safeName = sanitizeFileName(studentName || 'student');
-      saveAs(blob, `${safeName}_документы_${date}.zip`);
+      saveAs(blob, `${safeName}_${t('docs.zip.documents')}_${date}.zip`);
       toast(t('toast.downloaded'), 'success');
     } catch (e: any) {
       toast(e?.message || t('toast.error'), 'error');
@@ -256,7 +256,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
                   {isUploading ? t('common.uploading') : t('common.upload')}
                 </button>
               ) : (
-                <div className="doc-slot-empty">Не загружено</div>
+                <div className="doc-slot-empty">{t('docs.notUploaded')}</div>
               )}
 
               <input

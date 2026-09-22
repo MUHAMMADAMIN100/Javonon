@@ -1,3 +1,4 @@
+import { tr } from '../lib/i18n';
 import { create } from 'zustand';
 import type { User } from '../api/types';
 import { login as apiLogin, me as apiMe } from '../api/auth';
@@ -48,7 +49,7 @@ export function readToken(): string | null {
 export class TokenStorageError extends Error {
   readonly code = 'TOKEN_STORAGE_UNAVAILABLE' as const;
   constructor(
-    message = 'Не удалось сохранить сессию. Разрешите хранилище сайту и повторите вход.',
+    message = tr('auth.storageError'),
   ) {
     super(message);
     this.name = 'TokenStorageError';

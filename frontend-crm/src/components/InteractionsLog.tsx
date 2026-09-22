@@ -20,7 +20,7 @@ import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
-import { useT } from '../lib/i18n';
+import { tr, useT } from '../lib/i18n';
 
 const TYPES: InteractionType[] = ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'SMS', 'TELEGRAM', 'WHATSAPP'];
 
@@ -29,11 +29,11 @@ function fmtRelative(iso: string) {
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 60) return `${diffMin || 1} мин назад`;
+  if (diffMin < 60) return tr('ago.min').replace('{n}', String(diffMin || 1));
   const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH} ч назад`;
+  if (diffH < 24) return tr('ago.h').replace('{n}', String(diffH));
   const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `${diffD} д назад`;
+  if (diffD < 7) return tr('ago.d').replace('{n}', String(diffD));
   return fmtDateText(d, { day: '2-digit', month: 'short', year: 'numeric', timeZone: TJ_TZ });
 }
 
@@ -252,11 +252,11 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
                     color: 'var(--text-light)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.10em',
-                  }}>· внутреннее</span>
+                  }}>· {t('interactions.internal')}</span>
                 )}
                 {(it as TimelineItem).durationSeconds !== undefined && (
                   <span style={{ fontSize: 11, color: 'var(--text-soft)', fontFamily: 'var(--font-mono)' }}>
-                    · {Math.floor((it as TimelineItem).durationSeconds! / 60)}м {(it as TimelineItem).durationSeconds! % 60}с
+                    · {Math.floor((it as TimelineItem).durationSeconds! / 60)}{tr('time.m')} {(it as TimelineItem).durationSeconds! % 60}{tr('time.sec')}
                   </span>
                 )}
                 <span style={{ fontSize: 11, color: 'var(--text-light)', marginLeft: 'auto' }}>

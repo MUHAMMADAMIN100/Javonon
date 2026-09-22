@@ -1,3 +1,4 @@
+import { useT } from '../lib/i18n';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useShouldShowOfflineBanner } from '../realtime';
 
@@ -7,6 +8,7 @@ import { useShouldShowOfflineBanner } from '../realtime';
  * на самовосстановление). idle/connecting/connected — баннер скрыт.
  */
 export default function RealtimeStatusBanner() {
+  const { t } = useT();
   const { show, state } = useShouldShowOfflineBanner();
 
   return (
@@ -21,8 +23,8 @@ export default function RealtimeStatusBanner() {
         >
           <span className="rt-status-dot" />
           {state === 'reconnecting'
-            ? 'Соединение потеряно, переподключаемся…'
-            : 'Нет соединения с сервером'}
+            ? t('realtime.reconnecting')
+            : t('realtime.offline')}
         </motion.div>
       )}
     </AnimatePresence>

@@ -2,7 +2,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { getMonthDetails, type MonthApplication, type MonthDetails } from '../api/userProfile';
 import { TRANSACTION_CATEGORY_LABEL } from '../api/finance';
-import { useT } from '../lib/i18n';
+import { tr, useT } from '../lib/i18n';
 import { tjFormatDate, tjFormatTime } from '../lib/tjTime';
 import { useApplicationStatusLabel, useCountryLabel } from '../lib/labels';
 import DetailsModal, { groupBy, type DetailsColumn } from './DetailsModal';
@@ -18,10 +18,10 @@ export type MonthTile = 'hours' | 'late' | 'sales' | 'leads' | 'enrolled' | 'kpi
 type Kpi = { totalLeadsMonth: number; enrolledMonth: number; requiredClosed: number; achievedPct: number; targetPct: number };
 
 function fmtMinutes(min: number) {
-  if (!min || min <= 0) return '0м';
+  if (!min || min <= 0) return `0${tr('time.m')}`;
   const h = Math.floor(min / 60);
   const m = min % 60;
-  return h > 0 ? `${h}ч ${m}м` : `${m}м`;
+  return h > 0 ? `${h}${tr('time.hShort')} ${m}${tr('time.m')}` : `${m}${tr('time.m')}`;
 }
 /** Подписи плиток хранятся капсом («ПРОДАЖИ») — заголовку окна нужен обычный регистр. */
 function titleCase(s: string) {
@@ -70,7 +70,7 @@ export default function ProfileMonthDetails({
     { key: 'lunch', label: t('workday.col.lunch'), type: 'number', value: (e) => e.totalLunchMinutes, render: (e) => fmtMinutes(e.totalLunchMinutes) },
     { key: 'out', label: t('workday.col.leave'), type: 'date', value: (e) => e.clockOut, render: (e) => (e.clockOut ? tjFormatTime(e.clockOut) : null) },
     { key: 'worked', label: t('workday.col.worked'), type: 'number', value: (e) => e.totalMinutes, render: (e) => fmtMinutes(e.totalMinutes) },
-    { key: 'late', label: t('workday.col.late'), type: 'number', value: (e) => e.lateMinutes, render: (e) => (e.lateMinutes > 0 ? `+${e.lateMinutes}м` : '—') },
+    { key: 'late', label: t('workday.col.late'), type: 'number', value: (e) => e.lateMinutes, render: (e) => (e.lateMinutes > 0 ? `+${e.lateMinutes}${tr('time.m')}` : '—') },
   ];
   const appCols = (dateOf: (a: MonthApplication) => string): DetailsColumn<MonthApplication>[] => [
     { key: 'fullName', label: t('app.field.fullName'), value: (a) => a.fullName, render: (a) => <strong>{a.fullName}</strong> },

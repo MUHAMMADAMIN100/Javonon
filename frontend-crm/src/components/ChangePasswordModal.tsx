@@ -69,7 +69,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
       reset();
       onClose();
     } catch (e: any) {
-      setErr(e?.response?.data?.message?.toString() || 'Не удалось сменить пароль');
+      setErr(e?.response?.data?.message?.toString() || t('changePwd.failed'));
     } finally {
       setBusy(false);
     }

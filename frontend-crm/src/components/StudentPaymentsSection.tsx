@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../api/client';
 import Icon from '../Icon';
-import { useT } from '../lib/i18n';
+import { localized, useT } from '../lib/i18n';
 
 interface PaymentTx {
   id: string;
@@ -37,18 +37,18 @@ interface Response {
   totalPaidOther?: Record<string, number>;
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
+const CATEGORY_LABEL: Record<string, string> = localized('finance.cat', {
   TUITION_PAYMENT: 'Оплата обучения',
   ADDITIONAL_FEE: 'Доплата',
   OTHER_INCOME: 'Прочее',
-};
+});
 
-const STATUS_LABEL: Record<string, string> = {
+const STATUS_LABEL: Record<string, string> = localized('payments.status', {
   PENDING: 'Ожидает',
   CONFIRMED: 'Подтверждена',
   REJECTED: 'Отклонена',
   CANCELLED: 'Отменена',
-};
+});
 
 const STATUS_COLOR: Record<string, string> = {
   PENDING: '#b45309',

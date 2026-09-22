@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
-import { useT } from '../lib/i18n';
+import { tr, useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import FormModal from '../components/FormModal';
@@ -41,9 +41,9 @@ export default function Pipelines() {
       await createPipeline({
         ...data,
         stages: [
-          { name: 'Новый лид', color: '#3b82f6' },
-          { name: 'В работе', color: '#f59e0b' },
-          { name: 'Закрыт', color: '#10b981', isClosingStage: true },
+          { name: tr('pipelines.default.new'), color: '#3b82f6' },
+          { name: tr('pipelines.default.inWork'), color: '#f59e0b' },
+          { name: tr('pipelines.default.closed'), color: '#10b981', isClosingStage: true },
         ],
       });
       invalidate();
@@ -86,8 +86,7 @@ export default function Pipelines() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <p style={{ color: 'var(--text-soft)', fontSize: 13, margin: 0, maxWidth: 600 }}>
-            Кастомизируемые воронки продаж. Дефолтная (одна) — куда попадают новые лиды
-            без явного выбора. Каждая воронка содержит этапы со своим порядком и цветом.
+            {t('pipelines.intro')}
           </p>
           {!creatingNew && (
             <button className="btn btn-primary" data-testid="pipeline-new" onClick={() => setCreatingNew(true)}>
@@ -161,16 +160,16 @@ function CreateForm({
       </div>
       <label className="crm-checkbox-label" style={{ marginBottom: 10 }}>
         <input type="checkbox" className="crm-checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
-        Сделать воронкой по умолчанию (в неё попадают новые лиды)
+        {t('pipelines.makeDefaultHint')}
       </label>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button className="btn btn-sm btn-secondary" onClick={onCancel}>Отмена</button>
+        <button className="btn btn-sm btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
         <button
           className="btn btn-sm btn-primary"
           onClick={() => onCreate({ name: name.trim(), description: description.trim() || undefined, isDefault })}
           disabled={!name.trim()}
         >
-          Создать (с 3 базовыми этапами)
+          {t('pipelines.createWithStages')}
         </button>
       </div>
     </div>
@@ -217,7 +216,7 @@ function PipelineCard({
       await updateStage(s.id, patch);
       onChanged();
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     }
   };
 
@@ -260,7 +259,7 @@ function PipelineCard({
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button className="btn btn-sm btn-secondary" onClick={onToggleDefault}>
-            {pipeline.isDefault ? 'Снять default' : 'Сделать default'}
+            {pipeline.isDefault ? t('pipelines.unsetDefault') : t('pipelines.setDefault')}
           </button>
           <button className="btn btn-sm btn-secondary" onClick={onToggleActive}>
             {pipeline.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
@@ -361,10 +360,10 @@ function StageChip({
         background: stage.color || DEFAULT_STAGE_COLOR,
       }} />
       <span>{stage.name}</span>
-      {stage.isClosingStage && <span title="Финальный этап (зачислен)">✓</span>}
-      <button title="Вверх" onClick={onMoveUp} disabled={!canMoveUp} style={btnIcon}>‹</button>
-      <button title="Вниз" onClick={onMoveDown} disabled={!canMoveDown} style={btnIcon}>›</button>
-      <button title="Изменить" onClick={() => setEditing(true)} style={btnIcon}>✎</button>
+      {stage.isClosingStage && <span title={tr('pipelines.finalStage')}>✓</span>}
+      <button title={tr('pipelines.up')} onClick={onMoveUp} disabled={!canMoveUp} style={btnIcon}>‹</button>
+      <button title={tr('pipelines.down')} onClick={onMoveDown} disabled={!canMoveDown} style={btnIcon}>›</button>
+      <button title={tr('common.edit')} onClick={() => setEditing(true)} style={btnIcon}>✎</button>
       <button title="✕" onClick={onDelete} style={{ ...btnIcon, color: 'var(--danger)' }}>×</button>
     </div>
   );

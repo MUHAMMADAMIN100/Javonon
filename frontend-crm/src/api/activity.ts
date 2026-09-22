@@ -1,3 +1,4 @@
+import { localized } from '../lib/i18n';
 import { api } from './client';
 
 export type ActivityAction =
@@ -56,7 +57,7 @@ export async function listActivity(filters: {
   return data;
 }
 
-export const ACTIVITY_LABEL: Record<ActivityAction, string> = {
+export const ACTIVITY_LABEL: Record<ActivityAction, string> = localized('activity.action', {
   STATUS_CHANGE: 'Смена статуса',
   STUDENT_UPDATE: 'Изменение студента',
   STUDENT_CREATE: 'Создание студента',
@@ -73,4 +74,4 @@ export const ACTIVITY_LABEL: Record<ActivityAction, string> = {
   PAYMENT_REFUND: 'Возврат платежа',
   PARTNER_COMMISSION_SKIPPED: 'Комиссия партнёру не начислена',
   PARTNER_PREVIEW_LOOKUP: 'Запрос партнёра по клиенту',
-};
+});

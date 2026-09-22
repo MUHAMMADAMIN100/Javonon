@@ -1,20 +1,21 @@
+import { localized, tr } from '../lib/i18n';
 import { api } from './client';
 
 export type CallDirection = 'INCOMING' | 'OUTGOING';
 export type CallOutcome = 'ANSWERED' | 'NO_ANSWER' | 'BUSY' | 'CALLBACK' | 'CONVERTED';
 
-export const CALL_DIRECTION_LABEL: Record<CallDirection, string> = {
+export const CALL_DIRECTION_LABEL: Record<CallDirection, string> = localized('calls.dir', {
   INCOMING: 'Входящий',
   OUTGOING: 'Исходящий',
-};
+});
 
-export const CALL_OUTCOME_LABEL: Record<CallOutcome, string> = {
+export const CALL_OUTCOME_LABEL: Record<CallOutcome, string> = localized('calls.out', {
   ANSWERED: 'Ответили',
   NO_ANSWER: 'Не ответили',
   BUSY: 'Занято',
   CALLBACK: 'Перезвонить',
   CONVERTED: 'Сделка',
-};
+});
 
 export interface CallLog {
   id: string;
@@ -69,13 +70,13 @@ export const callsStats = (params?: { from?: string; to?: string }) =>
 
 /** Секунды → «5м 30с» / «1ч 5м». */
 export function fmtDuration(sec: number) {
-  if (sec <= 0) return '0с';
+  if (sec <= 0) return `0${tr('time.sec')}`;
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
   const parts: string[] = [];
-  if (h) parts.push(`${h}ч`);
-  if (m) parts.push(`${m}м`);
-  if (s && !h) parts.push(`${s}с`);
-  return parts.join(' ') || '0с';
+  if (h) parts.push(`${h}${tr('time.hShort')}`);
+  if (m) parts.push(`${m}${tr('time.m')}`);
+  if (s && !h) parts.push(`${s}${tr('time.sec')}`);
+  return parts.join(' ') || `0${tr('time.sec')}`;
 }

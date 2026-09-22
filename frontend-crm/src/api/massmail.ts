@@ -1,3 +1,4 @@
+import { localized } from '../lib/i18n';
 import { api } from './client';
 
 export type MassMailChannel = 'WHATSAPP' | 'INSTAGRAM' | 'TELEGRAM' | 'SMS';
@@ -10,14 +11,14 @@ export const MASS_MAIL_CHANNEL_LABEL: Record<MassMailChannel, string> = {
   SMS: 'SMS',
 };
 
-export const MASS_MAIL_STATUS_LABEL: Record<MassMailStatus, string> = {
+export const MASS_MAIL_STATUS_LABEL: Record<MassMailStatus, string> = localized('massmail.status', {
   DRAFT: 'Черновик',
   SCHEDULED: 'Запланирована',
   SENDING: 'Отправка',
   SENT: 'Отправлена',
   CANCELED: 'Отменена',
   FAILED: 'Ошибка',
-};
+});
 
 export interface MassMailCampaign {
   id: string;

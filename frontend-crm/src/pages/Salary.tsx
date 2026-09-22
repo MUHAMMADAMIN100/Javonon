@@ -14,7 +14,7 @@ import {
 import { listUsers } from '../api/users';
 import { ROLE_LABEL, type Role } from '../api/types';
 import { displayRoleLabel } from '../lib/roles';
-import { useT } from '../lib/i18n';
+import { tr, useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
@@ -38,10 +38,10 @@ function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 function fmtMin(min: number) {
-  if (min <= 0) return '0ч';
+  if (min <= 0) return `0${tr('time.hShort')}`;
   const h = Math.floor(min / 60);
   const m = min % 60;
-  return m > 0 ? `${h}ч ${m}м` : `${h}ч`;
+  return m > 0 ? `${h}${tr('time.hShort')} ${m}${tr('time.m')}` : `${h}${tr('time.hShort')}`;
 }
 /**
  * Колонок в журнале выплат: сотрудник, период, часы, приход, база, бонус,
@@ -96,7 +96,7 @@ export default function Salary() {
     queryFn: () => listSalaries(),
   });
   const records: SalaryRecord[] = recordsQuery.data ?? [];
-  const periodLabel = t('common.period') !== 'common.period' ? t('common.period') : 'Период';
+  const periodLabel = t('common.period') !== 'common.period' ? t('common.period') : t('common.periodFallback');
   const sort = useTableSort(records, [
     { key: 'employee', label: t('salary.field.employee'), value: (r) => r.user?.fullName },
     { key: 'period', label: periodLabel, type: 'date', value: (r) => r.periodStart },
@@ -126,13 +126,13 @@ export default function Salary() {
     mutationFn: createSalary,
     invalidate: [keys.salary.all],
     onSuccess: () => {
-      toast('Расчёт сохранён', 'success');
+      toast(t('salary.toast.saved'), 'success');
       setComment('');
     },
     onError: (e: any) => {
       const raw = e?.response?.data?.message;
       const key = typeof raw === 'string' ? SALARY_ERROR_KEYS[raw] : undefined;
-      toast(key ? t(key) : raw || 'Ошибка', 'error');
+      toast(key ? t(key) : raw || t('toast.error'), 'error');
     },
   });
 
@@ -145,16 +145,16 @@ export default function Salary() {
       paidAt: new Date().toISOString(),
     } as Partial<SalaryRecord>),
     invalidateAlso: [keys.finance.all],
-    onSuccess: () => toast('Зарплата выплачена', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('salary.toast.paid'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const deleteMut = useOptimisticMutation<unknown, string, SalaryRecord[]>({
     mutationFn: deleteSalary,
     queryKey: recordsKey,
     applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
-    onSuccess: () => toast('Удалено', 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || 'Ошибка', 'error'),
+    onSuccess: () => toast(t('toast.deleted'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const onCreate = () => {
@@ -177,7 +177,7 @@ export default function Salary() {
   const onPay = async (r: SalaryRecord) => {
     const ok = await confirm({
       title: t('salary.confirmPay'),
-      message: `${r.user?.fullName}: ${fmtMoney(r.netAmount, r.currency)} — будет создана расходная транзакция.`,
+      message: `${r.user?.fullName}: ${fmtMoney(r.netAmount, r.currency)} — ${t('salary.payWillCreate')}`,
       confirmText: t('salary.pay'),
     });
     if (!ok) return;
@@ -258,7 +258,7 @@ export default function Salary() {
               marginBottom: 24,
             }}>
               <PreviewCell label={t('salary.cell.hours')} value={fmtMin(preview.workedMinutes)} />
-              <PreviewCell label={t('salary.cell.late')} value={preview.lateMinutes > 0 ? `${preview.lateMinutes}м` : '—'} />
+              <PreviewCell label={t('salary.cell.late')} value={preview.lateMinutes > 0 ? `${preview.lateMinutes}${tr('time.m')}` : '—'} />
               <PreviewCell label={t('salary.cell.base')} value={fmtMoney(preview.baseAmount)} />
               <PreviewCell
                 label={

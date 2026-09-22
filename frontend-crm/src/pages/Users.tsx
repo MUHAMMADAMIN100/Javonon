@@ -361,7 +361,7 @@ export default function Users() {
                       <span style={{ fontWeight: 600 }}>{u.fullName}</span>
                       {u.isActive === false && <span className="badge badge-gray" data-testid="user-dismissed-badge">{t('users.dismissed')}</span>}
                     </span>
-                    {u.id === me?.id && <span style={{ color: '#5b6478', fontSize: 12 }}> (вы)</span>}
+                    {u.id === me?.id && <span style={{ color: '#5b6478', fontSize: 12 }}> ({t('common.youLower')})</span>}
                   </td>
                   {founder && (
                     <td data-testid="user-presence">

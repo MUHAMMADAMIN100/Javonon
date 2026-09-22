@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
-import { useT } from '../lib/i18n';
+import { tr, useT } from '../lib/i18n';
 import {
   InboxChannel,
   InboxMessage,
@@ -192,7 +192,7 @@ function ThreadView({ channel, handle, onClose }: { channel: InboxChannel; handl
         // Telegram-DM требует чтобы клиент сам начал чат с ботом.
         // Бэкенд может слать только в канал/группу. Поэтому без сложной
         // настройки бота с user-deep-link это не поддерживается из UI.
-        toast('Telegram: персональные DM требуют, чтобы клиент сам написал боту. Ответ через стандартный telegram.service.send (канал).', 'info');
+        toast(t('inbox.telegramNote'), 'info');
         setSending(false);
         return;
       }
@@ -277,7 +277,7 @@ function MessageBubble({ message }: { message: InboxMessage }) {
       whiteSpace: 'pre-wrap',
       wordBreak: 'break-word',
     }}>
-      {message.content || (message.mediaUrl ? '📎 файл' : '')}
+      {message.content || (message.mediaUrl ? `📎 ${tr('deal.file')}` : '')}
       <div style={{
         fontSize: 10,
         opacity: 0.7,

@@ -57,7 +57,7 @@ function Slot({
           <div className="manager-slot-label">{label}</div>
           <div className="manager-slot-name">
             {manager ? manager.fullName : t('managerBar.notAssigned')}
-            {isMine && <span className="manager-bar-you">(вы)</span>}
+            {isMine && <span className="manager-bar-you">({t('common.youLower')})</span>}
           </div>
         </div>
       </div>
@@ -135,9 +135,9 @@ export default function ManagerBar({ manager, chinaManager, onReassign }: Props)
     setSaving(true);
     try {
       await onReassign(kind === 'local' ? { managerId: userId } : { chinaManagerId: userId });
-      toast(kind === 'local' ? 'Локальный менеджер обновлён' : 'Китайский менеджер обновлён', 'success');
+      toast(kind === 'local' ? t('managerBar.localUpdated') : t('managerBar.chinaUpdated'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка переназначения', 'error');
+      toast(e?.response?.data?.message || t('managerBar.error'), 'error');
     } finally {
       setSaving(false);
     }

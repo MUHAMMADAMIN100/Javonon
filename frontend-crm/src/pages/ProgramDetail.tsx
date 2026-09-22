@@ -45,12 +45,12 @@ export default function ProgramDetail() {
   const scholarshipsSort = useTableSort(
     ((p as any)?.scholarships as any[] | undefined) ?? [],
     [
-      { key: 'name', label: 'Название', value: (s) => s.name },
-      { key: 'coverage', label: 'Покрытие', value: (s) => s.coverage },
-      { key: 'amount', label: 'Сумма', value: (s) => s.amount },
-      { key: 'includes', label: 'Что включено', value: (s) => s.includes },
-      { key: 'requirements', label: 'Требования', value: (s) => s.requirements },
-      { key: 'deadline', label: 'Дедлайн', value: (s) => s.deadline },
+      { key: 'name', label: t('common.name'), value: (s) => s.name },
+      { key: 'coverage', label: t('programs.sch.coverage'), value: (s) => s.coverage },
+      { key: 'amount', label: t('common.amount'), value: (s) => s.amount },
+      { key: 'includes', label: t('programs.ph.schIncludes'), value: (s) => s.includes },
+      { key: 'requirements', label: t('programs.sch.requirements'), value: (s) => s.requirements },
+      { key: 'deadline', label: t('common.deadline'), value: (s) => s.deadline },
     ],
   );
 
@@ -61,7 +61,7 @@ export default function ProgramDetail() {
       <>
         <BackButton fallback="/programs" />
         <motion.div className="card" style={{ padding: 28 }}>
-          <h2>Программа не найдена</h2>
+          <h2>{t('programs.notFound')}</h2>
         </motion.div>
       </>
     );
@@ -85,7 +85,7 @@ export default function ProgramDetail() {
           </div>
           {websiteUrl && (
             <a href={websiteUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
-              🌐 Официальный сайт университета
+              🌐 {t('programs.universitySite')}
             </a>
           )}
         </div>
@@ -125,15 +125,15 @@ export default function ProgramDetail() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
         <div className="card" style={{ padding: 20 }}>
           <h3 style={{ marginBottom: 12 }}>{t('programs.section.main')}</h3>
-          <Row label="Направление" value={p.direction ? DIRECTION_LABEL[p.direction] : '—'} />
-          <Row label="Специальность" value={p.major || '—'} />
-          <Row label="Стоимость / год" value={p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : 'Бесплатно / уточняется'} />
-          <Row label="Длительность" value={p.duration} />
-          <Row label="Язык обучения" value={p.language} />
-          <Row label="Уровень английского" value={p.englishLevel} />
-          <Row label="Средний проходной балл" value={p.avgAdmissionScore} />
-          <Row label="Дедлайн подачи" value={p.applicationDeadline} />
-          <Row label="Наборов в год" value={typeof p.intakesPerYear === 'number' ? String(p.intakesPerYear) : null} />
+          <Row label={t('app.field.direction')} value={p.direction ? DIRECTION_LABEL[p.direction] : '—'} />
+          <Row label={t('programs.row.major')} value={p.major || '—'} />
+          <Row label={t('programs.row.costYear')} value={p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : t('programs.costUnknown')} />
+          <Row label={t('programs.row.duration')} value={p.duration} />
+          <Row label={t('programs.row.language')} value={p.language} />
+          <Row label={t('programs.row.english')} value={p.englishLevel} />
+          <Row label={t('programs.row.avgScore')} value={p.avgAdmissionScore} />
+          <Row label={t('programs.row.deadline')} value={p.applicationDeadline} />
+          <Row label={t('programs.row.intakes')} value={typeof p.intakesPerYear === 'number' ? String(p.intakesPerYear) : null} />
         </div>
 
         {p.disciplines && p.disciplines.length > 0 && (
@@ -154,7 +154,7 @@ export default function ProgramDetail() {
 
       {scholarships && scholarships.length > 0 && (
         <div className="card" style={{ padding: 20, marginTop: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>🎓 Стипендии и гранты ({scholarships.length})</h3>
+          <h3 style={{ marginBottom: 12 }}>🎓 {t('programs.scholarships')} ({scholarships.length})</h3>
           <SortSelect sort={scholarshipsSort} />
           <table className="table" style={{ width: '100%' }}>
             <thead>
@@ -235,13 +235,13 @@ function ProgramDocumentsSection({ programId }: { programId: string }) {
     try {
       await uploadProgramDocument(programId, file);
       qc.invalidateQueries({ queryKey: ['program-documents', programId] });
-      toast('Документ загружен', 'success');
+      toast(t('programs.toast.docUploaded'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally { setUploading(false); }
   };
   const remove = async (d: ProgramDocument) => {
-    const ok = await confirm({ title: 'Удалить документ?', message: d.name, danger: true });
+    const ok = await confirm({ title: t('programs.docDelete'), message: d.name, danger: true });
     if (!ok) return;
     await deleteProgramDocument(d.id);
     qc.invalidateQueries({ queryKey: ['program-documents', programId] });
@@ -318,19 +318,19 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
   const items = query.data ?? [];
 
   const submit = async () => {
-    const t = draft.trim();
-    if (!t || sending) return;
+    const text = draft.trim();
+    if (!text || sending) return;
     setSending(true);
     try {
-      await addProgramComment(programId, t);
+      await addProgramComment(programId, text);
       setDraft('');
       qc.invalidateQueries({ queryKey: ['program-comments', programId] });
     } catch (e: any) {
-      toast(e?.response?.data?.message || 'Ошибка', 'error');
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
     } finally { setSending(false); }
   };
   const remove = async (c: ProgramComment) => {
-    const ok = await confirm({ title: 'Удалить комментарий?', message: c.text, danger: true });
+    const ok = await confirm({ title: t('programs.commentDelete'), message: c.text, danger: true });
     if (!ok) return;
     await deleteProgramComment(c.id);
     qc.invalidateQueries({ queryKey: ['program-comments', programId] });

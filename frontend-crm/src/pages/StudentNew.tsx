@@ -69,9 +69,9 @@ export default function StudentNew() {
   const errors = validateAll(
     { fullName, phone, email, comment },
     {
-      fullName: compose(required('Введите ФИО'), minLen(2), maxLen(100)),
+      fullName: compose(required(t('app.err.fullName')), minLen(2), maxLen(100)),
       phone: phoneRule(),
-      email: compose(required('Введите email'), emailRule()),
+      email: compose(required(t('login.err.email')), emailRule()),
       comment: maxLen(1000),
     },
   );

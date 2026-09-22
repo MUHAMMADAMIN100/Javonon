@@ -34,7 +34,7 @@ export default function Attendance() {
   const { t } = useT();
   const me = useAuth((s) => s.user);
   if (!isFounder(me)) {
-    return <div className="card" style={{ padding: 28 }}>Доступ только для основателя.</div>;
+    return <div className="card" style={{ padding: 28 }}>{t('common.founderOnly')}</div>;
   }
 
   const [userId, setUserId] = useState('');
@@ -163,12 +163,12 @@ export default function Attendance() {
                   <td>{fmtTime(e.lunchIn)}</td>
                   <td>{fmtTime(e.clockOut)}</td>
                   <td style={{ textAlign: 'right', color: e.lateMinutes > 0 ? '#ef4444' : 'var(--text-soft)' }}>
-                    {e.lateMinutes > 0 ? `+${e.lateMinutes} мин` : '—'}
+                    {e.lateMinutes > 0 ? `+${e.lateMinutes} ${t('common.minutes')}` : '—'}
                     {e.lateExcuseStatus === 'APPROVED' && (
-                      <span style={{ fontSize: 10, marginLeft: 4, color: '#10b981' }}>· одобрено</span>
+                      <span style={{ fontSize: 10, marginLeft: 4, color: '#10b981' }}>· {t('attendance.approved')}</span>
                     )}
                     {e.lateExcuseStatus === 'PENDING' && (
-                      <span style={{ fontSize: 10, marginLeft: 4, color: '#fbbf24' }}>· на разборе</span>
+                      <span style={{ fontSize: 10, marginLeft: 4, color: '#fbbf24' }}>· {t('attendance.review')}</span>
                     )}
                   </td>
                 </tr>

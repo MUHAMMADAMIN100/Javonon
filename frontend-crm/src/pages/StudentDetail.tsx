@@ -31,6 +31,7 @@ import { useDirectionLabel, useStudentStatusLabel, useApplicationStatusLabel, us
 import { tjDateInput, tjFormatDate } from '../lib/tjTime';
 
 function CredRow({ label, value }: { label: string; value: string }) {
+  const { t } = useT();
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
     try {
@@ -47,7 +48,7 @@ function CredRow({ label, value }: { label: string; value: string }) {
         type="button"
         onClick={onCopy}
         className="creds-copy-btn"
-        title={copied ? 'Скопировано' : 'Скопировать'}
+        title={copied ? t('common.copied') : t('common.copy')}
       >
         <Icon name={copied ? 'check' : 'content_copy'} size={15} />
       </button>
@@ -115,15 +116,15 @@ export default function StudentDetail() {
     ? validateAll(
         { fullName: form.fullName, phones: form.phones, email: form.email, cabinet: form.cabinet, comment: form.comment },
         {
-          fullName: compose(required('Введите ФИО'), minLen(2), maxLen(100)),
+          fullName: compose(required(t('app.err.fullName')), minLen(2), maxLen(100)),
           phones: (v) => {
             const s = String(v ?? '').trim();
             if (!s) return undefined;
             const parts = s.split(',').map((p: string) => p.trim()).filter(Boolean);
             for (const p of parts) {
               const digits = p.replace(/\D/g, '');
-              if (digits.length < 7) return `Номер «${p}» слишком короткий (мин. 7 цифр)`;
-              if (digits.length > 15) return `Номер «${p}» слишком длинный (макс. 15 цифр)`;
+              if (digits.length < 7) return t('app.err.phoneShort').replace('{p}', p);
+              if (digits.length > 15) return t('app.err.phoneLong').replace('{p}', p);
             }
             return undefined;
           },

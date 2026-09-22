@@ -20,8 +20,8 @@ export default function Login() {
   const errors = validateAll(
     { email, password },
     {
-      email: compose(required('Введите email'), emailRule()),
-      password: compose(required('Введите пароль'), minLen(4, 'Минимум 4 символа')),
+      email: compose(required(t('login.err.email')), emailRule()),
+      password: compose(required(t('login.err.password')), minLen(4, t('login.err.min4'))),
     },
   );
   const showErr = (k: 'email' | 'password') => touched[k] && errors[k];
@@ -47,7 +47,7 @@ export default function Login() {
       if (err instanceof TokenStorageError) {
         setError(err.message);
       } else {
-        setError(err.response?.data?.message || 'Не удалось войти');
+        setError(err.response?.data?.message || t('login.err.failed'));
       }
     } finally {
       setSubmitting(false);
@@ -68,27 +68,26 @@ export default function Login() {
 
         <div>
           <h1>
-            Управляй потоком<br />
-            <em>студентов.</em>
+            {t('login.hero.a')}<br />
+            <em>{t('login.hero.b')}</em>
           </h1>
           <p>
-            Внутренняя панель для менеджеров и администраторов. Заявки, студенты,
-            программы и результаты по грантам — в реальном времени.
+            {t('login.hero.text')}
           </p>
         </div>
 
         <div className="login-aside-stats">
           <div>
             <div className="login-aside-stat-num">40+</div>
-            <div className="login-aside-stat-label">Стран</div>
+            <div className="login-aside-stat-label">{t('login.stat.countries')}</div>
           </div>
           <div>
             <div className="login-aside-stat-num">1.2K</div>
-            <div className="login-aside-stat-label">Студентов</div>
+            <div className="login-aside-stat-label">{t('login.stat.students')}</div>
           </div>
           <div>
             <div className="login-aside-stat-num">94%</div>
-            <div className="login-aside-stat-label">Успех</div>
+            <div className="login-aside-stat-label">{t('login.stat.success')}</div>
           </div>
         </div>
       </motion.aside>

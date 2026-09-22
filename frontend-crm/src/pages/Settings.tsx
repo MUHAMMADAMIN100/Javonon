@@ -31,7 +31,7 @@ import ScheduleEditor from '../components/ScheduleEditor';
 import RevenueSchemeEditor from '../components/RevenueSchemeEditor';
 import RevenueSchemeMindMap from '../components/RevenueSchemeMindMap';
 import { getRevenueScheme } from '../api/revenue-scheme';
-import { useT } from '../lib/i18n';
+import { tr, useT } from '../lib/i18n';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { useRealtime } from '../realtime';
@@ -573,7 +573,7 @@ function RoleForm({
               textTransform: 'uppercase',
               color: 'var(--text-soft)',
               marginBottom: 8,
-            }}>{group}</div>
+            }}>{t(`perm.group.${group}`) !== `perm.group.${group}` ? t(`perm.group.${group}`) : group}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {items.map((p) => (
                 <label key={p.key} style={{
@@ -585,7 +585,7 @@ function RoleForm({
                     checked={perms.has(p.key)}
                     onChange={() => toggle(p.key)}
                   />
-                  <span>{p.label}</span>
+                  <span>{t(`perm.${p.key}`) !== `perm.${p.key}` ? t(`perm.${p.key}`) : p.label}</span>
                 </label>
               ))}
             </div>
@@ -839,7 +839,7 @@ function SalaryRosterSection() {
                               color: 'var(--text-soft)',
                               textTransform: 'uppercase',
                               letterSpacing: '0.06em',
-                            }}>TJS/ч</span>
+                            }}>TJS/{tr('time.hShort')}</span>
                           </div>
                           <div style={{
                             fontSize: 10,
@@ -847,8 +847,8 @@ function SalaryRosterSection() {
                             fontFamily: 'var(--font-mono)',
                           }}>
                             {monthHours > 0
-                              ? `${draftBase} ÷ ${monthHours}ч`
-                              : 'график не задан'}
+                              ? `${draftBase} ÷ ${monthHours}${tr('time.hShort')}`
+                              : tr('settings.noSchedule')}
                           </div>
                         </div>
                       );

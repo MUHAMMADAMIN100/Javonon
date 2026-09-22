@@ -268,7 +268,7 @@ export default function Students() {
         from: reportFrom,
         to: reportTo,
       });
-      toast(`Отчёт сгенерирован (${filtered.length} студентов)`, 'success');
+      toast(t('students.reportDone').replace('{n}', String(filtered.length)), 'success');
       setReportOpen(false);
       setReportFrom('');
       setReportTo('');
@@ -302,14 +302,14 @@ export default function Students() {
                 onClick={() => setValue('scope', 'mine')}
               >
                 <Icon name="person" size={16} />
-                Мои
+                {t('scope.mine')}
               </button>
               <button
                 className={`scope-btn${scope === 'all' ? ' active' : ''}`}
                 onClick={() => setValue('scope', 'all')}
               >
                 <Icon name="groups" size={16} />
-                Все
+                {t('common.all')}
               </button>
             </div>
           )}
@@ -321,7 +321,7 @@ export default function Students() {
             title={t('common.download')}
           >
             <Icon name="description" size={16} style={{ marginRight: 4 }} />
-            Отчёт Word
+            {t('students.reportWord')}
           </motion.button>
           {!founder && (
             <motion.button

@@ -246,12 +246,12 @@ export default function Dialpad() {
                   textAlign: 'center',
                 }}>
                   {String(Math.floor(callSeconds / 60)).padStart(2, '0')}:
-                  {String(callSeconds % 60).padStart(2, '0')} · в разговоре
+                  {String(callSeconds % 60).padStart(2, '0')} · {t('dialpad.inCall')}
                 </div>
               )}
               {callState === 'connecting' && (
                 <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4, textAlign: 'center' }}>
-                  Соединение…
+                  {t('dialpad.connecting')}
                 </div>
               )}
             </div>
@@ -326,7 +326,7 @@ export default function Dialpad() {
             </div>
 
             <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text-soft)', textAlign: 'center', lineHeight: 1.4 }}>
-              Twilio Voice не подключён — пока fallback на системный обработчик (tel:). Звонок будет зафиксирован в CRM.
+              {t('dialpad.noTwilio')}
             </div>
           </motion.div>
         )}
