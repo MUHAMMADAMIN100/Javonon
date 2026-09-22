@@ -1230,6 +1230,7 @@ model ChatMessage {
   isPinned        Boolean        @default(false)
   deletedAt       DateTime?
   reactions       ChatReaction[]
+  reads           ChatMessageRead[]
   createdAt       DateTime       @default(now())
   editedAt        DateTime?
 
@@ -1241,6 +1242,19 @@ model ChatMessage {
 // ============================================================
 // ChatReaction — реакции на сообщения (Telegram-style ❤️ 👍 etc.)
 // ============================================================
+// Кто и когда прочитал сообщение (меню «Прочитали»). Пишется, когда
+// участник открыл чат / дочитал до конца. Для сообщений до появления этой
+// таблицы строк нет — «прочитал» тогда определяется по ChatMember.lastReadAt.
+model ChatMessageRead {
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  readAt    DateTime    @default(now())
+
+  @@id([messageId, userId])
+  @@index([userId])
+}
+
 model ChatReaction {
   id        String      @id @default(uuid())
   messageId String

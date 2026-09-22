@@ -6631,3 +6631,19 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   .chat-select-bar .btn { padding: 6px 10px; }
   .chat-down-btn { right: 12px; }
 }
+
+/* Меню своего сообщения: кто прочитал и когда */
+.chat-reads-line, .chat-reads-toggle {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px;
+  border: none; background: transparent; text-align: left; border-radius: 8px;
+  font-size: 14px; color: var(--primary);
+}
+.chat-reads-line[data-state="unread"] { color: var(--text-light); }
+.chat-reads-toggle { cursor: pointer; }
+.chat-reads-toggle:hover:not(:disabled) { background: var(--bg-soft); }
+.chat-reads-toggle:disabled { cursor: default; color: var(--text-light); }
+.chat-reads, .chat-reads-line { border-bottom: 1px solid var(--border-soft); margin-bottom: 4px; }
+.chat-reads-list { max-height: 200px; overflow-y: auto; padding: 0 4px 6px; }
+.chat-reads-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; font-size: 13px; }
+.chat-reads-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-reads-time { flex-shrink: 0; font: 12px var(--font-mono); color: var(--text-light); }

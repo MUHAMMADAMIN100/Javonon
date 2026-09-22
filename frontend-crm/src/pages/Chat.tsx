@@ -28,6 +28,7 @@ import {
   leaveChatRoom,
   deleteChatMessages,
   editChatMessage,
+  getMessageReads,
   type ChatRoomMember,
   type ChatSearchHit,
 } from '../api/chat';
@@ -135,7 +136,7 @@ export default function Chat() {
   const loadingOlderRef = useRef(false);
   const atBottomRef = useRef(true);
   const scrollRestoreRef = useRef<{ height: number; top: number } | null>(null);
-  const lastSeenRef = useRef<{ roomId: string | null; lastId: string | null }>({ roomId: null, lastId: null });
+  const lastSeenRef = useRef<{ roomId: string | null; lastId: string | null; lastAt: string }>({ roomId: null, lastId: null, lastAt: '' });
   // Что нужно для повторной отправки черновика, который не ушёл.
   const draftsRef = useRef(new Map<string, { roomId: string; text: string; files: File[]; replyToId?: string }>());
   // Настоящий id сообщения → id его черновика: строка не пересоздаётся, когда
@@ -221,7 +222,8 @@ export default function Chat() {
     },
     enabled: !!activeId,
   });
-  const messages = (messagesQuery.data ?? []) as Draft[];
+  // Удалённые не показываем вовсе (сервер их и не отдаёт; это — на случай старого кеша).
+  const messages = ((messagesQuery.data ?? []) as Draft[]).filter((m) => !m.deletedAt);
 
   /** Подгрузить более старые сообщения (прокрутка вверх). Возвращает, было ли что. */
   const loadOlder = async (keepScroll = true): Promise<boolean> => {
@@ -306,16 +308,18 @@ export default function Chat() {
     });
   });
   // Удалили одно или несколько сообщений (messageIds), у всех сразу.
+  // Удалённые исчезают у всех совсем, без строки «сообщение удалено» (как в Telegram).
   const markDeleted = (roomId: string, ids: string[]) => {
     const gone = new Set(ids);
-    const stamp = new Date().toISOString();
-    qc.setQueryData<ChatMessage[]>(keys.chat.room(roomId), (cur) => cur?.map((m) => gone.has(m.id)
-      ? { ...m, deletedAt: m.deletedAt || stamp, text: '', attachments: null }
-      : m));
-    qc.setQueryData<ChatRoom[]>(keys.chat.rooms(), (cur) => cur?.map((r) => r.id === roomId && r.messages?.[0] && gone.has(r.messages[0].id)
-      ? { ...r, messages: [{ ...r.messages[0], deletedAt: stamp, text: '', attachments: null }] }
-      : r));
+    qc.setQueryData<ChatMessage[]>(keys.chat.room(roomId), (cur) => cur?.filter((m) => !gone.has(m.id)));
+    // Удалили последнее — в списке чатов должно стать видно предыдущее.
+    const rooms_ = qc.getQueryData<ChatRoom[]>(keys.chat.rooms());
+    if (rooms_?.some((r) => r.id === roomId && r.messages?.[0] && gone.has(r.messages[0].id))) {
+      qc.invalidateQueries({ queryKey: keys.chat.rooms() });
+    }
     setSelected((sel) => (sel ? sel.filter((id) => !gone.has(id)) : sel));
+    // Открыто меню у сообщения, которое только что удалили, — закрываем.
+    setContextMenu((cm) => (cm && gone.has(cm.msg.id) ? null : cm));
   };
   useRealtimeEvent('chat:message:deleted', (data: any) => {
     markDeleted(data.roomId, Array.isArray(data.messageIds) ? data.messageIds : [data.messageId]);
@@ -359,7 +363,9 @@ export default function Chat() {
     });
   });
   useRealtimeEvent('chat:read', (data: any) => {
-    // data: { roomId, userId, lastReadAt } — обновляем member в roomsKey
+    // data: { roomId, userId, lastReadAt } — обновляем member в roomsKey.
+    // Открыто меню «Прочитали» — список обновится сразу.
+    qc.invalidateQueries({ queryKey: ['chat', 'reads'] });
     qc.setQueryData<ChatRoom[]>(roomsKey, (cur) => {
       if (!cur) return cur;
       return cur.map((r) => {
@@ -518,7 +524,8 @@ export default function Chat() {
       const { height, top } = scrollRestoreRef.current;
       el.scrollTop = top + (el.scrollHeight - height);
       scrollRestoreRef.current = null;
-    } else if (last && last.id !== seen.lastId) {
+    } else if (last && last.id !== seen.lastId && last.createdAt >= seen.lastAt) {
+      // (последнее удалили — внизу стало более старое: это не «новое»)
       const mineLast = last.authorId === me?.id && !last.mentionsIds?.includes('__BOT__');
       if (atBottomRef.current || mineLast) {
         el.scrollTop = el.scrollHeight;
@@ -527,7 +534,7 @@ export default function Chat() {
         setNewBelow((n) => n + 1);
       }
     }
-    lastSeenRef.current = { roomId: activeId, lastId: last?.id ?? null };
+    lastSeenRef.current = { roomId: activeId, lastId: last?.id ?? null, lastAt: last?.createdAt ?? '' };
   }, [messages, activeId]);
 
   // Поле ввода растёт вместе с текстом (до ~6 строк), как в Telegram.
@@ -631,14 +638,14 @@ export default function Chat() {
   // Удаление (одно или несколько) — сразу у себя, сервер разошлёт остальным.
   const deleteMut = useOptimisticMutation<unknown, { ids: string[] }, ChatMessage[]>({
     mutationFn: ({ ids }) => (ids.length === 1 ? deleteChatMessage(ids[0]) : deleteChatMessages(ids)),
+    onError: (e: any) => toast(e?.response?.data?.message || t('chat.room.deleteError'), 'error'),
     queryKey: messagesKey,
     applyOptimistic: (cur, { ids }) => {
       if (!cur) return cur;
       const gone = new Set(ids);
-      return cur.map((m) => gone.has(m.id)
-        ? { ...m, deletedAt: new Date().toISOString(), text: '', attachments: null }
-        : m);
+      return cur.filter((m) => !gone.has(m.id));
     },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.chat.rooms() }),
   });
   // Правка — сразу у себя, пометка «изменено».
   const editMut = useOptimisticMutation<unknown, { messageId: string; text: string }, ChatMessage[]>({
@@ -1359,7 +1366,8 @@ export default function Chat() {
                 : `${activeRoom.members.length} ${t('chat.membersCount')}${onlineCount ? `, ${onlineCount} ${t('chat.onlineCount')}` : ''}`;
             // Выбор нескольких сообщений — вместо шапки панель действий.
             if (selected) {
-              const picked = messages.filter((m) => selected.includes(m.id));
+              // Уже удалённые и черновики в пути не мешают кнопке «Удалить».
+              const picked = messages.filter((m) => selected.includes(m.id) && !m.deletedAt && !isDraft(m));
               const deletable = picked.length > 0 && picked.every((m) => canDelete(m, activeRoom));
               const forwardable = picked.filter((m) => !m.deletedAt && !isDraft(m));
               return (
@@ -1600,7 +1608,7 @@ export default function Chat() {
                           <div
                             className="chat-bubble-quote"
                             role="button"
-                            onClick={(e) => { if (selected) return; e.stopPropagation(); void jumpTo(m.replyTo!.id); }}
+                            onClick={(e) => { if (selected || m.replyTo!.deletedAt) return; e.stopPropagation(); void jumpTo(m.replyTo!.id); }}
                           >
                             <div className="chat-bubble-quote-name">{m.replyTo.author?.fullName || t('chat.message')}</div>
                             <div className="chat-bubble-quote-text">
@@ -1953,7 +1961,9 @@ export default function Chat() {
             transition={{ duration: 0.12 }}
             style={{
               position: 'fixed',
-              top: Math.min(contextMenu.y, window.innerHeight - 380),
+              top: Math.max(12, Math.min(contextMenu.y, window.innerHeight - 470)),
+              maxHeight: 'calc(100dvh - 24px)',
+              overflowY: 'auto',
               left: Math.max(12, Math.min(contextMenu.x, window.innerWidth - 240)),
               background: 'white', borderRadius: 14, padding: 8,
               boxShadow: '0 16px 40px rgba(0,0,0,0.18)',
@@ -1984,6 +1994,11 @@ export default function Chat() {
                 </button>
               ))}
             </div>}
+            {/* Своё сообщение: кто прочитал и когда. */}
+            {contextMenu.msg.authorId === me?.id && !isDraft(contextMenu.msg) && !contextMenu.msg.deletedAt
+              && !contextMenu.msg.mentionsIds?.includes('__BOT__') && (
+              <MessageReadsInfo messageId={contextMenu.msg.id} direct={activeRoom?.type === 'DIRECT'} />
+            )}
             {/* Actions: черновик в пути — только «копировать»; не ушёл — «повторить». */}
             {(() => {
               const cm = contextMenu.msg as Draft;
@@ -2376,6 +2391,78 @@ export default function Chat() {
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+/** Когда прочитано: сегодня — «16:45», вчера — «вчера 16:45», раньше — «21.09 16:45». */
+function readTimeLabel(iso: string, t: (k: string) => string) {
+  const day = tjDateInput(iso);
+  if (day === tjDateInput(new Date())) return fmtTime(iso);
+  if (day === tjDateInput(new Date(Date.now() - 86_400_000))) return t('chat.reads.yesterday').replace('{t}', fmtTime(iso));
+  const sameYear = day.slice(0, 4) === tjDateInput(new Date()).slice(0, 4);
+  const date = fmtDateText(iso, { day: '2-digit', month: '2-digit', ...(sameYear ? {} : { year: 'numeric' }), timeZone: TJ_TZ });
+  return `${date} ${fmtTime(iso)}`;
+}
+
+/**
+ * «Кто прочитал» в меню своего сообщения. Личный чат — одна строка
+ * «Прочитано 16:45»; группа — «Прочитали (N)», по клику список с временем.
+ * readAt=null — прочитал до того, как время стали запоминать.
+ */
+function MessageReadsInfo({ messageId, direct }: { messageId: string; direct: boolean }) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const q = useQuery({
+    queryKey: ['chat', 'reads', messageId],
+    queryFn: () => getMessageReads(messageId),
+    staleTime: 0,
+  });
+  const list = q.data ?? [];
+  const when = (readAt: string | null) => (readAt ? readTimeLabel(readAt, t) : t('chat.reads.noTime'));
+  if (direct) {
+    const r = list[0];
+    return (
+      <div className="chat-reads-line" data-testid="chat-reads" data-state={r ? 'read' : 'unread'}>
+        <Icon name={r ? 'done_all' : 'done'} size={18} />
+        <span>
+          {q.isLoading
+            ? '…'
+            : r
+              ? (r.readAt ? t('chat.reads.readAt').replace('{t}', readTimeLabel(r.readAt, t)) : t('chat.reads.read'))
+              : t('chat.reads.notYet')}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="chat-reads" data-testid="chat-reads">
+      <button
+        type="button"
+        className="chat-reads-toggle"
+        data-testid="chat-reads-toggle"
+        disabled={!list.length}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Icon name="done_all" size={18} />
+        <span style={{ flex: 1 }}>
+          {q.isLoading ? '…' : list.length ? `${t('chat.reads.title')} (${list.length})` : t('chat.reads.none')}
+        </span>
+        {list.length > 0 && <Icon name={open ? 'expand_less' : 'expand_more'} size={18} />}
+      </button>
+      {open && (
+        <div className="chat-reads-list" data-testid="chat-reads-list">
+          {list.map((r) => (
+            <div key={r.userId} className="chat-reads-row" data-testid="chat-reads-row">
+              <span className="chat-avatar" style={{ background: avatarColor(r.userId), width: 26, height: 26, fontSize: 10, alignSelf: 'center' }}>
+                {initials(r.fullName)}
+              </span>
+              <span className="chat-reads-name">{r.fullName}</span>
+              <span className="chat-reads-time">{when(r.readAt)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

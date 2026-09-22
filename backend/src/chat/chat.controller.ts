@@ -161,6 +161,12 @@ export class ChatController {
     return this.svc.deleteMessages(body.ids, me.id);
   }
 
+  /** Кто прочитал моё сообщение и когда (только автору). */
+  @Get('messages/:id/reads')
+  reads(@Param('id') id: string, @CurrentUser() me: any) {
+    return this.svc.messageReads(id, me.id);
+  }
+
   /** Изменить своё сообщение. */
   @Patch('messages/:id')
   edit(@Param('id') id: string, @CurrentUser() me: any, @Body() body: { text?: string }) {

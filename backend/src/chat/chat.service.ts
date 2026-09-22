@@ -72,6 +72,12 @@ export class ChatService implements OnModuleInit {
       });
       return { message };
     });
+    // «Прочитал» — тоже через сокет: в живом чате это частое событие, и по
+    // HTTP оно съедало лимит запросов (60 в минуту на человека).
+    this.realtime.onClientEvent('chat:read', async (userId, p: any) => {
+      if (!p || typeof p.roomId !== 'string') return {};
+      return this.markRoomRead(p.roomId, userId);
+    });
     this.realtime.onClientEvent('chat:typing', async (userId, p: any) => {
       if (!p || typeof p.roomId !== 'string') return {};
       await this.setTyping(p.roomId, userId, !!p.typing);
@@ -192,7 +198,9 @@ export class ChatService implements OnModuleInit {
         members: {
           include: { user: { select: { id: true, fullName: true, role: true } } },
         },
+        // Последнее живое сообщение: удалённые исчезают совсем (как в Telegram).
         messages: {
+          where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
           take: 1,
           include: { author: { select: { id: true, fullName: true } } },
@@ -227,23 +235,16 @@ export class ChatService implements OnModuleInit {
     if (member?.clearedAt) createdAt.gt = member.clearedAt;
     if (beforeDate) createdAt.lt = beforeDate;
 
+    // Удалённые не отдаём вовсе — у всех они просто исчезают.
     const recent = await this.prisma.chatMessage.findMany({
-      where: { roomId, ...(createdAt.gt || createdAt.lt ? { createdAt } : {}) },
+      where: { roomId, deletedAt: null, ...(createdAt.gt || createdAt.lt ? { createdAt } : {}) },
       orderBy: { createdAt: 'desc' },
       include: MESSAGE_INCLUDE,
       take: PAGE_SIZE + 1,
     });
     const hasMore = recent.length > PAGE_SIZE;
     const messages = recent.slice(0, PAGE_SIZE).reverse().map((m) => this.shape(m));
-    if (!beforeDate) {
-      // Прочитал — собеседник сразу видит ✓✓.
-      const lastReadAt = new Date();
-      await this.prisma.chatMember.update({
-        where: { roomId_userId: { roomId, userId } },
-        data: { lastReadAt },
-      });
-      await this.emitRoom(roomId, 'chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
-    }
+    if (!beforeDate) await this.recordRead(roomId, userId);
     return { messages, hasMore };
   }
 
@@ -300,13 +301,76 @@ export class ChatService implements OnModuleInit {
   /** Telegram-style: пометить как прочитано (повторно, при scroll/focus). */
   async markRoomRead(roomId: string, userId: string) {
     await this.requireAccess(roomId, userId);
-    const lastReadAt = new Date();
+    const lastReadAt = await this.recordRead(roomId, userId);
+    return { ok: true, lastReadAt: lastReadAt.toISOString() };
+  }
+
+  /**
+   * Прочитал: для каждого нового (с прошлого раза) чужого сообщения
+   * запоминаем время — из этого меню «Прочитали» у автора. Затем двигаем
+   * lastReadAt, и собеседники сразу видят ✓✓.
+   */
+  private async recordRead(roomId: string, userId: string) {
+    const now = new Date();
+    const member = await this.prisma.chatMember.findUnique({
+      where: { roomId_userId: { roomId, userId } },
+      select: { lastReadAt: true },
+    });
+    const fresh = await this.prisma.chatMessage.findMany({
+      where: {
+        roomId,
+        authorId: { not: userId },
+        deletedAt: null,
+        createdAt: { lte: now, ...(member?.lastReadAt ? { gt: member.lastReadAt } : {}) },
+      },
+      select: { id: true },
+    });
+    if (fresh.length) {
+      await this.prisma.chatMessageRead.createMany({
+        data: fresh.map((m) => ({ messageId: m.id, userId, readAt: now })),
+        skipDuplicates: true,
+      });
+    }
     await this.prisma.chatMember.update({
       where: { roomId_userId: { roomId, userId } },
-      data: { lastReadAt },
+      data: { lastReadAt: now },
     });
-    await this.emitRoom(roomId, 'chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
-    return { ok: true, lastReadAt: lastReadAt.toISOString() };
+    await this.emitRoom(roomId, 'chat:read', { roomId, userId, lastReadAt: now.toISOString() });
+    return now;
+  }
+
+  /**
+   * Кто прочитал моё сообщение и когда — только автору. Для сообщений до
+   * появления таблицы прочтений время неизвестно: «прочитал» без времени,
+   * если человек заходил в чат после сообщения.
+   */
+  async messageReads(messageId: string, userId: string) {
+    const msg = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      select: { roomId: true, authorId: true, createdAt: true, deletedAt: true },
+    });
+    if (!msg || msg.deletedAt) throw new NotFoundException('Сообщение не найдено');
+    await this.requireAccess(msg.roomId, userId);
+    if (msg.authorId !== userId) throw new ForbiddenException('Кто прочитал — видно только автору сообщения');
+    const [members, reads] = await Promise.all([
+      this.prisma.chatMember.findMany({
+        where: { roomId: msg.roomId, userId: { not: userId } },
+        select: { userId: true, lastReadAt: true, user: { select: { fullName: true } } },
+      }),
+      this.prisma.chatMessageRead.findMany({ where: { messageId }, select: { userId: true, readAt: true } }),
+    ]);
+    const at = new Map(reads.map((r) => [r.userId, r.readAt]));
+    return members
+      .map((m) => ({
+        userId: m.userId,
+        fullName: m.user.fullName,
+        readAt: at.get(m.userId) ?? null,
+        read: at.has(m.userId) || (!!m.lastReadAt && m.lastReadAt >= msg.createdAt),
+      }))
+      .filter((r) => r.read)
+      // Свежие прочтения сверху, «без времени» — в конце.
+      .sort((a, b) => (b.readAt?.getTime() ?? 0) - (a.readAt?.getTime() ?? 0) || a.fullName.localeCompare(b.fullName, 'ru'))
+      .map(({ userId: id, fullName, readAt }) => ({ userId: id, fullName, readAt }));
   }
 
   // ============ СООБЩЕНИЯ ============

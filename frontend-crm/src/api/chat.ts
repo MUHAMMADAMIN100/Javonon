@@ -182,5 +182,29 @@ export function sendChatMessageLive(
 }
 
 /** Telegram-style: пометить комнату прочитанной (для read-receipts ✓✓). */
-export const markRoomRead = (roomId: string) =>
+const markRoomReadHttp = (roomId: string) =>
   api.post<{ ok: boolean; lastReadAt: string }>(`/chat/rooms/${roomId}/read`).then((r) => r.data);
+
+/**
+ * «Прочитал» — через сокет (в живом чате это частое событие, по HTTP оно
+ * съедало лимит запросов); нет соединения — обычным запросом.
+ */
+export function markRoomRead(roomId: string): Promise<unknown> {
+  const s = getSocket();
+  if (!s?.connected) return markRoomReadHttp(roomId);
+  return new Promise((resolve) => {
+    s.timeout(8000).emit('chat:read', { roomId }, (err: unknown, res: unknown) => {
+      if (err) markRoomReadHttp(roomId).then(resolve, () => resolve(null));
+      else resolve(res);
+    });
+  });
+}
+
+/** Кто прочитал моё сообщение и когда (readAt=null — прочитал до того, как время стали запоминать). */
+export interface ChatMessageRead {
+  userId: string;
+  fullName: string;
+  readAt: string | null;
+}
+export const getMessageReads = (messageId: string) =>
+  api.get<ChatMessageRead[]>(`/chat/messages/${messageId}/reads`).then((r) => r.data);

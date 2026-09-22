@@ -2615,6 +2615,13 @@ const DICT: Record<Lang, Record<string, string>> = {
     'chat.select.count': 'Выбрано: {n}',
     'chat.select.cantDelete': 'Среди выбранных есть чужие сообщения — их может удалить только админ группы',
     'chat.toBottom': 'Вниз',
+    'chat.reads.title': 'Прочитали',
+    'chat.reads.readAt': 'Прочитано {t}',
+    'chat.reads.read': 'Прочитано',
+    'chat.reads.none': 'Ещё никто не прочитал',
+    'chat.reads.notYet': 'Ещё не прочитано',
+    'chat.reads.noTime': 'время неизвестно',
+    'chat.reads.yesterday': 'вчера {t}',
   },
   tg: {
     // ===== common =====
@@ -5156,6 +5163,13 @@ const DICT: Record<Lang, Record<string, string>> = {
     'chat.select.count': 'Интихоб шуд: {n}',
     'chat.select.cantDelete': 'Дар байни интихобшудаҳо паёмҳои дигарон ҳаст — онҳоро танҳо админи гурӯҳ нест карда метавонад',
     'chat.toBottom': 'Ба поён',
+    'chat.reads.title': 'Хонданд',
+    'chat.reads.readAt': 'Хонда шуд {t}',
+    'chat.reads.read': 'Хонда шуд',
+    'chat.reads.none': 'Ҳанӯз касе нахондааст',
+    'chat.reads.notYet': 'Ҳанӯз хонда нашудааст',
+    'chat.reads.noTime': 'вақт маълум нест',
+    'chat.reads.yesterday': 'дирӯз {t}',
   },
 };
 
