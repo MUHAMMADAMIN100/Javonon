@@ -1,5 +1,6 @@
 import { fmtDateText, TJ_TZ } from '../lib/tjTime';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import CrmSelect from '../components/CrmSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,12 +17,15 @@ import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
 import ListTotal from '../components/ListTotal';
+import SearchField from '../components/SearchField';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import CrmDatePicker from '../components/CrmDatePicker';
 import { hasRole, isElevated, displayRoleLabel } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
 type Scope = 'all' | 'mine';
+/** Значение фильтра «Исполнитель» для задач, которые ещё никому не назначены. */
+const NO_ASSIGNEE = 'none';
 
 export default function Tasks() {
   const { t } = useT();
@@ -32,6 +36,19 @@ export default function Tasks() {
   // Удалять — как на сервере (tasks.service remove): основатель и администратор.
   const canDelete = hasRole(me, 'FOUNDER', 'ADMIN');
   const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
+  // Фильтры — в адресе страницы (?status=&assignee=): переживают обновление и ссылку.
+  const [params, setParams] = useSearchParams();
+  const statusFilter = (params.get('status') || '') as TaskStatus | '';
+  // Исполнитель — только в режиме «Все»: в «Моих» и так только мои задачи.
+  const assigneeFilter = scope === 'all' ? params.get('assignee') || '' : '';
+  const setFilter = (key: 'status' | 'assignee', value: string) => {
+    setParams((cur) => {
+      const next = new URLSearchParams(cur);
+      if (value) next.set(key, value);
+      else next.delete(key);
+      return next;
+    }, { replace: true });
+  };
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -58,13 +75,22 @@ export default function Tasks() {
   });
   const items = tasksQuery.data ?? [];
   const loading = tasksQuery.isLoading;
+  const assignedTo = (task: Task, userId: string) =>
+    (task.assignees ?? []).some((a) => a.id === userId) || task.assignedToId === userId;
+  const hasAssignee = (task: Task) => (task.assignees ?? []).length > 0 || !!task.assignedToId;
+  const shown = items.filter((task) =>
+    (!statusFilter || task.status === statusFilter)
+    && (!assigneeFilter
+      || (assigneeFilter === NO_ASSIGNEE ? !hasAssignee(task) : assignedTo(task, assigneeFilter))));
   // Всего задач без поиска — для «Найдено: X из N» (тот же кэш, что и список без поиска).
   const allQuery = useQuery({
     queryKey: keys.tasks.list({ mine: scope === 'mine', search: undefined }),
     queryFn: () => listTasks(scope === 'mine', undefined),
     enabled: !!debouncedSearch,
   });
-  const narrowed = !!debouncedSearch;
+  const narrowed = !!debouncedSearch || !!statusFilter || !!assigneeFilter;
+  // «Найдено X из N»: N — все задачи этого режима, без поиска и фильтров.
+  const totalAll = debouncedSearch ? allQuery.data?.length : items.length;
 
   /** Открытая в окне задача (id — чтобы окно видело свежие данные списка). */
   const [openId, setOpenId] = useState<string | null>(null);
@@ -78,7 +104,7 @@ export default function Tasks() {
         task.assignedToId === me.id ||
         task.controllerId === me.id));
 
-  const sort = useTableSort(items, [
+  const sort = useTableSort(shown, [
     { key: 'title', label: t('task.col.task'), value: (x) => x.title },
     { key: 'assignee', label: t('task.assignee'), value: (x) => (x.assignees ?? []).map((a) => a.fullName).join(', ') || null },
     { key: 'controller', label: t('task.controller'), value: (x) => x.controller?.fullName ?? null },
@@ -208,8 +234,8 @@ export default function Tasks() {
       <div className="card-header is-titleless">
         <ListTotal
           noun="tasks"
-          found={items.length}
-          total={narrowed ? allQuery.data?.length : undefined}
+          found={shown.length}
+          total={narrowed ? totalAll : undefined}
           filtered={narrowed}
           testId="tasks-total"
         />
@@ -248,13 +274,60 @@ export default function Tasks() {
       </div>
 
       <div className="card-body">
-        <div className="filters-search">
-          <input
-            className="crm-input"
-            placeholder={t('tasks.searchPlaceholder')}
+        <div className="filters">
+          <CrmSelect
+            className="crm-select"
+            value={statusFilter}
+            onChange={(e) => setFilter('status', e.target.value)}
+            title={t('common.status')}
+            data-testid="tasks-filter-status"
+          >
+            <option value="">{t('tasks.filter.allStatuses')}</option>
+            <option value="TODO">{t('task.status.TODO')}</option>
+            <option value="IN_PROGRESS">{t('task.status.IN_PROGRESS')}</option>
+            <option value="DONE">{t('task.status.DONE')}</option>
+          </CrmSelect>
+          {scope === 'all' && (
+            <CrmSelect
+              className="crm-select"
+              value={assigneeFilter}
+              onChange={(e) => setFilter('assignee', e.target.value)}
+              title={t('task.assignee')}
+              data-testid="tasks-filter-assignee"
+            >
+              <option value="">{t('tasks.filter.allAssignees')}</option>
+              <option value={NO_ASSIGNEE}>{t('tasks.filter.noAssignee')}</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.fullName}</option>
+              ))}
+            </CrmSelect>
+          )}
+          <SearchField
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
+            onClear={() => { setSearch(''); setDebouncedSearch(''); }}
+            placeholder={t('tasks.searchPlaceholder')}
+            testId="tasks-search"
           />
+          {(statusFilter || assigneeFilter || search) && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              data-testid="tasks-filter-reset"
+              onClick={() => {
+                setSearch('');
+                setDebouncedSearch('');
+                setParams((cur) => {
+                  const next = new URLSearchParams(cur);
+                  next.delete('status');
+                  next.delete('assignee');
+                  return next;
+                }, { replace: true });
+              }}
+            >
+              <Icon name="close" size={14} /> {t('common.reset')}
+            </button>
+          )}
         </div>
         <AnimatePresence>
           {creating && isAdmin && (
@@ -415,10 +488,10 @@ export default function Tasks() {
         <AnimatePresence mode="wait">
           {loading ? (
             <Loading />
-          ) : items.length === 0 ? (
-            <motion.div key="empty" className="empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+          ) : shown.length === 0 ? (
+            <motion.div key="empty" className="empty" data-testid="tasks-empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="empty-icon"><Icon name="task_alt" size={48} /></div>
-              {scope === 'mine' ? t('tasks.empty.mine') : t('tasks.empty.all')}
+              {items.length > 0 ? t('tasks.empty.filtered') : scope === 'mine' ? t('tasks.empty.mine') : t('tasks.empty.all')}
             </motion.div>
           ) : (
             <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

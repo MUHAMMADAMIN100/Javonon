@@ -4834,6 +4834,10 @@ input[type="checkbox"].crm-checkbox:checked {
     line-height: 1.2 !important;
     box-sizing: border-box !important;
   }
+  /* Справа у списка — стрелка: текст («Все исполнители») на неё не наезжает. */
+  .crm-select,
+  .filters .crm-select,
+  .filters select.crm-select { padding-right: 30px !important; }
   .crm-textarea,
   .filters .crm-textarea {
     height: auto !important;
@@ -6483,8 +6487,12 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 .chat-rooms-search {
   display: flex; align-items: center; gap: 8px; margin: 10px 12px 6px;
   padding: 0 12px; height: 38px; border-radius: 999px;
-  background: var(--bg-soft); color: var(--text-light);
+  background: var(--bg-card); color: var(--text-light);
+  /* Рамка — как у всех полей CRM. */
+  border: 1px solid var(--input-border);
 }
+.chat-rooms-search:hover { border-color: var(--input-border-hover); }
+.chat-rooms-search:focus-within { border-color: var(--primary); }
 .chat-rooms-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 14px; color: var(--text); }
 .chat-rooms-search button { border: none; background: transparent; cursor: pointer; color: var(--text-light); display: inline-flex; padding: 2px; }
 /* удержание пальцем на чате — наше меню, а не системное выделение */
@@ -6543,7 +6551,12 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   display: flex; align-items: center; gap: 6px; padding: 6px 12px 6px 18px;
   border-bottom: 1px solid var(--border-soft); background: var(--bg-card); color: var(--text-light);
 }
-.chat-search-bar input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 14px; color: var(--text); padding: 8px 4px; }
+.chat-search-bar input {
+  flex: 1; min-width: 0; outline: none; background: var(--bg-card); font-size: 14px; color: var(--text);
+  padding: 7px 12px; border: 1px solid var(--input-border); border-radius: 999px;
+}
+.chat-search-bar input:hover { border-color: var(--input-border-hover); }
+.chat-search-bar input:focus { border-color: var(--primary); }
 .chat-search-count { font: 12px var(--font-mono); color: var(--text-light); white-space: nowrap; }
 
 /* лента + кнопка «вниз» + зона перетаскивания */
@@ -6647,3 +6660,13 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 .chat-reads-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; font-size: 13px; }
 .chat-reads-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-reads-time { flex-shrink: 0; font: 12px var(--font-mono); color: var(--text-light); }
+
+/* Телефон: фильтры внутри карточки списка — во всю ширину, как поле
+   сортировки под ними (общий отступ 12px для .filters рассчитан на
+   фильтры прямо в странице, внутри карточки он давал двойной отступ). */
+@media (max-width: 600px) {
+  html body .content .card-body > .filters {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}

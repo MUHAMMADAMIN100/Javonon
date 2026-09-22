@@ -2622,6 +2622,10 @@ const DICT: Record<Lang, Record<string, string>> = {
     'chat.reads.notYet': 'Ещё не прочитано',
     'chat.reads.noTime': 'время неизвестно',
     'chat.reads.yesterday': 'вчера {t}',
+    'tasks.filter.allStatuses': 'Все статусы',
+    'tasks.filter.allAssignees': 'Все исполнители',
+    'tasks.filter.noAssignee': 'Без исполнителя',
+    'tasks.empty.filtered': 'По выбранным фильтрам задач нет',
   },
   tg: {
     // ===== common =====
@@ -5170,6 +5174,10 @@ const DICT: Record<Lang, Record<string, string>> = {
     'chat.reads.notYet': 'Ҳанӯз хонда нашудааст',
     'chat.reads.noTime': 'вақт маълум нест',
     'chat.reads.yesterday': 'дирӯз {t}',
+    'tasks.filter.allStatuses': 'Ҳамаи ҳолатҳо',
+    'tasks.filter.allAssignees': 'Ҳамаи иҷрокунандагон',
+    'tasks.filter.noAssignee': 'Бе иҷрокунанда',
+    'tasks.empty.filtered': 'Аз рӯи филтрҳои интихобшуда вазифа нест',
   },
 };
 
