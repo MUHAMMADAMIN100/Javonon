@@ -5,11 +5,25 @@ import {
   isLeadStatusRowMigrationEnabled,
 } from '../common/application-status';
 
+const SOFT_DELETE_READS = new Set(['findMany', 'findFirst', 'findFirstOrThrow', 'count', 'groupBy', 'aggregate']);
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
   async onModuleInit() {
+    // Заявки из корзины (deletedAt) не попадают ни в один список, счётчик,
+    // KPI и отчёт — одним правилом, а не условием в каждом из ~40 запросов.
+    // Запрос, который сам упоминает deletedAt (экран «Удалённые»,
+    // восстановление), фильтр не трогает.
+    this.$use(async (params, next) => {
+      if (params.model === 'Application' && SOFT_DELETE_READS.has(params.action)) {
+        params.args = params.args ?? {};
+        const where = params.args.where ?? {};
+        if (!('deletedAt' in where)) params.args.where = { ...where, deletedAt: null };
+      }
+      return next(params);
+    });
     await this.$connect();
     await this.migrateLegacyStatuses();
   }

@@ -1,4 +1,4 @@
-import { absFileUrl } from '../lib/fileUrl';
+import { absFileUrl, useFileToken } from '../lib/fileUrl';
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { Document } from '../api/types';
@@ -43,6 +43,7 @@ const sanitizeFileName = (s: string) =>
 export default function DocumentsChecklist({ studentId, studentName, documents, applicationForm, onChange, editable }: Props) {
   const { confirm, toast } = useUI();
   const { t } = useT();
+  useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   const docLabel = (type: string, fallback: string) => {
     const key = `docs.type.${type}`;
     const tr = t(key);

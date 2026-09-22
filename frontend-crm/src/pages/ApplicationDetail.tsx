@@ -1,5 +1,5 @@
 import { CONTACT_CHANNEL_LABEL, type ContactChannel } from '../api/types';
-import { absFileUrl } from '../lib/fileUrl';
+import { absFileUrl, useFileToken } from '../lib/fileUrl';
 import { useEffect, useRef, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -160,6 +160,7 @@ export default function ApplicationDetail() {
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
   const { t } = useT();
+  useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   const directionLabel = useDirectionLabel();
   const appStatusLabel = useApplicationStatusLabel();
   const studentStatusLabel = useStudentStatusLabel();

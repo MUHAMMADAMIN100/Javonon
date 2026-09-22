@@ -87,4 +87,9 @@ export class UpdateApplicationDto {
   @IsOptional()
   @IsBoolean()
   paymentPending?: boolean;
+
+  /** Дата рождения (YYYY-MM-DD); пустая строка — очистить. Окно возраста — как у нового лида. */
+  @IsOptional()
+  @IsString()
+  birthday?: string;
 }

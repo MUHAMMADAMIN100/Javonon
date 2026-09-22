@@ -396,6 +396,7 @@ export class ApplicationsService {
       SELECT id, comment FROM "Application"
       WHERE right(regexp_replace(phone, '[^0-9]', '', 'g'), 9) = ${key}
         AND status::text NOT IN (${Prisma.join(closed)})
+        AND "deletedAt" IS NULL
       ORDER BY "createdAt" DESC
       LIMIT 1`;
     return rows[0] ?? null;
@@ -678,8 +679,11 @@ export class ApplicationsService {
     sort?: string;
     /** Порядок подписей для колонок-списков: «значение:ранг,…» (см. labelRanks в CRM). */
     ranks?: string;
+    /** Корзина: только удалённые (иначе удалённых в выдаче нет вовсе). */
+    deleted?: boolean;
   }) {
     const where: Prisma.ApplicationWhereInput = {};
+    if (filters.deleted) where.deletedAt = { not: null };
     const and: Prisma.ApplicationWhereInput[] = [];
     // Фильтр по статусу разворачиваем в группу равнозначных значений: пока
     // перенос строк не прогнали (он опт-ин, MIGRATE_LEAD_STATUSES — см.
@@ -847,7 +851,7 @@ export class ApplicationsService {
       where: { id },
       include: MANAGER_INCLUDE,
     });
-    if (!app) throw new NotFoundException('Заявка не найдена');
+    if (!app || app.deletedAt) throw new NotFoundException('Заявка не найдена');
     if (!canSeePartnerAttribution(viewer)) return app;
     const partnerAttribution = this.referrals
       ? await this.referrals.getPartnerAttributionView({
@@ -889,6 +893,23 @@ export class ApplicationsService {
     const existing = await this.findOne(id);
     this.ensureCanEdit(existing, user);
 
+    // Номер меняют на номер другой открытой заявки — это дубль, не даём.
+    if (dto.phone != null) {
+      const key = phoneKey(dto.phone);
+      if (key && key !== phoneKey(existing.phone)) {
+        const other = await this.prisma.$transaction((tx) => this.findOpenByPhone(tx, key));
+        if (other && other.id !== id) {
+          throw new ConflictException('С этим номером уже есть открытая заявка');
+        }
+      }
+    }
+    // Дата рождения приходит строкой — проверяем окно возраста, как у нового лида.
+    const birthdayPatch: { birthday?: Date | null } = {};
+    if (dto.birthday !== undefined) {
+      birthdayPatch.birthday = dto.birthday ? this.parseBirthday(dto.birthday) : null;
+      delete (dto as any).birthday;
+    }
+
     // Второй рубеж к @IsIn в UpdateApplicationDto: писать легаси-статус нельзя
     // никогда. DTO ловит это на HTTP-границе (ValidationPipe в main.ts), но
     // проверка живёт и здесь — сервис не должен зависеть от того, каким путём
@@ -908,6 +929,7 @@ export class ApplicationsService {
     // в срез «по направлениям» на дашборде и в фильтр списка.
     const data = {
       ...dto,
+      ...birthdayPatch,
       ...(dto.direction != null ? { directionConfirmed: true } : {}),
     };
     // Направление, которое будет у заявки ПОСЛЕ этого PATCH. Студента ниже
@@ -1562,20 +1584,44 @@ export class ApplicationsService {
     return REQUIRED_DOCUMENT_TYPES.filter((t) => !uploaded.has(t.type)).map((t) => t.label);
   }
 
+  /**
+   * Удаление — в корзину: заявка скрывается из всех списков и счётчиков, но
+   * остаётся в базе и возвращается через restore(). Ученик, заведённый по
+   * заявке, не трогается (раньше удалялся вместе с ней, безвозвратно).
+   * Право — то же, что на правку: кто видит заявку.
+   */
   async remove(id: string, user: CurrentUser) {
-    // Удаление заявки — elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли).
-    // Раньше primary-only `user.role !== 'ADMIN'` блокировало FOUNDER
-    // и любого ADMIN'а назначенного через secondary roles[] (ТЗ §2).
-    if (!isElevated(user as any)) {
-      throw new ForbiddenException('Удалять заявки может только администрация');
-    }
     const app = await this.findOne(id);
-    if (app.studentId) {
-      await this.prisma.student.delete({ where: { id: app.studentId } }).catch(() => undefined);
-    }
-    await this.prisma.application.delete({ where: { id } }).catch(() => undefined);
-    this.realtime.emitStaff('application:deleted', { id });
+    this.ensureCanEdit(app, user);
+    await this.prisma.application.update({
+      where: { id },
+      data: { deletedAt: new Date(), deletedById: user.id },
+    });
+    this.realtime.emitApplication('application:deleted', app, { id });
     return { ok: true };
+  }
+
+  /** Вернуть заявку из корзины. Право — как на удаление. */
+  async restore(id: string, user: CurrentUser) {
+    const app = await this.prisma.application.findFirst({ where: { id, deletedAt: { not: null } } });
+    if (!app) throw new NotFoundException('Заявка не найдена в удалённых');
+    this.ensureCanEdit(app, user);
+    // Пока лид лежал в корзине, по этому номеру могла прийти новая заявка —
+    // вторую открытую с тем же номером не заводим.
+    const key = phoneKey(app.phone);
+    if (key) {
+      const open = await this.prisma.$transaction((tx) => this.findOpenByPhone(tx, key));
+      if (open && open.id !== id) {
+        throw new ConflictException('С этим номером уже есть открытая заявка — восстановить нельзя');
+      }
+    }
+    const restored = await this.prisma.application.update({
+      where: { id },
+      data: { deletedAt: null, deletedById: null },
+      include: MANAGER_INCLUDE,
+    });
+    this.realtime.emitApplication('application:updated', restored, { application: restored });
+    return restored;
   }
 
   /**

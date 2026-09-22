@@ -1,3 +1,4 @@
+import { useChatUnreadTotal } from '../lib/chatUnread';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -161,6 +162,11 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   const hydrated = useAuth((s) => s.hydrated);
   const logout = useAuth((s) => s.logout);
   const { t } = useT();
+  // Непрочитанные в чате — значок у группы и у пункта «Чат».
+  const chatUnread = useChatUnreadTotal();
+  const badgeFor = (to: string) => (to === '/chat' ? chatUnread : 0);
+  const groupBadge = (g: { items: { to: string }[] }) => g.items.reduce((s, it) => s + badgeFor(it.to), 0);
+  const badgeText = (n: number) => (n > 99 ? '99+' : String(n));
   const loc = useLocation();
   const isMobile = useMediaQuery(MOBILE_MQ);
   const reduceMotion = useReducedMotion();
@@ -661,6 +667,9 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
               <Icon name={it.icon} size={20} />
             </span>
             <span>{t(it.labelKey)}</span>
+            {badgeFor(it.to) > 0 && (
+              <span className="nav-badge" data-testid={`nav-badge-${it.to.slice(1)}`}>{badgeText(badgeFor(it.to))}</span>
+            )}
           </NavLink>
         );
         if (!animated || reduceMotion) {
@@ -852,6 +861,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
                   >
                     <span className="sidebar-nav-icon"><Icon name={g.icon} size={22} /></span>
                     <span>{t(g.labelKey)}</span>
+                    {groupBadge(g) > 0 && <span className="nav-badge">{badgeText(groupBadge(g))}</span>}
                     <Icon name="chevron_right" size={20} className="m-chev" />
                   </button>
                 ))}
@@ -935,6 +945,9 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
                 onTouchStart={() => prefetchGroup(g)}
               >
                 <Icon name={g.icon} size={22} />
+                {groupBadge(g) > 0 && (
+                  <span className="rail-badge" data-testid={`rail-badge-${g.key}`}>{badgeText(groupBadge(g))}</span>
+                )}
               </motion.button>
             ))}
           </nav>

@@ -130,6 +130,13 @@ async function bootstrap() {
   const uploadsRoot = resolve(process.cwd(), process.env.UPLOADS_DIR || './uploads');
   app.use(
     '/uploads',
+    // CRM и API на разных адресах (vercel ↔ railway). helmet ставит
+    // Cross-Origin-Resource-Policy: same-origin, и браузер не показывал ни
+    // одной картинки/файла из CRM. Доступ к файлу и так только по токену.
+    (_req: any, res: any, next: any) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      next();
+    },
     (req: any, res: any, next: any) => {
       uploadsAuth.use(req, res, next).catch((e: any) => {
         const status = typeof e?.getStatus === 'function' ? e.getStatus() : 401;

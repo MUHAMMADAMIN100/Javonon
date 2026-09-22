@@ -82,7 +82,7 @@ export class ChatController {
     @Param('id') id: string,
     @CurrentUser() me: any,
     @UploadedFiles() files: Express.Multer.File[] | undefined,
-    @Body() body: { text?: string; mentionsIds?: string[] | string; replyToId?: string },
+    @Body() body: { text?: string; mentionsIds?: string[] | string; replyToId?: string; clientId?: string },
   ) {
     // mentionsIds может прийти как массив (json) или строка (multipart) — нормализуем.
     let mentionsIds: string[] = [];
@@ -100,6 +100,7 @@ export class ChatController {
     return this.svc.sendMessage(id, me.id, body.text || '', mentionsIds, {
       replyToId: body.replyToId || undefined,
       attachments: attachments.length ? attachments : undefined,
+      clientId: typeof body.clientId === 'string' ? body.clientId.slice(0, 64) : undefined,
     });
   }
 

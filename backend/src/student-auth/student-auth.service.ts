@@ -20,6 +20,7 @@ const STUDENT_INCLUDE = {
   // с двумя заявками увидел бы статус то новой, то старой — между
   // перезагрузками страницы. Свежая заявка первая.
   applications: {
+    where: { deletedAt: null },
     select: { id: true, status: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   },

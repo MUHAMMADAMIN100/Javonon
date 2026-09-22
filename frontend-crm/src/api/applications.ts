@@ -19,6 +19,8 @@ export interface AppFilters {
   directionPending?: boolean;
   /** Заявки, в которых страна не указана (строка дашборда). */
   countryPending?: boolean;
+  /** Корзина: только удалённые. */
+  deleted?: boolean;
 }
 
 export async function listApplications(filters: AppFilters = {}) {
@@ -65,8 +67,15 @@ export async function convertApplication(id: string) {
   return data;
 }
 
+/** В корзину: заявка пропадает из списков, но её можно вернуть. */
 export async function deleteApplication(id: string) {
   const { data } = await api.delete(`/applications/${id}`);
+  return data;
+}
+
+/** Вернуть заявку из корзины. */
+export async function restoreApplication(id: string) {
+  const { data } = await api.post<Application>(`/applications/${id}/restore`);
   return data;
 }
 

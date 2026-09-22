@@ -1,4 +1,4 @@
-import { absFileUrl } from '../lib/fileUrl';
+import { absFileUrl, useFileToken } from '../lib/fileUrl';
 import { useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -31,6 +31,7 @@ const fileUrl = (u: string) => absFileUrl(u);
  */
 export default function ProgramDetail() {
   const { t } = useT();
+  useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   const { id } = useParams<{ id: string }>();
   const query = useQuery({
     queryKey: ['program', id],

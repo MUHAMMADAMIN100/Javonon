@@ -35,7 +35,7 @@ import CrmDatePicker from '../components/CrmDatePicker';
 import PartnerAttributionCard from '../components/PartnerAttributionCard';
 import PaymentStagesSection from '../components/PaymentStagesSection';
 import BackButton from '../components/BackButton';
-import { absFileUrl as absUrl } from '../lib/fileUrl';
+import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
 import { keys } from '../lib/queryKeys';
 import { useT } from '../lib/i18n';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
@@ -51,6 +51,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function SubmissionDetail() {
   const { t } = useT();
+  useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   const { id } = useParams<{ id: string }>();
   const me = useAuth((s) => s.user);
   const navigate = useNavigate();

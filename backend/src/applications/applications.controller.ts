@@ -95,6 +95,7 @@ export class ApplicationsController {
     @Query('pageSize') pageSize?: string,
     @Query('sort') sort?: string,
     @Query('ranks') ranks?: string,
+    @Query('deleted') deleted?: string,
   ) {
     // QA-fix #45: validate enum query params (раньше bad value → 500).
     // Единый источник истины — Prisma enum'ы. Добавили значение в schema.prisma
@@ -133,6 +134,7 @@ export class ApplicationsController {
       pageSize: pageSize ? Math.min(100, Math.max(1, parseInt(pageSize, 10) || 20)) : undefined,
       sort,
       ranks: ranks?.slice(0, 2000),
+      deleted: deleted === '1' || deleted === 'true',
     });
   }
 
@@ -243,5 +245,12 @@ export class ApplicationsController {
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.apps.remove(id, user);
+  }
+
+  /** Вернуть заявку из корзины. */
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/restore')
+  restore(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.apps.restore(id, user);
   }
 }

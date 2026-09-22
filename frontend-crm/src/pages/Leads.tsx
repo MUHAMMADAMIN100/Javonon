@@ -7,7 +7,10 @@ import {
   assignApplicationManager,
   bulkAssignApplicationManager,
   createStaffApplication,
+  deleteApplication,
   listApplications,
+  restoreApplication,
+  updateApplication,
   listAssignableManagers,
   type BulkAssignManagerInput,
   type BulkAssignManagerResult,
@@ -119,8 +122,11 @@ export default function Leads() {
   const [serverError, setServerError] = useState<string | null>(null);
   /** Форма нового лида живёт в окне: страница начинается сразу со списка. */
   const [formOpen, setFormOpen] = useState(false);
+  /** Лид, который правим (то же окно, что «Новый лид»); null — создаём новый. */
+  const [editing, setEditing] = useState<Application | null>(null);
 
   const nameRef = useRef<HTMLInputElement | null>(null);
+  const leadsKeyRef = useRef<readonly unknown[]>(['applications', 'list']);
 
   /**
    * ПОТЕРЯННЫЙ КЛИК. Форма стоит НАД списком, а поле ФИО берёт фокус при
@@ -168,24 +174,30 @@ export default function Leads() {
     // NO_HTML_RE на бэке: «<» и «>» в ФИО уедут в письма и Telegram.
     else if (/[<>]/.test(name)) e.fullName = t('leads.err.nameChars');
 
+    // Правка старого лида: номер, который уже сохранён (с сайта он мог прийти
+    // в другом виде), не перепроверяем — проверяем только изменённый.
+    const unchanged = (v: string, orig?: string | null) => !!editing && v.trim() === (orig || '').trim();
     if (!phone.trim()) e.phone = t('leads.err.phoneRequired');
-    else e.phone = validatePhoneValue(phone);
+    else if (!unchanged(phone, editing?.phone)) e.phone = validatePhoneValue(phone);
 
     // Галочка «тот же номер» — поле скрыто, в payload уходит копия phone.
     // Валидировать нечего: phone уже проверен выше.
     if (!sameWhatsapp) {
       if (!whatsappPhone.trim()) e.whatsappPhone = t('leads.err.whatsappRequired');
-      else e.whatsappPhone = validatePhoneValue(whatsappPhone);
+      else if (!unchanged(whatsappPhone, editing?.whatsappPhone)) e.whatsappPhone = validatePhoneValue(whatsappPhone);
     }
 
-    if (!birthday) e.birthday = t('leads.err.birthdayRequired');
-    else {
+    // У нового лида дата и страна обязательны. У старого, где их не было,
+    // — нет: иначе исправить опечатку в имени было бы невозможно.
+    if (!birthday) {
+      if (!editing || editing.birthday) e.birthday = t('leads.err.birthdayRequired');
+    } else {
       const age = ageFromBirthday(birthday);
       if (age === undefined) e.birthday = t('leads.err.birthdayInvalid');
       else if (age < MIN_AGE || age > MAX_AGE) e.birthday = t('leads.err.birthdayAge');
     }
 
-    if (!country) e.country = t('leads.err.countryRequired');
+    if (!country && (!editing || editing.country)) e.country = t('leads.err.countryRequired');
     if (comment.length > MAX_COMMENT) e.comment = t('leads.err.commentLong');
     else if (/[<>]/.test(comment)) e.comment = t('leads.err.commentChars');
 
@@ -193,7 +205,7 @@ export default function Leads() {
       if (!e[k]) delete e[k];
     });
     return e;
-  }, [fullName, phone, sameWhatsapp, whatsappPhone, birthday, country, comment, t]);
+  }, [fullName, phone, sameWhatsapp, whatsappPhone, birthday, country, comment, editing, t]);
 
   const invalid = (f: keyof FormErrors) => (touched[f] ? errors[f] : undefined);
   const hasErrors = Object.keys(errors).length > 0;
@@ -234,12 +246,29 @@ export default function Leads() {
 
   const openForm = () => {
     resetForm();
+    setEditing(null);
+    setFormOpen(true);
+  };
+
+  /** Изменить лид: то же окно, поля заполнены текущими данными. */
+  const openEdit = (a: Application) => {
+    resetForm();
+    setEditing(a);
+    setFullName(a.fullName || '');
+    setPhone(a.phone || '');
+    const wa = a.whatsappPhone || '';
+    setSameWhatsapp(!wa || wa === a.phone);
+    setWhatsappPhone(wa && wa !== a.phone ? wa : '');
+    // Дата рождения хранится UTC-полуночью — календарный день берём срезом.
+    setBirthday(a.birthday ? String(a.birthday).slice(0, 10) : '');
+    setCountry((a.country as Country) || '');
+    setComment(a.comment || '');
     setFormOpen(true);
   };
 
   /** Esc, клик мимо, крестик и «Отмена» — все закрытия идут через это. */
   const requestCloseForm = async () => {
-    if (createMut.isPending) return;
+    if (createMut.isPending || updateMut.isPending) return;
     if (formDirty) {
       const ok = await confirm({
         title: t('leads.form.closeConfirm.title'),
@@ -251,6 +280,48 @@ export default function Leads() {
     }
     resetForm();
     setFormOpen(false);
+  };
+
+  const updateMut = useInvalidatingMutation<Application, { id: string; patch: Partial<Application> }>({
+    mutationFn: ({ id, patch }) => updateApplication(id, patch),
+    invalidate: [keys.applications.all],
+    onSuccess: () => {
+      resetForm();
+      setEditing(null);
+      setFormOpen(false);
+      toast(t('leads.toast.updated'), 'success');
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      setServerError(Array.isArray(msg) ? msg.join(', ') : msg?.toString() || err?.userMessage || t('toast.error'));
+    },
+  });
+
+  // Удаление — сразу убираем строку (оптимистично), ошибка — вернётся.
+  const deleteMut = useOptimisticMutation<unknown, string, Application[]>({
+    mutationFn: deleteApplication,
+    queryKey: () => leadsKeyRef.current,
+    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    onSuccess: () => toast(t('leads.toast.deleted'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
+    invalidateAlso: [keys.applications.all],
+  });
+  const restoreMut = useOptimisticMutation<unknown, string, Application[]>({
+    mutationFn: restoreApplication,
+    queryKey: () => leadsKeyRef.current,
+    applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    onSuccess: () => toast(t('leads.toast.restored'), 'success'),
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
+    invalidateAlso: [keys.applications.all],
+  });
+  const onDelete = async (a: Application) => {
+    const ok = await confirm({
+      title: t('leads.delete.title'),
+      message: t('leads.delete.message').replace('{name}', a.fullName),
+      confirmText: t('common.delete'),
+      danger: true,
+    });
+    if (ok) deleteMut.mutate(a.id);
   };
 
   const createMut = useInvalidatingMutation<Application, CreateStaffApplicationInput>({
@@ -283,13 +354,29 @@ export default function Leads() {
     });
     if (hasErrors) return;
     setServerError(null);
-    createMut.mutate({
+    const payload = {
       fullName: fullName.trim(),
       phone: phone.trim(),
       whatsappPhone: (sameWhatsapp ? phone : whatsappPhone).trim() || undefined,
       birthday: birthday || undefined,
       country: (country || undefined) as Country | undefined,
       comment: comment.trim() || undefined,
+    };
+    if (editing) {
+      // Правка: пустые поля — очистить (иначе удалить дату или комментарий было бы нельзя).
+      updateMut.mutate({
+        id: editing.id,
+        patch: {
+          ...payload,
+          birthday: birthday || '',
+          comment: comment.trim(),
+          country: (country || null) as Country | null,
+        } as Partial<Application>,
+      });
+      return;
+    }
+    createMut.mutate({
+      ...payload,
       // `source` не шлём: в ApplicationSource нет значения «введено
       // сотрудником», выдумывать новое — destructive-изменение схемы.
       // Бэкенд подставит OTHER (STAFF_DEFAULT_SOURCE).
@@ -335,7 +422,12 @@ export default function Leads() {
     country: enumParam(COUNTRIES),
     // Потолок — как у бэкенда (200 символов, иначе 400).
     search: stringParam('', 200),
+    // «Удалённые» — корзина лидов.
+    view: enumParam(['deleted'] as const),
   });
+  const trash = periodValues.view === 'deleted';
+  // В корзине — только «Восстановить»: без галочек и назначения менеджера.
+  const bulkOn = canAssign && !trash;
   const { from, to, manager } = periodValues;
   // `country` в этом компоненте уже занято полем формы нового лида,
   // поэтому фильтр списка зовём filterCountry.
@@ -347,6 +439,7 @@ export default function Leads() {
 
   const leadFilters = {
     ...LEAD_FILTERS,
+    deleted: trash || undefined,
     from: from || undefined,
     to: to || undefined,
     manager: manager || undefined,
@@ -356,6 +449,8 @@ export default function Leads() {
   /** Список сужен чем-то, кроме самой очереди «Новые лиды». */
   const narrowed = !!(from || to || manager || filterCountry || urlSearch);
   const leadsKey = keys.applications.list(leadFilters);
+  // Мутации удаления объявлены выше списка — ключ передаём через ref.
+  leadsKeyRef.current = leadsKey;
   const leadsQuery = useQuery({
     queryKey: leadsKey,
     queryFn: () => listApplications(leadFilters),
@@ -699,14 +794,14 @@ export default function Leads() {
               className="dialog-card lead-modal-card"
               role="dialog"
               aria-modal="true"
-              aria-label={t('leads.form.title')}
+              aria-label={editing ? t('leads.form.editTitle') : t('leads.form.title')}
               initial={{ opacity: 0, scale: 0.96, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 16 }}
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="lead-modal-head">
-                <h2 className="card-title" style={{ margin: 0 }}>{t('leads.form.title')}</h2>
+                <h2 className="card-title" style={{ margin: 0 }}>{editing ? t('leads.form.editTitle') : t('leads.form.title')}</h2>
                 <button
                   type="button"
                   className="lead-modal-close"
@@ -852,8 +947,8 @@ export default function Leads() {
               >
                 {t('common.cancel')}
               </button>
-              <button type="submit" className="btn btn-primary" data-testid="lead-modal-save" disabled={createMut.isPending}>
-                {createMut.isPending ? t('common.saving') : t('leads.form.submit')}
+              <button type="submit" className="btn btn-primary" data-testid="lead-modal-save" disabled={createMut.isPending || updateMut.isPending}>
+                {createMut.isPending || updateMut.isPending ? t('common.saving') : editing ? t('common.save') : t('leads.form.submit')}
               </button>
             </div>
           </form>
@@ -879,6 +974,16 @@ export default function Leads() {
         </div>
         <div className="card-body">
           <div className="filters">
+            <CrmSelect
+              className="crm-select"
+              value={trash ? 'deleted' : ''}
+              onChange={(e) => setPeriod('view', (e.target.value || '') as 'deleted' | '')}
+              title={t('leads.view.deleted')}
+              data-testid="leads-filter-view"
+            >
+              <option value="">{t('leads.view.active')}</option>
+              <option value="deleted">{t('leads.view.deleted')}</option>
+            </CrmSelect>
             <CrmSelect
               className="crm-select"
               value={manager}
@@ -985,7 +1090,7 @@ export default function Leads() {
                 <div className="empty-icon"><Icon name={narrowed ? 'search_off' : 'inbox'} size={48} /></div>
                 {/* «Новых лидов нет» под поиском врало бы: лиды есть, не
                     нашлись именно эти. */}
-                <span data-testid="leads-empty">{narrowed ? t('common.empty') : t('leads.list.empty')}</span>
+                <span data-testid="leads-empty">{trash ? t('leads.trash.empty') : narrowed ? t('common.empty') : t('leads.list.empty')}</span>
               </motion.div>
             ) : (
               <motion.div
@@ -1004,7 +1109,7 @@ export default function Leads() {
                     список на свою высоту прямо под курсором: человек отметил
                     строку, а под мышью уже соседняя. Пустой слот заодно
                     подсказывает, что пачку вообще можно назначить разом. */}
-                {canAssign && (
+                {bulkOn && (
                   // Слот держит место в потоке, панель внутри него на узких
                   // экранах становится fixed (см. index.css): sticky там не
                   // работает — у .main/.app-layout/body стоит overflow-x:hidden.
@@ -1068,7 +1173,7 @@ export default function Leads() {
 
                 {/* На телефоне таблица превращается в карточки и <thead> скрыт —
                     галочке «вся страница» нужно своё место. */}
-                {canAssign && (
+                {bulkOn && (
                   <label className="crm-checkbox-label leads-select-page-mobile">
                     <SelectAllCheckbox
                       checked={pageAllSelected}
@@ -1090,7 +1195,7 @@ export default function Leads() {
                         col="fullName"
                         wrapClassName="lead-name-cell"
                         before={
-                          canAssign && (
+                          bulkOn && (
                             <SelectAllCheckbox
                               checked={pageAllSelected}
                               indeterminate={pageSomeSelected}
@@ -1104,6 +1209,7 @@ export default function Leads() {
                       <SortTh sort={sort} col="country" />
                       <SortTh sort={sort} col="manager" />
                       <SortTh sort={sort} col="createdAt" />
+                      <th aria-label={t('common.actions')} />
                     </tr>
                   </thead>
                   <tbody>
@@ -1115,7 +1221,7 @@ export default function Leads() {
                             место вместо ФИО. */}
                         <td>
                           <div className="lead-name-cell">
-                            {canAssign && (
+                            {bulkOn && (
                               <input
                                 type="checkbox"
                                 className="crm-checkbox"
@@ -1143,7 +1249,7 @@ export default function Leads() {
                           )}
                         </td>
                         <td>
-                          {canAssign ? (
+                          {bulkOn ? (
                             <CrmSelect
                               className="crm-select"
                               style={{ minWidth: 170 }}
@@ -1182,6 +1288,41 @@ export default function Leads() {
                           )}
                         </td>
                         <td>{tjFormatDate(a.createdAt)}</td>
+                        <td className="lead-actions" data-label={t('common.actions')}>
+                          {trash ? (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-secondary"
+                              data-testid="lead-restore"
+                              onClick={() => restoreMut.mutate(a.id)}
+                            >
+                              <Icon name="restore_from_trash" size={16} /> {t('leads.restore')}
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                data-testid="lead-edit"
+                                title={t('common.edit')}
+                                aria-label={`${t('common.edit')}: ${a.fullName}`}
+                                onClick={() => openEdit(a)}
+                              >
+                                <Icon name="edit" size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                className="icon-btn danger"
+                                data-testid="lead-delete"
+                                title={t('common.delete')}
+                                aria-label={`${t('common.delete')}: ${a.fullName}`}
+                                onClick={() => onDelete(a)}
+                              >
+                                <Icon name="delete" size={16} />
+                              </button>
+                            </>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

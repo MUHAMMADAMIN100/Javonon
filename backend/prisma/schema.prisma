@@ -439,6 +439,10 @@ model Application {
   birthday              DateTime?
   comment               String?
   source                ApplicationSource @default(LANDING_FORM)
+  // Корзина: удалённый лид скрыт из всех списков и счётчиков, но остаётся в
+  // базе и возвращается кнопкой «Восстановить». NULL — не удалён.
+  deletedAt   DateTime?
+  deletedById String?
   status                ApplicationStatus @default(NEW)
   // За заявкой числится долг («ждёт оплаты») — источник правды для
   // раздела «Задолженность студентов» (GET /finance/pending-payments,

@@ -1,3 +1,4 @@
+import { useChatUnreadSync, useChatUnreadTotal } from '../lib/chatUnread';
 import { useFileToken } from '../lib/fileUrl';
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
@@ -72,6 +73,9 @@ export default function Layout() {
   const me = useAuth((s) => s.user);
   // Свежий файловый токен → страница перерисовывается, ссылки на файлы не устаревают.
   useFileToken();
+  // Счётчики непрочитанных в чате — на любой странице, не только в чате.
+  useChatUnreadSync();
+  const chatUnread = useChatUnreadTotal();
   const route = TITLE_ROUTES.find((r) => loc.pathname.startsWith(r.path));
   const meta = route
     ? { eyebrow: `${t(route.eyebrowKey)} · ${route.num}`, title: t(route.titleKey) }
@@ -165,6 +169,10 @@ export default function Layout() {
             aria-label={t('sidebar.menu')}
           >
             <Icon name={mobileNavOpen ? 'close' : 'menu'} size={24} />
+            {/* На телефоне полосы иконок нет — непрочитанные видны на кнопке меню. */}
+            {chatUnread > 0 && !mobileNavOpen && (
+              <span className="rail-badge burger-badge" data-testid="burger-badge">{chatUnread > 99 ? '99+' : chatUnread}</span>
+            )}
           </button>
           <AnimatePresence mode="wait">
             <motion.div

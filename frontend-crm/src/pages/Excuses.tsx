@@ -21,7 +21,7 @@ import { localized, useT } from '../lib/i18n';
 // Файлы лежат на backend (Railway), а не на фронте (Vercel) — нужен
 // абсолютный URL. Audit fix #11: /uploads защищён JWT, токен подставляется
 // в query внутри absFileUrl().
-import { absFileUrl as absUrl } from '../lib/fileUrl';
+import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
 
 const STATUS_LABEL: Record<ExcuseStatus, string> = localized('excuses.status', {
   PENDING: 'Ожидает',
@@ -38,6 +38,7 @@ const STATUS_COLOR: Record<ExcuseStatus, string> = {
 export default function Excuses() {
   const me = useAuth((s) => s.user);
   const { t } = useT();
+  useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   if (!isFounder(me)) {
     return <div className="card" style={{ padding: 28 }}>{t('common.founderOnly')}</div>;
   }

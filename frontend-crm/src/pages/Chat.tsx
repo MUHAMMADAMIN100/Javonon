@@ -1,9 +1,11 @@
-import { fmtDateText, TJ_TZ } from '../lib/tjTime';
-import { absFileUrl } from '../lib/fileUrl';
-import { useEffect, useRef, useState } from 'react';
+import { fmtDateText, tjDateInput, TJ_TZ } from '../lib/tjTime';
+import { absFileUrl, useFileToken } from '../lib/fileUrl';
+import { setViewingChatRoom, useChatUnreadMap } from '../lib/chatUnread';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useUI } from '../ui/Dialogs';
 import {
   ChatRoom,
   ChatMessage,
@@ -17,7 +19,8 @@ import {
   deleteChatMessage,
   pinChatMessage,
   forwardChatMessage,
-  setTyping,
+  sendChatMessageLive,
+  sendTyping,
   markRoomRead,
 } from '../api/chat';
 import { listUsers } from '../api/users';
@@ -35,8 +38,16 @@ import { ROLE_LABEL, type Role } from '../api/types';
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: TJ_TZ });
 }
+/** Цвет аватара и имени автора — постоянный для человека (как в Telegram). */
+const AVATAR_COLORS = ['#e17076', '#7bc862', '#65aadd', '#a695e7', '#ee7aae', '#6ec9cb', '#faa774', '#1f6fd1'];
+function avatarColor(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+const FIVE_MIN = 5 * 60 * 1000;
 function fmtDate(iso: string) {
   return fmtDateText(iso, { day: '2-digit', month: 'short', timeZone: TJ_TZ });
 }
@@ -46,6 +57,10 @@ function initials(name: string) {
 
 export default function Chat() {
   const { t } = useT();
+  // Ссылки на картинки и файлы строятся с файловым токеном: перерисовываемся, когда он приходит.
+  useFileToken();
+  const unreadMap = useChatUnreadMap();
+  const { toast } = useUI();
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -116,6 +131,12 @@ export default function Chat() {
     if (cur !== activeId) {
       setSearchParams({ room: activeId }, { replace: true });
     }
+  }, [activeId]);
+
+  // Открытый чат не копит непрочитанные (см. lib/chatUnread).
+  useEffect(() => {
+    setViewingChatRoom(activeId);
+    return () => setViewingChatRoom(null);
   }, [activeId]);
 
   // Если URL изменился (открыли через notification) — переключаем room.
@@ -285,11 +306,11 @@ export default function Chat() {
     qc.setQueryData<ChatMessage[]>(targetKey, (cur) => {
       const list = cur ?? [];
       if (list.some((m) => m.id === data.message.id)) return list;
-      // Если это моё сообщение — заменяем tmp-копию по тексту/времени.
+      // Моё сообщение — заменяем черновик: по метке clientId, иначе по тексту.
       if (me?.id && data.message.authorId === me.id) {
-        const tmpIdx = list.findIndex(
-          (m) => m.id.startsWith('tmp-') && m.text === data.message.text,
-        );
+        const tmpIdx = data.clientId
+          ? list.findIndex((m) => m.id === data.clientId)
+          : list.findIndex((m) => m.id.startsWith('tmp-') && m.text === data.message.text);
         if (tmpIdx >= 0) {
           const next = list.slice();
           next[tmpIdx] = data.message;
@@ -306,34 +327,43 @@ export default function Chat() {
         : r,
       );
     });
-    // Unread — bump только если не моё сообщение и комната не активная.
-    if (data.message.authorId !== me?.id && data.roomId !== activeId) {
-      qc.setQueryData<Array<{ roomId: string; unread: number }>>(['chat', 'unread'], (cur) => {
-        if (!cur) return cur;
-        const exists = cur.find((u) => u.roomId === data.roomId);
-        if (exists) {
-          return cur.map((u) => u.roomId === data.roomId ? { ...u, unread: u.unread + 1 } : u);
-        }
-        return [...cur, { roomId: data.roomId, unread: 1 }];
-      });
-    }
+    // Непрочитанные считает lib/chatUnread (одно место на всё приложение).
+  });
+
+  // Новый чат (создал собеседник) — появляется в списке сразу.
+  useRealtimeEvent('chat:room', () => {
+    qc.invalidateQueries({ queryKey: roomsKey });
   });
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, activeId]);
 
   // SEND — оптимистично добавляем сообщение мгновенно с tempId.
   // На invalidate реальное сообщение из сервера приедет с настоящим id.
-  const sendMut = useInvalidatingMutation({
-    mutationFn: ({ roomId, text, files, replyToId }: {
-      roomId: string; text: string; files?: File[]; replyToId?: string;
-    }) => sendChatMessage(roomId, text, { files, replyToId }),
-    invalidate: [keys.chat.all],
-    onError: (_e: any) => {
-      qc.setQueryData<ChatMessage[]>(messagesKey, (cur) => (cur ?? []).filter((m) => !m.id.startsWith('tmp-')));
+  // Текст — через сокет (мгновенно у собеседника), файлы — обычной загрузкой.
+  // Ответ сервера сразу заменяет черновик: у автора галочка появляется без
+  // перечитывания чата.
+  const sendMut = useMutation({
+    mutationFn: ({ roomId, text, files, replyToId, clientId }: {
+      roomId: string; text: string; files?: File[]; replyToId?: string; clientId: string;
+    }) => (files && files.length
+      ? sendChatMessage(roomId, text, { files, replyToId, clientId })
+      : sendChatMessageLive(roomId, text, { replyToId, clientId })),
+    onSuccess: (msg, vars) => {
+      qc.setQueryData<ChatMessage[]>(keys.chat.room(vars.roomId), (cur) => {
+        const list = cur ?? [];
+        if (list.some((m) => m.id === msg.id)) return list.filter((m) => m.id !== vars.clientId);
+        return list.map((m) => (m.id === vars.clientId ? msg : m));
+      });
+    },
+    onError: (e: any, vars) => {
+      qc.setQueryData<ChatMessage[]>(keys.chat.room(vars.roomId), (cur) => (cur ?? []).filter((m) => m.id !== vars.clientId));
+      toast(e?.response?.data?.message || e?.userMessage || t('chat.sendError'), 'error');
+      // Текст не пропадает: возвращаем его в поле ввода.
+      setInput((cur) => cur || vars.text);
     },
   });
 
@@ -408,8 +438,9 @@ export default function Chat() {
       mimeType: f.type || 'application/octet-stream',
       size: f.size,
     }));
+    const clientId = tempId();
     const optimisticMsg: ChatMessage = {
-      id: tempId(),
+      id: clientId,
       roomId: activeId,
       authorId: me?.id || '',
       author: me ? { id: me.id, fullName: me.fullName, role: me.role } : undefined,
@@ -432,14 +463,14 @@ export default function Chat() {
     setPendingFiles([]);
     setReplyTo(null);
     // 2) actually send
-    sendMut.mutate({ roomId: activeId, text, files: filesCopy, replyToId: replyId });
+    sendMut.mutate({ roomId: activeId, text, files: filesCopy, replyToId: replyId, clientId });
     // 3) сразу шлём typing:false чтобы у собеседника убрался индикатор
     if (typingPingRef.current.idleTimer) {
       window.clearTimeout(typingPingRef.current.idleTimer);
       typingPingRef.current.idleTimer = null;
     }
     typingPingRef.current.lastPingAt = 0;
-    setTyping(activeId, false).catch(() => undefined);
+    sendTyping(activeId, false);
   };
 
   const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -496,7 +527,7 @@ export default function Chat() {
     const now = Date.now();
     if (text && now - typingPingRef.current.lastPingAt > 3000) {
       typingPingRef.current.lastPingAt = now;
-      setTyping(activeId, true).catch(() => undefined);
+      sendTyping(activeId, true);
     }
     if (typingPingRef.current.idleTimer) {
       window.clearTimeout(typingPingRef.current.idleTimer);
@@ -504,11 +535,11 @@ export default function Chat() {
     if (!text) {
       // input пустой — сразу шлём false
       typingPingRef.current.lastPingAt = 0;
-      setTyping(activeId, false).catch(() => undefined);
+      sendTyping(activeId, false);
       return;
     }
     typingPingRef.current.idleTimer = window.setTimeout(() => {
-      if (activeId) setTyping(activeId, false).catch(() => undefined);
+      if (activeId) sendTyping(activeId, false);
       typingPingRef.current.lastPingAt = 0;
     }, 3500);
   };
@@ -645,67 +676,74 @@ export default function Chat() {
                     : r.title || t('chat.team');
               };
 
+              const roomPreview = (r: typeof rooms[number]) => {
+                const typing = typingByRoom[r.id] && Object.values(typingByRoom[r.id]);
+                if (typing && typing.length) {
+                  return <span className="chat-room-typing">{t('chat.typingShort')}</span>;
+                }
+                const last = r.messages?.[0];
+                if (!last) return <span className="chat-room-empty">{t('chat.empty')}</span>;
+                const body = last.deletedAt
+                  ? t('chat.messageDeleted')
+                  : last.text || (last.attachments?.length ? `📎 ${t('chat.attachment')}` : '');
+                const who = last.authorId === me?.id
+                  ? t('chat.you')
+                  : r.type !== 'DIRECT'
+                    ? last.author?.fullName?.split(' ')[0]
+                    : '';
+                return (
+                  <>
+                    {who && <span className="chat-room-who">{who}: </span>}
+                    {body}
+                  </>
+                );
+              };
+              const roomTime = (iso?: string) => {
+                if (!iso) return '';
+                return tjDateInput(iso) === tjDateInput(new Date()) ? fmtTime(iso) : fmtDateText(iso, { day: '2-digit', month: '2-digit', timeZone: TJ_TZ });
+              };
+
               const renderRoom = (r: typeof rooms[number]) => {
                 const isActive = r.id === activeId;
                 const lastMsg = r.messages?.[0];
                 const title = roomTitle(r);
+                const unread = isActive ? 0 : unreadMap[r.id] || 0;
                 return (
                   <button
                     key={r.id}
+                    type="button"
+                    className={`chat-room-item${isActive ? ' active' : ''}${unread ? ' has-unread' : ''}`}
+                    data-testid="chat-room"
                     onClick={() => { setActiveId(r.id); setMobileShowList(false); }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 10,
-                      width: '100%',
-                      padding: '12px 18px',
-                      background: isActive ? 'var(--primary-soft)' : 'transparent',
-                      borderLeft: isActive ? '3px solid var(--primary)' : '3px solid transparent',
-                      border: 'none',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                    }}
                   >
-                    <div style={{
-                      width: 36, height: 36, borderRadius: '50%',
-                      background: r.type === 'GENERAL' ? 'var(--text)' : 'var(--primary)',
-                      // На обоих фонах текст белый — var(--text) и
-                      // var(--primary) оба тёмные.
-                      color: '#fff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: 'var(--font-display)',
-                      fontWeight: 600,
-                      fontSize: 13,
-                      flexShrink: 0,
-                    }}>
+                    <span
+                      className="chat-avatar chat-avatar-lg"
+                      style={{ background: r.type === 'GENERAL' ? 'var(--text)' : avatarColor(r.id) }}
+                    >
                       {r.type === 'GENERAL' ? '#' : initials(title)}
-                    </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{
-                        fontWeight: 500,
-                        fontSize: 14,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}>{title}</div>
-                      {lastMsg && (
-                        <div style={{
-                          fontSize: 12,
-                          color: 'var(--text-soft)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          marginTop: 2,
-                        }}>{lastMsg.author?.fullName?.split(' ')[0] || ''}: {lastMsg.text}</div>
-                      )}
-                    </div>
+                    </span>
+                    <span className="chat-room-main">
+                      <span className="chat-room-top">
+                        <span className="chat-room-title">{title}</span>
+                        <span className="chat-room-time">{roomTime(lastMsg?.createdAt)}</span>
+                      </span>
+                      <span className="chat-room-bottom">
+                        <span className="chat-room-preview">{roomPreview(r)}</span>
+                        {unread > 0 && (
+                          <span className="chat-unread-badge" data-testid="chat-room-unread">{unread > 99 ? '99+' : unread}</span>
+                        )}
+                      </span>
+                    </span>
                   </button>
                 );
               };
+              // Свежие переписки — сверху (время последнего сообщения).
+              const byLast = (a: typeof rooms[number], b: typeof rooms[number]) =>
+                new Date(b.messages?.[0]?.createdAt || b.updatedAt).getTime() - new Date(a.messages?.[0]?.createdAt || a.updatedAt).getTime();
 
               const general = rooms.filter((r) => r.type === 'GENERAL');
-              const teams = rooms.filter((r) => r.type === 'TEAM');
-              const directs = rooms.filter((r) => r.type === 'DIRECT');
+              const teams = rooms.filter((r) => r.type === 'TEAM').sort(byLast);
+              const directs = rooms.filter((r) => r.type === 'DIRECT').sort(byLast);
 
               const folders: Array<{ key: string; icon: string; label: string; list: typeof rooms }> = [
                 { key: 'GENERAL', icon: 'campaign', label: t('chat.tab.general'), list: general },
@@ -733,7 +771,12 @@ export default function Chat() {
                     >
                       <Icon name={f.icon} size={14} />
                       <span style={{ flex: 1 }}>{f.label}</span>
-                      <span style={{ fontWeight: 700 }}>{f.list.length}</span>
+                      {(() => {
+                        const n = f.list.reduce((sum, r) => sum + (r.id === activeId ? 0 : unreadMap[r.id] || 0), 0);
+                        return n > 0
+                          ? <span className="chat-unread-badge">{n > 99 ? '99+' : n}</span>
+                          : <span style={{ fontWeight: 700 }}>{f.list.length}</span>;
+                      })()}
                       <Icon name={collapsed ? 'expand_more' : 'expand_less'} size={16} />
                     </button>
                     {!collapsed && f.list.map(renderRoom)}
@@ -746,306 +789,218 @@ export default function Chat() {
 
         {/* Messages */}
         <div className="chat-thread-pane" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {activeRoom && (
-            <div className="chat-thread-header" style={{
-              padding: '20px 24px',
-              borderBottom: '1px solid var(--border-soft)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-            }}>
-              {/* Mobile: back-кнопка чтобы вернуться к списку чатов */}
-              <button
-                type="button"
-                className="chat-back-btn"
-                onClick={() => setMobileShowList(true)}
-                aria-label={t('chat.backToList')}
-              >
-                <Icon name="arrow_back" size={22} />
-              </button>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  letterSpacing: '0.12em',
-                  color: 'var(--text-soft)',
-                  textTransform: 'uppercase',
-                  marginBottom: 4,
-                }}>{activeRoom.type === 'GENERAL' ? 'GENERAL' : activeRoom.type === 'DIRECT' ? 'DIRECT' : 'TEAM'} · {activeRoom.members.length} members</div>
-                <div style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 22,
-                  fontWeight: 500,
-                  letterSpacing: '-0.01em',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}>
-                  {activeRoom.type === 'GENERAL' ? t('chat.general') :
-                    activeRoom.type === 'DIRECT'
-                      ? (() => {
-                          // Берём member'а который НЕ текущий пользователь.
-                          // Защита: если me?.id неизвестен — фильтруем по
-                          // fullName тоже, чтобы не показать собственное имя.
-                          const other = activeRoom.members.find((m) =>
-                            (me?.id ? m.userId !== me.id : true)
-                            && (me?.fullName ? m.user.fullName !== me.fullName : true),
-                          );
-                          return other?.user.fullName || activeRoom.title || t('chat.title');
-                        })()
-                      : activeRoom.title}
+          {activeRoom && (() => {
+            const other = activeRoom.type === 'DIRECT'
+              ? activeRoom.members.find((m) =>
+                  (me?.id ? m.userId !== me.id : true)
+                  && (me?.fullName ? m.user.fullName !== me.fullName : true),
+                )
+              : null;
+            const title = activeRoom.type === 'GENERAL'
+              ? t('chat.general')
+              : activeRoom.type === 'DIRECT'
+                ? other?.user.fullName || activeRoom.title || t('chat.title')
+                : activeRoom.title || t('chat.team');
+            const typers = Object.values(typingByRoom[activeRoom.id] || {}).map((u) => u.name);
+            const subtitle = typers.length
+              ? (typers.length === 1
+                  ? t('chat.typing.one').replace('{a}', activeRoom.type === 'DIRECT' ? '' : typers[0]).trim()
+                  : typers.length === 2
+                    ? t('chat.typing.two').replace('{a}', typers[0]).replace('{b}', typers[1])
+                    : t('chat.typing.many').replace('{n}', String(typers.length)))
+              : activeRoom.type === 'DIRECT'
+                ? t('chat.directChat')
+                : `${activeRoom.members.length} ${t('chat.membersCount')}`;
+            return (
+              <div className="chat-thread-header">
+                {/* Mobile: back-кнопка чтобы вернуться к списку чатов */}
+                <button
+                  type="button"
+                  className="chat-back-btn"
+                  onClick={() => setMobileShowList(true)}
+                  aria-label={t('chat.backToList')}
+                >
+                  <Icon name="arrow_back" size={22} />
+                </button>
+                <span
+                  className="chat-avatar chat-avatar-lg"
+                  style={{ background: activeRoom.type === 'GENERAL' ? 'var(--text)' : avatarColor(activeRoom.id) }}
+                >
+                  {activeRoom.type === 'GENERAL' ? '#' : initials(title)}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="chat-thread-title">{title}</div>
+                  <div className={`chat-thread-sub${typers.length ? ' typing' : ''}`} data-testid="chat-thread-sub">
+                    {typers.length > 0 && (
+                      <span className="typing-dots" aria-hidden="true"><span /><span /><span /></span>
+                    )}
+                    {subtitle}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+          <div ref={scrollRef} className="chat-thread-body" data-testid="chat-thread-body">
             {messages.length === 0 && (
               <div className="empty" style={{ marginTop: 80 }}>{t('chat.empty')}</div>
             )}
             {messages.map((m, i) => {
-              // QA-fix #6: надёжное определение isMine. Bot (__BOT__ mention)
-              // — всегда слева. Иначе сравниваем authorId с me.id.
+              // Bot (__BOT__) — всегда слева; иначе своё — по authorId.
               const isBot = m.mentionsIds?.includes('__BOT__');
               const isMine = !isBot && !!me?.id && m.authorId === me.id;
               const prev = messages[i - 1];
-              const showHeader = !prev || prev.authorId !== m.authorId ||
-                new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60 * 1000;
-              const isMentionedMe = me?.id && m.mentionsIds?.includes(me.id);
+              const next = messages[i + 1];
+              const day = tjDateInput(m.createdAt);
+              const newDay = !prev || tjDateInput(prev.createdAt) !== day;
+              // Подряд идущие сообщения одного автора (в пределах 5 минут и
+              // одного дня) — одной группой: имя сверху, аватар и «хвостик» снизу.
+              const sameAsPrev = !newDay && !!prev && prev.authorId === m.authorId
+                && !!prev.mentionsIds?.includes('__BOT__') === !!isBot
+                && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < FIVE_MIN;
+              const sameAsNext = !!next && tjDateInput(next.createdAt) === day && next.authorId === m.authorId
+                && !!next.mentionsIds?.includes('__BOT__') === !!isBot
+                && new Date(next.createdAt).getTime() - new Date(m.createdAt).getTime() < FIVE_MIN;
+              const isGroupChat = activeRoom?.type !== 'DIRECT';
+              const showName = !isMine && (isGroupChat || isBot) && !sameAsPrev;
+              const showAvatarSlot = !isMine && isGroupChat;
+              const isMentionedMe = !!me?.id && m.mentionsIds?.includes(me.id);
+              const color = isBot ? 'var(--primary)' : avatarColor(m.authorId);
+              const dayLabel = day === tjDateInput(new Date())
+                ? t('common.today')
+                : day === tjDateInput(new Date(Date.now() - 86_400_000))
+                  ? t('common.yesterday')
+                  : fmtDateText(m.createdAt, {
+                      day: 'numeric', month: 'long', timeZone: TJ_TZ,
+                      ...(day.slice(0, 4) !== tjDateInput(new Date()).slice(0, 4) ? { year: 'numeric' } : {}),
+                    });
+              // Галочки: часы — ещё не на сервере; ✓ — доставлено; ✓✓ — прочитал хоть кто-то.
+              const receipt = isMine && !isBot ? (() => {
+                if (m.id.startsWith('tmp-')) return <Icon name="schedule" size={13} />;
+                const created = new Date(m.createdAt).getTime();
+                const isRead = (activeRoom?.members || []).some((mm) =>
+                  mm.userId !== me?.id && mm.lastReadAt && new Date(mm.lastReadAt).getTime() >= created);
+                return (
+                  <span className={`chat-receipt${isRead ? ' read' : ''}`} title={isRead ? t('chat.read') : t('chat.delivered')} data-testid="chat-receipt" data-state={isRead ? 'read' : 'sent'}>
+                    <Icon name={isRead ? 'done_all' : 'done'} size={14} />
+                  </span>
+                );
+              })() : null;
               return (
-                <motion.div
-                  key={m.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  style={{
-                    display: 'flex',
-                    // Всегда row — alignment делаем через justify-content + max-width.
-                    // Так надёжнее чем row-reverse (rtl bugs c flex-end).
-                    justifyContent: isMine ? 'flex-end' : 'flex-start',
-                    gap: 10,
-                    marginBottom: showHeader ? 14 : 4,
-                    alignItems: 'flex-end',
-                  }}
-                >
-                  {/* Аватар СОБЕСЕДНИКА — слева. Свой не показываем чтобы был ровный край справа. */}
-                  {!isMine && (
-                    showHeader || isBot ? (
-                      <div style={{
-                        width: 32, height: 32, borderRadius: '50%',
-                        background: isBot ? 'linear-gradient(135deg, var(--primary), var(--text))' : 'var(--text)',
-                        color: 'white',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontFamily: 'var(--font-display)',
-                        fontWeight: 600, fontSize: 11,
-                        flexShrink: 0,
-                      }}>{isBot ? '🤖' : initials(m.author?.fullName || '?')}</div>
-                    ) : <div style={{ width: 32, flexShrink: 0 }} />
-                  )}
-                  <div style={{ maxWidth: '70%', display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', position: 'relative' }}>
-                    {(showHeader || isBot) && (
-                      <div style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 10,
-                        letterSpacing: '0.08em',
-                        color: 'var(--text-light)',
-                        marginBottom: 4,
-                        textTransform: 'uppercase',
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                      }}>
-                        <span>{isBot ? 'Javonon AI · BOT' : (isMine ? t('chat.you') : m.author?.fullName)} · {fmtTime(m.createdAt)}</span>
-                        {m.isPinned && <span title={t('chat.pinned')}>📌</span>}
-                        {/* Telegram-style read receipts: только для своих сообщений */}
-                        {isMine && !isBot && (() => {
-                          // tmp- = ещё не доставлено серверу → часы
-                          if (m.id.startsWith('tmp-')) {
-                            return <span title={t('chat.sending')}><Icon name="schedule" size={12} /></span>;
-                          }
-                          // Прочитано если хоть один другой участник
-                          // имеет lastReadAt >= createdAt сообщения
-                          const others = (activeRoom?.members || []).filter((mm) => mm.userId !== me?.id);
-                          const created = new Date(m.createdAt).getTime();
-                          const isRead = others.some((mm) => mm.lastReadAt && new Date(mm.lastReadAt).getTime() >= created);
-                          return (
-                            <span
-                              title={isRead ? t('chat.read') : t('chat.delivered')}
-                              style={{ color: isRead ? 'var(--primary, #01368B)' : 'var(--text-light)', display: 'inline-flex' }}
+                <Fragment key={m.id}>
+                  {newDay && <div className="chat-day-sep"><span>{dayLabel}</span></div>}
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`chat-row${isMine ? ' mine' : ''}${sameAsNext ? ' grouped' : ''}`}
+                    data-testid="chat-msg"
+                    data-mine={isMine ? '1' : '0'}
+                  >
+                    {showAvatarSlot && (
+                      sameAsNext
+                        ? <span className="chat-avatar-space" />
+                        : <span className="chat-avatar" style={{ background: isBot ? 'linear-gradient(135deg, var(--primary), var(--text))' : color }}>
+                            {isBot ? '🤖' : initials(m.author?.fullName || '?')}
+                          </span>
+                    )}
+                    <div className="chat-bubble-wrap">
+                      <div
+                        onContextMenu={(e) => onContextMenu(e, m)}
+                        className={`chat-bubble${isMine ? ' mine' : ''}${isBot ? ' bot' : ''}${m.deletedAt ? ' deleted' : ''}${isMentionedMe && !isMine ? ' mentioned' : ''}${sameAsNext ? '' : ' tail'}`}
+                      >
+                        {showName && (
+                          <div className="chat-bubble-author" style={{ color }}>
+                            {isBot ? 'Javonon AI' : m.author?.fullName}
+                          </div>
+                        )}
+                        {m.replyTo && !m.deletedAt && (
+                          <div className="chat-bubble-quote">
+                            <div className="chat-bubble-quote-name">{m.replyTo.author?.fullName || t('chat.message')}</div>
+                            <div className="chat-bubble-quote-text">
+                              {m.replyTo.deletedAt ? t('chat.deletedMessage') : (m.replyTo.text || (m.replyTo.attachments?.length ? `📎 ${t('chat.attachment')}` : ''))}
+                            </div>
+                          </div>
+                        )}
+                        {m.forwardedFrom && !m.deletedAt && (
+                          <div className="chat-bubble-forward">
+                            ↪ {t('chat.forwardedFrom')} {m.forwardedFrom.author?.fullName || t('chat.someoneGen')}
+                          </div>
+                        )}
+                        {!m.deletedAt && m.attachments && m.attachments.length > 0 && (
+                          <div className="chat-bubble-files">
+                            {m.attachments.map((a, ai) => {
+                              // mimeType иногда приходит как octet-stream — картинку узнаём и по расширению.
+                              const nameForExt = (a.originalName || a.filename || '').toLowerCase();
+                              const extIsImg = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(nameForExt);
+                              const isImg = a.mimeType?.startsWith('image/') || extIsImg;
+                              const isVid = a.mimeType?.startsWith('video/');
+                              const isAud = a.mimeType?.startsWith('audio/');
+                              const url = absFileUrl(a.url);
+                              if (isImg) {
+                                return (
+                                  <img
+                                    key={ai}
+                                    className="chat-msg-img"
+                                    src={url}
+                                    alt={a.originalName}
+                                    data-testid="chat-img"
+                                    onClick={() => setLightbox(url)}
+                                  />
+                                );
+                              }
+                              if (isVid) return <video key={ai} src={url} controls className="chat-msg-video" />;
+                              if (isAud) return <audio key={ai} src={url} controls style={{ width: '100%', maxWidth: 280 }} />;
+                              return (
+                                <a key={ai} href={url} target="_blank" rel="noreferrer" className="chat-file-card">
+                                  <Icon name="description" size={20} />
+                                  <span className="chat-file-card-main">
+                                    <span className="chat-file-card-name">{a.originalName}</span>
+                                    <span className="chat-file-card-size">{(a.size / 1024).toFixed(1)} {t('finance.kb')}</span>
+                                  </span>
+                                  <Icon name="download" size={18} style={{ flexShrink: 0 }} />
+                                </a>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {m.deletedAt
+                          ? <span>{t('chat.messageDeleted')}</span>
+                          : m.text ? <span className="chat-bubble-text">{renderMessageWithMentions(m.text)}</span> : null}
+                        <span className="chat-bubble-meta">
+                          {m.isPinned && <span title={t('chat.pinned')}>📌</span>}
+                          <span>{fmtTime(m.createdAt)}</span>
+                          {receipt}
+                        </span>
+                      </div>
+                      {!m.deletedAt && m.reactions && m.reactions.length > 0 && (
+                        <div className="chat-reactions">
+                          {Object.entries(
+                            m.reactions.reduce((acc: Record<string, { count: number; mine: boolean }>, r) => {
+                              if (!acc[r.emoji]) acc[r.emoji] = { count: 0, mine: false };
+                              acc[r.emoji].count++;
+                              if (r.userId === me?.id) acc[r.emoji].mine = true;
+                              return acc;
+                            }, {}),
+                          ).map(([emoji, { count, mine }]) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              className={`chat-reaction${mine ? ' mine' : ''}`}
+                              onClick={() => reactMut.mutate({ messageId: m.id, emoji })}
                             >
-                              <Icon name={isRead ? 'done_all' : 'done'} size={14} />
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    )}
-                    <div
-                      onContextMenu={(e) => onContextMenu(e, m)}
-                      style={{
-                        background: m.deletedAt
-                          ? 'transparent'
-                          : isBot
-                            ? 'linear-gradient(135deg, rgba(1, 54, 139,0.10), rgba(0,0,0,0.04))'
-                            : isMentionedMe && !isMine
-                              ? 'var(--primary-soft)'
-                              : isMine
-                                ? 'var(--primary, #01368B)'
-                                : 'var(--bg-soft, #f1f5f9)',
-                        color: m.deletedAt ? 'var(--text-light)' : isBot ? 'var(--text)' : (isMine ? 'white' : 'var(--text)'),
-                        padding: m.deletedAt ? '6px 12px' : '10px 14px',
-                        borderRadius: isMine ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
-                        fontSize: 14,
-                        lineHeight: 1.5,
-                        wordWrap: 'break-word',
-                        fontStyle: m.deletedAt ? 'italic' : 'normal',
-                        border: m.deletedAt ? '1px dashed var(--border)' : (isMentionedMe && !isMine ? '1px solid var(--primary)' : undefined),
-                        position: 'relative',
-                      }}>
-                      {/* Reply quote inside bubble */}
-                      {m.replyTo && !m.deletedAt && (
-                        <div style={{
-                          fontSize: 12,
-                          padding: '6px 10px',
-                          marginBottom: 8,
-                          borderLeft: `3px solid ${isMine ? 'rgba(255,255,255,0.6)' : 'var(--primary, #01368B)'}`,
-                          background: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(1, 54, 139, 0.08)',
-                          borderRadius: 4,
-                          opacity: 0.85,
-                        }}>
-                          <div style={{ fontWeight: 600, fontSize: 11, marginBottom: 2 }}>
-                            {m.replyTo.author?.fullName || t('chat.message')}
-                          </div>
-                          <div style={{
-                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
-                          }}>
-                            {m.replyTo.deletedAt ? t('chat.deletedMessage') : (m.replyTo.text || (m.replyTo.attachments?.length ? `📎 ${t('chat.attachment')}` : ''))}
-                          </div>
+                              <span>{emoji}</span>
+                              <span className="chat-reaction-count">{count}</span>
+                            </button>
+                          ))}
                         </div>
                       )}
-                      {/* Forwarded badge */}
-                      {m.forwardedFrom && !m.deletedAt && (
-                        <div style={{
-                          fontSize: 11, marginBottom: 6, opacity: 0.75,
-                          fontStyle: 'italic',
-                        }}>
-                          ↪ {t('chat.forwardedFrom')} {m.forwardedFrom.author?.fullName || t('chat.someoneGen')}
-                        </div>
-                      )}
-                      {/* Attachments */}
-                      {!m.deletedAt && m.attachments && m.attachments.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: m.text ? 8 : 0 }}>
-                          {m.attachments.map((a, ai) => {
-                            // QA-fix: некоторые загрузчики/прокси сбрасывают mimeType
-                            // в application/octet-stream — fallback по расширению,
-                            // чтобы картинка не упала в file-card.
-                            const nameForExt = (a.originalName || a.filename || '').toLowerCase();
-                            const extIsImg = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(nameForExt);
-                            const isImg = a.mimeType?.startsWith('image/') || extIsImg;
-                            const isVid = a.mimeType?.startsWith('video/');
-                            const isAud = a.mimeType?.startsWith('audio/');
-                            const url = absFileUrl(a.url);
-                            if (isImg) {
-                              return (
-                                <img
-                                  key={ai}
-                                  className="chat-msg-img"
-                                  src={url}
-                                  alt={a.originalName}
-                                  onClick={() => { try { window.open(url, '_blank'); } catch { setLightbox(url); } }}
-                                  style={{
-                                    width: '100%',
-                                    maxWidth: 280,
-                                    maxHeight: 280,
-                                    borderRadius: 12,
-                                    cursor: 'pointer',
-                                    objectFit: 'cover',
-                                    display: 'block',
-                                  }}
-                                />
-                              );
-                            }
-                            if (isVid) {
-                              return (
-                                <video
-                                  key={ai}
-                                  src={url}
-                                  controls
-                                  style={{ width: '100%', maxWidth: 320, maxHeight: 320, borderRadius: 10 }}
-                                />
-                              );
-                            }
-                            if (isAud) {
-                              return <audio key={ai} src={url} controls style={{ width: '100%', maxWidth: 280 }} />;
-                            }
-                            // file card
-                            return (
-                              <a
-                                key={ai}
-                                href={url}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: 10,
-                                  padding: '10px 12px',
-                                  background: isMine ? 'rgba(255,255,255,0.18)' : 'white',
-                                  color: 'inherit',
-                                  border: '1px solid rgba(0,0,0,0.06)',
-                                  borderRadius: 10,
-                                  textDecoration: 'none',
-                                  minWidth: 0,
-                                  maxWidth: '100%',
-                                  width: '100%',
-                                  boxSizing: 'border-box',
-                                }}
-                              >
-                                <Icon name="description" size={20} />
-                                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                                  <div style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {a.originalName}
-                                  </div>
-                                  <div style={{ fontSize: 11, opacity: 0.7 }}>
-                                    {(a.size / 1024).toFixed(1)} KB
-                                  </div>
-                                </span>
-                                <Icon name="download" size={18} style={{ flexShrink: 0 }} />
-                              </a>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {m.deletedAt ? <span>{t('chat.messageDeleted')}</span> : renderMessageWithMentions(m.text)}
                     </div>
-                    {/* Reactions chips */}
-                    {!m.deletedAt && m.reactions && m.reactions.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                        {Object.entries(
-                          m.reactions.reduce((acc: Record<string, { count: number; mine: boolean }>, r) => {
-                            if (!acc[r.emoji]) acc[r.emoji] = { count: 0, mine: false };
-                            acc[r.emoji].count++;
-                            if (r.userId === me?.id) acc[r.emoji].mine = true;
-                            return acc;
-                          }, {}),
-                        ).map(([emoji, { count, mine }]) => (
-                          <button
-                            key={emoji}
-                            onClick={() => reactMut.mutate({ messageId: m.id, emoji })}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 4,
-                              padding: '3px 8px', borderRadius: 100,
-                              background: mine ? 'rgba(1, 54, 139, 0.15)' : 'rgba(0,0,0,0.04)',
-                              border: mine ? '1px solid var(--primary, #01368B)' : '1px solid transparent',
-                              fontSize: 12, cursor: 'pointer',
-                            }}
-                          >
-                            <span>{emoji}</span>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{count}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
+                  </motion.div>
+                </Fragment>
               );
             })}
             {/* Typing indicator (Telegram-style) */}
-            {activeId && typingByRoom[activeId] && Object.keys(typingByRoom[activeId]).length > 0 && (
+            {activeId && activeRoom?.type !== 'DIRECT' && typingByRoom[activeId] && Object.keys(typingByRoom[activeId]).length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1227,8 +1182,14 @@ export default function Chat() {
               placeholder={t('chat.placeholder')}
               style={{ flex: 1, borderRadius: 100 }}
             />
-            <button type="submit" className="btn btn-primary" disabled={!input.trim() && pendingFiles.length === 0}>
-              <Icon name="send" size={16} />
+            <button
+              type="submit"
+              className="chat-send-btn"
+              data-testid="chat-send"
+              aria-label={t('common.send')}
+              disabled={!input.trim() && pendingFiles.length === 0}
+            >
+              <Icon name="send" size={18} />
             </button>
             </div>{/* end input row */}
           </form>

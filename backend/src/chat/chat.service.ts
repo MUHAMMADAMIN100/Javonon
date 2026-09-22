@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -7,8 +7,16 @@ import { FinanceService } from '../finance/finance.service';
 import { ChatRoomType } from '@prisma/client';
 
 @Injectable()
-export class ChatService {
+export class ChatService implements OnModuleInit {
   private readonly logger = new Logger(ChatService.name);
+  /** Участники комнат — для адресной рассылки событий (кеш на 30 с). */
+  private readonly membersCache = new Map<string, { ids: string[]; at: number }>();
+  /**
+   * Уже отправленные черновики: clientId → сообщение (2 мин). Если сокет
+   * принял сообщение, а подтверждение потерялось, клиент повторит отправку
+   * обычным запросом — второй копии не будет.
+   */
+  private readonly sentByClientId = new Map<string, { msg: any; at: number }>();
   constructor(
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
@@ -16,6 +24,45 @@ export class ChatService {
     private ai: AiService,
     private finance: FinanceService,
   ) {}
+
+  /**
+   * Сообщения и «печатает…» — через сокет, с подтверждением: клиент получает
+   * готовое сообщение в ответ и сразу заменяет им свой черновик. HTTP-вариант
+   * (POST rooms/:id/messages) остаётся для файлов и как запасной путь.
+   */
+  onModuleInit() {
+    this.realtime.onClientEvent('chat:send', async (userId, p: any) => {
+      if (!p || typeof p.roomId !== 'string') throw new BadRequestException('Не указан чат');
+      const message = await this.sendMessage(p.roomId, userId, String(p.text ?? ''), [], {
+        replyToId: typeof p.replyToId === 'string' ? p.replyToId : undefined,
+        clientId: typeof p.clientId === 'string' ? p.clientId.slice(0, 64) : undefined,
+      });
+      return { message };
+    });
+    this.realtime.onClientEvent('chat:typing', async (userId, p: any) => {
+      if (!p || typeof p.roomId !== 'string') return {};
+      await this.setTyping(p.roomId, userId, !!p.typing);
+      return {};
+    });
+  }
+
+  /** id участников комнаты (кеш 30 с — «печатает…» шлётся часто). */
+  private async memberIds(roomId: string): Promise<string[]> {
+    const hit = this.membersCache.get(roomId);
+    if (hit && Date.now() - hit.at < 30_000) return hit.ids;
+    const rows = await this.prisma.chatMember.findMany({ where: { roomId }, select: { userId: true } });
+    const ids = rows.map((r) => r.userId);
+    this.membersCache.set(roomId, { ids, at: Date.now() });
+    return ids;
+  }
+
+  /**
+   * Событие чата — только участникам комнаты. Раньше всё шло в общую
+   * комнату staff: личная переписка доходила до браузера каждого сотрудника.
+   */
+  private async emitRoom(roomId: string, event: string, payload: any) {
+    this.realtime.emitUsers(await this.memberIds(roomId), event, payload);
+  }
 
   /** Гарантирует, что общий чат компании существует, и возвращает его. */
   async ensureGeneralRoom() {
@@ -34,9 +81,11 @@ export class ChatService {
     const existingIds = new Set(existingMemberships.map((m) => m.userId));
     const toAdd = allUsers.filter((u) => !existingIds.has(u.id));
     if (toAdd.length) {
+      // Новому участнику старая переписка не «непрочитанная» — отсчёт с момента входа.
       await this.prisma.chatMember.createMany({
-        data: toAdd.map((u) => ({ roomId: room!.id, userId: u.id })),
+        data: toAdd.map((u) => ({ roomId: room!.id, userId: u.id, lastReadAt: new Date() })),
       });
+      this.membersCache.delete(room.id);
     }
     return room;
   }
@@ -90,7 +139,7 @@ export class ChatService {
       where: { roomId_userId: { roomId, userId } },
       data: { lastReadAt },
     });
-    this.realtime.emitStaff('chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
+    await this.emitRoom(roomId, 'chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
     return { messages };
   }
 
@@ -105,7 +154,7 @@ export class ChatService {
       where: { roomId_userId: { roomId, userId } },
       data: { lastReadAt },
     });
-    this.realtime.emitStaff('chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
+    await this.emitRoom(roomId, 'chat:read', { roomId, userId, lastReadAt: lastReadAt.toISOString() });
     return { ok: true, lastReadAt: lastReadAt.toISOString() };
   }
 
@@ -114,8 +163,13 @@ export class ChatService {
     authorId: string,
     text: string,
     mentionsIds: string[] = [],
-    options: { replyToId?: string; attachments?: any[] } = {},
+    options: { replyToId?: string; attachments?: any[]; clientId?: string } = {},
   ) {
+    if (options.clientId) {
+      const key = `${authorId}:${options.clientId}`;
+      const seen = this.sentByClientId.get(key);
+      if (seen && Date.now() - seen.at < 120_000) return seen.msg;
+    }
     const trimmed = (text || '').trim();
     const hasAttachments = Array.isArray(options.attachments) && options.attachments.length > 0;
     // Сообщение может быть только из вложений (без текста) или только текст.
@@ -183,7 +237,14 @@ export class ChatService {
 
     // КРИТИЧНО ДЛЯ СКОРОСТИ: сначала broadcast — собеседник видит сообщение
     // мгновенно. Потом параллельно: room.updatedAt + уведомления.
-    this.realtime.emitStaff('chat:message', { roomId, message: msg });
+    if (options.clientId) {
+      const now = Date.now();
+      for (const [k, v] of this.sentByClientId) if (now - v.at > 120_000) this.sentByClientId.delete(k);
+      this.sentByClientId.set(`${authorId}:${options.clientId}`, { msg, at: now });
+    }
+    // clientId — метка черновика у автора: по ней он заменяет свой черновик
+    // на это сообщение, даже если сокет-событие пришло раньше ответа.
+    await this.emitRoom(roomId, 'chat:message', { roomId, message: msg, clientId: options.clientId });
 
     // Всё остальное — fire-and-forget в фоне, без await чтобы не задерживать
     // ответ автору и не мешать broadcast'у.
@@ -350,7 +411,7 @@ export class ChatService {
       },
       include: { author: { select: { id: true, fullName: true, role: true } } },
     });
-    this.realtime.emitStaff('chat:message', { roomId, message: msg });
+    await this.emitRoom(roomId, 'chat:message', { roomId, message: msg });
   }
 
   async createTeamRoom(creatorId: string, title: string, memberIds: string[]) {
@@ -388,7 +449,8 @@ export class ChatService {
         members: { include: { user: { select: { id: true, fullName: true, role: true } } } },
       },
     });
-    this.realtime.emitStaff('chat:room', { room });
+    this.membersCache.delete(room.id);
+    this.realtime.emitUsers(ids, 'chat:room', { room });
     return room;
   }
 
@@ -421,7 +483,7 @@ export class ChatService {
         include: includeAll,
       });
       if (existing) return existing;
-      return tx.chatRoom.create({
+      const room = await tx.chatRoom.create({
         data: {
           type: 'DIRECT',
           title: otherUser.fullName || 'Прямой чат',
@@ -429,6 +491,9 @@ export class ChatService {
         },
         include: includeAll,
       });
+      // Собеседник видит новый чат в списке сразу, без перезагрузки.
+      this.realtime.emitUsers([creatorId, otherUserId], 'chat:room', { room });
+      return room;
     });
   }
 
@@ -456,27 +521,23 @@ export class ChatService {
     return { removed, kept: seen.size };
   }
 
+  /**
+   * Непрочитанные по каждой комнате — настоящее число сообщений после
+   * lastReadAt (не свои, не удалённые). Раньше отдавалось 0/1 по последнему
+   * сообщению, и счётчик «5 новых» показать было не из чего.
+   */
   async unreadCounts(userId: string) {
-    const memberships = await this.prisma.chatMember.findMany({
-      where: { userId },
-      include: {
-        room: {
-          include: {
-            messages: {
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-              select: { createdAt: true, authorId: true },
-            },
-          },
-        },
-      },
-    });
-    return memberships.map((m) => {
-      const last = m.room.messages[0];
-      const unread = last && last.authorId !== userId &&
-        (!m.lastReadAt || last.createdAt > m.lastReadAt) ? 1 : 0;
-      return { roomId: m.roomId, unread };
-    });
+    const rows = await this.prisma.$queryRaw<{ roomId: string; unread: bigint }[]>`
+      SELECT m."roomId", COUNT(msg.id) AS unread
+      FROM "ChatMember" m
+      LEFT JOIN "ChatMessage" msg
+        ON msg."roomId" = m."roomId"
+       AND msg."authorId" <> m."userId"
+       AND msg."deletedAt" IS NULL
+       AND (m."lastReadAt" IS NULL OR msg."createdAt" > m."lastReadAt")
+      WHERE m."userId" = ${userId}
+      GROUP BY m."roomId"`;
+    return rows.map((r) => ({ roomId: r.roomId, unread: Number(r.unread) }));
   }
 
   // ============ TELEGRAM-STYLE ACTIONS ============
@@ -506,7 +567,7 @@ export class ChatService {
       await this.prisma.chatReaction.create({ data: { messageId, userId, emoji } });
       action = 'added';
     }
-    this.realtime.emitStaff('chat:reaction', { roomId: msg.roomId, messageId, userId, emoji, action });
+    await this.emitRoom(msg.roomId, 'chat:reaction', { roomId: msg.roomId, messageId, userId, emoji, action });
     return { ok: true, action };
   }
 
@@ -536,7 +597,7 @@ export class ChatService {
       where: { id: messageId },
       data: { text: '', attachments: undefined, deletedAt: new Date() },
     });
-    this.realtime.emitStaff('chat:message:deleted', { roomId: msg.roomId, messageId });
+    await this.emitRoom(msg.roomId, 'chat:message:deleted', { roomId: msg.roomId, messageId });
     return { ok: true };
   }
 
@@ -563,7 +624,7 @@ export class ChatService {
       data: { isPinned: !msg.isPinned },
       select: { isPinned: true },
     });
-    this.realtime.emitStaff('chat:message:pin', { roomId: msg.roomId, messageId, isPinned: updated.isPinned });
+    await this.emitRoom(msg.roomId, 'chat:message:pin', { roomId: msg.roomId, messageId, isPinned: updated.isPinned });
     return { ok: true, isPinned: updated.isPinned };
   }
 
@@ -614,7 +675,7 @@ export class ChatService {
       where: { id: targetRoomId },
       data: { updatedAt: new Date() },
     });
-    this.realtime.emitStaff('chat:message', { roomId: targetRoomId, message: fwd });
+    await this.emitRoom(targetRoomId, 'chat:message', { roomId: targetRoomId, message: fwd });
     return fwd;
   }
 
@@ -626,7 +687,7 @@ export class ChatService {
       select: { user: { select: { fullName: true } } },
     });
     if (!member) throw new NotFoundException('Чат не найден');
-    this.realtime.emitStaff('chat:typing', {
+    await this.emitRoom(roomId, 'chat:typing', {
       roomId,
       userId,
       userName: member.user?.fullName || '',

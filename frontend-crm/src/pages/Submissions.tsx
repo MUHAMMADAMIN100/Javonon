@@ -24,7 +24,7 @@ import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import SearchField, { useUrlSearch } from '../components/SearchField';
 import ListTotal, { type ListNoun } from '../components/ListTotal';
 import { dateParam, enumParam, ignoredParam, stringParam, useUrlListState } from '../lib/useUrlListState';
-import { absFileUrl as absUrl } from '../lib/fileUrl';
+import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
 
 const STATUS_COLOR: Record<SubmissionStatus, string> = {
   ACTIVE: '#0ea5e9',
@@ -46,6 +46,7 @@ type DealFilters = { partner: string; from: string; to: string; search: string }
 export default function Submissions() {
   const me = useAuth((s) => s.user);
   const { t } = useT();
+  useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   const navigate = useNavigate();
   const qc = useQueryClient();
   const founder = isFounder(me);

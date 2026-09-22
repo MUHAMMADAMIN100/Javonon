@@ -896,7 +896,8 @@ export class UsersService {
    */
   async listSalarySettings() {
     const users = await this.prisma.user.findMany({
-      where: { role: { not: 'FOUNDER' as any } },
+      // Уволенным оклад не настраивают — их в списке нет.
+      where: { role: { not: 'FOUNDER' as any }, isActive: true },
       orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
       select: {
         id: true, fullName: true, email: true, role: true,
@@ -907,10 +908,13 @@ export class UsersService {
     // По ТЗ: «почасовая» считается автоматически = oklad / monthHours.
     // monthHours = сумма (end-start-lunch) по всем рабочим дням ТЕКУЩЕГО
     // месяца из effective schedule сотрудника. Обед НЕ считается.
+    // График сейчас один на компанию (личных нет — см. getEffectiveScheduleForUser),
+    // поэтому часы месяца считаем ОДИН раз, а не по сотруднику: раньше на
+    // 40 сотрудников это было 40 одинаковых расчётов и ~6 с ожидания.
     const now = new Date();
+    const { monthHours, workdays } = await this.settings.computeMonthlyWorkHoursForUser(users[0]?.id ?? '', now);
     return Promise.all(
       users.map(async (u) => {
-        const { monthHours, workdays } = await this.settings.computeMonthlyWorkHoursForUser(u.id, now);
         const computedHourly = u.baseSalary && monthHours > 0
           ? Math.round((u.baseSalary / monthHours) * 100) / 100
           : 0;

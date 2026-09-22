@@ -73,6 +73,17 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   @WebSocketServer()
   server: Server;
 
+  /**
+   * Обработчики событий от сотрудника (например, чат: отправка сообщения,
+   * «печатает…»). Модули регистрируют их при старте — так шлюз не зависит от
+   * них напрямую. Ответ обработчика уходит клиенту как подтверждение (ack).
+   */
+  private readonly clientHandlers = new Map<string, (userId: string, payload: any) => Promise<any>>();
+
+  onClientEvent(event: string, handler: (userId: string, payload: any) => Promise<any>) {
+    this.clientHandlers.set(event, handler);
+  }
+
   constructor(
     private jwt: JwtService,
     private config: ConfigService,
@@ -204,6 +215,17 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         const who = toUserWithRoles(u as any);
         client.join('staff');
         client.join(`user:${id}`);
+        for (const [event, handler] of this.clientHandlers) {
+          client.on(event, async (payload: any, ack?: (res: any) => void) => {
+            try {
+              const res = await handler(id, payload);
+              if (typeof ack === 'function') ack({ ok: true, ...(res ?? {}) });
+            } catch (err: any) {
+              const message = err?.response?.message || err?.message || 'error';
+              if (typeof ack === 'function') ack({ ok: false, error: Array.isArray(message) ? message.join(', ') : String(message) });
+            }
+          });
+        }
         if (canSeeFinance(who)) client.join('finance-staff');
         // Все заявки/студенты — только тем, кто видит их все (как список).
         if (canSeeAllApplications(who)) client.join('apps-all');
@@ -285,6 +307,12 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
    */
   emitFinanceStaff(event: string, payload: any) {
     this.server?.to('finance-staff').emit(event, payload);
+  }
+
+  /** Нескольким сотрудникам сразу (участникам чата и т.п.). */
+  emitUsers(userIds: string[], event: string, payload: any) {
+    const rooms = [...new Set(userIds)].map((id) => `user:${id}`);
+    if (rooms.length) this.server?.to(rooms).emit(event, payload);
   }
 
   /** Конкретному пользователю-сотруднику */

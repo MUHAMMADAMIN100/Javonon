@@ -1,4 +1,4 @@
-import { absFileUrl } from '../lib/fileUrl';
+import { absFileUrl, useFileToken } from '../lib/fileUrl';
 import { useEffect, useRef, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -65,6 +65,7 @@ export default function StudentDetail() {
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
   const { t } = useT();
+  useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   const directionLabel = useDirectionLabel();
   const statusLabel = useStudentStatusLabel();
   // Метка «успешного» исхода заявки. Раньше сюда передавали 'ENROLLED' в
