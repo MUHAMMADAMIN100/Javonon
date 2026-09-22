@@ -88,7 +88,8 @@ export const createTeamRoom = (title: string, memberIds: string[]) =>
   api.post<ChatRoom>('/chat/rooms/team', { title, memberIds }).then((r) => r.data);
 export const createDirectRoom = (userId: string) =>
   api.post<ChatRoom>('/chat/rooms/direct', { userId }).then((r) => r.data);
-export const chatUnread = () => api.get<Array<{ roomId: string; unread: number }>>('/chat/unread').then((r) => r.data);
+/** unread — непрочитанных сообщений, mentions — из них с упоминанием меня (значок «@»). */
+export const chatUnread = () => api.get<Array<{ roomId: string; unread: number; mentions?: number }>>('/chat/unread').then((r) => r.data);
 
 // Telegram-style actions
 export const reactToMessage = (messageId: string, emoji: string) =>

@@ -12,8 +12,12 @@ import { useAuth } from '../store/auth';
  * растёт на любой странице, а не только когда открыт чат. Страница чата
  * сообщает, какую комнату человек сейчас смотрит: её сообщения не считаются
  * непрочитанными (страница сама отметит их прочитанными).
+ *
+ * mentions — сколько из непрочитанных упоминают этого человека: по ним
+ * рисуется значок «@» (в списке чатов и в меню).
  */
-type Unread = Array<{ roomId: string; unread: number }>;
+type Unread = Array<{ roomId: string; unread: number; mentions?: number }>;
+export type RoomUnread = { unread: number; mentions: number };
 
 let viewingRoomId: string | null = null;
 
@@ -42,12 +46,13 @@ export function useChatUnreadSync() {
   const conn = useRealtimeConnState();
   useUnreadQuery();
 
-  const setRoom = (roomId: string, fn: (n: number) => number) => {
+  const setRoom = (roomId: string, fn: (r: RoomUnread) => RoomUnread) => {
     qc.setQueryData<Unread>(keys.chat.unread(), (cur) => {
       const list = cur ?? [];
       const found = list.find((u) => u.roomId === roomId);
-      if (found) return list.map((u) => (u.roomId === roomId ? { ...u, unread: Math.max(0, fn(u.unread)) } : u));
-      return [...list, { roomId, unread: Math.max(0, fn(0)) }];
+      const next = fn({ unread: found?.unread ?? 0, mentions: found?.mentions ?? 0 });
+      const row = { roomId, unread: Math.max(0, next.unread), mentions: Math.max(0, next.mentions) };
+      return found ? list.map((u) => (u.roomId === roomId ? row : u)) : [...list, row];
     });
   };
 
@@ -56,11 +61,12 @@ export function useChatUnreadSync() {
       if (!d?.message || !d.roomId) return;
       if (d.message.authorId === me?.id) return;
       if (isViewing(d.roomId)) return;
-      setRoom(d.roomId, (n) => n + 1);
+      const mentioned = !!me?.id && Array.isArray(d.message.mentionsIds) && d.message.mentionsIds.includes(me.id);
+      setRoom(d.roomId, (r) => ({ unread: r.unread + 1, mentions: r.mentions + (mentioned ? 1 : 0) }));
     },
-    // Прочитал я (в этой вкладке или в другой) — обнуляем комнату.
+    // Прочитал я (в этой вкладке или в другой) — обнуляем комнату вместе с «@».
     'chat:read': (d: any) => {
-      if (d?.userId && d.userId === me?.id) setRoom(d.roomId, () => 0);
+      if (d?.userId && d.userId === me?.id) setRoom(d.roomId, () => ({ unread: 0, mentions: 0 }));
     },
     'chat:message:deleted': () => qc.invalidateQueries({ queryKey: keys.chat.unread() }),
     'chat:room': () => qc.invalidateQueries({ queryKey: keys.chat.unread() }),
@@ -72,14 +78,18 @@ export function useChatUnreadSync() {
   }, [conn, me, qc]);
 }
 
-/** Непрочитанные по комнате. */
-export function useChatUnreadMap(): Record<string, number> {
+/** Непрочитанные и упоминания по комнате. */
+export function useChatUnreadMap(): Record<string, RoomUnread> {
   const q = useUnreadQuery();
-  return Object.fromEntries((q.data ?? []).map((u) => [u.roomId, u.unread]));
+  return Object.fromEntries((q.data ?? []).map((u) => [u.roomId, { unread: u.unread, mentions: u.mentions ?? 0 }]));
 }
 
-/** Всего непрочитанных — для значка в меню. */
-export function useChatUnreadTotal(): number {
+/** Всего непрочитанных и есть ли среди них упоминание меня — для значка в меню. */
+export function useChatUnreadTotal(): { count: number; mention: boolean } {
   const q = useUnreadQuery();
-  return (q.data ?? []).reduce((s, u) => s + u.unread, 0);
+  const list = q.data ?? [];
+  return {
+    count: list.reduce((s, u) => s + u.unread, 0),
+    mention: list.some((u) => (u.mentions ?? 0) > 0),
+  };
 }

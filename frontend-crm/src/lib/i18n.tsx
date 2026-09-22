@@ -2562,6 +2562,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'leads.view.active': 'Лиды',
     'leads.view.deleted': 'Удалённые',
     'leads.trash.empty': 'Удалённых лидов нет',
+    'chat.mentionedYou': 'Вас упомянули',
   },
   tg: {
     // ===== common =====
@@ -5050,6 +5051,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'leads.view.active': 'Лидҳо',
     'leads.view.deleted': 'Нестшудаҳо',
     'leads.trash.empty': 'Лиди нестшуда нест',
+    'chat.mentionedYou': 'Шуморо ёдовар шуданд',
   },
 };
 

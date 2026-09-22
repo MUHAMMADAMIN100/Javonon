@@ -3937,10 +3937,16 @@ textarea:focus {
 .chat-back-btn:hover { background: var(--bg-soft); }
 
 @media (max-width: 720px) {
-  .chat-card {
+  .content .card.chat-card.chat-card {
     grid-template-columns: 1fr !important;
-    height: calc(100vh - 180px) !important;
+    /* На телефоне — весь экран под шапкой, без полей. */
+    height: calc(100dvh - 56px) !important;
     min-height: 0 !important;
+    /* во всю ширину экрана, как бы ни были заданы поля вокруг */
+    width: 100vw !important;
+    max-width: none !important;
+    margin: -16px 0 -12px calc(50% - 50vw) !important;
+    border-radius: 0 !important;
   }
   .chat-card.show-list .chat-thread-pane { display: none !important; }
   .chat-card.show-thread .chat-rooms-pane { display: none !important; }
@@ -6435,3 +6441,32 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 }
 .icon-btn:hover { background: var(--bg-soft); color: var(--text); }
 .icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+
+/* Чат — на всю высоту и ширину под шапкой: на странице чата у .content
+   вместо обычных отступов 12px воздуха по краям. */
+.content:has(> * > .chat-card), .content:has(> .chat-card) { padding: 12px !important; }
+.chat-card {
+  padding: 0;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  overflow: hidden;
+  height: calc(100dvh - 72px - 24px);
+  min-height: 460px;
+  margin: 0;
+}
+@media (max-width: 1100px) { .chat-card { grid-template-columns: 280px 1fr; } }
+
+/* «Печатает…» пузырём внутри переписки */
+.chat-typing-bubble { display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding: 9px 13px; }
+.chat-typing-text { font-size: 13px; color: var(--text-soft); font-style: italic; }
+/* Значок «@» — упомянули меня */
+.chat-mention-badge {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--primary); color: #fff; font: 700 12px/20px var(--font-display); text-align: center;
+}
+.chat-room-item.active .chat-mention-badge { background: #fff; color: var(--primary); }
+.rail-badge.is-mention, .nav-badge.is-mention { background: var(--primary); font-family: var(--font-display); }
+
+/* Поле ввода чата не уходит под круглую кнопку звонков (fixed, 56px, 20px от угла) */
+.chat-composer { padding-right: 80px !important; }
+@media (max-width: 720px) { .chat-composer { padding-right: 88px !important; } }

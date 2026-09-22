@@ -170,8 +170,10 @@ export default function Layout() {
           >
             <Icon name={mobileNavOpen ? 'close' : 'menu'} size={24} />
             {/* На телефоне полосы иконок нет — непрочитанные видны на кнопке меню. */}
-            {chatUnread > 0 && !mobileNavOpen && (
-              <span className="rail-badge burger-badge" data-testid="burger-badge">{chatUnread > 99 ? '99+' : chatUnread}</span>
+            {chatUnread.count > 0 && !mobileNavOpen && (
+              <span className={`rail-badge burger-badge${chatUnread.mention ? ' is-mention' : ''}`} data-testid="burger-badge">
+                {chatUnread.mention ? '@' : chatUnread.count > 99 ? '99+' : chatUnread.count}
+              </span>
             )}
           </button>
           <AnimatePresence mode="wait">

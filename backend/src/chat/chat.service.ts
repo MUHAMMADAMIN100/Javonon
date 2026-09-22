@@ -527,8 +527,10 @@ export class ChatService implements OnModuleInit {
    * сообщению, и счётчик «5 новых» показать было не из чего.
    */
   async unreadCounts(userId: string) {
-    const rows = await this.prisma.$queryRaw<{ roomId: string; unread: bigint }[]>`
-      SELECT m."roomId", COUNT(msg.id) AS unread
+    // mentions — сколько из них упоминают этого человека (значок «@»).
+    const rows = await this.prisma.$queryRaw<{ roomId: string; unread: bigint; mentions: bigint }[]>`
+      SELECT m."roomId", COUNT(msg.id) AS unread,
+             COUNT(msg.id) FILTER (WHERE ${userId} = ANY(msg."mentionsIds")) AS mentions
       FROM "ChatMember" m
       LEFT JOIN "ChatMessage" msg
         ON msg."roomId" = m."roomId"
@@ -537,7 +539,7 @@ export class ChatService implements OnModuleInit {
        AND (m."lastReadAt" IS NULL OR msg."createdAt" > m."lastReadAt")
       WHERE m."userId" = ${userId}
       GROUP BY m."roomId"`;
-    return rows.map((r) => ({ roomId: r.roomId, unread: Number(r.unread) }));
+    return rows.map((r) => ({ roomId: r.roomId, unread: Number(r.unread), mentions: Number(r.mentions) }));
   }
 
   // ============ TELEGRAM-STYLE ACTIONS ============

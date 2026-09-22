@@ -163,10 +163,13 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   const logout = useAuth((s) => s.logout);
   const { t } = useT();
   // Непрочитанные в чате — значок у группы и у пункта «Чат».
-  const chatUnread = useChatUnreadTotal();
-  const badgeFor = (to: string) => (to === '/chat' ? chatUnread : 0);
+  const chatBadge = useChatUnreadTotal();
+  const badgeFor = (to: string) => (to === '/chat' ? chatBadge.count : 0);
+  // Есть непрочитанное упоминание меня — вместо числа «@».
+  const mentionFor = (to: string) => to === '/chat' && chatBadge.mention;
   const groupBadge = (g: { items: { to: string }[] }) => g.items.reduce((s, it) => s + badgeFor(it.to), 0);
-  const badgeText = (n: number) => (n > 99 ? '99+' : String(n));
+  const groupMention = (g: { items: { to: string }[] }) => g.items.some((it) => mentionFor(it.to));
+  const badgeText = (n: number, mention = false) => (mention ? '@' : n > 99 ? '99+' : String(n));
   const loc = useLocation();
   const isMobile = useMediaQuery(MOBILE_MQ);
   const reduceMotion = useReducedMotion();
@@ -668,7 +671,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
             </span>
             <span>{t(it.labelKey)}</span>
             {badgeFor(it.to) > 0 && (
-              <span className="nav-badge" data-testid={`nav-badge-${it.to.slice(1)}`}>{badgeText(badgeFor(it.to))}</span>
+              <span className={`nav-badge${mentionFor(it.to) ? ' is-mention' : ''}`} data-testid={`nav-badge-${it.to.slice(1)}`}>{badgeText(badgeFor(it.to), mentionFor(it.to))}</span>
             )}
           </NavLink>
         );
@@ -861,7 +864,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
                   >
                     <span className="sidebar-nav-icon"><Icon name={g.icon} size={22} /></span>
                     <span>{t(g.labelKey)}</span>
-                    {groupBadge(g) > 0 && <span className="nav-badge">{badgeText(groupBadge(g))}</span>}
+                    {groupBadge(g) > 0 && <span className={`nav-badge${groupMention(g) ? ' is-mention' : ''}`}>{badgeText(groupBadge(g), groupMention(g))}</span>}
                     <Icon name="chevron_right" size={20} className="m-chev" />
                   </button>
                 ))}
@@ -946,7 +949,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
               >
                 <Icon name={g.icon} size={22} />
                 {groupBadge(g) > 0 && (
-                  <span className="rail-badge" data-testid={`rail-badge-${g.key}`}>{badgeText(groupBadge(g))}</span>
+                  <span className={`rail-badge${groupMention(g) ? ' is-mention' : ''}`} data-testid={`rail-badge-${g.key}`}>{badgeText(groupBadge(g), groupMention(g))}</span>
                 )}
               </motion.button>
             ))}

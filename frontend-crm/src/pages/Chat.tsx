@@ -341,6 +341,15 @@ export default function Chat() {
     }
   }, [messages, activeId]);
 
+  // Появился пузырь «печатает…» — показываем его, если человек и так внизу
+  // переписки (читающего историю выше не дёргаем).
+  const typingCount = activeId ? Object.keys(typingByRoom[activeId] || {}).length : 0;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !typingCount) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) el.scrollTop = el.scrollHeight;
+  }, [typingCount]);
+
   // SEND — оптимистично добавляем сообщение мгновенно с tempId.
   // На invalidate реальное сообщение из сервера приедет с настоящим id.
   // Текст — через сокет (мгновенно у собеседника), файлы — обычной загрузкой.
@@ -611,14 +620,8 @@ export default function Chat() {
 
   return (
     <>
-      <div className={`card chat-card${mobileShowList ? ' show-list' : ' show-thread'}`} style={{
-        padding: 0,
-        height: 'calc(100vh - 280px)',
-        minHeight: 520,
-        display: 'grid',
-        gridTemplateColumns: '280px 1fr',
-        overflow: 'hidden',
-      }}>
+      {/* Размер — в CSS (.chat-card): чат занимает всё место под шапкой. */}
+      <div className={`card chat-card${mobileShowList ? ' show-list' : ' show-thread'}`}>
         {/* Sidebar — список чатов */}
         <div className="chat-rooms-pane" style={{
           borderRight: '1px solid var(--border-soft)',
@@ -707,7 +710,8 @@ export default function Chat() {
                 const isActive = r.id === activeId;
                 const lastMsg = r.messages?.[0];
                 const title = roomTitle(r);
-                const unread = isActive ? 0 : unreadMap[r.id] || 0;
+                const unread = isActive ? 0 : unreadMap[r.id]?.unread || 0;
+                const mentions = isActive ? 0 : unreadMap[r.id]?.mentions || 0;
                 return (
                   <button
                     key={r.id}
@@ -729,6 +733,10 @@ export default function Chat() {
                       </span>
                       <span className="chat-room-bottom">
                         <span className="chat-room-preview">{roomPreview(r)}</span>
+                        {/* Упомянули меня — «@» рядом со счётчиком, как в Telegram. */}
+                        {mentions > 0 && (
+                          <span className="chat-mention-badge" data-testid="chat-room-mention" title={t('chat.mentionedYou')}>@</span>
+                        )}
                         {unread > 0 && (
                           <span className="chat-unread-badge" data-testid="chat-room-unread">{unread > 99 ? '99+' : unread}</span>
                         )}
@@ -772,7 +780,7 @@ export default function Chat() {
                       <Icon name={f.icon} size={14} />
                       <span style={{ flex: 1 }}>{f.label}</span>
                       {(() => {
-                        const n = f.list.reduce((sum, r) => sum + (r.id === activeId ? 0 : unreadMap[r.id] || 0), 0);
+                        const n = f.list.reduce((sum, r) => sum + (r.id === activeId ? 0 : unreadMap[r.id]?.unread || 0), 0);
                         return n > 0
                           ? <span className="chat-unread-badge">{n > 99 ? '99+' : n}</span>
                           : <span style={{ fontWeight: 700 }}>{f.list.length}</span>;
@@ -999,32 +1007,37 @@ export default function Chat() {
                 </Fragment>
               );
             })}
-            {/* Typing indicator (Telegram-style) */}
-            {activeId && activeRoom?.type !== 'DIRECT' && typingByRoom[activeId] && Object.keys(typingByRoom[activeId]).length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '6px 14px', marginTop: 4,
-                  fontSize: 12, color: 'var(--text-soft)',
-                  fontStyle: 'italic',
-                }}
-              >
-                <span className="typing-dots" aria-hidden="true">
-                  <span /><span /><span />
-                </span>
-                {(() => {
-                  const names = Object.values(typingByRoom[activeId]).map((u) => u.name);
-                  if (names.length === 1) return t('chat.typing.one').replace('{a}', names[0]);
-                  if (names.length === 2) return t('chat.typing.two').replace('{a}', names[0]).replace('{b}', names[1]);
-                  return t('chat.typing.many').replace('{n}', String(names.length));
-                })()}
-              </motion.div>
-            )}
+            {/* «Печатает…» внутри переписки — пузырём, как в Telegram (и в группе, и в личке). */}
+            {activeId && typingByRoom[activeId] && Object.keys(typingByRoom[activeId]).length > 0 && (() => {
+              const typers = Object.entries(typingByRoom[activeId]);
+              const names = typers.map(([, u]) => u.name);
+              const label = names.length === 1
+                ? t('chat.typing.one').replace('{a}', names[0])
+                : names.length === 2
+                  ? t('chat.typing.two').replace('{a}', names[0]).replace('{b}', names[1])
+                  : t('chat.typing.many').replace('{n}', String(names.length));
+              const [firstId, first] = typers[0];
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="chat-row chat-typing-row"
+                  data-testid="chat-typing-bubble"
+                >
+                  {activeRoom?.type !== 'DIRECT' && (
+                    <span className="chat-avatar" style={{ background: avatarColor(firstId) }}>{initials(first.name || '?')}</span>
+                  )}
+                  <div className="chat-bubble tail chat-typing-bubble">
+                    <span className="typing-dots" aria-hidden="true"><span /><span /><span /></span>
+                    <span className="chat-typing-text">{label}</span>
+                  </div>
+                </motion.div>
+              );
+            })()}
           </div>
 
-          <form onSubmit={send} style={{
+          {/* chat-composer: справа место под круглую кнопку звонков (она поверх угла экрана). */}
+          <form onSubmit={send} className="chat-composer" style={{
             padding: '12px 20px 16px',
             borderTop: '1px solid var(--border-soft)',
             display: 'flex',
