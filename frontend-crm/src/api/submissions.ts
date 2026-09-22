@@ -1,3 +1,4 @@
+import { localized } from '../lib/i18n';
 import { api } from './client';
 import type { PartnerAttributionView } from './types';
 
@@ -320,28 +321,28 @@ export const uploadSubmissionFile = (file: File) => {
  */
 export const SUBMISSION_CURRENCIES = ['TJS', 'USD', 'EUR', 'CNY', 'RUB'] as const;
 
-export const SUBMISSION_CURRENCY_LABEL: Record<string, string> = {
+export const SUBMISSION_CURRENCY_LABEL: Record<string, string> = localized('deal.currency', {
   TJS: 'TJS (сомони)',
   USD: 'USD',
   EUR: 'EUR',
   CNY: 'CNY (юань)',
   RUB: 'RUB',
-};
+});
 
-export const SUBMISSION_STATUS_LABEL: Record<SubmissionStatus, string> = {
+export const SUBMISSION_STATUS_LABEL: Record<SubmissionStatus, string> = localized('deal.status', {
   ACTIVE: 'Активна',
   COMPLETED: 'Закрыта',
   CANCELLED: 'Отменена',
-};
+});
 
-export const PAYMENT_STATUS_LABEL: Record<SubmissionPaymentStatus, string> = {
+export const PAYMENT_STATUS_LABEL: Record<SubmissionPaymentStatus, string> = localized('deal.payStatus', {
   PENDING: 'На рассмотрении',
   APPROVED: 'Одобрено',
   REJECTED: 'Отклонено',
-};
+});
 
-export const PAYMENT_METHOD_LABEL: Record<SubmissionPaymentMethod, string> = {
+export const PAYMENT_METHOD_LABEL: Record<SubmissionPaymentMethod, string> = localized('deal.method', {
   TRANSFER: 'Перевод',
   CASH: 'Наличные',
   OTHER: 'Прочее',
-};
+});

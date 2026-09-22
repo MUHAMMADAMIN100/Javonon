@@ -1,4 +1,4 @@
-import { useT } from './lib/i18n';
+import { tr, useT } from './lib/i18n';
 
 export type FieldKind = 'text' | 'date' | 'email' | 'tel' | 'number' | 'textarea' | 'radio' | 'year' | 'select';
 
@@ -25,7 +25,8 @@ export interface FieldDef {
 }
 
 export const PRESENT_VALUE = 'PRESENT';
-export const PRESENT_LABEL = 'По настоящее время';
+/** «По настоящее время» на языке интерфейса. */
+export const presentLabel = (): string => tr('appForm.present');
 
 export interface SectionDef {
   key: string;
@@ -281,7 +282,7 @@ export function countProgress(form: any): { filled: number; total: number } {
 export function displayValue(def: FieldDef, raw: any): string {
   const v = raw?.toString().trim();
   if (!v) return '—';
-  if (def.kind === 'year' && def.allowPresent && v === PRESENT_VALUE) return PRESENT_LABEL;
+  if (def.kind === 'year' && def.allowPresent && v === PRESENT_VALUE) return presentLabel();
   if (def.options) {
     const opt = def.options.find((o) => o.value === v);
     return opt?.label || v;
@@ -309,76 +310,76 @@ export function validateField(def: FieldDef, raw: any, row?: any): string | unde
   const v = raw == null ? '' : String(raw).trim();
 
   if (!v) {
-    return def.optional ? undefined : 'Обязательное поле';
+    return def.optional ? undefined : tr('appForm.err.required');
   }
 
-  if (def.lettersOnly && !LETTERS_RE.test(v)) return 'Допустимы только буквы';
-  if (def.latinDigits && !LATIN_DIGITS_RE.test(v)) return 'Допустимы только буквы и цифры (без символов)';
-  if (def.latin && !LATIN_RE.test(v)) return 'Недопустимые символы';
+  if (def.lettersOnly && !LETTERS_RE.test(v)) return tr('appForm.err.lettersOnly');
+  if (def.latinDigits && !LATIN_DIGITS_RE.test(v)) return tr('appForm.err.latinDigits');
+  if (def.latin && !LATIN_RE.test(v)) return tr('appForm.err.badChars');
   // digitsOnly без kind=number (например, телефон родственника, индекс): только цифры
-  if (def.digitsOnly && def.kind !== 'number' && !/^\d+$/.test(v)) return 'Только цифры';
+  if (def.digitsOnly && def.kind !== 'number' && !/^\d+$/.test(v)) return tr('appForm.err.digitsOnly');
 
   if (def.kind === 'email') {
-    if (!EMAIL_RE.test(v)) return 'Некорректный email';
+    if (!EMAIL_RE.test(v)) return tr('appForm.err.email');
     return undefined;
   }
 
   if (def.kind === 'tel') {
     const digits = v.replace(/\D/g, '');
-    if (digits.length < 7) return 'Номер слишком короткий (мин. 7 цифр)';
-    if (digits.length > 15) return 'Номер слишком длинный (макс. 15 цифр)';
+    if (digits.length < 7) return tr('appForm.err.telShort');
+    if (digits.length > 15) return tr('appForm.err.telLong');
     return undefined;
   }
 
   if (def.kind === 'number') {
     const n = Number(v.replace(',', '.'));
-    if (!Number.isFinite(n)) return 'Должно быть числом';
-    if (def.digitsOnly && !Number.isInteger(n)) return 'Только целое число';
-    if (def.min !== undefined && n < def.min) return `Минимум ${def.min}`;
-    if (def.max !== undefined && n > def.max) return `Максимум ${def.max}`;
+    if (!Number.isFinite(n)) return tr('appForm.err.number');
+    if (def.digitsOnly && !Number.isInteger(n)) return tr('appForm.err.integer');
+    if (def.min !== undefined && n < def.min) return `${tr('appForm.err.min')} ${def.min}`;
+    if (def.max !== undefined && n > def.max) return `${tr('appForm.err.max')} ${def.max}`;
     return undefined;
   }
 
   if (def.kind === 'date') {
     const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return 'Некорректная дата';
+    if (Number.isNaN(d.getTime())) return tr('appForm.err.date');
     // Дата рождения должна быть в прошлом
-    if (def.key === 'birthDate' && d.getTime() > Date.now()) return 'Дата рождения должна быть в прошлом';
+    if (def.key === 'birthDate' && d.getTime() > Date.now()) return tr('appForm.err.birthFuture');
     // Срок действия паспорта — в будущем
-    if (def.key === 'passportExpiry' && d.getTime() < Date.now()) return 'Срок действия паспорта истёк';
+    if (def.key === 'passportExpiry' && d.getTime() < Date.now()) return tr('appForm.err.passportExpired');
     return undefined;
   }
 
   if (def.kind === 'year') {
     if (v === PRESENT_VALUE) {
       // 'По настоящее время' допустимо только в yearTo
-      if (def.key !== 'yearTo') return 'Недопустимое значение';
+      if (def.key !== 'yearTo') return tr('appForm.err.badValue');
       return undefined;
     }
     const year = Number(v);
-    if (!Number.isInteger(year)) return 'Год';
+    if (!Number.isInteger(year)) return tr('appForm.err.year');
     // Cross-field: yearTo >= yearFrom
     if (def.key === 'yearTo' && row?.yearFrom && row.yearFrom !== PRESENT_VALUE) {
       const yf = Number(row.yearFrom);
-      if (Number.isInteger(yf) && year < yf) return 'Год окончания раньше года начала';
+      if (Number.isInteger(yf) && year < yf) return tr('appForm.err.yearOrder');
     }
     return undefined;
   }
 
   if (def.kind === 'select' && def.options) {
     const ok = def.options.some((o) => o.value === v);
-    if (!ok) return 'Выберите значение из списка';
+    if (!ok) return tr('appForm.err.select');
     return undefined;
   }
 
   if (def.kind === 'radio' && def.options) {
     const ok = def.options.some((o) => o.value === v);
-    if (!ok) return 'Выберите вариант';
+    if (!ok) return tr('appForm.err.radio');
     return undefined;
   }
 
   // textarea / text — длина не более 2000 символов
-  if (v.length > 2000) return 'Слишком длинное значение (>2000 символов)';
+  if (v.length > 2000) return tr('appForm.err.tooLong');
   return undefined;
 }
 
@@ -400,6 +401,7 @@ export function useTranslatedSections(): SectionDef[] {
     fields: s.fields?.map((f) => ({
       ...f,
       label: tr(`appForm.field.${s.key}.${f.key}`, f.label),
+      placeholder: f.placeholder ? tr(`appForm.ph.${s.key}.${f.key}`, f.placeholder) : f.placeholder,
       options: f.options?.map((o) => ({
         ...o,
         label: tr(`appForm.opt.${s.key}.${f.key}.${o.value}`, o.label),

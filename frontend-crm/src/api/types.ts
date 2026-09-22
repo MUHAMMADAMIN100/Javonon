@@ -1,3 +1,5 @@
+import { localized } from '../lib/i18n';
+
 export type Role =
   | 'FOUNDER'
   | 'ADMIN'
@@ -8,14 +10,14 @@ export type Role =
   // но старые токены/кэш могут вернуть это значение до релогина.
   | 'EMPLOYEE';
 
-export const ROLE_LABEL: Record<Role, string> = {
+export const ROLE_LABEL: Record<Role, string> = localized('role', {
   FOUNDER: 'Основатель',
   ADMIN: 'Администратор',
   ACCOUNTANT: 'Бухгалтер',
   SALES_MANAGER: 'Менеджер по продажам',
   CLIENT_MANAGER: 'Клиентский менеджер',
   EMPLOYEE: 'Менеджер по продажам',
-};
+});
 export type Direction =
   | 'BACHELOR'
   | 'MASTER'
@@ -52,7 +54,7 @@ export const COUNTRIES: Country[] = [
   'GERMANY',
 ];
 
-export const COUNTRY_LABEL: Record<Country, string> = {
+export const COUNTRY_LABEL: Record<Country, string> = localized('country', {
   USA: 'США',
   KOREA: 'Корея',
   CHINA: 'Китай',
@@ -60,7 +62,7 @@ export const COUNTRY_LABEL: Record<Country, string> = {
   MALAYSIA: 'Малайзия',
   ITALY: 'Италия',
   GERMANY: 'Германия',
-};
+});
 
 /**
  * Статус заявки. Соответствует Prisma enum ApplicationStatus.
@@ -137,7 +139,7 @@ export const APPLICATION_SOURCES: ApplicationSource[] = [
   'OTHER',
 ];
 
-export const SOURCE_LABEL: Record<ApplicationSource, string> = {
+export const SOURCE_LABEL: Record<ApplicationSource, string> = localized('source', {
   LANDING_FORM: 'Сайт',
   SELF_REGISTRATION: 'Самозапись',
   REFERRAL: 'Реферал',
@@ -148,7 +150,7 @@ export const SOURCE_LABEL: Record<ApplicationSource, string> = {
   WORD_OF_MOUTH: 'Сарафан',
   EVENT: 'Мероприятие',
   OTHER: 'Другое',
-};
+});
 
 // Разные цвета — чтобы источник считывался глазом за долю секунды
 // в таблице из десятков заявок. Совпадают с общими badge-*
@@ -424,13 +426,13 @@ export interface Document {
 
 export type ContactChannel = 'WHATSAPP' | 'PHONE' | 'INSTAGRAM' | 'TELEGRAM' | 'EMAIL';
 
-export const CONTACT_CHANNEL_LABEL: Record<ContactChannel, string> = {
+export const CONTACT_CHANNEL_LABEL: Record<ContactChannel, string> = localized('channel', {
   WHATSAPP: 'WhatsApp',
   PHONE: 'Телефон',
   INSTAGRAM: 'Instagram',
   TELEGRAM: 'Telegram',
   EMAIL: 'Email',
-};
+});
 
 export type OnboardingStage =
   | 'WELCOME'
@@ -439,13 +441,13 @@ export type OnboardingStage =
   | 'ACADEMY_INTRO'
   | 'ACTIVE';
 
-export const ONBOARDING_STAGE_LABEL: Record<OnboardingStage, string> = {
+export const ONBOARDING_STAGE_LABEL: Record<OnboardingStage, string> = localized('onboarding', {
   WELCOME: 'Приветствие',
   DOCS_COLLECTED: 'Документы собраны',
   CABINET_OPENED: 'Кабинет открыт',
   ACADEMY_INTRO: 'Ознакомление с программой',
   ACTIVE: 'В активной работе',
-};
+});
 
 export interface Student {
   id: string;
@@ -540,11 +542,11 @@ export interface Task {
   updatedAt: string;
 }
 
-export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
+export const TASK_STATUS_LABEL: Record<TaskStatus, string> = localized('task.status', {
   TODO: 'К выполнению',
   IN_PROGRESS: 'В работе',
   DONE: 'Выполнено',
-};
+});
 
 export const TASK_STATUS_BADGE: Record<TaskStatus, string> = {
   TODO: 'badge-info',
@@ -552,21 +554,21 @@ export const TASK_STATUS_BADGE: Record<TaskStatus, string> = {
   DONE: 'badge-success',
 };
 
-export const DIRECTION_LABEL: Record<Direction, string> = {
+export const DIRECTION_LABEL: Record<Direction, string> = localized('direction', {
   BACHELOR: 'Бакалавриат',
   MASTER: 'Магистратура',
   LANGUAGE: 'Языковые курсы',
   LANGUAGE_COLLEGE: 'Языковой + колледж',
   LANGUAGE_BACHELOR: 'Языковой + бакалавриат',
   COLLEGE: 'Колледж',
-};
+});
 
 /**
  * RU-фоллбэк для меток статуса. Основной источник — i18n
  * (`app.status.*`, см. useApplicationStatusLabel): здесь остаётся то, что
  * нужно вне React-дерева и как страховка от отсутствующего ключа.
  */
-export const STATUS_LABEL: Record<ApplicationStatus, string> = {
+export const STATUS_LABEL: Record<ApplicationStatus, string> = localized('app.status', {
   NEW_LEAD: 'Новые лиды',
   IN_PROCESSING: 'В обработке',
   ONLINE_CONSULTATION: 'Онлайн консультации',
@@ -586,9 +588,9 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = {
   ENROLLED: 'Зачислен',
   IN_PROGRESS: 'Документы на проверке',
   COMPLETED: 'Зачислен',
-};
+});
 
-export const STATUS_SHORT: Record<ApplicationStatus, string> = {
+export const STATUS_SHORT: Record<ApplicationStatus, string> = localized('app.statusShort', {
   NEW_LEAD: 'Новый',
   IN_PROCESSING: 'В работе',
   ONLINE_CONSULTATION: 'Онлайн',
@@ -608,14 +610,14 @@ export const STATUS_SHORT: Record<ApplicationStatus, string> = {
   ENROLLED: 'Зачислен',
   IN_PROGRESS: 'Проверка',
   COMPLETED: 'Зачислен',
-};
+});
 
-export const STUDENT_STATUS_LABEL: Record<StudentStatus, string> = {
+export const STUDENT_STATUS_LABEL: Record<StudentStatus, string> = localized('student.status', {
   ACTIVE: 'Активный',
   PAUSED: 'Приостановлен',
   GRADUATED: 'Выпустился',
   ARCHIVED: 'В архиве',
-};
+});
 
 /**
  * Цвет бейджа. Логика: синий — лид только пришёл, жёлтый — с ним идёт

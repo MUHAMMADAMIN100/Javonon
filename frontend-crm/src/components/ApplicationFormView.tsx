@@ -183,7 +183,7 @@ export default function ApplicationFormView({ form, canEdit, onSave }: Props) {
                             </div>
                           )}
                           <div className="af-view-value" style={{ color: 'var(--text-soft)', fontStyle: 'italic' }}>
-                            не учился
+                            {t('appForm.notAttended')}
                           </div>
                         </div>
                       );

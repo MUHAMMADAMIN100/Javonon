@@ -4,7 +4,7 @@ import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/style.css';
 import { format, parse, isValid } from 'date-fns';
 import { useT } from '../lib/i18n';
-import { ru } from 'date-fns/locale';
+import { dateLocale } from '../lib/dateLocale';
 
 type Props = {
   value: string;
@@ -73,7 +73,8 @@ export default function CrmDatePicker({
   min,
   max,
 }: Props) {
-  const { t } = useT();
+  const { t, lang } = useT();
+  const locale = dateLocale(lang);
   const emptyLabel = placeholder || t('datepicker.placeholder');
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -108,9 +109,9 @@ export default function CrmDatePicker({
   const formattedLabel = useMemo(() => {
     if (!selectedDate) return '';
     if (showTime && timeValue) {
-      return format(selectedDate, 'd MMMM yyyy', { locale: ru }) + ' ' + timeValue;
+      return format(selectedDate, 'd MMMM yyyy', { locale }) + ' ' + timeValue;
     }
-    return format(selectedDate, 'd MMMM yyyy', { locale: ru });
+    return format(selectedDate, 'd MMMM yyyy', { locale });
   }, [selectedDate, showTime, timeValue]);
 
   const close = useCallback(() => setOpen(false), []);
@@ -277,7 +278,7 @@ export default function CrmDatePicker({
         mode="single"
         selected={selectedDate}
         onSelect={handleSelect}
-        locale={ru}
+        locale={locale}
         weekStartsOn={1}
         showOutsideDays
         captionLayout="dropdown"
@@ -294,7 +295,7 @@ export default function CrmDatePicker({
       />
       {showTime && (
         <div className="crm-datepicker-time">
-          <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>Время:</span>
+          <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>{t('datepicker.time')}:</span>
           <input
             type="time"
             className="crm-input"
@@ -310,14 +311,14 @@ export default function CrmDatePicker({
           className="btn btn-ghost btn-sm"
           onClick={handleToday}
         >
-          Сегодня
+          {t('common.today')}
         </button>
         <button
           type="button"
           className="btn btn-ghost btn-sm"
           onClick={handleClear}
         >
-          Очистить
+          {t('datepicker.clear')}
         </button>
       </div>
     </div>,

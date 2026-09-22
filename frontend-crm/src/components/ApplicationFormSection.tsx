@@ -5,7 +5,7 @@ import {
   useTranslatedSections,
   countProgress,
   emptyForm,
-  PRESENT_LABEL,
+  presentLabel,
   PRESENT_VALUE,
   validateField,
   type FieldDef,
@@ -33,6 +33,7 @@ function Field({
   readOnly?: boolean;
   rowContext?: any;
 }) {
+  const { t } = useT();
   const [touched, setTouched] = useState(false);
   const error = touched ? validateField(def, value, rowContext) : undefined;
   const sanitizeText = (raw: string): string => {
@@ -133,7 +134,7 @@ function Field({
       <div className="af-field af-field-wide">
         <label className="af-label">
           {def.label} <span className="af-label-en">{def.labelEn}</span>
-          {def.optional && <span className="af-optional">— необязательно</span>}
+          {def.optional && <span className="af-optional">— {t('appForm.optional')}</span>}
         </label>
         <textarea {...common} rows={3} className={error ? 'af-input-error' : ''} />
         {error && <div className="af-field-error">{error}</div>}
@@ -150,7 +151,7 @@ function Field({
         </label>
         <CrmSelect {...common} className={`crm-select ${error ? 'af-input-error' : ''}`}>
           <option value="">—</option>
-          {def.allowPresent && <option value={PRESENT_VALUE}>{PRESENT_LABEL}</option>}
+          {def.allowPresent && <option value={PRESENT_VALUE}>{presentLabel()}</option>}
           {Array.from({ length: 60 }, (_, i) => CURRENT_YEAR + 5 - i).map((y) => (
             <option key={y} value={y}>{y}</option>
           ))}
@@ -165,7 +166,7 @@ function Field({
       <div className="af-field">
         <label className="af-label">
           {def.label} <span className="af-label-en">{def.labelEn}</span>
-          {def.optional && <span className="af-optional">— необязательно</span>}
+          {def.optional && <span className="af-optional">— {t('appForm.optional')}</span>}
         </label>
         <PhoneInput value={value || ''} onChange={(v) => { setTouched(true); onChange(v); }} disabled={readOnly} error={!!error} />
         {error && <div className="af-field-error">{error}</div>}
@@ -178,14 +179,14 @@ function Field({
       <div className="af-field">
         <label className="af-label">
           {def.label} <span className="af-label-en">{def.labelEn}</span>
-          {def.optional && <span className="af-optional">— необязательно</span>}
+          {def.optional && <span className="af-optional">— {t('appForm.optional')}</span>}
         </label>
         <CrmSelect
           {...common}
           value={value || (def.noEmpty ? def.options[0].value : '')}
           className={`crm-select ${error ? 'af-input-error' : ''}`}
         >
-          {!def.noEmpty && <option value="">— выберите —</option>}
+          {!def.noEmpty && <option value="">{t('common.choose')}</option>}
           {def.options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
@@ -199,7 +200,7 @@ function Field({
     <div className="af-field">
       <label className="af-label">
         {def.label} <span className="af-label-en">{def.labelEn}</span>
-        {def.optional && <span className="af-optional">— необязательно</span>}
+        {def.optional && <span className="af-optional">— {t('appForm.optional')}</span>}
       </label>
       <input
         type={def.kind || 'text'}
@@ -311,7 +312,7 @@ function TableSection({
                 onClick={() => !notAttended && toggleRow(ri)}
                 style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}
               >
-                <div className="af-edu-title" style={{ width: '100%' }}>{rowLabels![ri] || `Строка ${ri + 1}`}</div>
+                <div className="af-edu-title" style={{ width: '100%' }}>{rowLabels![ri] || `${t('appForm.rowN')} ${ri + 1}`}</div>
                 <div
                   style={{
                     display: 'flex',
@@ -365,7 +366,7 @@ function TableSection({
       <div className="af-table">
         {rows.map((row, ri) => (
           <div key={ri} className="af-table-row">
-            {rowLabels && <div className="af-row-label">{rowLabels[ri] || `Строка ${ri + 1}`}</div>}
+            {rowLabels && <div className="af-row-label">{rowLabels[ri] || `${t('appForm.rowN')} ${ri + 1}`}</div>}
             <div className="af-row-cells">
               {columns.map((c) => (
                 <Field

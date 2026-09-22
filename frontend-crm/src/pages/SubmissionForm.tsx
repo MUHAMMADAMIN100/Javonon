@@ -231,7 +231,7 @@ export default function SubmissionForm() {
   const createMut = useMutation({
     mutationFn: (data: CreateSubmissionDto) => createSubmission(data),
     onSuccess: (s) => {
-      toast('Сделка отправлена на одобрение', 'success');
+      toast(t('dealForm.toast.sent'), 'success');
       navigate(`/submissions/${s.id}`);
     },
     // Порядок фоллбеков:
@@ -243,27 +243,27 @@ export default function SubmissionForm() {
       const status = e?.response?.status;
       const msg =
         e?.response?.data?.message ||
-        (status === 403 ? 'Недостаточно прав для создания сделки' : null) ||
-        (status === 413 ? 'Файл слишком большой' : null) ||
+        (status === 403 ? t('dealForm.err.forbidden') : null) ||
+        (status === 413 ? t('dealForm.err.tooLarge') : null) ||
         e?.userMessage ||
-        'Не удалось отправить сделку. Попробуйте ещё раз.';
+        t('dealForm.err.send');
       toast(msg, 'error');
     },
   });
 
   const onSubmit = () => {
     // Валидация
-    if (pendingUploads > 0) return toast('Дождитесь загрузки файлов', 'error');
-    if (mode === 'existing' && !studentId) return toast('Выберите студента', 'error');
-    if (mode === 'new' && newName.trim().length < 2) return toast('ФИО студента (мин 2 символа)', 'error');
-    if (!programId) return toast('Выберите программу', 'error');
-    if (contractUrls.length === 0) return toast('Загрузите хотя бы 1 файл контракта', 'error');
+    if (pendingUploads > 0) return toast(t('dealForm.err.waitUploads'), 'error');
+    if (mode === 'existing' && !studentId) return toast(t('dealForm.err.student'), 'error');
+    if (mode === 'new' && newName.trim().length < 2) return toast(t('dealForm.err.name'), 'error');
+    if (!programId) return toast(t('dealForm.err.program'), 'error');
+    if (contractUrls.length === 0) return toast(t('deal.err.contractFile'), 'error');
     const ta = parseFloat(totalAmount);
-    if (!isFinite(ta) || ta <= 0) return toast('Сумма контракта должна быть > 0', 'error');
+    if (!isFinite(ta) || ta <= 0) return toast(t('deal.err.contractAmount'), 'error');
     const pa = parseFloat(payAmount);
-    if (!isFinite(pa) || pa <= 0) return toast('Сумма платежа должна быть > 0', 'error');
-    if (payMethod === 'TRANSFER' && receiptUrls.length === 0) return toast('Прикрепите чек перевода', 'error');
-    if (payMethod === 'CASH' && depositProofUrls.length === 0) return toast('Прикрепите скрин пополнения счёта', 'error');
+    if (!isFinite(pa) || pa <= 0) return toast(t('dealForm.err.payAmount'), 'error');
+    if (payMethod === 'TRANSFER' && receiptUrls.length === 0) return toast(t('dealForm.err.receipt'), 'error');
+    if (payMethod === 'CASH' && depositProofUrls.length === 0) return toast(t('dealForm.err.deposit'), 'error');
 
     createMut.mutate({
       studentId: mode === 'existing' ? studentId : null,
@@ -316,7 +316,7 @@ export default function SubmissionForm() {
       <BackButton fallback="/submissions" />
       <div className="crm-section-head">
         <span className="crm-section-eyebrow">{t('eyebrow.salesNew')}</span>
-        <h2 className="crm-section-title">Новая сделка</h2>
+        <h2 className="crm-section-title">{t('dealForm.title')}</h2>
       </div>
 
       <motion.div
@@ -374,21 +374,21 @@ export default function SubmissionForm() {
         )}
 
         {/* ===== 1. СТУДЕНТ ===== */}
-        <Section title="1. Студент">
+        <Section title={`1. ${t('dealForm.section.student')}`}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
             <button
               type="button"
               className={`btn btn-sm ${mode === 'existing' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setMode('existing')}
             >
-              Существующий
+              {t('dealForm.existing')}
             </button>
             <button
               type="button"
               className={`btn btn-sm ${mode === 'new' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setMode('new')}
             >
-              Новый
+              {t('dealForm.new')}
             </button>
           </div>
 
@@ -414,25 +414,25 @@ export default function SubmissionForm() {
                       setStudentSearch('');
                     }}
                   >
-                    Сменить
+                    {t('dealForm.change')}
                   </button>
                 </div>
               ) : (
                 <>
                   <input
                     className="crm-input"
-                    placeholder="Поиск студента по ФИО / телефону / email (мин. 2 символа)"
+                    placeholder={t('dealForm.searchPlaceholder')}
                     value={studentSearch}
                     onChange={(e) => setStudentSearch(e.target.value)}
                   />
                   {debouncedStudentSearch.length < 2 ? (
                     <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
-                      Введите минимум 2 символа для поиска
+                      {t('dealForm.searchMin')}
                     </div>
                   ) : studentsQuery.isLoading ? (
-                    <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>Поиск…</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{t('dealForm.searching')}</div>
                   ) : studentOptions.length === 0 ? (
-                    <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>Ничего не найдено</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{t('common.empty')}</div>
                   ) : (
                     <ul
                       style={{
@@ -471,7 +471,7 @@ export default function SubmissionForm() {
                       ))}
                       {studentOptions.length >= 50 && (
                         <li style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-soft)' }}>
-                          Показаны первые 50 — уточните запрос
+                          {t('dealForm.first50')}
                         </li>
                       )}
                     </ul>
@@ -487,7 +487,7 @@ export default function SubmissionForm() {
              - new: обычный email нового студента (как раньше) */}
           {mode === 'existing' && (
             <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-              <Field label={selectedStudent?.email ? 'Email (обновит текущий)' : 'Email студента'}>
+              <Field label={selectedStudent?.email ? t('dealForm.emailUpdate') : t('dealForm.email')}>
                 <input
                   className="crm-input"
                   type="email"
@@ -501,16 +501,16 @@ export default function SubmissionForm() {
 
           {mode === 'new' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-              <Field label="ФИО *">
-                <input className="crm-input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Иванов Иван" />
+              <Field label={`${t('common.fullName')} *`}>
+                <input className="crm-input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('dealForm.namePlaceholder')} />
               </Field>
-              <Field label="Телефон">
+              <Field label={t('common.phone')}>
                 <input className="crm-input" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="+992..." />
               </Field>
               <Field label="Email">
                 <input className="crm-input" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="name@example.com" />
               </Field>
-              <Field label="Паспорт (фото/PDF)">
+              <Field label={t('dealForm.passport')}>
                 <MultiFileUpload
                   values={passportUrls}
                   metas={passportMetas}
@@ -530,11 +530,11 @@ export default function SubmissionForm() {
         </Section>
 
         {/* ===== 2. ПРОГРАММА + КОНТРАКТ ===== */}
-        <Section title="2. Программа и контракт">
+        <Section title={`2. ${t('dealForm.section.program')}`}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            <Field label="Программа *">
+            <Field label={`${t('deal.program')} *`}>
               <CrmSelect className="crm-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
-                <option value="">— выберите —</option>
+                <option value="">{t('common.choose')}</option>
                 {(programsQuery.data || []).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.university})
@@ -542,7 +542,7 @@ export default function SubmissionForm() {
                 ))}
               </CrmSelect>
             </Field>
-            <Field label="Контракт (PDF/фото) *">
+            <Field label={`${t('dealForm.contractFiles')} *`}>
               <MultiFileUpload
                 values={contractUrls}
                 metas={contractMetas}
@@ -551,10 +551,10 @@ export default function SubmissionForm() {
                 onUploadingChange={onUploadingChange}
               />
             </Field>
-            <Field label="Сумма контракта *">
+            <Field label={`${t('deal.contractAmount')} *`}>
               <input className="crm-input" type="number" min={0} step={50} value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="3000" />
             </Field>
-            <Field label="Валюта">
+            <Field label={t('common.currency')}>
               {/* Список — общий с бэком (SUBMISSION_CURRENCIES). Значение вне
                   списка бэк отвергает: по валюте сделки считается бонусная
                   база менеджера. Менять валюту можно только до первого
@@ -569,23 +569,23 @@ export default function SubmissionForm() {
         </Section>
 
         {/* ===== 3. ПЕРВЫЙ ПЛАТЁЖ ===== */}
-        <Section title="3. Первый платёж">
+        <Section title={`3. ${t('dealForm.section.payment')}`}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            <Field label="Сумма *">
+            <Field label={`${t('common.amount')} *`}>
               <input className="crm-input" type="number" min={0} step={50} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="1000" />
             </Field>
-            <Field label="Метод *">
+            <Field label={`${t('deal.field.method')} *`}>
               <CrmSelect className="crm-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value as SubmissionPaymentMethod)}>
-                <option value="TRANSFER">Перевод</option>
-                <option value="CASH">Наличные</option>
-                <option value="OTHER">Прочее</option>
+                <option value="TRANSFER">{t('deal.method.TRANSFER')}</option>
+                <option value="CASH">{t('deal.method.CASH')}</option>
+                <option value="OTHER">{t('deal.method.OTHER')}</option>
               </CrmSelect>
             </Field>
-            <Field label="Дата оплаты *">
+            <Field label={`${t('deal.col.paidAt')} *`}>
               <CrmDatePicker value={payDate} onChange={setPayDate} />
             </Field>
             {payMethod === 'TRANSFER' && (
-              <Field label="Чек / скрин перевода *">
+              <Field label={`${t('dealForm.receipt')} *`}>
                 <MultiFileUpload
                   values={receiptUrls}
                   metas={receiptMetas}
@@ -596,7 +596,7 @@ export default function SubmissionForm() {
               </Field>
             )}
             {payMethod === 'CASH' && (
-              <Field label="Скрин пополнения счёта *">
+              <Field label={`${t('dealForm.depositShot')} *`}>
                 <MultiFileUpload
                   values={depositProofUrls}
                   metas={depositProofMetas}
@@ -607,7 +607,7 @@ export default function SubmissionForm() {
               </Field>
             )}
             {payMethod === 'OTHER' && (
-              <Field label="Подтверждение">
+              <Field label={t('deal.field.proof')}>
                 <MultiFileUpload
                   values={receiptUrls}
                   metas={receiptMetas}
@@ -617,29 +617,29 @@ export default function SubmissionForm() {
                 />
               </Field>
             )}
-            <Field label="Следующий платёж: дата">
+            <Field label={t('deal.field.nextDate')}>
               <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} />
             </Field>
-            <Field label="Следующий платёж: сумма">
+            <Field label={t('deal.field.nextAmount')}>
               <input className="crm-input" type="number" min={0} step={50} value={nextDueAmount} onChange={(e) => setNextDueAmount(e.target.value)} placeholder="2000" />
             </Field>
           </div>
         </Section>
 
-        <Section title="Комментарий">
+        <Section title={t('common.comment')}>
           <textarea
             className="crm-textarea"
             rows={3}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Любые пояснения для основателя"
+            placeholder={t('dealForm.commentPlaceholder')}
             style={{ resize: 'none' }}
           />
         </Section>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={() => navigate('/submissions')} disabled={saving}>
-            Отмена
+            {t('common.cancel')}
           </button>
           {/* BUG-fix: раньше кнопка была `disabled` при pendingUploads>0. Если
               FileUpload размонтировался в середине загрузки (например, менеджер
@@ -648,7 +648,7 @@ export default function SubmissionForm() {
               кнопка навсегда серая без объяснения. Теперь клик всегда доходит
               до onSubmit, а тот покажет внятный toast если загрузка ещё идёт. */}
           <button className="btn btn-primary" onClick={onSubmit} disabled={saving}>
-            {saving ? 'Отправляем…' : pendingUploads > 0 ? 'Загружаем файлы…' : 'Отправить на одобрение'}
+            {saving ? t('common.sending') : pendingUploads > 0 ? t('dealForm.uploadingFiles') : t('dealForm.submit')}
           </button>
         </div>
       </motion.div>
@@ -745,6 +745,7 @@ function MultiFileUpload({
   accept?: string;
   onUploadingChange?: (uploading: boolean) => void;
 }) {
+  const { t } = useT();
   const { toast } = useUI();
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -789,12 +790,12 @@ function MultiFileUpload({
           });
         } catch (e: any) {
           failed++;
-          toast(e?.response?.data?.message || e?.userMessage || `Ошибка загрузки: ${file.name}`, 'error');
+          toast(e?.response?.data?.message || e?.userMessage || `${t('dealForm.uploadError')}: ${file.name}`, 'error');
         }
       }
       if (newUrls.length > 0) {
         onChange([...values, ...newUrls], [...metas, ...newMetas]);
-        if (failed === 0) toast(`Загружено файлов: ${newUrls.length}`, 'success');
+        if (failed === 0) toast(`${t('dealForm.uploadedFiles')}: ${newUrls.length}`, 'success');
       }
     } finally {
       setUploading(false);
@@ -879,7 +880,7 @@ function MultiFileUpload({
                   type="button"
                   onClick={() => removeAt(i)}
                   disabled={uploading}
-                  aria-label="Удалить файл"
+                  aria-label={t('dealForm.removeFile')}
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -923,12 +924,12 @@ function MultiFileUpload({
           onClick={() => addInputRef.current?.click()}
           disabled={uploading}
         >
-          + Добавить ещё
+          + {t('dealForm.addMore')}
         </button>
-        {uploading && <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>Загружаем…</span>}
+        {uploading && <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>{t('common.uploading')}</span>}
         {!uploading && values.length > 0 && (
           <span style={{ fontSize: 12, color: 'var(--primary-dark)' }}>
-            <Icon name="check_circle" size={14} /> Файлов: {values.length}
+            <Icon name="check_circle" size={14} /> {t('dealForm.files')}: {values.length}
           </span>
         )}
       </div>
@@ -953,6 +954,7 @@ function FileUpload({
   onMetaChange?: (meta: UploadMeta | null) => void;
   onUploadingChange?: (uploading: boolean) => void;
 }) {
+  const { t } = useT();
   const { toast } = useUI();
   const [uploading, setUploading] = useState(false);
   // Хранит, «отдали» ли мы наверх активный тик pendingUploads. Нужно чтобы:
@@ -987,9 +989,9 @@ function FileUpload({
         size: r.size ?? file.size,
         originalName: r.originalName || file.name,
       });
-      toast('Файл загружен', 'success');
+      toast(t('dealForm.fileUploaded'), 'success');
     } catch (e: any) {
-      toast(e?.response?.data?.message || e?.userMessage || 'Ошибка загрузки', 'error');
+      toast(e?.response?.data?.message || e?.userMessage || t('dealForm.uploadError'), 'error');
     } finally {
       setUploading(false);
       if (uploadingRef.current) {
@@ -1007,10 +1009,10 @@ function FileUpload({
         disabled={uploading}
         style={{ fontSize: 13 }}
       />
-      {uploading && <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>Загружаем…</span>}
+      {uploading && <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>{t('common.uploading')}</span>}
       {value && !uploading && (
         <span style={{ fontSize: 12, color: 'var(--primary-dark)' }}>
-          <Icon name="check_circle" size={14} /> Загружено
+          <Icon name="check_circle" size={14} /> {t('toast.uploaded')}
         </span>
       )}
     </div>

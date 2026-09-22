@@ -105,17 +105,17 @@ export default function Submissions() {
   return (
     <>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {!founder && tabBtn('mine', 'Мои сделки')}
+        {!founder && tabBtn('mine', t('deals.tab.mine'))}
         {founder && (
           <>
-            {tabBtn('pending', 'На рассмотрении')}
-            {tabBtn('approved', 'Одобренные')}
-            {tabBtn('all', 'Все сделки')}
+            {tabBtn('pending', t('deals.tab.pending'))}
+            {tabBtn('approved', t('deals.tab.approved'))}
+            {tabBtn('all', t('deals.tab.all'))}
           </>
         )}
         <div style={{ flex: 1 }} />
         <button className="btn btn-primary" onClick={() => navigate('/submissions/new')}>
-          <Icon name="add" size={16} /> Новая сделка
+          <Icon name="add" size={16} /> {t('dealForm.title')}
         </button>
       </div>
 
@@ -263,6 +263,7 @@ function DealsList<T>({
 }
 
 function MySubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
+  const { t } = useT();
   const p = params(f);
   const query = useQuery({
     queryKey: ['submissions', 'mine', p],
@@ -280,13 +281,14 @@ function MySubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
       query={query}
       totalQuery={narrowed ? totalQuery : query}
       narrowed={narrowed}
-      emptyText="У вас пока нет сделок. Нажмите «Новая сделка», чтобы оформить первую."
+      emptyText={t('deals.empty.mine')}
       render={(s: SaleSubmission) => <SubmissionCard key={s.id} s={s} />}
     />
   );
 }
 
 function AllSubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
+  const { t } = useT();
   const p = params(f);
   const query = useQuery({
     queryKey: ['submissions', 'all', p],
@@ -304,13 +306,14 @@ function AllSubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) 
       query={query}
       totalQuery={narrowed ? totalQuery : query}
       narrowed={narrowed}
-      emptyText="Сделок пока нет."
+      emptyText={t('deals.empty.all')}
       render={(s: SaleSubmission) => <SubmissionCard key={s.id} s={s} showManager />}
     />
   );
 }
 
 function ApprovedSubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
+  const { t } = useT();
   const p = params(f);
   const query = useQuery({
     queryKey: ['submissions', 'approved', p],
@@ -328,13 +331,14 @@ function ApprovedSubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolea
       query={query}
       totalQuery={narrowed ? totalQuery : query}
       narrowed={narrowed}
-      emptyText="Одобренных сделок пока нет."
+      emptyText={t('deals.empty.approved')}
       render={(s: SaleSubmission) => <SubmissionCard key={s.id} s={s} showManager />}
     />
   );
 }
 
 function PendingPayments({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
+  const { t } = useT();
   // Партнёр здесь нужен по той же причине, что на «Всех» и «Одобренных»:
   // перед выплатой партнёру надо видеть и то, что вот-вот одобрят, — иначе
   // сумма к выплате считается по неполной картине.
@@ -355,13 +359,14 @@ function PendingPayments({ f, narrowed }: { f: DealFilters; narrowed: boolean })
       query={query}
       totalQuery={narrowed ? totalQuery : query}
       narrowed={narrowed}
-      emptyText="Нет платежей на рассмотрении."
+      emptyText={t('deals.empty.pending')}
       render={(pp: PendingPayment) => <PendingPaymentCard key={pp.id} p={pp} />}
     />
   );
 }
 
 function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: boolean }) {
+  const { t } = useT();
   const studentName = s.student?.fullName || s.newStudentName || '—';
   const program = s.program?.name || '—';
   const totalPaid = s.payments.filter((p) => p.status === 'APPROVED').reduce((sum, p) => sum + p.amount, 0);
@@ -384,7 +389,7 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
             <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{program}</div>
             {showManager && s.manager && (
               <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>
-                Менеджер: {s.manager.fullName}
+                {t('deal.manager')}: {s.manager.fullName}
               </div>
             )}
             {/* Партнёр, приведший клиента. Приходит только руководству —
@@ -406,12 +411,12 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
                   fontWeight: 600,
                 }}
               >
-                Партнёр: {s.partnerAttribution.fullName}
+                {t('deals.partner')}: {s.partnerAttribution.fullName}
                 <span style={{ opacity: 0.7, fontWeight: 400 }}>
                   · {s.partnerAttribution.referralCode}
                 </span>
                 {s.partnerAttribution.commissionedAt && (
-                  <span style={{ opacity: 0.7, fontWeight: 400 }}>· начислено</span>
+                  <span style={{ opacity: 0.7, fontWeight: 400 }}>· {t('deals.credited')}</span>
                 )}
               </div>
             )}
@@ -432,27 +437,27 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginTop: 8 }}>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Контракт</div>
+            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('deal.contract')}</div>
             <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
               {s.totalAmount.toLocaleString('ru-RU')} {s.currency}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Оплачено</div>
+            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('deal.stat.paid')}</div>
             <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--primary-dark)' }}>
               {totalPaid.toLocaleString('ru-RU')} {s.currency}
             </div>
           </div>
           {pendingSum > 0 && (
             <div>
-              <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Ждёт одобрения</div>
+              <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('deals.awaiting')}</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#b45309' }}>
                 {pendingSum.toLocaleString('ru-RU')} {s.currency}
               </div>
             </div>
           )}
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Платежей</div>
+            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('deal.stat.payments')}</div>
             <div style={{ fontFamily: 'var(--font-mono)' }}>{s.payments.length}</div>
           </div>
         </div>
@@ -462,6 +467,7 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
 }
 
 function PendingPaymentCard({ p }: { p: PendingPayment }) {
+  const { t } = useT();
   const studentName = p.submission.student?.fullName || p.submission.newStudentName || '—';
   const partner = p.submission.partnerAttribution;
 
@@ -501,7 +507,7 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
             <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{p.submission.program?.name || '—'}</div>
             {p.submission.manager && (
               <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>
-                Менеджер: {p.submission.manager.fullName}
+                {t('deal.manager')}: {p.submission.manager.fullName}
               </div>
             )}
             {/* Партнёр приходит только руководству — бэкенд не кладёт поле в
@@ -523,10 +529,10 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
                   fontWeight: 600,
                 }}
               >
-                Партнёр: {partner.fullName}
+                {t('deals.partner')}: {partner.fullName}
                 <span style={{ opacity: 0.7, fontWeight: 400 }}>· {partner.referralCode}</span>
                 <span style={{ opacity: 0.7, fontWeight: 400 }}>
-                  · {credited ? 'начислено' : 'при одобрении'} {commissionLabel}
+                  · {credited ? t('deals.credited') : t('deals.onApproval')} {commissionLabel}
                 </span>
               </div>
             )}
@@ -547,13 +553,13 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13 }}>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase' }}>Сумма платежа</div>
+            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase' }}>{t('deals.payAmount')}</div>
             <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--primary-dark)', fontSize: 16 }}>
               {p.amount.toLocaleString('ru-RU')} {p.submission.currency}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase' }}>Дата оплаты</div>
+            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase' }}>{t('deal.col.paidAt')}</div>
             <div style={{ fontFamily: 'var(--font-mono)' }}>
               {new Date(p.paidAt).toLocaleDateString('ru-RU')}
             </div>
@@ -566,7 +572,7 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
               onClick={(e) => e.stopPropagation()}
               className="btn btn-sm btn-secondary"
             >
-              <Icon name="image" size={14} /> Чек{p.receiptUrls.length > 1 ? ` (${p.receiptUrls.length})` : ''}
+              <Icon name="image" size={14} /> {t('deal.receipt')}{p.receiptUrls.length > 1 ? ` (${p.receiptUrls.length})` : ''}
             </a>
           )}
           {p.depositProofUrls.length > 0 && (
@@ -577,7 +583,7 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
               onClick={(e) => e.stopPropagation()}
               className="btn btn-sm btn-secondary"
             >
-              <Icon name="image" size={14} /> Депозит{p.depositProofUrls.length > 1 ? ` (${p.depositProofUrls.length})` : ''}
+              <Icon name="image" size={14} /> {t('deal.deposit')}{p.depositProofUrls.length > 1 ? ` (${p.depositProofUrls.length})` : ''}
             </a>
           )}
         </div>
@@ -587,7 +593,8 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
 }
 
 function Loading() {
-  return <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-soft)' }}>Загружаем…</div>;
+  const { t } = useT();
+  return <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-soft)' }}>{t('common.loading')}</div>;
 }
 function Empty({ children }: { children: any }) {
   return <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>{children}</div>;
