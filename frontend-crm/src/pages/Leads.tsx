@@ -266,7 +266,8 @@ export default function Leads() {
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.message;
-      setServerError(Array.isArray(msg) ? msg.join(', ') : msg?.toString() || t('toast.error'));
+      // Нет ответа сервера (сеть, перезапуск) — объясняем, а не «Ошибка».
+      setServerError(Array.isArray(msg) ? msg.join(', ') : msg?.toString() || err?.userMessage || t('toast.error'));
     },
   });
 

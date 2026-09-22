@@ -22,6 +22,8 @@ const ALWAYS_ALLOWED_HOSTS = [
   'www.javonongroup.tj',
 ];
 
+const VERCEL_TEAM_RE = /^javonon-[a-z0-9-]+-muhammadamin100s-projects\.vercel\.app$/;
+
 export function isAllowedOrigin(origin: string): boolean {
   let url: URL;
   try {
@@ -34,6 +36,11 @@ export function isAllowedOrigin(origin: string): boolean {
   if (env.some((o) => o === origin || o === host || o === `${url.protocol}//${host}`)) return true;
   if (ALWAYS_ALLOWED_HOSTS.includes(host)) return true;
   if (url.hostname.endsWith('.javonon.com')) return true;
+  // Адреса сборок Vercel нашей команды (javonon-…-muhammadamin100s-projects.vercel.app):
+  // суффикс команды принадлежит только нашему аккаунту — чужой проект такой
+  // адрес получить не может. Без этого CRM, открытая по адресу конкретной
+  // сборки (кнопка в панели Vercel), не могла сделать ни одного запроса.
+  if (VERCEL_TEAM_RE.test(url.hostname)) return true;
   if (process.env.NODE_ENV !== 'production' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')) return true;
   return false;
 }
