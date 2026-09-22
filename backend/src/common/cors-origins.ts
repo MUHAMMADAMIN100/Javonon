@@ -17,6 +17,9 @@ const ALWAYS_ALLOWED_HOSTS = [
   'javonon-crm.vercel.app',
   'javonon-landing.vercel.app',
   'javonon.vercel.app',
+  // Боевой домен лендинга; CRM открывается на нём же через /admin (rewrite Vercel).
+  'javonongroup.tj',
+  'www.javonongroup.tj',
 ];
 
 export function isAllowedOrigin(origin: string): boolean {
