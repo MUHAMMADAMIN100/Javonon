@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isElevated } from '../auth/role-utils';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
@@ -82,11 +82,15 @@ export class SalesService {
    *   2. Считаем у каждого число активных (не закрытых) Application.
    *   3. Берём с минимальным числом. Если несколько — берём с самым
    *      ранним createdAt (равномерно распределяет в пустой системе).
+   *
+   * db — транзакция вызывающего: он держит замок распределения до вставки
+   * заявки, иначе два одновременных лида видели бы одну нагрузку и
+   * доставались одному менеджеру.
    */
-  async pickManagerForLead(): Promise<string | null> {
+  async pickManagerForLead(db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<string | null> {
     // Мульти-роли (ТЗ §2): юзер с SALES_MANAGER в roles[] тоже считается
     // менеджером — раньше auto-distribute их пропускал.
-    const managers = await this.prisma.user.findMany({
+    const managers = await db.user.findMany({
       where: {
         // Уволенным лиды не распределяются.
         isActive: true,
@@ -98,23 +102,22 @@ export class SalesService {
       select: { id: true, createdAt: true },
     });
     if (managers.length === 0) return null;
-    const counts = await Promise.all(
-      managers.map(async (m) => ({
-        userId: m.id,
-        createdAt: m.createdAt,
-        load: await this.prisma.application.count({
-          where: {
-            managerId: m.id,
-            // notIn по всей группе «доведено до результата»: если бы здесь
-            // остался только новый SUCCESSFUL_LEAD, то на неперенесённых
-            // строках (перенос опт-ин, см. MIGRATE_LEAD_STATUSES) все старые
-            // ENROLLED-заявки снова считались бы активными и нагрузка
-            // менеджеров скакнула бы, перекосив round-robin.
-            status: { notIn: FINISHED_APPLICATION_STATUSES },
-          },
-        }),
-      })),
-    );
+    // Нагрузка всех менеджеров — одним запросом.
+    const loads = await db.application.groupBy({
+      by: ['managerId'],
+      where: {
+        managerId: { in: managers.map((m) => m.id) },
+        // notIn по всей группе «доведено до результата»: если бы здесь
+        // остался только новый SUCCESSFUL_LEAD, то на неперенесённых
+        // строках (перенос опт-ин, см. MIGRATE_LEAD_STATUSES) все старые
+        // ENROLLED-заявки снова считались бы активными и нагрузка
+        // менеджеров скакнула бы, перекосив round-robin.
+        status: { notIn: FINISHED_APPLICATION_STATUSES },
+      },
+      _count: { _all: true },
+    });
+    const loadOf = new Map(loads.map((l) => [l.managerId, l._count._all]));
+    const counts = managers.map((m) => ({ userId: m.id, createdAt: m.createdAt, load: loadOf.get(m.id) ?? 0 }));
     counts.sort((a, b) => {
       if (a.load !== b.load) return a.load - b.load;
       return a.createdAt.getTime() - b.createdAt.getTime();

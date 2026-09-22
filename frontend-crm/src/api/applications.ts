@@ -27,6 +27,15 @@ export async function listApplications(filters: AppFilters = {}) {
 }
 
 /**
+ * Одна страница списка заявок — страницу, порядок и счётчик считает сервер.
+ * sort — как ?sort= в ссылке: «fullName» или «-createdAt».
+ */
+export async function listApplicationsPage(filters: AppFilters & { page: number; pageSize: number; sort?: string; ranks?: string }) {
+  const { data } = await api.get<{ items: Application[]; total: number }>('/applications', { params: filters });
+  return data;
+}
+
+/**
  * Карточка заявки. Единственный ответ, который может нести
  * `partnerAttribution` (Application.partnerAttribution →
  * PartnerAttributionView): бэкенд добавляет его только для

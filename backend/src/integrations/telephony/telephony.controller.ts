@@ -26,8 +26,12 @@ export class TelephonyController {
    * Возвращает XML «куда дозваниваться». ?u=<userId> прокидывается
    * во вложенный recordingStatusCallback URL, чтобы мы знали кому
    * писать в CallLog.
+   *
+   * Подпись Twilio обязательна и здесь: без неё любой мог получить TwiML
+   * с нашим callerId и подставить свой ?u= в адрес записи разговора.
    */
   @Post('voice')
+  @UseGuards(TwilioSignatureGuard)
   @Header('Content-Type', 'application/xml')
   voice(
     @Body() body: any,

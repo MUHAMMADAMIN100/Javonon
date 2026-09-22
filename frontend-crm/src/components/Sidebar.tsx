@@ -7,7 +7,7 @@ import ChangePasswordModal from './ChangePasswordModal';
 import { queryClient } from '../lib/queryClient';
 import { keys } from '../lib/queryKeys';
 import { listChatRooms, chatUnread } from '../api/chat';
-import { listApplications } from '../api/applications';
+import { listApplicationsPage } from '../api/applications';
 import { listStudents, studentStats } from '../api/students';
 import { listPrograms } from '../api/programs';
 import { listTasks } from '../api/tasks';
@@ -34,7 +34,9 @@ const PREFETCH_MAP: Record<string, () => Promise<void> | void> = {
     queryClient.prefetchQuery({ queryKey: keys.chat.unread(), queryFn: () => chatUnread() });
   },
   '/applications': () => {
-    queryClient.prefetchQuery({ queryKey: keys.applications.list({}), queryFn: () => listApplications() });
+    // Первая страница «Всех» без фильтров — ровно тот ключ, с которым открывается экран.
+    const first = { mine: false, page: 1, pageSize: 20 };
+    queryClient.prefetchQuery({ queryKey: keys.applications.list(first), queryFn: () => listApplicationsPage(first) });
   },
   '/students': () => {
     queryClient.prefetchQuery({ queryKey: keys.students.list({ paid: true }), queryFn: () => listStudents({ paid: true }) });

@@ -110,40 +110,56 @@ export class KpiService {
     // «Продажи» — по правилу зарплаты (common/manager-sales.ts): одобренные
     // платежи по сделкам в TJS; ручные приходы — отдельно «Прочие приходы»;
     // прочие валюты — nonTjsSales. Сразу по всем сотрудникам.
-    const sales = await managerSales(this.prisma, users.map((u) => u.id), filters);
+    const ids = users.map((u) => u.id);
+    // Всё сразу по всем сотрудникам — 4 группировки вместо 5 запросов на
+    // каждого (при 30 сотрудниках было 150 запросов на одно открытие).
+    const [sales, appGroups, studentGroups, taskGroups] = await Promise.all([
+      managerSales(this.prisma, ids, filters),
+      this.prisma.application.groupBy({
+        by: ['managerId', 'chinaManagerId', 'status'],
+        where: this.applicationsWhere(ids, dateFilter),
+        _count: { _all: true },
+      }),
+      this.prisma.student.groupBy({
+        by: ['managerId', 'chinaManagerId'],
+        where: this.studentsWhere(ids, dateFilter),
+        _count: { _all: true },
+      }),
+      this.prisma.task.groupBy({
+        by: ['assignedToId', 'status'],
+        where: {
+          assignedToId: { in: ids },
+          // Обе задачные метрики — по createdAt, иначе колонка
+          // «tasksDone / (tasksDone + tasksOpen)» на /kpi складывала бы
+          // закрытые-в-периоде с открытыми-за-всё-время.
+          ...(dateFilter && { createdAt: dateFilter }),
+        },
+        _count: { _all: true },
+      }),
+    ]);
+    // Заявка или студент засчитывается каждому из двух слотов менеджера —
+    // но один раз, если в обоих один и тот же человек (как OR в where).
+    const add = (map: Map<string, number>, who: (string | null)[], n: number) => {
+      for (const id of new Set(who.filter((x): x is string => !!x))) map.set(id, (map.get(id) ?? 0) + n);
+    };
+    const assigned = new Map<string, number>();
+    const enrolled = new Map<string, number>();
+    for (const g of appGroups) {
+      add(assigned, [g.managerId, g.chinaManagerId], g._count._all);
+      if (FINISHED_APPLICATION_STATUSES.includes(g.status)) add(enrolled, [g.managerId, g.chinaManagerId], g._count._all);
+    }
+    const students = new Map<string, number>();
+    for (const g of studentGroups) add(students, [g.managerId, g.chinaManagerId], g._count._all);
+    const open = new Map<string, number>();
+    const done = new Map<string, number>();
+    for (const g of taskGroups) add(g.status === 'DONE' ? done : open, [g.assignedToId], g._count._all);
 
-    const result = await Promise.all(
-      users.map(async (u) => {
-        const [
-          applicationsAssigned,
-          applicationsEnrolled,
-          studentsCount,
-          tasksOpen,
-          tasksDone,
-        ] = await Promise.all([
-          this.prisma.application.count({ where: this.applicationsWhere(u.id, dateFilter) }),
-          this.prisma.application.count({
-            where: { ...this.applicationsWhere(u.id, dateFilter), status: { in: FINISHED_APPLICATION_STATUSES } },
-          }),
-          this.prisma.student.count({ where: this.studentsWhere(u.id, dateFilter) }),
-          this.prisma.task.count({
-            where: {
-              assignedToId: u.id,
-              status: { not: 'DONE' },
-              ...(dateFilter && { createdAt: dateFilter }),
-            },
-          }),
-          this.prisma.task.count({
-            where: {
-              assignedToId: u.id,
-              status: 'DONE',
-              // Обе задачные метрики — по createdAt, иначе колонка
-              // «tasksDone / (tasksDone + tasksOpen)» на /kpi складывала бы
-              // закрытые-в-периоде с открытыми-за-всё-время.
-              ...(dateFilter && { createdAt: dateFilter }),
-            },
-          }),
-        ]);
+    const result = users.map((u) => {
+        const applicationsAssigned = assigned.get(u.id) ?? 0;
+        const applicationsEnrolled = enrolled.get(u.id) ?? 0;
+        const studentsCount = students.get(u.id) ?? 0;
+        const tasksOpen = open.get(u.id) ?? 0;
+        const tasksDone = done.get(u.id) ?? 0;
 
         // Math.min(100, …) — не расчёт, а предохранитель. После перевода
         // enrolled на createdAt он строго подмножество assigned, и выйти
@@ -176,8 +192,7 @@ export class KpiService {
           tasksOpen,
           tasksDone,
         };
-      }),
-    );
+      });
 
     // Сортируем по продажам — топ-менеджеры наверху. Ключ сортировки
     // одновалютный (TJS), поэтому сравнение осмысленно: до фикса валюты
@@ -196,18 +211,20 @@ export class KpiService {
    *  4». Поэтому и leaderboard(), и details() берут where отсюда.
    * ==================================================================== */
 
-  /** Заявки сотрудника (любой из двух слотов менеджера), по дате создания. */
-  private applicationsWhere(userId: string, dateFilter: DateRange): Prisma.ApplicationWhereInput {
+  /** Заявки сотрудника (любой из двух слотов менеджера), по дате создания. Список id — для рейтинга. */
+  private applicationsWhere(userId: string | string[], dateFilter: DateRange): Prisma.ApplicationWhereInput {
+    const who = Array.isArray(userId) ? { in: userId } : userId;
     return {
-      OR: [{ managerId: userId }, { chinaManagerId: userId }],
+      OR: [{ managerId: who }, { chinaManagerId: who }],
       ...(dateFilter && { createdAt: dateFilter }),
     };
   }
 
   /** Активные ОПЛАТИВШИЕ студенты сотрудника, по дате заведения карточки. */
-  private studentsWhere(userId: string, dateFilter: DateRange): Prisma.StudentWhereInput {
+  private studentsWhere(userId: string | string[], dateFilter: DateRange): Prisma.StudentWhereInput {
+    const who = Array.isArray(userId) ? { in: userId } : userId;
     return {
-      OR: [{ managerId: userId }, { chinaManagerId: userId }],
+      OR: [{ managerId: who }, { chinaManagerId: who }],
       status: 'ACTIVE',
       // Студент = оплативший (common/paid-student.ts) — как в списке
       // «Студенты» и на карточке дашборда.

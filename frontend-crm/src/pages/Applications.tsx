@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { listApplications } from '../api/applications';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { listApplicationsPage } from '../api/applications';
 import { listUsers } from '../api/users';
 import type { Application, ApplicationSource, ApplicationStatus, Country, Direction } from '../api/types';
 import {
@@ -20,11 +20,12 @@ import { useRealtime } from '../realtime';
 import Icon from '../Icon';
 import PeriodFilter from '../components/PeriodFilter';
 import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
-import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import { labelRanks, SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import ListTotal from '../components/ListTotal';
 import DirectionOptions from '../components/DirectionOptions';
 import Pagination from '../components/Pagination';
 import { keys } from '../lib/queryKeys';
+import { tjFormatDate } from '../lib/tjTime';
 import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
@@ -151,11 +152,28 @@ export default function Applications() {
     countryPending: countryPending && !country ? true : undefined,
   };
 
+  // Страница, порядок и счётчик — на сервере: заявок могут быть тысячи, и
+  // тянуть их все ради 20 строк на экране нельзя. Порядок берём из ссылки
+  // (?sort=), где его хранит заголовок таблицы.
+  const [searchParams] = useSearchParams();
+  const sortParam = searchParams.get('sort') || undefined;
+  // Колонки-списки сервер сортирует по подписям на языке интерфейса —
+  // передаём ему их порядок.
+  const sortKey = sortParam?.replace(/^-/, '');
+  const ranks =
+    sortKey === 'status' ? labelRanks(APPLICATION_STATUS_VALUES, statusLabel)
+    : sortKey === 'country' ? labelRanks(COUNTRIES, countryLabel)
+    : sortKey === 'direction' ? labelRanks(DIRECTION_VALUES, directionLabel)
+    : sortKey === 'source' ? labelRanks(APPLICATION_SOURCES, (s) => SOURCE_LABEL[s as ApplicationSource])
+    : undefined;
+  const pageQuery = { ...filters, page, pageSize: PAGE_SIZE, sort: sortParam, ranks };
   const appsQuery = useQuery({
-    queryKey: keys.applications.list(filters),
-    queryFn: () => listApplications(filters),
+    queryKey: keys.applications.list(pageQuery),
+    queryFn: () => listApplicationsPage(pageQuery),
+    placeholderData: keepPreviousData,
   });
-  const items = appsQuery.data ?? [];
+  const items = appsQuery.data?.items ?? [];
+  const found = appsQuery.data?.total ?? 0;
   const loading = appsQuery.isLoading;
 
   // Для счётчика «Найдено: N из M»: сколько всего без фильтров. «Мои/Все» —
@@ -163,8 +181,8 @@ export default function Applications() {
   const narrowed = Object.entries(filters).some(([k, v]) => k !== 'mine' && v !== undefined && v !== '');
   const allFilters = { mine: scope === 'mine' };
   const totalQuery = useQuery({
-    queryKey: keys.applications.list(allFilters),
-    queryFn: () => listApplications(allFilters),
+    queryKey: keys.applications.list({ ...allFilters, page: 1, pageSize: 1 }),
+    queryFn: () => listApplicationsPage({ ...allFilters, page: 1, pageSize: 1 }),
     enabled: narrowed,
   });
 
@@ -187,9 +205,9 @@ export default function Applications() {
   // техническая коррекция, а не переход, в истории ей не место.
   useEffect(() => {
     if (!appsQuery.isSuccess) return;
-    const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(found / PAGE_SIZE));
     if (page > totalPages) setValue('page', totalPages, { replace: true });
-  }, [appsQuery.isSuccess, items.length, page, setValue]);
+  }, [appsQuery.isSuccess, found, page, setValue]);
 
   const sort = useTableSort<Application>(
     items,
@@ -210,7 +228,8 @@ export default function Applications() {
     ],
     { pageParam: 'page' },
   );
-  const pagedItems = sort.sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Строки уже отсортированы и нарезаны сервером; заголовки только меняют ?sort=.
+  const pagedItems = items;
 
   useRealtime({
     'application:new': () => qc.invalidateQueries({ queryKey: keys.applications.all }),
@@ -230,8 +249,8 @@ export default function Applications() {
       <div className="card-header is-titleless">
         <ListTotal
           noun="applications"
-          found={items.length}
-          total={totalQuery.data?.length}
+          found={found}
+          total={totalQuery.data?.total}
           filtered={narrowed}
           testId="applications-total"
         />
@@ -453,7 +472,7 @@ export default function Applications() {
                         </span>
                       </td>
                       <td><span className={`badge ${STATUS_BADGE[a.status]}`}>{statusLabel(a.status)}</span></td>
-                      <td>{new Date(a.createdAt).toLocaleDateString('ru-RU')}</td>
+                      <td>{tjFormatDate(a.createdAt)}</td>
                     </motion.tr>
                   ))}
                 </motion.tbody>
@@ -465,7 +484,7 @@ export default function Applications() {
         {!loading && (
           <Pagination
             page={page}
-            total={items.length}
+            total={found}
             pageSize={PAGE_SIZE}
             onChange={(next) => setValue('page', next)}
           />

@@ -89,6 +89,12 @@ export class ApplicationsController {
     @Query('directionPending') directionPending?: string,
     /** Заявки без указанной страны — строка «Не указано» карточки «Страны». */
     @Query('countryPending') countryPending?: string,
+    // Серверная пагинация экрана «Заявки»: с page ответ — { items, total },
+    // без него — весь список массивом, как раньше (очередь лидов, дашборд).
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('sort') sort?: string,
+    @Query('ranks') ranks?: string,
   ) {
     // QA-fix #45: validate enum query params (раньше bad value → 500).
     // Единый источник истины — Prisma enum'ы. Добавили значение в schema.prisma
@@ -123,6 +129,10 @@ export class ApplicationsController {
       currentUserRoles: user?.roles,
       currentUserPermissions: user?.permissions,
       currentUserHasCustomRole: user?.hasCustomRole,
+      page: page ? Math.max(1, parseInt(page, 10) || 1) : undefined,
+      pageSize: pageSize ? Math.min(100, Math.max(1, parseInt(pageSize, 10) || 20)) : undefined,
+      sort,
+      ranks: ranks?.slice(0, 2000),
     });
   }
 

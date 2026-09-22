@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 /**
  * Проверка X-Twilio-Signature на webhook endpoint'ах. Без неё любой в
@@ -55,7 +55,10 @@ export class TwilioSignatureGuard implements CanActivate {
       .update(url + payload)
       .digest('base64');
 
-    if (expected !== signature) {
+    // Сравнение за постоянное время — подпись нельзя подобрать по задержке ответа.
+    const a = Buffer.from(expected);
+    const b = Buffer.from(signature);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       this.logger.warn(`Invalid Twilio signature for ${url}`);
       throw new ForbiddenException('Invalid Twilio signature');
     }

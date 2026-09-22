@@ -74,17 +74,17 @@ export class TelephonyService {
     const publicBase = this.config.get<string>('PUBLIC_API_BASE') || '';
     const safeTo = to.replace(/[^\d+]/g, '');
     const recordingCallback = publicBase
-      ? `${publicBase}/api/integrations/telephony/recording-status${userId ? `?u=${userId}` : ''}`
+      ? `${publicBase}/api/integrations/telephony/recording-status${userId ? `?u=${encodeURIComponent(userId)}` : ''}`
       : '';
     // record="record-from-answer-dual" — пишем оба канала разговора
     // отдельно, начиная с момента ответа. trim="trim-silence" чтобы
     // не пилить тишину в начале/конце.
     const recordAttr = `record="record-from-answer-dual"`;
     const callbackAttr = recordingCallback
-      ? ` recordingStatusCallback="${recordingCallback}" recordingStatusCallbackEvent="completed"`
+      ? ` recordingStatusCallback="${xmlAttr(recordingCallback)}" recordingStatusCallbackEvent="completed"`
       : '';
     return `<?xml version="1.0" encoding="UTF-8"?><Response>
-      <Dial callerId="${callerId}" answerOnBridge="true" ${recordAttr}${callbackAttr}>
+      <Dial callerId="${xmlAttr(callerId)}" answerOnBridge="true" ${recordAttr}${callbackAttr}>
         <Number>${safeTo}</Number>
       </Dial>
     </Response>`;
@@ -160,4 +160,9 @@ export class TelephonyService {
       return { ok: false };
     }
   }
+}
+
+/** Значение для XML-атрибута TwiML: кавычки и & не ломают разметку. */
+function xmlAttr(v: string): string {
+  return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

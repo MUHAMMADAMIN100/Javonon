@@ -360,9 +360,13 @@ export class ApplicationsService {
     // («+992 90 123-45-67» и «901234567» — один человек). Замок на номер
     // держится до конца транзакции: двойной клик и две вкладки дают ОДНУ
     // заявку, второй запрос дождётся первого и увидит её.
+    //
+    // Авто-распределение держит второй, общий замок: менеджер выбирается по
+    // нагрузке, и два одновременных лида без него доставались бы одному.
+    // Порядок замков всегда «номер → распределение» — взаимной блокировки нет.
     const key = phoneKey(dto.phone);
-    if (key) {
-      return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
+      if (key) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'lead:' + key}))`;
         const open = await this.findOpenByPhone(tx, key);
         if (open) {
@@ -374,10 +378,12 @@ export class ApplicationsService {
           });
           return { app, duplicate: true };
         }
-        return { app: await this.insertLead(tx, dto, opts, birthday), duplicate: false };
-      });
-    }
-    return { app: await this.insertLead(this.prisma, dto, opts, birthday), duplicate: false };
+      }
+      if (opts.autoAssignManager) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('lead-distribution'))`;
+      }
+      return { app: await this.insertLead(tx, dto, opts, birthday), duplicate: false };
+    });
   }
 
   /**
@@ -409,7 +415,7 @@ export class ApplicationsService {
     let pipelineStageId: string | null = null;
     if (this.sales) {
       if (opts.autoAssignManager) {
-        try { assignedManagerId = await this.sales.pickManagerForLead(); }
+        try { assignedManagerId = await this.sales.pickManagerForLead(db); }
         catch { /* fallback: оставляем без менеджера */ }
       }
       // Авто-проставление дефолтной воронки и её первого этапа.
@@ -665,6 +671,13 @@ export class ApplicationsService {
     // был бы пуст.
     currentUserPermissions?: string[];
     currentUserHasCustomRole?: boolean;
+    /** Страница (с 1). Задана — ответ { items, total } вместо массива. */
+    page?: number;
+    pageSize?: number;
+    /** Колонка сортировки, «-» в начале — по убыванию (как ?sort= в CRM). */
+    sort?: string;
+    /** Порядок подписей для колонок-списков: «значение:ранг,…» (см. labelRanks в CRM). */
+    ranks?: string;
   }) {
     const where: Prisma.ApplicationWhereInput = {};
     const and: Prisma.ApplicationWhereInput[] = [];
@@ -757,11 +770,63 @@ export class ApplicationsService {
       and.push({ OR: or });
     }
     if (and.length) where.AND = and;
-    return this.prisma.application.findMany({
+    if (!filters.page) {
+      return this.prisma.application.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        include: MANAGER_INCLUDE,
+      });
+    }
+    const size = filters.pageSize ?? 20;
+    const skip = (filters.page - 1) * size;
+    const key = filters.sort?.replace(/^-/, '');
+    // По дате (и по умолчанию) — страница прямо из базы.
+    if (!key || key === 'createdAt' || !SORT_VALUE[key]) {
+      const desc = key === 'createdAt' ? !!filters.sort?.startsWith('-') : true;
+      const [items, total] = await Promise.all([
+        this.prisma.application.findMany({
+          where,
+          orderBy: [{ createdAt: desc ? 'desc' : 'asc' }, { id: 'asc' }],
+          include: MANAGER_INCLUDE,
+          skip,
+          take: size,
+        }),
+        this.prisma.application.count({ where }),
+      ]);
+      return { items, total };
+    }
+    // Остальные колонки — ровно как сортировала таблица CRM: «Заявка 2»
+    // раньше «Заявка 12», регистр не важен, пустые всегда в конце, списки —
+    // по подписям. Такой порядок база сама не даёт, поэтому берём лёгкие
+    // строки (только поля сортировки), сортируем здесь, а целиком читаем
+    // лишь строки страницы.
+    const light = await this.prisma.application.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
-      include: MANAGER_INCLUDE,
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      select: {
+        id: true, fullName: true, phone: true, country: true, direction: true,
+        directionConfirmed: true, source: true, status: true, manager: { select: { fullName: true } },
+      },
     });
+    const rank = new Map<string, number>();
+    for (const part of (filters.ranks || '').split(',')) {
+      const [v, r] = part.split(':');
+      if (v && r !== undefined && !Number.isNaN(Number(r))) rank.set(v, Number(r));
+    }
+    const dir = filters.sort?.startsWith('-') ? -1 : 1;
+    const valueOf = SORT_VALUE[key];
+    const decorated = light.map((row, i) => ({ id: row.id, i, v: valueOf(row, rank) }));
+    decorated.sort((a, b) => {
+      if (a.v === null && b.v === null) return a.i - b.i;
+      if (a.v === null) return 1;
+      if (b.v === null) return -1;
+      const c = typeof a.v === 'number' && typeof b.v === 'number' ? a.v - b.v : SORT_COLLATOR.compare(String(a.v), String(b.v));
+      return c === 0 ? a.i - b.i : c * dir;
+    });
+    const ids = decorated.slice(skip, skip + size).map((d) => d.id);
+    const rows = await this.prisma.application.findMany({ where: { id: { in: ids } }, include: MANAGER_INCLUDE });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return { items: ids.map((id) => byId.get(id)).filter(Boolean), total: light.length };
   }
 
   /**
@@ -1571,3 +1636,26 @@ function phoneKey(phone: string): string | null {
   const d = (phone || '').replace(/\D/g, '');
   return d.length >= 7 ? d.slice(-9) : null;
 }
+
+/** То же сравнение, что у таблиц CRM (components/TableSort.tsx). */
+const SORT_COLLATOR = new Intl.Collator(['ru', 'tg', 'en'], { sensitivity: 'base', numeric: true });
+
+type SortRow = {
+  fullName: string; phone: string; country: string | null; direction: string; directionConfirmed: boolean;
+  source: string; status: string; manager: { fullName: string } | null;
+};
+const text = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
+/**
+ * Значение колонки для серверной сортировки. Колонки-списки — по рангу
+ * подписи из CRM; значение без ранга — в конец. Неподтверждённое
+ * направление в таблице — прочерк, и в сортировке тоже пусто.
+ */
+const SORT_VALUE: Record<string, (row: SortRow, rank: Map<string, number>) => string | number | null> = {
+  fullName: (r) => text(r.fullName),
+  phone: (r) => text(r.phone),
+  manager: (r) => text(r.manager?.fullName),
+  country: (r, rank) => (r.country ? rank.get(r.country) ?? null : null),
+  direction: (r, rank) => (r.directionConfirmed === false ? null : rank.get(r.direction) ?? null),
+  source: (r, rank) => rank.get(r.source || 'OTHER') ?? null,
+  status: (r, rank) => rank.get(r.status) ?? null,
+};

@@ -42,7 +42,7 @@ import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import CrmDatePicker from '../components/CrmDatePicker';
 import FormModal from '../components/FormModal';
-import { tjToday } from '../lib/tjTime';
+import { TJ_TZ, tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
 import { useRealtime } from '../realtime';
 import { useAuth } from '../store/auth';
@@ -54,7 +54,13 @@ function fmtMoney(n: number, currency = 'TJS'): string {
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' });
+  // «YYYY-MM-DD» — календарный день как есть; момент времени — по Душанбе,
+  // а не по часам браузера (иначе операция в 01:00 по Душанбе у бухгалтера
+  // в другом поясе попадала бы во вчера).
+  const dayOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso);
+  return new Date(dayOnly ? `${iso}T00:00:00Z` : iso).toLocaleDateString('ru-RU', {
+    day: '2-digit', month: 'short', year: 'numeric', timeZone: dayOnly ? 'UTC' : TJ_TZ,
+  });
 }
 
 /**
@@ -2890,12 +2896,13 @@ function DrilldownRow({ tx, hideManager }: { tx: Transaction; hideManager?: bool
 }
 
 // Диапазон недели по key из TimeseriesPoint (backend возвращает
-// начало-недели в 'YYYY-MM-DD'). Конец — start + 7 дней (exclusive).
+// начало недели в 'YYYY-MM-DD'). Дни — календарные дни Душанбе, «по»
+// включительно, как у переключателя периода: сервер сам берёт конец дня.
+// Раньше полночь считалась по часам браузера и неделя съезжала на пояс.
 function weekRangeFromPoint(point: TimeseriesPoint): { from: string; to: string } {
-  const start = new Date(point.key + 'T00:00:00');
-  const end = new Date(start);
-  end.setDate(end.getDate() + 7);
-  return { from: start.toISOString(), to: end.toISOString() };
+  const [y, m, d] = point.key.split('-').map(Number);
+  const end = new Date(Date.UTC(y, m - 1, d + 6));
+  return { from: point.key, to: end.toISOString().slice(0, 10) };
 }
 
 function WeekDetailPanel({
@@ -2919,9 +2926,6 @@ function WeekDetailPanel({
   const otherCount = txs.length - tjsTxs.length;
   const displayCurrency = 'TJS';
 
-  const endLabel = new Date(range.to);
-  endLabel.setDate(endLabel.getDate() - 1);
-
   return (
     <FormModal
       open
@@ -2944,7 +2948,7 @@ function WeekDetailPanel({
             fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
             letterSpacing: '-0.02em',
           }}>
-            {fmtDate(range.from)} — {fmtDate(endLabel.toISOString())}
+            {fmtDate(range.from)} — {fmtDate(range.to)}
           </h3>
         </div>
         <button

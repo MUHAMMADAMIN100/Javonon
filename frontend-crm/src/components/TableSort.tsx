@@ -134,6 +134,23 @@ export function useTableSort<T>(
 }
 
 /**
+ * Ранги значений списка (статус, страна…) по их подписи — тем же сравнением,
+ * что у таблицы. Для серверной сортировки: сервер не знает подписей на языке
+ * интерфейса, поэтому получает готовый порядок «значение:ранг». Одинаковые
+ * подписи — одинаковый ранг (как равные значения в sortRows).
+ */
+export function labelRanks(values: readonly string[], label: (v: string) => string): string {
+  const sorted = [...values].sort((a, b) => collator.compare(label(a), label(b)));
+  let rank = 0;
+  return sorted
+    .map((v, i) => {
+      if (i > 0 && collator.compare(label(sorted[i - 1]), label(v)) !== 0) rank = i;
+      return `${v}:${rank}`;
+    })
+    .join(',');
+}
+
+/**
  * Сама сортировка — отдельно от хука, чтобы тем же порядком можно было
  * разложить второй набор строк без своих заголовков (продажи в другой
  * валюте в окне KPI).
