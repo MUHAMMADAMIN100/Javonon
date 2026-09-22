@@ -1,3 +1,4 @@
+import { secureRandomString } from '../common/random';
 import { BadRequestException, Injectable, Optional, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -6,10 +7,7 @@ import { MailService } from '../mail/mail.service';
 import { ReferralsService } from '../partners/referrals.service';
 
 function generatePassword(length = 8): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  let out = '';
-  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
+  return secureRandomString('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789', length);
 }
 
 const STUDENT_INCLUDE = {

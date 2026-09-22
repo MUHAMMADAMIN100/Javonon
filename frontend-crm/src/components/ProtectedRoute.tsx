@@ -12,7 +12,8 @@ const ROUTE_ROLES: Array<{ prefix: string; roles: Role[]; perms?: string[] }> = 
   { prefix: '/finance',     roles: ['ADMIN', 'ACCOUNTANT'], perms: ['finance:read', 'finance:write'] },
   { prefix: '/salary',      roles: ['ADMIN', 'ACCOUNTANT'], perms: ['salary:read', 'salary:write'] },
   { prefix: '/users',       roles: ['ADMIN', 'ACCOUNTANT'], perms: ['users:read', 'users:write'] },
-  { prefix: '/activity',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['activity:read'] },
+  // Журнал действий — только основатель (сервер тоже).
+  { prefix: '/activity',    roles: ['FOUNDER'] },
   { prefix: '/lms',         roles: ['ADMIN', 'ACCOUNTANT'], perms: ['lms:read', 'lms:write'] },
   { prefix: '/partners',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['partners:read'] },
   { prefix: '/settings',    roles: ['FOUNDER'] },

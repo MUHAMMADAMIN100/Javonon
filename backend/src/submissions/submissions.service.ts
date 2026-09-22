@@ -1,3 +1,4 @@
+import { secureRandomString } from '../common/random';
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException, Optional } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -77,10 +78,7 @@ const PHONE_MATCH_CANDIDATE_LIMIT = 20;
 type PreviewViewer = UserWithRoles & { id?: string | null };
 
 function generateStudentPassword(length = 8): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  let out = '';
-  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
+  return secureRandomString('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789', length);
 }
 
 /**

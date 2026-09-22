@@ -1,3 +1,5 @@
+import { useAuth } from '../store/auth';
+import { isElevated } from '../lib/roles';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -37,6 +39,8 @@ function fmtRelative(iso: string) {
 export default function InteractionsLog({ studentId, canEdit = true }: { studentId: string; canEdit?: boolean }) {
   const { toast, confirm } = useUI();
   const { t } = useT();
+  const me = useAuth((st) => st.user);
+  const elevated = isElevated(me);
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   // По ТЗ §8 «вся связанная информация» — переключатель показывает либо
@@ -277,8 +281,9 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
                 </div>
               )}
             </div>
-            {canEdit && isInteraction && (
-              <button className="btn btn-sm btn-danger" onClick={() => onDelete(it)} style={{ alignSelf: 'flex-start' }}>
+            {/* Удалять — автору или руководству (так же проверяет сервер). */}
+            {canEdit && isInteraction && (elevated || (it as any).authorId === me?.id || it.author?.id === me?.id) && (
+              <button className="btn btn-sm btn-danger" data-testid="interaction-delete" onClick={() => onDelete(it)} style={{ alignSelf: 'flex-start' }}>
                 <Icon name="delete" size={14} />
               </button>
             )}

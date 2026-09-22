@@ -1,3 +1,4 @@
+import { secureRandomString } from '../common/random';
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Optional } from '@nestjs/common';
 import { PAID_STUDENT_WHERE, UNPAID_STUDENT_WHERE } from '../common/paid-student';
 import { Direction, Prisma, Role, StudentStatus } from '@prisma/client';
@@ -30,10 +31,7 @@ function parseStudentBirthday(input: unknown): Date | null {
 }
 
 function generatePassword(length = 8): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  let out = '';
-  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
+  return secureRandomString('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789', length);
 }
 
 const STUDENT_INCLUDE = {

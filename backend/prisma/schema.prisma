@@ -1032,6 +1032,10 @@ model SalaryRecord {
   bonusMonthTotal  Float?  // комиссия за месяц целиком, до вычета уже начисленного
   bonusAlreadyPaid Float?  // уже начислено за этот месяц другими записями
   bonusSource      String? // 'BAND' — ставка из сетки; 'PERSONAL' — процент сотрудника
+  // Начисленный бонус по календарным месяцам: { "2026-06": 1200, "2026-07": 800 }.
+  // По нему следующая запись вычитает уже начисленное ровно за свой месяц.
+  // NULL у старых записей — тогда вычитается весь bonusAmount (как раньше).
+  bonusByMonth     Json?
 
   status  SalaryStatus @default(DRAFT)
   paidAt  DateTime?

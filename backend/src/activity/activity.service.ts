@@ -135,7 +135,8 @@ export class ActivityService {
     if (PARTNER_SENSITIVE_ACTIONS.includes(data.action)) {
       this.realtime.emitFinanceStaff('activity:new', { entry });
     } else {
-      this.realtime.emitStaff('activity:new', { entry });
+      // Журнал — только основателю (комната founders).
+    this.realtime.server?.to('founders').emit('activity:new', { entry });
     }
     return entry;
   }

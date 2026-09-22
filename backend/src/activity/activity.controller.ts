@@ -1,12 +1,19 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ActivityService, ActivityAction } from './activity.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { canSeePartnerAttribution } from '../auth/role-utils';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
+// Журнал действий видит только основатель (решение заказчика): там суммы,
+// удаления и чужие действия. RolesGuard: @Roles(FOUNDER) без @Permissions —
+// кастомная роль сюда не проходит (см. «только основатель» в RolesGuard).
 @Controller('activity')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.FOUNDER)
 export class ActivityController {
   constructor(private activity: ActivityService) {}
 

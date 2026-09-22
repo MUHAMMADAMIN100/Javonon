@@ -24,12 +24,13 @@ import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
 import { SalesService } from '../sales/sales.service';
 import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
-import { parseCalendarDateUtc, tjYMD } from '../common/tj-time';
+import { parseCalendarDateUtc, tjLocalDay, tjYMD } from '../common/tj-time';
 import { dateRangeFilter } from '../common/query-date';
 import { likeLiteral, phoneDigitsPattern } from '../common/search';
 import {
   ACTIVE_APPLICATION_STATUSES,
   CLIENT_SMS_STATUS_LABEL,
+  FINISHED_APPLICATION_STATUSES,
   NEW_LEAD_APPLICATION_STATUSES,
   applicationStatusFilterValues,
   isFinishedApplicationStatus,
@@ -349,11 +350,57 @@ export class ApplicationsService {
   private async persistNewLead(
     dto: CreateApplicationDto | CreateStaffApplicationDto,
     opts: { source: ApplicationSource; autoAssignManager: boolean },
-  ) {
+  ): Promise<{ app: Prisma.ApplicationGetPayload<{}>; duplicate: boolean }> {
     // Валидируем дату рождения ДО любых side-effect'ов (создание заявки,
     // назначение менеджера, реферальная атрибуция) — иначе при 400 в БД
     // осталась бы половинчатая заявка.
     const birthday = this.parseBirthday(dto.birthday);
+
+    // Повторное обращение. Номер сравниваем по последним 9 цифрам
+    // («+992 90 123-45-67» и «901234567» — один человек). Замок на номер
+    // держится до конца транзакции: двойной клик и две вкладки дают ОДНУ
+    // заявку, второй запрос дождётся первого и увидит её.
+    const key = phoneKey(dto.phone);
+    if (key) {
+      return this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'lead:' + key}))`;
+        const open = await this.findOpenByPhone(tx, key);
+        if (open) {
+          const line = `[${tjLocalDay()}] Повторное обращение` +
+            (dto.comment?.trim() ? `: ${dto.comment.trim()}` : '');
+          const app = await tx.application.update({
+            where: { id: open.id },
+            data: { comment: open.comment ? `${open.comment}\n${line}` : line },
+          });
+          return { app, duplicate: true };
+        }
+        return { app: await this.insertLead(tx, dto, opts, birthday), duplicate: false };
+      });
+    }
+    return { app: await this.insertLead(this.prisma, dto, opts, birthday), duplicate: false };
+  }
+
+  /**
+   * Открытая заявка с этим номером: не успешная и не «некачественный лид».
+   * По закрытой клиент заводится заново — это новая сделка.
+   */
+  private async findOpenByPhone(tx: Prisma.TransactionClient, key: string) {
+    const closed: ApplicationStatus[] = [...FINISHED_APPLICATION_STATUSES, 'LOW_QUALITY_LEAD'];
+    const rows = await tx.$queryRaw<{ id: string; comment: string | null }[]>`
+      SELECT id, comment FROM "Application"
+      WHERE right(regexp_replace(phone, '[^0-9]', '', 'g'), 9) = ${key}
+        AND status::text NOT IN (${Prisma.join(closed)})
+      ORDER BY "createdAt" DESC
+      LIMIT 1`;
+    return rows[0] ?? null;
+  }
+
+  private async insertLead(
+    db: Prisma.TransactionClient | PrismaService,
+    dto: CreateApplicationDto | CreateStaffApplicationDto,
+    opts: { source: ApplicationSource; autoAssignManager: boolean },
+    birthday: Date | null,
+  ) {
 
     // Sprint E: авто-распределение лидов. Если managerId не задан явно —
     // round-robin среди SALES_MANAGER (наименее загруженный).
@@ -372,7 +419,7 @@ export class ApplicationsService {
         pipelineStageId = def.pipelineStageId;
       } catch { /* без воронки — норм */ }
     }
-    return this.prisma.application.create({
+    return db.application.create({
       data: {
         fullName: dto.fullName.trim(),
         phone: dto.phone.trim(),
@@ -416,10 +463,21 @@ export class ApplicationsService {
   }
 
   async create(dto: CreateApplicationDto & { ref?: string }) {
-    const app = await this.persistNewLead(dto, {
+    const { app, duplicate } = await this.persistNewLead(dto, {
       source: dto.source || 'LANDING_FORM',
       autoAssignManager: true,
     });
+
+    // Публичный ответ — без данных заявки: иначе по чужому номеру можно было
+    // бы получить чужую заявку (комментарии, менеджера).
+    if (duplicate) {
+      await this.notifyRepeat(app);
+      this.telegram
+        .send(`🔁 *Повторное обращение*\n*ФИО:* ${dto.fullName.trim()}\n*Телефон:* ${dto.phone.trim()}` +
+          (dto.comment?.trim() ? `\n*Комментарий:* ${dto.comment.trim()}` : ''))
+        .catch(() => undefined);
+      return { ok: true };
+    }
 
     // Реферальная атрибуция: если в заявке пришёл ref-код партнёра,
     // привязываем заявку к нему через ReferralsService.
@@ -486,7 +544,22 @@ export class ApplicationsService {
       .catch(() => undefined);
 
     this.realtime.emitApplication('application:new', app, { application: app });
-    return app;
+    return { ok: true };
+  }
+
+  /** Повторное обращение: менеджерам заявки и тем, кто видит все заявки, плюс живое обновление. */
+  private async notifyRepeat(app: Prisma.ApplicationGetPayload<{}>) {
+    await this.notifications.notifyAudience(
+      'applications',
+      [app.managerId, app.chinaManagerId],
+      {
+        type: 'APPLICATION_NEW',
+        title: 'Повторное обращение',
+        message: `${app.fullName}, ${app.phone}`,
+        payload: { applicationId: app.id },
+      },
+    );
+    this.realtime.emitApplication('application:updated', app, { application: app });
   }
 
   /**
@@ -523,10 +596,14 @@ export class ApplicationsService {
     if (!canCreateApplication(user as any)) {
       throw new ForbiddenException('Недостаточно прав для создания заявки');
     }
-    const app = await this.persistNewLead(dto, {
+    const { app, duplicate } = await this.persistNewLead(dto, {
       source: dto.source || STAFF_DEFAULT_SOURCE,
       autoAssignManager: false,
     });
+    if (duplicate) {
+      await this.notifyRepeat(app);
+      return { ...app, duplicate: true };
+    }
     this.realtime.emitApplication('application:new', app, { application: app });
     return app;
   }
@@ -785,10 +862,17 @@ export class ApplicationsService {
       NEW_LEAD_APPLICATION_STATUSES.includes(existing.status) &&
       !existing.studentId
     ) {
-      // Создаём студента только если email уникален (он обязателен для ЛК)
-      // Старый флоу (без email) — пропускаем, студент создастся при отдельном действии
+      // Email у студента уникален. Если ученик с этим email уже есть — это
+      // тот же человек: привязываем заявку к нему, а не создаём второго.
+      // Любая другая ошибка создания — наружу, и статус НЕ меняется (раньше
+      // ошибка глоталась, заявка уходила «в обработку» без ученика молча).
       let studentId = existing.studentId;
-      try {
+      const email = existing.email?.trim() || null;
+      const sameEmail = email
+        ? await this.prisma.student.findUnique({ where: { email }, select: { id: true } })
+        : null;
+      if (sameEmail) studentId = sameEmail.id;
+      else {
         // По ТЗ §8 — все доп. поля из Application переносим в Student
         // (раньше терялись secondaryPhone, preferredChannel — менеджеру
         // пришлось бы заполнять заново).
@@ -848,10 +932,21 @@ export class ApplicationsService {
           country: (existing as any).country ?? null,
           comment: existing.comment,
         };
-        const student = await this.prisma.student.create({ data: studentData });
-        studentId = student.id;
-      } catch {
-        // Если студент с таким email уже есть — просто переводим статус без создания
+        try {
+          const student = await this.prisma.student.create({ data: studentData });
+          studentId = student.id;
+        } catch (e: any) {
+          // Гонка: ученика с этим email завели между проверкой и созданием.
+          const again = e?.code === 'P2002' && email
+            ? await this.prisma.student.findUnique({ where: { email }, select: { id: true } })
+            : null;
+          if (!again) {
+            throw new BadRequestException(
+              'Не удалось создать ученика из заявки — статус не изменён. Попробуйте ещё раз.',
+            );
+          }
+          studentId = again.id;
+        }
       }
       const updated = await this.prisma.application.update({
         where: { id },
@@ -1469,4 +1564,10 @@ export class ApplicationsService {
     ]);
     return { total, byStatus, byDirection, byCountry, directionUnconfirmed };
   }
+}
+
+/** Ключ номера для поиска повторов: последние 9 цифр; короче 7 цифр — не номер, не сравниваем. */
+function phoneKey(phone: string): string | null {
+  const d = (phone || '').replace(/\D/g, '');
+  return d.length >= 7 ? d.slice(-9) : null;
 }

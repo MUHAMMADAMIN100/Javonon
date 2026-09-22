@@ -384,16 +384,9 @@ export class SalaryService {
     // SERIALIZABLE-транзакции (insertRecordAtomically). Числа совпадают,
     // пока нет гонки; при гонке авторитетно значение из транзакции.
     const monthsWithDue: Array<{ month: (typeof bonusMonths)[number]; alreadyPaid: number; due: number }> = [];
+    const paidPerMonth = await bonusPaidByMonth(this.prisma, userId, bonusMonths);
     for (const m of bonusMonths) {
-      const agg = await this.prisma.salaryRecord.aggregate({
-        where: {
-          userId,
-          periodStart: { lte: m.periodEnd },
-          periodEnd: { gte: m.periodStart },
-        },
-        _sum: { bonusAmount: true },
-      });
-      const alreadyPaid = round(agg._sum.bonusAmount || 0);
+      const alreadyPaid = paidPerMonth.get(monthKey(m.periodStart)) ?? 0;
       monthsWithDue.push({
         month: m,
         alreadyPaid,
@@ -703,18 +696,15 @@ export class SalaryService {
             // уже начисленным считаем записи, которые его ПЕРЕСЕКАЮТ.
             let bonusAmount = 0;
             let bonusAlreadyPaid = 0;
+            const bonusByMonth: Record<string, number> = {};
+            const paidPerMonth = await bonusPaidByMonth(tx, args.userId, args.bonusMonths);
             for (const m of args.bonusMonths) {
-              const agg = await tx.salaryRecord.aggregate({
-                where: {
-                  userId: args.userId,
-                  periodStart: { lte: m.periodEnd },
-                  periodEnd: { gte: m.periodStart },
-                },
-                _sum: { bonusAmount: true },
-              });
-              const paid = round(agg._sum.bonusAmount || 0);
+              const key = monthKey(m.periodStart);
+              const paid = paidPerMonth.get(key) ?? 0;
+              const due = Math.max(0, round(m.monthTotal - paid));
               bonusAlreadyPaid += paid;
-              bonusAmount += Math.max(0, round(m.monthTotal - paid));
+              bonusAmount += due;
+              bonusByMonth[key] = due;
             }
             bonusAmount = round(bonusAmount);
             bonusAlreadyPaid = round(bonusAlreadyPaid);
@@ -760,6 +750,7 @@ export class SalaryService {
                 bonusPercent: args.bonusPercent,
                 bonusMonthTotal: args.bonusMonthTotal,
                 bonusAlreadyPaid,
+                bonusByMonth,
                 bonusSource: args.bonusSource,
                 comment: args.comment,
               },
@@ -804,6 +795,30 @@ export class SalaryService {
       });
       if (claim.count === 0) {
         throw new BadRequestException('Зарплата уже выплачена');
+      }
+      // Транзакции оплат по сделкам, вошедшие в базу бонуса этой выплаты,
+      // помечаем bonusApplied: удалить их без явного обхода руководством
+      // (overrideBonusApplied) больше нельзя. Раньше флаг нигде не ставился,
+      // и защита в finance.remove() была фиктивной. Правило отбора — как у
+      // базы бонуса (common/manager-bonus-volume.ts), по месяцам периода.
+      const bonusFrom = tjStartOfMonth(rec.periodStart);
+      const bonusTo = tjEndOfMonth(rec.periodEnd);
+      const counted = await tx.submissionPayment.findMany({
+        where: {
+          status: 'APPROVED',
+          paidAt: { gte: bonusFrom, lte: bonusTo },
+          financeTransactionId: { not: null },
+          submission: { status: { not: 'CANCELLED' } },
+          OR: [
+            { creditedManagerId: rec.userId },
+            { creditedManagerId: null, submission: { managerId: rec.userId } },
+          ],
+        },
+        select: { financeTransactionId: true },
+      });
+      const txIds = counted.map((p) => p.financeTransactionId).filter((x): x is string => !!x);
+      if (txIds.length) {
+        await tx.transaction.updateMany({ where: { id: { in: txIds }, reversedAt: null }, data: { bonusApplied: true } });
       }
       await tx.transaction.create({
         data: {
@@ -858,4 +873,44 @@ export class SalaryService {
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Ключ календарного месяца по Душанбе: «2026-06». */
+function monthKey(d: Date): string {
+  return tjLocalDay(d).slice(0, 7);
+}
+
+/**
+ * Уже начисленный бонус по каждому месяцу. Запись с разбивкой bonusByMonth
+ * отдаёт месяцу ровно его долю: запись «май–июнь» больше не гасит весь июнь
+ * своим майским бонусом. У старых записей без разбивки весь bonusAmount
+ * ложится на каждый задетый месяц — лучше недоплатить на виду, чем
+ * начислить дважды.
+ */
+async function bonusPaidByMonth(
+  db: Prisma.TransactionClient | PrismaService,
+  userId: string,
+  months: Array<{ periodStart: Date; periodEnd: Date }>,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!months.length) return out;
+  const records = await db.salaryRecord.findMany({
+    where: {
+      userId,
+      periodStart: { lte: months[months.length - 1].periodEnd },
+      periodEnd: { gte: months[0].periodStart },
+    },
+    select: { periodStart: true, periodEnd: true, bonusAmount: true, bonusByMonth: true },
+  });
+  for (const m of months) {
+    const key = monthKey(m.periodStart);
+    let paid = 0;
+    for (const r of records) {
+      if (r.periodStart > m.periodEnd || r.periodEnd < m.periodStart) continue;
+      const split = r.bonusByMonth as Record<string, number> | null;
+      paid += split && typeof split === 'object' ? Number(split[key] || 0) : r.bonusAmount || 0;
+    }
+    out.set(key, round(paid));
+  }
+  return out;
 }

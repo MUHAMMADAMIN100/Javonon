@@ -12,18 +12,20 @@ export class InteractionsController {
   constructor(private svc: InteractionsService) {}
 
   @Get()
-  list(@Query('studentId') studentId: string) {
+  async list(@Query('studentId') studentId: string, @CurrentUser() me: any) {
+    await this.svc.assertCanSeeStudent(studentId, me);
     return this.svc.listForStudent(studentId);
   }
 
   /** Полная история взаимодействий (Interaction + CallLog + ExternalMessage). */
   @Get('timeline')
-  timeline(@Query('studentId') studentId: string) {
+  async timeline(@Query('studentId') studentId: string, @CurrentUser() me: any) {
+    await this.svc.assertCanSeeStudent(studentId, me);
     return this.svc.fullTimeline(studentId);
   }
 
   @Post()
-  create(
+  async create(
     @CurrentUser() me: any,
     @Body() body: {
       studentId: string;
@@ -34,16 +36,19 @@ export class InteractionsController {
       occurredAt?: string;
     },
   ) {
+    await this.svc.assertCanSeeStudent(body?.studentId, me);
     return this.svc.create(me.id, body);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() body: any) {
+  async update(@Param('id') id: string, @Body() body: any, @CurrentUser() me: any) {
+    await this.svc.assertCanModify(id, me);
     return this.svc.update(id, body);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @CurrentUser() me: any) {
+    await this.svc.assertCanModify(id, me);
     return this.svc.remove(id);
   }
 }

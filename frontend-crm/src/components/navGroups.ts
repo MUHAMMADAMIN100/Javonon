@@ -133,7 +133,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // но старые роуты живы в App.tsx и рендерят тот же Workday.
       { to: '/workday', icon: 'schedule', labelKey: 'sidebar.workday', aliases: ['/time', '/attendance', '/excuses'], visible: always },
       // Аудит-лог — единолично у FOUNDER (Activity.tsx блокирует остальных).
-      { to: '/activity', icon: 'history', labelKey: 'sidebar.activity', visible: (c) => c.show('activity:read', c.isFounder) },
+      { to: '/activity', icon: 'history', labelKey: 'sidebar.activity', visible: (c) => c.isFounder },
     ],
   },
   {

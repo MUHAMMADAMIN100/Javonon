@@ -215,6 +215,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'leads.search.clear': 'Очистить поиск',
     'leads.manager.unassigned': 'Не назначен',
     'leads.toast.created': 'Лид создан',
+    'leads.toast.duplicate': 'С этим номером уже есть открытая заявка — добавлено повторное обращение',
     'leads.toast.assignFailed': 'Не удалось назначить менеджера',
     // Массовое назначение менеджера пачке лидов.
     'leads.bulk.region': 'Массовое назначение менеджера',
@@ -2108,6 +2109,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'leads.search.clear': 'Тоза кардани ҷустуҷӯ',
     'leads.manager.unassigned': 'Таъин нашудааст',
     'leads.toast.created': 'Лид сабт шуд',
+    'leads.toast.duplicate': 'Бо ин рақам аллакай аризаи кушода ҳаст — муроҷиати такрорӣ илова шуд',
     'leads.toast.assignFailed': 'Менеҷерро таъин карда нашуд',
     // Таъини оммавии менеҷер ба гурӯҳи лидҳо.
     'leads.bulk.region': 'Таъини оммавии менеҷер',

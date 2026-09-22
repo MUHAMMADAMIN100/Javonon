@@ -256,11 +256,13 @@ export default function Leads() {
   const createMut = useInvalidatingMutation<Application, CreateStaffApplicationInput>({
     mutationFn: createStaffApplication,
     invalidate: [keys.applications.all],
-    onSuccess: () => {
+    onSuccess: (res) => {
       // Сохранили — окно закрывается, новая строка появляется в списке.
+      // С этим номером уже есть открытая заявка — новая не создана, в старую
+      // добавлено «повторное обращение».
       resetForm();
       setFormOpen(false);
-      toast(t('leads.toast.created'), 'success');
+      toast(t((res as Application & { duplicate?: boolean }).duplicate ? 'leads.toast.duplicate' : 'leads.toast.created'), 'success');
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.message;

@@ -1,3 +1,4 @@
+import { secureRandomString } from '../common/random';
 import {
   BadRequestException,
   ConflictException,
@@ -18,11 +19,7 @@ import { requireJwtSecret } from '../auth/jwt-secret';
 const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 function generateCode(len = 8): string {
-  let out = '';
-  for (let i = 0; i < len; i++) {
-    out += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
-  }
-  return out;
+  return secureRandomString(ALPHABET, len);
 }
 
 @Injectable()

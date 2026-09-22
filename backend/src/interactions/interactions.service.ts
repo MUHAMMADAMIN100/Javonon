@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { isElevated } from '../auth/role-utils';
+import { BadRequestException, ForbiddenException, NotFoundException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InteractionType } from '@prisma/client';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -6,6 +7,29 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 @Injectable()
 export class InteractionsService {
   constructor(private prisma: PrismaService, private realtime: RealtimeGateway) {}
+
+  /**
+   * История общения — тем, кто видит студента (руководство или его менеджер,
+   * как список студентов); править/удалять запись — автору или руководству.
+   * Раньше любой сотрудник читал, правил и удалял чужие записи.
+   */
+  async assertCanSeeStudent(studentId: string, user: { id: string; role?: string; roles?: string[] }) {
+    if (!studentId) throw new BadRequestException('studentId обязателен');
+    if (isElevated(user as any)) return;
+    const s = await this.prisma.student.findUnique({ where: { id: studentId }, select: { managerId: true, chinaManagerId: true } });
+    if (!s) throw new NotFoundException('Студент не найден');
+    if (s.managerId !== user.id && s.chinaManagerId !== user.id) {
+      throw new ForbiddenException('Нет доступа к этому студенту');
+    }
+  }
+
+  async assertCanModify(id: string, user: { id: string; role?: string; roles?: string[] }) {
+    const it = await this.prisma.interaction.findUnique({ where: { id }, select: { authorId: true } });
+    if (!it) throw new NotFoundException('Запись не найдена');
+    if (it.authorId !== user.id && !isElevated(user as any)) {
+      throw new ForbiddenException('Править и удалять запись может только её автор или руководство');
+    }
+  }
 
   async listForStudent(studentId: string, opts: { visibleToStudentOnly?: boolean } = {}) {
     return this.prisma.interaction.findMany({
@@ -117,7 +141,8 @@ export class InteractionsService {
     });
     // Realtime — студенту в его комнату
     this.realtime.emitStudent(dto.studentId, 'interaction:new', { interaction: created });
-    this.realtime.emitStaff('interaction:new', { interaction: created });
+    // Сотрудникам — только тем, кто видит студента.
+    void this.realtime.emitStudentScoped(dto.studentId, 'interaction:new', { interaction: created });
     return created;
   }
 
