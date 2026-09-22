@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import CrmSelect from '../components/CrmSelect';
-import { dateParam, pageParam, useUrlListState } from '../lib/useUrlListState';
+import { pageParam, useUrlListState } from '../lib/useUrlListState';
 import Pagination from '../components/Pagination';
-import PeriodFilter from '../components/PeriodFilter';
-import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
+import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -214,28 +213,35 @@ export default function Finance() {
   const [filterProductEnum, setFilterProductEnum] = useState<ProductCategoryEnum | ''>('');
   const [filterPaymentPhase, setFilterPaymentPhase] = useState<PaymentPhaseStatus | ''>('');
   const [showForm, setShowForm] = useState(false);
-  // Период журнала и страница — в ссылке, как в остальных списках CRM:
-  // из карточки транзакции возвращаются кнопкой «назад», и выборка должна
-  // остаться той же.
-  const { values: txUrl, setValue: setTxUrl, reset: resetTxUrl } = useUrlListState(
-    { from: dateParam(), to: dateParam(), page: pageParam() },
+  // ОДИН период на всю страницу (как на дашборде, тот же переключатель и
+  // та же ссылка ?period=…): карточки, график, диаграммы, топ менеджеров,
+  // распределение и журнал считаются за одни и те же даты — «Доход»
+  // всегда равен сумме диаграммы и сумме строк журнала. По умолчанию —
+  // текущий месяц (Asia/Dushanbe).
+  const period = useDashboardPeriod();
+  const range = period.range;
+  const rangeOk = !period.invalid;
+  // Страница журнала — в ссылке, как в остальных списках CRM.
+  const { values: txUrl, setValue: setTxUrl } = useUrlListState(
+    { page: pageParam() },
     { pageKey: 'page' },
   );
-  const { from: txFrom, to: txTo, page: txPage } = txUrl;
+  const { page: txPage } = txUrl;
   /** Открытая карточка транзакции (id, а не объект: список перезапрашивается). */
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
 
   const txParams = {
     ...(filterType ? { type: filterType } : {}),
-    ...(txFrom ? { from: txFrom } : {}),
-    ...(txTo ? { to: txTo } : {}),
+    ...(range.from ? { from: range.from } : {}),
+    ...(range.to ? { to: range.to } : {}),
     take: 200,
   };
   const txKey = keys.finance.transactions(txParams);
   const txQuery = useQuery({
     queryKey: txKey,
     queryFn: () => listTransactions(txParams),
+    enabled: rangeOk,
   });
   const allTransactions = txQuery.data ?? [];
   // Клиентская доп-фильтрация по новым Google-Sheet-parity полям
@@ -291,8 +297,9 @@ export default function Finance() {
   }, [transactions.length, txPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const summaryQuery = useQuery({
-    queryKey: keys.finance.summary(),
-    queryFn: () => financeSummary(),
+    queryKey: keys.finance.summary(range),
+    queryFn: () => financeSummary(range),
+    enabled: rangeOk,
   });
   const summary = summaryQuery.data ?? null;
 
@@ -303,28 +310,30 @@ export default function Finance() {
   const pending = pendingQuery.data ?? [];
 
   const seriesQuery = useQuery({
-    queryKey: keys.finance.timeseries({ bucket: 'week' }),
-    queryFn: () => financeTimeseries({ bucket: 'week' }),
+    queryKey: keys.finance.timeseries({ bucket: 'week', ...range }),
+    queryFn: () => financeTimeseries({ bucket: 'week', ...range }),
+    enabled: rangeOk,
   });
   const series = seriesQuery.data ?? [];
 
-  // Распределение 70/20/10 за текущий месяц + топ менеджеров
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  // Распределение по схеме + топ менеджеров — за тот же период страницы.
   const distributionQuery = useQuery({
-    queryKey: ['finance', 'distribution', monthStart],
+    queryKey: ['finance', 'distribution', range.from ?? '', range.to ?? ''],
     queryFn: async () => {
       const m = await import('../api/finance');
-      return m.financeDistribution({ from: monthStart });
+      return m.financeDistribution(range);
     },
+    enabled: rangeOk,
   });
   const distribution = distributionQuery.data;
 
   const topManagersQuery = useQuery({
-    queryKey: ['finance', 'top-managers', monthStart],
+    queryKey: ['finance', 'top-managers', range.from ?? '', range.to ?? ''],
     queryFn: async () => {
       const m = await import('../api/finance');
-      return m.financeTopManagers({ from: monthStart, limit: 10 });
+      return m.financeTopManagers({ ...range, limit: 10 });
     },
+    enabled: rangeOk,
   });
   // Backend теперь отдаёт объект { managers, currency, nonTjsTotals } (вместо
   // плоского массива), чтобы UI мог показать бэйдж базовой валюты и
@@ -336,36 +345,15 @@ export default function Finance() {
 
 
 
-  // === Dashboard breakdown (3 pie charts): source / manager / expense category
-  // за выбранный период (This month / Last month / Custom range). Диапазон
-  // считаем на фронте и передаём явные from/to — так «This month» это
-  // календарный месяц, а не «последние 30 дней» (что backend вернул бы для
-  // period=month).
-  type BreakdownPeriod = 'THIS_MONTH' | 'LAST_MONTH' | 'CUSTOM';
-  const [bdPeriod, setBdPeriod] = useState<BreakdownPeriod>('THIS_MONTH');
-  const [bdFrom, setBdFrom] = useState<string>('');
-  const [bdTo, setBdTo] = useState<string>('');
-
-  const bdRange = useMemo<{ from?: string; to?: string }>(() => {
-    const now = new Date();
-    if (bdPeriod === 'THIS_MONTH') {
-      const from = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: from.toISOString() };
-    }
-    if (bdPeriod === 'LAST_MONTH') {
-      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const to = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: from.toISOString(), to: to.toISOString() };
-    }
-    return {
-      ...(bdFrom && { from: new Date(bdFrom).toISOString() }),
-      ...(bdTo && { to: new Date(bdTo).toISOString() }),
-    };
-  }, [bdPeriod, bdFrom, bdTo]);
-
+  // === Диаграммы (источник / менеджеры / категория расходов) — за период
+  // страницы. Без дат /finance/breakdown по умолчанию берёт текущий месяц,
+  // поэтому «всё время» передаём явно: period=all.
+  const bdRange = range;
+  const bdParams = range.from || range.to ? range : { period: 'all' as const };
   const breakdownQuery = useQuery({
-    queryKey: keys.finance.breakdown(bdRange),
-    queryFn: () => financeBreakdown(bdRange),
+    queryKey: keys.finance.breakdown(bdParams),
+    queryFn: () => financeBreakdown(bdParams),
+    enabled: rangeOk,
   });
   const breakdown = breakdownQuery.data;
 
@@ -376,7 +364,7 @@ export default function Finance() {
   const [pieFocus, setPieFocus] = useState<PieFocus | null>(null);
   useEffect(() => {
     setPieFocus(null);
-  }, [bdRange.from, bdRange.to, bdPeriod]);
+  }, [bdRange.from, bdRange.to, period.period]);
   const togglePieFocus = (next: PieFocus) => {
     setPieFocus((cur) =>
       cur &&
@@ -567,47 +555,8 @@ export default function Finance() {
       {/* === Дашборд: 3 пироговые диаграммы (источник дохода / менеджеры /
           категория расходов) с переключателем периода. Данные — единый
           агрегат /finance/breakdown. */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        flexWrap: 'wrap', marginBottom: 12,
-      }}>
-        <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
-          color: 'var(--primary-dark)', textTransform: 'uppercase',
-        }}>
-          {t('finance.period.title')}
-        </div>
-        <div className="pagination-controls" style={{ padding: 4 }}>
-          <button
-            className={bdPeriod === 'THIS_MONTH' ? 'active' : ''}
-            onClick={() => setBdPeriod('THIS_MONTH')}
-          >
-            {t('finance.period.thisMonth')}
-          </button>
-          <button
-            className={bdPeriod === 'LAST_MONTH' ? 'active' : ''}
-            onClick={() => setBdPeriod('LAST_MONTH')}
-          >
-            {t('finance.period.lastMonth')}
-          </button>
-          <button
-            className={bdPeriod === 'CUSTOM' ? 'active' : ''}
-            onClick={() => setBdPeriod('CUSTOM')}
-          >
-            {t('finance.period.custom')}
-          </button>
-        </div>
-        {bdPeriod === 'CUSTOM' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <CrmDatePicker className="crm-input" value={bdFrom} onChange={(v) => setBdFrom(v)} />
-            <span style={{ color: 'var(--text-soft)' }}>—</span>
-            <CrmDatePicker className="crm-input" value={bdTo} onChange={(v) => setBdTo(v)} />
-          </div>
-        )}
-        {breakdownQuery.isFetching && (
-          <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>...</span>
-        )}
-      </div>
+      {/* Один период на всю страницу — тот же переключатель, что на дашборде. */}
+      <PeriodSwitcher state={period} busy={summaryQuery.isFetching || breakdownQuery.isFetching || txQuery.isFetching} />
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
@@ -732,7 +681,7 @@ export default function Finance() {
                 color: 'rgba(255,255,255,0.55)',
                 textTransform: 'uppercase',
               }}>
-                {t('dashboard.finance.netProfit')}
+                {`${t('dashboard.finance.netProfit')} ${period.suffix}`}
               </div>
               {/* Бухгалтерский баннер: суммы в USD/EUR/CNY/RUB не входят в
                   KPI выше (backend считает всё в TJS), но были в периоде и
@@ -745,9 +694,9 @@ export default function Finance() {
             </div>
           </motion.div>
 
-          <KpiBento eyebrow={`${t('eyebrow.income')} · 02`} label={t('dashboard.finance.income')} value={fmtMoney(summary.totalIncome)} accent />
-          <KpiBento eyebrow={`${t('eyebrow.expense')} · 03`} label={t('dashboard.finance.expense')} value={fmtMoney(summary.totalExpense)} />
-          <KpiBento eyebrow={`${t('eyebrow.count')} · 04`} label={t('finance.transactions')} value={String(summary.transactionCount ?? summary.incomeCount + summary.expenseCount)} span="span-3" />
+          <KpiBento eyebrow={`${t('eyebrow.income')} · 02`} label={`${t('dashboard.finance.income')} ${period.suffix}`} value={fmtMoney(summary.totalIncome)} accent />
+          <KpiBento eyebrow={`${t('eyebrow.expense')} · 03`} label={`${t('dashboard.finance.expense')} ${period.suffix}`} value={fmtMoney(summary.totalExpense)} />
+          <KpiBento eyebrow={`${t('eyebrow.count')} · 04`} label={`${t('finance.transactions')} ${period.suffix}`} value={String(summary.transactionCount ?? summary.incomeCount + summary.expenseCount)} span="span-3" />
         </div>
       )}
 
@@ -1093,12 +1042,6 @@ export default function Finance() {
             )}
           </>
         )}
-        <PeriodFilter
-          from={txFrom}
-          to={txTo}
-          onFrom={(v) => setTxUrl('from', v)}
-          onTo={(v) => setTxUrl('to', v)}
-        />
         <div style={{ flex: 1 }} />
         {/* «Новая транзакция» — гейт по backend @Roles на POST
             /finance/transactions (ADMIN/ACCOUNTANT/SALES_MANAGER/CLIENT_MANAGER)
@@ -1129,25 +1072,10 @@ export default function Finance() {
         )}
       </AnimatePresence>
 
-      <ActiveFilterChips
-        chips={
-          txFrom || txTo
-            ? [{
-                key: 'period',
-                label: txFrom && txTo
-                  ? `${t('list.chip.period')}: ${fmtDay(txFrom)} — ${fmtDay(txTo)}`
-                  : txFrom
-                    ? `${t('list.chip.periodFrom')} ${fmtDay(txFrom)}`
-                    : `${t('list.chip.periodTo')} ${fmtDay(txTo)}`,
-                onClear: () => resetTxUrl(['from', 'to']),
-              }]
-            : []
-        }
-      />
 
       {transactions.length > 0 && <SortSelect sort={txSort} />}
       <div className="card" style={{ padding: 0 }}>
-        <table className="table" style={{ width: '100%' }}>
+        <table className="table" style={{ width: '100%' }} data-testid="tx-table">
           <thead>
             <tr>
               {txSort.columns.map((c) => <SortTh key={c.key} sort={txSort} col={c.key} />)}

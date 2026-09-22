@@ -337,8 +337,9 @@ export interface FinanceBreakdown {
     count: number;
   }>;
   byManager: Array<{
+    /** null — доходы без менеджера (доля «Без менеджера»). */
     managerId: string | null;
-    manager: { id: string; fullName: string; email?: string };
+    manager: { id: string; fullName: string; email?: string } | null;
     amount: number;
     count: number;
   }>;

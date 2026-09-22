@@ -1796,9 +1796,11 @@ export class FinanceService {
         _sum: { amount: true },
         _count: true,
       }),
+      // Вместе с доходами без менеджера (доля «Без менеджера») — иначе
+      // диаграмма «по менеджерам» в сумме меньше «Дохода».
       this.prisma.transaction.groupBy({
         by: ['managerId'],
-        where: { ...incomeWhere, managerId: { not: null } },
+        where: incomeWhere,
         _sum: { amount: true },
         _count: true,
       }),
@@ -1836,9 +1838,8 @@ export class FinanceService {
       srcMap.set(key, cur);
     }
     // То же для byManager.
-    const mgrMap = new Map<string, { amount: number; count: number }>();
+    const mgrMap = new Map<string | null, { amount: number; count: number }>();
     for (const g of byMgr) {
-      if (!g.managerId) continue; // managerId filter выше уже режет null
       const cur = mgrMap.get(g.managerId) ?? { amount: 0, count: 0 };
       cur.amount += g._sum.amount || 0;
       cur.count += g._count;
@@ -1859,7 +1860,7 @@ export class FinanceService {
         .sort((a, b) => b[1].amount - a[1].amount)
         .map(([managerId, v]) => ({
           managerId,
-          manager: userMap.get(managerId) || { id: managerId, fullName: 'Без менеджера' },
+          manager: managerId ? userMap.get(managerId) || { id: managerId, fullName: 'Без менеджера' } : null,
           amount: v.amount,
           count: v.count,
         })),
