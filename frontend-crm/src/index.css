@@ -6670,3 +6670,25 @@ input[type="checkbox"].crm-checkbox:indeterminate {
     max-width: 100% !important;
   }
 }
+
+/* ===================== Зарплата: таблица за период ===================== */
+.salary-roster-row { cursor: pointer; }
+.salary-roster-row:hover > td { background: var(--bg-soft); }
+.salary-roster-role { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+.salary-norate { color: var(--danger); }
+.salary-pct { font: 12px var(--font-mono); color: var(--text-light); }
+/* Строка «Итого» — как в отчётах: отделена линией и набрана жирным. */
+.table-total > td {
+  font-weight: 700;
+  background: var(--bg-soft);
+  border-top: 2px solid var(--border);
+}
+.salary-detail { padding: 20px; }
+.salary-detail-done {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--success-soft); color: var(--success); font-weight: 500;
+}
+@media (max-width: 720px) {
+  .salary-detail { padding: 14px; }
+}

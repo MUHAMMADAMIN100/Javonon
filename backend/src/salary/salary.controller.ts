@@ -37,6 +37,15 @@ export class SalaryController {
     );
   }
 
+  /** Таблица зарплат: все работающие сотрудники за период. */
+  @Get('preview-all')
+  previewAll(
+    @Query('periodStart') periodStart: string,
+    @Query('periodEnd') periodEnd: string,
+  ) {
+    return this.svc.previewAll(tjParseLocalDate(periodStart), tjParseLocalDateEnd(periodEnd));
+  }
+
   @Post()
   create(@Body() dto: { userId: string; periodStart: string; periodEnd: string; kpiBonus?: number; comment?: string }) {
     return this.svc.create(dto);

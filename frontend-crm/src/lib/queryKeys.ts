@@ -46,6 +46,7 @@ export const keys = {
     all: ['salary'] as const,
     list: (p: Record<string, unknown> = {}) => ['salary', 'list', p] as const,
     preview: (p: Record<string, unknown>) => ['salary', 'preview', p] as const,
+    previewAll: (p: Record<string, unknown>) => ['salary', 'preview-all', p] as const,
   },
   penalties: {
     all: ['penalties'] as const,

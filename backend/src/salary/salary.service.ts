@@ -112,6 +112,82 @@ export class SalaryService {
   }
 
   /**
+   * Зарплата за период сразу по всем работающим сотрудникам — таблица на
+   * странице «Зарплата». Каждая строка считается тем же preview(), что и
+   * карточка одного человека: числа в таблице и в расчёте совпадают.
+   * Считаем пачками по шесть, чтобы не занимать весь пул соединений.
+   */
+  async previewAll(periodStart: Date, periodEnd: Date) {
+    const users = await this.prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, fullName: true, role: true, roles: true, baseSalary: true, hourlyRate: true },
+      orderBy: { fullName: 'asc' },
+    });
+    // Уже начисленное за этот период — чтобы не начислить второй раз.
+    const records = await this.prisma.salaryRecord.findMany({
+      where: { periodStart: { gte: periodStart, lte: periodEnd } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const recordByUser = new Map<string, (typeof records)[number]>();
+    for (const r of records) if (!recordByUser.has(r.userId)) recordByUser.set(r.userId, r);
+
+    const rows: any[] = [];
+    const CHUNK = 6;
+    for (let i = 0; i < users.length; i += CHUNK) {
+      const part = await Promise.all(
+        users.slice(i, i + CHUNK).map(async (u) => {
+          const rec = recordByUser.get(u.id) ?? null;
+          // Начислено — показываем сохранённые числа, а не новый расчёт:
+          // после начисления комиссия месяца уже выплачена, а штрафы
+          // помечены применёнными, и пересчёт дал бы другую сумму.
+          if (rec) {
+            return {
+              userId: u.id,
+              user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles },
+              hasRate: (u.baseSalary || 0) > 0 || (u.hourlyRate || 0) > 0,
+              workedMinutes: rec.workedMinutes,
+              lateMinutes: rec.lateMinutes,
+              baseAmount: rec.baseAmount,
+              salesAmount: rec.salesAmount,
+              bonusAmount: rec.bonusAmount,
+              bonusPercent: rec.bonusPercent ?? null,
+              kpiBonus: rec.kpiBonus,
+              penalties: rec.penalties,
+              penaltiesPending: 0,
+              penaltiesExcused: 0,
+              netAmount: rec.netAmount,
+              currency: rec.currency,
+              record: { id: rec.id, status: rec.status, netAmount: rec.netAmount, periodStart: rec.periodStart, periodEnd: rec.periodEnd },
+            };
+          }
+          const p = await this.preview(u.id, periodStart, periodEnd, 0);
+          return {
+            userId: u.id,
+            user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles },
+            /** Оклад или ставка заданы — иначе база всегда 0 и это стоит заметить. */
+            hasRate: (u.baseSalary || 0) > 0 || (u.hourlyRate || 0) > 0,
+            workedMinutes: p.workedMinutes,
+            lateMinutes: p.lateMinutes,
+            baseAmount: p.baseAmount,
+            salesAmount: p.salesAmount,
+            bonusAmount: p.bonusAmount,
+            bonusPercent: p.bonusPercent,
+            kpiBonus: 0,
+            penalties: p.penalties,
+            penaltiesPending: p.penaltiesPending,
+            penaltiesExcused: p.penaltiesExcused,
+            netAmount: p.netAmount,
+            currency: p.currency,
+            record: null,
+          };
+        }),
+      );
+      rows.push(...part);
+    }
+    return { periodStart, periodEnd, rows };
+  }
+
+  /**
    * Считает (без сохранения) зарплату сотрудника за период:
    *   - hours/minutes — берём из TimeEntry за ЗАПРОШЕННЫЙ период
    *   - объём продаж (бонусная база) — сумма APPROVED SubmissionPayment,

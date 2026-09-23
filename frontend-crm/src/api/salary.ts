@@ -154,6 +154,33 @@ export const previewSalary = (params: {
   kpiBonus?: number;
 }) => api.get<SalaryPreview>('/salary/preview', { params }).then((r) => r.data);
 
+/** Строка таблицы зарплат: один сотрудник за выбранный период. */
+export interface SalaryRosterRow {
+  userId: string;
+  user: { id: string; fullName: string; role: string; roles?: string[] };
+  /** Задан оклад или почасовая ставка. Нет — база всегда 0. */
+  hasRate: boolean;
+  workedMinutes: number;
+  lateMinutes: number;
+  baseAmount: number;
+  salesAmount: number;
+  bonusAmount: number;
+  bonusPercent: number | null;
+  /** KPI-бонус: у начисленной строки — из записи, иначе 0. */
+  kpiBonus: number;
+  penalties: number;
+  penaltiesPending: number;
+  penaltiesExcused: number;
+  netAmount: number;
+  currency: string;
+  /** Начисление за этот период, если уже сделано. */
+  record: { id: string; status: SalaryStatus; netAmount: number; periodStart: string; periodEnd: string } | null;
+}
+
+export const previewAllSalaries = (params: { periodStart: string; periodEnd: string }) =>
+  api.get<{ periodStart: string; periodEnd: string; rows: SalaryRosterRow[] }>('/salary/preview-all', { params })
+    .then((r) => r.data);
+
 export const createSalary = (dto: {
   userId: string;
   periodStart: string;
