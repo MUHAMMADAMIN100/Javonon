@@ -50,7 +50,8 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: TJ_TZ });
 }
 /** Цвет аватара и имени автора — постоянный для человека (как в Telegram). */
-const AVATAR_COLORS = ['#e17076', '#7bc862', '#65aadd', '#a695e7', '#ee7aae', '#6ec9cb', '#faa774', '#1f6fd1'];
+// Тона насыщеннее, чем в Telegram: белые инициалы на них читаются (контраст ≥ 4.5).
+const AVATAR_COLORS = ['#c2414b', '#3d7f2f', '#2667a8', '#6b54c9', '#b8387a', '#1d7c7e', '#b4561a', '#1f5fbf'];
 function avatarColor(id: string) {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;

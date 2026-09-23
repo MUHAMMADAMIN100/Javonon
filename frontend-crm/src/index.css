@@ -6307,6 +6307,8 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 .chat-room-item.active .chat-room-preview,
 .chat-room-item.active .chat-room-who,
 .chat-room-item.active .chat-room-typing { color: #fff; }
+/* «Сообщений пока нет» у выбранного чата — светлым, как остальной текст строки. */
+.chat-room-item.active .chat-room-empty { color: rgba(255, 255, 255, 0.78); }
 .chat-room-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .chat-room-top, .chat-room-bottom { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .chat-room-title {
@@ -6753,3 +6755,69 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 .owner-kpi-value.is-green { color: #15803d; }
 .owner-kpi-value.is-red { color: #dc2626; }
 .owner-kpi-sub { font-size: 12px; line-height: 1.4; color: var(--text-light); }
+
+/* Кнопка в строке фильтров («Сегодня», «Сбросить») — той же высоты, что поля рядом. */
+.btn.filter-height-btn { height: 40px !important; min-height: 0 !important; padding: 0 18px !important; border-radius: 10px; font-size: 14px; }
+@media (max-width: 1024px) { .btn.filter-height-btn { height: 38px !important; } }
+
+/* ===================== Карточка сотрудника: шапка, плитки, данные ===================== */
+.profile-hero {
+  display: flex; align-items: center; gap: 22px;
+  padding: 22px 24px; margin-bottom: 14px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(1, 54, 139, 0.07), transparent 45%),
+    var(--bg-card);
+}
+.profile-hero-avatar {
+  width: 84px; height: 84px; flex-shrink: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font: 600 28px var(--font-display); letter-spacing: 0.02em;
+  box-shadow: 0 0 0 4px var(--bg-card), 0 0 0 5px var(--border-soft);
+}
+.profile-hero-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.profile-hero-eyebrow { margin: 0; }
+.profile-hero-name {
+  margin: 0; display: block;
+  font-size: clamp(24px, 2.4vw, 32px); line-height: 1.15; overflow-wrap: anywhere;
+}
+.profile-hero-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.profile-hero-chip {
+  display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; background: var(--primary-soft); color: var(--primary-dark);
+}
+.profile-hero-contacts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 2px; }
+.profile-hero-contact {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: 13px; color: var(--text-soft); text-decoration: none; overflow-wrap: anywhere;
+}
+a.profile-hero-contact:hover { color: var(--primary); }
+.profile-hero-contact .material-symbols-rounded { color: var(--text-light); }
+.profile-hero-actions { display: flex; gap: 8px; flex-shrink: 0; align-self: flex-start; }
+.profile-hero-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+
+/* Плитки «Текущего месяца» — сетка как у карточек «Финансов» */
+.profile-stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.profile-tile.owner-kpi { padding: 14px 14px 12px; }
+.profile-tile.owner-kpi .owner-kpi-value { font-size: 22px; }
+
+/* Личные данные | Оплата — две панели */
+.profile-cols { gap: 14px; }
+.profile-group {
+  background: var(--bg-soft); border-radius: 14px; padding: 16px 18px;
+}
+.profile-group + .profile-group { padding-left: 18px; border-left: 0; }
+.profile-grid { gap: 14px 18px; }
+.profile-field-label { font-size: 12px; font-weight: 600; }
+.profile-field-value { font-size: 15px; }
+.profile-h { font-size: 16px; }
+
+@media (max-width: 900px) {
+  .profile-hero { flex-wrap: wrap; gap: 16px; padding: 18px; }
+  .profile-hero-avatar { width: 64px; height: 64px; font-size: 22px; }
+  .profile-hero-actions { width: 100%; }
+  .profile-hero-actions .btn { flex: 1; justify-content: center; }
+}
+@media (max-width: 480px) {
+  .profile-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+.profile-hero-name .presence-dot { display: inline-block; margin-left: 10px; vertical-align: middle; }

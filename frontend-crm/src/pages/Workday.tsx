@@ -34,7 +34,10 @@ export default function Workday() {
     location.pathname.startsWith('/attendance') ? 'attendance' :
     location.pathname.startsWith('/excuses') ? 'excuses' :
     location.pathname.startsWith('/time') ? 'time' : null;
-  const initial: Tab = fromQuery || fromPath || 'time';
+  // Основатель не отмечает приход — его страница начинается с посещаемости команды.
+  const fallback: Tab = founder ? 'attendance' : 'time';
+  const requested = fromQuery || fromPath || fallback;
+  const initial: Tab = founder && requested === 'time' ? 'attendance' : requested;
   const [tab, setTab] = useState<Tab>(initial);
 
   // Когда юзер кликает таб — обновляем URL чтобы можно было поделиться.
@@ -46,9 +49,9 @@ export default function Workday() {
     }
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Не-FOUNDER может смотреть только своё время.
+  // Не-FOUNDER может смотреть только своё время; основатель — только команду.
   const tabs: Array<{ key: Tab; label: string; visible: boolean }> = [
-    { key: 'time', label: t('workday.tab.time'), visible: true },
+    { key: 'time', label: t('workday.tab.time'), visible: !founder },
     { key: 'attendance', label: t('workday.tab.attendance'), visible: founder },
     { key: 'excuses', label: t('workday.tab.excuses'), visible: founder },
   ];
@@ -71,13 +74,15 @@ export default function Workday() {
             <button
               key={tb.key}
               onClick={() => setTab(tb.key)}
+              data-testid={`workday-tab-${tb.key}`}
               style={{
                 padding: '10px 18px',
                 borderRadius: 10,
                 border: '1.5px solid',
                 borderColor: tab === tb.key ? 'var(--primary)' : 'var(--border)',
-                background: tab === tb.key ? 'var(--primary-light, #e0e7ff)' : 'white',
-                color: tab === tb.key ? 'var(--primary-dark, #4338ca)' : 'var(--text-soft)',
+                // Активная — синяя со светлым текстом (тёмный на синем не читался).
+                background: tab === tb.key ? 'var(--primary)' : 'white',
+                color: tab === tb.key ? '#fff' : 'var(--text-soft)',
                 cursor: 'pointer',
                 fontWeight: 600,
                 fontSize: 14,
@@ -89,7 +94,7 @@ export default function Workday() {
         </div>
       )}
 
-      {tab === 'time' && <TimeTracker />}
+      {tab === 'time' && !founder && <TimeTracker />}
       {tab === 'attendance' && founder && <Attendance />}
       {tab === 'excuses' && founder && <Excuses />}
     </>

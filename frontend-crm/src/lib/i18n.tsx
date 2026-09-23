@@ -2672,6 +2672,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'finance.details.debtors': 'Должников',
     'finance.details.debtSum': 'Сумма, {cur}',
     'finance.details.now': 'на сегодня',
+    'profile.hero.write': 'Написать',
+    'profile.hero.since': 'в команде с {d}',
+    'profile.hero.dismissed': 'уволен',
   },
   tg: {
     // ===== common =====
@@ -5270,6 +5273,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'finance.details.debtors': 'Қарздорон',
     'finance.details.debtSum': 'Маблағ, {cur}',
     'finance.details.now': 'то имрӯз',
+    'profile.hero.write': 'Навиштан',
+    'profile.hero.since': 'дар даста аз {d}',
+    'profile.hero.dismissed': 'аз кор озод',
   },
 };
 

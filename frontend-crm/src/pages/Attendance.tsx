@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Pagination from '../components/Pagination';
 import CrmSelect from '../components/CrmSelect';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -30,6 +31,9 @@ function minutesOfDay(iso: string | null): number | null {
   return Number.isNaN(h) || Number.isNaN(m) ? null : h * 60 + m;
 }
 
+/** Строк на странице таблицы посещаемости. */
+const ATTENDANCE_PAGE_SIZE = 10;
+
 export default function Attendance() {
   const { t } = useT();
   const me = useAuth((s) => s.user);
@@ -40,6 +44,9 @@ export default function Attendance() {
   const [userId, setUserId] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  /** Страница таблицы — по 10 строк. */
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [userId, from, to]);
 
   const qc = useQueryClient();
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => listUsers() });
@@ -110,7 +117,8 @@ export default function Attendance() {
             const isToday = from === today && to === today;
             return (
               <button
-                className={`btn btn-sm ${isToday ? 'btn-primary' : 'btn-secondary'}`}
+                className={`btn ${isToday ? 'btn-primary' : 'btn-secondary'} filter-height-btn`}
+                data-testid="attendance-today"
                 onClick={() => {
                   setFrom(today);
                   setTo(today);
@@ -121,7 +129,7 @@ export default function Attendance() {
             );
           })()}
           {(userId || from || to) && (
-            <button className="btn btn-sm btn-secondary" onClick={() => { setUserId(''); setFrom(''); setTo(''); }}>
+            <button className="btn btn-secondary filter-height-btn" onClick={() => { setUserId(''); setFrom(''); setTo(''); }}>
               {t('filter.reset')}
             </button>
           )}
@@ -151,7 +159,7 @@ export default function Attendance() {
               </tr>
             </thead>
             <tbody>
-              {sort.sorted.map((e) => (
+              {sort.sorted.slice((page - 1) * ATTENDANCE_PAGE_SIZE, page * ATTENDANCE_PAGE_SIZE).map((e) => (
                 <tr key={e.id}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{e.user.fullName}</div>
@@ -176,6 +184,12 @@ export default function Attendance() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          total={sort.sorted.length}
+          pageSize={ATTENDANCE_PAGE_SIZE}
+          onChange={setPage}
+        />
         </>
       )}
     </>

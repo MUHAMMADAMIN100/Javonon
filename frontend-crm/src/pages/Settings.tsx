@@ -641,7 +641,8 @@ function RosterNumberInput({
         padding: '6px 10px',
         border: `1.5px solid ${dirty ? 'var(--primary, #4f46e5)' : 'var(--input-border)'}`,
         borderRadius: 10,
-        background: dirty ? 'var(--primary-light, #eef2ff)' : 'white',
+        // Изменено, не сохранено — бледно-голубой фон (--primary-light тут насыщенно-синий, цифры на нём не читались).
+        background: dirty ? 'var(--primary-soft)' : 'white',
         boxShadow: dirty ? '0 0 0 3px rgba(79,70,229,0.08)' : 'none',
         transition: 'border-color 0.15s, background 0.15s, box-shadow 0.15s',
         width: width ?? 'auto',

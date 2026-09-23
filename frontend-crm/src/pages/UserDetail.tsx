@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { createPortal } from 'react-dom';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { createDirectRoom } from '../api/chat';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FullProfile,
@@ -80,6 +81,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   const toggleEdit = (k: 'personal' | 'pay' | 'roles' | 'custom') => setEditing((cur) => (cur === k ? null : k));
   const closeEdit = () => setEditing(null);
   const roleLabel = useRoleLabel();
+  const navigate = useNavigate();
+  const [openingChat, setOpeningChat] = useState(false);
 
   /** Какая плитка «Текущий месяц» открыта в окне «подробнее». */
   const [monthTile, setMonthTile] = useState<MonthTile | null>(null);
@@ -183,21 +186,67 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   return (
     <>
       {back}
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">
-          {isAdmin ? `${t('eyebrow.team')} · ${displayRoleLabel(user as any).toUpperCase()}` : t('eyebrow.profile')}
+      {/* Шапка: аватар, имя, роль, контакты и действия — главное о человеке одним взглядом. */}
+      <section className="card profile-hero" data-testid="profile-hero">
+        <span className="profile-hero-avatar" style={{ background: heroColor(user.id) }} aria-hidden="true">
+          {heroInitials(user.fullName)}
         </span>
-        <h2 className="crm-section-title">
-          {user.fullName}
-          {presence.ready && (
-            <PresenceDot
-              state={presence.byId.get(realId)?.state ?? 'OFFLINE'}
-              title={presenceText(presence.byId.get(realId), presence.now, t)}
-              size={12}
-            />
+        <div className="profile-hero-main">
+          <span className="crm-section-eyebrow profile-hero-eyebrow">
+            {isAdmin ? `${t('eyebrow.team')} · ${displayRoleLabel(user as any).toUpperCase()}` : t('eyebrow.profile')}
+          </span>
+          <h2 className="crm-section-title profile-hero-name">
+            {user.fullName}
+            {presence.ready && (
+              <PresenceDot
+                state={presence.byId.get(realId)?.state ?? 'OFFLINE'}
+                title={presenceText(presence.byId.get(realId), presence.now, t)}
+                size={12}
+              />
+            )}
+          </h2>
+          <div className="profile-hero-chips">
+            <span className="profile-hero-chip is-role">{roleText}</span>
+          </div>
+          <div className="profile-hero-contacts">
+            <a className="profile-hero-contact" href={`mailto:${user.email}`}><Icon name="mail" size={16} />{user.email}</a>
+            {user.phone && <a className="profile-hero-contact" href={`tel:${user.phone.replace(/[^\d+]/g, '')}`}><Icon name="call" size={16} />{user.phone}</a>}
+            {user.hiredAt && (
+              <span className="profile-hero-contact">
+                <Icon name="work" size={16} />{t('profile.hero.since').replace('{d}', new Date(user.hiredAt).toLocaleDateString('ru-RU'))}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="profile-hero-actions">
+          {!own && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              data-testid="profile-write"
+              disabled={openingChat}
+              onClick={async () => {
+                setOpeningChat(true);
+                try {
+                  const room = await createDirectRoom(realId);
+                  navigate(`/chat?room=${room.id}`);
+                } catch (e: any) {
+                  toast(e?.response?.data?.message || t('toast.error'), 'error');
+                } finally {
+                  setOpeningChat(false);
+                }
+              }}
+            >
+              <Icon name="chat" size={18} /> {t('profile.hero.write')}
+            </button>
           )}
-        </h2>
-      </div>
+          {(canEditNameEmail || isAdmin) && (
+            <button type="button" className="btn btn-primary" data-testid="profile-hero-edit" onClick={() => toggleEdit('personal')}>
+              <Icon name="edit" size={18} /> {t('profile.edit')}
+            </button>
+          )}
+        </div>
+      </section>
 
       {/* Личные данные | Оплата — одна карточка в две колонки, ниже строка
           «Активность» (видит основатель). Кнопка «Изменить» — у заголовка
@@ -309,13 +358,13 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       <section className="card profile-section">
         <h3 className="profile-h">{t('profile.month.current')}</h3>
         <div className="profile-stats">
-          <Stat {...tileProps('hours')} label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
-          <Stat {...tileProps('late')} label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
-          <Stat {...tileProps('sales')} label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}${(sales.monthOtherIncome ?? 0) > 0 ? ` · ${t('sales.otherIncome').toLowerCase()} ${fmtMoney(sales.monthOtherIncome!)}` : ''}${otherCurrencies(sales.monthOther)}`} />
-          <Stat {...tileProps('leads')} label={t('profile.month.leadsTotal')} value={String(kpi.totalLeadsMonth)} sub={`${kpi.ownClientsMonth} ${t('profile.month.myOwn')}`} />
-          <Stat {...tileProps('enrolled')} label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />
-          <Stat {...tileProps('kpi')} label={t('profile.month.kpiPct')} value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.target')} ${kpi.targetPct}%`} />
-          <Stat {...tileProps('penalties')} label={t('profile.month.penalties')} value={fmtMoney(penalties.pendingTotal)} accent="red" />
+          <Stat {...tileProps('hours')} icon="schedule" tone="blue" label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
+          <Stat {...tileProps('late')} icon="alarm" tone={attendance.lateMinutes > 0 ? 'red' : 'green'} label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
+          <Stat {...tileProps('sales')} icon="payments" tone="green" label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}${(sales.monthOtherIncome ?? 0) > 0 ? ` · ${t('sales.otherIncome').toLowerCase()} ${fmtMoney(sales.monthOtherIncome!)}` : ''}${otherCurrencies(sales.monthOther)}`} />
+          <Stat {...tileProps('leads')} icon="group_add" tone="purple" label={t('profile.month.leadsTotal')} value={String(kpi.totalLeadsMonth)} sub={`${kpi.ownClientsMonth} ${t('profile.month.myOwn')}`} />
+          <Stat {...tileProps('enrolled')} icon="how_to_reg" tone={kpi.onTrack ? 'green' : 'red'} label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />
+          <Stat {...tileProps('kpi')} icon="trending_up" tone={kpi.onTrack ? 'green' : 'red'} label={t('profile.month.kpiPct')} value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.target')} ${kpi.targetPct}%`} />
+          <Stat {...tileProps('penalties')} icon="gavel" tone="red" label={t('profile.month.penalties')} value={fmtMoney(penalties.pendingTotal)} accent="red" />
         </div>
         <ProfileMonthDetails
           tile={monthTile}
@@ -544,21 +593,32 @@ function EditButton({ active, onClick, testId }: { active: boolean; onClick: () 
   );
 }
 
-function Stat({ label, value, sub, accent, ...rest }: {
+/** Плитка «Текущего месяца» — того же вида, что карточки «Финансов» (цветная полоска, значок). */
+function Stat({ label, value, sub, accent, icon, tone = 'blue', ...rest }: {
   label: string; value: string; sub?: string; accent?: 'green' | 'red';
+  icon: string; tone?: 'green' | 'red' | 'purple' | 'blue' | 'amber';
 } & React.HTMLAttributes<HTMLDivElement>) {
-  const color = accent === 'green' ? '#15803d' : accent === 'red' ? '#b91c1c' : undefined;
   return (
-    <div
-      {...rest}
-      className={rest.onClick ? 'profile-tile is-clickable' : undefined}
-      style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, minWidth: 0 }}
-    >
-      <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, color, marginTop: 2 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>{sub}</div>}
+    <div {...rest} className={`owner-kpi profile-tile tone-${tone}${rest.onClick ? ' is-link is-clickable' : ''}`}>
+      <span className="owner-kpi-head">
+        <span className="owner-kpi-title">{label}</span>
+        <span className="owner-kpi-icon"><Icon name={icon} size={18} /></span>
+      </span>
+      <span className={`owner-kpi-value${accent ? ` is-${accent}` : ''}`}>{value}</span>
+      {sub && <span className="owner-kpi-sub">{sub}</span>}
     </div>
   );
+}
+
+/** Цвет аватара — постоянный для человека (тона с читаемыми белыми инициалами). */
+const HERO_COLORS = ['#c2414b', '#3d7f2f', '#2667a8', '#6b54c9', '#b8387a', '#1d7c7e', '#b4561a', '#1f5fbf'];
+function heroColor(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return HERO_COLORS[h % HERO_COLORS.length];
+}
+function heroInitials(name: string) {
+  return name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
 }
 
 /**
@@ -1048,8 +1108,9 @@ function RolesEditor({ user, userId, onSaved, onClose }: { user: FullProfile['us
                     borderRadius: 999,
                     border: '1.5px solid',
                     borderColor: on ? 'var(--primary)' : 'var(--input-border)',
-                    background: on ? 'var(--primary-light)' : 'white',
-                    color: on ? 'var(--primary-dark)' : 'var(--text-soft)',
+                    // Выбрана — синяя со светлым текстом (тёмный на синем не читался).
+                    background: on ? 'var(--primary)' : 'white',
+                    color: on ? '#fff' : 'var(--text-soft)',
                     fontSize: 12, fontWeight: 600, cursor: 'pointer',
                   }}
                 >
