@@ -127,7 +127,15 @@ export default function Salary() {
     { key: 'kpi', label: t('salary.cell.kpi'), type: 'number', value: (r) => kpiOf(r) },
     { key: 'penalties', label: t('salary.cell.penalties'), type: 'number', value: (r) => r.penalties },
     { key: 'net', label: t('salary.cell.net'), type: 'number', value: (r) => netOf(r) },
-    { key: 'status', label: t('common.status'), value: (r) => (r.record ? 1 : 0) },
+    // По той же подписи, что в ячейке: раньше ключ был «есть запись / нет»
+    // (0/1), и «Начислено» с «Выплачено» при сортировке перемешивались.
+    {
+      key: 'status',
+      label: t('common.status'),
+      value: (r) => (r.record
+        ? (r.record.status === 'PAID' ? t('salary.status.PAID') : t('salary.roster.accrued'))
+        : t('salary.roster.notAccrued')),
+    },
   ]);
   const totals = shown.reduce(
     (acc, r) => ({

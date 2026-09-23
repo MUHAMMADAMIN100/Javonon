@@ -8,6 +8,7 @@ import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
 import { tjLastDaysRange } from '../lib/tjTime';
 import KpiDetailsModal from '../components/KpiDetailsModal';
+import FitNumber from '../components/FitNumber';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 function fmtMoney(n: number, c = 'TJS') {
@@ -79,12 +80,16 @@ export default function Kpi() {
   return (
     <>
       <div className="filters" style={{ alignItems: 'center' }}>
-        <div className="pagination-controls" style={{ padding: 4 }}>
+        {/* Тот же вид, что у периода дашборда: на телефоне — сетка 2 × 2. */}
+        <div className="pagination-controls period-switcher-options" data-testid="period-options">
           {RANGE_KEYS.map((rg, i) => (
             <button
               key={rg.key}
+              type="button"
               className={i === rangeIdx ? 'active' : ''}
+              aria-pressed={i === rangeIdx}
               onClick={() => setRangeIdx(i)}
+              data-testid={`kpi-range-${i}`}
             >{t(rg.key)}</button>
           ))}
         </div>
@@ -106,14 +111,14 @@ export default function Kpi() {
           <div className="bento-card feature span-3 row-2">
             <span className="bento-num">{t('kpi.label.thisRank')} · #{myRank}</span>
             <div style={{ marginTop: 'auto' }}>
-              <div style={{
+              <FitNumber testId="kpi-my-sales" style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 'clamp(64px, 8vw, 104px)',
                 fontWeight: 500,
                 letterSpacing: '-0.04em',
                 lineHeight: 0.9,
                 marginBottom: 16,
-              }}>{fmtMoney(myRow.salesAmount, myRow.currency)}</div>
+              }}>{fmtMoney(myRow.salesAmount, myRow.currency)}</FitNumber>
               <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
@@ -144,13 +149,13 @@ export default function Kpi() {
       {/* Top performer banner for ADMIN */}
       {isElevated(me) && top && (
         <motion.div
-          className="card"
+          className="card kpi-top-card"
+          data-testid="kpi-top"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           style={{
             background: 'linear-gradient(135deg, var(--text), var(--primary-darker))',
             color: 'white',
-            padding: 32,
             marginBottom: 24,
             borderColor: 'transparent',
           }}
@@ -164,14 +169,7 @@ export default function Kpi() {
           }}>{t('kpi.label.topPerformer')}</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 32, flexWrap: 'wrap' }}>
             <div>
-              <div style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 42,
-                fontWeight: 500,
-                letterSpacing: '-0.02em',
-                lineHeight: 1,
-                marginBottom: 8,
-              }}>{top.fullName}</div>
+              <div className="kpi-top-name" data-testid="kpi-top-name">{top.fullName}</div>
               <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 12,
@@ -179,15 +177,15 @@ export default function Kpi() {
                 letterSpacing: '0.08em',
               }}>{roleLabel(top.role)}</div>
             </div>
-            <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-              <div style={{
+            <div className="kpi-top-sum">
+              <FitNumber testId="kpi-top-sales" style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 64,
                 fontWeight: 500,
                 letterSpacing: '-0.04em',
                 lineHeight: 1,
                 color: 'var(--primary-light)',
-              }}>{fmtMoney(top.salesAmount, top.currency)}</div>
+              }}>{fmtMoney(top.salesAmount, top.currency)}</FitNumber>
               <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
@@ -326,14 +324,14 @@ function KpiBento({ eyebrow, label, value, accent, span = 'span-3' }: {
     >
       <span className="bento-num">{eyebrow}</span>
       <div style={{ marginTop: 'auto' }}>
-        <div style={{
+        <FitNumber style={{
           fontFamily: 'var(--font-display)',
           fontSize: 'clamp(40px, 5vw, 64px)',
           fontWeight: 500,
           letterSpacing: '-0.04em',
           lineHeight: 0.9,
           marginBottom: 12,
-        }}>{value}</div>
+        }}>{value}</FitNumber>
         <div style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 11,

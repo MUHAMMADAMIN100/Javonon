@@ -29,11 +29,18 @@ export default function FitNumber({ children, style, min = 0.35, testId }: {
       const have = box.clientWidth;
       const need = text.getBoundingClientRect().width;
       if (!have || !need) return;
-      // Ширина текста пропорциональна шрифту — хватает одного пересчёта.
-      // 0.99 — запас на округление, чтобы последняя буква не упиралась в край;
-      // он же делает пересчёт устойчивым (без качелей туда-обратно).
-      const next = Math.max(min, Math.min(1, scaleRef.current * (have / need) * 0.99));
-      if (Math.abs(next - scaleRef.current) < 0.005) return;
+      const scale = scaleRef.current;
+      // Уменьшаем только при настоящем переполнении, увеличиваем — только
+      // при явном запасе места. Иначе в блоке, который берёт ширину по
+      // своему тексту (элемент flex без заданной ширины), каждое ужатие
+      // сжимало бы и сам блок — и цифра уменьшалась бы по кругу до минимума.
+      const overflow = need > have + 0.5;
+      const room = scale < 1 && need < have * 0.97;
+      if (!overflow && !room) return;
+      // Ширина текста пропорциональна шрифту — хватает одного пересчёта;
+      // 0.99 — запас на округление, чтобы последняя буква не упиралась в край.
+      const next = Math.max(min, Math.min(1, scale * (have / need) * 0.99));
+      if (Math.abs(next - scale) < 0.005) return;
       scaleRef.current = next;
       box.style.setProperty('--fit', next.toFixed(3));
     };

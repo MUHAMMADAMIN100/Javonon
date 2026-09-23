@@ -6442,3 +6442,23 @@ a.profile-hero-contact:hover { color: var(--primary); }
 /* Большая цифра карточки в одну строку (components/FitNumber): шрифт ужимается множителем --fit. */
 .fit-number { max-width: 100%; }
 .fit-number-text { display: inline-block; }
+
+/* ===================== KPI: баннер «Топ-1» (pages/Kpi) ===================== */
+.kpi-top-card { padding: 32px; }
+.kpi-top-card .kpi-top-name {
+  font-family: var(--font-display); font-size: 42px; font-weight: 500;
+  letter-spacing: -0.02em; line-height: 1; margin-bottom: 8px;
+  /* Переносим по словам: общая «страховка» карточек (overflow-wrap: anywhere)
+     рвала имя посреди слова — «Менедже / р». Слово режется, только если
+     само не влезает в строку. */
+  overflow-wrap: break-word;
+}
+/* Сумма занимает всё свободное место строки (справа), а не ширину своего текста —
+   тогда FitNumber видит, сколько места на самом деле. */
+.kpi-top-sum { flex: 1 1 auto; margin-left: auto; text-align: right; min-width: 0; max-width: 100%; }
+@media (max-width: 640px) {
+  .kpi-top-card { padding: 22px 20px; }
+  .kpi-top-card .kpi-top-name { font-size: 28px; }
+  /* Сумма — своей строкой во всю ширину, по левому краю, как цифры дашборда. */
+  .kpi-top-sum { margin-left: 0; width: 100%; text-align: left; }
+}
