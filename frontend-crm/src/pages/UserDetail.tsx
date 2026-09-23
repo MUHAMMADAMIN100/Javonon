@@ -25,7 +25,6 @@ import { listCustomRoles, setUserCustomRole, type CustomRole } from '../api/cust
 import { updateUser } from '../api/users';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
-import CrmDatePicker from '../components/CrmDatePicker';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
@@ -37,6 +36,7 @@ import PresenceDot from '../components/PresenceDot';
 import { agoText, presenceText, usePresence } from '../lib/usePresence';
 import { tjFormatDateTime } from '../lib/tjTime';
 import ProfileMonthDetails, { type MonthTile } from '../components/ProfileMonthDetails';
+import { EditButton, EditForm, Field, LabelInput, heroColor, heroInitials } from '../components/ProfileParts';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -563,34 +563,12 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 // Используем общий словарь из api/userProfile.
 const LABEL = USER_DOCUMENT_LABEL;
 
-function Field({ label, value, hint, extra }: { label: string; value: React.ReactNode; hint?: string; extra?: React.ReactNode }) {
-  return (
-    <div className="profile-field">
-      <div className="profile-field-label">{label}</div>
-      <div className="profile-field-value">{value}</div>
-      {hint && <div className="profile-field-hint">{hint}</div>}
-      {extra}
-    </div>
-  );
-}
-
 /** Суммы в других валютах подписью: « · + 300 USD». В TJS-сумму они не входят. */
 function otherCurrencies(other?: Record<string, number>) {
   const parts = Object.entries(other ?? {})
     .filter(([, v]) => v)
     .map(([c, v]) => `+ ${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(v)} ${c}`);
   return parts.length ? ` · ${parts.join(' · ')}` : '';
-}
-
-/** «✎ Изменить» у заголовка группы; нажата — форма открыта. */
-function EditButton({ active, onClick, testId }: { active: boolean; onClick: () => void; testId: string }) {
-  const { t } = useT();
-  return (
-    <button type="button" className={`profile-edit-btn${active ? ' is-active' : ''}`} onClick={onClick} data-testid={testId} aria-expanded={active}>
-      <Icon name={active ? 'close' : 'edit'} size={15} />
-      {active ? t('common.cancel') : t('profile.edit')}
-    </button>
-  );
 }
 
 /** Плитка «Текущего месяца» — того же вида, что карточки «Финансов» (цветная полоска, значок). */
@@ -608,17 +586,6 @@ function Stat({ label, value, sub, accent, icon, tone = 'blue', ...rest }: {
       {sub && <span className="owner-kpi-sub">{sub}</span>}
     </div>
   );
-}
-
-/** Цвет аватара — постоянный для человека (тона с читаемыми белыми инициалами). */
-const HERO_COLORS = ['#c2414b', '#3d7f2f', '#2667a8', '#6b54c9', '#b8387a', '#1d7c7e', '#b4561a', '#1f5fbf'];
-function heroColor(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return HERO_COLORS[h % HERO_COLORS.length];
-}
-function heroInitials(name: string) {
-  return name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
 }
 
 /**
@@ -726,49 +693,6 @@ function PayEditor({ user, userId, onSaved, onClose }: { user: FullProfile['user
       <LabelInput label={t('userDetail.field.kpiAutoStep')} value={kpiAutoStepPct} onChange={setKpiAutoStepPct} type="number" />
       <LabelInput label={t('userDetail.field.kpiMax')} value={kpiMaxPct} onChange={setKpiMaxPct} type="number" />
     </EditForm>
-  );
-}
-
-/** Общая рамка формы правки: заголовок, поля сеткой, «Отмена / Сохранить». */
-function EditForm({ title, saving, onSave, onCancel, children }: {
-  title: string; saving: boolean; onSave: () => void; onCancel: () => void; children: React.ReactNode;
-}) {
-  const { t } = useT();
-  return (
-    <div className="profile-edit-form">
-      <div className="profile-edit-title">{title}</div>
-      <div className="profile-edit-grid">{children}</div>
-      <div className="profile-edit-actions">
-        <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel} disabled={saving}>{t('common.cancel')}</button>
-        <button type="button" className="btn btn-sm btn-primary" onClick={onSave} disabled={saving} data-testid="edit-save">
-          {saving ? t('common.saving') : t('common.save')}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function LabelInput({ label, value, onChange, type = 'text' }: any) {
-  return (
-    <div className="profile-edit-field">
-      <span className="profile-field-label">{label}</span>
-      {type === 'date' ? (
-        <CrmDatePicker
-          className="crm-input"
-          value={value}
-          onChange={(v) => onChange(v)}
-          style={{ width: '100%' }}
-        />
-      ) : (
-        <input
-          className="crm-input"
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          style={{ width: '100%' }}
-        />
-      )}
-    </div>
   );
 }
 

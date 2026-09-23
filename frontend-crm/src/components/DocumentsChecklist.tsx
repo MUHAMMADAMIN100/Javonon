@@ -272,11 +272,11 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
         })}
       </div>
 
-      {/* Прочие документы */}
-      <div className="docs-other-section">
+      {/* Прочие документы. Пусто — одной строкой: заголовок, «нет» и «Загрузить». */}
+      <div className={`docs-other-section${otherDocs.length === 0 ? ' is-empty' : ''}`} data-testid="docs-other">
         <h4 className="docs-other-title">{t('docs.other.title')}</h4>
         {otherDocs.length === 0 ? (
-          <div className="empty" style={{ padding: 16 }}>{t('common.empty')}</div>
+          <span className="profile-empty">{t('docs.other.none')}</span>
         ) : (
           <div className="documents-list">
             {otherDocs.map((d) => (
@@ -298,7 +298,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
           </div>
         )}
         {editable && (
-          <div style={{ marginTop: 12 }}>
+          <div className="docs-other-upload">
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => otherRef.current?.click()}

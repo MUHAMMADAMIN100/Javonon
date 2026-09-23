@@ -32,9 +32,11 @@ type Props = {
    * Оба случая рисуют одно и то же: ничего.
    */
   attribution?: PartnerAttributionView | null;
+  /** field — строка в панели «Менеджеры» карточки клиента (как поля карточки сотрудника). */
+  variant?: 'card' | 'field';
 };
 
-export default function PartnerAttributionCard({ attribution }: Props) {
+export default function PartnerAttributionCard({ attribution, variant = 'card' }: Props) {
   const { t } = useT();
 
   if (!attribution) return null;
@@ -55,6 +57,34 @@ export default function PartnerAttributionCard({ attribution }: Props) {
   const commissionLabel = attribution.commissionCurrency
     ? fmtMoneyCents(attribution.commissionAmountCents, attribution.commissionCurrency)
     : fmtCommissionRate(attribution.commissionAmountCents);
+
+  if (variant === 'field') {
+    return (
+      <div className="client-person" data-testid="partner-attribution">
+        <span className="client-person-icon"><Icon name="handshake" size={18} /></span>
+        <div className="profile-field client-person-main">
+          <div className="profile-field-label">{t('partners.attribution.title')}</div>
+          <div className="profile-field-value">
+            <Link to={`/partners/${attribution.partnerId}`} className="client-link">{attribution.fullName}</Link>
+          </div>
+          <div className="profile-field-hint client-partner-hint">
+            <span>
+              {t('partners.attribution.code')}: <code title={attribution.referralUrl}>{attribution.referralCode}</code>
+            </span>
+            <span>
+              {t('partners.attribution.commission')}: <b>{commissionLabel}</b>
+            </span>
+            <span style={{ color: accent, fontWeight: 600 }}>
+              <Icon name={credited ? 'check_circle' : 'schedule'} size={13} />{' '}
+              {credited
+                ? `${t('partners.attribution.credited')} ${tjFormatDate(attribution.commissionedAt)}`
+                : t('partners.attribution.notCredited')}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

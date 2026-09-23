@@ -930,26 +930,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 
 /* Detail */
-.detail-grid {
-  display: grid; grid-template-columns: 280px 1fr;
-  gap: 24px;
-}
-.detail-photo {
-  position: relative;
-  width: 100%; aspect-ratio: 1; border-radius: 12px;
-  background: var(--bg); display: flex; align-items: center; justify-content: center;
-  overflow: hidden;
-  /* font-size намеренно НЕ задаём — иначе текст бейджа «Зачислен» унаследует
-     огромный размер. Иконка-заглушка <Icon size={80}> сама задаёт свой
-     fontSize через inline-style. */
-}
-.detail-photo.is-enrolled {
-  outline: 2px solid #3b82f6; outline-offset: 2px;
-}
-.detail-photo img { width: 100%; height: 100%; object-fit: cover; }
-.detail-row { display: flex; padding: 10px 0; border-bottom: 1px solid var(--border); }
-.detail-label { width: 160px; color: var(--text-soft); font-size: 14px; font-weight: 500; }
-.detail-value { flex: 1; font-size: 14px; }
 
 .documents-list { display: flex; flex-direction: column; gap: 8px; }
 .doc-item {
@@ -1060,68 +1040,11 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .mgr-tag.tj { background: #d52b2b; color: white; }
 .mgr-tag.cn { background: #fde047; color: #713f12; }
 
-/* Manager Bar (два слота) */
-.manager-bar-two {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 10px; margin-bottom: 18px;
-}
-.manager-slot {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; padding: 12px 14px;
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: 10px;
-}
-.manager-slot.mine {
-  background: var(--success-soft);
-  border-color: rgba(1, 54, 139, 0.3);
-}
-.manager-slot.empty { background: var(--warning-soft); border-color: rgba(245, 158, 11, 0.3); }
-.manager-slot-head {
-  display: flex; align-items: center; gap: 10px; min-width: 0;
-}
-.manager-slot-head .material-symbols-rounded { color: var(--text-soft); flex-shrink: 0; }
-.manager-slot.mine .manager-slot-head .material-symbols-rounded { color: var(--success); }
-.manager-slot-label {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
-  color: var(--text-soft); font-weight: 600;
-}
-.manager-slot-name {
-  font-size: 14px; font-weight: 600; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-/* Старый ManagerBar (на случай если ещё используется) */
-.manager-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 12px 16px;
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: 10px; margin-bottom: 18px;
-}
-.manager-bar-mine {
-  background: var(--success-soft);
-  border-color: rgba(1, 54, 139, 0.3);
-}
-.manager-bar-empty { background: var(--warning-soft); border-color: rgba(245, 158, 11, 0.3); }
-.manager-bar-label {
-  display: flex; align-items: center; gap: 10px;
-}
-.manager-bar-label .material-symbols-rounded { color: var(--text-soft); }
-.manager-bar-mine .manager-bar-label .material-symbols-rounded { color: var(--success); }
-.manager-bar-title {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
-  color: var(--text-soft); font-weight: 600;
-}
-.manager-bar-name {
-  font-size: 14px; font-weight: 600; color: var(--text);
-}
+/* Менеджеры в карточке клиента (ManagerBar): пометка «вы» и список для смены менеджера. */
 .manager-bar-you {
   margin-left: 6px; color: var(--success); font-weight: 600; font-size: 12px;
 }
-.manager-bar-actions { position: relative; }
-.manager-bar-hint {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; color: var(--text-soft); font-style: italic;
-}
+
 .manager-dropdown {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 50;
   background: var(--bg-card); border: 1px solid var(--border);
@@ -1343,82 +1266,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   align-self: flex-start; text-transform: uppercase;
 }
 
-/* Stage bar (application stages) */
-.stage-bar {
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #fff5f5 0%, #fff9f0 100%);
-  border-bottom: 1px solid var(--border);
-}
-.stage-bar-track {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  position: relative; gap: 4px; margin-bottom: 16px;
-}
-.stage-step {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  position: relative; min-width: 0;
-}
-.stage-dot {
-  width: 32px; height: 32px; border-radius: 50%;
-  background: white; border: 2px solid var(--border);
-  color: var(--text-light); font-weight: 700; font-size: 13px;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.25s;
-  z-index: 2; position: relative;
-}
-.stage-step.done .stage-dot {
-  background: var(--success); border-color: var(--success); color: white;
-}
-.stage-step.current .stage-dot {
-  background: var(--primary); border-color: var(--primary); color: white;
-  box-shadow: 0 0 0 4px rgba(213, 43, 43, 0.15);
-  transform: scale(1.1);
-}
-.stage-label {
-  font-size: 11px; font-weight: 600; color: var(--text-soft);
-  margin-top: 6px; text-align: center; line-height: 1.3;
-  max-width: 100px;
-}
-.stage-step.current .stage-label { color: var(--primary); }
-.stage-step.done .stage-label { color: var(--success); }
-.stage-connector {
-  position: absolute; top: 15px;
-  left: calc(50% + 16px); right: calc(-50% + 16px);
-  height: 2px; background: var(--border);
-  z-index: 1;
-}
-.stage-step.done .stage-connector { background: var(--success); }
-.stage-actions {
-  display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
-}
-
-/* Access panel on student detail */
-.access-bar {
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 12px; padding: 12px 14px;
-  background: var(--primary-soft); border: 1px solid rgba(213, 43, 43, 0.2);
-  border-radius: 10px; margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-.access-bar-info { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 200px; }
-.access-bar-info > div { min-width: 0; }
-.access-bar-info .material-symbols-rounded { color: var(--primary); flex-shrink: 0; }
-.access-bar-title {
-  font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;
-  color: var(--primary); font-weight: 600;
-}
-.access-bar-email {
-  font-size: 14px; color: var(--text);
-  word-break: break-all;
-}
-.access-bar > .btn { flex-shrink: 0; }
-@media (max-width: 720px) {
-  .access-bar { padding: 10px 12px; gap: 8px; }
-  .access-bar-info { flex: 1 1 100%; }
-  .access-bar > .btn { width: 100%; justify-content: center; }
-  .access-bar-email { font-size: 13px; }
-  .access-bar-title { font-size: 11px; }
-}
-
 /* Application form (readonly view in CRM) */
 .af-view {
   background: white; border: 1px solid var(--border);
@@ -1541,7 +1388,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   /* ТЗ §12 — текст слева, не центрирован. */
   .sidebar-nav a { justify-content: flex-start; text-align: left; padding: 12px 10px; }
   .form-grid-2 { grid-template-columns: 1fr; }
-  .detail-grid { grid-template-columns: 1fr; }
+
   .content { padding: 18px; }
   .card-header { flex-wrap: wrap; gap: 10px; }
   .docs-grid { grid-template-columns: 1fr; }
@@ -1708,11 +1555,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
   /* Таблицы → карточки: правило живёт в блоке ≤900px выше. */
 
-  /* Детали заявки/студента */
-  .detail-photo { aspect-ratio: 1; max-width: 220px; margin: 0 auto; }
-  .detail-row { flex-direction: column; align-items: stretch; gap: 2px; padding: 10px 0; }
-  .detail-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
-
   /* Документы */
   .docs-info { font-size: 13px; padding: 10px 12px; }
   .docs-progress { padding: 12px; }
@@ -1848,38 +1690,6 @@ select.input-error {
   font-size: 14px;
 }
 
-.enrolled-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 12px; border-radius: 20px;
-  background: #dcfce7 !important; color: #16a34a !important;
-  font-size: 13px; font-weight: 700;
-  border: 1.5px solid #86efac;
-}
-.enrolled-badge,
-.enrolled-badge * { color: #16a34a !important; }
-.enrolled-badge .material-symbols-rounded { color: #16a34a !important; }
-
-.enrolled-photo-badge {
-  display: flex !important; align-items: center; justify-content: center;
-  gap: 6px;
-  margin: 10px auto 0;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #dcfce7 0%, #bbf7d0 100%);
-  color: #16a34a !important;
-  font-weight: 700 !important;
-  font-size: 14px !important;
-  line-height: 1 !important;
-  white-space: nowrap;
-  width: fit-content;
-  max-width: 100%;
-  border: 1.5px solid #86efac;
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.18);
-}
-.enrolled-photo-badge,
-.enrolled-photo-badge * { color: #16a34a !important; }
-.enrolled-photo-badge .material-symbols-rounded { color: #16a34a !important; }
-
 .doc-slot-files { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .doc-slot-files .doc-slot-file { position: relative; padding-right: 40px; }
 .doc-slot-del {
@@ -1907,74 +1717,6 @@ select.input-error {
 .activity-student .material-symbols-rounded { color: var(--primary); }
 .activity-role { color: var(--text-soft); font-size: 12px; }
 .activity-details { font-size: 14px; color: var(--text); margin-top: 4px; }
-
-.app-stepper {
-  background: white; border: 1px solid var(--border);
-  border-radius: 12px; padding: 16px 18px;
-  margin: 16px 0;
-}
-.app-stepper-head {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  flex-wrap: wrap; gap: 12px; margin-bottom: 14px;
-}
-.app-stepper-title { font-size: 13px; color: var(--text-soft); margin-bottom: 4px; }
-.app-stepper-current .badge { font-size: 13px; padding: 4px 10px; }
-.app-stepper-select {
-  padding: 8px 12px; border: 1.5px solid var(--input-border);
-  border-radius: 8px; font-size: 14px;
-  /* Стрелка у переключателя статуса — своя, рисуем её здесь же. */
-  background-color: white;
-  cursor: pointer; min-width: 220px;
-}
-.app-stepper-select:focus { outline: none; border-color: var(--primary); }
-.app-stepper-track {
-  display: grid; grid-template-columns: repeat(6, 1fr);
-  gap: 4px; position: relative;
-}
-.app-stepper-track::before {
-  content: ''; position: absolute; top: 14px; left: 8%; right: 8%;
-  height: 2px; background: var(--border); z-index: 0;
-}
-.app-stepper-step {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  background: transparent; border: none; cursor: pointer;
-  padding: 0; position: relative; z-index: 1;
-}
-.app-stepper-step:disabled { cursor: default; }
-.app-stepper-dot {
-  width: 30px; height: 30px;
-  min-width: 30px; min-height: 30px;
-  flex-shrink: 0; flex-grow: 0;
-  aspect-ratio: 1 / 1;
-  border-radius: 50%;
-  background: white; border: 2px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; color: var(--text-soft);
-  transition: all .2s;
-  box-sizing: border-box;
-}
-.app-stepper-step.reached .app-stepper-dot {
-  background: var(--success); border-color: var(--success); color: white;
-}
-.app-stepper-step.current .app-stepper-dot {
-  background: var(--primary); border-color: var(--primary); color: white;
-  box-shadow: 0 0 0 4px rgba(231, 39, 39, 0.15);
-}
-.app-stepper-label {
-  font-size: 11px; color: var(--text-soft); text-align: center;
-  line-height: 1.2; max-width: 80px;
-}
-.app-stepper-step.current .app-stepper-label { color: var(--primary); font-weight: 600; }
-.app-stepper-step.reached:not(.current) .app-stepper-label { color: var(--text); }
-
-@media (max-width: 720px) {
-  .app-stepper-track { grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .app-stepper-track::before { display: none; }
-}
-@media (max-width: 480px) {
-  .app-stepper-track { grid-template-columns: repeat(2, 1fr); }
-  .app-stepper-select { width: 100%; min-width: 0; }
-}
 
 /* 6h fix: эти правила настоящие мобильные — оборачиваем обратно в
    @media (max-width: 720px). Внутри dialog/toast/notif/manager/form
@@ -2005,8 +1747,7 @@ select.input-error {
   }
 
   /* Менеджер-дропдаун */
-  .manager-bar { flex-direction: column; align-items: stretch; gap: 10px; }
-  .manager-bar-two { grid-template-columns: 1fr; }
+
   .manager-dropdown { position: fixed; left: 10px; right: 10px; top: 120px; min-width: 0; }
 
   /* Формы новых/редактирования */
@@ -2593,156 +2334,8 @@ select.input-error {
   opacity: 0.25;
 }
 
-/* ---------- STAGE BAR (Stepper) — editorial mono ---------- */
-.stage-bar {
-  background: white;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-xl);
-  padding: 28px 32px;
-  margin-bottom: 18px;
-}
-.stage-bar-track {
-  display: flex;
-  position: relative;
-  padding: 0 8px;
-}
-.stage-step {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center;
-  position: relative;
-  text-align: center;
-  gap: 12px;
-  padding-top: 4px;
-  cursor: pointer;
-  transition: opacity .15s;
-}
-.stage-step .stage-dot {
-  width: 36px; height: 36px;
-  border-radius: 50%;
-  background: white;
-  border: 1.5px solid var(--border);
-  color: var(--text-light);
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 13px;
-  z-index: 2;
-  transition: all .25s cubic-bezier(0.22,1,0.36,1);
-  box-shadow: none;
-}
-.stage-step.done .stage-dot {
-  background: var(--text);
-  border-color: var(--text);
-  color: white;
-}
-.stage-step.current .stage-dot {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: white;
-  box-shadow: 0 0 0 6px var(--primary-soft);
-}
-.stage-step:hover:not(.current) .stage-dot {
-  border-color: var(--primary);
-  color: var(--primary-dark);
-}
-.stage-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-light);
-  max-width: 110px;
-  line-height: 1.3;
-}
-.stage-step.current .stage-label,
-.stage-step.done .stage-label {
-  color: var(--text);
-}
-.stage-connector {
-  position: absolute;
-  top: 22px;
-  left: 50%;
-  width: 100%;
-  height: 1px;
-  background: var(--border);
-  z-index: 1;
-}
-.stage-step.done .stage-connector {
-  background: var(--text);
-}
-.stage-actions {
-  display: flex; justify-content: flex-end; gap: 8px;
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border-soft);
-}
-
 /* ---------- MANAGER BAR — flat editorial, no yellow ---------- */
-.manager-bar-two {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-bottom: 18px;
-}
-.manager-slot {
-  background: white;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  padding: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  transition: all .2s;
-}
-.manager-slot:hover { border-color: var(--text-light); }
-.manager-slot.mine {
-  background: var(--primary-soft);
-  border-color: var(--primary);
-}
-.manager-slot.empty {
-  background: white;
-  border: 1px dashed var(--border);
-}
-.manager-slot-head {
-  display: flex; align-items: flex-start; gap: 14px;
-  min-width: 0; flex: 1;
-}
-.manager-slot-head > .material-symbols-rounded {
-  width: 40px; height: 40px;
-  border-radius: 10px;
-  background: var(--bg-soft);
-  color: var(--text);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px !important;
-  flex-shrink: 0;
-}
-.manager-slot.mine .manager-slot-head > .material-symbols-rounded {
-  background: var(--primary);
-  color: #fff;
-}
-.manager-slot-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-soft);
-  margin-bottom: 6px;
-}
-.manager-slot-name {
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  display: flex; align-items: baseline; gap: 8px;
-}
-.manager-slot.empty .manager-slot-name {
-  color: var(--text-light);
-  font-style: italic;
-  font-family: 'Times New Roman', Georgia, serif;
-  font-weight: 400;
-}
+
 .manager-bar-you {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -2800,54 +2393,6 @@ select.input-error {
   margin-top: 4px;
   padding-top: 12px !important;
   color: var(--danger);
-}
-
-/* ---------- DETAIL grid (Application/Student) ---------- */
-.detail-grid {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 32px;
-  align-items: start;
-}
-.detail-photo {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: var(--radius-xl);
-  background: var(--bg-soft);
-  border: 1px solid var(--border-soft);
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden;
-  color: var(--text-light);
-}
-.detail-photo.is-enrolled {
-  outline: 2px solid var(--primary);
-  outline-offset: 4px;
-}
-.detail-photo img { width: 100%; height: 100%; object-fit: cover; }
-.detail-row {
-  display: flex;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border-soft);
-  align-items: baseline;
-  gap: 24px;
-}
-.detail-row:last-child { border-bottom: none; }
-.detail-label {
-  width: 180px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-soft);
-  flex-shrink: 0;
-}
-.detail-value {
-  flex: 1;
-  font-size: 15px;
-  color: var(--text);
-  font-weight: 400;
 }
 
 /* ---------- DOCUMENTS CHECKLIST ---------- */
@@ -3470,10 +3015,7 @@ select.input-error {
 .content { padding: 32px 36px; }
 @media (max-width: 980px) {
   .content { padding: 20px 16px; }
-  .detail-grid { grid-template-columns: 1fr; }
-  .manager-bar-two { grid-template-columns: 1fr; }
-  .stage-bar { padding: 22px 18px; }
-  .stage-label { font-size: 9px; max-width: 80px; }
+
 }
 
 /* ---------- Inputs everywhere also pick up emerald focus ---------- */
@@ -3678,9 +3220,7 @@ textarea:focus {
   /* Form grids — всё в 1 колонку */
   .form-grid-2,
   .form-grid-3,
-  .form-row,
-  .detail-grid,
-  .manager-bar-two {
+  .form-row {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
   }
@@ -3813,9 +3353,7 @@ textarea:focus {
   /* --- Form-grid — всё в 1 колонку с компактным gap --- */
   .form-grid-2,
   .form-grid-3,
-  .form-row,
-  .detail-grid,
-  .manager-bar-two {
+  .form-row {
     grid-template-columns: 1fr !important;
     gap: 10px !important;
   }
@@ -3886,7 +3424,7 @@ textarea:focus {
    ================================================================ */
 @media (max-width: 600px) {
   .af-card, .af-section, .af-section-body, .af-sections, .af-field,
-  .form-grid-2, .form-grid-3, .form-row, .detail-grid, .manager-bar,
+  .form-grid-2, .form-grid-3, .form-row,
   .filters, .card-header, .card-header-actions, .card, .card-body,
   .stu-card {
     min-width: 0 !important;
@@ -3981,9 +3519,7 @@ textarea:focus {
 
 /* Stepper current dot — perfectly circular даже когда родитель flex
    и пытается сжать. aspect-ratio + min/max + flex-shrink: 0 */
-.app-stepper-step.current .app-stepper-dot,
-.ep-step.current .ep-dot,
-.stage-step .stage-dot {
+.ep-step.current .ep-dot {
   aspect-ratio: 1 / 1 !important;
   flex-shrink: 0 !important;
   border-radius: 50% !important;
@@ -3994,114 +3530,6 @@ textarea:focus {
    Никаких горизонтальных скроллов, всё чётко, padding'и одинаковые.
    ================================================================ */
 @media (max-width: 600px) {
-  /* --- Detail-row (профиль студента) — стек в колонку --- */
-  .detail-row {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 4px !important;
-    padding: 10px 0 !important;
-  }
-  .detail-label {
-    width: auto !important;
-    font-size: 10px !important;
-    flex-shrink: 0 !important;
-  }
-  .detail-value {
-    font-size: 14px !important;
-    word-break: break-word !important;
-    overflow-wrap: anywhere !important;
-    min-width: 0 !important;
-  }
-
-  /* --- Detail-photo — центрируем, ужимаем --- */
-  .detail-photo {
-    aspect-ratio: 1 !important;
-    max-width: 180px !important;
-    margin: 0 auto !important;
-    width: 100% !important;
-  }
-
-  /* --- Stage-bar (CRM stepper) — горизонтальный скролл вместо
-         сжатия 6 шагов в 60px-узкие колонки с обрезанными labels --- */
-  .stage-bar {
-    padding: 18px 14px !important;
-    overflow: hidden;
-  }
-  .stage-bar-track {
-    overflow-x: auto;
-    overflow-y: visible;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding: 8px 0 12px !important;
-    gap: 16px;
-  }
-  .stage-bar-track::-webkit-scrollbar { display: none; }
-  .stage-step {
-    flex: 0 0 auto !important;
-    min-width: 76px !important;
-    max-width: 90px !important;
-  }
-  .stage-step .stage-dot {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-    min-height: 32px !important;
-    aspect-ratio: 1 / 1 !important;
-    flex-shrink: 0 !important;
-  }
-  .stage-label {
-    font-size: 9px !important;
-    max-width: 100% !important;
-    word-break: break-word;
-    line-height: 1.25 !important;
-  }
-  .stage-connector { display: none !important; }
-  .stage-actions {
-    flex-direction: column-reverse !important;
-    margin-top: 16px !important;
-    padding-top: 16px !important;
-    gap: 8px !important;
-  }
-  .stage-actions .btn {
-    width: 100% !important;
-    justify-content: center;
-    min-height: 42px;
-  }
-
-  /* --- App-stepper (другой stepper) тоже в горизонтальный скролл --- */
-  .app-stepper { overflow: hidden; padding: 14px !important; }
-  .app-stepper-track {
-    display: flex !important;
-    grid-template-columns: none !important;
-    overflow-x: auto;
-    overflow-y: visible !important;
-    flex-wrap: nowrap !important;
-    gap: 12px !important;
-    padding: 8px 0 12px !important;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .app-stepper-track::-webkit-scrollbar { display: none; }
-  .app-stepper-track::before { display: none !important; }
-  .app-stepper-step {
-    flex: 0 0 auto !important;
-    min-width: 70px !important;
-    max-width: 88px !important;
-  }
-  .app-stepper-label {
-    font-size: 10px !important;
-    max-width: 100% !important;
-    line-height: 1.2 !important;
-    word-break: break-word;
-  }
-
-  /* --- Manager bar (двойная карточка менеджеров) --- */
-  .manager-bar-two {
-    grid-template-columns: 1fr !important;
-    gap: 10px !important;
-  }
-
   /* --- Edit/icon кнопки — touch-friendly 40x40 минимум --- */
   .icon-btn,
   .edit-btn,
@@ -4194,13 +3622,6 @@ textarea:focus {
 }
 
 /* --- Совсем узкие (≤375px) --- */
-@media (max-width: 375px) {
-  .stage-step { min-width: 68px !important; max-width: 80px !important; }
-  .app-stepper-step { min-width: 64px !important; max-width: 78px !important; }
-  .stage-label, .app-stepper-label { font-size: 9px !important; }
-  .detail-label { font-size: 9px !important; }
-  .detail-value { font-size: 13px !important; }
-}
 
 /* ================================================================
    ULTIMATE PADDING TRUTH — единый источник правды для рамочных
@@ -4255,10 +3676,6 @@ textarea:focus {
   html body .content .crm-section-head,
   html body .content .bento,
   html body .content .card,
-  html body .content .stage-bar,
-  html body .content .app-stepper,
-  html body .content .manager-bar,
-  html body .content .manager-bar-two,
   html body .content .filters,
   html body .content .stu-card,
   html body .content .ep-card,
@@ -4624,13 +4041,9 @@ input[type="checkbox"].crm-checkbox:checked {
    Stepper contrast safety — guarantee white text inside any
    circle/badge whose background is the dark blue brand color.
    ================================================================ */
-.app-stepper-step.current .app-stepper-dot,
-.stage-step.current .stage-dot,
 .ep-step.current .ep-dot {
   color: white !important;
 }
-.app-stepper-step.current .app-stepper-dot *,
-.stage-step.current .stage-dot *,
 .ep-step.current .ep-dot * {
   color: white !important;
 }
@@ -5674,7 +5087,6 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   .kpi-details-name { font-size: 20px; }
   .kpi-details-tab { padding: 9px 10px; font-size: 13px; }
 }
-
 
 /* =====================================================================
    Дашборд · разрезы «Распределение» — строки-ссылки
@@ -6830,3 +6242,160 @@ a.profile-hero-contact:hover { color: var(--primary); }
 }
 .user-menu-seg button.is-on { background: var(--primary); color: #fff; }
 .user-menu-sep { height: 1px; background: var(--border-soft); margin: 4px 6px; }
+
+/* ===================== Карточка клиента: заявка и студент (components/ClientCard) =====================
+   Та же раскладка, что у карточки сотрудника: шапка .profile-hero, данные .profile-section / .profile-grid.
+   Здесь — только то, чего у сотрудника нет: фото на аватаре, таблетки статуса / этапа / долга,
+   строки менеджеров и однострочные пустые блоки. */
+.client-page > .card, .client-page > .stu-card { margin-bottom: 10px; }
+
+/* Аватар: фото или инициалы; кнопка «загрузить фото» сидит на аватаре. */
+.client-avatar { position: relative; flex-shrink: 0; }
+.profile-hero-avatar.has-photo { background: var(--bg-soft); overflow: hidden; }
+.profile-hero-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+.profile-hero-avatar.is-enrolled { box-shadow: 0 0 0 4px var(--bg-card), 0 0 0 6px var(--success); }
+.client-avatar-cam {
+  position: absolute; right: -2px; bottom: -2px;
+  width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--bg-card); background: var(--primary); color: #fff; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 19, 32, 0.18);
+}
+.client-avatar-cam:hover { background: var(--primary-dark); }
+.client-avatar-cam:disabled { opacity: .7; cursor: progress; }
+.client-enrolled-mark { display: inline-flex; margin-left: 8px; vertical-align: middle; color: var(--success); }
+
+/* Таблетки статуса / этапа / долга — по ширине текста, с переносом на узком экране. */
+.client-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0; }
+.client-pill {
+  --pill-bg: var(--bg-soft); --pill-border: var(--border); --pill-fg: var(--text);
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px; max-width: 100%; box-sizing: border-box;
+  border-radius: 999px; border: 1.5px solid var(--pill-border);
+  background-color: var(--pill-bg); color: var(--pill-fg);
+  font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap;
+}
+.client-pill.is-info { --pill-bg: #e8f0fe; --pill-border: #b7cdf5; --pill-fg: #1e4fa3; }
+.client-pill.is-warning { --pill-bg: #fef3c7; --pill-border: #fcd34d; --pill-fg: #92400e; }
+.client-pill.is-gray { --pill-bg: #f1f5f9; --pill-border: #cbd5e1; --pill-fg: #334155; }
+.client-pill.is-danger { --pill-bg: #fee2e2; --pill-border: #fca5a5; --pill-fg: #b91c1c; }
+.client-pill.is-success { --pill-bg: #dcfce7; --pill-border: #86efac; --pill-fg: #166534; }
+.client-pill.is-plain { --pill-bg: #fff; --pill-border: var(--input-border); --pill-fg: var(--text); }
+.client-pill.is-status::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0;
+}
+.client-pill-prefix { font-weight: 500; opacity: .7; cursor: pointer; }
+/* Внутри — обычный CrmSelect без своей рамки; стрелку рисуем цветом таблетки. */
+.client-pill.has-select { padding-right: 0; }
+.client-pill.has-select::after {
+  content: ''; position: absolute; right: 13px; top: 50%;
+  width: 6px; height: 6px; margin-top: -5px;
+  border-right: 1.8px solid currentColor; border-bottom: 1.8px solid currentColor;
+  transform: rotate(45deg); pointer-events: none; opacity: .75;
+}
+.client-pill .client-pill-select.crm-select-trigger {
+  height: 100%; min-width: 0; padding: 0 32px 0 0; border: 0; border-radius: 999px;
+  background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; outline: none;
+}
+.client-pill.has-select:hover, .client-pill-check:hover { border-color: var(--pill-fg); }
+.client-pill.has-select:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--pill-fg) 18%, transparent); }
+/* Долг — чекбокс в таблетке. */
+.client-pill-check { cursor: pointer; user-select: none; }
+.client-pill-check input { width: 15px; height: 15px; margin: 0; accent-color: #b45309; cursor: pointer; }
+.client-pill-check.is-busy { cursor: progress; opacity: .75; }
+/* SMS клиенту — коротко; полная фраза в подсказке. */
+.client-sms { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-soft); }
+.client-sms.is-on { color: #166534; }
+
+/* Данные клиента */
+.profile-field.is-wide { grid-column: 1 / -1; }
+.client-field-sub { color: var(--text-soft); font-weight: 500; }
+.client-muted { color: var(--text-light); }
+.client-pre { white-space: pre-wrap; font-weight: 500; }
+.client-link { color: var(--primary-dark); text-decoration: none; }
+.client-link:hover { text-decoration: underline; }
+.profile-edit-field.is-wide { grid-column: 1 / -1; margin-top: 12px; }
+
+/* Менеджеры: строки «значок · подпись и имя · ✎». */
+.client-people { display: flex; flex-direction: column; }
+.client-person { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; }
+.client-person:first-child { padding-top: 0; }
+.client-person + .client-person, .client-people + .client-person { border-top: 1px solid var(--border-soft); }
+.client-person-icon {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; color: var(--text-soft);
+}
+.client-person.is-mine .client-person-icon { background: var(--primary); color: #fff; }
+.client-person.is-empty .profile-field-value { color: var(--text-light); font-weight: 500; }
+.client-person-main { flex: 1; min-width: 0; }
+.client-person-actions { position: relative; flex-shrink: 0; }
+.client-person .manager-bar-you { margin-left: 8px; vertical-align: middle; }
+/* Сотрудников десятки — список прокручивается, а не тянется на весь экран вниз. */
+.client-person .manager-dropdown-list { max-height: min(360px, 55vh); overflow-y: auto; }
+.profile-edit-btn.is-icon { width: 30px; padding: 0; justify-content: center; }
+.client-partner-hint { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.client-partner-hint .material-symbols-rounded { vertical-align: -2px; }
+
+/* Действия шапки: «Удалить» — квадратная кнопка со значком. */
+.profile-hero-actions .client-delete-btn { flex: 0 0 auto; width: 42px; padding-left: 0 !important; padding-right: 0 !important; color: var(--danger); }
+.profile-hero-actions .client-delete-btn:hover { background: var(--danger-soft); border-color: rgba(220, 38, 38, 0.35); color: var(--danger); }
+
+/* Нижние блоки: заголовок как у разделов карточки сотрудника. */
+.client-block-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.client-block-head .profile-h { margin: 0; display: inline-flex; align-items: center; gap: 8px; }
+.client-block-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.client-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 7px;
+  border-radius: 999px; background: var(--bg-soft); color: var(--text-soft); font: 600 12px var(--font-mono);
+}
+.client-toggle {
+  padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--border);
+  background: transparent; color: var(--text-soft); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+/* --primary насыщенный тёмно-синий — на нём только белый текст. */
+.client-toggle.is-on { border-color: var(--primary-dark); background: var(--primary); color: #fff; }
+.client-payments-total { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-family: var(--font-display); }
+.client-payments-total b { font-size: 22px; font-weight: 600; color: var(--primary-dark); }
+.client-payments-total span { font-size: 14px; font-weight: 600; color: var(--text-soft); }
+.profile-section.is-empty.client-empty-line { align-items: center; }
+.client-empty-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Документы в своей карточке — без внешнего отступа сверху. */
+.profile-section > .docs-checklist { margin-top: 0; }
+.docs-other-upload { margin-top: 12px; }
+.docs-other-section.is-empty { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-top: 16px; }
+.docs-other-section.is-empty .docs-other-title { margin: 0; }
+.docs-other-section.is-empty .docs-other-upload { margin: 0 0 0 auto; }
+
+@media (max-width: 900px) {
+  .client-controls { gap: 6px; }
+}
+/* Телефон: аватар рядом с именем, таблетки, контакты и кнопки — во всю
+   ширину карточки (раньше узкая колонка справа от аватара ставила таблетки
+   по одной в строку). Кнопки — одним рядом: «Удалить» квадратная, у
+   остальных на узком экране прячем значки, чтобы текст не обрезался. */
+@media (max-width: 600px) {
+  .client-hero {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 14px; row-gap: 8px; align-items: center;
+  }
+  .client-hero .profile-hero-main { display: contents; }
+  .client-hero .client-avatar { grid-row: 1 / span 2; }
+  .client-hero .profile-hero-avatar { width: 56px; height: 56px; font-size: 20px; }
+  .client-hero .client-avatar-cam { width: 26px; height: 26px; }
+  .client-hero .profile-hero-eyebrow { grid-column: 2; align-self: end; }
+  .client-hero .profile-hero-name { grid-column: 2; align-self: start; font-size: 20px; overflow-wrap: break-word; }
+  .client-hero .client-controls,
+  .client-hero .profile-hero-contacts,
+  .client-hero .profile-hero-actions { grid-column: 1 / -1; }
+  .client-hero .profile-hero-actions { display: flex; gap: 8px; width: auto; }
+  .client-hero .profile-hero-actions .btn { flex: 1 1 0; min-width: 0; padding-left: 10px; padding-right: 10px; }
+  .client-hero .profile-hero-actions .client-delete-btn { flex: 0 0 42px; }
+}
+@media (max-width: 480px) {
+  .client-hero .profile-hero-actions .btn:not(.client-delete-btn) .material-symbols-rounded { display: none; }
+}
+@media (max-width: 480px) {
+  .client-pill { height: 30px; font-size: 12.5px; }
+  .client-empty-actions { margin-left: 0; }
+}

@@ -1,26 +1,15 @@
-import { CONTACT_CHANNEL_LABEL, type ContactChannel } from '../api/types';
-import { absFileUrl, useFileToken } from '../lib/fileUrl';
-import { useEffect, useRef, useState } from 'react';
-import CrmSelect from '../components/CrmSelect';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignApplicationManager, deleteApplication, getApplication, updateApplication } from '../api/applications';
 import { getStudent, updateStudent, uploadPhoto } from '../api/students';
-import type { Application, ApplicationStatus, Direction, Student, StudentStatus } from '../api/types';
-import {
-  APPLICATION_STATUSES,
-  DIRECTION_LABEL,
-  STATUS_BADGE,
-  STATUS_LABEL,
-  STUDENT_STATUS_LABEL,
-  isFinishedApplicationStatus,
-  isLegacyApplicationStatus,
-  isNewLeadApplicationStatus,
-} from '../api/types';
+import type { Application, ApplicationStatus, Direction, Student } from '../api/types';
+import { isFinishedApplicationStatus, isNewLeadApplicationStatus } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
 import { keys } from '../lib/queryKeys';
+import { useFileToken } from '../lib/fileUrl';
 import Loading from '../components/Loading';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import DocumentsChecklist from '../components/DocumentsChecklist';
@@ -28,131 +17,34 @@ import DirectionOptions from '../components/DirectionOptions';
 import ManagerBar from '../components/ManagerBar';
 import PartnerAttributionCard from '../components/PartnerAttributionCard';
 import ApplicationFormSection from '../components/ApplicationFormSection';
+import InteractionsLog from '../components/InteractionsLog';
+import StudentEditForm, { type StudentPatch } from '../components/StudentEditForm';
 import BackButton from '../components/BackButton';
-import CrmDatePicker from '../components/CrmDatePicker';
+import CrmSelect from '../components/CrmSelect';
 import Icon from '../Icon';
-import { motion } from 'framer-motion';
-import { listPipelines, moveApplicationStage } from '../api/sales';
-import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
+import { EditButton, EditField, EditForm, Field } from '../components/ProfileParts';
+import {
+  BirthdayValue,
+  ClientHero,
+  DebtPill,
+  SmsNote,
+  StagePill,
+  StatusPill,
+  telLink,
+  waLink,
+  type ClientContact,
+} from '../components/ClientCard';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
-import { useDirectionLabel, useApplicationStatusLabel, useStudentStatusLabel, useChannelLabel, useCountryLabel } from '../lib/labels';
-import { tjDateInput, tjFormatDate, tjYMD } from '../lib/tjTime';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
+import { useChannelLabel, useCountryLabel, useDirectionLabel, useStudentStatusLabel } from '../lib/labels';
+import { tjFormatFull } from '../lib/tjTime';
 
 /**
- * wa.me принимает только цифры — «+992 90 123-45-67» → «992901234567».
- * Возвращает null для пустого/мусорного номера, чтобы вместо битой ссылки
- * отрисовать прочерк.
+ * Карточка заявки. Устроена как карточка сотрудника: шапка (аватар, имя,
+ * статус / этап / долг таблетками, контакты, действия), ниже одна панель
+ * «Данные клиента» плотной сеткой и рядом «Менеджеры». Правка открывается
+ * под данными. Карточка студента (StudentDetail) собрана из тех же деталей.
  */
-function waLink(phone: string | null | undefined): string | null {
-  const digits = String(phone ?? '').replace(/\D/g, '');
-  return digits.length >= 7 ? `https://wa.me/${digits}` : null;
-}
-
-/**
- * «2006-03-11T19:00:00.000Z» → «12.03.2006».
- *
- * Y-M-D берём через Intl в Asia/Dushanbe, а НЕ регуляркой по сырой ISO-строке.
- * Бэкенд парсит дату с лендинга как душанбинскую полночь (tjParseLocalDate),
- * поэтому 12 марта сериализуется в JSON как 11 марта 19:00Z — срез/регексп
- * по строке показал бы день рождения на сутки раньше.
- */
-function formatBirthday(iso: string): string {
-  return tjFormatDate(iso) || iso;
-}
-
-/**
- * Возраст на сегодня в Asia/Dushanbe — тот же часовой пояс, в котором бэкенд
- * проверяет диапазон 14..60 при создании заявки. Обе даты (рождения и
- * «сегодня») приводим к TJ-календарю через tjYMD, чтобы сравнивать
- * сопоставимые Y/M/D — см. комментарий к formatBirthday.
- */
-function ageFromBirthday(iso: string): number | null {
-  const date = new Date(iso);
-  if (isNaN(date.getTime())) return null;
-  const { y: by, m: bm, d: bd } = tjYMD(date);
-  const today = tjYMD();
-  let age = today.y - by;
-  if (today.m < bm || (today.m === bm && today.d < bd)) age -= 1;
-  return age >= 0 && age < 150 ? age : null;
-}
-
-/** 21 год · 22 года · 25 лет — русские формы множественного числа. */
-function agePluralKey(n: number): string {
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return 'app.age.many';
-  const mod10 = n % 10;
-  if (mod10 === 1) return 'app.age.one';
-  if (mod10 >= 2 && mod10 <= 4) return 'app.age.few';
-  return 'app.age.many';
-}
-
-/**
- * Ответы, которые клиент дал в форме на сайте: страна, WhatsApp, дата
- * рождения. Живут на самой заявке (Application), а не на студенте, поэтому
- * показываем их на любом этапе — и до конвертации, и после.
- */
-function ApplicationLeadFields({ app }: { app: Application }) {
-  const { t } = useT();
-  const countryLabel = useCountryLabel();
-  const wa = waLink(app.whatsappPhone);
-  const age = app.birthday ? ageFromBirthday(app.birthday) : null;
-
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <div
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          letterSpacing: '0.12em',
-          color: 'var(--text-soft)',
-          textTransform: 'uppercase',
-          marginBottom: 6,
-        }}
-      >
-        {t('applicationDetail.leadFields')}
-      </div>
-      <div className="detail-row">
-        <div className="detail-label">{t('app.field.country')}</div>
-        {/* countryLabel сам возвращает «—» для null — заявки, заведённые
-            в обход формы лендинга (ручное создание в CRM, самозапись,
-            approve заявки партнёра), и созданные до релиза новой формы
-            страну не заполняют. */}
-        <div className="detail-value">{countryLabel(app.country)}</div>
-      </div>
-      <div className="detail-row">
-        <div className="detail-label">{t('app.field.whatsapp')}</div>
-        <div className="detail-value">
-          {wa ? (
-            <a href={wa} target="_blank" rel="noopener noreferrer">{app.whatsappPhone}</a>
-          ) : (
-            '—'
-          )}
-        </div>
-      </div>
-      <div className="detail-row">
-        <div className="detail-label">{t('app.field.birthday')}</div>
-        <div className="detail-value">
-          {app.birthday ? (
-            <>
-              {formatBirthday(app.birthday)}
-              {age !== null && (
-                <span style={{ color: 'var(--text-soft)', marginLeft: 6 }}>
-                  · {age} {t(agePluralKey(age))}
-                </span>
-              )}
-            </>
-          ) : (
-            '—'
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ApplicationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -162,13 +54,10 @@ export default function ApplicationDetail() {
   const { t } = useT();
   useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   const directionLabel = useDirectionLabel();
-  const appStatusLabel = useApplicationStatusLabel();
   const studentStatusLabel = useStudentStatusLabel();
   const channelLabel = useChannelLabel();
-  const [edit, setEdit] = useState(false);
-  const [form, setForm] = useState<any>(null);
-  const photoRef = useRef<HTMLInputElement>(null);
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const countryLabel = useCountryLabel();
+  const [editing, setEditing] = useState(false);
 
   const appKey = id ? keys.applications.one(id) : ['applications', 'one', null];
   const appQuery = useQuery<Application>({
@@ -188,55 +77,10 @@ export default function ApplicationDetail() {
   });
   const student = studentQuery.data ?? null;
 
-  // Когда student приходит — синхронизируем форму.
-  useEffect(() => {
-    if (student) {
-      setForm({
-        fullName: student.fullName,
-        phones: student.phones.join(', '),
-        phoneLabels: (student.phoneLabels || []).join(', '),
-        preferredChannel: student.preferredChannel || '',
-        // tjDateInput, а не slice(0, 10): сырая ISO-строка хранит TJ-полночь
-        // (11.03 19:00Z для 12.03), и срез подставил бы в пикер 11-е — при
-        // сохранении форма записала бы этот сдвиг в БД навсегда.
-        birthday: tjDateInput(student.birthday),
-        email: student.email || '',
-        direction: student.direction,
-        cabinet: student.cabinet,
-        status: student.status,
-        comment: student.comment || '',
-      });
-    }
-  }, [student?.id, student?.fullName, student?.email, student?.direction, student?.cabinet, student?.status, student?.comment, student?.phones]);
-
   const reload = () => {
     qc.invalidateQueries({ queryKey: appKey });
     if (studentId) qc.invalidateQueries({ queryKey: studentKey });
   };
-
-  const formErrors = form
-    ? validateAll(
-        { fullName: form.fullName, phones: form.phones, email: form.email, cabinet: form.cabinet, comment: form.comment },
-        {
-          fullName: compose(required(t('app.err.fullName')), minLen(2), maxLen(100)),
-          phones: (v) => {
-            const s = String(v ?? '').trim();
-            if (!s) return undefined;
-            const parts = s.split(',').map((p: string) => p.trim()).filter(Boolean);
-            for (const p of parts) {
-              const digits = p.replace(/\D/g, '');
-              if (digits.length < 7) return t('app.err.phoneShort').replace('{p}', p);
-              if (digits.length > 15) return t('app.err.phoneLong').replace('{p}', p);
-            }
-            return undefined;
-          },
-          email: emailRule(),
-          cabinet: numberRule({ min: 1, max: 99, integer: true }),
-          comment: maxLen(2000),
-        },
-      )
-    : {};
-  const showErr = (k: string) => touched[k] && (formErrors as any)[k];
 
   useRealtime({
     'application:updated': (data: any) => {
@@ -313,15 +157,14 @@ export default function ApplicationDetail() {
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
-  const updateStudentMut = useOptimisticMutation<Student, Parameters<typeof updateStudent>[1], Student>({
+  const updateStudentMut = useOptimisticMutation<Student, StudentPatch, Student>({
     mutationFn: (patch) => updateStudent(studentId!, patch),
     queryKey: studentKey,
     applyOptimistic: (cur, patch) => optimistic.patch(cur, patch as Partial<Student>),
     invalidateAlso: [keys.students.all, keys.applications.all],
     onSuccess: () => {
       toast(t('toast.updated'), 'success');
-      setEdit(false);
-      setTouched({});
+      setEditing(false);
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
@@ -332,11 +175,6 @@ export default function ApplicationDetail() {
     onSuccess: () => toast(t('toast.updated'), 'success'),
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
-
-  const onStatus = (status: ApplicationStatus) => {
-    if (!id) return;
-    statusMut.mutate(status);
-  };
 
   const onReassign = async (patch: { managerId?: string | null; chinaManagerId?: string | null }): Promise<void> => {
     if (!id) return;
@@ -355,37 +193,6 @@ export default function ApplicationDetail() {
     deleteMut.mutate(undefined as any);
   };
 
-  const onSave = () => {
-    if (!student || !form) return;
-    setTouched({ fullName: true, phones: true, email: true, cabinet: true, comment: true });
-    if (hasErrors(formErrors)) {
-      toast(t('toast.error'), 'error');
-      return;
-    }
-    const phones = form.phones.split(',').map((p: string) => p.trim()).filter(Boolean);
-    const phoneLabels = (form.phoneLabels || '').split(',').map((s: string) => s.trim());
-    while (phoneLabels.length < phones.length) phoneLabels.push('');
-    phoneLabels.length = phones.length;
-    updateStudentMut.mutate({
-      fullName: form.fullName.trim(),
-      phones,
-      phoneLabels,
-      preferredChannel: form.preferredChannel || undefined,
-      birthday: form.birthday || undefined,
-      email: form.email?.trim() || undefined,
-      direction: form.direction,
-      cabinet: parseInt(form.cabinet, 10),
-      status: form.status,
-      comment: form.comment?.trim() || undefined,
-    } as any);
-  };
-
-  const onPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !student) return;
-    photoMut.mutate(file);
-  };
-
   if (error) return <div className="error-banner">{error}</div>;
   if (!app) return <Loading />;
 
@@ -397,495 +204,224 @@ export default function ApplicationDetail() {
   const isAdmin = isElevated(me);
   const assigned = !!app.managerId || !!app.chinaManagerId;
   const isMine = !assigned || app.managerId === me?.id || app.chinaManagerId === me?.id;
+  // Админ и назначенный менеджер (TJ/CN) могут вести заявку на любом этапе.
   const canAct = isAdmin || isMine;
-  // Админ и назначенный менеджер (TJ/CN) могут редактировать заявку на любом этапе
-  // — как данные студента, так и анкету.
-  const canEdit = !!student && canAct;
-  // NB: здесь была проверка «нельзя перейти в DOCS_SUBMITTED, пока не
-  // загружены обязательные документы». Статуса DOCS_SUBMITTED в новой схеме
-  // нет, а вешать это условие на «Успешные лиды» — другая бизнес-семантика,
-  // поэтому проверка снята. Незагруженные документы по-прежнему видны в
-  // DocumentsChecklist ниже.
-  // Статус заявки, ещё не переведённой на новую схему: в списке предлагаемых
-  // его нет, но выбранным значением он обязан показываться.
-  const statusIsLegacy = isLegacyApplicationStatus(app.status);
+  // Новая заявка (и заявка без студента) показывает и правит свои поля;
+  // после создания студента — данные студента. Пока студент грузится,
+  // видны поля заявки, а правка ждёт загрузки.
+  const showsLead = isNew || !studentId;
+  const withStudent = !showsLead && !!student;
+  const canEditData = canAct && (showsLead || withStudent);
+
+  // Контакты и поля — без повторов: у новой заявки из самой заявки, у заявки
+  // со студентом — из студента, плюс ответы клиента с сайта (страна, WhatsApp).
+  const phones = withStudent ? student!.phones : [app.phone, app.secondaryPhone].filter((p): p is string => !!p);
+  const email = withStudent ? student!.email : app.email;
+  const birthday = (withStudent && student!.birthday) || app.birthday;
+  const country = app.country ?? (withStudent ? student!.country : null);
+  const wa = waLink(app.whatsappPhone);
+  const direction = withStudent ? student!.direction : app.direction;
+  const directionConfirmed = withStudent ? student!.directionConfirmed : app.directionConfirmed;
+  const channel = withStudent ? student!.preferredChannel : app.preferredChannel;
+  const comment = withStudent ? student!.comment : app.comment;
+
+  const contacts: ClientContact[] = [];
+  if (phones[0]) contacts.push({ icon: 'call', text: phones[0], href: telLink(phones[0]), testId: 'contact-phone' });
+  if (wa) contacts.push({ icon: 'chat', text: 'WhatsApp', href: wa, external: true, title: app.whatsappPhone || undefined, testId: 'contact-whatsapp' });
+  if (email) contacts.push({ icon: 'mail', text: email, href: `mailto:${email}`, testId: 'contact-email' });
+  if (country) contacts.push({ icon: 'public', text: countryLabel(country), testId: 'contact-country' });
+
+  const showPeople = !isNew || !!app.partnerAttribution;
 
   return (
-    <div>
+    <div className="client-page">
       <BackButton fallback="/applications" />
-      <div className="card">
-      <div className="card-header">
-        <h2 className="card-title">{app.fullName}</h2>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {canEdit && !edit && (
-            <button className="btn btn-sm btn-secondary" onClick={() => setEdit(true)}>
-              {t('common.edit')}
-            </button>
-          )}
-          {canEdit && edit && (
-            <>
-              <button className="btn btn-sm btn-secondary" onClick={() => { setEdit(false); reload(); }}>{t('common.cancel')}</button>
-              <button className="btn btn-sm btn-primary" onClick={onSave}>{t('common.save')}</button>
-            </>
-          )}
-          {/*
-            ЕДИНСТВЕННЫЙ вход «заявка → сделка». Раньше его не существовало
-            вовсе: /submissions/new открывался только кнопкой «Новая сделка» из
-            списка сделок, и менеджер заводил клиента вкладкой «Новый» по имени
-            и телефону лида. Такая сделка не связана с заявкой ничем, а
-            партнёрская атрибуция с лендинга висит именно на заявке — партнёр
-            оставался неоплаченным молча, без единой записи в логе.
-            Здесь id заявки уходит в query, бэкенд кладёт его в
-            SaleSubmission.sourceApplicationId, и связь переживает одобрение.
 
-            Скрыт на «успешных» исходах: такая заявка обычно САМА создана
-            одобрением первого платежа (SUCCESSFUL_LEAD), и заводить по ней
-            новую сделку — почти всегда ошибка. Через список сделок этот путь
-            по-прежнему доступен, если он действительно нужен.
-          */}
-          {canAct && !isEnrolled && !edit && (
-            <button
-              className="btn btn-sm btn-secondary"
-              title={t('applicationDetail.createDeal.hint')}
-              onClick={() => navigate(`/submissions/new?applicationId=${encodeURIComponent(app.id)}`)}
-            >
-              <Icon name="handshake" size={14} /> {t('applicationDetail.createDeal')}
-            </button>
-          )}
-          {canAct && (
-            <button className="btn btn-sm btn-danger" onClick={onDeleteApp}>{t('common.delete')}</button>
-          )}
-        </div>
-      </div>
-
-      {/*
-        Статус заявки. Был степпер с кнопками «назад/вперёд» по воронке;
-        новые статусы — исходы квалификации, а не этапы («Вне города» ничему
-        не предшествует), поэтому здесь обычный дропдаун. Смена статуса
-        по-прежнему идёт через оптимистичный statusMut → onStatus.
-      */}
-      <div className="stage-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, color: 'var(--text-soft)' }}>{t('app.field.status')}</span>
-          <span className={`badge ${STATUS_BADGE[app.status] || 'badge-gray'}`}>
-            {appStatusLabel(app.status)}
-          </span>
-          {canAct && (
-            <CrmSelect
-              className="app-stepper-select"
-              style={{ marginLeft: 'auto' }}
-              value={app.status}
-              onChange={(e) => onStatus(e.target.value as ApplicationStatus)}
-              title={t('app.field.status')}
-            >
-              {statusIsLegacy && (
-                <option value={app.status} disabled>
-                  {appStatusLabel(app.status)}
-                </option>
-              )}
-              {APPLICATION_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {appStatusLabel(s)}
-                </option>
-              ))}
-            </CrmSelect>
-          )}
-        </div>
-
-        {/*
-          Задолженность. Отдельная строка, а не пункт дропдауна выше: долг
-          ортогонален квалификации лида — «Успешный лид» вполне может быть
-          должником, и раньше, когда это был статус AWAITING_PAYMENT, одно
-          состояние затирало другое. Флаг читают Финансы
-          (GET /finance/pending-payments) и карточка дашборда «Студентов
-          с задолженностью».
-        */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            flexWrap: 'wrap',
-            marginTop: 10,
-          }}
-        >
-          <span style={{ fontSize: 13, color: 'var(--text-soft)' }}>{t('app.field.debt')}</span>
-          {app.paymentPending ? (
-            <span className="badge badge-warning">{t('app.debt.pending')}</span>
-          ) : (
-            <span className="badge badge-gray">{t('app.debt.none')}</span>
-          )}
-          {canAct && (
-            <label
-              style={{
-                marginLeft: 'auto',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 13,
-                cursor: debtMut.isPending ? 'progress' : 'pointer',
-              }}
-              title={t('app.debt.hint')}
-            >
-              <input
-                type="checkbox"
-                checked={!!app.paymentPending}
-                disabled={debtMut.isPending}
-                onChange={(e) => debtMut.mutate(e.target.checked)}
-              />
-              {t('app.debt.toggle')}
-            </label>
-          )}
-        </div>
-      </div>
-
-      <div className="card-body">
-        {!isNew && (
-          <ManagerBar
-            manager={app.manager}
-            chinaManager={app.chinaManager}
-            onReassign={onReassign}
-          />
-        )}
-
-        {/* Блок «Партнёр» — сразу под менеджерами. В отличие от ManagerBar
-            рисуем и у новых заявок (isNew): партнёрский лид ценен именно на
-            входе, до назначения менеджера. Само наличие блока определяет
-            бэкенд: partnerAttribution приходит ТОЛЬКО руководству
-            (FOUNDER/ADMIN/ACCOUNTANT) и только у партнёрских клиентов —
-            у менеджера по продажам ключа в JSON нет вовсе. */}
-        <PartnerAttributionCard attribution={app.partnerAttribution} />
-
-        <PipelineStageSelector
-          applicationId={app.id}
-          currentStageId={app.pipelineStageId || null}
-          currentPipelineId={app.pipelineId || null}
-          onChanged={reload}
-        />
-
-        <ApplicationLeadFields app={app} />
-
-        {isNew && (
+      <ClientHero
+        eyebrow={t('client.eyebrow.lead')}
+        name={withStudent ? student!.fullName : app.fullName}
+        avatarId={app.studentId || app.id}
+        photoUrl={withStudent ? student!.photoUrl : null}
+        enrolled={isEnrolled}
+        onPhotoPick={withStudent && canAct ? (file) => photoMut.mutate(file) : undefined}
+        photoBusy={photoMut.isPending}
+        controls={
           <>
-            <NewApplicationEditor app={app} onSaved={reload} />
-            <div className="detail-row"><div className="detail-label">{t('profile.field.createdAt')}</div><div className="detail-value">{new Date(app.createdAt).toLocaleString('ru-RU')}</div></div>
-          </>
-        )}
-
-        {!isNew && student && form && (
-          <>
-            <div className="detail-grid">
-              <div>
-                <div className={`detail-photo${isEnrolled ? ' is-enrolled' : ''}`}>
-                  {student.photoUrl
-                    ? <img src={absFileUrl(student.photoUrl)} alt="" />
-                    : <Icon name="person" size={80} style={{ color: 'var(--text-light)' }} />}
-                </div>
-                {isEnrolled && (
-                  <motion.div
-                    className="enrolled-photo-badge"
-                    initial={{ opacity: 0, scale: 0.9, y: 6 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    transition={{ type: 'spring', stiffness: 250, damping: 18 }}
-                    style={{ color: '#16a34a' }}
-                  >
-                    <Icon name="verified" size={16} style={{ color: '#16a34a' }} />
-                    <span style={{ color: '#16a34a' }}>{appStatusLabel('SUCCESSFUL_LEAD')}</span>
-                  </motion.div>
-                )}
-                {canEdit && (
-                  <>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ width: '100%', marginTop: 8 }}
-                      onClick={() => photoRef.current?.click()}
-                    >
-                      <Icon name="photo_camera" size={18} style={{ marginRight: 6 }} />
-                      {t('studentDetail.action.uploadPhoto')}
-                    </button>
-                    <input ref={photoRef} type="file" accept="image/*" hidden onChange={onPhoto} />
-                  </>
-                )}
-              </div>
-
-              <div>
-                {!edit ? (
-                  <>
-                    <div className="detail-row"><div className="detail-label">{t('app.field.fullName')}</div><div className="detail-value">{student.fullName}</div></div>
-                    <div className="detail-row">
-                      <div className="detail-label">{t('app.field.phones')}</div>
-                      <div className="detail-value">
-                        {student.phones.length === 0
-                          ? '—'
-                          : student.phones.map((p, i) => (
-                              <div key={i}>
-                                {p}
-                                {student.phoneLabels?.[i] && (
-                                  <span style={{ color: 'var(--text-soft)', fontSize: 12, marginLeft: 6 }}>
-                                    · {student.phoneLabels[i]}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-                      </div>
-                    </div>
-                    {student.preferredChannel && (
-                      <div className="detail-row">
-                        <div className="detail-label">{t('app.field.preferredChannel')}</div>
-                        <div className="detail-value">{channelLabel(student.preferredChannel as any)}</div>
-                      </div>
-                    )}
-                    {student.birthday && (
-                      <div className="detail-row">
-                        <div className="detail-label">{t('app.field.birthday')}</div>
-                        {/* Тот же TJ-хелпер, что и в блоке лид-полей выше:
-                            иначе у менеджера с не-душанбинским браузером две
-                            карточки одной заявки показывали бы разные даты. */}
-                        <div className="detail-value">{formatBirthday(student.birthday)}</div>
-                      </div>
-                    )}
-                    <div className="detail-row"><div className="detail-label">{t('userDetail.field.email')}</div><div className="detail-value">{student.email || '—'}</div></div>
-                    <div className="detail-row">
-                      <div className="detail-label">{t('app.field.direction')}</div>
-                      {/* Тот же принцип, что в списке заявок и на карточке
-                          студента: неподтверждённое направление — плейсхолдер
-                          бэкенда, а не выбор клиента. undefined (старый ответ
-                          API) считаем подтверждённым — @default(true). */}
-                      <div className="detail-value">
-                        {student.directionConfirmed === false ? (
-                          <span
-                            style={{ color: 'var(--text-light)' }}
-                            title={t('app.direction.unconfirmed')}
-                          >
-                            —
-                          </span>
-                        ) : (
-                          directionLabel(student.direction)
-                        )}
-                      </div>
-                    </div>
-                    <div className="detail-row">
-                      <div className="detail-label">{t('app.field.cabinet')}</div>
-                      {/* Кабинет до подтверждения направления — «приёмник»
-                          из конвертации, а не назначенный менеджером. */}
-                      <div className="detail-value">
-                        №{student.cabinet}
-                        {student.directionConfirmed === false && (
-                          <span style={{ color: 'var(--text-light)', fontSize: 12, marginLeft: 6 }}>
-                            · {t('student.cabinet.pending')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="detail-row"><div className="detail-label">{t('common.status')}</div><div className="detail-value">{studentStatusLabel(student.status)}</div></div>
-                    <div className="detail-row"><div className="detail-label">{t('app.field.comment')}</div><div className="detail-value" style={{ whiteSpace: 'pre-wrap' }}>{student.comment || '—'}</div></div>
-                    <div className="detail-row"><div className="detail-label">{t('profile.field.createdAt')}</div><div className="detail-value">{new Date(app.createdAt).toLocaleString('ru-RU')}</div></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="form-group">
-                      <label>{t('app.field.fullName')} *</label>
-                      <input
-                        value={form.fullName}
-                        onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                        onBlur={() => setTouched((tt) => ({ ...tt, fullName: true }))}
-                        className={`crm-input${showErr('fullName') ? ' input-error' : ''}`}
-                        maxLength={100}
-                      />
-                      {showErr('fullName') && <div className="form-error-text">{(formErrors as any).fullName}</div>}
-                    </div>
-                    <div className="form-group">
-                      <label>{t('app.field.phones')}</label>
-                      <input
-                        value={form.phones}
-                        onChange={(e) => setForm({ ...form, phones: e.target.value.replace(/[^\d ,+\-()]/g, '') })}
-                        onBlur={() => setTouched((tt) => ({ ...tt, phones: true }))}
-                        className={`crm-input${showErr('phones') ? ' input-error' : ''}`}
-                        placeholder="+992123456789, +992111222333"
-                      />
-                      {showErr('phones') && <div className="form-error-text">{(formErrors as any).phones}</div>}
-                    </div>
-                    <div className="form-group">
-                      <label>{t('studentDetail.field.phoneLabels')}</label>
-                      <input
-                        className="crm-input"
-                        value={form.phoneLabels || ''}
-                        onChange={(e) => setForm({ ...form, phoneLabels: e.target.value })}
-                      />
-                    </div>
-                    <div className="form-grid-2">
-                      <div className="form-group">
-                        <label>{t('app.field.preferredChannel')}</label>
-                        <CrmSelect
-                          className="crm-select"
-                          value={form.preferredChannel || ''}
-                          onChange={(e) => setForm({ ...form, preferredChannel: e.target.value })}
-                        >
-                          <option value="">—</option>
-                          <option value="WHATSAPP">{channelLabel('WHATSAPP' as any)}</option>
-                          <option value="PHONE">{channelLabel('PHONE' as any)}</option>
-                          <option value="INSTAGRAM">{channelLabel('INSTAGRAM' as any)}</option>
-                          <option value="TELEGRAM">{channelLabel('TELEGRAM' as any)}</option>
-                          <option value="EMAIL">{channelLabel('EMAIL' as any)}</option>
-                        </CrmSelect>
-                      </div>
-                      <div className="form-group">
-                        <label>{t('app.field.birthday')}</label>
-                        <CrmDatePicker
-                          className="crm-input"
-                          value={form.birthday || ''}
-                          onChange={(v) => setForm({ ...form, birthday: v })}
-                        />
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <label>{t('userDetail.field.email')}</label>
-                      <input
-                        type="email"
-                        value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        onBlur={() => setTouched((tt) => ({ ...tt, email: true }))}
-                        className={`crm-input${showErr('email') ? ' input-error' : ''}`}
-                      />
-                      {showErr('email') && <div className="form-error-text">{(formErrors as any).email}</div>}
-                    </div>
-                    <div className="form-grid-2">
-                      <div className="form-group">
-                        <label>{t('app.field.direction')}</label>
-                        <CrmSelect className="crm-select" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value as Direction })}>
-                          <DirectionOptions />
-                        </CrmSelect>
-                      </div>
-                      <div className="form-group">
-                        <label>{t('app.field.cabinet')}</label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={99}
-                          value={form.cabinet}
-                          onChange={(e) => setForm({ ...form, cabinet: e.target.value.replace(/[^\d]/g, '') })}
-                          onBlur={() => setTouched((tt) => ({ ...tt, cabinet: true }))}
-                          className={`crm-input${showErr('cabinet') ? ' input-error' : ''}`}
-                        />
-                        {showErr('cabinet') && <div className="form-error-text">{(formErrors as any).cabinet}</div>}
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <label>{t('common.status')}</label>
-                      <CrmSelect className="crm-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as StudentStatus })}>
-                        <option value="ACTIVE">{studentStatusLabel('ACTIVE' as any)}</option>
-                        <option value="PAUSED">{studentStatusLabel('PAUSED' as any)}</option>
-                        <option value="GRADUATED">{studentStatusLabel('GRADUATED' as any)}</option>
-                        <option value="ARCHIVED">{studentStatusLabel('ARCHIVED' as any)}</option>
-                      </CrmSelect>
-                    </div>
-                    <div className="form-group">
-                      <label>{t('app.field.comment')}</label>
-                      <textarea
-                        value={form.comment}
-                        onChange={(e) => setForm({ ...form, comment: e.target.value })}
-                        onBlur={() => setTouched((tt) => ({ ...tt, comment: true }))}
-                        maxLength={2000}
-                        rows={3}
-                        style={{ resize: 'none' }}
-                        className={`crm-textarea${showErr('comment') ? ' input-error' : ''}`}
-                      />
-                      {showErr('comment') && <div className="form-error-text">{(formErrors as any).comment}</div>}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <DocumentsChecklist
-              studentId={student.id}
-              studentName={student.fullName}
-              documents={student.documents || []}
-              applicationForm={student.applicationForm}
-              onChange={reload}
-              editable={!!canEdit}
+            <StatusPill status={app.status} canEdit={canAct} busy={statusMut.isPending} onChange={(s) => statusMut.mutate(s)} />
+            <StagePill
+              applicationId={app.id}
+              pipelineId={app.pipelineId}
+              stageId={app.pipelineStageId}
+              canEdit={canAct}
+              onChanged={reload}
             />
-
-            <div style={{ marginTop: 28 }}>
-              <ApplicationFormSection
-                studentId={student.id}
-                initialForm={student.applicationForm}
-                canEdit={!!canEdit}
-                onSaved={reload}
-              />
-            </div>
-
-            <CommentsSection applicationId={app.id} />
+            <DebtPill pending={!!app.paymentPending} canEdit={canAct} busy={debtMut.isPending} onChange={(v) => debtMut.mutate(v)} />
+            <SmsNote status={app.status} />
           </>
+        }
+        contacts={contacts}
+        actions={
+          <>
+            {/*
+              ЕДИНСТВЕННЫЙ вход «заявка → сделка». id заявки уходит в query,
+              бэкенд кладёт его в SaleSubmission.sourceApplicationId, и связь
+              (а с ней партнёрская атрибуция с лендинга) переживает одобрение.
+              Скрыт на «успешных» исходах: такая заявка обычно САМА создана
+              одобрением первого платежа, и новая сделка по ней — почти всегда
+              ошибка. Через список сделок этот путь по-прежнему доступен.
+            */}
+            {canAct && !isEnrolled && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                title={t('applicationDetail.createDeal.hint')}
+                onClick={() => navigate(`/submissions/new?applicationId=${encodeURIComponent(app.id)}`)}
+                data-testid="client-create-deal"
+              >
+                <Icon name="handshake" size={18} /> {t('applicationDetail.createDeal')}
+              </button>
+            )}
+            {canEditData && (
+              <button type="button" className="btn btn-primary" onClick={() => setEditing((v) => !v)} data-testid="client-edit">
+                <Icon name="edit" size={18} /> {t('profile.edit')}
+              </button>
+            )}
+            {canAct && (
+              <button
+                type="button"
+                className="btn btn-secondary client-delete-btn"
+                onClick={onDeleteApp}
+                title={t('common.delete')}
+                aria-label={t('common.delete')}
+                data-testid="client-delete"
+              >
+                <Icon name="delete" size={18} />
+              </button>
+            )}
+          </>
+        }
+      />
+
+      <section className="card profile-section" data-testid="client-main">
+        <div className={`profile-cols${showPeople ? '' : ' is-single'}`}>
+          <div className="profile-group" data-testid="group-client">
+            <div className="profile-group-head">
+              <h3 className="profile-h">{t('client.section.data')}</h3>
+              {canEditData && <EditButton active={editing} testId="edit-client" onClick={() => setEditing((v) => !v)} />}
+            </div>
+            <div className="profile-grid client-grid">
+              <Field
+                label={phones.length > 1 ? t('app.field.phones') : t('app.field.phone')}
+                testId="field-phone"
+                value={
+                  phones.length === 0 ? '—' : phones.map((p, i) => (
+                    <div key={i}>
+                      {p}
+                      {withStudent
+                        ? student!.phoneLabels?.[i] && <span className="client-field-sub"> · {student!.phoneLabels[i]}</span>
+                        : i === 1 && app.secondaryContactLabel && <span className="client-field-sub"> · {app.secondaryContactLabel}</span>}
+                    </div>
+                  ))
+                }
+              />
+              <Field
+                label={t('app.field.whatsapp')}
+                testId="field-whatsapp"
+                value={wa ? <a href={wa} target="_blank" rel="noopener noreferrer" className="client-link">{app.whatsappPhone}</a> : '—'}
+              />
+              <Field label={t('userDetail.field.email')} testId="field-email" value={email || '—'} />
+              <Field label={t('app.field.birthday')} testId="field-birthday" value={<BirthdayValue iso={birthday} />} />
+              <Field label={t('app.field.country')} testId="field-country" value={countryLabel(country)} />
+              {/* Неподтверждённое направление — плейсхолдер бэкенда, а не выбор
+                  клиента: форма на сайте спрашивает страну. Показываем «—». */}
+              <Field
+                label={t('app.field.direction')}
+                testId="field-direction"
+                value={directionConfirmed === false
+                  ? <span className="client-muted" title={t('app.direction.unconfirmed')}>—</span>
+                  : directionLabel(direction)}
+              />
+              {withStudent && (
+                <Field
+                  label={t('app.field.cabinet')}
+                  testId="field-cabinet"
+                  value={<>№{student!.cabinet}</>}
+                  hint={student!.directionConfirmed === false ? t('student.cabinet.pending') : undefined}
+                />
+              )}
+              {withStudent && <Field label={t('common.status')} testId="field-student-status" value={studentStatusLabel(student!.status)} />}
+              {channel && <Field label={t('app.field.preferredChannel')} testId="field-channel" value={channelLabel(channel)} />}
+              <Field label={t('client.created.lead')} testId="field-created" value={tjFormatFull(app.createdAt)} />
+              <Field label={t('app.field.comment')} testId="field-comment" wide value={<span className="client-pre">{comment || '—'}</span>} />
+            </div>
+          </div>
+          {showPeople && (
+            <div className="profile-group" data-testid="group-people">
+              <div className="profile-group-head">
+                <h3 className="profile-h">{t('client.section.people')}</h3>
+              </div>
+              {!isNew && <ManagerBar manager={app.manager} chinaManager={app.chinaManager} onReassign={onReassign} />}
+              {/* Партнёр — только руководству и только у партнёрских клиентов:
+                  решает бэкенд, у менеджера по продажам ключа в JSON нет. */}
+              <PartnerAttributionCard attribution={app.partnerAttribution} variant="field" />
+            </div>
+          )}
+        </div>
+
+        {editing && canEditData && (
+          <div className="profile-edit">
+            {withStudent ? (
+              <StudentEditForm
+                student={student!}
+                saving={updateStudentMut.isPending}
+                onSave={(patch) => updateStudentMut.mutate(patch)}
+                onCancel={() => setEditing(false)}
+              />
+            ) : (
+              <NewApplicationEditor app={app} onSaved={() => { setEditing(false); reload(); }} onCancel={() => setEditing(false)} />
+            )}
+          </div>
         )}
-      </div>
-      </div>
+      </section>
+
+      {withStudent && (
+        <>
+          <section className="card profile-section" data-testid="client-docs">
+            <h3 className="profile-h">{t('client.section.docs')}</h3>
+            <DocumentsChecklist
+              studentId={student!.id}
+              studentName={student!.fullName}
+              documents={student!.documents || []}
+              applicationForm={student!.applicationForm}
+              onChange={reload}
+              editable={canAct}
+            />
+          </section>
+
+          {/* Вместо прежнего блока «Комментарии» (он ничего не сохранял) —
+              настоящая история общения клиента: звонки, переписка, заметки. */}
+          <InteractionsLog studentId={student!.id} canEdit={canAct} />
+
+          <ApplicationFormSection
+            studentId={student!.id}
+            initialForm={student!.applicationForm}
+            canEdit={canAct}
+            onSaved={reload}
+          />
+        </>
+      )}
     </div>
   );
 }
 
 /**
- * Comments section — chat-style feed under the application with a textarea
- * for posting a new comment and an "Отправить" button.
+ * Правка полей самой заявки — пока по ней не создан студент: телефоны,
+ * канал связи, email, направление, комментарий (поля Application из ТЗ §8b).
  */
-function CommentsSection({ applicationId }: { applicationId: string }) {
-  const { t } = useT();
-  const { toast } = useUI();
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-
-  const send = async () => {
-    const value = text.trim();
-    if (!value) return;
-    setSending(true);
-    try {
-      // Best-effort: comment posting endpoint may not yet be wired; UI is ready.
-      await Promise.resolve();
-      toast(t('app.comments.sent'), 'success');
-      setText('');
-    } catch (e: any) {
-      toast(e?.response?.data?.message || t('toast.error'), 'error');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <div style={{ marginTop: 28 }} data-testid={`comments-section-${applicationId}`}>
-      <h3 style={{ margin: '0 0 12px 0', fontSize: 16 }}>{t('app.comments.title')}</h3>
-      <div className="form-group" style={{ marginBottom: 8 }}>
-        <textarea
-          className="crm-textarea"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={3}
-          style={{ resize: 'none' }}
-          placeholder={t('app.comments.placeholder')}
-        />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-        <button
-          className="btn btn-sm btn-primary"
-          style={{ alignSelf: 'center' }}
-          onClick={send}
-          disabled={sending || !text.trim()}
-        >
-          {sending ? t('common.sending') : t('common.send')}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Редактор полей самой заявки (до перехода в статус с созданным студентом).
- * Покрывает phone, secondaryPhone + label, preferredChannel, email,
- * direction, comment — поля Application'а из ТЗ §8b.
- */
-function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () => void }) {
+function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; onSaved: () => void; onCancel: () => void }) {
   const { toast } = useUI();
   const { t } = useT();
-  const [edit, setEdit] = useState(false);
+  const channelLabel = useChannelLabel();
   const [phone, setPhone] = useState(app.phone || '');
   const [secondaryPhone, setSecondaryPhone] = useState(app.secondaryPhone || '');
   const [secondaryContactLabel, setSecondaryContactLabel] = useState(app.secondaryContactLabel || '');
@@ -894,10 +430,7 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
   // Неподтверждённое направление показываем как пустой выбор, а не как
   // «Бакалавриат»: в БД там плейсхолдер, и предзаполненный селект заставил бы
   // менеджера подтвердить чужую догадку одним нажатием «Сохранить».
-  const unconfirmedDirection = app.directionConfirmed === false;
-  const [direction, setDirection] = useState<Direction | ''>(
-    unconfirmedDirection ? '' : app.direction,
-  );
+  const [direction, setDirection] = useState<Direction | ''>(app.directionConfirmed === false ? '' : app.direction);
   const [comment, setComment] = useState(app.comment || '');
   const [saving, setSaving] = useState(false);
 
@@ -917,7 +450,6 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
         comment: comment.trim() || undefined,
       } as any);
       toast(t('toast.saved'), 'success');
-      setEdit(false);
       onSaved();
     } catch (e: any) {
       toast(e?.response?.data?.message || t('toast.error'), 'error');
@@ -926,207 +458,63 @@ function NewApplicationEditor({ app, onSaved }: { app: Application; onSaved: () 
     }
   };
 
-  if (!edit) {
-    return (
-      <>
-        <div className="detail-row"><div className="detail-label">{t('app.field.phone')}</div><div className="detail-value">{app.phone}</div></div>
-        {app.secondaryPhone && (
-          <div className="detail-row">
-            <div className="detail-label">{t('app.field.secondaryPhone')}</div>
-            <div className="detail-value">
-              {app.secondaryPhone}
-              {app.secondaryContactLabel && (
-                <span style={{ color: 'var(--text-soft)', fontSize: 12, marginLeft: 6 }}>
-                  · {app.secondaryContactLabel}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-        {app.preferredChannel && (
-          <div className="detail-row">
-            <div className="detail-label">{t('app.field.preferredChannel')}</div>
-            <div className="detail-value">{CONTACT_CHANNEL_LABEL[app.preferredChannel as ContactChannel] ?? app.preferredChannel}</div>
-          </div>
-        )}
-        <div className="detail-row"><div className="detail-label">Email</div><div className="detail-value">{app.email || '—'}</div></div>
-        <div className="detail-row">
-          <div className="detail-label">{t('app.field.direction')}</div>
-          {/* Плейсхолдер не выдаём за ответ клиента: форма лендинга
-              направление не спрашивает (спрашивает страну), бэкенд ставит
-              туда DEFAULT_DIRECTION и помечает directionConfirmed=false. */}
-          <div className="detail-value">
-            {unconfirmedDirection ? (
-              <span style={{ color: 'var(--text-light)' }} title={t('app.direction.unconfirmed')}>—</span>
-            ) : (
-              DIRECTION_LABEL[app.direction]
-            )}
-          </div>
-        </div>
-        <div className="detail-row"><div className="detail-label">{t('app.field.comment')}</div><div className="detail-value">{app.comment || '—'}</div></div>
-        <div style={{ marginTop: 10 }}>
-          <button className="btn btn-sm btn-secondary" onClick={() => setEdit(true)}>
-            {t('app.edit')}
-          </button>
-        </div>
-      </>
-    );
-  }
-
   return (
-    <div style={{ padding: 14, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg-soft)' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>{t('app.field.mainPhone')}</label>
-          <input className="crm-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </div>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>{t('app.field.secondaryPhoneHint')}</label>
-          <input className="crm-input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="+992 ..." />
-        </div>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>{t('app.field.secondaryLabel')}</label>
-          <input className="crm-input" value={secondaryContactLabel} onChange={(e) => setSecondaryContactLabel(e.target.value)} placeholder={t('app.field.secondaryLabelPh')} />
-        </div>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>{t('app.field.preferredChannel')}</label>
-          <CrmSelect className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
-            <option value="">—</option>
-            <option value="WHATSAPP">WhatsApp</option>
-            <option value="PHONE">{t('channel.PHONE')}</option>
-            <option value="INSTAGRAM">Instagram</option>
-            <option value="TELEGRAM">Telegram</option>
-            <option value="EMAIL">Email</option>
-          </CrmSelect>
-        </div>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>Email</label>
-          <input className="crm-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        {/* Единственное место, где направление лида с лендинга вообще можно
-            проставить. Без него заявка навсегда оставалась бы
-            directionConfirmed=false и не попадала бы ни в срез дашборда
-            «по направлениям», ни в фильтр списка. */}
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>{t('app.field.direction')}</label>
-          <CrmSelect
-            className="crm-select"
-            value={direction}
-            onChange={(e) => setDirection(e.target.value as Direction | '')}
-          >
-            <option value="">{t('app.direction.notChosen')}</option>
-            <DirectionOptions />
-          </CrmSelect>
-        </div>
-      </div>
-      <div className="form-group" style={{ marginTop: 12 }}>
-        <label>{t('app.field.comment')}</label>
-        <textarea
-          className="crm-textarea"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          rows={3}
-          style={{ resize: 'none' }}
+    <EditForm
+      title={t('client.section.data')}
+      saving={saving}
+      onSave={save}
+      onCancel={onCancel}
+      testId="client-edit-form"
+      footer={
+        <EditField label={t('app.field.comment')} wide>
+          <textarea
+            className="crm-textarea"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={3}
+            style={{ resize: 'none' }}
+            data-testid="edit-comment"
+          />
+        </EditField>
+      }
+    >
+      <EditField label={t('app.field.mainPhone')}>
+        <input className="crm-input" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="edit-phone" />
+      </EditField>
+      <EditField label={t('app.field.secondaryPhoneHint')}>
+        <input className="crm-input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="+992 ..." />
+      </EditField>
+      <EditField label={t('app.field.secondaryLabel')}>
+        <input
+          className="crm-input"
+          value={secondaryContactLabel}
+          onChange={(e) => setSecondaryContactLabel(e.target.value)}
+          placeholder={t('app.field.secondaryLabelPh')}
         />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginTop: 10 }}>
-        <button className="btn btn-sm btn-secondary" onClick={() => setEdit(false)} disabled={saving}>{t('common.cancel')}</button>
-        <button className="btn btn-sm btn-primary" style={{ alignSelf: 'center' }} onClick={save} disabled={saving}>
-          {saving ? t('common.saving') : t('common.save')}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Селектор этапа воронки для заявки. Подгружает список pipelines с их
- * этапами, показывает текущий этап в виде цветной плашки и dropdown
- * для перехода на другой этап. Если воронок нет в системе — секция
- * скрывается (не мешает).
- */
-function PipelineStageSelector({
-  applicationId,
-  currentStageId,
-  currentPipelineId,
-  onChanged,
-}: {
-  applicationId: string;
-  currentStageId: string | null;
-  currentPipelineId: string | null;
-  onChanged: () => void;
-}) {
-  const { toast } = useUI();
-  const { t } = useT();
-  const query = useQuery({ queryKey: ['sales', 'pipelines'], queryFn: listPipelines });
-  const pipelines = query.data ?? [];
-  const [busy, setBusy] = useState(false);
-
-  if (pipelines.length === 0) return null;
-
-  const currentPipeline = pipelines.find((p) => p.id === currentPipelineId) ||
-    pipelines.find((p) => p.isDefault) ||
-    pipelines[0];
-
-  const currentStage = currentPipeline.stages.find((s) => s.id === currentStageId);
-
-  const onPick = async (stageId: string) => {
-    setBusy(true);
-    try {
-      await moveApplicationStage(applicationId, stageId);
-      toast(t('toast.updated'), 'success');
-      onChanged();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || t('toast.error'), 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div style={{
-      marginTop: 12,
-      marginBottom: 24,
-      padding: '10px 14px',
-      background: 'var(--bg-soft)',
-      border: '1px solid var(--border-soft)',
-      borderRadius: 10,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      flexWrap: 'wrap',
-    }}>
-      <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        letterSpacing: '0.12em',
-        color: 'var(--text-soft)',
-        textTransform: 'uppercase',
-      }}>
-        {t('app.field.pipeline')} · {currentPipeline.name}
-      </div>
-      <CrmSelect className="crm-select"
-        value={currentStageId || ''}
-        onChange={(e) => onPick(e.target.value)}
-        disabled={busy}
-        style={{
-          padding: '6px 12px',
-          borderRadius: 999,
-          border: '1.5px solid',
-          borderColor: currentStage?.color || 'var(--input-border)',
-          background: currentStage?.color ? `${currentStage.color}20` : 'white',
-          fontSize: 13,
-          fontWeight: 600,
-          color: currentStage?.color || 'var(--text)',
-        }}
-      >
-        <option value="">— {t('app.field.stage')} —</option>
-        {currentPipeline.stages.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}{s.isClosingStage ? ' ✓' : ''}
-          </option>
-        ))}
-      </CrmSelect>
-    </div>
+      </EditField>
+      <EditField label={t('app.field.preferredChannel')}>
+        <CrmSelect className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
+          <option value="">—</option>
+          <option value="WHATSAPP">{channelLabel('WHATSAPP')}</option>
+          <option value="PHONE">{channelLabel('PHONE')}</option>
+          <option value="INSTAGRAM">{channelLabel('INSTAGRAM')}</option>
+          <option value="TELEGRAM">{channelLabel('TELEGRAM')}</option>
+          <option value="EMAIL">{channelLabel('EMAIL')}</option>
+        </CrmSelect>
+      </EditField>
+      <EditField label={t('userDetail.field.email')}>
+        <input className="crm-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="edit-email" />
+      </EditField>
+      {/* Единственное место, где направление лида с лендинга вообще можно
+          проставить. Без него заявка навсегда оставалась бы
+          directionConfirmed=false и не попадала бы ни в срез дашборда
+          «по направлениям», ни в фильтр списка. */}
+      <EditField label={t('app.field.direction')}>
+        <CrmSelect className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as Direction | '')}>
+          <option value="">{t('app.direction.notChosen')}</option>
+          <DirectionOptions />
+        </CrmSelect>
+      </EditField>
+    </EditForm>
   );
 }

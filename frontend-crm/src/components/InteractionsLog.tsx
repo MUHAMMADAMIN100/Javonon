@@ -21,6 +21,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { tr, useT } from '../lib/i18n';
+import { EmptyLine } from './ClientCard';
 
 const TYPES: InteractionType[] = ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'SMS', 'TELEGRAM', 'WHATSAPP'];
 
@@ -70,7 +71,9 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
 
   const createMut = useInvalidatingMutation({
     mutationFn: createInteraction,
-    invalidate: [listKey],
+    // Полная лента открыта по умолчанию — без её сброса новая запись
+    // появлялась только после события по сокету.
+    invalidate: [listKey, timelineKey],
     onSuccess: () => {
       toast(t('toast.created'), 'success');
       setShowForm(false);
@@ -82,6 +85,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
     mutationFn: deleteInteraction,
     queryKey: listKey,
     applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
+    invalidateAlso: [timelineKey],
     onSuccess: () => toast(t('toast.deleted'), 'success'),
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
@@ -143,50 +147,48 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
     };
   };
 
+  const timelineToggle = (
+    <button
+      type="button"
+      onClick={() => setShowFullTimeline((v) => !v)}
+      className={`client-toggle${showFullTimeline ? ' is-on' : ''}`}
+      title={t('interactions.fullTimeline')}
+      data-testid="interactions-full-toggle"
+    >
+      {showFullTimeline ? '◉ ' : '○ '}{t('interactions.fullTimeline')}
+    </button>
+  );
+  const addButton = canEdit && !showForm && (
+    <button className="btn btn-sm btn-primary" onClick={() => setShowForm(true)} data-testid="interaction-add">
+      <Icon name="add" size={14} /> {t('common.add')}
+    </button>
+  );
+  const loading = showFullTimeline ? timelineQuery.isLoading : interactionsQuery.isLoading;
+
+  // Записей нет — одной строкой, как пустые блоки карточки сотрудника.
+  // Переключатель ленты нужен только чтобы вернуться к полной ленте: в ней
+  // и так есть все ручные записи.
+  if (!loading && items.length === 0 && !showForm) {
+    return (
+      <EmptyLine
+        title={t('interactions.title')}
+        text={t('interactions.emptyLine')}
+        testId="interactions-empty"
+        actions={<>{!showFullTimeline && timelineToggle}{addButton}</>}
+      />
+    );
+  }
+
   return (
-    <div className="card" style={{ padding: 28, marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.16em',
-            color: 'var(--primary-dark)',
-            marginBottom: 6,
-            textTransform: 'uppercase',
-          }}>INTERACTIONS · {items.length}</div>
-          <h3 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 22,
-            fontWeight: 500,
-            letterSpacing: '-0.02em',
-          }}>
-            {t('interactions.title')}
-          </h3>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={() => setShowFullTimeline((v) => !v)}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 999,
-              border: `1.5px solid ${showFullTimeline ? 'var(--primary-dark)' : 'var(--border)'}`,
-              // --primary-light = #1E5BB8 (тёмно-синий, не светлый),
-              // поэтому на active state текст ОБЯЗАТЕЛЬНО белый.
-              background: showFullTimeline ? 'var(--primary)' : 'transparent',
-              color: showFullTimeline ? '#fff' : 'var(--text-soft)',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            }}
-            title={t('interactions.fullTimeline')}
-          >
-            {showFullTimeline ? '◉ ' : '○ '}{t('interactions.fullTimeline')}
-          </button>
-          {canEdit && !showForm && (
-            <button className="btn btn-sm btn-primary" onClick={() => setShowForm(true)}>
-              <Icon name="add" size={14} /> {t('common.add')}
-            </button>
-          )}
+    <section className="card profile-section" data-testid="interactions">
+      <div className="client-block-head">
+        <h3 className="profile-h">
+          {t('interactions.title')}
+          {items.length > 0 && <span className="client-count">{items.length}</span>}
+        </h3>
+        <div className="client-block-actions">
+          {timelineToggle}
+          {addButton}
         </div>
       </div>
 
@@ -205,7 +207,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.length === 0 && (
-          <div className="empty" style={{ padding: 32 }}>{t('common.empty')}</div>
+          <div className="profile-empty" style={{ padding: '4px 0' }}>{loading ? t('common.loading') : t('interactions.emptyLine')}</div>
         )}
         {items.map((it) => {
           const vis = resolveVisuals(it);
@@ -292,7 +294,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
 

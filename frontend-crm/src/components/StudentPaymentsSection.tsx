@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { api } from '../api/client';
 import Icon from '../Icon';
 import { localized, useT } from '../lib/i18n';
+import { EmptyLine } from './ClientCard';
 
 interface PaymentTx {
   id: string;
@@ -91,61 +92,31 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
   });
 
   if (loading) {
-    return (
-      <div className="card" style={{ padding: 28, marginBottom: 16 }}>
-        <div style={{ color: 'var(--text-soft)' }}>{t('common.loading')}</div>
-      </div>
-    );
+    return <EmptyLine title={t('payments.title')} text={t('common.loading')} />;
   }
   if (!data) return null;
 
   const { transactions, paymentRequests, totalPaid, totalPaidOther } = data;
   const pendingActive = paymentRequests.filter((p) => p.status === 'PENDING');
 
+  // Оплат и заявок на оплату нет — одной строкой, как пустые блоки карточки сотрудника.
+  if (transactions.length === 0 && paymentRequests.length === 0) {
+    return <EmptyLine title={t('payments.title')} text={t('payments.emptyLine')} testId="payments-empty" />;
+  }
+
   return (
-    <div className="card" style={{ padding: 28, marginBottom: 16 }}>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.16em',
-          color: 'var(--primary-dark)',
-          marginBottom: 6,
-          textTransform: 'uppercase',
-        }}>PAYMENTS · {transactions.length} CONFIRMED</div>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
-          flexWrap: 'wrap',
-          gap: 16,
-        }}>
-          <h3 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 22,
-            fontWeight: 500,
-            letterSpacing: '-0.02em',
-            margin: 0,
-          }}>
-            {t('payments.title')}
-          </h3>
-          {/* «Оплачено» в TJS, под ним — другие валюты (в сумму не входят). */}
-          <div style={{ textAlign: 'right' }}>
-            <div style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 32,
-              fontWeight: 500,
-              letterSpacing: '-0.03em',
-              color: 'var(--primary-dark)',
-            }}>
-              {fmt(totalPaid, 'TJS')}
-            </div>
-            {Object.entries(totalPaidOther ?? {}).map(([cur, v]) => (
-              <div key={cur} data-testid="paid-other" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-soft)' }}>
-                + {fmt(v, cur)}
-              </div>
-            ))}
-          </div>
+    <section className="card profile-section" data-testid="payments">
+      <div className="client-block-head">
+        <h3 className="profile-h">
+          {t('payments.title')}
+          {transactions.length > 0 && <span className="client-count">{transactions.length}</span>}
+        </h3>
+        {/* «Оплачено» в TJS, рядом — другие валюты (в сумму не входят). */}
+        <div className="client-payments-total" data-testid="paid-total">
+          <b>{fmt(totalPaid, 'TJS')}</b>
+          {Object.entries(totalPaidOther ?? {}).map(([cur, v]) => (
+            <span key={cur} data-testid="paid-other">+ {fmt(v, cur)}</span>
+          ))}
         </div>
       </div>
 
@@ -194,9 +165,7 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
 
       {/* Подтверждённые транзакции */}
       {transactions.length === 0 ? (
-        <div style={{ padding: 24, color: 'var(--text-light)', fontSize: 13, textAlign: 'center' }}>
-          {t('common.empty')}
-        </div>
+        <div className="profile-empty" style={{ padding: '4px 0' }}>{t('payments.emptyLine')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {transactions.map((tx) => (
@@ -284,6 +253,6 @@ export default function StudentPaymentsSection({ studentId }: { studentId: strin
           </div>
         </details>
       )}
-    </div>
+    </section>
   );
 }

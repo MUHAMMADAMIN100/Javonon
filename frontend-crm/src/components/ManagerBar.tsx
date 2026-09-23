@@ -50,26 +50,29 @@ function Slot({
   }, [open]);
 
   return (
-    <div className={`manager-slot${isMine ? ' mine' : ''}${!manager ? ' empty' : ''}`}>
-      <div className="manager-slot-head">
-        <Icon name={icon} size={20} />
-        <div>
-          <div className="manager-slot-label">{label}</div>
-          <div className="manager-slot-name">
-            {manager ? manager.fullName : t('managerBar.notAssigned')}
-            {isMine && <span className="manager-bar-you">({t('common.youLower')})</span>}
-          </div>
+    <div className={`client-person${isMine ? ' is-mine' : ''}${!manager ? ' is-empty' : ''}`} data-testid={`manager-${kind}`}>
+      <span className="client-person-icon"><Icon name={icon} size={18} /></span>
+      <div className="profile-field client-person-main">
+        <div className="profile-field-label">{label}</div>
+        <div className="profile-field-value">
+          {manager ? manager.fullName : t('managerBar.notAssigned')}
+          {isMine && <span className="manager-bar-you">{t('common.youLower')}</span>}
         </div>
       </div>
       {isAdmin && (
-        <div style={{ position: 'relative' }}>
+        <div className="client-person-actions">
           <motion.button
-            className="btn btn-sm btn-secondary"
+            type="button"
+            className={`profile-edit-btn is-icon${open ? ' is-active' : ''}`}
             onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
             disabled={saving}
             whileTap={{ scale: 0.95 }}
+            title={`${t('profile.edit')}: ${label}`}
+            aria-label={`${t('profile.edit')}: ${label}`}
+            aria-expanded={open}
+            data-testid={`manager-${kind}-edit`}
           >
-            <Icon name="edit" size={14} />
+            <Icon name="edit" size={15} />
           </motion.button>
           <AnimatePresence>
             {open && (
@@ -143,11 +146,12 @@ export default function ManagerBar({ manager, chinaManager, onReassign }: Props)
     }
   };
 
+  // Строки в панели «Менеджеры» карточки клиента (заявка, студент).
   return (
-    <div className="manager-bar-two">
+    <div className="client-people">
       <Slot
         kind="local"
-        label={`${t('app.field.manager')} (TJ)`}
+        label={t('app.field.manager')}
         icon="apartment"
         manager={manager}
         isAdmin={isAdmin}
@@ -158,7 +162,7 @@ export default function ManagerBar({ manager, chinaManager, onReassign }: Props)
       />
       <Slot
         kind="china"
-        label={`${t('app.field.chinaManager')} (CN)`}
+        label={t('app.field.chinaManager')}
         icon="flag"
         manager={chinaManager}
         isAdmin={isAdmin}

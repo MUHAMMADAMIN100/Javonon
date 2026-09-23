@@ -190,7 +190,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'app.status.ENROLLED': 'Зачислен',
     'app.status.IN_PROGRESS': 'Документы на проверке',
     'app.status.COMPLETED': 'Зачислен',
-    // Уведомляется ли клиент об этом статусе (см. ApplicationStatusSelect).
+    // Уведомляется ли клиент об этом статусе (см. SmsNote в components/ClientCard).
     'app.status.smsSent': 'Клиент получает SMS об этом статусе.',
     'app.status.smsSilent': 'Внутренний статус — клиенту SMS не отправляется.',
     'app.title': 'Заявки клиентов',
@@ -2676,6 +2676,19 @@ const DICT: Record<Lang, Record<string, string>> = {
     'profile.hero.since': 'в команде с {d}',
     'profile.hero.dismissed': 'уволен',
     'userMenu.language': 'Язык',
+    'client.eyebrow.lead': 'ЗАЯВКА',
+    'client.eyebrow.student': 'СТУДЕНТ',
+    'client.section.data': 'Данные клиента',
+    'client.section.people': 'Менеджеры',
+    'client.section.docs': 'Документы',
+    'client.created.lead': 'Заявка создана',
+    'client.created.student': 'Добавлен в базу',
+    'client.photo.change': 'Сменить фото',
+    'client.sms.on': 'Клиент получит SMS',
+    'client.sms.off': 'Без SMS клиенту',
+    'docs.other.none': 'нет',
+    'interactions.emptyLine': 'записей пока нет',
+    'payments.emptyLine': 'оплат пока нет',
   },
   tg: {
     // ===== common =====
@@ -2848,7 +2861,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'app.status.ENROLLED': 'Қабул шуд',
     'app.status.IN_PROGRESS': 'Ҳуҷҷатҳо дар санҷиш',
     'app.status.COMPLETED': 'Қабул шуд',
-    // Оё муштарӣ дар бораи ин ҳолат хабар мегирад (ниг. ApplicationStatusSelect).
+    // Оё муштарӣ дар бораи ин ҳолат хабар мегирад (ниг. SmsNote дар components/ClientCard).
     'app.status.smsSent': 'Муштарӣ дар бораи ин ҳолат SMS мегирад.',
     'app.status.smsSilent': 'Ҳолати дохилӣ — ба муштарӣ SMS фиристода намешавад.',
     'app.title': 'Аризаҳои муштариён',
@@ -5278,6 +5291,19 @@ const DICT: Record<Lang, Record<string, string>> = {
     'profile.hero.since': 'дар даста аз {d}',
     'profile.hero.dismissed': 'аз кор озод',
     'userMenu.language': 'Забон',
+    'client.eyebrow.lead': 'АРИЗА',
+    'client.eyebrow.student': 'ДОНИШҶӮ',
+    'client.section.data': 'Маълумоти муштарӣ',
+    'client.section.people': 'Менеҷерон',
+    'client.section.docs': 'Ҳуҷҷатҳо',
+    'client.created.lead': 'Ариза сохта шуд',
+    'client.created.student': 'Ба база илова шуд',
+    'client.photo.change': 'Иваз кардани сурат',
+    'client.sms.on': 'Муштарӣ SMS мегирад',
+    'client.sms.off': 'Бе SMS ба муштарӣ',
+    'docs.other.none': 'нест',
+    'interactions.emptyLine': 'ҳоло сабт нест',
+    'payments.emptyLine': 'ҳоло пардохт нест',
   },
 };
 

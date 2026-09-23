@@ -317,9 +317,13 @@ export class StudentsService {
    *   блок им не считается: лишний запрос и лишний риск утечки.
    */
   async findOne(id: string, viewer?: UserWithRoles | null) {
+    // Заявки — из STUDENT_INCLUDE: без удалённых и новые первыми. Карточка
+    // студента меняет статус, этап и долг у applications[0]; раньше здесь
+    // стояло applications: true — приходили и удалённые заявки, в случайном
+    // порядке, и правка могла уйти не в ту заявку.
     const student = await this.prisma.student.findUnique({
       where: { id },
-      include: { ...STUDENT_INCLUDE, applications: true },
+      include: STUDENT_INCLUDE,
     });
     if (!student) throw new NotFoundException('Студент не найден');
     if (!canSeePartnerAttribution(viewer)) return student;
