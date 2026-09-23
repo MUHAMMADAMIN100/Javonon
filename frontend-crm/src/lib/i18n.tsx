@@ -2675,6 +2675,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'profile.hero.write': 'Написать',
     'profile.hero.since': 'в команде с {d}',
     'profile.hero.dismissed': 'уволен',
+    'userMenu.language': 'Язык',
   },
   tg: {
     // ===== common =====
@@ -5276,6 +5277,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     'profile.hero.write': 'Навиштан',
     'profile.hero.since': 'дар даста аз {d}',
     'profile.hero.dismissed': 'аз кор озод',
+    'userMenu.language': 'Забон',
   },
 };
 
@@ -5358,36 +5360,4 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
 export function useT() {
   return useContext(I18nContext);
-}
-
-/** Переключатель языка для шапки/Sidebar. */
-export function LangSwitcher() {
-  const { lang, setLang } = useT();
-  return (
-    <div style={{ display: 'inline-flex', gap: 4, padding: 2, borderRadius: 999, background: 'rgba(255,255,255,0.06)' }}>
-      <button
-        onClick={() => setLang('ru')}
-        style={langBtnStyle(lang === 'ru')}
-        title="Русский"
-      >RU</button>
-      <button
-        onClick={() => setLang('tg')}
-        style={langBtnStyle(lang === 'tg')}
-        title="Тоҷикӣ"
-      >TJ</button>
-    </div>
-  );
-}
-
-function langBtnStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: '3px 8px',
-    borderRadius: 999,
-    border: 'none',
-    cursor: 'pointer',
-    background: active ? 'white' : 'transparent',
-    color: active ? '#0f172a' : 'rgba(255,255,255,0.75)',
-    fontWeight: 600,
-    fontSize: 11,
-  };
 }

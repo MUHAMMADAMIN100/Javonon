@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { changePassword } from '../api/auth';
 import { updateUser } from '../api/users';
@@ -40,6 +41,23 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
     onClose();
   };
 
+  // Esc закрывает окно, как FormModal и окна «подробнее». Ref — обработчик
+  // вешается один раз на открытие, а close зависит от busy. stopPropagation:
+  // на телефоне под окном открыта выезжающая панель — её Esc тоже закрывает,
+  // а одно нажатие должно закрыть только окно.
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      closeRef.current();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
@@ -75,7 +93,9 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
     }
   };
 
-  return (
+  // В body: окно открывают и из выезжающей панели телефона, а у неё есть
+  // transform — внутри неё position: fixed сжимался до ширины панели.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -153,6 +173,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
           </motion.form>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

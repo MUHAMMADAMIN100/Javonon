@@ -18,7 +18,8 @@ import { financeSummary, listTransactions } from '../api/finance';
 import { listSalaries } from '../api/salary';
 import { displayRoleLabel } from '../lib/roles';
 import { resolveLandingBaseUrl } from '../lib/landingUrl';
-import { LangSwitcher, useT } from '../lib/i18n';
+import { useT } from '../lib/i18n';
+import UserMenu from './UserMenu';
 import {
   buildNavCtx,
   visibleGroups,
@@ -691,136 +692,32 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     </>
   );
 
-  // ===== Нижний блок (drawer, <= 900px): /me + База знаний + юзер, язык,
-  //       пароль, выход — в полную ширину, с подписями =====
+  // ===== Нижний блок (drawer, <= 900px): строка пользователя, по нажатию —
+  //       то же меню, что у аватара на компьютере (профиль, база знаний,
+  //       язык, пароль, выход). =====
+  const userMenuProps = {
+    initials,
+    fullName: user?.fullName ?? '',
+    roleLabel: displayRoleLabel(user as any),
+    profileTo: PROFILE_ITEM.to,
+    profileLabel: t(PROFILE_ITEM.labelKey),
+    profileLinkProps: prefetchProps(PROFILE_ITEM.to),
+    knowledgeHref: `${resolveLandingBaseUrl()}/knowledge`,
+    onChangePassword: () => setPwdOpen(true),
+    onLogout: logout,
+  };
   const footMobile = (
-    <div className="sidebar-foot">
-      <div className="sidebar-quick">
-        <NavLink to={PROFILE_ITEM.to} onClick={() => onClose?.()} {...prefetchProps(PROFILE_ITEM.to)}>
-          <span className="sidebar-nav-icon">
-            <Icon name={PROFILE_ITEM.icon} size={19} />
-          </span>
-          <span>{t(PROFILE_ITEM.labelKey)}</span>
-        </NavLink>
-        {/* База знаний — внешняя ссылка на лендинг (ТЗ §3.1
-            "сайт используется ... сотрудниками как база знаний").
-            QA-fix #8: базу берём из lib/landingUrl, не из inline-env. */}
-        <a href={`${resolveLandingBaseUrl()}/knowledge`} target="_blank" rel="noreferrer">
-          <span className="sidebar-nav-icon">
-            <Icon name="library_books" size={19} />
-          </span>
-          <span>{t('sidebar.knowledge')}</span>
-          <Icon name="open_in_new" size={13} style={{ marginLeft: 'auto', opacity: 0.45 }} />
-        </a>
-      </div>
-      <motion.div
-        className="sidebar-user"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, duration: 0.3 }}
-      >
-        <motion.div
-          className="user-avatar"
-          whileHover={{ scale: 1.1 }}
-          transition={{ type: 'spring', stiffness: 300 }}
-        >
-          {initials}
-        </motion.div>
-        <div className="user-info">
-          <div className="user-name">{user?.fullName}</div>
-          <div className="user-role">{displayRoleLabel(user as any)}</div>
-          <div style={{ marginTop: 6 }}>
-            <LangSwitcher />
-          </div>
-        </div>
-        <motion.button
-          className="logout-btn"
-          onClick={() => setPwdOpen(true)}
-          title={t('auth.changePassword')}
-          whileHover={{ scale: 1.15 }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <Icon name="lock_reset" size={20} />
-        </motion.button>
-        <motion.button
-          className="logout-btn"
-          onClick={logout}
-          title={t('auth.logout')}
-          whileHover={{ scale: 1.15, rotate: 15 }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <Icon name="logout" size={20} />
-        </motion.button>
-      </motion.div>
+    <div className="sidebar-foot user-menu-foot is-mobile">
+      <UserMenu variant="mobile" {...userMenuProps} />
     </div>
   );
 
-  // ===== Нижний блок (десктоп): тот же набор, но в 64px rail'а —
-  //       иконки без подписей, подписи ушли в title/aria-label.
-  //       Живёт именно в RAIL'е, а не в панели: панель схлопывается, а
-  //       профиль / RU-TJ / смена пароля / выход обязаны оставаться под
-  //       рукой всегда. Префетч /me сохранён. =====
+  // ===== Нижний блок (десктоп): в узком rail — только аватар, остальное
+  //       в его меню. Раньше тут стояли шесть значков кучей, и нижний ряд
+  //       обрезался на невысоком экране. =====
   const footRail = (
-    <div className="sidebar-foot rail-foot">
-      <div className="sidebar-quick">
-        <NavLink
-          to={PROFILE_ITEM.to}
-          title={t(PROFILE_ITEM.labelKey)}
-          aria-label={t(PROFILE_ITEM.labelKey)}
-          {...prefetchProps(PROFILE_ITEM.to)}
-        >
-          <span className="sidebar-nav-icon">
-            <Icon name={PROFILE_ITEM.icon} size={20} />
-          </span>
-        </NavLink>
-        {/* База знаний — внешняя ссылка на лендинг (ТЗ §3.1). */}
-        <a
-          href={`${resolveLandingBaseUrl()}/knowledge`}
-          target="_blank"
-          rel="noreferrer"
-          title={t('sidebar.knowledge')}
-          aria-label={t('sidebar.knowledge')}
-        >
-          <span className="sidebar-nav-icon">
-            <Icon name="library_books" size={20} />
-          </span>
-        </a>
-      </div>
-      <div className="rail-lang">
-        <LangSwitcher />
-      </div>
-      <div className="sidebar-user rail-user">
-        <motion.div
-          className="user-avatar"
-          title={`${user?.fullName ?? ''} · ${displayRoleLabel(user as any)}`}
-          whileHover={{ scale: 1.1 }}
-          transition={{ type: 'spring', stiffness: 300 }}
-        >
-          {initials}
-        </motion.div>
-        <div className="rail-actions">
-          <motion.button
-            className="logout-btn"
-            onClick={() => setPwdOpen(true)}
-            title={t('auth.changePassword')}
-            aria-label={t('auth.changePassword')}
-            whileHover={{ scale: 1.15 }}
-            whileTap={{ scale: 0.9 }}
-          >
-            <Icon name="lock_reset" size={18} />
-          </motion.button>
-          <motion.button
-            className="logout-btn"
-            onClick={logout}
-            title={t('auth.logout')}
-            aria-label={t('auth.logout')}
-            whileHover={{ scale: 1.15, rotate: 15 }}
-            whileTap={{ scale: 0.9 }}
-          >
-            <Icon name="logout" size={18} />
-          </motion.button>
-        </div>
-      </div>
+    <div className="sidebar-foot rail-foot user-menu-foot">
+      <UserMenu variant="rail" {...userMenuProps} />
     </div>
   );
 
