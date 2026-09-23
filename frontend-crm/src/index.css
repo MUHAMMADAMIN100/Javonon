@@ -6399,3 +6399,46 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .client-pill { height: 30px; font-size: 12.5px; }
   .client-empty-actions { margin-left: 0; }
 }
+
+/* ===================== Переключатель периода (дашборд, «Финансы») — components/PeriodSwitcher ===================== */
+.period-switcher { margin-bottom: 20px; }
+.period-switcher-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.period-switcher-label {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+  color: var(--primary-dark); text-transform: uppercase;
+}
+.pagination-controls.period-switcher-options { padding: 4px; }
+.period-switcher-dates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.period-switcher-dash { color: var(--text-soft); }
+.period-switcher-busy { font-size: 12px; color: var(--text-soft); }
+.period-switcher-invalid { margin-top: 8px; font-size: 13px; color: var(--danger); }
+
+/* Узкий экран: кнопки сеткой 2 × 3 одинаковой ширины в прямоугольной рамке.
+   Раньше они переносились внутри «таблетки» — получался овал с рядами
+   разной длины (на 320 px — 2 + 3 + 1). Поля «своего периода» — под сеткой. */
+@media (max-width: 640px) {
+  .period-switcher-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .pagination-controls.period-switcher-options {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px;
+    width: 100%; box-sizing: border-box; border-radius: 14px;
+  }
+  .pagination-controls.period-switcher-options button {
+    width: 100%; min-width: 0; min-height: 40px; padding: 8px 6px;
+    border-radius: 10px; white-space: nowrap;
+    background: var(--bg-soft); color: var(--text);
+  }
+  .pagination-controls.period-switcher-options button:hover:not(.active) { background: #e9edf4; }
+  .period-switcher-dates { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; }
+  .period-switcher-dates .crm-datepicker-wrapper { min-width: 0; }
+  .period-switcher-dates .crm-datepicker-trigger { width: 100%; }
+}
+/* Телефон: поля «своего периода» — друг под другом во всю ширину: в ряд
+   «30 сентября 2026» не помещается уже на 375 px и рвётся на две строки. */
+@media (max-width: 480px) {
+  .period-switcher-dates { grid-template-columns: minmax(0, 1fr); }
+  .period-switcher-dash { display: none; }
+}
+
+/* Большая цифра карточки в одну строку (components/FitNumber): шрифт ужимается множителем --fit. */
+.fit-number { max-width: 100%; }
+.fit-number-text { display: inline-block; }

@@ -168,34 +168,28 @@ export default function PeriodSwitcher({
   const { t } = useT();
   const { period, from, to, setPeriod, setFrom, setTo, invalid, invalidHint } = state;
 
+  // Вёрстка — классами (index.css, «Переключатель периода»): на узком экране
+  // кнопки встают сеткой 2 × 3, на широком — одной строкой-«таблеткой».
   return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.14em',
-            color: 'var(--primary-dark)',
-            textTransform: 'uppercase',
-          }}
-        >
-          {t('dashboard.period.title')}
-        </div>
-        <div className="pagination-controls" style={{ padding: 4 }}>
+    <div className="period-switcher">
+      <div className="period-switcher-row">
+        <div className="period-switcher-label">{t('dashboard.period.title')}</div>
+        <div className="pagination-controls period-switcher-options" data-testid="period-options">
           {DASHBOARD_PERIODS.map((p) => (
             <button
               key={p}
               type="button"
               className={period === p ? 'active' : ''}
+              aria-pressed={period === p}
               onClick={() => setPeriod(p)}
+              data-testid={`period-${p}`}
             >
               {t(LABEL_KEY[p])}
             </button>
           ))}
         </div>
         {period === 'custom' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div className="period-switcher-dates" data-testid="period-dates">
             {/* max/min связывают пикеры друг с другом: перевёрнутый
                 диапазон просто нельзя выбрать мышкой. */}
             <CrmDatePicker
@@ -205,7 +199,7 @@ export default function PeriodSwitcher({
               max={to || undefined}
               placeholder={t('dashboard.period.from')}
             />
-            <span style={{ color: 'var(--text-soft)' }}>—</span>
+            <span className="period-switcher-dash">—</span>
             <CrmDatePicker
               className="crm-input"
               value={to}
@@ -215,19 +209,9 @@ export default function PeriodSwitcher({
             />
           </div>
         )}
-        {busy && !invalid && <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>...</span>}
+        {busy && !invalid && <span className="period-switcher-busy">...</span>}
       </div>
-      {invalid && (
-        <div
-          style={{
-            marginTop: 8,
-            fontSize: 13,
-            color: 'var(--danger)',
-          }}
-        >
-          {invalidHint}
-        </div>
-      )}
+      {invalid && <div className="period-switcher-invalid">{invalidHint}</div>}
     </div>
   );
 }

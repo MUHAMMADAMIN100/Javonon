@@ -13,6 +13,7 @@ import { isElevated, hasRole } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useApplicationStatusLabel, useCountryLabel, useDirectionLabel } from '../lib/labels';
 import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
+import FitNumber from '../components/FitNumber';
 import DashboardDetails, { type DashboardDetailKind } from '../components/DashboardDetails';
 
 function fmtMoney(n: number, c = 'TJS') {
@@ -268,7 +269,8 @@ export default function Dashboard() {
           >
             <span className="bento-num">{k.eyebrow}</span>
             <div style={{ marginTop: 'auto' }}>
-              <div
+              <FitNumber
+                testId={`kpi-value-${i}`}
                 style={{
                   fontFamily: 'var(--font-display)',
                   fontSize: k.accent === 'feature' ? 'clamp(80px, 9vw, 128px)' : 'clamp(48px, 6vw, 80px)',
@@ -279,7 +281,7 @@ export default function Dashboard() {
                 }}
               >
                 {k.value}
-              </div>
+              </FitNumber>
               <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
@@ -327,14 +329,14 @@ export default function Dashboard() {
             >
               <span className="bento-num">{t('eyebrow.profit')} · 06</span>
               <div style={{ marginTop: 'auto' }}>
-                <div style={{
+                <FitNumber testId="finance-profit-value" style={{
                   fontFamily: 'var(--font-display)',
                   fontSize: 'clamp(56px, 7vw, 96px)',
                   fontWeight: 500,
                   letterSpacing: '-0.04em',
                   lineHeight: 0.9,
                   marginBottom: 12,
-                }}>{fmtMoney(finance.netProfit)}</div>
+                }}>{fmtMoney(finance.netProfit)}</FitNumber>
                 <div style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: 11,
@@ -419,14 +421,14 @@ export default function Dashboard() {
                   letterSpacing: '-0.01em',
                   marginBottom: 16,
                 }}>{p.fullName}</div>
-                <div style={{
+                <FitNumber style={{
                   fontFamily: 'var(--font-display)',
                   fontSize: 36,
                   fontWeight: 500,
                   letterSpacing: '-0.03em',
                   color: 'var(--primary-dark)',
                   marginBottom: 6,
-                }}>{fmtMoney(p.salesAmount)}</div>
+                }}>{fmtMoney(p.salesAmount)}</FitNumber>
                 <div style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: 11,
@@ -561,14 +563,14 @@ function SmallBento({ eyebrow, label, value, accent, span = 'span-3', detail }: 
     >
       <span className="bento-num">{eyebrow}</span>
       <div style={{ marginTop: 'auto' }}>
-        <div style={{
+        <FitNumber style={{
           fontFamily: 'var(--font-display)',
           fontSize: 'clamp(40px, 5vw, 56px)',
           fontWeight: 500,
           letterSpacing: '-0.04em',
           lineHeight: 0.9,
           marginBottom: 12,
-        }}>{value}</div>
+        }}>{value}</FitNumber>
         <div style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 11,
