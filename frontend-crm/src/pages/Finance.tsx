@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { pageParam, useUrlListState } from '../lib/useUrlListState';
 import Pagination from '../components/Pagination';
+import ListTotal from '../components/ListTotal';
 import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,7 +21,8 @@ import {
   createTransaction,
   updateTransaction,
   deleteTransaction,
-  financeSummary,
+  financeOverview,
+  type FinanceOverview,
   pendingPayments,
   financeIncomeSources,
   financeIncomeByProduct,
@@ -304,12 +306,13 @@ export default function Finance() {
     if (txPage > last) setTxUrl('page', 1);
   }, [transactions.length, txPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const summaryQuery = useQuery({
-    queryKey: keys.finance.summary(range),
-    queryFn: () => financeSummary(range),
+  // Карточки владельца: выручка, прибыль, зарплаты, расходы, средний чек.
+  const overviewQuery = useQuery({
+    queryKey: keys.finance.overview(range),
+    queryFn: () => financeOverview(range),
     enabled: rangeOk,
   });
-  const summary = summaryQuery.data ?? null;
+  const overview = overviewQuery.data ?? null;
 
   const pendingQuery = useQuery({
     queryKey: keys.finance.pending(),
@@ -560,11 +563,218 @@ export default function Finance() {
 
   return (
     <>
-      {/* === Дашборд: 3 пироговые диаграммы (источник дохода / менеджеры /
-          категория расходов) с переключателем периода. Данные — единый
-          агрегат /finance/breakdown. */}
       {/* Один период на всю страницу — тот же переключатель, что на дашборде. */}
-      <PeriodSwitcher state={period} busy={summaryQuery.isFetching || breakdownQuery.isFetching || txQuery.isFetching} />
+      <PeriodSwitcher state={period} busy={overviewQuery.isFetching || breakdownQuery.isFetching || txQuery.isFetching} />
+      {/* Главное для владельца — сразу под периодом: выручка, прибыль,
+          зарплаты, расходы, средний чек и долги клиентов. */}
+      {/* Нет доступа к сводке (менеджер открыл страницу по ссылке) — карточек нет, а не пустые прочерки. */}
+      {!overviewQuery.isError && <OwnerKpis
+        overview={overview}
+        loading={overviewQuery.isLoading}
+        range={range}
+        debts={pending}
+        onDebtsClick={() => document.getElementById('finance-debts')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+      />}
+
+      {/* Заявки на оплату от клиентов (от студентов) — ждут подтверждения
+          бухгалтера. Backend: POST /payments/:id/confirm|reject доступны
+          только ADMIN/ACCOUNTANT/FOUNDER (payments.controller.ts:13). До
+          фикса блок рендерился всем ролям, у SALES_MANAGER с finance:read
+          «висели» кнопки confirm/reject, которые упирались в 403 —
+          вводило в заблуждение и открывало доступ к чужим клиентским
+          суммам. Прячем блок целиком для не-elevated ролей. */}
+      {canReviewPayments && paymentRequests.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <div className="crm-section-head">
+            <span className="crm-section-eyebrow" style={{ color: 'var(--primary-dark)' }}>{t('eyebrow.paymentRequests')}</span>
+            <h2 className="crm-section-title">{t('finance.paymentRequests')}</h2>
+          </div>
+          <SortSelect sort={paymentsSort} />
+          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+            <table className="table" style={{ width: '100%', tableLayout: 'fixed' }}>
+              {/* QA-fix #5: фиксируем ширины и no-wrap для заголовков
+                  (раньше «КОГДА / СТУДЕНТ» сжимались до 1 буквы), плюс
+                  truncate для длинного комментария чтобы не ломал layout. */}
+              <colgroup>
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '19%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '21%' }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  {paymentsSort.columns.map((c) => (
+                    <SortTh key={c.key} sort={paymentsSort} col={c.key} style={{ whiteSpace: 'nowrap' }} />
+                  ))}
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentsSort.sorted.map((p) => (
+                  <tr key={p.id}>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'nowrap' }}>{fmtDate(p.createdAt)}</td>
+                    <td style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.student?.fullName}</td>
+                    <td style={{
+                      fontFamily: 'var(--font-display)',
+                      fontWeight: 500,
+                      fontSize: 18,
+                      color: 'var(--primary-dark)',
+                      whiteSpace: 'nowrap',
+                    }}>{fmtMoney(p.amount, p.currency)}</td>
+                    <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{PAYMENT_METHOD_LABEL[p.method]}</td>
+                    <td
+                      style={{
+                        color: 'var(--text-soft)', fontSize: 13,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        maxWidth: 0,
+                      }}
+                      title={p.comment || ''}
+                    >
+                      {p.comment || '—'}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn btn-sm btn-primary" onClick={() => onConfirmPayment(p)}>
+                          <Icon name="check" size={14} /> {t('finance.payment.confirm')}
+                        </button>
+                        <button className="btn btn-sm btn-danger" onClick={() => onRejectPayment(p)}>
+                          <Icon name="close" size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/*
+        Задолженность студентов.
+
+        Раздел рисуется ВСЕГДА, даже когда должников ноль. Раньше здесь стояло
+        `pending.length > 0 &&`, и пустой ответ прятал блок целиком — экран
+        выглядел так, будто раздела просто нет. Это опасно именно для
+        дебиторки: неотличимо «долгов действительно нет» от «запрос перестал
+        находить должников» (ровно так и случилось, когда признак долга
+        переехал со статуса AWAITING_PAYMENT на флаг paymentPending). Явное
+        «должников нет» — утверждение, которое бухгалтер может оспорить;
+        отсутствие блока оспорить нельзя.
+
+        Ошибку запроса тоже показываем текстом, а не пустой таблицей.
+      */}
+      <div id="finance-debts" style={{ marginBottom: 32, scrollMarginTop: 90 }}>
+        <div className="crm-section-head">
+          <span className="crm-section-eyebrow" style={{ color: '#b45309' }}>{t('eyebrow.outstandingPayment')}</span>
+          <h2 className="crm-section-title">{t('finance.outstanding')}</h2>
+        </div>
+        {pendingQuery.isError ? (
+          <div className="error-banner">{t('finance.outstanding.error')}</div>
+        ) : pendingQuery.isLoading ? (
+          <div className="card" style={{ color: 'var(--text-light)' }}>{t('common.loading')}</div>
+        ) : pending.length === 0 ? (
+          <div className="card" style={{ color: 'var(--text-light)' }}>{t('finance.outstanding.empty')}</div>
+        ) : (
+          <>
+          <SortSelect sort={pendingSort} />
+          <div className="card" style={{ padding: 0 }}>
+            <table className="table" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  {pendingSort.columns.map((c) => <SortTh key={c.key} sort={pendingSort} col={c.key} />)}
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingSort.sorted.map((app) => (
+                  <tr key={app.id}>
+                    <td style={{ fontWeight: 500 }}>{app.fullName}</td>
+                    <td>{app.program?.name || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
+                    <td style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 16 }}>
+                      {app.program ? fmtMoney(app.program.cost, app.program.currency || 'TJS') : '—'}
+                    </td>
+                    <td>{app.manager?.fullName || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
+                    <td>
+                      {/* «Внести оплату» открывает ту же TransactionForm.
+                          Гейтим по canCreateTx (кто в принципе имеет право
+                          на POST). Для менеджера без finance:create кнопка
+                          скрыта — иначе он попадал бы в форму, из которой
+                          всё равно ничего не смог бы отправить.
+                          Дополнительно: не-elevated менеджер может внести
+                          оплату только по своему студенту (backend
+                          ownership-check в finance.service.create). Если
+                          заявка чужого менеджера — кнопка скрыта, чтобы
+                          не порождать «случайный клик → 403 по чужому
+                          студенту». */}
+                      {canCreateTx && (elevated || !app.managerId || app.managerId === mySelfId) && (
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => {
+                            setShowForm(true);
+                            // Pre-select student in form via state below.
+                            // Для non-elevated backend перепишет managerId
+                            // на caller.id независимо от значения ниже,
+                            // но передаём осмысленный default для elevated.
+                            setPreselectedStudent({
+                              studentId: app.studentId,
+                              managerId: elevated ? app.managerId : mySelfId,
+                              amount: app.program?.cost,
+                              currency: app.program?.currency,
+                            });
+                          }}
+                        >
+                          {t('finance.recordPayment')}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </>
+        )}
+      </div>
+
+      {/* Revenue chart (timeseries) */}
+      {series.length > 0 && (
+        <div className="card" style={{ padding: 28, marginBottom: 24 }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.16em',
+            color: 'var(--primary-dark)',
+            marginBottom: 6,
+          }}>{t('eyebrow.revenueWeekly')}</div>
+          <h3 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 22,
+            fontWeight: 500,
+            letterSpacing: '-0.02em',
+            marginBottom: 24,
+          }}>{t('finance.chart.title')}</h3>
+          <RevenueChart
+            points={series}
+            onPointClick={(p) => toggleWeekFocus(p)}
+            focusedKey={weekFocus?.key ?? null}
+          />
+        </div>
+      )}
+      <AnimatePresence>
+        {weekFocus && (
+          <WeekDetailPanel
+            key={weekFocus.key}
+            point={weekFocus}
+            onClose={() => setWeekFocus(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Диаграммы: источник дохода / менеджеры / категория расходов.
+          Данные — единый агрегат /finance/breakdown за период страницы. */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
@@ -662,87 +872,6 @@ export default function Finance() {
         )}
       </AnimatePresence>
 
-      {/* Bento с финансовой сводкой */}
-      {summary && (
-        <div className="bento" style={{ marginBottom: 32 }}>
-          <motion.div
-            className="bento-card feature span-3 row-2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <span className="bento-num">{t('eyebrow.revenue')} · 01</span>
-            <div style={{ marginTop: 'auto' }}>
-              <div style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 'clamp(64px, 8vw, 104px)',
-                fontWeight: 500,
-                letterSpacing: '-0.04em',
-                lineHeight: 0.9,
-                marginBottom: 16,
-              }}>
-                {fmtMoney(summary.netProfit)}
-              </div>
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                letterSpacing: '0.12em',
-                color: 'rgba(255,255,255,0.55)',
-                textTransform: 'uppercase',
-              }}>
-                {`${t('dashboard.finance.netProfit')} ${period.suffix}`}
-              </div>
-              {/* Бухгалтерский баннер: суммы в USD/EUR/CNY/RUB не входят в
-                  KPI выше (backend считает всё в TJS), но были в периоде и
-                  ждут ручной обработки. Пустой `nonTjsTotals` → баннер
-                  не рисуется. */}
-              <NonTjsStrip
-                totals={summary.nonTjsTotals}
-                color="rgba(255,255,255,0.72)"
-              />
-            </div>
-          </motion.div>
-
-          <KpiBento eyebrow={`${t('eyebrow.income')} · 02`} label={`${t('dashboard.finance.income')} ${period.suffix}`} value={fmtMoney(summary.totalIncome)} accent />
-          <KpiBento eyebrow={`${t('eyebrow.expense')} · 03`} label={`${t('dashboard.finance.expense')} ${period.suffix}`} value={fmtMoney(summary.totalExpense)} />
-          <KpiBento eyebrow={`${t('eyebrow.count')} · 04`} label={`${t('finance.transactions')} ${period.suffix}`} value={String(summary.transactionCount ?? summary.incomeCount + summary.expenseCount)} span="span-3" />
-        </div>
-      )}
-
-
-      {/* Revenue chart (timeseries) */}
-      {series.length > 0 && (
-        <div className="card" style={{ padding: 28, marginBottom: 24 }}>
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.16em',
-            color: 'var(--primary-dark)',
-            marginBottom: 6,
-          }}>{t('eyebrow.revenueWeekly')}</div>
-          <h3 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 22,
-            fontWeight: 500,
-            letterSpacing: '-0.02em',
-            marginBottom: 24,
-          }}>{t('finance.chart.title')}</h3>
-          <RevenueChart
-            points={series}
-            onPointClick={(p) => toggleWeekFocus(p)}
-            focusedKey={weekFocus?.key ?? null}
-          />
-        </div>
-      )}
-      <AnimatePresence>
-        {weekFocus && (
-          <WeekDetailPanel
-            key={weekFocus.key}
-            point={weekFocus}
-            onClose={() => setWeekFocus(null)}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Распределение по активной FOUNDER-редактируемой схеме + Топ менеджеров */}
       {distribution && (
         <div className="analytics-row" style={{ marginBottom: 32 }}>
@@ -804,173 +933,18 @@ export default function Finance() {
         </div>
       )}
 
-      {/* Заявки на оплату от клиентов (от студентов) — ждут подтверждения
-          бухгалтера. Backend: POST /payments/:id/confirm|reject доступны
-          только ADMIN/ACCOUNTANT/FOUNDER (payments.controller.ts:13). До
-          фикса блок рендерился всем ролям, у SALES_MANAGER с finance:read
-          «висели» кнопки confirm/reject, которые упирались в 403 —
-          вводило в заблуждение и открывало доступ к чужим клиентским
-          суммам. Прячем блок целиком для не-elevated ролей. */}
-      {canReviewPayments && paymentRequests.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <div className="crm-section-head">
-            <span className="crm-section-eyebrow" style={{ color: 'var(--primary-dark)' }}>{t('eyebrow.paymentRequests')}</span>
-            <h2 className="crm-section-title">{t('finance.paymentRequests')}</h2>
-          </div>
-          <SortSelect sort={paymentsSort} />
-          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-            <table className="table" style={{ width: '100%', tableLayout: 'fixed' }}>
-              {/* QA-fix #5: фиксируем ширины и no-wrap для заголовков
-                  (раньше «КОГДА / СТУДЕНТ» сжимались до 1 буквы), плюс
-                  truncate для длинного комментария чтобы не ломал layout. */}
-              <colgroup>
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '26%' }} />
-                <col style={{ width: '16%' }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  {paymentsSort.columns.map((c) => (
-                    <SortTh key={c.key} sort={paymentsSort} col={c.key} style={{ whiteSpace: 'nowrap' }} />
-                  ))}
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentsSort.sorted.map((p) => (
-                  <tr key={p.id}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'nowrap' }}>{fmtDate(p.createdAt)}</td>
-                    <td style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.student?.fullName}</td>
-                    <td style={{
-                      fontFamily: 'var(--font-display)',
-                      fontWeight: 500,
-                      fontSize: 18,
-                      color: 'var(--primary-dark)',
-                      whiteSpace: 'nowrap',
-                    }}>{fmtMoney(p.amount, p.currency)}</td>
-                    <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{PAYMENT_METHOD_LABEL[p.method]}</td>
-                    <td
-                      style={{
-                        color: 'var(--text-soft)', fontSize: 13,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        maxWidth: 0,
-                      }}
-                      title={p.comment || ''}
-                    >
-                      {p.comment || '—'}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="btn btn-sm btn-primary" onClick={() => onConfirmPayment(p)}>
-                          <Icon name="check" size={14} /> {t('finance.payment.confirm')}
-                        </button>
-                        <button className="btn btn-sm btn-danger" onClick={() => onRejectPayment(p)}>
-                          <Icon name="close" size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/*
-        Задолженность студентов.
-
-        Раздел рисуется ВСЕГДА, даже когда должников ноль. Раньше здесь стояло
-        `pending.length > 0 &&`, и пустой ответ прятал блок целиком — экран
-        выглядел так, будто раздела просто нет. Это опасно именно для
-        дебиторки: неотличимо «долгов действительно нет» от «запрос перестал
-        находить должников» (ровно так и случилось, когда признак долга
-        переехал со статуса AWAITING_PAYMENT на флаг paymentPending). Явное
-        «должников нет» — утверждение, которое бухгалтер может оспорить;
-        отсутствие блока оспорить нельзя.
-
-        Ошибку запроса тоже показываем текстом, а не пустой таблицей.
-      */}
-      <div style={{ marginBottom: 32 }}>
-        <div className="crm-section-head">
-          <span className="crm-section-eyebrow" style={{ color: '#b45309' }}>{t('eyebrow.outstandingPayment')}</span>
-          <h2 className="crm-section-title">{t('finance.outstanding')}</h2>
-        </div>
-        {pendingQuery.isError ? (
-          <div className="error-banner">{t('finance.outstanding.error')}</div>
-        ) : pendingQuery.isLoading ? (
-          <div className="card" style={{ color: 'var(--text-light)' }}>{t('common.loading')}</div>
-        ) : pending.length === 0 ? (
-          <div className="card" style={{ color: 'var(--text-light)' }}>{t('finance.outstanding.empty')}</div>
-        ) : (
-          <>
-          <SortSelect sort={pendingSort} />
-          <div className="card" style={{ padding: 0 }}>
-            <table className="table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  {pendingSort.columns.map((c) => <SortTh key={c.key} sort={pendingSort} col={c.key} />)}
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingSort.sorted.map((app) => (
-                  <tr key={app.id}>
-                    <td style={{ fontWeight: 500 }}>{app.fullName}</td>
-                    <td>{app.program?.name || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
-                    <td style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 16 }}>
-                      {app.program ? fmtMoney(app.program.cost, app.program.currency || 'TJS') : '—'}
-                    </td>
-                    <td>{app.manager?.fullName || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
-                    <td>
-                      {/* «Внести оплату» открывает ту же TransactionForm.
-                          Гейтим по canCreateTx (кто в принципе имеет право
-                          на POST). Для менеджера без finance:create кнопка
-                          скрыта — иначе он попадал бы в форму, из которой
-                          всё равно ничего не смог бы отправить.
-                          Дополнительно: не-elevated менеджер может внести
-                          оплату только по своему студенту (backend
-                          ownership-check в finance.service.create). Если
-                          заявка чужого менеджера — кнопка скрыта, чтобы
-                          не порождать «случайный клик → 403 по чужому
-                          студенту». */}
-                      {canCreateTx && (elevated || !app.managerId || app.managerId === mySelfId) && (
-                        <button
-                          className="btn btn-sm btn-secondary"
-                          onClick={() => {
-                            setShowForm(true);
-                            // Pre-select student in form via state below.
-                            // Для non-elevated backend перепишет managerId
-                            // на caller.id независимо от значения ниже,
-                            // но передаём осмысленный default для elevated.
-                            setPreselectedStudent({
-                              studentId: app.studentId,
-                              managerId: elevated ? app.managerId : mySelfId,
-                              amount: app.program?.cost,
-                              currency: app.program?.currency,
-                            });
-                          }}
-                        >
-                          {t('finance.recordPayment')}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          </>
-        )}
-      </div>
-
       {/* Управление транзакциями */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
         <span className="crm-section-eyebrow">{t('eyebrow.ledgerAll')}</span>
         <h2 className="crm-section-title">{t('finance.ledger')}</h2>
+        {/* Сколько операций за период — столько строк в журнале (с фильтрами — «найдено X из N»). */}
+        <ListTotal
+          noun="transactions"
+          found={transactions.length}
+          total={transactions.length !== allTransactions.length ? allTransactions.length : undefined}
+          filtered={transactions.length !== allTransactions.length}
+          testId="finance-tx-total"
+        />
       </div>
 
       <div className="filters" style={{ alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
@@ -1298,43 +1272,158 @@ function TransactionDetailModal({
 let preselectedStudent: any = null;
 function setPreselectedStudent(v: any) { preselectedStudent = v; }
 
-function KpiBento({ eyebrow, label, value, accent, span = 'span-3' }: {
-  eyebrow: string;
-  label: string;
+/** «01.09.2026 — 30.09.2026» — период под выручкой. */
+function periodLabel(range: { from?: string; to?: string }, t: (k: string) => string) {
+  const d = (iso: string) => fmtDateText(`${iso.slice(0, 10)}T00:00:00Z`, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
+  if (range.from && range.to) return `${d(range.from)} — ${d(range.to)}`;
+  if (range.from) return `${t('finance.kpi.since')} ${d(range.from)}`;
+  if (range.to) return `${t('finance.kpi.until')} ${d(range.to)}`;
+  return t('finance.kpi.allTime');
+}
+
+type KpiTone = 'green' | 'red' | 'purple' | 'blue' | 'amber';
+
+function OwnerKpi({ tone, title, icon, value, valueTone, sub, onClick, testId }: {
+  tone: KpiTone;
+  title: string;
+  icon: string;
   value: string;
-  accent?: boolean;
-  span?: string;
+  /** Цвет самой суммы: выручка — зелёная, расходы — красные, остальное — обычная. */
+  valueTone?: 'green' | 'red';
+  sub?: React.ReactNode;
+  onClick?: () => void;
+  testId?: string;
 }) {
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <motion.div
-      className={`bento-card ${accent ? 'accent' : ''} ${span}`}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -3 }}
+    <Tag
+      type={onClick ? 'button' : undefined}
+      className={`owner-kpi tone-${tone}${onClick ? ' is-link' : ''}`}
+      onClick={onClick}
+      data-testid={testId}
     >
-      <span className="bento-num">{eyebrow}</span>
-      <div style={{ marginTop: 'auto' }}>
-        <div style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(40px, 5vw, 64px)',
-          fontWeight: 500,
-          letterSpacing: '-0.04em',
-          lineHeight: 0.9,
-          marginBottom: 12,
-        }}>
-          {value}
-        </div>
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          color: accent ? 'rgba(5,7,6,0.65)' : 'var(--text-soft)',
-        }}>
-          {label}
-        </div>
+      <span className="owner-kpi-head">
+        <span className="owner-kpi-title">{title}</span>
+        <span className="owner-kpi-icon"><Icon name={icon} size={18} /></span>
+      </span>
+      <span className={`owner-kpi-value${valueTone ? ` is-${valueTone}` : ''}`} data-testid={testId ? `${testId}-value` : undefined}>
+        {value}
+      </span>
+      {sub && <span className="owner-kpi-sub">{sub}</span>}
+    </Tag>
+  );
+}
+
+/**
+ * Главные цифры для владельца — первая строка «Финансов» (как в отчётах
+ * управленческого учёта): выручка, чистая прибыль с формулой, зарплаты,
+ * прочие расходы, средний чек и долги клиентов. Все суммы — за период
+ * страницы и сходятся с журналом ниже; долги — текущие, из того же списка,
+ * что раздел «Ожидает оплаты».
+ */
+function OwnerKpis({ overview, loading, range, debts, onDebtsClick }: {
+  overview: FinanceOverview | null;
+  loading: boolean;
+  range: { from?: string; to?: string };
+  debts: any[];
+  onDebtsClick: () => void;
+}) {
+  const { t } = useT();
+  if (!overview) {
+    return (
+      <div className="owner-kpis" data-testid="owner-kpis">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="owner-kpi is-skeleton">{loading ? t('common.loading') : '—'}</div>
+        ))}
       </div>
-    </motion.div>
+    );
+  }
+  const cur = overview.currency || 'TJS';
+  const money = (n: number) => fmtMoney(n, cur);
+  const profit = overview.netProfit;
+  // Долги: суммы по валютам программ. Главная — в валюте отчётов, а если
+  // в ней долгов нет — в той валюте, где они есть (иначе «0 TJS» прятал бы
+  // долг в долларах). Остальные валюты — строкой ниже.
+  const debtByCur: Record<string, number> = {};
+  for (const a of debts) {
+    const c = a.program?.currency || cur;
+    debtByCur[c] = (debtByCur[c] || 0) + Number(a.program?.cost || 0);
+  }
+  const debtList = Object.entries(debtByCur).filter(([, v]) => v > 0);
+  const debtMainEntry = debtList.find(([c]) => c === cur) ?? debtList[0] ?? [cur, 0];
+  const debtOther = debtList.filter(([c]) => c !== debtMainEntry[0]);
+  // Не-TJS поступления и расходы периода — в карточках, а не отдельной строкой.
+  const nonTjs = Object.entries(overview.nonTjsTotals || {});
+  const nonTjsIncome = nonTjs.filter(([, b]) => b.income > 0).map(([c, b]) => fmtMoney(b.income, c));
+  const nonTjsExpense = nonTjs.filter(([, b]) => b.expense > 0).map(([c, b]) => fmtMoney(b.expense, c));
+  return (
+    <div className="owner-kpis" data-testid="owner-kpis">
+      <OwnerKpi
+        tone="green"
+        title={t('finance.kpi.revenue')}
+        icon="account_balance_wallet"
+        value={money(overview.totalIncome)}
+        valueTone="green"
+        sub={<>
+          {periodLabel(range, t)}
+          {nonTjsIncome.length > 0 && <><br />{t('finance.kpi.alsoCurrencies').replace('{list}', nonTjsIncome.join(', '))}</>}
+        </>}
+        testId="kpi-revenue"
+      />
+      <OwnerKpi
+        tone={profit >= 0 ? 'green' : 'red'}
+        title={t('finance.kpi.profit')}
+        icon={profit >= 0 ? 'trending_up' : 'trending_down'}
+        value={money(profit)}
+        valueTone={profit >= 0 ? 'green' : 'red'}
+        sub={t('finance.kpi.profitFormula')
+          .replace('{salary}', money(overview.salaryExpense))
+          .replace('{other}', money(overview.otherExpense))}
+        testId="kpi-profit"
+      />
+      <OwnerKpi
+        tone="purple"
+        title={t('finance.kpi.salary')}
+        icon="groups"
+        value={money(overview.salaryExpense)}
+        sub={overview.salaryAccruedUnpaid > 0
+          ? t('finance.kpi.salaryUnpaid').replace('{sum}', money(overview.salaryAccruedUnpaid))
+          : t('finance.kpi.salaryHint')}
+        testId="kpi-salary"
+      />
+      <OwnerKpi
+        tone="red"
+        title={t('finance.kpi.expenses')}
+        icon="south_east"
+        value={money(overview.otherExpense)}
+        valueTone="red"
+        sub={<>
+          {t('finance.kpi.expensesHint')}
+          {nonTjsExpense.length > 0 && <><br />{t('finance.kpi.alsoCurrencies').replace('{list}', nonTjsExpense.join(', '))}</>}
+        </>}
+        testId="kpi-expenses"
+      />
+      <OwnerKpi
+        tone="blue"
+        title={t('finance.kpi.avgCheck')}
+        icon="receipt_long"
+        value={money(overview.avgCheck)}
+        sub={t('finance.kpi.avgCheckHint').replace('{n}', String(overview.incomeCount))}
+        testId="kpi-avg"
+      />
+      <OwnerKpi
+        tone="amber"
+        title={t('finance.kpi.debts')}
+        icon="hourglass_top"
+        value={fmtMoney(Number(debtMainEntry[1]), String(debtMainEntry[0]))}
+        sub={<>
+          {t('finance.kpi.debtsHint').replace('{n}', String(debts.length))}
+          {debtOther.map(([c, v]) => <span key={c}> · + {fmtMoney(v, c)}</span>)}
+        </>}
+        onClick={onDebtsClick}
+        testId="kpi-debts"
+      />
+    </div>
   );
 }
 

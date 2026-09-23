@@ -37,6 +37,7 @@ export const keys = {
     all: ['finance'] as const,
     transactions: (p: Record<string, unknown> = {}) => ['finance', 'transactions', p] as const,
     summary: (p: Record<string, unknown> = {}) => ['finance', 'summary', p] as const,
+    overview: (p: Record<string, unknown> = {}) => ['finance', 'overview', p] as const,
     byCategory: (p: Record<string, unknown> = {}) => ['finance', 'byCategory', p] as const,
     timeseries: (p: Record<string, unknown> = {}) => ['finance', 'timeseries', p] as const,
     breakdown: (p: Record<string, unknown> = {}) => ['finance', 'breakdown', p] as const,

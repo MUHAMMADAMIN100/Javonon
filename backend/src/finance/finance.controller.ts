@@ -411,6 +411,15 @@ export class FinanceController {
     );
   }
 
+  /** Главные цифры для владельца — карточки вверху «Финансов». */
+  @Get('overview')
+  overview(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.svc.overview({
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to', true),
+    });
+  }
+
   @Get('summary')
   summary(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.summary({

@@ -219,6 +219,22 @@ export const updateTransaction = (id: string, patch: Partial<CreateTransactionDt
 export const deleteTransaction = (id: string) =>
   api.delete(`/finance/transactions/${id}`).then((r) => r.data);
 
+/** Главные цифры для владельца — карточки вверху «Финансов». */
+export interface FinanceOverview extends FinanceSummary {
+  /** Выплаченная зарплата с премиями (расходы категории «Зарплата»). */
+  salaryExpense: number;
+  salaryCount: number;
+  /** Остальные расходы — без зарплаты. */
+  otherExpense: number;
+  /** Выручка ÷ число поступлений. */
+  avgCheck: number;
+  /** Начислено за период, но ещё не выплачено (черновики зарплаты). */
+  salaryAccruedUnpaid: number;
+  salaryAccruedUnpaidCount: number;
+}
+export const financeOverview = (params?: { from?: string; to?: string }) =>
+  api.get<FinanceOverview>('/finance/overview', { params }).then((r) => r.data);
+
 export const financeSummary = (params?: { from?: string; to?: string }) =>
   api.get<FinanceSummary>('/finance/summary', { params }).then((r) => r.data);
 

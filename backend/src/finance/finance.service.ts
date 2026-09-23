@@ -1892,6 +1892,50 @@ export class FinanceService {
   }
 
   /** Сводка: общий доход / расход / прибыль за период. */
+  /**
+   * Главные цифры для владельца — строка карточек вверху «Финансов».
+   * Всё в TJS и за тот же период, что и журнал, поэтому сходится с ним:
+   *   выручка        = все INCOME;
+   *   зарплата       = EXPENSE категории SALARY (выплаченная зарплата с премиями);
+   *   прочие расходы = остальные EXPENSE;
+   *   чистая прибыль = выручка − зарплата − прочие (= summary.netProfit);
+   *   средний чек    = выручка ÷ число поступлений.
+   * «Начислено, но не выплачено» — черновики зарплаты за этот период: это
+   * ещё не расход, но деньги, которые скоро уйдут.
+   */
+  async overview(opts: { from?: Date; to?: Date }) {
+    const base = await this.summary(opts);
+    const dateWhere = opts.from || opts.to
+      ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+      : {};
+    const [salary, drafts] = await Promise.all([
+      this.prisma.transaction.aggregate({
+        where: { ...dateWhere, reversedAt: null, type: 'EXPENSE', category: 'SALARY', currency: REPORTING_CURRENCY },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.salaryRecord.aggregate({
+        where: {
+          status: 'DRAFT',
+          ...(opts.to ? { periodStart: { lte: opts.to } } : {}),
+          ...(opts.from ? { periodEnd: { gte: opts.from } } : {}),
+        },
+        _sum: { netAmount: true },
+        _count: true,
+      }),
+    ]);
+    const salaryExpense = salary._sum.amount || 0;
+    return {
+      ...base,
+      salaryExpense,
+      salaryCount: salary._count,
+      otherExpense: base.totalExpense - salaryExpense,
+      avgCheck: base.incomeCount > 0 ? base.totalIncome / base.incomeCount : 0,
+      salaryAccruedUnpaid: drafts._sum.netAmount || 0,
+      salaryAccruedUnpaidCount: drafts._count,
+    };
+  }
+
   async summary(opts: { from?: Date; to?: Date }) {
     this.validateRange(opts);
     // Удалённые (reversedAt) и их зеркальные записи не считаем нигде —

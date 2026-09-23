@@ -1,6 +1,6 @@
 import { useT } from '../lib/i18n';
 
-export type ListNoun = 'leads' | 'applications' | 'students' | 'deals' | 'payments' | 'partners' | 'commissions' | 'payouts' | 'users' | 'tasks';
+export type ListNoun = 'leads' | 'applications' | 'students' | 'deals' | 'payments' | 'partners' | 'commissions' | 'payouts' | 'users' | 'tasks' | 'transactions';
 
 /**
  * Счётчик списка в левом углу шапки: «Всего лидов: 93», а под фильтром или
