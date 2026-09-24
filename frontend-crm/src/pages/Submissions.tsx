@@ -105,17 +105,21 @@ export default function Submissions() {
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {!founder && tabBtn('mine', t('deals.tab.mine'))}
-        {founder && (
-          <>
-            {tabBtn('pending', t('deals.tab.pending'))}
-            {tabBtn('approved', t('deals.tab.approved'))}
-            {tabBtn('all', t('deals.tab.all'))}
-          </>
-        )}
-        <div style={{ flex: 1 }} />
-        <button className="btn btn-primary" onClick={() => navigate('/submissions/new')}>
+      {/* На телефоне вкладки — одним переключателем во всю ширину, кнопка —
+          строкой ниже (index.css, .deals-head). У менеджера вкладка одна —
+          там она на телефоне не показывается. */}
+      <div className="deals-head">
+        <div className={`deals-tabs${founder ? '' : ' is-single'}`}>
+          {!founder && tabBtn('mine', t('deals.tab.mine'))}
+          {founder && (
+            <>
+              {tabBtn('pending', t('deals.tab.pending'))}
+              {tabBtn('approved', t('deals.tab.approved'))}
+              {tabBtn('all', t('deals.tab.all'))}
+            </>
+          )}
+        </div>
+        <button className="btn btn-primary deals-new" onClick={() => navigate('/submissions/new')} data-testid="deals-new">
           <Icon name="add" size={16} /> {t('dealForm.title')}
         </button>
       </div>
@@ -124,7 +128,7 @@ export default function Submissions() {
           по дате оплаты (в карточке платежа видна именно она), на остальных —
           по дате создания сделки. По умолчанию период пуст, и очередь на
           одобрение видна целиком. */}
-      <div className="filters">
+      <div className="filters deals-filters">
         {founder && partners.length > 0 && (
           <CrmSelect
             className="crm-select"
@@ -378,18 +382,17 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
       style={{ textDecoration: 'none', color: 'inherit' }}
     >
       <motion.div
-        className="card"
+        className="card deal-card"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         whileHover={{ y: -2 }}
-        style={{ padding: 18, cursor: 'pointer' }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>{studentName}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{program}</div>
+        <div className="deal-card-head">
+          <div className="deal-card-who">
+            <div className="deal-card-name">{studentName}</div>
+            <div className="deal-card-sub">{program}</div>
             {showManager && s.manager && (
-              <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>
+              <div className="deal-card-mgr">
                 {t('deal.manager')}: {s.manager.fullName}
               </div>
             )}
@@ -398,68 +401,44 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
                 достаточно проверки на наличие. Сделки без партнёра (таких
                 большинство — люди приходят сами) строку не показывают. */}
             {s.partnerAttribution && (
-              <div
-                style={{
-                  fontSize: 11,
-                  marginTop: 4,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  background: 'rgba(139, 92, 246, 0.12)',
-                  color: '#7c3aed',
-                  fontWeight: 600,
-                }}
-              >
+              <div className="deal-card-partner">
                 {t('deals.partner')}: {s.partnerAttribution.fullName}
-                <span style={{ opacity: 0.7, fontWeight: 400 }}>
-                  · {s.partnerAttribution.referralCode}
-                </span>
+                <span className="deal-card-partner-note">· {s.partnerAttribution.referralCode}</span>
                 {s.partnerAttribution.commissionedAt && (
-                  <span style={{ opacity: 0.7, fontWeight: 400 }}>· {t('deals.credited')}</span>
+                  <span className="deal-card-partner-note">· {t('deals.credited')}</span>
                 )}
               </div>
             )}
           </div>
           <span
-            style={{
-              padding: '4px 10px',
-              borderRadius: 999,
-              background: STATUS_COLOR[s.status] + '22',
-              color: STATUS_COLOR[s.status],
-              fontSize: 12,
-              fontWeight: 600,
-              border: `1.5px solid ${STATUS_COLOR[s.status]}`,
-            }}
+            className="deal-card-status"
+            style={{ background: STATUS_COLOR[s.status] + '22', color: STATUS_COLOR[s.status], borderColor: STATUS_COLOR[s.status] }}
           >
             {SUBMISSION_STATUS_LABEL[s.status]}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginTop: 8 }}>
+        <div className="deal-card-stats">
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('deal.contract')}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-              {s.totalAmount.toLocaleString('ru-RU')} {s.currency}
-            </div>
+            <div className="deal-stat-label">{t('deal.contract')}</div>
+            <div className="deal-stat-value">{s.totalAmount.toLocaleString('ru-RU')} {s.currency}</div>
           </div>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('deal.stat.paid')}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--primary-dark)' }}>
+            <div className="deal-stat-label">{t('deal.stat.paid')}</div>
+            <div className="deal-stat-value" style={{ color: 'var(--primary-dark)' }}>
               {totalPaid.toLocaleString('ru-RU')} {s.currency}
             </div>
           </div>
           {pendingSum > 0 && (
             <div>
-              <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('deals.awaiting')}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#b45309' }}>
+              <div className="deal-stat-label">{t('deals.awaiting')}</div>
+              <div className="deal-stat-value" style={{ color: '#b45309' }}>
                 {pendingSum.toLocaleString('ru-RU')} {s.currency}
               </div>
             </div>
           )}
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('deal.stat.payments')}</div>
-            <div style={{ fontFamily: 'var(--font-mono)' }}>{s.payments.length}</div>
+            <div className="deal-stat-label">{t('deal.stat.payments')}</div>
+            <div className="deal-stat-value is-light">{s.payments.length}</div>
           </div>
         </div>
       </motion.div>
@@ -494,20 +473,19 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
       style={{ textDecoration: 'none', color: 'inherit' }}
     >
       <motion.div
-        className="card"
+        className="card deal-card is-payment"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         whileHover={{ y: -2 }}
-        style={{ padding: 18, cursor: 'pointer' }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>{studentName}</div>
+        <div className="deal-card-head">
+          <div className="deal-card-who">
+            <div className="deal-card-name">{studentName}</div>
             {/* Программу и менеджера у сделки могли удалить (обе связи
                 SetNull) — строка не должна ронять весь экран. */}
-            <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{p.submission.program?.name || '—'}</div>
+            <div className="deal-card-sub">{p.submission.program?.name || '—'}</div>
             {p.submission.manager && (
-              <div style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>
+              <div className="deal-card-mgr">
                 {t('deal.manager')}: {p.submission.manager.fullName}
               </div>
             )}
@@ -516,76 +494,66 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
                 наличие. Клиенты без партнёра (их большинство) строку не
                 показывают. */}
             {partner && (
-              <div
-                style={{
-                  fontSize: 11,
-                  marginTop: 4,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  background: 'rgba(139, 92, 246, 0.12)',
-                  color: '#7c3aed',
-                  fontWeight: 600,
-                }}
-              >
+              <div className="deal-card-partner">
                 {t('deals.partner')}: {partner.fullName}
-                <span style={{ opacity: 0.7, fontWeight: 400 }}>· {partner.referralCode}</span>
-                <span style={{ opacity: 0.7, fontWeight: 400 }}>
+                <span className="deal-card-partner-note">· {partner.referralCode}</span>
+                <span className="deal-card-partner-note">
                   · {credited ? t('deals.credited') : t('deals.onApproval')} {commissionLabel}
                 </span>
               </div>
             )}
           </div>
           <span
+            className="deal-card-status"
             style={{
-              padding: '4px 10px',
-              borderRadius: 999,
               background: PAYMENT_STATUS_COLOR.PENDING + '22',
               color: PAYMENT_STATUS_COLOR.PENDING,
-              fontSize: 12,
-              fontWeight: 600,
-              border: `1.5px solid ${PAYMENT_STATUS_COLOR.PENDING}`,
+              borderColor: PAYMENT_STATUS_COLOR.PENDING,
             }}
           >
             {PAYMENT_STATUS_LABEL.PENDING}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13 }}>
+        <div className="deal-card-stats">
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase' }}>{t('deals.payAmount')}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--primary-dark)', fontSize: 16 }}>
+            <div className="deal-stat-label">{t('deals.payAmount')}</div>
+            <div className="deal-stat-value is-amount">
               {p.amount.toLocaleString('ru-RU')} {p.submission.currency}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase' }}>{t('deal.col.paidAt')}</div>
-            <div style={{ fontFamily: 'var(--font-mono)' }}>
+            <div className="deal-stat-label">{t('deal.col.paidAt')}</div>
+            <div className="deal-stat-value is-light">
               {new Date(p.paidAt).toLocaleDateString('ru-RU')}
             </div>
           </div>
-          {p.receiptUrls.length > 0 && (
-            <a
-              href={absUrl(p.receiptUrls[0])}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="btn btn-sm btn-secondary"
-            >
-              <Icon name="image" size={14} /> {t('deal.receipt')}{p.receiptUrls.length > 1 ? ` (${p.receiptUrls.length})` : ''}
-            </a>
-          )}
-          {p.depositProofUrls.length > 0 && (
-            <a
-              href={absUrl(p.depositProofUrls[0])}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="btn btn-sm btn-secondary"
-            >
-              <Icon name="image" size={14} /> {t('deal.deposit')}{p.depositProofUrls.length > 1 ? ` (${p.depositProofUrls.length})` : ''}
-            </a>
+          {(p.receiptUrls.length > 0 || p.depositProofUrls.length > 0) && (
+            <div className="deal-card-files">
+              {p.receiptUrls.length > 0 && (
+                <a
+                  href={absUrl(p.receiptUrls[0])}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="btn btn-sm btn-secondary"
+                  data-testid="deal-card-receipt"
+                >
+                  <Icon name="image" size={14} /> {t('deal.receipt')}{p.receiptUrls.length > 1 ? ` (${p.receiptUrls.length})` : ''}
+                </a>
+              )}
+              {p.depositProofUrls.length > 0 && (
+                <a
+                  href={absUrl(p.depositProofUrls[0])}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="btn btn-sm btn-secondary"
+                  data-testid="deal-card-deposit"
+                >
+                  <Icon name="image" size={14} /> {t('deal.deposit')}{p.depositProofUrls.length > 1 ? ` (${p.depositProofUrls.length})` : ''}
+                </a>
+              )}
+            </div>
           )}
         </div>
       </motion.div>

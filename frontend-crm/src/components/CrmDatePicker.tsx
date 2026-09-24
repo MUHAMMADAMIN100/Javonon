@@ -114,6 +114,50 @@ export default function CrmDatePicker({
     return format(selectedDate, 'd MMMM yyyy', { locale });
   }, [selectedDate, showTime, timeValue]);
 
+  // Длинная дата («14 сентября 2026») в узком поле — две даты рядом в
+  // фильтрах на телефоне — обрезалась многоточием. В фильтрах (подпись в одну
+  // строку; в формах она переносится) на телефоне дата всегда короткая
+  // «14.09.2026» — одинаково от 320 до 600 px, а шире — короткая, только если
+  // не влезает самая длинная дата года: решение не зависит от месяца, и два
+  // поля рядом всегда в одном виде. Пересчёт при смене ширины поля, языка и
+  // после загрузки шрифтов.
+  const shortLabel = useMemo(() => {
+    if (!selectedDate) return '';
+    return format(selectedDate, 'dd.MM.yyyy') + (showTime && timeValue ? ' ' + timeValue : '');
+  }, [selectedDate, showTime, timeValue]);
+  const labelRef = useRef<HTMLSpanElement | null>(null);
+  const [triggerWidth, setTriggerWidth] = useState(0);
+  const [fontsLoaded, setFontsLoaded] = useState(0);
+  const [useShort, setUseShort] = useState(false);
+  useEffect(() => {
+    const el = triggerRef.current;
+    let alive = true;
+    document.fonts?.ready.then(() => { if (alive) setFontsLoaded((n) => n + 1); });
+    if (!el || typeof ResizeObserver === 'undefined') return () => { alive = false; };
+    const ro = new ResizeObserver(([entry]) => setTriggerWidth(Math.round(entry.contentRect.width)));
+    ro.observe(el);
+    return () => { alive = false; ro.disconnect(); };
+  }, []);
+  useLayoutEffect(() => {
+    const label = labelRef.current, trigger = triggerRef.current;
+    if (!label || !trigger || !selectedDate) return;
+    const ls = getComputedStyle(label), ts = getComputedStyle(trigger);
+    let next = false;
+    if (ls.whiteSpace === 'nowrap' && window.matchMedia('(max-width: 600px)').matches) {
+      next = true;
+    } else if (ls.whiteSpace === 'nowrap') {
+      const icon = trigger.querySelector('svg')?.getBoundingClientRect().width ?? 0;
+      const room = trigger.clientWidth - parseFloat(ts.paddingLeft) - parseFloat(ts.paddingRight) - icon - (parseFloat(ts.columnGap) || 0);
+      const longest = format(new Date(2026, 8, 28), 'd MMMM yyyy', { locale }) + (showTime && timeValue ? ' ' + timeValue : '');
+      const ctx = document.createElement('canvas').getContext('2d');
+      if (ctx) {
+        ctx.font = `${ls.fontStyle} ${ls.fontWeight} ${ls.fontSize} ${ls.fontFamily}`;
+        next = ctx.measureText(longest).width > room;
+      }
+    }
+    if (next !== useShort) setUseShort(next);
+  }, [selectedDate, triggerWidth, fontsLoaded, locale, showTime, timeValue, useShort]);
+
   const close = useCallback(() => setOpen(false), []);
 
   const computeCoords = useCallback((): boolean => {
@@ -358,7 +402,7 @@ export default function CrmDatePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <span>{isEmpty ? emptyLabel : formattedLabel}</span>
+        <span ref={labelRef}>{isEmpty ? emptyLabel : useShort ? shortLabel : formattedLabel}</span>
         <svg
           width="18"
           height="18"
