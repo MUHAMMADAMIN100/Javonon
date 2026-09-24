@@ -409,7 +409,7 @@ export default function Applications() {
                       style={{ cursor: 'pointer' }}
                     >
                       <td className="cl-name"><strong>{a.fullName}</strong></td>
-                      <td data-label={t('app.field.phone')} className="cl-phone">{a.phone}</td>
+                      <td data-label={t('app.field.phone')} className="cl-phone">{a.phone || '—'}</td>
                       <td data-label={t('app.field.country')} className={`cl-chip${a.country ? '' : ' is-empty'}`}>
                         {/* Страна есть только у заявок с новой формы лендинга.
                             Старые заявки и всё, что заведено в обход формы

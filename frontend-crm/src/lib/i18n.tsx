@@ -1370,8 +1370,8 @@ const DICT: Record<Lang, Record<string, string>> = {
     // ===== filters / pagination =====
     'filter.reset': 'Сбросить',
     'filter.apply': 'Применить',
-    'pagination.prev': '← Назад',
-    'pagination.next': 'Вперёд →',
+    'pagination.prev': 'Назад',
+    'pagination.next': 'Вперёд',
     'pagination.page': 'Стр.',
     'pagination.of': 'из',
 
@@ -4004,8 +4004,8 @@ const DICT: Record<Lang, Record<string, string>> = {
     // ===== filters / pagination =====
     'filter.reset': 'Бекор кардан',
     'filter.apply': 'Татбиқ',
-    'pagination.prev': '← Қаблӣ',
-    'pagination.next': 'Минбаъд →',
+    'pagination.prev': 'Қаблӣ',
+    'pagination.next': 'Минбаъд',
     'pagination.page': 'Саҳ.',
     'pagination.of': 'аз',
 

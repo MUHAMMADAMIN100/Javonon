@@ -273,7 +273,7 @@ export default function ApplicationDetail() {
             {canAct && !isEnrolled && (
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-secondary client-deal-btn"
                 title={t('applicationDetail.createDeal.hint')}
                 onClick={() => navigate(`/submissions/new?applicationId=${encodeURIComponent(app.id)}`)}
                 data-testid="client-create-deal"

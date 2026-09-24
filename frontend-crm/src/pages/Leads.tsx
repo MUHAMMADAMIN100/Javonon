@@ -1241,7 +1241,7 @@ export default function Leads() {
                             <strong>{a.fullName}</strong>
                           </div>
                         </td>
-                        <td data-label={t('app.field.phone')} className="cl-phone">{a.phone}</td>
+                        <td data-label={t('app.field.phone')} className="cl-phone">{a.phone || '—'}</td>
                         <td data-label={t('app.field.country')} className={`cl-chip${a.country ? '' : ' is-empty'}`}>
                           {a.country ? (
                             <span className="badge badge-gray">{countryLabel(a.country)}</span>

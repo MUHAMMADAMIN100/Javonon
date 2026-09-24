@@ -94,14 +94,6 @@ export default function DetailsModal<T>({
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  // На телефоне окно во весь экран, и страницы должны уместиться в одну строку.
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 600px)').matches);
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 600px)');
-    const on = () => setNarrow(mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -249,7 +241,7 @@ export default function DetailsModal<T>({
                       </tbody>
                     </table>
                     <div data-testid="details-pagination">
-                      <Pagination page={current} total={sort.sorted.length} pageSize={PAGE_SIZE} onChange={setPage} siblings={narrow ? 1 : 2} />
+                      <Pagination page={current} total={sort.sorted.length} pageSize={PAGE_SIZE} onChange={setPage} />
                     </div>
                   </div>
                 )}
