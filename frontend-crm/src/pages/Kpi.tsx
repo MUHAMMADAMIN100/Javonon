@@ -209,7 +209,9 @@ export default function Kpi() {
 
       {rows.length > 0 && <SortSelect sort={sort} />}
       <div className="card" style={{ padding: 0 }}>
-        <table className="table" style={{ width: '100%' }}>
+        {/* На телефоне строка — компактная карточка: место, имя, конверсия и
+            продажи (kpi-table в index.css); остальные цифры — в окне подробностей. */}
+        <table className="table kpi-table" style={{ width: '100%' }}>
           <thead>
             <tr>
               {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
@@ -226,7 +228,7 @@ export default function Kpi() {
                 <tr
                   key={r.id}
                   data-testid={`kpi-row-${i}`}
-                  className={canOpenAll || isMe ? 'kpi-row-clickable' : 'kpi-row-static'}
+                  className={`kpi-row ${canOpenAll || isMe ? 'kpi-row-clickable' : 'kpi-row-static'}`}
                   style={isMe ? { background: 'var(--primary-soft)' } : undefined}
                   {...(canOpenAll || isMe
                     ? {
@@ -243,7 +245,7 @@ export default function Kpi() {
                       }
                     : {})}
                 >
-                  <td style={{
+                  <td className={`kpi-c-rank${rank < 3 ? ' is-medal' : ''}`} style={{
                     fontFamily: 'var(--font-display)',
                     fontWeight: 500,
                     fontSize: 18,
@@ -252,28 +254,32 @@ export default function Kpi() {
                   }}>
                     {rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : `#${rank + 1}`}
                   </td>
-                  <td>
-                    <div style={{ fontWeight: 500 }}>{r.fullName} {isMe && <span style={{ fontFamily: 'Times New Roman, Georgia, serif', fontStyle: 'italic', color: 'var(--primary-dark)' }}>{t('kpi.label.itsYou')}</span>}</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  <td className="kpi-c-who">
+                    <div className="kpi-name" style={{ fontWeight: 500 }}>{r.fullName} {isMe && <span className="kpi-you" style={{ fontFamily: 'Times New Roman, Georgia, serif', fontStyle: 'italic', color: 'var(--primary-dark)' }}>{t('kpi.label.itsYou')}</span>}</div>
+                    <div className="kpi-role" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                       {roleLabel(r.role)}
                     </div>
                   </td>
-                  <td>{r.applicationsAssigned}</td>
-                  <td style={{ color: 'var(--primary-dark)' }}>{r.applicationsEnrolled}</td>
-                  <td>
-                    <span className={`badge ${r.conversionRate >= 50 ? 'badge-success' : r.conversionRate >= 25 ? 'badge-warning' : 'badge-gray'}`}>
+                  <td className="kpi-c-leads">{r.applicationsAssigned}</td>
+                  <td className="kpi-c-enrolled" style={{ color: 'var(--primary-dark)' }}>{r.applicationsEnrolled}</td>
+                  <td className="kpi-c-conv">
+                    <span
+                      className={`badge ${r.conversionRate >= 50 ? 'badge-success' : r.conversionRate >= 25 ? 'badge-warning' : 'badge-gray'}`}
+                      title={t('kpi.col.conversion')}
+                      data-testid="kpi-conv"
+                    >
                       {r.conversionRate}%
                     </span>
                   </td>
-                  <td>{r.studentsCount}</td>
-                  <td style={{
+                  <td className="kpi-c-students">{r.studentsCount}</td>
+                  <td className="kpi-c-sales" style={{
                     fontFamily: 'var(--font-display)',
                     fontWeight: 500,
-                    fontSize: 16,
                     letterSpacing: '-0.01em',
                     color: 'var(--primary-dark)',
                   }}>
-                    {fmtMoney(r.salesAmount, r.currency)}
+                    {/* Размер — переменной: на телефоне сумма крупнее (index.css). */}
+                    <FitNumber testId="kpi-sales" style={{ fontSize: 'var(--kpi-sales-fs, 16px)' }}>{fmtMoney(r.salesAmount, r.currency)}</FitNumber>
                     {(r.otherIncome ?? 0) > 0 && (
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-soft)' }} data-testid="kpi-other-income">
                         {t('sales.otherIncome')}: {fmtMoney(r.otherIncome!, r.currency)}
@@ -289,7 +295,7 @@ export default function Kpi() {
                       }}>+ {nonTjsLine(r)}</div>
                     )}
                   </td>
-                  <td style={{ fontSize: 13, color: 'var(--text-soft)' }}>
+                  <td className="kpi-c-tasks" style={{ fontSize: 13, color: 'var(--text-soft)' }}>
                     <span style={{ color: 'var(--text)' }}>{r.tasksDone}</span> / {r.tasksDone + r.tasksOpen}
                   </td>
                 </tr>
