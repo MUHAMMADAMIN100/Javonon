@@ -21,6 +21,7 @@ import ListTotal from '../components/ListTotal';
 import ActiveFilterChips from '../components/ActiveFilterChips';
 import { stringParam, useUrlListState } from '../lib/useUrlListState';
 import { matchesSearch } from '../lib/listSearch';
+import { isTouchDevice } from '../lib/touch';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { presenceSortValue, presenceText, usePresence } from '../lib/usePresence';
@@ -506,7 +507,7 @@ export default function Users() {
                   className={`crm-input${showErr('fullName') ? ' input-error' : ''}`}
                   maxLength={100}
                   autoComplete="off"
-                  autoFocus
+                  autoFocus={!isTouchDevice()}
                   required
                 />
                 {showErr('fullName') && <div className="form-error-text">{formErrors.fullName}</div>}

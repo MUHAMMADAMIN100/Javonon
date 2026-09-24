@@ -25,6 +25,7 @@ import { useCountryLabel } from '../lib/labels';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { tjFormatDate } from '../lib/tjTime';
+import { isTouchDevice } from '../lib/touch';
 import { useRealtime } from '../realtime';
 import { useUI } from '../ui/Dialogs';
 import PhoneInput, { COUNTRIES as PHONE_COUNTRIES } from '../components/PhoneInput';
@@ -821,7 +822,7 @@ export default function Leads() {
               <label>{t('app.field.fullName')} *</label>
               <input
                 ref={nameRef}
-                autoFocus
+                autoFocus={!isTouchDevice()}
                 className={`crm-input${invalid('fullName') ? ' input-error' : ''}`}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -1187,7 +1188,7 @@ export default function Leads() {
 
                 <SortSelect sort={sort} />
                 <div className="table-wrap">
-                <table className="table">
+                <table className="table client-list">
                   <thead>
                     <tr>
                       <SortTh
@@ -1214,12 +1215,12 @@ export default function Leads() {
                   </thead>
                   <tbody>
                     {pageItems.map((a) => (
-                      <tr key={a.id} className={selected.has(a.id) ? 'is-selected' : undefined}>
+                      <tr key={a.id} className={`client-row${selected.has(a.id) ? ' is-selected' : ''}`}>
                         {/* Галочка живёт ВНУТРИ первой ячейки, а не отдельной
                             колонкой: на телефоне td:first-child — это заголовок
                             карточки, и колонка из одних галочек заняла бы его
                             место вместо ФИО. */}
-                        <td>
+                        <td className="cl-name">
                           <div className="lead-name-cell">
                             {bulkOn && (
                               <input
@@ -1240,15 +1241,15 @@ export default function Leads() {
                             <strong>{a.fullName}</strong>
                           </div>
                         </td>
-                        <td data-label={t('app.field.phone')}>{a.phone}</td>
-                        <td data-label={t('app.field.country')}>
+                        <td data-label={t('app.field.phone')} className="cl-phone">{a.phone}</td>
+                        <td data-label={t('app.field.country')} className={`cl-chip${a.country ? '' : ' is-empty'}`}>
                           {a.country ? (
                             <span className="badge badge-gray">{countryLabel(a.country)}</span>
                           ) : (
                             <span style={{ color: 'var(--text-light)' }}>—</span>
                           )}
                         </td>
-                        <td data-label={t('app.field.manager')} className="td-stack">
+                        <td data-label={t('app.field.manager')} className="td-stack cl-mgr cl-with-label">
                           {bulkOn ? (
                             <CrmSelect
                               className="crm-select"
@@ -1287,8 +1288,8 @@ export default function Leads() {
                             </span>
                           )}
                         </td>
-                        <td data-label={t('reports.col.date')}>{tjFormatDate(a.createdAt)}</td>
-                        <td className="lead-actions" data-label={t('common.actions')}>
+                        <td data-label={t('reports.col.date')} className="cl-top cl-date">{tjFormatDate(a.createdAt)}</td>
+                        <td className="lead-actions cl-actions" data-label={t('common.actions')}>
                           {trash ? (
                             <button
                               type="button"

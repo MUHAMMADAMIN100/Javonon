@@ -7,6 +7,7 @@ import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import PasswordInput from './PasswordInput';
 import { useT } from '../lib/i18n';
+import { isTouchDevice } from '../lib/touch';
 
 type Mode =
   | { kind: 'self' }
@@ -135,7 +136,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
                   value={current}
                   onChange={(e) => setCurrent(e.target.value)}
                   required
-                  autoFocus
+                  autoFocus={!isTouchDevice()}
                   autoComplete="current-password"
                 />
               </div>
@@ -147,7 +148,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
                 onChange={(e) => setNext(e.target.value)}
                 required
                 minLength={8}
-                autoFocus={mode.kind === 'admin'}
+                autoFocus={mode.kind === 'admin' && !isTouchDevice()}
                 autoComplete="new-password"
               />
             </div>

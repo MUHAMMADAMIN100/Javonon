@@ -6515,3 +6515,69 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .table td:first-child[data-label] { text-align: left; }
   .table td:first-child[data-label]::before { display: none; }
 }
+
+/* ===================== Карточки клиентов на телефоне: заявки, лиды, студенты =====================
+   Одна раскладка на три списка (роли ячеек — классы cl-*): сверху имя и статус, ниже
+   телефон и дата (у студента — кабинет), строка плашек «страна · направление ·
+   источник», менеджеры TJ и CN одной строкой, у лидов внизу — кнопки. Подписи не
+   нужны: вид сам объясняет, что где. Строки-разрывы — ::before/::after строки. */
+/* Приставка к значению («Кабинет №1») — только в карточке на телефоне. */
+.client-list .cl-prefix { display: none; }
+@media (max-width: 900px) {
+  .client-list tr.client-row {
+    display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 0;
+    padding: 12px 14px !important;
+  }
+  .client-list tr.client-row::before,
+  .client-list tr.client-row::after { content: ''; flex-basis: 100%; height: 0; }
+  .client-list tr.client-row::before { order: 25; }
+  .client-list tr.client-row::after { order: 45; }
+  .client-list tr.client-row > td {
+    display: block; width: auto; min-width: 0; padding: 0; margin: 0;
+    border: none !important; text-align: left; font-size: 14px;
+  }
+  .client-list tr.client-row > td::before { display: none; }
+  .client-list tr.client-row > td.cl-name {
+    order: 10; flex: 1 1 0; font-size: 15px; line-height: 1.3;
+    overflow-wrap: break-word; word-break: normal;
+    /* Полоска наведения/выбора у первой ячейки упиралась бы в имя —
+       у выбранной карточки она по левому краю самой карточки (ниже). */
+    box-shadow: none !important;
+  }
+  .client-list tr.client-row.is-selected { box-shadow: inset 3px 0 0 var(--primary); }
+  /* Статус (у лида — дата) — вровень с первой строкой имени, а не посередине
+     имени в две-три строки. min-height — высота строки имени (15px × 1.3). */
+  .client-list tr.client-row > td.cl-top {
+    order: 20; flex: 0 0 auto; margin-left: auto;
+    align-self: flex-start; display: flex; align-items: center; min-height: 19.5px;
+  }
+  /* Галочка лида — тоже у первой строки имени. */
+  .client-list tr.client-row .lead-name-cell { align-items: flex-start; gap: 10px; }
+  .client-list tr.client-row > td.cl-top.cl-date { color: var(--text-soft); font-size: 13px; }
+  .client-list tr.client-row > td.cl-phone {
+    order: 30; flex: 1 1 0; margin-top: 4px; color: var(--text); font-variant-numeric: tabular-nums;
+  }
+  .client-list tr.client-row > td.cl-right { order: 40; flex: 0 0 auto; margin: 4px 0 0 auto; color: var(--text-soft); font-size: 13px; }
+  .client-list tr.client-row > td.cl-right .cl-prefix { display: inline; }
+  .client-list tr.client-row > td.cl-chip { order: 50; flex: 0 0 auto; margin-top: 8px; }
+  .client-list tr.client-row > td.cl-chip.is-empty { display: none; }
+  .client-list tr.client-row > td.cl-chip.is-text {
+    padding: 3px 10px; border-radius: 999px; background: var(--bg-soft);
+    color: var(--text-soft); font-size: 12px; font-weight: 600; line-height: 1.4;
+  }
+  .client-list tr.client-row > td.cl-mgr { order: 80; flex: 0 0 100%; margin-top: 10px; }
+  .client-list tr.client-row .cl-mgr .mgr-cell { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 18px; }
+  /* Статус в углу карточки — компактнее: имени остаётся больше места. */
+  .client-list tr.client-row > td.cl-top .badge { font-size: 10px; padding: 3px 8px; letter-spacing: 0.05em; white-space: nowrap; }
+  /* У лида менеджер без меток TJ/CN — подпись коротко перед именем. */
+  .client-list tr.client-row > td.cl-with-label::before {
+    display: inline; content: attr(data-label); float: none; margin-right: 6px;
+    font-size: 11px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.4px;
+  }
+  .client-list tr.client-row > td.cl-actions { order: 90; flex: 0 0 100%; margin-top: 10px; }
+}
+/* На телефоне карточки — во всю ширину рамки списка, как рейтинг KPI: отступ
+   .card-body (14px) плюс свой отступ карточки съедали у имени почти треть ширины. */
+@media (max-width: 720px) {
+  .card-body .table.client-list { width: calc(100% + 26px); margin-left: -13px; margin-right: -13px; }
+}

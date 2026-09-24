@@ -38,6 +38,7 @@ import BackButton from '../components/BackButton';
 import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
 import { keys } from '../lib/queryKeys';
 import { useT } from '../lib/i18n';
+import { isTouchDevice } from '../lib/touch';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -835,7 +836,7 @@ function RejectReasonModal({
             onChange={(e) => setReason(e.target.value.slice(0, REJECT_REASON_MAX))}
             maxLength={REJECT_REASON_MAX}
             placeholder={t('deal.rejectPlaceholder')}
-            autoFocus
+            autoFocus={!isTouchDevice()}
             disabled={busy}
             style={{ resize: 'none', width: '100%' }}
           />

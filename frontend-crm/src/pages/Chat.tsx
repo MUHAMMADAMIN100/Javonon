@@ -41,6 +41,7 @@ import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation, tempId } from '../lib/optimistic';
 import { isFounder, displayRoleLabel } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { isTouchDevice } from '../lib/touch';
 import { ROLE_LABEL, type Role } from '../api/types';
 
 // Базовый URL для статических attachments (chat-uploads).
@@ -1457,7 +1458,8 @@ export default function Chat() {
             <div className="chat-search-bar" data-testid="chat-search-bar">
               <Icon name="search" size={16} />
               <input
-                autoFocus
+                // на сенсорном экране клавиатура — только по нажатию на поле (lib/touch)
+                autoFocus={!isTouchDevice()}
                 value={msgSearch.q}
                 onChange={(e) => setMsgSearch({ ...msgSearch, q: e.target.value })}
                 onKeyDown={(e) => {

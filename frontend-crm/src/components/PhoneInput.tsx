@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../lib/i18n';
+import { isTouchDevice } from '../lib/touch';
 
 export type Country = {
   cc: string;
@@ -174,7 +175,8 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
     document.addEventListener('keydown', onKey);
     window.addEventListener('scroll', onScrollOrResize, true);
     window.addEventListener('resize', onScrollOrResize);
-    setTimeout(() => searchRef.current?.focus(), 30);
+    // На сенсорном экране не фокусируем — иначе выскакивает клавиатура (lib/touch).
+    if (!isTouchDevice()) setTimeout(() => searchRef.current?.focus(), 30);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);

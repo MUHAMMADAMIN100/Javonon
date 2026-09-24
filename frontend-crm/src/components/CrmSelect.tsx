@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../lib/i18n';
+import { isTouchDevice } from '../lib/touch';
 
 /**
  * Выпадающий список в оформлении CRM.
@@ -180,7 +181,8 @@ export default function CrmSelect({
   useEffect(() => {
     if (!open) return;
     setActive(Math.max(0, visible.findIndex((o) => o.value === current)));
-    if (showSearch) setTimeout(() => searchRef.current?.focus(), 30);
+    // На сенсорном экране не фокусируем — иначе выскакивает клавиатура (lib/touch).
+    if (showSearch && !isTouchDevice()) setTimeout(() => searchRef.current?.focus(), 30);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Подсвеченная строка всегда в поле зрения при ходьбе стрелками.

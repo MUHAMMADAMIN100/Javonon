@@ -418,7 +418,7 @@ export default function Students() {
           ) : (
             <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <SortSelect sort={sort} />
-              <table className="table">
+              <table className="table client-list">
                 <thead>
                   <tr>
                     {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
@@ -432,6 +432,7 @@ export default function Students() {
                   {pagedItems.map((s) => (
                     <motion.tr
                       key={s.id}
+                      className="client-row"
                       onClick={() => navigate(`/students/${s.id}`)}
                       variants={{
                         hidden: { opacity: 0, x: -10 },
@@ -440,15 +441,15 @@ export default function Students() {
                       whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)', x: 2 }}
                       style={{ cursor: 'pointer' }}
                     >
-                      <td><strong>{s.fullName}</strong></td>
-                      <td data-label={t('app.field.phones')}>{s.phones.join(', ') || '—'}</td>
+                      <td className="cl-name"><strong>{s.fullName}</strong></td>
+                      <td data-label={t('app.field.phones')} className="cl-phone">{s.phones.join(', ') || '—'}</td>
                       {/* directionConfirmed === false → студент сконвертирован
                           из заявки с лендинга, и в direction лежит плейсхолдер
                           бэкенда, а не выбор клиента. Печатать «Бакалавриат»
                           нельзя — вся колонка выглядела бы как ответы клиентов.
                           undefined (старый ответ API) считаем подтверждённым,
                           как @default(true) в схеме. */}
-                      <td data-label={t('app.field.direction')}>
+                      <td data-label={t('app.field.direction')} className={`cl-chip is-text${s.directionConfirmed === false ? ' is-empty' : ''}`}>
                         {s.directionConfirmed === false ? (
                           <span
                             style={{ color: 'var(--text-light)' }}
@@ -462,15 +463,15 @@ export default function Students() {
                       </td>
                       {/* Кабинет до подтверждения направления — «приёмник»
                           из конвертации, а не назначенная маршрутизация. */}
-                      <td data-label={t('app.field.cabinet')}>
-                        №{s.cabinet}
+                      <td data-label={t('app.field.cabinet')} className="cl-right">
+                        <span className="cl-prefix">{t('app.field.cabinet')} </span>№{s.cabinet}
                         {s.directionConfirmed === false && (
                           <span style={{ color: 'var(--text-light)', fontSize: 12, marginLeft: 4 }} title={t('app.direction.unconfirmed')}>
                             ·&nbsp;{t('student.cabinet.pending')}
                           </span>
                         )}
                       </td>
-                      <td data-label={t('app.field.manager')} className="td-stack">
+                      <td data-label={t('app.field.manager')} className="td-stack cl-mgr">
                         <div className="mgr-cell">
                           <div className="mgr-row">
                             <span className="mgr-tag tj">TJ</span>
@@ -494,7 +495,7 @@ export default function Students() {
                           </div>
                         </div>
                       </td>
-                      <td data-label={t('common.status')}>
+                      <td data-label={t('common.status')} className="cl-top">
                         {(() => {
                           const appStatus = s.applications?.[0]?.status;
                           if (s.status !== 'ACTIVE' || !appStatus) {

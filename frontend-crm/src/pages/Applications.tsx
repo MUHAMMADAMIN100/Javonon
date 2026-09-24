@@ -385,7 +385,7 @@ export default function Applications() {
           ) : (
             <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <SortSelect sort={sort} />
-              <table className="table">
+              <table className="table client-list">
                 <thead>
                   <tr>
                     {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
@@ -399,6 +399,7 @@ export default function Applications() {
                   {pagedItems.map((a) => (
                     <motion.tr
                       key={a.id}
+                      className="client-row"
                       onClick={() => navigate(`/applications/${a.id}`)}
                       variants={{
                         hidden: { opacity: 0, x: -10 },
@@ -407,9 +408,9 @@ export default function Applications() {
                       whileHover={{ backgroundColor: 'rgba(0,0,0,0.02)', x: 2 }}
                       style={{ cursor: 'pointer' }}
                     >
-                      <td><strong>{a.fullName}</strong></td>
-                      <td data-label={t('app.field.phone')}>{a.phone}</td>
-                      <td data-label={t('app.field.country')}>
+                      <td className="cl-name"><strong>{a.fullName}</strong></td>
+                      <td data-label={t('app.field.phone')} className="cl-phone">{a.phone}</td>
+                      <td data-label={t('app.field.country')} className={`cl-chip${a.country ? '' : ' is-empty'}`}>
                         {/* Страна есть только у заявок с новой формы лендинга.
                             Старые заявки и всё, что заведено в обход формы
                             (ручное создание в CRM, самозапись, approve заявки
@@ -421,7 +422,7 @@ export default function Applications() {
                           <span style={{ color: 'var(--text-light)' }}>—</span>
                         )}
                       </td>
-                      <td data-label={t('app.field.direction')}>
+                      <td data-label={t('app.field.direction')} className={`cl-chip is-text${a.directionConfirmed === false ? ' is-empty' : ''}`}>
                         {/* directionConfirmed === false → в direction лежит
                             плейсхолдер бэкенда, а не выбор клиента: форма
                             лендинга направление не спрашивает. Рисуем прочерк,
@@ -439,7 +440,7 @@ export default function Applications() {
                           directionLabel(a.direction)
                         )}
                       </td>
-                      <td data-label={t('app.field.manager')} className="td-stack">
+                      <td data-label={t('app.field.manager')} className="td-stack cl-mgr">
                         <div className="mgr-cell">
                           <div className="mgr-row">
                             <span className="mgr-tag tj">TJ</span>
@@ -463,7 +464,7 @@ export default function Applications() {
                           </div>
                         </div>
                       </td>
-                      <td data-label={t('app.field.source')}>
+                      <td data-label={t('app.field.source')} className="cl-chip">
                         {/* fallback OTHER — если бэкенд когда-нибудь пришлёт заявку
                             без source (миграционные данные, dev-фикстуры), не
                             крашимся undefined-badge, а показываем нейтральный. */}
@@ -471,8 +472,8 @@ export default function Applications() {
                           {SOURCE_LABEL[a.source ?? 'OTHER']}
                         </span>
                       </td>
-                      <td data-label={t('common.status')}><span className={`badge ${STATUS_BADGE[a.status]}`}>{statusLabel(a.status)}</span></td>
-                      <td data-label={t('reports.col.date')}>{tjFormatDate(a.createdAt)}</td>
+                      <td data-label={t('common.status')} className="cl-top"><span className={`badge ${STATUS_BADGE[a.status]}`}>{statusLabel(a.status)}</span></td>
+                      <td data-label={t('reports.col.date')} className="cl-right">{tjFormatDate(a.createdAt)}</td>
                     </motion.tr>
                   ))}
                 </motion.tbody>

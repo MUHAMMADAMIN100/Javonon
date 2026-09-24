@@ -33,6 +33,7 @@ import ListTotal, { type ListNoun } from '../components/ListTotal';
 import ActiveFilterChips from '../components/ActiveFilterChips';
 import { enumParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { matchesSearch } from '../lib/listSearch';
+import { isTouchDevice } from '../lib/touch';
 
 type Tab = 'partners' | 'commissions' | 'payouts';
 const COMMISSION_STATUSES = ['PENDING', 'APPROVED', 'PAID', 'REVERSED'] as const;
@@ -601,7 +602,7 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
-                autoFocus
+                autoFocus={!isTouchDevice()}
                 minLength={2}
                 maxLength={100}
               />
