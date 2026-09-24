@@ -249,7 +249,7 @@ function SalesRows({ rows }: { rows: KpiDetailsSale[] }) {
         <tr key={x.id}>
           <td data-label={t('reports.col.date')}>{tjFormatDate(x.date)}</td>
           <td data-label={t('sales.kind')} data-testid="kpi-sale-kind">{t(`sales.kind.${(x as any).kind || 'DEAL'}`)}</td>
-          <td>
+          <td data-label={t('kpi.details.col.payer')}>
             {x.student ? (
               <Link to={`/students/${x.student.id}`} className="kpi-details-link">{x.student.fullName}</Link>
             ) : (

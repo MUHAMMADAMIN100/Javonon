@@ -364,7 +364,7 @@ export default function Users() {
                     {u.id === me?.id && <span style={{ color: '#5b6478', fontSize: 12 }}> ({t('common.youLower')})</span>}
                   </td>
                   {founder && (
-                    <td data-testid="user-presence">
+                    <td data-label={t('presence.col')} data-testid="user-presence">
                       {(() => {
                         const r = presenceOf(u);
                         if (!r) return <span style={{ color: 'var(--text-light)' }}>—</span>;
@@ -376,8 +376,8 @@ export default function Users() {
                       })()}
                     </td>
                   )}
-                  <td>{u.email}</td>
-                  <td>
+                  <td data-label={t('userDetail.field.email')}>{u.email}</td>
+                  <td data-label={t('userDetail.field.role')} className="td-stack">
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {hasActiveCustom ? (
                         // Если есть активная кастомная роль — показываем
@@ -422,7 +422,7 @@ export default function Users() {
                       )}
                     </div>
                   </td>
-                  <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('ru-RU') : '—'}</td>
+                  <td data-label={t('profile.field.createdAt')}>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('ru-RU') : '—'}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {u.isActive === false ? (

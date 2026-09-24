@@ -395,16 +395,16 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                 {salarySort.sorted.map((r) => (
                   <tr key={r.id}>
                     <td>{new Date(r.periodStart).toLocaleDateString('ru-RU')} – {new Date(r.periodEnd).toLocaleDateString('ru-RU')}</td>
-                    <td>{fmtMinutes(r.workedMinutes)}</td>
-                    <td>{fmtMoney(r.baseAmount, r.currency)}</td>
-                    <td>{fmtMoney(r.salesAmount, r.currency)}</td>
-                    <td>{fmtMoney(r.bonusAmount, r.currency)}</td>
-                    <td>{fmtMoney(r.kpiBonus, r.currency)}</td>
-                    <td style={{ color: r.penalties > 0 ? 'var(--danger)' : undefined }}>
+                    <td data-label={salarySort.label('hours')}>{fmtMinutes(r.workedMinutes)}</td>
+                    <td data-label={salarySort.label('base')}>{fmtMoney(r.baseAmount, r.currency)}</td>
+                    <td data-label={salarySort.label('sales')}>{fmtMoney(r.salesAmount, r.currency)}</td>
+                    <td data-label={salarySort.label('bonus')}>{fmtMoney(r.bonusAmount, r.currency)}</td>
+                    <td data-label={salarySort.label('kpi')}>{fmtMoney(r.kpiBonus, r.currency)}</td>
+                    <td data-label={salarySort.label('penalties')} style={{ color: r.penalties > 0 ? 'var(--danger)' : undefined }}>
                       {fmtMoney(r.penalties, r.currency)}
                     </td>
-                    <td><b>{fmtMoney(r.netAmount, r.currency)}</b></td>
-                    <td>
+                    <td data-label={salarySort.label('net')}><b>{fmtMoney(r.netAmount, r.currency)}</b></td>
+                    <td data-label={salarySort.label('status')}>
                       <span style={{
                         fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
                         background: r.status === 'PAID' ? '#dcfce7' : '#fef3c7',
@@ -441,9 +441,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                   return (
                   <tr key={p.id}>
                     <td>{new Date(p.date).toLocaleDateString('ru-RU')}</td>
-                    <td>{reasonLbl}{p.comment ? ` · ${p.comment}` : ''}</td>
-                    <td style={{ color: 'var(--danger)' }}>{fmtMoney(p.amount, p.currency)}</td>
-                    <td>{p.applied ? '✓' : '—'}</td>
+                    <td data-label={penaltiesSort.label('reason')} className="td-stack">{reasonLbl}{p.comment ? ` · ${p.comment}` : ''}</td>
+                    <td data-label={penaltiesSort.label('amount')} style={{ color: 'var(--danger)' }}>{fmtMoney(p.amount, p.currency)}</td>
+                    <td data-label={penaltiesSort.label('applied')}>{p.applied ? '✓' : '—'}</td>
                   </tr>
                   );
                 })}
@@ -545,10 +545,10 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                 {reportsSort.sorted.map((r) => (
                   <tr key={r.id}>
                     <td>{new Date(r.date).toLocaleDateString('ru-RU')}</td>
-                    <td>{r.callsCount ?? 0}</td>
-                    <td>{r.meetingsCount ?? 0}</td>
-                    <td>{r.salesCount ?? 0}</td>
-                    <td>{r.salesAmount ? fmtMoney(r.salesAmount) : '—'}</td>
+                    <td data-label={reportsSort.label('calls')}>{r.callsCount ?? 0}</td>
+                    <td data-label={reportsSort.label('meetings')}>{r.meetingsCount ?? 0}</td>
+                    <td data-label={reportsSort.label('deals')}>{r.salesCount ?? 0}</td>
+                    <td data-label={reportsSort.label('amount')}>{r.salesAmount ? fmtMoney(r.salesAmount) : '—'}</td>
                   </tr>
                 ))}
               </tbody>

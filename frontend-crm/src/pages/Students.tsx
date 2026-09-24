@@ -441,14 +441,14 @@ export default function Students() {
                       style={{ cursor: 'pointer' }}
                     >
                       <td><strong>{s.fullName}</strong></td>
-                      <td>{s.phones.join(', ') || '—'}</td>
+                      <td data-label={t('app.field.phones')}>{s.phones.join(', ') || '—'}</td>
                       {/* directionConfirmed === false → студент сконвертирован
                           из заявки с лендинга, и в direction лежит плейсхолдер
                           бэкенда, а не выбор клиента. Печатать «Бакалавриат»
                           нельзя — вся колонка выглядела бы как ответы клиентов.
                           undefined (старый ответ API) считаем подтверждённым,
                           как @default(true) в схеме. */}
-                      <td>
+                      <td data-label={t('app.field.direction')}>
                         {s.directionConfirmed === false ? (
                           <span
                             style={{ color: 'var(--text-light)' }}
@@ -462,7 +462,7 @@ export default function Students() {
                       </td>
                       {/* Кабинет до подтверждения направления — «приёмник»
                           из конвертации, а не назначенная маршрутизация. */}
-                      <td>
+                      <td data-label={t('app.field.cabinet')}>
                         №{s.cabinet}
                         {s.directionConfirmed === false && (
                           <span style={{ color: 'var(--text-light)', fontSize: 12, marginLeft: 4 }} title={t('app.direction.unconfirmed')}>
@@ -470,7 +470,7 @@ export default function Students() {
                           </span>
                         )}
                       </td>
-                      <td>
+                      <td data-label={t('app.field.manager')} className="td-stack">
                         <div className="mgr-cell">
                           <div className="mgr-row">
                             <span className="mgr-tag tj">TJ</span>
@@ -494,7 +494,7 @@ export default function Students() {
                           </div>
                         </div>
                       </td>
-                      <td>
+                      <td data-label={t('common.status')}>
                         {(() => {
                           const appStatus = s.applications?.[0]?.status;
                           if (s.status !== 'ACTIVE' || !appStatus) {

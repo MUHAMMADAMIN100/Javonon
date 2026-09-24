@@ -187,12 +187,13 @@ export default function Reports() {
             {sort.sorted.map((r) => (
               <tr key={r.id}>
                 <td style={{ fontWeight: 500 }}>{fmtDate(r.date)}</td>
-                <td style={{ fontFamily: 'var(--font-mono)' }}>{r.callsCount}</td>
-                <td style={{ fontFamily: 'var(--font-mono)' }}>{r.meetingsCount}</td>
-                <td style={{ fontFamily: 'var(--font-mono)' }}>{r.applicationsContacted}</td>
-                <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--primary-dark)' }}>{r.salesCount}</td>
-                <td style={{ fontFamily: 'var(--font-display)', fontWeight: 500, color: 'var(--primary-dark)' }}>${r.salesAmount.toLocaleString('ru-RU')}</td>
-                <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{r.activitySummary || '—'}</td>
+                {/* data-label — подпись у цифры в карточке на телефоне (index.css). */}
+                <td data-label={t('reports.field.calls')} style={{ fontFamily: 'var(--font-mono)' }}>{r.callsCount}</td>
+                <td data-label={t('reports.field.meetings')} style={{ fontFamily: 'var(--font-mono)' }}>{r.meetingsCount}</td>
+                <td data-label={t('reports.field.applications')} style={{ fontFamily: 'var(--font-mono)' }}>{r.applicationsContacted}</td>
+                <td data-label={t('reports.field.salesCount')} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--primary-dark)' }}>{r.salesCount}</td>
+                <td data-label={t('reports.field.salesAmount')} style={{ fontFamily: 'var(--font-display)', fontWeight: 500, color: 'var(--primary-dark)' }}>${r.salesAmount.toLocaleString('ru-RU')}</td>
+                <td data-label={t('reports.field.activity')} className="td-stack" style={{ color: 'var(--text-soft)', fontSize: 13 }}>{r.activitySummary || '—'}</td>
               </tr>
             ))}
           </tbody>

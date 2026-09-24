@@ -1240,15 +1240,15 @@ export default function Leads() {
                             <strong>{a.fullName}</strong>
                           </div>
                         </td>
-                        <td>{a.phone}</td>
-                        <td>
+                        <td data-label={t('app.field.phone')}>{a.phone}</td>
+                        <td data-label={t('app.field.country')}>
                           {a.country ? (
                             <span className="badge badge-gray">{countryLabel(a.country)}</span>
                           ) : (
                             <span style={{ color: 'var(--text-light)' }}>—</span>
                           )}
                         </td>
-                        <td>
+                        <td data-label={t('app.field.manager')} className="td-stack">
                           {bulkOn ? (
                             <CrmSelect
                               className="crm-select"
@@ -1287,7 +1287,7 @@ export default function Leads() {
                             </span>
                           )}
                         </td>
-                        <td>{tjFormatDate(a.createdAt)}</td>
+                        <td data-label={t('reports.col.date')}>{tjFormatDate(a.createdAt)}</td>
                         <td className="lead-actions" data-label={t('common.actions')}>
                           {trash ? (
                             <button

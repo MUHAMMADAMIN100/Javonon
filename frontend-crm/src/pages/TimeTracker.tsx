@@ -450,17 +450,17 @@ export default function TimeTracker() {
                   exit={{ opacity: 0 }}
                 >
                   <td style={{ fontWeight: 500 }}>{fmtDate(h.clockIn)}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtTime(h.clockIn)}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtMin(h.totalLunchMinutes)}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtTime(h.clockOut)}</td>
-                  <td>
+                  <td data-label={t('workday.col.arrival')} style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtTime(h.clockIn)}</td>
+                  <td data-label={t('workday.col.lunch')} style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtMin(h.totalLunchMinutes)}</td>
+                  <td data-label={t('workday.col.leave')} style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtTime(h.clockOut)}</td>
+                  <td data-label={t('workday.col.late')}>
                     {h.lateMinutes > 0 ? (
                       <span className="badge badge-warning">{h.lateMinutes}{t('common.minutes')}</span>
                     ) : (
                       <span style={{ color: 'var(--text-light)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>—</span>
                     )}
                   </td>
-                  <td style={{
+                  <td data-label={t('workday.col.worked')} style={{
                     fontFamily: 'var(--font-display)',
                     fontWeight: 500,
                     fontSize: 16,

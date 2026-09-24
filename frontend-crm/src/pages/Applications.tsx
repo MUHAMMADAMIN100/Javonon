@@ -408,8 +408,8 @@ export default function Applications() {
                       style={{ cursor: 'pointer' }}
                     >
                       <td><strong>{a.fullName}</strong></td>
-                      <td>{a.phone}</td>
-                      <td>
+                      <td data-label={t('app.field.phone')}>{a.phone}</td>
+                      <td data-label={t('app.field.country')}>
                         {/* Страна есть только у заявок с новой формы лендинга.
                             Старые заявки и всё, что заведено в обход формы
                             (ручное создание в CRM, самозапись, approve заявки
@@ -421,7 +421,7 @@ export default function Applications() {
                           <span style={{ color: 'var(--text-light)' }}>—</span>
                         )}
                       </td>
-                      <td>
+                      <td data-label={t('app.field.direction')}>
                         {/* directionConfirmed === false → в direction лежит
                             плейсхолдер бэкенда, а не выбор клиента: форма
                             лендинга направление не спрашивает. Рисуем прочерк,
@@ -439,7 +439,7 @@ export default function Applications() {
                           directionLabel(a.direction)
                         )}
                       </td>
-                      <td>
+                      <td data-label={t('app.field.manager')} className="td-stack">
                         <div className="mgr-cell">
                           <div className="mgr-row">
                             <span className="mgr-tag tj">TJ</span>
@@ -463,7 +463,7 @@ export default function Applications() {
                           </div>
                         </div>
                       </td>
-                      <td>
+                      <td data-label={t('app.field.source')}>
                         {/* fallback OTHER — если бэкенд когда-нибудь пришлёт заявку
                             без source (миграционные данные, dev-фикстуры), не
                             крашимся undefined-badge, а показываем нейтральный. */}
@@ -471,8 +471,8 @@ export default function Applications() {
                           {SOURCE_LABEL[a.source ?? 'OTHER']}
                         </span>
                       </td>
-                      <td><span className={`badge ${STATUS_BADGE[a.status]}`}>{statusLabel(a.status)}</span></td>
-                      <td>{tjFormatDate(a.createdAt)}</td>
+                      <td data-label={t('common.status')}><span className={`badge ${STATUS_BADGE[a.status]}`}>{statusLabel(a.status)}</span></td>
+                      <td data-label={t('reports.col.date')}>{tjFormatDate(a.createdAt)}</td>
                     </motion.tr>
                   ))}
                 </motion.tbody>

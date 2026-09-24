@@ -186,16 +186,16 @@ export default function PaymentStagesSection({
                     }
                   >
                     <td style={{ color: 'var(--text-soft)' }}>{s.order}</td>
-                    <td style={{ fontWeight: 500 }}>
+                    <td data-label={t('stages.col.title')} style={{ fontWeight: 500 }}>
                       {s.title || `${t('stages.col.title')} ${s.order}`}
                     </td>
-                    <td style={{ color: s.status === 'OVERDUE' ? DANGER_TEXT : 'var(--text-soft)', fontWeight: s.status === 'OVERDUE' ? 600 : 400 }}>
+                    <td data-label={t('stages.col.due')} style={{ color: s.status === 'OVERDUE' ? DANGER_TEXT : 'var(--text-soft)', fontWeight: s.status === 'OVERDUE' ? 600 : 400 }}>
                       {tjFormatDate(s.dueDate)}
                     </td>
-                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    <td data-label={t('stages.col.amount')} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       {money(s.amount, currency)}
                     </td>
-                    <td>
+                    <td data-label={t('stages.col.status')}>
                       <span className={STAGE_BADGE[s.status]}>
                         {t(`stages.status.${s.status}`)}
                       </span>

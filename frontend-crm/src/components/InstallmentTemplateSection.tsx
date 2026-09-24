@@ -155,7 +155,7 @@ export default function InstallmentTemplateSection({
               {list.map((r, i) => (
                 <tr key={i}>
                   <td style={{ color: 'var(--text-soft)' }}>{i + 1}</td>
-                  <td>
+                  <td data-label={t('installments.col.title')}>
                     <input
                       className="crm-input"
                       value={r.title}
@@ -165,7 +165,7 @@ export default function InstallmentTemplateSection({
                       onChange={(e) => patch(i, { title: e.target.value })}
                     />
                   </td>
-                  <td>
+                  <td data-label={t('installments.col.percent')}>
                     <input
                       className="crm-input"
                       type="number"
@@ -177,7 +177,7 @@ export default function InstallmentTemplateSection({
                       onChange={(e) => patch(i, { percent: e.target.value })}
                     />
                   </td>
-                  <td>
+                  <td data-label={t('installments.col.offset')}>
                     <input
                       className="crm-input"
                       type="number"
@@ -189,7 +189,7 @@ export default function InstallmentTemplateSection({
                     />
                   </td>
                   {amounts.length > 0 && (
-                    <td style={{ textAlign: 'right', color: 'var(--text-soft)', fontVariantNumeric: 'tabular-nums' }}>
+                    <td data-label={t('installments.col.preview')} style={{ textAlign: 'right', color: 'var(--text-soft)', fontVariantNumeric: 'tabular-nums' }}>
                       {amounts[i]?.toLocaleString('ru-RU')} {currency || ''}
                     </td>
                   )}

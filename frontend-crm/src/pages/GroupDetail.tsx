@@ -213,8 +213,8 @@ export default function GroupDetail() {
                         {m.student.fullName}
                       </span>
                     </td>
-                    <td style={{ color: 'var(--text-soft)' }}>{m.student.phones?.[0] || '—'}</td>
-                    <td style={{ color: 'var(--text-soft)' }}>{tjFormatDate(m.joinedAt)}</td>
+                    <td data-label={t('common.phone')} style={{ color: 'var(--text-soft)' }}>{m.student.phones?.[0] || '—'}</td>
+                    <td data-label={t('groups.joinedAt')} style={{ color: 'var(--text-soft)' }}>{tjFormatDate(m.joinedAt)}</td>
                     {canAdmin && (
                       <td>
                         <button

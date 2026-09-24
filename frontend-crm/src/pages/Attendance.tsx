@@ -165,12 +165,12 @@ export default function Attendance() {
                     <div style={{ fontWeight: 500 }}>{e.user.fullName}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>{e.user.email}</div>
                   </td>
-                  <td>{fmtDate(e.clockIn)}</td>
-                  <td>{fmtTime(e.clockIn)}</td>
-                  <td>{fmtTime(e.lunchOut)}</td>
-                  <td>{fmtTime(e.lunchIn)}</td>
-                  <td>{fmtTime(e.clockOut)}</td>
-                  <td style={{ textAlign: 'right', color: e.lateMinutes > 0 ? '#ef4444' : 'var(--text-soft)' }}>
+                  <td data-label={t('attendance.col.date')}>{fmtDate(e.clockIn)}</td>
+                  <td data-label={t('attendance.col.in')}>{fmtTime(e.clockIn)}</td>
+                  <td data-label={t('attendance.col.lunchOut')}>{fmtTime(e.lunchOut)}</td>
+                  <td data-label={t('attendance.col.lunchIn')}>{fmtTime(e.lunchIn)}</td>
+                  <td data-label={t('attendance.col.out')}>{fmtTime(e.clockOut)}</td>
+                  <td data-label={t('attendance.col.late')} style={{ textAlign: 'right', color: e.lateMinutes > 0 ? '#ef4444' : 'var(--text-soft)' }}>
                     {e.lateMinutes > 0 ? `+${e.lateMinutes} ${t('common.minutes')}` : '—'}
                     {e.lateExcuseStatus === 'APPROVED' && (
                       <span style={{ fontSize: 10, marginLeft: 4, color: '#10b981' }}>· {t('attendance.approved')}</span>

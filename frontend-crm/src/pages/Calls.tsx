@@ -284,9 +284,9 @@ export default function Calls() {
                 {statsSort.sorted.map((s) => (
                   <tr key={s.user.id}>
                     <td style={{ fontWeight: 500 }}>{s.user.fullName}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)' }}>{s.totalCalls}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)' }}>{fmtDuration(s.totalSeconds)}</td>
-                    <td style={{
+                    <td data-label={t('calls.col.totalCalls')} style={{ fontFamily: 'var(--font-mono)' }}>{s.totalCalls}</td>
+                    <td data-label={t('calls.col.onLineLabel')} style={{ fontFamily: 'var(--font-mono)' }}>{fmtDuration(s.totalSeconds)}</td>
+                    <td data-label={t('calls.col.conversions')} style={{
                       fontFamily: 'var(--font-mono)',
                       fontWeight: 600,
                       color: 'var(--primary-dark)',
@@ -320,7 +320,7 @@ export default function Calls() {
             {callsSort.sorted.map((c) => (
               <tr key={c.id}>
                 <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{fmtDateTime(c.occurredAt)}</td>
-                <td>
+                <td data-label={t('calls.col.client')}>
                   <div style={{ fontWeight: 500 }}>{c.clientName}</div>
                   {c.clientPhone && (
                     <div style={{ color: 'var(--text-soft)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
@@ -329,14 +329,14 @@ export default function Calls() {
                   )}
                 </td>
                 {isAdmin && (
-                  <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{c.user?.fullName || '—'}</td>
+                  <td data-label={t('kpi.col.employee')} style={{ color: 'var(--text-soft)', fontSize: 13 }}>{c.user?.fullName || '—'}</td>
                 )}
-                <td style={{ fontSize: 13 }}>{t(`calls.dir.${c.direction}`)}</td>
-                <td style={{ fontSize: 13, fontWeight: 600, color: OUTCOME_COLOR[c.outcome] }}>
+                <td data-label={t('calls.col.direction')} style={{ fontSize: 13 }}>{t(`calls.dir.${c.direction}`)}</td>
+                <td data-label={t('calls.col.outcome')} style={{ fontSize: 13, fontWeight: 600, color: OUTCOME_COLOR[c.outcome] }}>
                   {t(`calls.out.${c.outcome}`)}
                 </td>
-                <td style={{ fontFamily: 'var(--font-mono)' }}>{fmtDuration(c.durationSeconds)}</td>
-                <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>
+                <td data-label={t('calls.col.duration')} style={{ fontFamily: 'var(--font-mono)' }}>{fmtDuration(c.durationSeconds)}</td>
+                <td data-label={t('calls.field.notes')} className="td-stack" style={{ color: 'var(--text-soft)', fontSize: 13 }}>
                   {c.notes || '—'}
                   {c.recordingUrl && (
                     <div style={{ marginTop: 4 }}>

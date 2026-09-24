@@ -562,16 +562,16 @@ export default function Finance() {
                 {paymentsSort.sorted.map((p) => (
                   <tr key={p.id}>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'nowrap' }}>{fmtDate(p.createdAt)}</td>
-                    <td style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.student?.fullName}</td>
-                    <td style={{
+                    <td data-label={paymentsSort.label('student')} style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.student?.fullName}</td>
+                    <td data-label={paymentsSort.label('amount')} style={{
                       fontFamily: 'var(--font-display)',
                       fontWeight: 500,
                       fontSize: 18,
                       color: 'var(--primary-dark)',
                       whiteSpace: 'nowrap',
                     }}>{fmtMoney(p.amount, p.currency)}</td>
-                    <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{PAYMENT_METHOD_LABEL[p.method]}</td>
-                    <td
+                    <td data-label={paymentsSort.label('type')} style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{PAYMENT_METHOD_LABEL[p.method]}</td>
+                    <td data-label={paymentsSort.label('comment')} className="td-stack"
                       style={{
                         color: 'var(--text-soft)', fontSize: 13,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -639,11 +639,11 @@ export default function Finance() {
                 {pendingSort.sorted.map((app) => (
                   <tr key={app.id}>
                     <td style={{ fontWeight: 500 }}>{app.fullName}</td>
-                    <td>{app.program?.name || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
-                    <td style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 16 }}>
+                    <td data-label={pendingSort.label('program')}>{app.program?.name || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
+                    <td data-label={pendingSort.label('amount')} style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 16 }}>
                       {app.program ? fmtMoney(app.program.cost, app.program.currency || 'TJS') : '—'}
                     </td>
-                    <td>{app.manager?.fullName || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
+                    <td data-label={pendingSort.label('manager')}>{app.manager?.fullName || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
                     <td>
                       {/* «Внести оплату» открывает ту же TransactionForm.
                           Гейтим по canCreateTx (кто в принципе имеет право
@@ -845,13 +845,13 @@ export default function Finance() {
                 }}
               >
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtDate(tx.date)}</td>
-                <td>
+                <td data-label={txSort.label('type')}>
                   <span className={`badge ${tx.type === 'INCOME' ? 'badge-success' : 'badge-danger'}`}>
                     {tx.type === 'INCOME' ? t('finance.income') : t('finance.expense')}
                   </span>
                 </td>
-                <td>{categoryLabel(tx)}</td>
-                <td style={{
+                <td data-label={txSort.label('category')}>{categoryLabel(tx)}</td>
+                <td data-label={txSort.label('amount')} style={{
                   fontFamily: 'var(--font-display)',
                   fontWeight: 500,
                   fontSize: 17,
@@ -860,12 +860,12 @@ export default function Finance() {
                 }}>
                   {tx.type === 'INCOME' ? '+' : '−'} {fmtMoney(tx.amount, tx.currency)}
                 </td>
-                <td style={{ fontSize: 13 }}>
+                <td data-label={txSort.label('student')} style={{ fontSize: 13 }}>
                   {tx.student && <div>👤 {tx.student.fullName}</div>}
                   {tx.manager && <div style={{ color: 'var(--text-soft)' }}>💼 {tx.manager.fullName}</div>}
                   {!tx.student && !tx.manager && <span style={{ color: 'var(--text-light)' }}>—</span>}
                 </td>
-                <td style={{ color: 'var(--text-soft)', fontSize: 13 }}>{tx.comment || '—'}</td>
+                <td data-label={txSort.label('comment')} className="td-stack" style={{ color: 'var(--text-soft)', fontSize: 13 }}>{tx.comment || '—'}</td>
                 <td>
                   {canDeleteTx && (
                     <button className="btn btn-sm btn-danger" onClick={() => onDelete(tx)}>

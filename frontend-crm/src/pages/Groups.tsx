@@ -156,15 +156,15 @@ export default function Groups() {
                   onClick={() => navigate(`/groups/${g.id}`)}
                 >
                   <td style={{ fontWeight: 600 }}>{g.name}</td>
-                  <td style={{ color: 'var(--text-soft)' }}>
+                  <td data-label={t('groups.field.program')} style={{ color: 'var(--text-soft)' }}>
                     {g.program?.name || t('groups.noProgram')}
                   </td>
-                  <td style={{ color: 'var(--text-soft)' }}>
+                  <td data-label={t('groups.field.teacher')} style={{ color: 'var(--text-soft)' }}>
                     {g.teacher?.fullName || t('groups.noTeacher')}
                   </td>
-                  <td style={{ textAlign: 'right' }}>{g._count?.members ?? 0}</td>
-                  <td style={{ textAlign: 'right' }}>{g._count?.sessions ?? 0}</td>
-                  <td>
+                  <td data-label={t('groups.membersCount')} style={{ textAlign: 'right' }}>{g._count?.members ?? 0}</td>
+                  <td data-label={t('groups.sessionsCount')} style={{ textAlign: 'right' }}>{g._count?.sessions ?? 0}</td>
+                  <td data-label={t('common.status')}>
                     <span className={g.status === 'ACTIVE' ? 'badge badge-success' : 'badge badge-gray'}>
                       {t(`groups.status.${g.status}`)}
                     </span>

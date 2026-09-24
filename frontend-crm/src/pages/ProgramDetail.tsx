@@ -170,11 +170,11 @@ export default function ProgramDetail() {
               {scholarshipsSort.sorted.map((s: any) => (
                 <tr key={s.id}>
                   <td style={{ fontWeight: 600 }}>{s.name}</td>
-                  <td>{s.coverage || '—'}</td>
-                  <td>{s.amount || '—'}</td>
-                  <td>{s.includes || '—'}</td>
-                  <td>{s.requirements || '—'}</td>
-                  <td>{s.deadline || '—'}</td>
+                  <td data-label={t('programs.sch.coverage')}>{s.coverage || '—'}</td>
+                  <td data-label={t('common.amount')}>{s.amount || '—'}</td>
+                  <td data-label={t('programs.ph.schIncludes')} className="td-stack">{s.includes || '—'}</td>
+                  <td data-label={t('programs.sch.requirements')} className="td-stack">{s.requirements || '—'}</td>
+                  <td data-label={t('common.deadline')}>{s.deadline || '—'}</td>
                   <td>
                     {s.link && (
                       <a href={s.link} target="_blank" rel="noreferrer">🔗</a>

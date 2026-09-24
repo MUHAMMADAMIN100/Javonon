@@ -790,7 +790,7 @@ function SalaryRosterSection() {
                       {u.customRole?.name || u.role}
                     </div>
                   </td>
-                  <td>
+                  <td data-label={t('settings.salary.field.base')}>
                     <RosterNumberInput
                       value={val('baseSalary', u.baseSalary) as any}
                       onChange={(v) => setField(u.id, 'baseSalary', v)}
@@ -800,7 +800,7 @@ function SalaryRosterSection() {
                       width={140}
                     />
                   </td>
-                  <td>
+                  <td data-label={t('settings.salary.field.hourly')} className="td-stack">
                     {(() => {
                       // Превью почасовой: считаем на лету от draft baseSalary
                       // (если редактируется) или от сохранённого. monthHours
@@ -855,7 +855,7 @@ function SalaryRosterSection() {
                       );
                     })()}
                   </td>
-                  <td>
+                  <td data-label={t('settings.salary.field.bonusPercent')}>
                     <RosterNumberInput
                       value={val('bonusPercent', u.bonusPercent) as any}
                       onChange={(v) => setField(u.id, 'bonusPercent', v)}

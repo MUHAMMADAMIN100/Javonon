@@ -42,6 +42,8 @@ export type TableSort<T> = {
   columns: SortColumn<T>[];
   toggle: (key: string) => void;
   set: (key: string | null, dir?: SortDir) => void;
+  /** Подпись колонки по ключу — для data-label ячейки (подпись в карточке на телефоне). */
+  label: (key: string) => string;
 };
 
 // Кириллица, таджикские буквы и латиница — одним алфавитным порядком;
@@ -130,7 +132,9 @@ export function useTableSort<T>(
 
   const sorted = useMemo(() => sortRows(rows, column, dir), [rows, column, dir]);
 
-  return { sorted, key, dir, columns, toggle, set };
+  /** Подпись колонки по ключу — для data-label ячейки (подпись в карточке на телефоне). */
+  const label = (k: string) => columns.find((c) => c.key === k)?.label ?? '';
+  return { sorted, key, dir, columns, toggle, set, label };
 }
 
 /**

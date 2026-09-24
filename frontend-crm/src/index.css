@@ -3558,11 +3558,6 @@ textarea:focus {
     overflow-wrap: anywhere;
     min-width: 0;
   }
-  .table td[data-label] {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 2px !important;
-  }
 
   /* --- Activity (история действий) --- */
   .activity-item {
@@ -6497,4 +6492,26 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .kpi-table tr.kpi-row td.kpi-c-students,
   .kpi-table tr.kpi-row td.kpi-c-tasks { display: none; }
   .kpi-table tr.kpi-row td.kpi-c-conv .badge { font-size: 13px; padding: 5px 10px; }
+}
+
+/* ===================== Таблицы на телефоне: подпись слева, значение справа =====================
+   Карточка строки (≤900px): у каждой ячейки подпись колонки (data-label) слева, значение
+   справа — одной строкой; значение из нескольких строк (сумма + «прочие приходы») идёт
+   справа столбиком. Раньше на ≤720px подпись вставала над значением, а в половине
+   таблиц подписей не было вовсе — цифры «1 / 1 / 1 / $1» было не понять.
+   td.td-stack — для длинного текста (комментарий, активность): подпись сверху. */
+@media (max-width: 900px) {
+  .table td[data-label] { display: block; text-align: right; }
+  .table td[data-label]::before {
+    float: left; text-align: left; max-width: 55%; margin-right: 12px;
+    font-weight: 500; color: var(--text-soft); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.4px; line-height: 20px;
+  }
+  .table td[data-label]::after { content: ''; display: table; clear: both; }
+  /* Длинный текст на телефоне переносится, а не режется многоточием (как на компьютере). */
+  .table td.td-stack { text-align: left; white-space: normal !important; max-width: none !important; overflow: visible !important; }
+  .table td.td-stack::before { float: none; display: block; max-width: none; margin: 0 0 2px; }
+  /* Первая ячейка — заголовок карточки: без подписи, по левому краю (как во всех таблицах). */
+  .table td:first-child[data-label] { text-align: left; }
+  .table td:first-child[data-label]::before { display: none; }
 }

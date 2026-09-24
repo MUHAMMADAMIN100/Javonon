@@ -406,7 +406,7 @@ function PartnersList({ search }: { search: SearchCtl }) {
                   </td>
                   <td data-label={t('partners.col.balance')}>{fmtMoneyCents(p.balanceCents)}</td>
                   <td data-label={t('partners.col.earned')}>{fmtMoneyCents(p.totalEarnedCents)}</td>
-                  <td>
+                  <td data-label={t('common.status')}>
                     <span style={{
                       fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
                       background: p.status === 'ACTIVE' ? '#dcfce7' : p.status === 'SUSPENDED' ? '#fef3c7' : '#fee2e2',
@@ -923,15 +923,15 @@ function CommissionsList({
               {sort.sorted.map((c) => (
                 <tr key={c.id}>
                   <td>{new Date(c.createdAt).toLocaleString('ru-RU')}</td>
-                  <td>{c.partner?.fullName} <span style={{ color: 'var(--text-soft)', fontSize: 12 }}>({c.partner?.email})</span></td>
-                  <td>{fmtMoneyCents(c.baseAmountCents, c.baseCurrency ?? c.currency)}</td>
-                  <td>
+                  <td data-label={sort.label('partner')}>{c.partner?.fullName} <span style={{ color: 'var(--text-soft)', fontSize: 12 }}>({c.partner?.email})</span></td>
+                  <td data-label={sort.label('base')}>{fmtMoneyCents(c.baseAmountCents, c.baseCurrency ?? c.currency)}</td>
+                  <td data-label={sort.label('rate')}>
                     {c.percent === 0
                       ? `${t('partners.commission.rate.flat')} ${fmtMoneyCents(c.amountCents, c.currency)}`
                       : `${c.percent}%`}
                   </td>
-                  <td><b>{fmtMoneyCents(c.amountCents, c.currency)}</b></td>
-                  <td>
+                  <td data-label={sort.label('amount')}><b>{fmtMoneyCents(c.amountCents, c.currency)}</b></td>
+                  <td data-label={sort.label('status')}>
                     {t(`partners.commission.status.${c.status}`)}
                     {/* A reversed row is the audit record of a cancelled deal:
                         the money has already been taken back off the partner's
@@ -1049,11 +1049,11 @@ function PayoutsList({ search }: { search: SearchCtl }) {
             {sort.sorted.map((p) => (
               <tr key={p.id}>
                 <td>{new Date(p.requestedAt).toLocaleString('ru-RU')}</td>
-                <td>{p.partner?.fullName}</td>
-                <td>{fmtMoneyCents(p.amountCents, p.currency)}</td>
-                <td>{p.method || '—'}</td>
-                <td style={{ wordBreak: 'break-all' }}>{p.details || '—'}</td>
-                <td>{t(`partners.payout.status.${p.status}`)}</td>
+                <td data-label={sort.label('partner')}>{p.partner?.fullName}</td>
+                <td data-label={sort.label('amount')}>{fmtMoneyCents(p.amountCents, p.currency)}</td>
+                <td data-label={sort.label('method')}>{p.method || '—'}</td>
+                <td data-label={sort.label('details')} className="td-stack" style={{ wordBreak: 'break-all' }}>{p.details || '—'}</td>
+                <td data-label={sort.label('status')}>{t(`partners.payout.status.${p.status}`)}</td>
                 <td>
                   {p.status === 'REQUESTED' && (
                     <div style={{ display: 'flex', gap: 4 }}>

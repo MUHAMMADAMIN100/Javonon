@@ -422,15 +422,15 @@ function ClientsTab({ partnerId }: { partnerId: string }) {
                   style={{ cursor: clickable ? 'pointer' : 'default' }}
                 >
                   <td>{new Date(a.createdAt).toLocaleString('ru-RU')}</td>
-                  <td>
+                  <td data-label={sort.label('fullName')}>
                     {a.application?.fullName ||
                       a.student?.fullName ||
                       (a.telegramUserId ? `tg:${a.telegramUserId}` : a.emailHint || '—')}
                   </td>
-                  <td>{a.application?.phone || a.student?.phone || '—'}</td>
-                  <td>{a.application ? directionLabel(a.application.direction) : '—'}</td>
-                  <td>{a.application ? appStatusLabel(a.application.status) : '—'}</td>
-                  <td>
+                  <td data-label={sort.label('phone')}>{a.application?.phone || a.student?.phone || '—'}</td>
+                  <td data-label={sort.label('direction')}>{a.application ? directionLabel(a.application.direction) : '—'}</td>
+                  <td data-label={sort.label('status')}>{a.application ? appStatusLabel(a.application.status) : '—'}</td>
+                  <td data-label={t('common.type')}>
                     <span
                       style={{
                         fontSize: 11,
@@ -524,16 +524,16 @@ function CommissionsTab({ partnerId }: { partnerId: string }) {
             {sort.sorted.map((c) => (
               <tr key={c.id}>
                 <td>{new Date(c.createdAt).toLocaleString('ru-RU')}</td>
-                <td>{fmtMoneyCents(c.baseAmountCents, c.baseCurrency ?? c.currency)}</td>
-                <td>
+                <td data-label={sort.label('base')}>{fmtMoneyCents(c.baseAmountCents, c.baseCurrency ?? c.currency)}</td>
+                <td data-label={sort.label('rate')}>
                   {c.percent === 0
                     ? `${t('partners.commission.rate.flat')} ${fmtMoneyCents(c.amountCents, c.currency)}`
                     : `${c.percent}%`}
                 </td>
-                <td>
+                <td data-label={sort.label('amount')}>
                   <b>{fmtMoneyCents(c.amountCents, c.currency)}</b>
                 </td>
-                <td>{t(`partners.commission.status.${c.status}`)}</td>
+                <td data-label={sort.label('status')}>{t(`partners.commission.status.${c.status}`)}</td>
               </tr>
             ))}
           </tbody>
@@ -581,10 +581,10 @@ function PayoutsTab({ partnerId }: { partnerId: string }) {
             {sort.sorted.map((p) => (
               <tr key={p.id}>
                 <td>{new Date(p.requestedAt).toLocaleString('ru-RU')}</td>
-                <td>{fmtMoneyCents(p.amountCents, p.currency)}</td>
-                <td>{p.method || '—'}</td>
-                <td style={{ wordBreak: 'break-all' }}>{p.details || '—'}</td>
-                <td>{t(`partners.payout.status.${p.status}`)}</td>
+                <td data-label={sort.label('amount')}>{fmtMoneyCents(p.amountCents, p.currency)}</td>
+                <td data-label={sort.label('method')}>{p.method || '—'}</td>
+                <td data-label={sort.label('details')} className="td-stack" style={{ wordBreak: 'break-all' }}>{p.details || '—'}</td>
+                <td data-label={sort.label('status')}>{t(`partners.payout.status.${p.status}`)}</td>
               </tr>
             ))}
           </tbody>
@@ -630,12 +630,12 @@ function ClicksTab({
             {sort.sorted.map((c) => (
               <tr key={c.id}>
                 <td>{new Date(c.createdAt).toLocaleString('ru-RU')}</td>
-                <td>{c.source || '—'}</td>
-                <td>{c.ip || '—'}</td>
-                <td style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <td data-label={sort.label('source')}>{c.source || '—'}</td>
+                <td data-label={sort.label('ip')}>{c.ip || '—'}</td>
+                <td data-label={sort.label('referer')} className="td-stack" style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {c.referer || '—'}
                 </td>
-                <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-soft)' }}>
+                <td data-label={sort.label('userAgent')} className="td-stack" style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-soft)' }}>
                   {c.userAgent || '—'}
                 </td>
               </tr>
