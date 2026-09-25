@@ -125,25 +125,28 @@ export default function Schedule() {
         animate={{ opacity: 1, y: 0 }}
         style={{ padding: 18, marginBottom: 16 }}
       >
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button className="btn btn-sm btn-secondary" onClick={() => setMonthOffset((o) => o - 1)}>
+        {/* На телефоне шапка — сетка (index.css, .sched-head): стрелки по краям, месяц
+            по центру, фильтры во всю ширину, переключатель вида, «Сегодня» и «Новое
+            занятие» пополам. На компьютере — строка, как была. */}
+        <div className="sched-head" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="sched-nav" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button className="btn btn-sm btn-secondary sched-nav-btn sched-prev" data-testid="sched-prev" aria-label={t('common.back')} onClick={() => setMonthOffset((o) => o - 1)}>
               <Icon name="chevron_left" size={16} />
             </button>
-            <button className="btn btn-sm btn-secondary" onClick={() => setMonthOffset(0)}>
+            <button className="btn btn-sm btn-secondary sched-today" data-testid="sched-today" onClick={() => setMonthOffset(0)}>
               {t('common.today')}
             </button>
-            <button className="btn btn-sm btn-secondary" onClick={() => setMonthOffset((o) => o + 1)}>
+            <button className="btn btn-sm btn-secondary sched-nav-btn sched-next" data-testid="sched-next" aria-label={t('common.next')} onClick={() => setMonthOffset((o) => o + 1)}>
               <Icon name="chevron_right" size={16} />
             </button>
-            <strong style={{ marginLeft: 8, fontSize: 16 }}>
+            <strong className="sched-title" data-testid="sched-title" style={{ marginLeft: 8, fontSize: 16 }}>
               {t(`month.${month}`)} {year}
             </strong>
           </div>
 
-          <div style={{ flex: 1 }} />
+          <div className="sched-spacer" style={{ flex: 1 }} />
 
-          <CrmSelect className="crm-select" style={{ width: 200 }} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+          <CrmSelect className="crm-select sched-filter" style={{ width: 200 }} value={groupId} onChange={(e) => setGroupId(e.target.value)} data-testid="sched-group">
             <option value="">{t('classes.allGroups')}</option>
             {groups.map((g) => (
               <option key={g.id} value={g.id}>{g.name}</option>
@@ -151,7 +154,7 @@ export default function Schedule() {
           </CrmSelect>
 
           {elevated && (
-            <CrmSelect className="crm-select" style={{ width: 200 }} value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
+            <CrmSelect className="crm-select sched-filter" style={{ width: 200 }} value={teacherId} onChange={(e) => setTeacherId(e.target.value)} data-testid="sched-teacher">
               <option value="">{t('classes.allTeachers')}</option>
               {(usersQuery.data ?? []).map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
@@ -159,15 +162,17 @@ export default function Schedule() {
             </CrmSelect>
           )}
 
-          <div style={{ display: 'inline-flex', gap: 4 }}>
+          <div className="sched-views" style={{ display: 'inline-flex', gap: 4 }}>
             <button
               className={view === 'month' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary'}
+              data-testid="sched-view-month"
               onClick={() => setView('month')}
             >
               {t('classes.view.month')}
             </button>
             <button
               className={view === 'agenda' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary'}
+              data-testid="sched-view-agenda"
               onClick={() => setView('agenda')}
             >
               {t('classes.view.agenda')}
@@ -175,7 +180,7 @@ export default function Schedule() {
           </div>
 
           {groups.length > 0 && (
-            <button className="btn btn-sm btn-primary" onClick={() => setModal({ day: selectedDay })}>
+            <button className="btn btn-sm btn-primary sched-new" data-testid="sched-new" onClick={() => setModal({ day: selectedDay })}>
               <Icon name="add" size={14} /> {t('classes.newSession')}
             </button>
           )}
@@ -185,7 +190,56 @@ export default function Schedule() {
       {sessionsQuery.isLoading ? (
         <Loading />
       ) : view === 'month' ? (
-        <div className="card" style={{ padding: 14, marginBottom: 16, overflowX: 'auto' }}>
+        <>
+        {/* Телефон: вместо сетки 7 колонок — все дни месяца строками: плашка с числом
+            и днём недели, справа занятия дня (или «—»). Нажатие на день выбирает дату
+            для «Нового занятия», на занятие — открывает его. Сетка (ниже) на телефоне
+            скрыта, список — на компьютере (index.css). */}
+        <div className="card sched-days-card" data-testid="sched-days">
+          {cells.filter((d): d is string => !!d).map((day) => {
+            const list = byDay.get(day) ?? [];
+            const dnum = Number(day.slice(8));
+            const wd = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'][mondayIndex(year, month, dnum)];
+            const isToday = day === today;
+            const isSelected = day === selectedDay;
+            return (
+              <div
+                key={day}
+                className={`sched-day${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
+                data-testid={`sched-day-${day}`}
+                onClick={() => setSelectedDay(day)}
+              >
+                <div className="sched-day-chip">
+                  <b>{dnum}</b>
+                  <span>{t(`weekday.short.${wd}`)}</span>
+                </div>
+                <div className="sched-day-body">
+                  {list.length === 0 ? (
+                    <span className="sched-day-empty">—</span>
+                  ) : (
+                    list.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={`sched-day-session${s.status === 'CANCELLED' ? ' is-cancelled' : ''}`}
+                        style={{ ['--c' as string]: SESSION_COLOR[s.status] }}
+                        data-testid="sched-day-session"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setModal({ session: s });
+                        }}
+                      >
+                        <span className="sched-day-time">{tjFormatTime(s.startsAt)}—{tjFormatTime(s.endsAt)}</span>
+                        <span className="sched-day-group">{s.group?.name || '—'}{s.topic ? ` · ${s.topic}` : ''}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="card sched-grid-card" style={{ padding: 14, marginBottom: 16, overflowX: 'auto' }}>
           <div style={{ minWidth: 640 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginBottom: 6 }}>
               {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => (
@@ -256,8 +310,9 @@ export default function Schedule() {
             </div>
           </div>
         </div>
+        </>
       ) : (
-        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div className="card sched-agenda-card" data-testid="sched-agenda" style={{ padding: 20, marginBottom: 16 }}>
           {sessions.length === 0 ? (
             <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('classes.empty')}</div>
           ) : (
@@ -271,7 +326,7 @@ export default function Schedule() {
       )}
 
       {view === 'month' && (
-        <div className="card" style={{ padding: 20 }}>
+        <div className="card sched-day-card" style={{ padding: 20 }}>
           <h3 style={{ marginBottom: 12 }}>
             {t('classes.dayOf')} {selectedDay} ({daySessions.length})
           </h3>

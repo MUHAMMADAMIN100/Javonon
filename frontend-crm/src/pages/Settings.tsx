@@ -634,6 +634,7 @@ function RosterNumberInput({
 }) {
   return (
     <div
+      className="roster-num"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -783,14 +784,16 @@ function SalaryRosterSection() {
               };
               const dirty = Object.keys(patch).length > 0;
               return (
-                <tr key={u.id}>
-                  <td>
+                // На телефоне строка — карточка (index.css, .sal-row): подпись слева, поле
+                // справа, все поля одной ширины, «Сохранить» во всю ширину внизу.
+                <tr key={u.id} className="sal-row" data-testid={`sal-row-${u.id}`}>
+                  <td className="sal-name">
                     <div style={{ fontWeight: 600 }}>{u.fullName}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>
                       {u.customRole?.name || u.role}
                     </div>
                   </td>
-                  <td data-label={t('settings.salary.field.base')}>
+                  <td data-label={t('settings.salary.field.base')} className="sal-base">
                     <RosterNumberInput
                       value={val('baseSalary', u.baseSalary) as any}
                       onChange={(v) => setField(u.id, 'baseSalary', v)}
@@ -800,7 +803,7 @@ function SalaryRosterSection() {
                       width={140}
                     />
                   </td>
-                  <td data-label={t('settings.salary.field.hourly')} className="td-stack">
+                  <td data-label={t('settings.salary.field.hourly')} className="sal-hourly">
                     {(() => {
                       // Превью почасовой: считаем на лету от draft baseSalary
                       // (если редактируется) или от сохранённого. monthHours
@@ -814,8 +817,8 @@ function SalaryRosterSection() {
                         ? Math.round((draftBase / monthHours) * 100) / 100
                         : 0;
                       return (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <div style={{
+                        <div className="sal-hourly-cell" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <div className="sal-hourly-chip" data-testid="sal-hourly" style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 6,
@@ -855,7 +858,7 @@ function SalaryRosterSection() {
                       );
                     })()}
                   </td>
-                  <td data-label={t('settings.salary.field.bonusPercent')}>
+                  <td data-label={t('settings.salary.field.bonusPercent')} className="sal-bonus">
                     <RosterNumberInput
                       value={val('bonusPercent', u.bonusPercent) as any}
                       onChange={(v) => setField(u.id, 'bonusPercent', v)}
@@ -866,9 +869,10 @@ function SalaryRosterSection() {
                       width={100}
                     />
                   </td>
-                  <td>
+                  <td className="sal-actions">
                     <button
-                      className="btn btn-sm btn-primary"
+                      className="btn btn-sm btn-primary sal-save"
+                      data-testid="sal-save"
                       onClick={() => save(u)}
                       disabled={!dirty}
                     >

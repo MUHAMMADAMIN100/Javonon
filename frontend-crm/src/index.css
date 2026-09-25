@@ -6825,3 +6825,87 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .att-filters .att-f-btn:has(+ .att-f-btn),
   .att-filters .att-f-btn + .att-f-btn { grid-column: auto; }
 }
+
+/* ===================== Расписание (pages/Schedule) на телефоне =====================
+   Шапка — сетка 40px | 1fr | 1fr | 40px: стрелки по краям, месяц по центру, фильтры и
+   переключатель «Месяц | Списком» во всю ширину, «Сегодня» и «Новое занятие» пополам.
+   Месяц — не сетка 7 колонок (клетки были узкими и высокими, занятия не читались), а
+   список всех дней: плашка «число + день недели» и занятия дня справа. */
+.sched-days-card { display: none; }
+@media (max-width: 600px) {
+  /* !important у display: у контейнеров инлайновый display: flex (для компьютера). Все
+     строки сетки заданы явно — иначе авторасстановка ставила переключатель под кнопки. */
+  .sched-head { display: grid !important; grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 40px; gap: 10px !important; align-items: center; }
+  .sched-head .sched-nav { display: contents !important; }
+  .sched-head .sched-spacer { display: none !important; }
+  .sched-head .sched-nav-btn { width: 40px; height: 40px; padding: 0 !important; justify-content: center; border-radius: 10px !important; }
+  .sched-head .sched-prev { grid-column: 1; grid-row: 1; }
+  .sched-head .sched-next { grid-column: 4; grid-row: 1; }
+  .sched-head .sched-title { grid-column: 2 / 4; grid-row: 1; margin: 0 !important; text-align: center; font-size: 16px; line-height: 1.2; }
+  .sched-head .sched-filter { grid-column: 1 / -1; width: 100% !important; }
+  .sched-head [data-testid=sched-group] { grid-row: 2; }
+  .sched-head [data-testid=sched-teacher] { grid-row: 3; }
+  .sched-head .sched-views {
+    grid-column: 1 / -1; grid-row: 4; display: flex !important; gap: 2px; padding: 4px;
+    background: #fff; border: 1px solid var(--border); border-radius: 999px;
+  }
+  .sched-head .sched-views .btn {
+    flex: 1 1 0; min-width: 0; justify-content: center; white-space: nowrap;
+    padding: 8px !important; border: 0; border-radius: 999px !important; box-shadow: none;
+    background: transparent; color: var(--text-soft);
+  }
+  .sched-head .sched-views .btn.btn-primary,
+  .sched-head .sched-views .btn.btn-primary:hover { background: var(--text); }
+  .sched-head .sched-views .btn:hover { transform: none; box-shadow: none; }
+  .sched-head .sched-today { grid-column: 1 / 3; grid-row: 5; }
+  .sched-head .sched-new { grid-column: 3 / 5; grid-row: 5; }
+  .sched-head:not(:has(.sched-new)) .sched-today { grid-column: 1 / -1; }
+  /* без фильтра преподавателей (менеджер) — всё на строку выше */
+  .sched-head:not(:has([data-testid=sched-teacher])) .sched-views { grid-row: 3; }
+  .sched-head:not(:has([data-testid=sched-teacher])) .sched-today,
+  .sched-head:not(:has([data-testid=sched-teacher])) .sched-new { grid-row: 4; }
+  .sched-head .sched-today, .sched-head .sched-new { min-height: 40px; justify-content: center; width: 100%; margin: 0 !important; }
+
+  .sched-grid-card, .sched-day-card { display: none !important; }
+  .sched-days-card { display: block; padding: 6px 14px !important; margin-bottom: 16px; }
+  .sched-day { display: flex; align-items: flex-start; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
+  .sched-day:last-child { border-bottom: 0; }
+  .sched-day-chip {
+    flex: 0 0 48px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 48px; border-radius: 12px; background: var(--bg-soft); color: var(--text-soft); line-height: 1.1;
+  }
+  .sched-day-chip b { font-size: 17px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .sched-day-chip span { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; }
+  .sched-day.is-today .sched-day-chip { background: var(--primary); color: rgba(255, 255, 255, .8); }
+  .sched-day.is-today .sched-day-chip b { color: #fff; }
+  .sched-day.is-selected:not(.is-today) .sched-day-chip { box-shadow: inset 0 0 0 1.5px var(--primary); }
+  .sched-day-body { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding-top: 2px; }
+  .sched-day-empty { color: var(--text-light); font-size: 14px; line-height: 44px; }
+  .sched-day-session {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left;
+    padding: 6px 10px; border: 0; border-left: 3px solid var(--c); border-radius: 8px; cursor: pointer; font-family: inherit;
+    background: color-mix(in srgb, var(--c) 13%, #fff); color: var(--text);
+  }
+  .sched-day-session.is-cancelled .sched-day-group, .sched-day-session.is-cancelled .sched-day-time { text-decoration: line-through; color: var(--text-soft); }
+  .sched-day-time { font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
+  .sched-day-group { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+}
+
+/* ===================== Оклады сотрудников (Настройки → Зарплата) на телефоне =====================
+   Строка — карточка: имя и роль сверху; строки «подпись — поле», все поля и плашка
+   почасовой одной ширины у правого края, формула под плашкой; «Сохранить» во всю
+   ширину внизу. Раньше поля были разной ширины, а кнопка висела слева. */
+@media (max-width: 900px) {
+  /* Поле 120 px, подписи — всё остальное место и переносятся на две строки: на 320 px
+     «Почасовая (расчёт)» и поле в 150 px в одну строку не помещались. */
+  .table tr.sal-row > td[data-label]::before { max-width: calc(100% - 132px); }
+  .table tr.sal-row > td.sal-base .roster-num,
+  .table tr.sal-row > td.sal-bonus .roster-num,
+  .table tr.sal-row > td.sal-hourly .sal-hourly-chip { width: 120px !important; min-width: 120px !important; box-sizing: border-box; }
+  /* inline-flex — как поля: блочный flex-контейнер рядом с плавающей подписью сжимался
+     и плашка наезжала на текст. */
+  .table tr.sal-row > td.sal-hourly .sal-hourly-cell { display: inline-flex !important; flex-direction: column; align-items: flex-end; width: 120px; vertical-align: top; }
+  .table tr.sal-row > td.sal-hourly { display: block; }
+  .table tr.sal-row > td.sal-actions { display: block; padding-top: 10px; }
+  .table tr.sal-row .sal-save { width: 100%; min-height: 40px; justify-content: center; }
+}
