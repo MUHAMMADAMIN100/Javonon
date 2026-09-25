@@ -1105,7 +1105,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 
 .docs-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 14px;
 }
 .doc-slot {
@@ -1201,7 +1201,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 /* Programs grid (CRM) */
 .programs-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 14px;
 }
 .program-card {
@@ -1481,6 +1481,11 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
     box-shadow: 0 1px 2px rgba(0,0,0,0.03);
   }
   .table tr:hover { background: white; }
+  /* Полоска наведения у первой ячейки — на телефоне после нажатия она
+     остаётся висеть слева от заголовка карточки (у тач-экрана :hover не
+     снимается). В карточке ей не место — везде одинаково. */
+  .table tbody tr:hover td:first-child,
+  .table tbody tr:focus-visible td:first-child { box-shadow: none; }
   .table td {
     border: none !important; padding: 4px 0;
     display: flex; justify-content: space-between; align-items: center;
@@ -2483,7 +2488,7 @@ select.input-error {
 
 .docs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
   gap: 12px;
 }
 .doc-slot {
@@ -3681,16 +3686,12 @@ textarea:focus {
     width: 100% !important;
   }
 
-  /* КАЖДЫЙ потомок .content — margin: auto + явная width.
-     Рамка 12px (была 18px — слишком далеко от рамок телефона). */
-  html body .content > *,
-  html body .content .crm-section-head,
-  html body .content .bento,
-  html body .content .card,
-  html body .content .filters,
-  html body .content .stu-card,
-  html body .content .ep-card,
-  html body .content .af-card {
+  /* Рамка 12px — ОДИН раз, на обёртке страницы (единственный потомок
+     .content, components/Layout). Раньше те же 12px получал ещё и каждый
+     блок внутри (.card, .filters …), и до карточки выходило 24px (на
+     320–360 px — 20): содержимое стояло далеко от края телефона, а
+     фильтры внутри карточки — ещё дальше. */
+  html body .content > * {
     margin-left: auto !important;
     margin-right: auto !important;
     width: calc(100% - 24px) !important;
@@ -3698,7 +3699,15 @@ textarea:focus {
     min-width: 0 !important;
     box-sizing: border-box !important;
   }
-  /* Bento-card внутри bento — без своих margin'ов, full-width в bento */
+  /* Блоки внутри обёртки — во всю её ширину, без своей рамки: инлайн-стили
+     (max-width: 480, margin: 0 auto у форм) на телефоне не нужны. */
+  html body .content > * .crm-section-head,
+  html body .content > * .bento,
+  html body .content > * .card,
+  html body .content > * .filters,
+  html body .content > * .stu-card,
+  html body .content > * .ep-card,
+  html body .content > * .af-card,
   html body .content .bento .bento-card,
   html body .content .bento > * {
     margin-left: 0 !important;
@@ -3706,21 +3715,7 @@ textarea:focus {
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
-  }
-}
-
-@media (max-width: 360px) {
-  /* На совсем узких — рамка 10px */
-  html body .app-layout .main .topbar {
-    padding-left: 10px !important;
-    padding-right: 10px !important;
-  }
-  html body .content > *,
-  html body .content .crm-section-head,
-  html body .content .bento,
-  html body .content .card {
-    width: calc(100% - 20px) !important;
-    max-width: calc(100% - 20px) !important;
+    box-sizing: border-box !important;
   }
 }
 
@@ -5478,7 +5473,8 @@ input[type="checkbox"].crm-checkbox:indeterminate {
    белого поля. */
 .analytics-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  /* min(…, 100%) — на 320 px колонка не шире экрана, карточки не вылезают за край. */
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -5492,8 +5488,38 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   flex-wrap: nowrap;
 }
 .payments-table td { vertical-align: middle; }
+/* Подписи «Редактировать» / «Удалить» — только в карточке на телефоне;
+   в таблице на компьютере кнопки остаются значками. */
+.pay-btn-label { display: none; }
+/* Карточка платежа на телефоне (строка таблицы → карточка): сверху сумма и
+   статус в одной строке, как в карточках заявок и сделок; ниже строки
+   «подпись — значение»; внизу кнопки сеткой 2×2 одного размера с подписями
+   (у одобренных и отклонённых — один ряд «Редактировать · Удалить»). Раньше
+   статус стоял строкой среди полей, а кнопки шли вразнобой: две с текстом,
+   две квадратные, последняя падала на новую строку. */
 @media (max-width: 900px) {
-  .payment-actions { flex-wrap: wrap; justify-content: flex-start; width: 100%; }
+  .payments-table tr.pay-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
+  .payments-table tr.pay-row > td { flex: 0 0 100%; min-width: 0; }
+  /* width: auto — общее правило карточек ставит всем td width: 100%, и
+     статус уезжал бы на свою строку под сумму. */
+  .payments-table tr.pay-row > td.pay-amount {
+    order: 1; flex: 1 1 0; width: auto; border-bottom: none !important; margin-bottom: 0; padding-bottom: 4px;
+    box-shadow: none !important;
+  }
+  .payments-table tr.pay-row > td.pay-status { order: 2; flex: 0 0 auto; width: auto; margin-left: auto; padding: 4px 0; }
+  .payments-table tr.pay-row > td.pay-status::before { display: none; }
+  /* Линия под суммой и статусом — как под заголовком любой карточки. */
+  .payments-table tr.pay-row::after {
+    content: ''; order: 3; flex-basis: 100%; height: 1px; margin: 4px 0 8px; background: var(--border);
+  }
+  .payments-table tr.pay-row > td[data-label]:not(.pay-status) { order: 4; }
+  .payments-table tr.pay-row > td.pay-actions { order: 9; padding-top: 10px; }
+  .payment-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+  .payment-actions .btn {
+    justify-content: center; min-height: 40px; padding: 8px 10px; font-size: 13px; white-space: nowrap;
+  }
+  .payment-actions .btn .material-symbols-rounded { font-size: 16px !important; }
+  .payment-actions .pay-btn-label { display: inline; }
 }
 
 /* ===== Карточка сотрудника / «Мой профиль» (pages/UserDetail) — плотнее ===== */
@@ -6629,15 +6655,17 @@ a.profile-hero-contact:hover { color: var(--primary); }
 @media (max-width: 600px) {
   /* Вкладки — одним переключателем во всю ширину, «Новая сделка» — строкой ниже.
      У менеджера вкладка одна: переключать нечего — остаётся только кнопка. */
-  .deals-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  /* nowrap: у переносимой колонки ширина строки = самому широкому ребёнку, и
+     на 320 px оба блока вылезали за край на ширину вкладок. */
+  .deals-head { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 10px; }
   .deals-tabs {
-    flex-wrap: nowrap; gap: 2px; padding: 4px;
+    flex-wrap: nowrap; min-width: 0; gap: 2px; padding: 4px;
     background: #fff; border: 1px solid var(--border); border-radius: 999px;
   }
   .deals-tabs.is-single { display: none; }
   .deals-tabs .btn {
     flex: 1 1 auto; min-width: 0; justify-content: center; white-space: nowrap;
-    padding: 8px 10px; border: 0; border-radius: 999px; box-shadow: none;
+    padding: 8px; border: 0; border-radius: 999px; box-shadow: none;
     background: transparent; color: var(--text-soft);
   }
   .deals-tabs .btn.btn-primary,

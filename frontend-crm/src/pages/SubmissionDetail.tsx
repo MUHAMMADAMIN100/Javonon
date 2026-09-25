@@ -502,8 +502,8 @@ function PaymentRow({
   const { t } = useT();
   const muted = { color: 'var(--text-light)' };
   return (
-    <tr data-testid={`payment-row-${p.id}`}>
-      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+    <tr data-testid={`payment-row-${p.id}`} className="pay-row">
+      <td className="pay-amount" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, whiteSpace: 'nowrap' }}>
         {p.amount.toLocaleString('ru-RU')} {currency}
       </td>
       <td data-label={t('deal.col.paidAt')} style={{ whiteSpace: 'nowrap' }}>{new Date(p.paidAt).toLocaleDateString('ru-RU')}</td>
@@ -549,7 +549,7 @@ function PaymentRow({
         {p.notes && <div style={{ color: 'var(--text-soft)' }}>{p.notes}</div>}
         {!p.rejectReason && !p.notes && <span style={muted}>—</span>}
       </td>
-      <td data-label={t('common.status')}>
+      <td data-label={t('common.status')} className="pay-status">
         <span
           style={{
             padding: '3px 10px',
@@ -565,9 +565,10 @@ function PaymentRow({
           {PAYMENT_STATUS_LABEL[p.status]}
         </span>
       </td>
-      <td>
+      <td className="pay-actions">
         {/* Все действия — в одну строку в конце: одобрить/отклонить
-            (руководство, пока платёж на рассмотрении), править и удалить. */}
+            (руководство, пока платёж на рассмотрении), править и удалить.
+            На телефоне (строка — карточка) — сеткой 2×2 с подписями. */}
         {(canReview || canManage || canDelete) && (
           <div className="payment-actions">
             {canReview && (
@@ -590,6 +591,7 @@ function PaymentRow({
                 data-testid="payment-edit"
               >
                 <Icon name="edit" size={14} />
+                <span className="pay-btn-label">{t('common.edit')}</span>
               </button>
             )}
             {canDelete && (
@@ -602,6 +604,7 @@ function PaymentRow({
                 data-testid="payment-delete"
               >
                 <Icon name="delete" size={14} />
+                <span className="pay-btn-label">{t('common.delete')}</span>
               </button>
             )}
           </div>

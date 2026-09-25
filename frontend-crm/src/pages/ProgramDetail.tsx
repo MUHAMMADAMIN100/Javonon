@@ -123,7 +123,7 @@ export default function ProgramDetail() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 16 }}>
         <div className="card" style={{ padding: 20 }}>
           <h3 style={{ marginBottom: 12 }}>{t('programs.section.main')}</h3>
           <Row label={t('app.field.direction')} value={p.direction ? DIRECTION_LABEL[p.direction] : '—'} />

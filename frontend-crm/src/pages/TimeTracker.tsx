@@ -284,12 +284,14 @@ export default function TimeTracker() {
             </div>
           </div>
 
-          {/* Сегодняшний таймстемпы */}
+          {/* Сегодняшний таймстемпы. min-width: 0 — с 280 на 320 px сетка
+              вылезала за карточку и за край экрана. */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
             gap: 20,
-            minWidth: 280,
+            minWidth: 0,
+            flex: '1 1 200px',
           }}>
             <TimeStamp label={t('workday.field.arrival')} value={fmtTime(today?.clockIn || null)} />
             <TimeStamp label={t('workday.field.lunchOut')} value={fmtTime(today?.lunchOut || null)} />

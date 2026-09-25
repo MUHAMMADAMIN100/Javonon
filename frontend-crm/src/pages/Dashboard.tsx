@@ -383,7 +383,7 @@ export default function Dashboard() {
           </div>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))',
             gap: 14,
             marginBottom: 32,
             ...staleStyle,
@@ -450,7 +450,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, ...staleStyle }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 16, ...staleStyle }}>
         {/* Страны идут первыми: это единственный вопрос о цели обучения,
             на который клиент реально отвечает в форме лендинга. Раньше
             первым стоял срез «по направлениям», где 100% лидов с сайта
