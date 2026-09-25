@@ -6764,3 +6764,64 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .dist-item { font-size: 11px; }
   .dist-net-sum { font-size: 15px; }
 }
+
+/* ===================== Сотрудники (pages/Users): роль в карточке =====================
+   Плашки роли — справа, напротив подписи «Роль», как остальные значения карточки
+   (раньше ячейка была td-stack: подпись сверху, плашка под ней). */
+.users-role-cell { display: flex; gap: 4px; flex-wrap: wrap; }
+@media (max-width: 900px) {
+  .users-role-cell { justify-content: flex-end; }
+}
+
+/* ===================== Задачи (pages/Tasks): карточка на телефоне =====================
+   Как остальные карточки: заголовок слева и плашка статуса (она же список) справа
+   в одной строке, под ними описание и линия; ниже строки «подпись — значение»;
+   у основателя внизу «Удалить» во всю ширину. Раньше статус стоял строкой среди
+   полей, а корзина висела отдельно под ним. */
+.task-delete-label { display: none; }
+@media (max-width: 900px) {
+  .tasks-table tr.task-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
+  .tasks-table tr.task-row > td { flex: 0 0 100%; min-width: 0; }
+  /* Ячейка заголовка «растворяется»: заголовок и описание — отдельные элементы строки. */
+  .tasks-table tr.task-row > td.task-cell-main { display: contents; }
+  /* Заголовок не ниже плашки (38 px) и центрирован по ней: у короткого заголовка
+     плашка иначе оказывалась выше текста, у длинного — вровень с первой строкой. */
+  .tasks-table tr.task-row .task-row-title {
+    order: 1; flex: 1 1 0; min-width: 0; min-height: 38px; display: flex; align-items: center;
+    font-size: 15px; line-height: 1.3;
+  }
+  .tasks-table tr.task-row > td.task-cell-status { order: 2; flex: 0 0 auto; width: auto; align-self: flex-start; padding: 0; }
+  .tasks-table tr.task-row > td.task-cell-status::before { display: none; }
+  .tasks-table tr.task-row .task-row-desc { order: 3; flex: 0 0 100%; margin-top: 4px; }
+  .tasks-table tr.task-row::after {
+    content: ''; order: 4; flex-basis: 100%; height: 1px; margin: 8px 0; background: var(--border);
+  }
+  .tasks-table tr.task-row > td[data-label]:not(.task-cell-status) { order: 5; }
+  .tasks-table tr.task-row > td.task-cell-actions { order: 9; width: 100%; padding-top: 10px; justify-content: stretch; }
+  .tasks-table tr.task-row .task-delete-btn {
+    width: 100%; height: 40px; gap: 6px; border-radius: 10px;
+    border: 1px solid rgba(220, 38, 38, 0.35); background: #fff; color: var(--danger);
+    font-size: 13px; font-weight: 500; font-family: inherit;
+  }
+  .tasks-table tr.task-row .task-delete-label { display: inline; }
+}
+
+/* ===================== Посещаемость (pages/Attendance): фильтры на телефоне =====================
+   Сетка в две колонки: сотрудник во всю ширину, «С» и «По» пополам, ниже «Сегодня»
+   во всю ширину (со «Сбросить» — пополам), все поля и кнопки одной высоты. Раньше
+   даты и «Сегодня» делили строку на три неровные части. */
+@media (max-width: 600px) {
+  .att-filters { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px !important; align-items: end; }
+  .att-filters .att-f-employee { grid-column: 1 / -1; min-width: 0 !important; }
+  .att-filters .form-group { width: 100%; min-width: 0; }
+  .att-filters .form-group .crm-select,
+  .att-filters .form-group .crm-datepicker-wrapper,
+  .att-filters .form-group .crm-datepicker-trigger { width: 100%; }
+  /* Дата в одну строку: в половине экрана «25 сентября 2026» не влезает — календарь
+     сам покажет короткую «25.09.2026» (CrmDatePicker смотрит на nowrap). */
+  .att-filters .crm-datepicker-trigger > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .att-filters .att-f-btn { grid-column: 1 / -1; width: 100%; justify-content: center; }
+  /* Две кнопки («Сегодня» и «Сбросить») — пополам. */
+  .att-filters .att-f-btn:has(+ .att-f-btn),
+  .att-filters .att-f-btn + .att-f-btn { grid-column: auto; }
+}

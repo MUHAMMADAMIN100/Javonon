@@ -378,8 +378,10 @@ export default function Users() {
                     </td>
                   )}
                   <td data-label={t('userDetail.field.email')}>{u.email}</td>
-                  <td data-label={t('userDetail.field.role')} className="td-stack">
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {/* На телефоне роль стоит напротив подписи «Роль» (справа), как остальные
+                      значения карточки — раскладка плашек в .users-role-cell. */}
+                  <td data-label={t('userDetail.field.role')} className="users-role">
+                    <div className="users-role-cell">
                       {hasActiveCustom ? (
                         // Если есть активная кастомная роль — показываем
                         // только её, чтобы пользователь не путался с

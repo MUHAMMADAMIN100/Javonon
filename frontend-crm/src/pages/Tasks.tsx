@@ -528,7 +528,7 @@ export default function Tasks() {
                       <td data-label={t('task.created')}>{new Date(task.createdAt).toLocaleDateString('ru-RU')}</td>
                       {/* Выпадающий список рисуется порталом, но события React идут
                           по дереву — без stopPropagation выбор статуса открывал бы окно. */}
-                      <td data-label={t('common.status')} onClick={(e) => e.stopPropagation()}>
+                      <td data-label={t('common.status')} className="task-cell-status" onClick={(e) => e.stopPropagation()}>
                         <TaskStatusSelect task={task} canChange={canChangeTask(task)} onChange={(next) => setStatus(task, next)} />
                       </td>
                       {canDelete && (
@@ -541,6 +541,8 @@ export default function Tasks() {
                             aria-label={t('common.delete')}
                           >
                             <Icon name="delete" size={18} />
+                            {/* Подпись видна только в карточке на телефоне (index.css). */}
+                            <span className="task-delete-label">{t('common.delete')}</span>
                           </button>
                         </td>
                       )}

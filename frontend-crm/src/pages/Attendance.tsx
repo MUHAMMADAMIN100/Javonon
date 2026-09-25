@@ -90,8 +90,10 @@ export default function Attendance() {
       </div>
 
       <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ padding: 18, marginBottom: 14 }}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div className="form-group" style={{ minWidth: 200, margin: 0 }}>
+        {/* На телефоне — сетка (index.css, .att-filters): сотрудник во всю ширину,
+            даты пополам, кнопки строкой ниже. */}
+        <div className="att-filters" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="form-group att-f-employee" style={{ minWidth: 200, margin: 0 }}>
             <label>{t('attendance.col.employee')}</label>
             <CrmSelect className="crm-select" value={userId} onChange={(e) => setUserId(e.target.value)}>
               <option value="">{t('common.all')}</option>
@@ -100,11 +102,11 @@ export default function Attendance() {
               ))}
             </CrmSelect>
           </div>
-          <div className="form-group" style={{ margin: 0 }}>
+          <div className="form-group att-f-date" style={{ margin: 0 }}>
             <label>{t('common.from')}</label>
             <CrmDatePicker className="crm-input" value={from} onChange={(v) => setFrom(v)} />
           </div>
-          <div className="form-group" style={{ margin: 0 }}>
+          <div className="form-group att-f-date" style={{ margin: 0 }}>
             <label>{t('common.to')}</label>
             <CrmDatePicker className="crm-input" value={to} onChange={(v) => setTo(v)} />
           </div>
@@ -117,7 +119,7 @@ export default function Attendance() {
             const isToday = from === today && to === today;
             return (
               <button
-                className={`btn ${isToday ? 'btn-primary' : 'btn-secondary'} filter-height-btn`}
+                className={`btn ${isToday ? 'btn-primary' : 'btn-secondary'} filter-height-btn att-f-btn`}
                 data-testid="attendance-today"
                 onClick={() => {
                   setFrom(today);
@@ -129,7 +131,7 @@ export default function Attendance() {
             );
           })()}
           {(userId || from || to) && (
-            <button className="btn btn-secondary filter-height-btn" onClick={() => { setUserId(''); setFrom(''); setTo(''); }}>
+            <button className="btn btn-secondary filter-height-btn att-f-btn" data-testid="attendance-reset" onClick={() => { setUserId(''); setFrom(''); setTo(''); }}>
               {t('filter.reset')}
             </button>
           )}
