@@ -6699,3 +6699,40 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .deals-filters > .crm-select { flex: 1 1 100% !important; }
   .deals-filters > .crm-datepicker-wrapper { flex: 1 1 calc(50% - 4px) !important; }
 }
+
+/* ===================== Партнёры (pages/Partners): действия в строке =====================
+   На компьютере — значки в одну строку справа, как было. На телефоне (строка таблицы →
+   карточка) — как карточка платежа: имя и статус в одной строке сверху, ниже строки
+   «подпись — значение», внизу кнопки сеткой в два столбца одного размера с подписями,
+   «Удалить» — во всю ширину. Раньше пять круглых значков шли вразнобой и переносились,
+   а подпись «Статус» упиралась в них. */
+.partner-actions { display: flex; gap: 4px; flex-wrap: nowrap; justify-content: flex-end; }
+.pt-btn-label { display: none; }
+@media (max-width: 900px) {
+  .table tr.partner-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
+  .table tr.partner-row > td { flex: 0 0 100%; min-width: 0; }
+  /* width: auto — общее правило карточек ставит всем td width: 100%. */
+  .table tr.partner-row > td.pt-name {
+    order: 1; flex: 1 1 0; width: auto; border-bottom: none !important; margin-bottom: 0; padding-bottom: 4px;
+    box-shadow: none !important;
+  }
+  .table tr.partner-row > td.pt-status { order: 2; flex: 0 0 auto; width: auto; margin-left: auto; padding: 4px 0; }
+  .table tr.partner-row > td.pt-status::before { display: none; }
+  .table tr.partner-row::after {
+    content: ''; order: 3; flex-basis: 100%; height: 1px; margin: 4px 0 8px; background: var(--border);
+  }
+  /* :not(.pt-name) — у имени тоже есть data-label, без исключения оно уезжало бы под линию. */
+  .table tr.partner-row > td[data-label]:not(.pt-name):not(.pt-status):not(.pt-actions) { order: 4; }
+  .table tr.partner-row > td.pt-actions { order: 9; padding-top: 10px; }
+  .table tr.partner-row > td.pt-actions::before { display: none; }
+  .partner-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+  /* Поля 6px и зазор 6px с !important: на ≤360 px общее правило .btn-sm ставит
+     padding 10px !important, и «Приостановить» на 320 px не влезало в полкарточки. */
+  .partner-actions .btn {
+    justify-content: center; gap: 6px; min-height: 40px; padding: 8px 6px !important; font-size: 13px; white-space: nowrap;
+  }
+  .partner-actions .btn .material-symbols-rounded { font-size: 15px !important; }
+  .partner-actions .pt-btn-tjs { font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  .partner-actions .pt-btn-label { display: inline; }
+  .partner-actions .pt-btn-delete { grid-column: 1 / -1; }
+}

@@ -395,10 +395,11 @@ function PartnersList({ search }: { search: SearchCtl }) {
                   tabIndex={0}
                   role="button"
                   style={{ cursor: 'pointer' }}
-                  className="row-clickable"
+                  className="row-clickable partner-row"
                   aria-label={`${p.fullName} — ${p.email}`}
+                  data-testid={`partner-row-${p.id}`}
                 >
-                  <td data-label={t('common.name')}>{p.fullName}</td>
+                  <td data-label={t('common.name')} className="pt-name">{p.fullName}</td>
                   <td data-label={t('partners.col.email')}>{p.email}</td>
                   <td data-label={t('partners.col.code')}><code>{p.referralCode}</code></td>
                   <td data-label={t('partners.col.commission')}>{fmtCommissionRate(p.commissionAmountCents)}</td>
@@ -407,47 +408,81 @@ function PartnersList({ search }: { search: SearchCtl }) {
                   </td>
                   <td data-label={t('partners.col.balance')}>{fmtMoneyCents(p.balanceCents)}</td>
                   <td data-label={t('partners.col.earned')}>{fmtMoneyCents(p.totalEarnedCents)}</td>
-                  <td data-label={t('common.status')}>
-                    <span style={{
+                  <td data-label={t('common.status')} className="pt-status">
+                    <span data-testid="partner-status" style={{
                       fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
                       background: p.status === 'ACTIVE' ? '#dcfce7' : p.status === 'SUSPENDED' ? '#fef3c7' : '#fee2e2',
                       color: p.status === 'ACTIVE' ? '#15803d' : p.status === 'SUSPENDED' ? '#b45309' : '#b91c1c',
                     }}>{t(`partners.status.${p.status}`)}</span>
                   </td>
-                  <td data-label={t('common.actions')} onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {/* На компьютере — значки в одну строку; на телефоне (строка —
+                      карточка) — сетка 2×2 с подписями и «Удалить» во всю ширину
+                      (index.css, .partner-actions). Подписи .pt-btn-label видны
+                      только в карточке. */}
+                  <td data-label={t('common.actions')} className="pt-actions" onClick={(e) => e.stopPropagation()}>
+                    <div className="partner-actions">
                       <button
                         className="btn btn-sm btn-secondary"
                         onClick={stop(() => copyRow(p))}
                         title={t('partners.share.copy')}
+                        aria-label={t('partners.share.copy')}
+                        data-testid="partner-copy"
                       >
                         <Icon name="content_copy" size={14} />
+                        <span className="pt-btn-label">{t('partners.share.copy')}</span>
                       </button>
                       <button
                         className="btn btn-sm btn-secondary"
                         onClick={stop(() => openShareFor(p))}
                         title={t('partners.share.title')}
+                        aria-label={t('partners.share.title')}
+                        data-testid="partner-share"
                       >
                         <Icon name="link" size={14} />
+                        <span className="pt-btn-label">{t('partners.act.link')}</span>
                       </button>
                       <button
                         className="btn btn-sm btn-secondary"
                         onClick={stop(() => updateAmount(p.id, p.commissionAmountCents))}
                         title={t('partners.col.commission.prompt')}
+                        aria-label={t('partners.col.commission.prompt')}
+                        data-testid="partner-commission"
                       >
-                        TJS
+                        <span className="pt-btn-tjs">TJS</span>
+                        <span className="pt-btn-label">{t('partners.act.commission')}</span>
                       </button>
                       {p.status === 'ACTIVE' ? (
-                        <button className="btn btn-sm btn-secondary" onClick={stop(() => updateStatus(p.id, 'SUSPENDED'))}>⏸</button>
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={stop(() => updateStatus(p.id, 'SUSPENDED'))}
+                          title={t('partners.act.suspend')}
+                          aria-label={t('partners.act.suspend')}
+                          data-testid="partner-toggle"
+                        >
+                          <Icon name="pause" size={14} />
+                          <span className="pt-btn-label">{t('partners.act.suspend')}</span>
+                        </button>
                       ) : (
-                        <button className="btn btn-sm btn-secondary" onClick={stop(() => updateStatus(p.id, 'ACTIVE'))}>▶</button>
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={stop(() => updateStatus(p.id, 'ACTIVE'))}
+                          title={t('partners.act.resume')}
+                          aria-label={t('partners.act.resume')}
+                          data-testid="partner-toggle"
+                        >
+                          <Icon name="play_arrow" size={14} />
+                          <span className="pt-btn-label">{t('partners.act.resume')}</span>
+                        </button>
                       )}
                       <button
-                        className="btn btn-sm btn-danger"
+                        className="btn btn-sm btn-danger pt-btn-delete"
                         onClick={stop(() => removePartner(p))}
                         title={t('common.delete')}
+                        aria-label={t('common.delete')}
+                        data-testid="partner-delete"
                       >
                         <Icon name="delete" size={14} />
+                        <span className="pt-btn-label">{t('common.delete')}</span>
                       </button>
                     </div>
                   </td>
