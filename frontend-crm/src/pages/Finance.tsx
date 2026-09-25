@@ -1883,19 +1883,15 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
 
         return (
           <div key={b.id} style={{ marginBottom: 14 }}>
+            {/* Раскладка строки — в CSS (.dist-row-*): сумма справа не рвётся, переносится подпись. */}
             <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-                marginBottom: 4,
-                cursor: isFixed && b.items.length > 0 ? 'pointer' : 'default',
-              }}
+              className="dist-row-head"
+              style={{ cursor: isFixed && b.items.length > 0 ? 'pointer' : 'default' }}
               onClick={() => {
                 if (isFixed && b.items.length > 0) toggleExpand(b.id);
               }}
             >
-              <span style={{ fontSize: 13 }}>
+              <span className="dist-row-label">
                 <b style={{ color }}>{headline}</b>
                 <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11 }}>
                   · {kindLabel}
@@ -1906,7 +1902,7 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
                   </span>
                 )}
               </span>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>
+              <span className="dist-row-sum" data-testid="dist-sum">
                 {b.allocated.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
               </span>
             </div>
@@ -1920,18 +1916,9 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
                 display: 'flex', flexDirection: 'column', gap: 2,
               }}>
                 {b.items.map((it) => (
-                  <div
-                    key={it.id}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      fontSize: 12,
-                      color: 'var(--text-soft)',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                  >
-                    <span>{it.name}{it.user ? ` · ${it.user.fullName}` : ''}</span>
-                    <span>{it.amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</span>
+                  <div key={it.id} className="dist-item">
+                    <span className="dist-item-name">{it.name}{it.user ? ` · ${it.user.fullName}` : ''}</span>
+                    <span className="dist-item-sum" data-testid="dist-sum">{it.amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</span>
                   </div>
                 ))}
               </div>
@@ -1941,26 +1928,14 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
       })}
 
       {/* Net after distribution */}
-      <div
-        style={{
-          marginTop: 16,
-          paddingTop: 12,
-          borderTop: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'baseline',
-        }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 500 }}>
+      <div className="dist-net">
+        <span className="dist-net-label">
           {t('finance.distribution.netAfter')}
         </span>
         <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 16,
-            fontWeight: 700,
-            color: breakdown.netAfterDistribution >= 0 ? '#15803d' : '#b91c1c',
-          }}
+          className="dist-net-sum"
+          data-testid="dist-net-sum"
+          style={{ color: breakdown.netAfterDistribution >= 0 ? '#15803d' : '#b91c1c' }}
         >
           {breakdown.netAfterDistribution.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} {breakdown.currency}
         </span>

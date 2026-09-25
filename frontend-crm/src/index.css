@@ -3766,6 +3766,9 @@ textarea:focus {
   /* Salary "Зафиксировать" — кнопка с input в одной строке.
      Мобиле: оба full-width, в столбик. */
   .salary-confirm-row { flex-direction: column !important; align-items: stretch !important; }
+  /* flex-basis у поля комментария (flex: 1 1 200px) в колонке становится
+     ВЫСОТОЙ — поле растягивалось до 200 px. В столбике размер по содержимому. */
+  .salary-confirm-row > * { flex: 0 0 auto !important; }
   .salary-confirm-row input { width: 100% !important; min-width: 0 !important; }
   .salary-confirm-row .btn {
     width: 100% !important;
@@ -5871,7 +5874,13 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 
 /* Поле ввода чата не уходит под круглую кнопку звонков (fixed, 56px, 20px от угла) */
 .chat-composer { padding-right: 80px !important; }
-@media (max-width: 720px) { .chat-composer { padding-right: 88px !important; } }
+/* Телефон: в открытом диалоге кнопку звонка не показываем — запас под неё
+   (88px) съедал полполя ввода, на 320 px полю оставалось 112 px. В списке
+   чатов и на остальных страницах кнопка на месте. */
+@media (max-width: 720px) {
+  .chat-composer { padding-right: 20px !important; }
+  .app-layout:has(.chat-card.show-thread) .dialpad-fab { display: none !important; }
+}
 
 /* ===================== Чат: как в Telegram (участники, выбор, поиск, правка) ===================== */
 .chat-icon-btn {
@@ -6735,4 +6744,23 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .partner-actions .pt-btn-tjs { font-size: 11px; font-weight: 700; letter-spacing: .04em; }
   .partner-actions .pt-btn-label { display: inline; }
   .partner-actions .pt-btn-delete { grid-column: 1 / -1; }
+}
+
+/* ===================== «Финансы»: схема распределения (pages/Finance, DistributionCard) =====================
+   Сумма справа никогда не рвётся и не сжимается: переносится подпись слева
+   («Процентный фонд»), а не цифры. На телефоне суммы 13 px (итог 15 px). Раньше
+   на 320 px «23 095,4» и «−28 100 TJS» уходили на две строки. */
+.dist-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.dist-row-label { min-width: 0; font-size: 13px; }
+.dist-row-sum { flex-shrink: 0; white-space: nowrap; font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+.dist-item { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text-soft); font-family: var(--font-mono); }
+.dist-item-name { min-width: 0; }
+.dist-item-sum { flex-shrink: 0; white-space: nowrap; }
+.dist-net { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.dist-net-label { min-width: 0; font-size: 13px; font-weight: 500; }
+.dist-net-sum { flex-shrink: 0; white-space: nowrap; font-family: var(--font-mono); font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) {
+  .dist-row-sum { font-size: 13px; }
+  .dist-item { font-size: 11px; }
+  .dist-net-sum { font-size: 15px; }
 }
