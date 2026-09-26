@@ -58,7 +58,7 @@ export class CallsService {
       },
       include: {
         student: { select: { id: true, fullName: true } },
-        user: { select: { id: true, fullName: true } },
+        user: { select: { id: true, fullName: true, isActive: true } },
       },
     });
   }
@@ -81,7 +81,7 @@ export class CallsService {
       take: Math.min(opts.take || 100, 500),
       include: {
         student: { select: { id: true, fullName: true } },
-        user: { select: { id: true, fullName: true } },
+        user: { select: { id: true, fullName: true, isActive: true } },
       },
     });
   }
@@ -112,11 +112,15 @@ export class CallsService {
     const userIds = grouped.map((g) => g.userId);
     const users = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, fullName: true },
+      select: { id: true, fullName: true, isActive: true },
     });
-    const userMap = new Map(users.map((u) => [u.id, u]));
+    const userMap = new Map(users.map((u) => [u.id, { id: u.id, fullName: u.fullName }]));
+    // Статистика «по сотрудникам» — только по действующим: уволенных в
+    // рейтингах нет. Сами звонки в журнале остаются.
+    const dismissed = new Set(users.filter((u) => !u.isActive).map((u) => u.id));
 
     return grouped
+      .filter((g) => !dismissed.has(g.userId))
       .map((g) => ({
         user: userMap.get(g.userId) || { id: g.userId, fullName: '—' },
         totalCalls: g._count,

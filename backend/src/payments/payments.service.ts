@@ -68,6 +68,7 @@ export class PaymentsService {
     // юзер с ACCOUNTANT в roles[] но другой primary тоже попадает.
     const accountants = await this.prisma.user.findMany({
       where: {
+        isActive: true,
         OR: [
           { role: { in: ['ADMIN', 'ACCOUNTANT'] } },
           { roles: { hasSome: ['ADMIN', 'ACCOUNTANT'] } },
@@ -287,7 +288,7 @@ export class PaymentsService {
       orderBy: { createdAt: 'desc' },
       include: {
         student: { select: { id: true, fullName: true, email: true, phones: true, managerId: true } },
-        confirmedBy: { select: { id: true, fullName: true } },
+        confirmedBy: { select: { id: true, fullName: true, isActive: true } },
       },
     });
   }

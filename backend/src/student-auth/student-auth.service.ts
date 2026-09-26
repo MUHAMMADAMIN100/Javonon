@@ -12,8 +12,8 @@ function generatePassword(length = 8): string {
 
 const STUDENT_INCLUDE = {
   documents: true,
-  manager: { select: { id: true, fullName: true, email: true } },
-  chinaManager: { select: { id: true, fullName: true, email: true } },
+  manager: { select: { id: true, fullName: true, isActive: true, email: true } },
+  chinaManager: { select: { id: true, fullName: true, isActive: true, email: true } },
   // orderBy обязателен: кабинет студента показывает марҳилаи қабул и
   // поздравление по applications[0] (EnrollmentProgress, StudentCabinet).
   // Без сортировки Postgres волен вернуть строки в любом порядке, и студент

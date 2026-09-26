@@ -24,12 +24,12 @@ export class ExcusesService {
     const [arrival, lunch] = await Promise.all([
       this.prisma.timeEntry.findMany({
         where: { lateExcuseStatus: 'PENDING' as any },
-        include: { user: { select: { id: true, fullName: true, role: true, email: true } } },
+        include: { user: { select: { id: true, fullName: true, isActive: true, role: true, email: true } } },
         orderBy: { lateExcuseAt: 'desc' },
       }),
       this.prisma.timeEntry.findMany({
         where: { lunchLateExcuseStatus: 'PENDING' as any },
-        include: { user: { select: { id: true, fullName: true, role: true, email: true } } },
+        include: { user: { select: { id: true, fullName: true, isActive: true, role: true, email: true } } },
         orderBy: { lunchLateExcuseAt: 'desc' },
       }),
     ]);
@@ -55,7 +55,7 @@ export class ExcusesService {
           ...(opts.status && { lateExcuseStatus: opts.status as any }),
           ...(opts.userId && { userId: opts.userId }),
         },
-        include: { user: { select: { id: true, fullName: true, role: true, email: true } } },
+        include: { user: { select: { id: true, fullName: true, isActive: true, role: true, email: true } } },
         orderBy: { lateExcuseAt: 'desc' },
         take,
       }),
@@ -65,7 +65,7 @@ export class ExcusesService {
           ...(opts.status && { lunchLateExcuseStatus: opts.status as any }),
           ...(opts.userId && { userId: opts.userId }),
         },
-        include: { user: { select: { id: true, fullName: true, role: true, email: true } } },
+        include: { user: { select: { id: true, fullName: true, isActive: true, role: true, email: true } } },
         orderBy: { lunchLateExcuseAt: 'desc' },
         take,
       }),

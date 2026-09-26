@@ -36,8 +36,8 @@ function generatePassword(length = 8): string {
 
 const STUDENT_INCLUDE = {
   documents: true,
-  manager: { select: { id: true, fullName: true, email: true } },
-  chinaManager: { select: { id: true, fullName: true, email: true } },
+  manager: { select: { id: true, fullName: true, isActive: true, email: true } },
+  chinaManager: { select: { id: true, fullName: true, isActive: true, email: true } },
   program: true,
   applications: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' as const } },
 } as const;
@@ -350,13 +350,13 @@ export class StudentsService {
           category: true,
           date: true,
           comment: true,
-          recordedBy: { select: { id: true, fullName: true } },
+          recordedBy: { select: { id: true, fullName: true, isActive: true } },
         },
       }),
       this.prisma.payment.findMany({
         where: { studentId },
         orderBy: { createdAt: 'desc' },
-        include: { confirmedBy: { select: { id: true, fullName: true } } },
+        include: { confirmedBy: { select: { id: true, fullName: true, isActive: true } } },
       }),
     ]);
     // «Оплачено» — в TJS; другие валюты отдельно, не складываем с сомони.
@@ -527,6 +527,7 @@ export class StudentsService {
       if (patch.managerId) {
         const exists = await this.prisma.user.findUnique({ where: { id: patch.managerId } });
         if (!exists) throw new NotFoundException('Локальный менеджер не найден');
+        if (exists.isActive === false) throw new BadRequestException('Менеджер уволен');
       }
       data.managerId = patch.managerId;
     }
@@ -534,6 +535,7 @@ export class StudentsService {
       if (patch.chinaManagerId) {
         const exists = await this.prisma.user.findUnique({ where: { id: patch.chinaManagerId } });
         if (!exists) throw new NotFoundException('Китайский менеджер не найден');
+        if (exists.isActive === false) throw new BadRequestException('Менеджер уволен');
       }
       data.chinaManagerId = patch.chinaManagerId;
     }

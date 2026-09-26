@@ -134,7 +134,6 @@ export interface UserSalarySettings {
   role: string;
   baseSalary: number | null;
   hourlyRate: number | null;
-  bonusPercent: number | null;
   customRole?: { id: string; name: string } | null;
   // Поля вычисляются бэком на основе графика сотрудника:
   //   monthHours    — рабочих часов в текущем месяце (за вычетом обеда)
@@ -150,7 +149,7 @@ export const listSalarySettings = () =>
 
 export const updateUserSalary = (
   userId: string,
-  patch: { baseSalary?: number; hourlyRate?: number; bonusPercent?: number },
+  patch: { baseSalary?: number; hourlyRate?: number },
 ) => api.patch<UserSalarySettings>(`/users/${userId}/salary`, patch).then((r) => r.data);
 
 // --- Helpers ---

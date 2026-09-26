@@ -24,6 +24,7 @@ import Loading from '../components/Loading';
 import { isElevated, isFounder } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useApplicationStatusLabel } from '../lib/labels';
+import DismissedMark from '../components/DismissedMark';
 import {
   dateParam,
   enumParam,
@@ -478,6 +479,7 @@ export default function Students() {
                             {s.manager ? (
                               <span className={s.manager.id === me?.id ? 'mgr-mine' : 'mgr-other'}>
                                 {s.manager.fullName}
+                                <DismissedMark person={s.manager} />
                               </span>
                             ) : (
                               <span className="mgr-none">—</span>

@@ -367,7 +367,7 @@ export class TimeTrackingService {
 
     const todayEntries = await this.prisma.timeEntry.findMany({
       where: { clockIn: { gte: today, lt: tomorrow } },
-      include: { user: { select: { id: true, fullName: true, role: true, email: true } } },
+      include: { user: { select: { id: true, fullName: true, isActive: true, role: true, email: true } } },
       orderBy: { clockIn: 'desc' },
     });
 

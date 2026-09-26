@@ -153,7 +153,8 @@ export class RevenueSchemeService implements OnModuleInit {
             items: {
               orderBy: [{ order: 'asc' }, { name: 'asc' }, { id: 'asc' }],
               include: {
-                user: { select: { id: true, fullName: true } },
+                // isActive — место уволенного CRM показывает как свободное.
+                user: { select: { id: true, fullName: true, isActive: true } },
               },
             },
           },
@@ -331,9 +332,10 @@ export class RevenueSchemeService implements OnModuleInit {
     if (dto.userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: dto.userId },
-        select: { id: true },
+        select: { id: true, isActive: true },
       });
       if (!user) throw new BadRequestException('Указанный сотрудник не найден');
+      if (!user.isActive) throw new BadRequestException('Сотрудник уволен');
     }
     // См. коммент в createBucket: retry-loop страхует от гонки на
     // (bucketId, order) — уникальный индекс её ловит.
@@ -373,7 +375,7 @@ export class RevenueSchemeService implements OnModuleInit {
             order,
             userId: dto.userId ?? null,
           },
-          include: { user: { select: { id: true, fullName: true } } },
+          include: { user: { select: { id: true, fullName: true, isActive: true } } },
         });
       } catch (e) {
         if (this.isOrderUniqueConflict(e)) {
@@ -398,9 +400,10 @@ export class RevenueSchemeService implements OnModuleInit {
     if (dto.userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: dto.userId },
-        select: { id: true },
+        select: { id: true, isActive: true },
       });
       if (!user) throw new BadRequestException('Указанный сотрудник не найден');
+      if (!user.isActive) throw new BadRequestException('Сотрудник уволен');
     }
     const updated = await this.prisma.revenueBucketItem.update({
       where: { id },
@@ -410,7 +413,7 @@ export class RevenueSchemeService implements OnModuleInit {
         ...(dto.order !== undefined && { order: dto.order }),
         ...(dto.userId !== undefined && { userId: dto.userId }),
       },
-      include: { user: { select: { id: true, fullName: true } } },
+      include: { user: { select: { id: true, fullName: true, isActive: true } } },
     });
     // Before-payload критичен для FIXED_SUM позиций (именованные
     // зарплаты в ФОТ): без него amountCents тихо переписывался бы
@@ -529,7 +532,7 @@ export class RevenueSchemeService implements OnModuleInit {
               include: {
                 items: {
                   orderBy: [{ order: 'asc' }],
-                  include: { user: { select: { id: true, fullName: true } } },
+                  include: { user: { select: { id: true, fullName: true, isActive: true } } },
                 },
               },
             },
@@ -546,7 +549,7 @@ export class RevenueSchemeService implements OnModuleInit {
             include: {
               items: {
                 orderBy: [{ order: 'asc' }],
-                include: { user: { select: { id: true, fullName: true } } },
+                include: { user: { select: { id: true, fullName: true, isActive: true } } },
               },
             },
           },

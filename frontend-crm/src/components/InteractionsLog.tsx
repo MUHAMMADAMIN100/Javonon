@@ -22,6 +22,7 @@ import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { tr, useT } from '../lib/i18n';
 import { EmptyLine } from './ClientCard';
+import DismissedMark from './DismissedMark';
 
 const TYPES: InteractionType[] = ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'SMS', 'TELEGRAM', 'WHATSAPP'];
 
@@ -281,6 +282,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
                   marginTop: 8,
                 }}>
                   {it.author.fullName}
+                  <DismissedMark person={it.author} />
                 </div>
               )}
             </div>

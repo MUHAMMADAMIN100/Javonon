@@ -59,7 +59,7 @@ export class ReportsService {
       },
       orderBy: { date: 'desc' },
       take: opts.take ?? 60,
-      include: { user: { select: { id: true, fullName: true, role: true } } },
+      include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
     });
   }
 

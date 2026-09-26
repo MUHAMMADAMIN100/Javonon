@@ -261,8 +261,9 @@ export class SubmissionsController {
   /** FOUNDER одобряет платёж — атомарно создаёт Student/Application/Transaction. */
   @Post('payments/:id/approve')
   @Roles(Role.FOUNDER)
-  approve(@CurrentUser() me: any, @Param('id') id: string) {
-    return this.svc.approvePayment(id, me.id);
+  approve(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { amountTjs?: number | string }) {
+    // amountTjs — сумма в сомони; обязательна только для сделки не в TJS.
+    return this.svc.approvePayment(id, me.id, { amountTjs: body?.amountTjs });
   }
 
   /** FOUNDER отклоняет платёж с причиной. */

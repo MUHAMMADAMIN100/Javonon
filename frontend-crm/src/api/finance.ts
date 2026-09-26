@@ -274,7 +274,7 @@ export interface DistributionBucketItem {
   name: string;
   amount: number;
   userId?: string | null;
-  user?: { id: string; fullName: string } | null;
+  user?: { id: string; fullName: string; isActive?: boolean } | null;
 }
 export interface DistributionBucket {
   id: string;

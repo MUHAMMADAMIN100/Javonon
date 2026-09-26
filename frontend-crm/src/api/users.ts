@@ -26,9 +26,48 @@ export async function updateUser(id: string, payload: Partial<{ email: string; f
   return data;
 }
 
-/** «Уволить»: вход закрыт, сессии отозваны, история сохраняется. */
-export async function dismissUser(id: string) {
-  const { data } = await api.post(`/users/${id}/dismiss`);
+/** Кому передать дела: выбранному сотруднику или «автоматически» по нагрузке. */
+export type HandoverBody = { mode: 'AUTO' } | { mode: 'USER'; toUserId: string };
+
+/** Что числится за сотрудником (см. backend/src/users/handover.ts). */
+export type HandoverCounts = {
+  applications: number;
+  students: number;
+  deals: number;
+  tasks: number;
+  groups: number;
+  sessions: number;
+  revenueShares: number;
+};
+
+export type HandoverInfo = {
+  user: { id: string; fullName: string; isActive: boolean };
+  counts: HandoverCounts;
+  total: number;
+  /** Сколько менеджеров доступно режиму «автоматически». */
+  autoTargets: { salesManagers: number; clientManagers: number };
+  /** Действующие сотрудники, кому можно передать всё. */
+  candidates: Array<{ id: string; fullName: string; role: Role; roles?: Role[] }>;
+};
+
+export async function getHandoverInfo(id: string) {
+  const { data } = await api.get<HandoverInfo>(`/users/${id}/handover`);
+  return data;
+}
+
+/**
+ * «Уволить»: дела передаются (одной транзакцией с увольнением), вход закрыт,
+ * сессии отозваны, из списков, рейтингов и чатов сотрудник пропадает;
+ * история сохраняется.
+ */
+export async function dismissUser(id: string, body: HandoverBody = { mode: 'AUTO' }) {
+  const { data } = await api.post(`/users/${id}/dismiss`, body);
+  return data;
+}
+
+/** Передать дела уже уволенного сотрудника. */
+export async function handoverUser(id: string, body: HandoverBody) {
+  const { data } = await api.post(`/users/${id}/handover`, body);
   return data;
 }
 

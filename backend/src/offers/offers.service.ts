@@ -192,7 +192,7 @@ export class OffersService {
   async signatures(offerId: string) {
     return this.prisma.offerSignature.findMany({
       where: { offerId },
-      include: { user: { select: { id: true, fullName: true, email: true } } },
+      include: { user: { select: { id: true, fullName: true, isActive: true, email: true } } },
       orderBy: { signedAt: 'desc' },
     });
   }

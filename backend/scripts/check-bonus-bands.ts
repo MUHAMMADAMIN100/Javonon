@@ -23,7 +23,7 @@ import {
   computeManagerBonus,
   findManagerBonusBand,
 } from '../src/common/bonus-bands';
-import { effectiveManagerBonus } from '../src/common/manager-bonus-volume';
+import { effectiveManagerBonus, managerBonusProgress } from '../src/common/manager-bonus-volume';
 
 let failed = 0;
 function test(name: string, fn: () => void): void {
@@ -158,28 +158,53 @@ test('effectiveManagerBonus: сетка на границе 150 000 → 5%, а �
   // Ровно то, что теперь делает managerBonusVolume перед возвратом.
   const raw = sumPayments(payments);
   const volume = Math.round(raw * 100) / 100;
-  const eff = effectiveManagerBonus(0, volume);
+  const eff = effectiveManagerBonus(volume);
   assert.equal(eff.source, 'BAND');
   assert.equal(eff.percent, 5);
   assert.equal(eff.band.key, 'band2');
   // И даже если объём придёт неокруглённым — защита в bonus-bands держит.
-  assert.equal(effectiveManagerBonus(0, raw).percent, 5);
+  assert.equal(effectiveManagerBonus(raw).percent, 5);
 });
 
-test('effectiveManagerBonus: персональный процент перебивает сетку, полоса всё равно есть', () => {
-  const eff = effectiveManagerBonus(9, 150_000);
-  assert.equal(eff.source, 'PERSONAL');
-  assert.equal(eff.percent, 9);
-  assert.equal(eff.personalPercent, 9);
-  assert.equal(eff.band.key, 'band2', 'полоса считается даже при личной ставке');
-});
-
-test('effectiveManagerBonus: 0 / null / undefined = «по сетке»', () => {
-  for (const p of [0, null, undefined]) {
-    const eff = effectiveManagerBonus(p, 150_000);
-    assert.equal(eff.source, 'BAND', String(p));
-    assert.equal(eff.percent, 5, String(p));
+test('effectiveManagerBonus: персонального процента нет — ставка всегда по сетке', () => {
+  // Решение учредителя 2026-09-26: одна сетка для всех.
+  for (const [volume, percent] of [[0, 4], [75_000, 4], [75_001, 5], [150_000, 5], [150_001, 6], [300_001, 8]] as const) {
+    const eff = effectiveManagerBonus(volume);
+    assert.equal(eff.source, 'BAND', String(volume));
+    assert.equal(eff.percent, percent, String(volume));
   }
+});
+
+const month = { periodStart: new Date('2026-09-01T00:00:00+05:00'), periodEnd: new Date('2026-09-30T23:59:59.999+05:00') };
+
+test('managerBonusProgress: 62 000 → 4%, до 5% осталось 13 001', () => {
+  const p = managerBonusProgress({ ...month, volume: 62_000 });
+  assert.equal(p.percent, 4);
+  assert.equal(p.bonus, 2_480);
+  assert.equal(p.nextBand?.percent, 5);
+  assert.equal(p.toNext, 13_001);
+});
+
+test('managerBonusProgress: ровно на границе 150 000 — ещё 5%, до 6% остался 1', () => {
+  const p = managerBonusProgress({ ...month, volume: 150_000 });
+  assert.equal(p.percent, 5);
+  assert.equal(p.bonus, 7_500);
+  assert.equal(p.toNext, 1);
+});
+
+test('managerBonusProgress: пустой месяц — 4%, до 5% нужно 75 001', () => {
+  const p = managerBonusProgress({ ...month, volume: 0 });
+  assert.equal(p.percent, 4);
+  assert.equal(p.bonus, 0);
+  assert.equal(p.toNext, 75_001);
+});
+
+test('managerBonusProgress: верхняя полоса — следующей нет', () => {
+  const p = managerBonusProgress({ ...month, volume: 420_000 });
+  assert.equal(p.percent, 8);
+  assert.equal(p.bonus, 33_600);
+  assert.equal(p.nextBand, null);
+  assert.equal(p.toNext, null);
 });
 if (failed > 0) {
   console.error(`\n${failed} проверок упало`);

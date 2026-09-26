@@ -37,7 +37,7 @@ export class LmsService {
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { lessons: true, enrollments: true } },
-        author: { select: { id: true, fullName: true } },
+        author: { select: { id: true, fullName: true, isActive: true } },
       },
     });
   }
@@ -47,7 +47,7 @@ export class LmsService {
       where: { id },
       include: {
         lessons: { orderBy: { order: 'asc' } },
-        author: { select: { id: true, fullName: true } },
+        author: { select: { id: true, fullName: true, isActive: true } },
       },
     });
     if (!course) throw new NotFoundException('Курс не найден');

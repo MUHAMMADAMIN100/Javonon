@@ -25,6 +25,7 @@ import SearchField, { useUrlSearch } from '../components/SearchField';
 import ListTotal, { type ListNoun } from '../components/ListTotal';
 import { dateParam, enumParam, ignoredParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
+import DismissedMark from '../components/DismissedMark';
 
 const STATUS_COLOR: Record<SubmissionStatus, string> = {
   ACTIVE: '#0ea5e9',
@@ -394,6 +395,7 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
             {showManager && s.manager && (
               <div className="deal-card-mgr">
                 {t('deal.manager')}: {s.manager.fullName}
+                <DismissedMark person={s.manager} />
               </div>
             )}
             {/* Партнёр, приведший клиента. Приходит только руководству —
@@ -487,6 +489,7 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
             {p.submission.manager && (
               <div className="deal-card-mgr">
                 {t('deal.manager')}: {p.submission.manager.fullName}
+                <DismissedMark person={p.submission.manager} />
               </div>
             )}
             {/* Партнёр приходит только руководству — бэкенд не кладёт поле в

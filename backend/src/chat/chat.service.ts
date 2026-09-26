@@ -13,15 +13,16 @@ import { ChatRoomType } from '@prisma/client';
  * (раньше его не было в переписке, и подпись пропадала после перезагрузки).
  */
 const MESSAGE_INCLUDE = {
-  author: { select: { id: true, fullName: true, role: true } },
+  // isActive — чтобы у сообщений уволенного сотрудника CRM показала пометку.
+  author: { select: { id: true, fullName: true, role: true, isActive: true } },
   replyTo: {
     select: {
       id: true, text: true, authorId: true, attachments: true, deletedAt: true,
-      author: { select: { id: true, fullName: true } },
+      author: { select: { id: true, fullName: true, isActive: true } },
     },
   },
   forwardedFrom: {
-    select: { id: true, authorId: true, author: { select: { id: true, fullName: true } } },
+    select: { id: true, authorId: true, author: { select: { id: true, fullName: true, isActive: true } } },
   },
   reactions: { select: { id: true, emoji: true, userId: true } },
 } as const;
@@ -116,7 +117,12 @@ export class ChatService implements OnModuleInit {
 
   private async usersIndex() {
     if (this.usersCache && Date.now() - this.usersCache.at < CACHE_MS) return this.usersCache;
-    const rows = await this.prisma.user.findMany({ select: { id: true, fullName: true, email: true, role: true, roles: true } });
+    // Только действующие: уволенного нельзя упомянуть, и админом чата он не
+    // считается. Вернут — снова появится (кеш живёт CACHE_MS).
+    const rows = await this.prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, fullName: true, email: true, role: true, roles: true },
+    });
     const list = rows.map((u) => ({
       id: u.id,
       fullName: u.fullName,
@@ -171,8 +177,10 @@ export class ChatService implements OnModuleInit {
         data: { type: 'GENERAL', title: 'Команда Javonon' },
       });
     }
-    // Каждый сотрудник автоматически в общем чате
-    const allUsers = await this.prisma.user.findMany({ select: { id: true } });
+    // Каждый ДЕЙСТВУЮЩИЙ сотрудник автоматически в общем чате. Членство
+    // уволенного не удаляем (вернут — вернётся со всей перепиской), но в
+    // списках участников его не видно (listRooms / roomMembers).
+    const allUsers = await this.prisma.user.findMany({ where: { isActive: true }, select: { id: true } });
     const existingMemberships = await this.prisma.chatMember.findMany({
       where: { roomId: room.id },
       select: { userId: true },
@@ -196,14 +204,17 @@ export class ChatService implements OnModuleInit {
       orderBy: { updatedAt: 'desc' },
       include: {
         members: {
-          include: { user: { select: { id: true, fullName: true, role: true } } },
+          // Уволенных в составе чата не показываем: ни в аватарах, ни в
+          // счётчике участников. Членство остаётся — на случай «Вернуть».
+          where: { user: { isActive: true } },
+          include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
         },
         // Последнее живое сообщение: удалённые исчезают совсем (как в Telegram).
         messages: {
           where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
           take: 1,
-          include: { author: { select: { id: true, fullName: true } } },
+          include: { author: { select: { id: true, fullName: true, isActive: true } } },
         },
       },
     });
@@ -211,6 +222,9 @@ export class ChatService implements OnModuleInit {
     // старая переписка (и её последнее сообщение в списке) остаётся скрытой.
     const out: typeof rooms = [];
     for (const r of rooms) {
+      // Личный чат с уволенным исчезает из списка: собеседника больше нет.
+      // Переписка в базе цела и вернётся вместе с сотрудником.
+      if (r.type === 'DIRECT' && !r.members.some((m) => m.userId !== userId)) continue;
       const cleared = r.members.find((m) => m.userId === userId)?.clearedAt;
       if (!cleared) { out.push(r); continue; }
       if (r.updatedAt <= cleared) continue;
@@ -266,7 +280,7 @@ export class ChatService implements OnModuleInit {
       },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      select: { id: true, text: true, createdAt: true, authorId: true, author: { select: { id: true, fullName: true } } },
+      select: { id: true, text: true, createdAt: true, authorId: true, author: { select: { id: true, fullName: true, isActive: true } } },
     });
   }
 
@@ -277,7 +291,8 @@ export class ChatService implements OnModuleInit {
   async roomMembers(roomId: string, userId: string) {
     const room = await this.requireAccess(roomId, userId);
     const rows = await this.prisma.chatMember.findMany({
-      where: { roomId },
+      // Уволенные в участниках не показываются и в «N участников» не входят.
+      where: { roomId, user: { isActive: true } },
       select: { user: { select: { id: true, fullName: true, role: true, roles: true, isActive: true, lastSeenAt: true } } },
     });
     const live = this.presence.snapshot();
@@ -354,7 +369,7 @@ export class ChatService implements OnModuleInit {
     if (msg.authorId !== userId) throw new ForbiddenException('Кто прочитал — видно только автору сообщения');
     const [members, reads] = await Promise.all([
       this.prisma.chatMember.findMany({
-        where: { roomId: msg.roomId, userId: { not: userId } },
+        where: { roomId: msg.roomId, userId: { not: userId }, user: { isActive: true } },
         select: { userId: true, lastReadAt: true, user: { select: { fullName: true } } },
       }),
       this.prisma.chatMessageRead.findMany({ where: { messageId }, select: { userId: true, readAt: true } }),
@@ -583,6 +598,7 @@ export class ChatService implements OnModuleInit {
     // системный бот не мог писать.
     const admin = await this.prisma.user.findFirst({
       where: {
+        isActive: true,
         OR: [
           { role: { in: ['FOUNDER', 'ADMIN', 'ACCOUNTANT'] } },
           { roles: { hasSome: ['FOUNDER', 'ADMIN', 'ACCOUNTANT'] } },
@@ -623,11 +639,11 @@ export class ChatService implements OnModuleInit {
     const ids = Array.from(new Set([creatorId, ...memberIds]));
     // QA-fix: валидируем все memberId, чтобы вместо FK-500 пользователь получал 400.
     const existing = await this.prisma.user.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, isActive: true },
       select: { id: true },
     });
     if (existing.length !== ids.length) {
-      throw new BadRequestException('Один или несколько участников не найдены');
+      throw new BadRequestException('Один или несколько участников не найдены или уволены');
     }
     const room = await this.prisma.chatRoom.create({
       data: {
@@ -637,7 +653,7 @@ export class ChatService implements OnModuleInit {
         members: { create: ids.map((id) => ({ userId: id })) },
       },
       include: {
-        members: { include: { user: { select: { id: true, fullName: true, role: true } } } },
+        members: { include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } } },
       },
     });
     this.forgetRoom(room.id);
@@ -650,12 +666,13 @@ export class ChatService implements OnModuleInit {
     if (creatorId === otherUserId) throw new BadRequestException('Нельзя создать чат с самим собой');
     const otherUser = await this.prisma.user.findUnique({
       where: { id: otherUserId },
-      select: { id: true, fullName: true },
+      select: { id: true, fullName: true, isActive: true },
     });
     if (!otherUser) throw new NotFoundException('Пользователь не найден');
+    if (!otherUser.isActive) throw new BadRequestException('Сотрудник уволен');
 
     const includeAll = {
-      members: { include: { user: { select: { id: true, fullName: true, role: true } } } },
+      members: { include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } } },
     };
 
     // QA-fix #6: атомарный find-or-create в $transaction. Раньше при двух

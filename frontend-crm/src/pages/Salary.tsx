@@ -27,6 +27,7 @@ import { tjStartOfMonthStr, tjEndOfMonthStr, tjFormatDate } from '../lib/tjTime'
 import { bandRangeLabel } from '../lib/bonusBands';
 import CrmDatePicker from '../components/CrmDatePicker';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import DismissedMark from '../components/DismissedMark';
 
 // Отказы бэкенда при фиксации расчёта приходят как 400 с русским текстом
 // (Nest не отдаёт машиночитаемых кодов ошибок в этом модуле). Сопоставляем
@@ -383,7 +384,7 @@ export default function Salary() {
                             onClick={() => setOpenUserId(open ? null : r.userId)}
                           >
                             <td>
-                              <div style={{ fontWeight: 500 }}>{r.user.fullName}</div>
+                              <div style={{ fontWeight: 500 }}>{r.user.fullName}<DismissedMark person={r.user} /></div>
                               <div className="salary-roster-role">
                                 {displayRoleLabel(r.user as any)}
                                 {!r.hasRate && (

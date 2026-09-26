@@ -9,6 +9,7 @@ import { useT } from '../lib/i18n';
 import { tjFormatDate } from '../lib/tjTime';
 import { useApplicationStatusLabel, useCountryLabel, useDirectionLabel } from '../lib/labels';
 import DetailsModal, { groupBy, type DetailsColumn } from './DetailsModal';
+import { withDismissed } from './DismissedMark';
 
 /**
  * Окна «подробнее» у карточек дашборда. Каждое берёт записи за ТОТ ЖЕ
@@ -93,7 +94,7 @@ function ApplicationsDetails({
           : () => true;
   const rows = query.data?.filter((a) => pred(a.status));
   const title = t(`dashboard.kpi.${kind === 'enrolled' ? 'enrolled' : kind === 'pipeline' ? 'pipeline' : kind}`);
-  const managerOf = (a: Application) => a.manager?.fullName || t('details.noManager');
+  const managerOf = (a: Application) => (a.manager ? withDismissed(a.manager.fullName, a.manager, t('users.dismissed')) : t('details.noManager'));
   const columns: DetailsColumn<Application>[] = [
     { key: 'fullName', label: t('app.field.fullName'), value: (a) => a.fullName, render: (a) => <strong>{a.fullName}</strong> },
     { key: 'phone', label: t('app.field.phone'), value: (a) => a.phone },
@@ -164,7 +165,7 @@ function StudentsDetails({
       title={title}
       subtitle={periodLabel}
       groups={rows ? [
-        { title: t('details.byManager'), items: groupBy(rows, (s) => s.manager?.fullName || t('details.noManager'), { more }) },
+        { title: t('details.byManager'), items: groupBy(rows, (s) => (s.manager ? withDismissed(s.manager.fullName, s.manager, t('users.dismissed')) : t('details.noManager')), { more }) },
         { title: t('details.byDirection'), items: groupBy(rows, (s) => (s.directionConfirmed === false ? t('details.noValue') : directionLabel(s.direction)), { more }) },
       ] : undefined}
       rows={rows}
@@ -300,7 +301,7 @@ function DebtDetails({ onClose }: { onClose: () => void }) {
     <DetailsModal
       testId="details-debt"
       title={title}
-      groups={rows ? [{ title: t('details.byManager'), items: groupBy(rows, (a) => a.manager?.fullName || t('details.noManager'), { more }) }] : undefined}
+      groups={rows ? [{ title: t('details.byManager'), items: groupBy(rows, (a) => (a.manager ? withDismissed(a.manager.fullName, a.manager, t('users.dismissed')) : t('details.noManager')), { more }) }] : undefined}
       rows={rows}
       loading={query.isLoading}
       error={query.isError}

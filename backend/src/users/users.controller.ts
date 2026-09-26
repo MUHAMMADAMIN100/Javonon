@@ -189,12 +189,25 @@ export class UsersController {
     return this.users.dismiss(id, me);
   }
 
+  /** Body: { mode: 'USER' | 'AUTO', toUserId? } — кому передать дела. */
   @Post(':id/dismiss')
-  dismiss(@Param('id') id: string, @CurrentUser() me: any) {
+  dismiss(@Param('id') id: string, @CurrentUser() me: any, @Body() body: any) {
     if (id === me.id) {
       throw new BadRequestException('Нельзя уволить самого себя');
     }
-    return this.users.dismiss(id, me);
+    return this.users.dismiss(id, me, body);
+  }
+
+  /** Что числится за сотрудником и кому можно передать (окно «Уволить»). */
+  @Get(':id/handover')
+  handoverInfo(@Param('id') id: string) {
+    return this.users.handoverInfo(id);
+  }
+
+  /** Передать дела уже уволенного сотрудника. Body как у dismiss. */
+  @Post(':id/handover')
+  handover(@Param('id') id: string, @CurrentUser() me: any, @Body() body: any) {
+    return this.users.handoverDismissed(id, me, body);
   }
 
   @Post(':id/restore')

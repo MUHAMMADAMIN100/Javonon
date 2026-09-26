@@ -3,7 +3,7 @@ import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { createUser, dismissUser, listUsers, restoreUser, updateUser } from '../api/users';
+import { createUser, listUsers, restoreUser, updateUser } from '../api/users';
 import { type Role, type User } from '../api/types';
 import { listCustomRoles } from '../api/customRoles';
 import { useAuth } from '../store/auth';
@@ -13,6 +13,7 @@ import { useRoleLabel } from '../lib/labels';
 import { useUI } from '../ui/Dialogs';
 import { compose, email as emailRule, hasErrors, maxLen, minLen, passwordRule, required, validateAll } from '../utils/validators';
 import ChangePasswordModal from '../components/ChangePasswordModal';
+import HandoverModal from '../components/HandoverModal';
 import PasswordInput from '../components/PasswordInput';
 import Icon from '../Icon';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
@@ -40,12 +41,14 @@ export default function Users() {
   const roleLabel = useRoleLabel();
   const me = useAuth((s) => s.user);
   const navigate = useNavigate();
-  const { confirm, toast } = useUI();
+  const { toast } = useUI();
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [pwdTarget, setPwdTarget] = useState<User | null>(null);
+  // Окно «Уволить» (с передачей дел) или «Передать дела» у уже уволенного.
+  const [handover, setHandover] = useState<{ user: User; kind: 'dismiss' | 'handover' } | null>(null);
 
   const formErrors = validateAll(
     form,
@@ -176,13 +179,6 @@ export default function Users() {
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
-  const dismissMut = useOptimisticMutation<unknown, string, User[]>({
-    mutationFn: dismissUser,
-    queryKey: listKey,
-    applyOptimistic: (cur, id) => optimistic.updateById(cur, id, { isActive: false } as Partial<User>),
-    onSuccess: () => toast(t('users.dismiss.done'), 'success'),
-    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
-  });
   const restoreMut = useOptimisticMutation<unknown, string, User[]>({
     mutationFn: restoreUser,
     queryKey: listKey,
@@ -216,19 +212,14 @@ export default function Users() {
     setError(null);
   };
 
-  const onDismiss = async (u: User) => {
+  // Увольнение идёт через окно передачи дел: сначала видно, что числится за
+  // сотрудником, и выбирается, кому это отдать.
+  const onDismiss = (u: User) => {
     if (u.id === me?.id) {
       toast(t('toast.error'), 'error');
       return;
     }
-    const ok = await confirm({
-      title: `${t('users.dismiss')} «${u.fullName}»?`,
-      message: t('users.dismiss.confirm'),
-      confirmText: t('users.dismiss'),
-      danger: true,
-    });
-    if (!ok) return;
-    dismissMut.mutate(u.id);
+    setHandover({ user: u, kind: 'dismiss' });
   };
 
   return (
@@ -429,9 +420,14 @@ export default function Users() {
                   <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {u.isActive === false ? (
-                        <button className="btn btn-sm btn-secondary" data-testid="user-restore" onClick={() => restoreMut.mutate(u.id)}>
-                          {t('users.restore')}
-                        </button>
+                        <>
+                          <button className="btn btn-sm btn-secondary" data-testid="user-restore" onClick={() => restoreMut.mutate(u.id)}>
+                            {t('users.restore')}
+                          </button>
+                          <button className="btn btn-sm btn-secondary" data-testid="user-handover" onClick={() => setHandover({ user: u, kind: 'handover' })}>
+                            {t('users.handover')}
+                          </button>
+                        </>
                       ) : (
                         <>
                           <button
@@ -602,6 +598,12 @@ export default function Users() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <HandoverModal
+        target={handover?.user ?? null}
+        kind={handover?.kind ?? 'dismiss'}
+        onClose={() => setHandover(null)}
+      />
 
       <ChangePasswordModal
         open={!!pwdTarget}

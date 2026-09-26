@@ -21,8 +21,17 @@ import { SettingsService } from '../settings/settings.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 import {
   effectiveManagerBonus,
+  managerBonusProgress,
   managerBonusVolume,
 } from '../common/manager-bonus-volume';
+import {
+  autoTargets,
+  handoverCounts,
+  handoverTotal,
+  parseHandover,
+  performHandover,
+  validateHandoverTarget,
+} from './handover';
 
 @Injectable()
 export class UsersService {
@@ -108,6 +117,7 @@ export class UsersService {
       where: { id },
       select: {
         id: true, email: true, fullName: true, role: true, createdAt: true,
+        isActive: true,
         customRoleId: true,
         customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
       },
@@ -321,9 +331,8 @@ export class UsersService {
       managerBonusVolume(this.prisma, id, now),
     ]);
 
-    // Действующая ставка: персональный процент, если задан (> 0),
-    // иначе — ставка полосы, в которую попал объём месяца.
-    const bonus = effectiveManagerBonus(user.bonusPercent, bonusVolume.volume);
+    // Ставка — по сетке, одна для всех (персонального процента больше нет).
+    const bonus = effectiveManagerBonus(bonusVolume.volume);
 
     const target = user.kpiTargetPct ?? 1;
     const requiredClosed = Math.ceil((totalLeadsMonth * target) / 100);
@@ -339,26 +348,25 @@ export class UsersService {
         records: salaryRecords,
         baseSalary: user.baseSalary || 0,
         hourlyRate: user.hourlyRate || 0,
-        /**
-         * ПЕРСОНАЛЬНЫЙ override из User.bonusPercent. 0 = не задан,
-         * ставка берётся из сетки. НЕ показывать как «бонус % с продаж».
-         */
-        bonusPercent: user.bonusPercent || 0,
-        /** Ставка, которая РЕАЛЬНО применяется к объёму этого месяца. */
+        /** Ставка этого месяца по сетке (персонального процента больше нет). */
+        bonusPercent: bonus.percent,
+        /** Ставка, которая применяется к объёму этого месяца. */
         bonusPercentEffective: bonus.percent,
-        /** 'PERSONAL' — личный процент; 'BAND' — ставка сетки. */
+        /** Всегда 'BAND'. */
         bonusSource: bonus.source,
-        /** Полоса объёма — возвращается всегда, даже при личном проценте. */
+        /** Полоса объёма этого месяца. */
         bonusBand: {
           key: bonus.band.key,
           minAmount: bonus.band.minAmount,
           maxAmount: bonus.band.maxAmount, // null = без верхней границы
           percent: bonus.band.percent,
         },
-        /** Объём (APPROVED-платежи, TJS) за календарный месяц. */
+        /** Объём (одобренные платежи, в сомони) за календарный месяц. */
         bonusVolume: Math.round(bonusVolume.volume * 100) / 100,
         bonusPeriodStart: bonusVolume.periodStart,
         bonusPeriodEnd: bonusVolume.periodEnd,
+        /** Набрано / ставка / до следующей ставки — полоска прогресса. */
+        bonusProgress: managerBonusProgress(bonusVolume),
       },
       penalties: {
         list: penalties,
@@ -563,7 +571,8 @@ export class UsersService {
     if (dto.hiredAt !== undefined) data.hiredAt = dto.hiredAt ? new Date(dto.hiredAt) : null;
     if (dto.baseSalary !== undefined) data.baseSalary = dto.baseSalary;
     if (dto.hourlyRate !== undefined) data.hourlyRate = dto.hourlyRate;
-    if (dto.bonusPercent !== undefined) data.bonusPercent = dto.bonusPercent;
+    // bonusPercent больше не пишем: персональный процент отменён, бонус у
+    // всех по одной сетке (common/bonus-bands.ts).
     if (dto.kpiTargetPct !== undefined) data.kpiTargetPct = dto.kpiTargetPct;
     if (dto.kpiAutoStepPct !== undefined) data.kpiAutoStepPct = dto.kpiAutoStepPct;
     if (dto.kpiMaxPct !== undefined) data.kpiMaxPct = dto.kpiMaxPct;
@@ -626,7 +635,8 @@ export class UsersService {
     if (dto.hiredAt !== undefined) data.hiredAt = dto.hiredAt ? new Date(dto.hiredAt) : null;
     if (dto.baseSalary !== undefined) data.baseSalary = dto.baseSalary;
     if (dto.hourlyRate !== undefined) data.hourlyRate = dto.hourlyRate;
-    if (dto.bonusPercent !== undefined) data.bonusPercent = dto.bonusPercent;
+    // bonusPercent больше не пишем: персональный процент отменён, бонус у
+    // всех по одной сетке (common/bonus-bands.ts).
     if (dto.kpiTargetPct !== undefined) data.kpiTargetPct = dto.kpiTargetPct;
     if (dto.kpiAutoStepPct !== undefined) data.kpiAutoStepPct = dto.kpiAutoStepPct;
     if (dto.kpiMaxPct !== undefined) data.kpiMaxPct = dto.kpiMaxPct;
@@ -763,11 +773,57 @@ export class UsersService {
     return this.dismiss(id, requester);
   }
 
-  async dismiss(id: string, requester?: { id: string; role?: string; roles?: string[] }) {
+  /**
+   * Что числится за сотрудником и кому это можно передать — для окна
+   * «Уволить» и кнопки «Передать дела» у уже уволенного.
+   */
+  async handoverInfo(id: string) {
+    const target = await this.findOne(id);
+    const [counts, targets, candidates] = await Promise.all([
+      handoverCounts(this.prisma, id),
+      autoTargets(this.prisma, id),
+      this.prisma.user.findMany({
+        where: { isActive: true, id: { not: id } },
+        select: { id: true, fullName: true, role: true, roles: true },
+        orderBy: { fullName: 'asc' },
+      }),
+    ]);
+    return {
+      user: { id: target.id, fullName: target.fullName, isActive: target.isActive },
+      counts,
+      total: handoverTotal(counts),
+      autoTargets: targets,
+      candidates,
+    };
+  }
+
+  /**
+   * Передать дела уже уволенного сотрудника (уволенные до появления
+   * передачи — их заявки, студенты и задачи так и висят на них).
+   */
+  async handoverDismissed(id: string, requester: { id: string }, body: any) {
+    const target = await this.findOne(id);
+    if (target.isActive) {
+      throw new BadRequestException('Сотрудник работает — дела передаются при увольнении');
+    }
+    const { mode, toUserId } = parseHandover(body);
+    await validateHandoverTarget(this.prisma, id, toUserId);
+    const handover = await this.prisma.$transaction(
+      (tx) => performHandover(tx, id, { mode, toUserId, actorId: requester?.id ?? null }),
+      { timeout: 60_000, maxWait: 10_000 },
+    );
+    this.logger.log(`Handover of ${id} (${mode}${toUserId ? ' → ' + toUserId : ''}) by ${requester?.id ?? 'system'}`);
+    return { ok: true, handover };
+  }
+
+  async dismiss(id: string, requester?: { id: string; role?: string; roles?: string[] }, body?: any) {
     const target = await this.findOne(id);
 
     if (isFounder(target as any)) {
       throw new ForbiddenException('Основателя уволить нельзя');
+    }
+    if (!target.isActive) {
+      throw new BadRequestException('Сотрудник уже уволен');
     }
     // Нельзя уволить последнего действующего администратора.
     const isAdminTarget = target.role === 'ADMIN' || ((target as any).roles || []).includes('ADMIN');
@@ -780,16 +836,30 @@ export class UsersService {
       }
     }
 
-    await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id }, data: { isActive: false } }),
-      this.prisma.session.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } }),
-    ]);
+    // Кому передать дела: выбранному сотруднику (USER) или по нагрузке
+    // (AUTO — по умолчанию, в т.ч. для старого DELETE /users/:id).
+    const { mode, toUserId } = parseHandover(body);
+    await validateHandoverTarget(this.prisma, id, toUserId);
+
+    // Передача дел, увольнение и отзыв сессий — одной транзакцией:
+    // «уволен, а заявки всё ещё на нём» получиться не может.
+    const handover = await this.prisma.$transaction(
+      async (tx) => {
+        const result = await performHandover(tx, id, { mode, toUserId, actorId: requester?.id ?? null });
+        await tx.user.update({ where: { id }, data: { isActive: false } });
+        await tx.session.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+        return result;
+      },
+      { timeout: 60_000, maxWait: 10_000 },
+    );
     // Мгновенно выкидываем из открытых вкладок: событие → фронт делает logout,
     // затем рвём сокеты (сокет больше не получает ни одного события).
     this.realtime.emitUser(id, 'user:deleted', { reason: 'dismissed' });
     this.realtime.disconnectUser(id, 'dismissed');
-    this.logger.log(`User ${id} dismissed by ${requester?.id ?? 'system'}`);
-    return { ok: true, isActive: false };
+    // Списки у остальных (заявки, студенты, задачи, чат) обновятся сами.
+    this.realtime.emitStaff('user:dismissed', { userId: id });
+    this.logger.log(`User ${id} dismissed by ${requester?.id ?? 'system'} (handover ${mode}${toUserId ? ' → ' + toUserId : ''})`);
+    return { ok: true, isActive: false, handover };
   }
 
   /** Вернуть уволенного сотрудника (войти он сможет заново). */
@@ -901,7 +971,7 @@ export class UsersService {
       orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
       select: {
         id: true, fullName: true, email: true, role: true,
-        baseSalary: true, hourlyRate: true, bonusPercent: true,
+        baseSalary: true, hourlyRate: true,
         customRole: { select: { id: true, name: true } },
       },
     });
@@ -933,7 +1003,6 @@ export class UsersService {
   async updateSalary(targetId: string, dto: {
     baseSalary?: number;
     hourlyRate?: number;
-    bonusPercent?: number;
   }) {
     const target = await this.prisma.user.findUnique({
       where: { id: targetId },
@@ -955,10 +1024,8 @@ export class UsersService {
     const data: any = {};
     if (dto.baseSalary !== undefined) data.baseSalary = num(dto.baseSalary, 'baseSalary', 1_000_000);
     if (dto.hourlyRate !== undefined) data.hourlyRate = num(dto.hourlyRate, 'hourlyRate', 100_000);
-    if (dto.bonusPercent !== undefined) {
-      const p = num(dto.bonusPercent, 'bonusPercent', 100);
-      data.bonusPercent = p;
-    }
+    // bonusPercent не принимаем: персональный процент отменён, бонус у всех
+    // по сетке (common/bonus-bands.ts). Колонка в БД осталась, не читается.
     // overtimeMultiplier намеренно не принимаем: переработка убрана,
     // множитель больше ни на что не влияет (колонка в БД сохранена).
 
@@ -967,7 +1034,7 @@ export class UsersService {
       data,
       select: {
         id: true, fullName: true, email: true, role: true,
-        baseSalary: true, hourlyRate: true, bonusPercent: true,
+        baseSalary: true, hourlyRate: true,
       },
     });
   }

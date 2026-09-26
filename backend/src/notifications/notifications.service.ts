@@ -73,6 +73,7 @@ export class NotificationsService {
     // расширяем и на ACCOUNTANT — иначе мульти-роль не симметрична.
     const admins = await this.prisma.user.findMany({
       where: {
+        isActive: true,
         OR: [
           { role: { in: ['ADMIN', 'ACCOUNTANT'] } },
           { roles: { hasSome: ['ADMIN', 'ACCOUNTANT'] } },

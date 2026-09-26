@@ -257,7 +257,14 @@ function SalesRows({ rows }: { rows: KpiDetailsSale[] }) {
             )}
           </td>
           <td data-label={t('kpi.details.col.category')}>{t(`finance.cat.${x.category}`)}</td>
-          <td data-label={t('kpi.details.col.amount')} style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(x.amount, x.currency)}</td>
+          <td data-label={t('kpi.details.col.amount')} style={{ textAlign: 'right', fontWeight: 600 }}>
+            {fmtMoney(x.amount, x.currency)}
+            {x.originalCurrency && x.originalAmount != null && (
+              <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-soft)' }} data-testid="kpi-sale-original">
+                {fmtMoney(x.originalAmount, x.originalCurrency)}
+              </div>
+            )}
+          </td>
         </tr>
       ))}
     </>

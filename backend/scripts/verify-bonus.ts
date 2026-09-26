@@ -13,6 +13,7 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { managerBonusVolume, effectiveManagerBonus } from '../src/common/manager-bonus-volume';
+// Ставка — по сетке, одна для всех (персональный процент отменён 2026-09-26).
 import { computeManagerBonus } from '../src/common/bonus-bands';
 
 const prisma = new PrismaClient();
@@ -23,7 +24,7 @@ const MONTHS = ['2026-06-15', '2026-07-15', '2026-08-15', '2026-09-15'];
 async function main() {
   const users = await prisma.user.findMany({
     where: { role: 'SALES_MANAGER' },
-    select: { id: true, fullName: true, bonusPercent: true },
+    select: { id: true, fullName: true },
     orderBy: { fullName: 'asc' },
   });
   const months = MONTHS;
@@ -31,10 +32,8 @@ async function main() {
   for (const u of users) {
     for (const m of months) {
       const v = await managerBonusVolume(prisma as any, u.id, new Date(m + 'T00:00:00Z'));
-      const eff = effectiveManagerBonus(u.bonusPercent, v.volume);
-      const bonus = eff.source === 'PERSONAL'
-        ? Math.round((v.volume * eff.percent) / 100 * 100) / 100
-        : computeManagerBonus(v.volume).amount;
+      const eff = effectiveManagerBonus(v.volume);
+      const bonus = computeManagerBonus(v.volume).amount;
       if (v.volume === 0) continue;
       out.push({
         менеджер: u.fullName,
@@ -46,7 +45,7 @@ async function main() {
       });
     }
   }
-  console.log('=== РАСЧЁТ НАСТОЯЩИМ КОДОМ, ЯКОРЬ paidAt ===');
+  console.log('=== РАСЧЁТ НАСТОЯЩИМ КОДОМ (месяц засчёта: одобрения / получения денег у старых строк) ===');
   console.table(out);
   const total = out.filter((r) => r.менеджер === 'Khurshed Hakimov');
   console.log('Хуршед — сумма объёмов по месяцам:', total.reduce((s, r) => s + r.объём, 0));

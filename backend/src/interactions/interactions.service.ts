@@ -38,7 +38,7 @@ export class InteractionsService {
         ...(opts.visibleToStudentOnly && { visibleToStudent: true }),
       },
       orderBy: { occurredAt: 'desc' },
-      include: { author: { select: { id: true, fullName: true, role: true } } },
+      include: { author: { select: { id: true, fullName: true, isActive: true, role: true } } },
     });
   }
 
@@ -63,11 +63,11 @@ export class InteractionsService {
     const [interactions, callLogs, externalMessages] = await Promise.all([
       this.prisma.interaction.findMany({
         where: { studentId },
-        include: { author: { select: { id: true, fullName: true, role: true } } },
+        include: { author: { select: { id: true, fullName: true, isActive: true, role: true } } },
       }),
       this.prisma.callLog.findMany({
         where: { studentId },
-        include: { user: { select: { id: true, fullName: true, role: true } } },
+        include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
       }),
       this.prisma.externalMessage.findMany({
         where: {
@@ -137,7 +137,7 @@ export class InteractionsService {
         visibleToStudent: dto.visibleToStudent ?? true,
         occurredAt: clean.occurredAt ?? new Date(),
       },
-      include: { author: { select: { id: true, fullName: true, role: true } } },
+      include: { author: { select: { id: true, fullName: true, isActive: true, role: true } } },
     });
     // Realtime — студенту в его комнату
     this.realtime.emitStudent(dto.studentId, 'interaction:new', { interaction: created });

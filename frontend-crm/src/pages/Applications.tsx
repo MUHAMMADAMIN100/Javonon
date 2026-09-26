@@ -30,6 +30,7 @@ import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useApplicationStatusLabel, useCountryLabel } from '../lib/labels';
+import DismissedMark from '../components/DismissedMark';
 import {
   boolParam,
   dateParam,
@@ -447,6 +448,7 @@ export default function Applications() {
                             {a.manager ? (
                               <span className={a.manager.id === me?.id ? 'mgr-mine' : 'mgr-other'}>
                                 {a.manager.fullName}
+                                <DismissedMark person={a.manager} />
                               </span>
                             ) : (
                               <span className="mgr-none">—</span>

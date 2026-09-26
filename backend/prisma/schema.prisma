@@ -2178,6 +2178,23 @@ model SubmissionPayment {
   // появляется пустой у всех существующих платежей, и объём обнулился бы
   // у каждого менеджера разом.
   creditedManagerId    String?
+  // ПО КАКОМУ ПРАВИЛУ платёж лёг в бонусный месяц менеджера. Пишется ОДИН
+  // раз — тем же CAS-апдейтом, что переводит платёж в APPROVED
+  // (common/manager-bonus-volume.ts → BONUS_MONTH_RULE):
+  //   'APPROVAL' — месяц одобрения (reviewedAt);
+  //   'PAYMENT'  — месяц получения денег (paidAt).
+  // NULL — платёж одобрен ДО появления колонки: тогда он считался по paidAt
+  // и в уже начисленных зарплатах лежит именно там. Поэтому NULL читается как
+  // 'PAYMENT' — старые месяцы не пересчитываются и никому не начисляется
+  // дважды. Правило хранится у платежа, а не выводится из текущей настройки:
+  // смена настройки меняет только НОВЫЕ одобрения.
+  bonusMonthBy         String?
+  // Сумма платежа В СОМОНИ для бонуса и KPI — только у сделок не в TJS.
+  // Вводит основатель при одобрении (курса валют в системе нет). NULL у
+  // TJS-сделок (там в объём идёт amount как есть) и у валютных платежей,
+  // одобренных до появления колонки, — такие в объём не входят и
+  // показываются отдельно, как раньше.
+  amountTjs            Float?
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
 
@@ -2190,6 +2207,7 @@ model SubmissionPayment {
   @@index([reviewedAt])
   // Основной зарплатный запрос: объём одного менеджера за календарный месяц.
   @@index([creditedManagerId, status, reviewedAt])
+  @@index([creditedManagerId, status, paidAt])
 }
 
 // Audit fix (HIGH, multi-replica rate-limit inflation + reset-on-deploy):

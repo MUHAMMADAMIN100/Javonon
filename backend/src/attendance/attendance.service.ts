@@ -21,7 +21,7 @@ export class AttendanceService {
     return this.prisma.timeEntry.findMany({
       where,
       include: {
-        user: { select: { id: true, fullName: true, role: true, email: true } },
+        user: { select: { id: true, fullName: true, isActive: true, role: true, email: true } },
       },
       orderBy: { clockIn: 'desc' },
       take: Math.min(opts.take || 100, 500),

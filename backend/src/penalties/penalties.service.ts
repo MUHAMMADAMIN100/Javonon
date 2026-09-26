@@ -44,7 +44,7 @@ export class PenaltiesService {
           : {}),
       },
       orderBy: { date: 'desc' },
-      include: { user: { select: { id: true, fullName: true, role: true } } },
+      include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
     });
   }
 
@@ -118,7 +118,7 @@ export class PenaltiesService {
         lateMinutes: { gte: LATE_THRESHOLD_MIN },
         latePenaltyApplied: false,
       },
-      include: { user: { select: { id: true, fullName: true } } },
+      include: { user: { select: { id: true, fullName: true, isActive: true } } },
     });
 
     let created = 0;
@@ -218,7 +218,7 @@ export class PenaltiesService {
         lateLunchMinutes: { gte: LATE_THRESHOLD_MIN },
         lateLunchPenaltyApplied: false,
       },
-      include: { user: { select: { id: true, fullName: true } } },
+      include: { user: { select: { id: true, fullName: true, isActive: true } } },
     });
 
     let created = 0;

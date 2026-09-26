@@ -37,6 +37,7 @@ import { agoText, presenceText, usePresence } from '../lib/usePresence';
 import { tjFormatDateTime } from '../lib/tjTime';
 import ProfileMonthDetails, { type MonthTile } from '../components/ProfileMonthDetails';
 import { EditButton, EditForm, Field, LabelInput, heroColor, heroInitials } from '../components/ProfileParts';
+import BonusProgress from '../components/BonusProgress';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -313,6 +314,13 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
               />
               <Field label={t('userDetail.field.kpiTarget')} value={`${kpi.targetPct}%`} />
             </div>
+            {/* Бонус за месяц: набрано, ставка, сколько до следующей — тем же
+                расчётом, что в «Зарплате» и KPI. */}
+            {salary.bonusProgress && (
+              <div className="profile-bonus">
+                <BonusProgress p={salary.bonusProgress} testId="profile-bonus" />
+              </div>
+            )}
           </div>
           )}
         </div>

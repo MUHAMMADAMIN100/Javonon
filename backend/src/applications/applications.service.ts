@@ -73,13 +73,13 @@ const COUNTRY_LABEL: Record<Country, string> = {
 const MANAGER_INCLUDE = {
   student: {
     include: {
-      manager: { select: { id: true, fullName: true, email: true } },
-      chinaManager: { select: { id: true, fullName: true, email: true } },
+      manager: { select: { id: true, fullName: true, isActive: true, email: true } },
+      chinaManager: { select: { id: true, fullName: true, isActive: true, email: true } },
       program: true,
     },
   },
-  manager: { select: { id: true, fullName: true, email: true } },
-  chinaManager: { select: { id: true, fullName: true, email: true } },
+  manager: { select: { id: true, fullName: true, isActive: true, email: true } },
+  chinaManager: { select: { id: true, fullName: true, isActive: true, email: true } },
   program: true,
 };
 

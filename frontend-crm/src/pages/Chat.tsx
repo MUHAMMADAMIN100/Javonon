@@ -43,6 +43,7 @@ import { isFounder, displayRoleLabel } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
 import { ROLE_LABEL, type Role } from '../api/types';
+import DismissedMark from '../components/DismissedMark';
 
 // Базовый URL для статических attachments (chat-uploads).
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
@@ -1605,6 +1606,7 @@ export default function Chat() {
                         {showName && (
                           <div className="chat-bubble-author" style={{ color }}>
                             {isBot ? 'Javonon AI' : m.author?.fullName}
+                            {!isBot && <DismissedMark person={m.author} />}
                           </div>
                         )}
                         {m.replyTo && !m.deletedAt && (

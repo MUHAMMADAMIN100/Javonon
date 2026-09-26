@@ -1,30 +1,36 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { REPORTING_CURRENCY } from './reporting-currency';
+import { loadCountedPayments } from './manager-bonus-volume';
 
 /**
  * «Продажи» менеджера — ОДНО правило для зарплаты, KPI, рейтинга и профиля.
  *
- *  - deals  — одобренные платежи по сделкам (SubmissionPayment APPROVED) в
- *             TJS за период по дате оплаты (paidAt), сделка не отменена,
- *             связанная транзакция не удалена; платёж засчитан менеджеру,
- *             которому он зачислен при одобрении (creditedManagerId), а для
- *             старых строк без снапшота — владельцу сделки. Ровно так
- *             считается база бонуса в зарплате (common/manager-bonus-volume).
+ *  - deals  — платежи по сделкам, засчитанные менеджеру в бонус: ровно те,
+ *             что отбирает loadCountedPayments() (common/manager-bonus-volume):
+ *             одобрены основателем, лежат в периоде по месяцу засчёта
+ *             (одобрения — для новых, получения денег — для старых строк),
+ *             сделка не отменена, транзакция не развёрнута. Сумма — в
+ *             сомони: у валютной сделки это сумма в сомони, которую основатель
+ *             ввёл при одобрении.
  *  - other  — «Прочие приходы»: ручные доходы по менеджеру (INCOME, не
  *             TUITION_PAYMENT, не удалённые) в TJS — в продажи не входят,
  *             показываются отдельной строкой (как manualSalesAmount в зарплате).
- *  - nonTjs — то и другое в прочих валютах: в суммы TJS не складываются.
+ *  - nonTjs — валютные платежи без суммы в сомони (одобрены до того, как её
+ *             стали вводить) и валютные ручные приходы: в суммы TJS не
+ *             складываются.
  *
- * Раньше KPI и профиль суммировали ВСЕ приходы менеджера, а зарплата — только
- * одобренные платежи по сделкам: у одного человека за один месяц цифры на
- * двух экранах расходились.
+ * Раньше KPI и профиль считали платежи своим запросом, а зарплата — своим:
+ * фильтры были скопированы и могли разъехаться. Теперь платежи отбирает одна
+ * функция на всех.
  *
- * Считает сразу по многим менеджерам за 3 запроса (рейтинг KPI).
+ * Считает сразу по многим менеджерам (рейтинг KPI).
  */
 export interface ManagerSalesRow {
   kind: 'DEAL' | 'OTHER';
   id: string;
+  /** Дата, по которой строка попала в период: для DEAL — момент засчёта. */
   date: Date;
+  /** Сумма в `currency`. У валютной сделки с суммой в сомони — уже в TJS. */
   amount: number;
   currency: string;
   category: string;
@@ -33,6 +39,13 @@ export interface ManagerSalesRow {
   studentId: string | null;
   student: { id: string; fullName: string } | null;
   submissionId?: string | null;
+  /** DEAL: когда получены деньги. */
+  paidAt?: Date;
+  /** DEAL: когда основатель одобрил. */
+  approvedAt?: Date | null;
+  /** DEAL валютной сделки: исходные сумма и валюта (amount/currency — в сомони). */
+  originalAmount?: number;
+  originalCurrency?: string;
 }
 
 export interface ManagerSales {
@@ -57,27 +70,7 @@ export async function managerSales(
   const date = range.from || range.to ? { ...(range.from && { gte: range.from }), ...(range.to && { lte: range.to }) } : undefined;
 
   const [payments, others] = await Promise.all([
-    prisma.submissionPayment.findMany({
-      where: {
-        status: 'APPROVED',
-        ...(date && { paidAt: date }),
-        submission: { status: { not: 'CANCELLED' } },
-        OR: [
-          { creditedManagerId: { in: userIds } },
-          { creditedManagerId: null, submission: { managerId: { in: userIds } } },
-        ],
-      },
-      select: {
-        id: true, amount: true, paidAt: true, financeTransactionId: true, creditedManagerId: true, notes: true,
-        submission: {
-          select: {
-            id: true, managerId: true, currency: true, studentId: true, newStudentName: true,
-            student: { select: { id: true, fullName: true } },
-          },
-        },
-      },
-      orderBy: { paidAt: 'desc' },
-    }),
+    loadCountedPayments(prisma, userIds, range),
     prisma.transaction.findMany({
       where: {
         managerId: { in: userIds },
@@ -94,30 +87,31 @@ export async function managerSales(
     }),
   ]);
 
-  // Платёж, чья транзакция удалена (отмена), в продажи не входит.
-  const linked = payments.map((p) => p.financeTransactionId).filter((x): x is string => !!x);
-  const reversed = new Set<string>();
-  if (linked.length) {
-    const rows = await prisma.transaction.findMany({ where: { id: { in: linked }, reversedAt: { not: null } }, select: { id: true } });
-    for (const r of rows) reversed.add(r.id);
-  }
-
   for (const p of payments) {
-    if (p.financeTransactionId && reversed.has(p.financeTransactionId)) continue;
-    const who = p.creditedManagerId ?? p.submission.managerId;
-    const acc = who ? out.get(who) : undefined;
+    const acc = out.get(p.managerId);
     if (!acc) continue;
-    const cur = p.submission.currency || REPORTING_CURRENCY;
-    if (cur === REPORTING_CURRENCY) {
-      acc.deals += p.amount || 0;
+    const converted = p.currency !== REPORTING_CURRENCY && p.amountTjs !== null;
+    if (p.amountTjs !== null) {
+      acc.deals += p.amountTjs;
       acc.dealsCount += 1;
     } else {
-      acc.nonTjs[cur] = round2((acc.nonTjs[cur] || 0) + (p.amount || 0));
+      acc.nonTjs[p.currency] = round2((acc.nonTjs[p.currency] || 0) + p.amount);
     }
     acc.rows.push({
-      kind: 'DEAL', id: p.id, date: p.paidAt, amount: p.amount, currency: cur, category: 'TUITION_PAYMENT',
-      comment: p.notes ?? null, payerName: p.submission.student ? null : p.submission.newStudentName ?? null,
-      studentId: p.submission.studentId, student: p.submission.student, submissionId: p.submission.id,
+      kind: 'DEAL',
+      id: p.id,
+      date: p.countedAt,
+      amount: p.amountTjs ?? p.amount,
+      currency: p.amountTjs !== null ? REPORTING_CURRENCY : p.currency,
+      category: 'TUITION_PAYMENT',
+      comment: p.notes,
+      payerName: p.student ? null : p.newStudentName,
+      studentId: p.studentId,
+      student: p.student,
+      submissionId: p.submissionId,
+      paidAt: p.paidAt,
+      approvedAt: p.reviewedAt,
+      ...(converted && { originalAmount: p.amount, originalCurrency: p.currency }),
     });
   }
   for (const t of others) {

@@ -14,10 +14,10 @@ type CurrentUser = { id: string; role: Role; roles?: Role[] };
 // Legacy assignedTo оставлен на переходный период (мигрирующие клиенты
 // ещё могут читать одиночное поле, см. schema.prisma коммент к Task).
 const TASK_INCLUDE = {
-  assignedTo: { select: { id: true, fullName: true, email: true } },
+  assignedTo: { select: { id: true, fullName: true, isActive: true, email: true } },
   assignees: { select: { id: true, fullName: true, email: true } },
-  controller: { select: { id: true, fullName: true, email: true } },
-  createdBy: { select: { id: true, fullName: true, email: true } },
+  controller: { select: { id: true, fullName: true, isActive: true, email: true } },
+  createdBy: { select: { id: true, fullName: true, isActive: true, email: true } },
 } as const;
 
 @Injectable()
@@ -90,10 +90,13 @@ export class TasksService {
     const idsToCheck = Array.from(new Set([...assigneeIds, ...(controllerId ? [controllerId] : [])]));
     const foundUsers = await this.prisma.user.findMany({
       where: { id: { in: idsToCheck } },
-      select: { id: true },
+      select: { id: true, isActive: true },
     });
     if (foundUsers.length !== idsToCheck.length) {
       throw new NotFoundException('Один или несколько сотрудников не найдены');
+    }
+    if (foundUsers.some((u) => !u.isActive)) {
+      throw new BadRequestException('Уволенного сотрудника нельзя назначить на задачу');
     }
 
     const task = await this.prisma.task.create({
@@ -219,10 +222,13 @@ export class TasksService {
       const uniq = Array.from(new Set(idsToCheck));
       const found = await this.prisma.user.findMany({
         where: { id: { in: uniq } },
-        select: { id: true },
+        select: { id: true, isActive: true },
       });
       if (found.length !== uniq.length) {
         throw new NotFoundException('Один или несколько сотрудников не найдены');
+      }
+      if (found.some((u) => !u.isActive)) {
+        throw new BadRequestException('Уволенного сотрудника нельзя назначить на задачу');
       }
     }
 

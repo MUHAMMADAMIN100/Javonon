@@ -217,6 +217,12 @@ export interface NonTjsBucket {
 }
 export type NonTjsTotals = Record<string, NonTjsBucket>;
 
+/**
+ * Ключ строки «Уволенные сотрудники» в разбивке дохода по менеджерам: доход,
+ * который принесли уволенные, собирается в одну строку без имён.
+ */
+export const DISMISSED_MANAGERS_KEY = '__dismissed__';
+
 @Injectable()
 export class FinanceService {
   private readonly logger = new Logger(FinanceService.name);
@@ -323,8 +329,8 @@ export class FinanceService {
       take: filters.take ?? 200,
       include: {
         student: { select: { id: true, fullName: true } },
-        manager: { select: { id: true, fullName: true, role: true } },
-        recordedBy: { select: { id: true, fullName: true, role: true } },
+        manager: { select: { id: true, fullName: true, isActive: true, role: true } },
+        recordedBy: { select: { id: true, fullName: true, isActive: true, role: true } },
       },
     });
   }
@@ -601,8 +607,8 @@ export class FinanceService {
       },
       include: {
         student: { select: { id: true, fullName: true } },
-        manager: { select: { id: true, fullName: true } },
-        recordedBy: { select: { id: true, fullName: true } },
+        manager: { select: { id: true, fullName: true, isActive: true } },
+        recordedBy: { select: { id: true, fullName: true, isActive: true } },
         paidVia: { select: { id: true, fullName: true } },
       },
     });
@@ -693,7 +699,7 @@ export class FinanceService {
         incomeSource: true,
         paymentPhase: true,
         paidViaId: true,
-        manager: { select: { id: true, fullName: true } },
+        manager: { select: { id: true, fullName: true, isActive: true } },
       },
     });
     if (!before) {
@@ -1041,7 +1047,7 @@ export class FinanceService {
       },
       include: {
         student: { select: { id: true, fullName: true } },
-        manager: { select: { id: true, fullName: true } },
+        manager: { select: { id: true, fullName: true, isActive: true } },
       },
     });
     // WS-нотификация finance-staff-комнате: тот же сценарий, что в create() —
@@ -1355,11 +1361,13 @@ export class FinanceService {
     const managerIds = grouped.map((g) => g.managerId!).filter(Boolean);
     const users = await this.prisma.user.findMany({
       where: { id: { in: managerIds } },
-      select: { id: true, fullName: true, email: true },
+      select: { id: true, fullName: true, email: true, isActive: true },
     });
-    const userMap = new Map(users.map((u) => [u.id, u]));
+    const userMap = new Map(users.map((u) => [u.id, { id: u.id, fullName: u.fullName, email: u.email }]));
+    // ТОП — рейтинг людей: уволенных в нём нет (как в KPI).
+    const dismissed = new Set(users.filter((u) => !u.isActive).map((u) => u.id));
     return {
-      managers: grouped.map((g) => ({
+      managers: grouped.filter((g) => !dismissed.has(g.managerId!)).map((g) => ({
         manager: userMap.get(g.managerId!) || { id: g.managerId, fullName: 'Без менеджера' },
         amount: g._sum.amount || 0,
         count: g._count,
@@ -1816,7 +1824,7 @@ export class FinanceService {
       // Единичный дозапрос за именами менеджеров — findMany быстрее чем
       // N отдельных `include`, а groupBy relation'ы не поддерживает.
       this.prisma.user.findMany({
-        select: { id: true, fullName: true, email: true },
+        select: { id: true, fullName: true, email: true, isActive: true },
       }),
       this.nonTjsTotals(liveWhere),
     ]);
@@ -1839,13 +1847,17 @@ export class FinanceService {
       cur.count += g._count;
       srcMap.set(key, cur);
     }
-    // То же для byManager.
+    // То же для byManager. Деньги уволенных не исчезают (иначе разбивка не
+    // сошлась бы с «Доходом»), но и имён нет — одна строка «Уволенные
+    // сотрудники» (ключ DISMISSED_MANAGERS_KEY, подпись переводит CRM).
+    const dismissedIds = new Set(mgrList.filter((u) => !u.isActive).map((u) => u.id));
     const mgrMap = new Map<string | null, { amount: number; count: number }>();
     for (const g of byMgr) {
-      const cur = mgrMap.get(g.managerId) ?? { amount: 0, count: 0 };
+      const key = g.managerId && dismissedIds.has(g.managerId) ? DISMISSED_MANAGERS_KEY : g.managerId;
+      const cur = mgrMap.get(key) ?? { amount: 0, count: 0 };
       cur.amount += g._sum.amount || 0;
       cur.count += g._count;
-      mgrMap.set(g.managerId, cur);
+      mgrMap.set(key, cur);
     }
 
     return {
@@ -1862,7 +1874,12 @@ export class FinanceService {
         .sort((a, b) => b[1].amount - a[1].amount)
         .map(([managerId, v]) => ({
           managerId,
-          manager: managerId ? userMap.get(managerId) || { id: managerId, fullName: 'Без менеджера' } : null,
+          manager:
+            managerId === DISMISSED_MANAGERS_KEY
+              ? { id: DISMISSED_MANAGERS_KEY, fullName: 'Уволенные сотрудники', email: '', dismissed: true }
+              : managerId
+                ? userMap.get(managerId) || { id: managerId, fullName: 'Без менеджера' }
+                : null,
           amount: v.amount,
           count: v.count,
         })),
@@ -2079,7 +2096,7 @@ export class FinanceService {
       },
       include: {
         student: { select: { id: true, fullName: true, phones: true, email: true } },
-        manager: { select: { id: true, fullName: true } },
+        manager: { select: { id: true, fullName: true, isActive: true } },
         program: { select: { id: true, name: true, cost: true, currency: true } },
       },
       orderBy: { updatedAt: 'desc' },

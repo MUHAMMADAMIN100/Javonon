@@ -157,7 +157,8 @@ export const previewSalary = (params: {
 /** Строка таблицы зарплат: один сотрудник за выбранный период. */
 export interface SalaryRosterRow {
   userId: string;
-  user: { id: string; fullName: string; role: string; roles?: string[] };
+  /** isActive=false — уволен: строка есть, только пока ему положены деньги за период. */
+  user: { id: string; fullName: string; role: string; roles?: string[]; isActive?: boolean };
   /** Задан оклад или почасовая ставка. Нет — база всегда 0. */
   hasRate: boolean;
   workedMinutes: number;

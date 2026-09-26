@@ -1,6 +1,33 @@
 import { api } from './client';
 import type { Role } from './types';
 
+/** Полоса сетки комиссии (common/bonus-bands.ts на бэке). */
+export interface BonusBand {
+  key: string;
+  minAmount: number;
+  /** null — без верхней границы. */
+  maxAmount: number | null;
+  percent: number;
+}
+
+/**
+ * Бонус менеджера за текущий календарный месяц: набрано, ставка, сколько
+ * осталось до следующей. Тот же расчёт, что в «Зарплате»
+ * (common/manager-bonus-volume.ts → managerBonusProgress).
+ */
+export interface BonusProgressData {
+  periodStart: string;
+  periodEnd: string;
+  volume: number;
+  band: BonusBand;
+  percent: number;
+  /** Комиссия на сегодняшний объём (до вычета уже начисленного). */
+  bonus: number;
+  nextBand: BonusBand | null;
+  toNext: number | null;
+  bands: BonusBand[];
+}
+
 export interface KpiRow {
   id: string;
   fullName: string;
@@ -32,6 +59,8 @@ export interface KpiRow {
   nonTjsSales?: Record<string, number>;
   tasksOpen: number;
   tasksDone: number;
+  /** Бонус за текущий месяц (optional: старый бэк поля не отдаёт). */
+  bonusProgress?: BonusProgressData;
 }
 
 export const leaderboard = (params?: { from?: string; to?: string }) =>
@@ -57,8 +86,15 @@ export interface KpiDetailsStudent {
 
 export interface KpiDetailsSale {
   id: string;
+  /** В `currency`; у валютной сделки с суммой в сомони — уже в TJS. */
   amount: number;
   currency: string;
+  /** Платёж по сделке: когда получены деньги и когда одобрен. */
+  paidAt?: string;
+  approvedAt?: string | null;
+  /** Валютная сделка: исходные сумма и валюта. */
+  originalAmount?: number;
+  originalCurrency?: string;
   date: string;
   category: string;
   comment: string | null;

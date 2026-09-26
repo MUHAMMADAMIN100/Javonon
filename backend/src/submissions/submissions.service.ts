@@ -41,6 +41,7 @@ import {
 } from '@prisma/client';
 import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
 import { InstallmentsService } from '../installments/installments.service';
+import { BONUS_MONTH_RULE, MANAGER_BONUS_CURRENCY } from '../common/manager-bonus-volume';
 
 /**
  * Bug #31 (HIGH): студент, созданный из SaleSubmission через approvePayment,
@@ -1385,7 +1386,7 @@ export class SubmissionsService {
       include: {
         program: { select: { id: true, name: true, university: true } },
         student: { select: { id: true, fullName: true } },
-        manager: { select: { id: true, fullName: true, role: true } },
+        manager: { select: { id: true, fullName: true, isActive: true, role: true } },
         payments: { orderBy: { paidAt: 'desc' } },
       },
       orderBy: { createdAt: 'desc' },
@@ -1471,7 +1472,7 @@ export class SubmissionsService {
           include: {
             program: { select: { id: true, name: true, university: true } },
             student: { select: { id: true, fullName: true } },
-            manager: { select: { id: true, fullName: true } },
+            manager: { select: { id: true, fullName: true, isActive: true } },
           },
         },
       },
@@ -1517,11 +1518,11 @@ export class SubmissionsService {
       include: {
         program: true,
         student: true,
-        manager: { select: { id: true, fullName: true, role: true } },
+        manager: { select: { id: true, fullName: true, isActive: true, role: true } },
         application: true,
         payments: {
           orderBy: { paidAt: 'desc' },
-          include: { reviewedBy: { select: { id: true, fullName: true } } },
+          include: { reviewedBy: { select: { id: true, fullName: true, isActive: true } } },
         },
         // План рассрочки — часть карточки сделки, а не отдельный экран.
         // Отдаём здесь же, чтобы страница не делала второй запрос ради
@@ -1591,7 +1592,7 @@ export class SubmissionsService {
    *     optimistic CAS гарантирует, что Student/Application создаст ровно
    *     один winner из параллельных approve'ов.
    */
-  async approvePayment(paymentId: string, reviewerId: string) {
+  async approvePayment(paymentId: string, reviewerId: string, opts: { amountTjs?: unknown } = {}) {
     const reviewer = await this.prisma.user.findUnique({
       where: { id: reviewerId },
       select: { id: true, role: true, roles: true },
@@ -1625,6 +1626,13 @@ export class SubmissionsService {
     if (submission.status !== SubmissionStatus.ACTIVE) {
       throw new BadRequestException('Нельзя одобрить платёж по неактивной сделке');
     }
+    // СУММА В СОМОНИ ДЛЯ БОНУСА. Курса валют в системе нет, поэтому у сделки
+    // не в сомони основатель при одобрении указывает, сколько это в сомони:
+    // именно эта сумма идёт в объём менеджера и в KPI (common/
+    // manager-bonus-volume.ts). У TJS-сделки поле не нужно — в объём идёт
+    // сама сумма платежа. Сравнение валюты — точное, как в бонусной базе.
+    const isForeignDeal = (submission.currency || MANAGER_BONUS_CURRENCY) !== MANAGER_BONUS_CURRENCY;
+    const amountTjs = isForeignDeal ? parseAmountTjs(opts.amountTjs) : null;
     // Конфликт интересов: FOUNDER, который является менеджером сделки,
     // не может сам себе одобрять платежи (иначе self-approve + бонус себе).
     if (submission.managerId && submission.managerId === reviewerId) {
@@ -1874,6 +1882,11 @@ export class SubmissionsService {
           // платёж в APPROVED, — значит «одобрен» и «кому засчитан» не могут
           // разъехаться даже при роллбэке части транзакции.
           creditedManagerId,
+          // По какому правилу платёж ложится в бонусный месяц — фиксируется
+          // здесь же и больше не меняется (см. шапку manager-bonus-volume.ts:
+          // смена правила не должна переносить уже засчитанные платежи).
+          bonusMonthBy: BONUS_MONTH_RULE,
+          amountTjs,
         },
       });
       if (claim.count === 0) {
@@ -3228,7 +3241,7 @@ export class SubmissionsService {
         include: {
           program: { select: { id: true, name: true, university: true } },
           student: { select: { id: true, fullName: true } },
-          manager: { select: { id: true, fullName: true, role: true } },
+          manager: { select: { id: true, fullName: true, isActive: true, role: true } },
           payments: { orderBy: { paidAt: 'desc' } },
         },
       });
@@ -3280,6 +3293,8 @@ export class SubmissionsService {
       nextDueDate?: string | Date | null;
       nextDueAmount?: number | null;
       notes?: string | null;
+      /** Сумма в сомони — только у сделок не в TJS (см. approvePayment). */
+      amountTjs?: number | string | null;
     },
   ) {
     if (!user) throw new ForbiddenException('Не авторизован');
@@ -3369,6 +3384,20 @@ export class SubmissionsService {
     if (dto.nextDueAmount !== undefined) data.nextDueAmount = dto.nextDueAmount ?? null;
     if (dto.notes !== undefined) {
       data.notes = dto.notes ? String(dto.notes).trim() || null : null;
+    }
+
+    // Сумма в сомони у валютной сделки (по ней считается бонус). Явно
+    // переданная — заменяет прежнюю. Правка суммы в валюте без новой суммы в
+    // сомони пересчитывает её пропорционально: курс, по которому основатель
+    // засчитал платёж, сохраняется, и объём менеджера не расходится с правкой.
+    const isForeignDeal = (payment.submission.currency || MANAGER_BONUS_CURRENCY) !== MANAGER_BONUS_CURRENCY;
+    if (dto.amountTjs !== undefined && dto.amountTjs !== null && dto.amountTjs !== '') {
+      if (!isForeignDeal) {
+        throw new BadRequestException('Сумма в сомони указывается только для сделок в другой валюте');
+      }
+      data.amountTjs = parseAmountTjs(dto.amountTjs);
+    } else if (isForeignDeal && data.amount !== undefined && payment.amountTjs && payment.amount > 0) {
+      data.amountTjs = Math.round(((payment.amountTjs * data.amount) / payment.amount) * 100) / 100;
     }
 
     // APPROVED + есть Transaction → синхронизируем финансовую запись, чтобы
@@ -3636,4 +3665,19 @@ export class SubmissionsService {
   //
   // Метод-заглушка approvedBonusableForUser(userId, from, to) больше не нужен:
   // источник №1 выше делает ровно то, что предполагалось от заглушки.
+}
+
+/**
+ * Сумма платежа в сомони, которую основатель вводит при одобрении валютного
+ * платежа. Принимает число или строку с запятой («1 234,5»).
+ */
+function parseAmountTjs(raw: unknown): number {
+  const n = typeof raw === 'string' ? Number(raw.replace(/\s/g, '').replace(',', '.')) : Number(raw);
+  if (raw === undefined || raw === null || raw === '' || !Number.isFinite(n) || n <= 0) {
+    throw new BadRequestException(
+      'Укажите сумму платежа в сомони — сделка в другой валюте, а бонус менеджера считается в сомони',
+    );
+  }
+  if (n > 100_000_000) throw new BadRequestException('Сумма в сомони слишком велика');
+  return Math.round(n * 100) / 100;
 }

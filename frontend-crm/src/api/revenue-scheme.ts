@@ -23,6 +23,8 @@ export type BucketKind = 'PERCENTAGE' | 'FIXED_SUM';
 export interface RevenueBucketItemUser {
   id: string;
   fullName: string;
+  /** false — сотрудник уволен (место в схеме стоит освободить). */
+  isActive?: boolean;
 }
 
 export interface RevenueBucketItem {

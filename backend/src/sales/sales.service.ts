@@ -155,7 +155,7 @@ export class SalesService {
     return this.prisma.application.update({
       where: { id: applicationId },
       data: { managerId: newManagerId },
-      include: { manager: { select: { id: true, fullName: true, role: true } } },
+      include: { manager: { select: { id: true, fullName: true, isActive: true, role: true } } },
     });
   }
 

@@ -11,6 +11,7 @@ import { keys } from '../lib/queryKeys';
 import { useT } from '../lib/i18n';
 import { tjFormatDate } from '../lib/tjTime';
 import DetailsModal, { groupBy, type DetailsColumn, type DetailsGroup } from './DetailsModal';
+import { withDismissed } from './DismissedMark';
 
 /**
  * Окна карточек «Финансов» (выручка, прибыль, зарплата, прочие расходы,
@@ -97,7 +98,7 @@ function MoneyDetails({
     const k = `finance.source.${tx.incomeSource}`;
     return t(k) !== k ? t(k) : String(tx.incomeSource);
   };
-  const managerLabel = (tx: Transaction) => tx.manager?.fullName || t('details.noManager');
+  const managerLabel = (tx: Transaction) => (tx.manager ? withDismissed(tx.manager.fullName, tx.manager, t('users.dismissed')) : t('details.noManager'));
   const more = (n: number) => t('details.more').replace('{n}', String(n));
   const money = (n: number) => fmtMoney(n);
   const signed = (tx: Transaction) => (tx.type === 'INCOME' ? 1 : -1) * Number(tx.amount);
@@ -248,7 +249,7 @@ function DebtsDetails({ onClose }: { onClose: () => void }) {
       title={t('finance.kpi.debts')}
       subtitle={t('finance.details.now')}
       summary={summary}
-      groups={rows ? [{ title: t('details.byManager'), items: groupBy(rows, (a) => a.manager?.fullName || t('details.noManager'), { more }) }] : undefined}
+      groups={rows ? [{ title: t('details.byManager'), items: groupBy(rows, (a) => (a.manager ? withDismissed(a.manager.fullName, a.manager, t('users.dismissed')) : t('details.noManager')), { more }) }] : undefined}
       rows={rows}
       loading={query.isLoading}
       error={query.isError}

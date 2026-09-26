@@ -715,7 +715,8 @@ function SalaryRosterSection() {
         type: 'number',
         value: (u) => (u.monthHours && u.baseSalary ? u.baseSalary / u.monthHours : null),
       },
-      { key: 'bonusPercent', label: t('settings.salary.field.bonusPercent'), type: 'number', value: (u) => u.bonusPercent || 0 },
+      // «Персональный %» убран: бонус у всех по одной сетке (блок «Комиссия
+      // менеджера» ниже), решение учредителя 2026-09-26.
     ],
     { param: 'sortSalary' },
   );
@@ -735,7 +736,6 @@ function SalaryRosterSection() {
       await updateUserSalary(u.id, {
         baseSalary: patch.baseSalary === undefined ? undefined : Number(patch.baseSalary),
         hourlyRate: patch.hourlyRate === undefined ? undefined : Number(patch.hourlyRate),
-        bonusPercent: patch.bonusPercent === undefined ? undefined : Number(patch.bonusPercent),
       });
       toast(t('toast.updated'), 'success');
       setEdits((e) => {
@@ -766,10 +766,10 @@ function SalaryRosterSection() {
           </thead>
           <tbody>
             {query.isLoading && (
-              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('common.loading')}</td></tr>
+              <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('common.loading')}</td></tr>
             )}
             {!query.isLoading && items.length === 0 && (
-              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('users.empty')}</td></tr>
+              <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-soft)', padding: 16 }}>{t('users.empty')}</td></tr>
             )}
             {sort.sorted.map((u) => {
               const patch = edits[u.id] || {};
@@ -858,17 +858,6 @@ function SalaryRosterSection() {
                         </div>
                       );
                     })()}
-                  </td>
-                  <td data-label={t('settings.salary.field.bonusPercent')} className="sal-bonus">
-                    <RosterNumberInput
-                      value={val('bonusPercent', u.bonusPercent) as any}
-                      onChange={(v) => setField(u.id, 'bonusPercent', v)}
-                      suffix="%"
-                      dirty={has('bonusPercent')}
-                      max={100}
-                      step={0.5}
-                      width={100}
-                    />
                   </td>
                   <td className="sal-actions">
                     <button

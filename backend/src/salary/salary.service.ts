@@ -13,14 +13,13 @@ import {
 import {
   MANAGER_BONUS_BANDS,
   ManagerBonusBand,
-  computeManagerBonus,
 } from '../common/bonus-bands';
 import {
   MANAGER_BONUS_CURRENCY,
-  effectiveManagerBonus,
-  managerBonusVolume,
+  loadCountedPayments,
   managerBonusMonths,
   monthCoverageShare,
+  nonTjsCounted,
 } from '../common/manager-bonus-volume';
 
 // Единая отчётная валюта модуля зарплат. Должна совпадать с
@@ -79,26 +78,6 @@ export class SalaryService {
     private penaltiesSvc: PenaltiesService,
   ) {}
 
-  /**
-   * Возвращает set-у Transaction.id, отмеченных reversedAt != null, среди
-   * переданных id (nulls игнорим — legacy-платежи без linked-tx). Используется
-   * для parity-фильтра с finance: платёж, чья финансовая запись развёрнута,
-   * не должен попадать в бонусную базу, даже если submission ещё ACTIVE
-   * (случай ручной корректировки без cancel'а сделки). См. подробный
-   * комментарий в preview() (ANCHOR-PARITY-FIX).
-   */
-  private async reversedLinkedTxIds(
-    candidateIds: Array<string | null | undefined>,
-  ): Promise<Set<string>> {
-    const ids = candidateIds.filter((x): x is string => !!x);
-    if (ids.length === 0) return new Set();
-    const reversed = await this.prisma.transaction.findMany({
-      where: { id: { in: ids }, reversedAt: { not: null } },
-      select: { id: true },
-    });
-    return new Set(reversed.map((t) => t.id));
-  }
-
   async list(filters: { userId?: string; from?: Date; to?: Date }) {
     return this.prisma.salaryRecord.findMany({
       where: {
@@ -107,7 +86,7 @@ export class SalaryService {
         ...(filters.to && { periodEnd: { lte: filters.to } }),
       },
       orderBy: { periodStart: 'desc' },
-      include: { user: { select: { id: true, fullName: true, role: true, email: true } } },
+      include: { user: { select: { id: true, fullName: true, isActive: true, role: true, email: true } } },
     });
   }
 
@@ -118,9 +97,12 @@ export class SalaryService {
    * Считаем пачками по шесть, чтобы не занимать весь пул соединений.
    */
   async previewAll(periodStart: Date, periodEnd: Date) {
+    const userSelect = {
+      id: true, fullName: true, role: true, roles: true, baseSalary: true, hourlyRate: true, isActive: true,
+    } as const;
     const users = await this.prisma.user.findMany({
       where: { isActive: true },
-      select: { id: true, fullName: true, role: true, roles: true, baseSalary: true, hourlyRate: true },
+      select: userSelect,
       orderBy: { fullName: 'asc' },
     });
     // Уже начисленное за этот период — чтобы не начислить второй раз.
@@ -130,6 +112,34 @@ export class SalaryService {
     });
     const recordByUser = new Map<string, (typeof records)[number]>();
     for (const r of records) if (!recordByUser.has(r.userId)) recordByUser.set(r.userId, r);
+
+    // УВОЛЕННЫЕ. Из всех списков они убраны, но зарплата — это долг: если в
+    // периоде уволенный успел поработать или ему засчитаны продажи, строка
+    // нужна, иначе расчёт при увольнении нечем начислить. Показываем ТОЛЬКО
+    // за такие периоды (и за те, где начисление уже есть), с пометкой
+    // «уволен»; за периоды после ухода его в таблице нет.
+    const dismissed = await this.prisma.user.findMany({
+      where: { isActive: false },
+      select: userSelect,
+      orderBy: { fullName: 'asc' },
+    });
+    if (dismissed.length) {
+      const ids = dismissed.map((u) => u.id);
+      const [worked, counted] = await Promise.all([
+        this.prisma.timeEntry.groupBy({
+          by: ['userId'],
+          where: { userId: { in: ids }, date: { gte: periodStart, lte: periodEnd } },
+          _count: { _all: true },
+        }),
+        loadCountedPayments(this.prisma, ids, { from: tjStartOfMonth(periodStart), to: tjEndOfMonth(periodEnd) }),
+      ]);
+      const owed = new Set<string>([
+        ...worked.map((w) => w.userId),
+        ...counted.map((c) => c.managerId),
+        ...ids.filter((id) => recordByUser.has(id)),
+      ]);
+      users.push(...dismissed.filter((u) => owed.has(u.id)));
+    }
 
     const rows: any[] = [];
     const CHUNK = 6;
@@ -143,7 +153,7 @@ export class SalaryService {
           if (rec) {
             return {
               userId: u.id,
-              user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles },
+              user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles, isActive: u.isActive },
               hasRate: (u.baseSalary || 0) > 0 || (u.hourlyRate || 0) > 0,
               workedMinutes: rec.workedMinutes,
               lateMinutes: rec.lateMinutes,
@@ -163,7 +173,7 @@ export class SalaryService {
           const p = await this.preview(u.id, periodStart, periodEnd, 0);
           return {
             userId: u.id,
-            user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles },
+            user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles, isActive: u.isActive },
             /** Оклад или ставка заданы — иначе база всегда 0 и это стоит заметить. */
             hasRate: (u.baseSalary || 0) > 0 || (u.hourlyRate || 0) > 0,
             workedMinutes: p.workedMinutes,
@@ -190,11 +200,10 @@ export class SalaryService {
   /**
    * Считает (без сохранения) зарплату сотрудника за период:
    *   - hours/minutes — берём из TimeEntry за ЗАПРОШЕННЫЙ период
-   *   - объём продаж (бонусная база) — сумма APPROVED SubmissionPayment,
-   *     paidAt которых попал в КАЛЕНДАРНЫЙ МЕСЯЦ (Asia/Dushanbe) даты
-   *     начала периода. Месяц определяет дата получения денег; одобрение
-   *     остаётся фильтром, а не якорем периода — обоснование и разбор на
-   *     боевых данных в common/manager-bonus-volume.ts.
+   *   - объём продаж (бонусная база) — сумма в сомони одобренных основателем
+   *     платежей, засчитанных в КАЛЕНДАРНЫЙ МЕСЯЦ (Asia/Dushanbe) по месяцу
+   *     одобрения (старые строки — по месяцу получения денег). Правило и
+   *     фильтры — только в common/manager-bonus-volume.ts.
    *   - bonus = ВЕСЬ объём × ставка ОДНОЙ полосы (см. common/bonus-bands.ts:
    *     flat-по-полосе, не прогрессивно)
    *   - penalty — эффективные штрафы за период (не тронуты этой доработкой)
@@ -236,14 +245,13 @@ export class SalaryService {
 
     // ИСТОЧНИК БОНУСНОЙ БАЗЫ — два разных «триггера»:
     //
-    // 1) Платежи по сделкам (SubmissionPayment) — попадают в бонус по
-    //    reviewedAt (когда FOUNDER одобрил), а НЕ по paidAt (когда менеджер
-    //    принёс деньги). Это фикс bug #22 из audit:integration:
-    //    paidAt мог оказаться в уже закрытом (PAID) salary-периоде, и при
-    //    задержке одобрения бонус терялся бесследно (preview не пересчитывает
-    //    PAID-записи, а в новый период date<periodStart). Transaction.date
-    //    при этом по-прежнему = paidAt — это «факт прихода денег» для
-    //    финансовой отчётности; reviewedAt — «триггер начисления бонуса».
+    // 1) Платежи по сделкам (SubmissionPayment) — одобренные основателем, в
+    //    месяц одобрения (новые строки) или получения денег (одобренные до
+    //    2026-09-26); сумма — в сомони (у валютной сделки её вводит
+    //    основатель при одобрении). Отбор — loadCountedPayments() в
+    //    common/manager-bonus-volume.ts, общий с KPI и профилем.
+    //    Transaction.date при этом = paidAt — это «факт прихода денег» для
+    //    финансовой отчётности, к бонусу отношения не имеет.
     //
     // 2) Ручные INCOME-транзакции (импорт / исторические данные /
     //    операции без сделки) — считаются по date и с новым правилом
@@ -335,13 +343,7 @@ export class SalaryService {
     // месяцу, который задевает период, и суммируется — см.
     // managerBonusMonths(). Раньше бралcя только месяц начала периода, и
     // за 1 июня – 1 сентября июль с августом пропадали молча.
-    const bonusMonths = await managerBonusMonths(
-      this.prisma,
-      userId,
-      user.bonusPercent,
-      periodStart,
-      periodEnd,
-    );
+    const bonusMonths = await managerBonusMonths(this.prisma, userId, periodStart, periodEnd);
     const bonusPeriodStart = bonusMonths[0]?.periodStart ?? tjStartOfMonth(periodStart);
     const bonusPeriodEnd =
       bonusMonths[bonusMonths.length - 1]?.periodEnd ?? tjEndOfMonth(periodStart);
@@ -365,37 +367,14 @@ export class SalaryService {
     });
     const manualSalesAmount = manualSalesAgg._sum.amount || 0;
 
-    // Разбивка не-TJS продаж за тот же период. Для transaction — обычный
-    // groupBy по currency. Для submissionPayment currency лежит у
-    // родителя SaleSubmission, а Prisma groupBy не умеет по relation
-    // scalar — поэтому findMany с include и группировка в памяти
-    // (типичный размер платежей за период — десятки, не тысячи).
-    // Отменённые сделки (submission.status='CANCELLED') и reversed
-    // транзакции по-прежнему исключены — теми же фильтрами, что и TJS.
-    const nonTjsSubmissionPayments = await this.prisma.submissionPayment.findMany({
-      where: {
-        status: 'APPROVED',
-        // Тот же якорь, что и у TJS-объёма — paidAt, не reviewedAt
-        // (см. common/manager-bonus-volume.ts, блок «ЯКОРЬ ПЕРИОДА»).
-        paidAt: { gte: bonusPeriodStart, lte: bonusPeriodEnd },
-        submission: {
-          managerId: userId,
-          status: { not: 'CANCELLED' },
-          currency: { not: SALARY_REPORTING_CURRENCY },
-        },
-      },
-      select: {
-        amount: true,
-        financeTransactionId: true,
-        submission: { select: { currency: true } },
-      },
+    // Разбивка не-TJS продаж за тот же период: валютные платежи БЕЗ суммы в
+    // сомони (одобрены до того, как её стали вводить) — из той же общей
+    // выборки, что и объём, плюс валютные ручные приходы (groupBy по
+    // currency). Валютный платёж С суммой в сомони уже сидит в объёме.
+    const countedForMonths = await loadCountedPayments(this.prisma, [userId], {
+      from: bonusPeriodStart,
+      to: bonusPeriodEnd,
     });
-    // Тот же parity-фикс, что и для TJS: платежи с reversed linked-tx
-    // исключаем, иначе non-TJS breakdown разойдётся с finance по тем же
-    // сценариям (A)/(B), описанным в комментарии выше.
-    const reversedNonTjsLinkedTxIds = await this.reversedLinkedTxIds(
-      nonTjsSubmissionPayments.map((p) => p.financeTransactionId),
-    );
     const nonTjsTransactionsAgg = await this.prisma.transaction.groupBy({
       by: ['currency'],
       where: {
@@ -408,14 +387,7 @@ export class SalaryService {
       },
       _sum: { amount: true },
     });
-    const nonTjsSales: NonTjsSalesBreakdown = {};
-    for (const p of nonTjsSubmissionPayments) {
-      if (p.financeTransactionId && reversedNonTjsLinkedTxIds.has(p.financeTransactionId)) {
-        continue; // linked tx reversed — parity с finance
-      }
-      const c = p.submission?.currency || 'UNKNOWN';
-      nonTjsSales[c] = (nonTjsSales[c] || 0) + (p.amount || 0);
-    }
+    const nonTjsSales: NonTjsSalesBreakdown = { ...nonTjsCounted(countedForMonths) };
     for (const g of nonTjsTransactionsAgg) {
       const c = g.currency;
       nonTjsSales[c] = (nonTjsSales[c] || 0) + (g._sum.amount || 0);
@@ -427,9 +399,8 @@ export class SalaryService {
     // Весь месячный объём умножается на ставку ОДНОЙ полосы, в которую он
     // попал. Не прогрессивно, срезы не складываются:
     //   200 000 → полоса 150 001–225 000 → 6% → 12 000 (а не 9 750).
-    // Полоса определяется ВСЕГДА (даже при персональном проценте) — чтобы
-    // CRM могла показать менеджеру, куда попал его объём.
-    // Персональный bonusPercent, если > 0, перебивает сетку.
+    // Ставка у всех одна — по сетке. Персонального процента больше нет
+    // (решение учредителя 2026-09-26); User.bonusPercent не читается.
     //
     // ОДИН МЕСЯЦ — одна полоса. НЕСКОЛЬКО — каждый месяц со своей полосой,
     // суммой. Ставку «за период целиком» не показываем: у трёх месяцев их
@@ -437,7 +408,6 @@ export class SalaryService {
     const singleMonth = bonusMonths.length === 1 ? bonusMonths[0] : null;
     const bonusPercent = singleMonth ? singleMonth.percent : null;
     const band = singleMonth ? singleMonth.band : null;
-    const usePersonal = bonusMonths.some((m) => m.source === 'PERSONAL');
     /** Комиссия за все задетые месяцы целиком. */
     const bonusMonthTotal = round(bonusMonths.reduce((sum, m) => sum + m.monthTotal, 0));
 
@@ -542,8 +512,8 @@ export class SalaryService {
             percent: band.percent,
           } as ManagerBonusBand)
         : null,
-      /** 'BAND' — ставка из сетки; 'PERSONAL' — персональный процент юзера. */
-      bonusSource: usePersonal ? ('PERSONAL' as const) : ('BAND' as const),
+      /** Всегда 'BAND' — ставка из сетки ('PERSONAL' бывает только у старых записей). */
+      bonusSource: 'BAND' as const,
       /** Вся сетка целиком — CRM рисует полосы и подсвечивает текущую. */
       bonusBands: MANAGER_BONUS_BANDS,
       /**
@@ -830,7 +800,7 @@ export class SalaryService {
                 bonusSource: args.bonusSource,
                 comment: args.comment,
               },
-              include: { user: { select: { id: true, fullName: true, role: true } } },
+              include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
             });
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -874,24 +844,12 @@ export class SalaryService {
       }
       // Транзакции оплат по сделкам, вошедшие в базу бонуса этой выплаты,
       // помечаем bonusApplied: удалить их без явного обхода руководством
-      // (overrideBonusApplied) больше нельзя. Раньше флаг нигде не ставился,
-      // и защита в finance.remove() была фиктивной. Правило отбора — как у
-      // базы бонуса (common/manager-bonus-volume.ts), по месяцам периода.
+      // (overrideBonusApplied) больше нельзя. Отбор — тот же, что у базы
+      // бонуса (loadCountedPayments в common/manager-bonus-volume.ts), по
+      // месяцам периода: помечаются ровно те платежи, за которые заплатили.
       const bonusFrom = tjStartOfMonth(rec.periodStart);
       const bonusTo = tjEndOfMonth(rec.periodEnd);
-      const counted = await tx.submissionPayment.findMany({
-        where: {
-          status: 'APPROVED',
-          paidAt: { gte: bonusFrom, lte: bonusTo },
-          financeTransactionId: { not: null },
-          submission: { status: { not: 'CANCELLED' } },
-          OR: [
-            { creditedManagerId: rec.userId },
-            { creditedManagerId: null, submission: { managerId: rec.userId } },
-          ],
-        },
-        select: { financeTransactionId: true },
-      });
+      const counted = await loadCountedPayments(tx, [rec.userId], { from: bonusFrom, to: bonusTo });
       const txIds = counted.map((p) => p.financeTransactionId).filter((x): x is string => !!x);
       if (txIds.length) {
         await tx.transaction.updateMany({ where: { id: { in: txIds }, reversedAt: null }, data: { bonusApplied: true } });
@@ -909,7 +867,7 @@ export class SalaryService {
       });
       return tx.salaryRecord.findUnique({
         where: { id },
-        include: { user: { select: { id: true, fullName: true, role: true } } },
+        include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
       });
     });
   }

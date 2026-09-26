@@ -89,7 +89,7 @@ export class StudyGroupsService {
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
       include: {
         program: { select: { id: true, name: true } },
-        teacher: { select: { id: true, fullName: true } },
+        teacher: { select: { id: true, fullName: true, isActive: true } },
         _count: { select: { members: true, sessions: true } },
       },
     });
@@ -101,7 +101,7 @@ export class StudyGroupsService {
       where: { id },
       include: {
         program: { select: { id: true, name: true } },
-        teacher: { select: { id: true, fullName: true } },
+        teacher: { select: { id: true, fullName: true, isActive: true } },
         members: {
           orderBy: { joinedAt: 'asc' },
           include: {
@@ -113,7 +113,7 @@ export class StudyGroupsService {
         sessions: {
           orderBy: { startsAt: 'asc' },
           take: 200,
-          include: { teacher: { select: { id: true, fullName: true } } },
+          include: { teacher: { select: { id: true, fullName: true, isActive: true } } },
         },
       },
     });
@@ -143,7 +143,7 @@ export class StudyGroupsService {
       },
       include: {
         program: { select: { id: true, name: true } },
-        teacher: { select: { id: true, fullName: true } },
+        teacher: { select: { id: true, fullName: true, isActive: true } },
         _count: { select: { members: true, sessions: true } },
       },
     });
@@ -193,7 +193,7 @@ export class StudyGroupsService {
       data,
       include: {
         program: { select: { id: true, name: true } },
-        teacher: { select: { id: true, fullName: true } },
+        teacher: { select: { id: true, fullName: true, isActive: true } },
         _count: { select: { members: true, sessions: true } },
       },
     });
@@ -300,7 +300,7 @@ export class StudyGroupsService {
             _count: { select: { members: true } },
           },
         },
-        teacher: { select: { id: true, fullName: true } },
+        teacher: { select: { id: true, fullName: true, isActive: true } },
       },
     });
   }
@@ -329,7 +329,7 @@ export class StudyGroupsService {
       },
       include: {
         group: { select: { id: true, name: true } },
-        teacher: { select: { id: true, fullName: true } },
+        teacher: { select: { id: true, fullName: true, isActive: true } },
       },
     });
   }
@@ -385,7 +385,7 @@ export class StudyGroupsService {
       data,
       include: {
         group: { select: { id: true, name: true } },
-        teacher: { select: { id: true, fullName: true } },
+        teacher: { select: { id: true, fullName: true, isActive: true } },
       },
     });
   }
@@ -528,7 +528,7 @@ export class StudyGroupsService {
         group: {
           select: { id: true, name: true, program: { select: { id: true, name: true } } },
         },
-        teacher: { select: { id: true, fullName: true } },
+        teacher: { select: { id: true, fullName: true, isActive: true } },
       },
     });
     return sessions;
@@ -567,7 +567,7 @@ export class StudyGroupsService {
         group: {
           select: { id: true, name: true, program: { select: { id: true, name: true } } },
         },
-        teacher: { select: { id: true, fullName: true } },
+        teacher: { select: { id: true, fullName: true, isActive: true } },
       },
     });
   }
@@ -632,8 +632,9 @@ export class StudyGroupsService {
   private async assertTeacherExists(teacherId?: string | null) {
     const id = teacherId?.trim();
     if (!id) return;
-    const found = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
+    const found = await this.prisma.user.findUnique({ where: { id }, select: { id: true, isActive: true } });
     if (!found) throw new NotFoundException('Сотрудник-преподаватель не найден');
+    if (!found.isActive) throw new BadRequestException('Преподаватель уволен');
   }
 
   /** Отсеиваем несуществующих студентов до вставки — по той же причине. */

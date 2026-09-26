@@ -22,6 +22,13 @@ export interface SubmissionPayment {
   reviewedAt: string | null;
   rejectReason: string | null;
   financeTransactionId: string | null;
+  /**
+   * Сумма в сомони, которая идёт в бонус менеджера и KPI — только у сделок
+   * не в TJS; вводит основатель при одобрении. null у TJS-сделок.
+   */
+  amountTjs?: number | null;
+  /** По какому правилу платёж лёг в бонусный месяц (null — старые строки, по дате получения). */
+  bonusMonthBy?: 'APPROVAL' | 'PAYMENT' | null;
   createdAt: string;
   updatedAt: string;
   reviewedBy?: { id: string; fullName: string } | null;
@@ -185,6 +192,8 @@ export interface UpdatePaymentDto {
   nextDueDate?: string | null;
   nextDueAmount?: number | null;
   notes?: string | null;
+  /** Сумма в сомони (только сделки не в TJS). Не передавать — сервер пересчитает пропорционально сумме. */
+  amountTjs?: number;
 }
 
 export const createSubmission = (data: CreateSubmissionDto) =>
@@ -275,8 +284,11 @@ export const previewSubmissionPartner = (
 export const getSubmission = (id: string) =>
   api.get<SaleSubmission>(`/submissions/${id}`).then((r) => r.data);
 
-export const approvePayment = (id: string) =>
-  api.post<SubmissionPayment>(`/submissions/payments/${id}/approve`).then((r) => r.data);
+/** amountTjs — сумма в сомони; обязательна для сделки не в TJS (по ней считается бонус). */
+export const approvePayment = (id: string, amountTjs?: number) =>
+  api
+    .post<SubmissionPayment>(`/submissions/payments/${id}/approve`, amountTjs !== undefined ? { amountTjs } : {})
+    .then((r) => r.data);
 
 export const rejectPayment = (id: string, reason: string) =>
   api.post<SubmissionPayment>(`/submissions/payments/${id}/reject`, { reason }).then((r) => r.data);

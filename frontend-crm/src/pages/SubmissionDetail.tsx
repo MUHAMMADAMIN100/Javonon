@@ -40,6 +40,7 @@ import { keys } from '../lib/queryKeys';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import DismissedMark from '../components/DismissedMark';
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: '#0ea5e9',
@@ -68,7 +69,7 @@ export default function SubmissionDetail() {
   const s = query.data;
 
   const approveMut = useMutation({
-    mutationFn: (paymentId: string) => approvePayment(paymentId),
+    mutationFn: ({ paymentId, amountTjs }: { paymentId: string; amountTjs?: number }) => approvePayment(paymentId, amountTjs),
     onSuccess: () => {
       toast(t('deal.toast.approved'), 'success');
       qc.invalidateQueries({ queryKey: ['submission', id] });
@@ -128,6 +129,8 @@ export default function SubmissionDetail() {
 
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [rejectPaymentId, setRejectPaymentId] = useState<string | null>(null);
+  // Одобрение платежа по сделке не в сомони — сначала спрашиваем сумму в сомони.
+  const [approveTarget, setApproveTarget] = useState<SubmissionPayment | null>(null);
   const [showEditSubmission, setShowEditSubmission] = useState(false);
   const [editPaymentId, setEditPaymentId] = useState<string | null>(null);
 
@@ -237,6 +240,7 @@ export default function SubmissionDetail() {
             {s.manager && (
               <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
                 {t('deal.manager')}: {s.manager.fullName}
+                <DismissedMark person={s.manager} />
               </div>
             )}
           </div>
@@ -381,7 +385,7 @@ export default function SubmissionDetail() {
             p={p}
             currency={s.currency}
             canReview={founder && p.status === 'PENDING' && s.status === 'ACTIVE' && !isOwnSubmission}
-            onApprove={() => approveMut.mutate(p.id)}
+            onApprove={() => (s.currency === 'TJS' ? approveMut.mutate({ paymentId: p.id }) : setApproveTarget(p))}
             onReject={() => onReject(p.id)}
             busy={approveMut.isPending || rejectMut.isPending}
             /* Управление платежом — только FOUNDER.
@@ -413,6 +417,23 @@ export default function SubmissionDetail() {
             qc.invalidateQueries({ queryKey: ['submission', id] });
             qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
             toast(t('deal.toast.paymentAdded'), 'success');
+          }}
+        />
+      )}
+
+      {approveTarget && (
+        <ApproveTjsModal
+          payment={approveTarget}
+          currency={s.currency}
+          busy={approveMut.isPending}
+          onClose={() => {
+            if (!approveMut.isPending) setApproveTarget(null);
+          }}
+          onSubmit={(amountTjs) => {
+            approveMut.mutate(
+              { paymentId: approveTarget.id, amountTjs },
+              { onSuccess: () => setApproveTarget(null) },
+            );
           }}
         />
       )}
@@ -505,6 +526,11 @@ function PaymentRow({
     <tr data-testid={`payment-row-${p.id}`} className="pay-row">
       <td className="pay-amount" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, whiteSpace: 'nowrap' }}>
         {p.amount.toLocaleString('ru-RU')} {currency}
+        {currency !== 'TJS' && p.amountTjs != null && (
+          <div className="pay-amount-tjs" data-testid="pay-amount-tjs">
+            {t('deal.inBonus')}: {p.amountTjs.toLocaleString('ru-RU')} TJS
+          </div>
+        )}
       </td>
       <td data-label={t('deal.col.paidAt')} style={{ whiteSpace: 'nowrap' }}>{new Date(p.paidAt).toLocaleDateString('ru-RU')}</td>
       <td data-label={t('deal.col.method')}>{PAYMENT_METHOD_LABEL[p.paymentMethod]}</td>
@@ -768,6 +794,93 @@ function Field({ label, children }: { label: string; children: any }) {
 }
 
 const REJECT_REASON_MAX = 500;
+
+/**
+ * Одобрение платежа по сделке НЕ в сомони. Курса валют в системе нет, а бонус
+ * менеджера и KPI считаются в сомони, поэтому основатель указывает, сколько
+ * этот платёж в сомони. Для TJS-сделки окно не открывается — одобрение в
+ * одно нажатие, как раньше.
+ */
+function ApproveTjsModal({
+  payment, currency, busy, onClose, onSubmit,
+}: {
+  payment: SubmissionPayment;
+  currency: string;
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (amountTjs: number) => void;
+}) {
+  const { t } = useT();
+  const [value, setValue] = useState('');
+  const amount = parseFloat(value.replace(',', '.'));
+  const isValid = isFinite(amount) && amount > 0;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isValid || busy) return;
+    onSubmit(Math.round(amount * 100) / 100);
+  };
+
+  return (
+    <motion.div
+      className="dialog-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={() => !busy && onClose()}
+    >
+      <motion.form
+        className="dialog-card"
+        data-testid="approve-tjs-modal"
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+        style={{ maxWidth: 440, textAlign: 'left' }}
+      >
+        <h3 style={{ fontSize: 18, marginBottom: 8, textAlign: 'center' }}>{t('deal.approveTjs.title')}</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12, lineHeight: 1.45 }}>
+          {t('deal.approveTjs.text').replace('{currency}', currency)}
+        </p>
+        <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, marginBottom: 12 }}>
+          {payment.amount.toLocaleString('ru-RU')} {currency}
+        </div>
+        <Field label={`${t('deal.approveTjs.field')} *`}>
+          <input
+            className="crm-input"
+            type="number"
+            min={0}
+            step={1}
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoFocus={!isTouchDevice()}
+            disabled={busy}
+            data-testid="approve-tjs-input"
+            placeholder="0"
+          />
+        </Field>
+        <div className="dialog-actions" style={{ justifyContent: 'flex-end' }}>
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
+          <button type="submit" className="btn btn-primary" disabled={!isValid || busy} data-testid="approve-tjs-submit">
+            {t('deal.approve')}
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}
 
 function RejectReasonModal({
   busy, onClose, onSubmit,
@@ -1218,6 +1331,12 @@ function EditPaymentModal({
     payment.nextDueAmount != null ? String(payment.nextDueAmount) : '',
   );
   const [notes, setNotes] = useState<string>(payment.notes || '');
+  // Сумма в сомони — у одобренного платежа по сделке не в TJS. Отправляем,
+  // только если её поменяли: иначе сервер сам пересчитает её пропорционально
+  // новой сумме в валюте (курс засчёта сохраняется).
+  const showTjs = currency !== 'TJS' && payment.status === 'APPROVED';
+  const initialTjs = payment.amountTjs != null ? String(payment.amountTjs) : '';
+  const [amountTjs, setAmountTjs] = useState<string>(initialTjs);
 
   const mut = useMutation({
     mutationFn: () => {
@@ -1230,6 +1349,7 @@ function EditPaymentModal({
         nextDueDate: nextDueDate || null,
         nextDueAmount: nextDueAmount ? parseFloat(nextDueAmount) : null,
         notes: notes.trim() || null,
+        ...(showTjs && amountTjs !== initialTjs && amountTjs.trim() ? { amountTjs: parseFloat(amountTjs.replace(',', '.')) } : {}),
       };
       return updatePayment(payment.id, dto);
     },
@@ -1241,6 +1361,10 @@ function EditPaymentModal({
     if (readOnly) return;
     const a = parseFloat(amount);
     if (!isFinite(a) || a <= 0) return toast(t('deal.err.amount'), 'error');
+    if (showTjs && amountTjs !== initialTjs) {
+      const tj = parseFloat(amountTjs.replace(',', '.'));
+      if (!isFinite(tj) || tj <= 0) return toast(t('deal.approveTjs.required'), 'error');
+    }
     if (method === 'TRANSFER' && receiptUrls.length === 0) return toast(t('deal.err.receipt'), 'error');
     if (method === 'CASH' && depositProofUrls.length === 0) return toast(t('deal.err.deposit'), 'error');
     mut.mutate();
@@ -1257,7 +1381,8 @@ function EditPaymentModal({
     depositProofUrls.join('|') !== (payment.depositProofUrls || []).join('|') ||
     nextDueDate !== (payment.nextDueDate ? new Date(payment.nextDueDate).toISOString().slice(0, 10) : '') ||
     nextDueAmount !== (payment.nextDueAmount != null ? String(payment.nextDueAmount) : '') ||
-    notes !== (payment.notes || '');
+    notes !== (payment.notes || '') ||
+    amountTjs !== initialTjs;
 
   const attemptClose = async () => {
     if (mut.isPending) return;
@@ -1341,6 +1466,20 @@ function EditPaymentModal({
               disabled={readOnly}
             />
           </Field>
+          {showTjs && (
+            <Field label={t('deal.approveTjs.field')}>
+              <input
+                className="crm-input"
+                type="number"
+                min={0}
+                step={1}
+                inputMode="decimal"
+                value={amountTjs}
+                onChange={(e) => setAmountTjs(e.target.value)}
+                data-testid="edit-pay-amount-tjs"
+              />
+            </Field>
+          )}
           <Field label={t('deal.field.method')}>
             <CrmSelect
               className="crm-select"

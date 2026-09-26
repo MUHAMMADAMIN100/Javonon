@@ -46,6 +46,7 @@ import { useRealtime } from '../realtime';
 import { useAuth } from '../store/auth';
 import { hasRole, isElevated } from '../lib/roles';
 import { hasPermission } from '../lib/permissions';
+import DismissedMark from '../components/DismissedMark';
 
 function fmtMoney(n: number, currency = 'TJS'): string {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -862,7 +863,7 @@ export default function Finance() {
                 </td>
                 <td data-label={txSort.label('student')} style={{ fontSize: 13 }}>
                   {tx.student && <div>👤 {tx.student.fullName}</div>}
-                  {tx.manager && <div style={{ color: 'var(--text-soft)' }}>💼 {tx.manager.fullName}</div>}
+                  {tx.manager && <div style={{ color: 'var(--text-soft)' }}>💼 {tx.manager.fullName}<DismissedMark person={tx.manager} /></div>}
                   {!tx.student && !tx.manager && <span style={{ color: 'var(--text-light)' }}>—</span>}
                 </td>
                 <td data-label={txSort.label('comment')} className="td-stack" style={{ color: 'var(--text-soft)', fontSize: 13 }}>{tx.comment || '—'}</td>
@@ -1917,7 +1918,10 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
               }}>
                 {b.items.map((it) => (
                   <div key={it.id} className="dist-item">
-                    <span className="dist-item-name">{it.name}{it.user ? ` · ${it.user.fullName}` : ''}</span>
+                    <span className="dist-item-name">
+                      {it.name}
+                      {it.user && <> · {it.user.fullName}<DismissedMark person={it.user} /></>}
+                    </span>
                     <span className="dist-item-sum" data-testid="dist-sum">{it.amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</span>
                   </div>
                 ))}

@@ -15,6 +15,7 @@ import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { listGroups, createGroup, type StudyGroupStatus } from '../api/studyGroups';
 import { listPrograms } from '../api/programs';
 import { listUsers } from '../api/users';
+import DismissedMark from '../components/DismissedMark';
 
 /**
  * Учебные группы.
@@ -161,6 +162,7 @@ export default function Groups() {
                   </td>
                   <td data-label={t('groups.field.teacher')} style={{ color: 'var(--text-soft)' }}>
                     {g.teacher?.fullName || t('groups.noTeacher')}
+                    <DismissedMark person={g.teacher} />
                   </td>
                   <td data-label={t('groups.membersCount')} style={{ textAlign: 'right' }}>{g._count?.members ?? 0}</td>
                   <td data-label={t('groups.sessionsCount')} style={{ textAlign: 'right' }}>{g._count?.sessions ?? 0}</td>

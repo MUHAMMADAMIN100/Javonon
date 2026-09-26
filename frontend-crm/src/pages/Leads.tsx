@@ -40,6 +40,7 @@ import SearchField, { useUrlSearch } from '../components/SearchField';
 import ListTotal from '../components/ListTotal';
 import { dateParam, enumParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds } from '../utils/validators';
+import DismissedMark from '../components/DismissedMark';
 
 /**
  * Экран «Лиды» — ручной ввод заявок сотрудником (роль «Квалификатор
@@ -1281,7 +1282,10 @@ export default function Leads() {
                               ))}
                             </CrmSelect>
                           ) : a.manager ? (
-                            a.manager.fullName
+                            <>
+                              {a.manager.fullName}
+                              <DismissedMark person={a.manager} />
+                            </>
                           ) : (
                             <span style={{ color: 'var(--text-light)' }}>
                               {t('leads.manager.unassigned')}

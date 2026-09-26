@@ -66,12 +66,7 @@ export interface FullProfile {
     }>;
     baseSalary: number;
     hourlyRate: number;
-    /**
-     * ПЕРСОНАЛЬНЫЙ override ставки (User.bonusPercent). 0 = не задан,
-     * ставка берётся из сетки. Для показа «бонус % с продаж»
-     * бери bonusPercentEffective — иначе все, кто сидит на сетке,
-     * увидят «0%» при 6% на экране Зарплаты.
-     */
+    /** Ставка этого месяца по сетке (персонального процента больше нет). */
     bonusPercent: number;
     /** Ставка, которая РЕАЛЬНО применяется к объёму этого месяца. */
     bonusPercentEffective?: number;
@@ -84,10 +79,12 @@ export interface FullProfile {
       maxAmount: number | null;
       percent: number;
     };
-    /** Объём за календарный месяц (APPROVED-платежи, TJS). */
+    /** Объём за календарный месяц (одобренные платежи, в сомони). */
     bonusVolume?: number;
     bonusPeriodStart?: string;
     bonusPeriodEnd?: string;
+    /** Набрано / ставка / до следующей ставки — полоска прогресса. */
+    bonusProgress?: import('./kpi').BonusProgressData;
   } | null;
   penalties: {
     list: Array<{

@@ -152,6 +152,7 @@ export class CronService {
       const RECIPIENT_ROLES = ['FOUNDER', 'ADMIN', 'ACCOUNTANT'] as const;
       const recipients = await this.prisma.user.findMany({
         where: {
+          isActive: true,
           OR: [
             { role: { in: RECIPIENT_ROLES as any } },
             { roles: { hasSome: RECIPIENT_ROLES as any } },
@@ -226,6 +227,8 @@ export class CronService {
       const FILTER_ROLES = ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'] as const;
       const employees = await this.prisma.user.findMany({
         where: {
+          // Уволенный не «опаздывает» и не «не отметился».
+          isActive: true,
           OR: [
             { role: { in: FILTER_ROLES as any } },
             { roles: { hasSome: FILTER_ROLES as any } },
@@ -272,7 +275,7 @@ export class CronService {
       this.logger.log('Cron: remindClockOut');
       const open = await this.prisma.timeEntry.findMany({
         where: { status: { in: ['WORKING', 'ON_LUNCH'] } },
-        include: { user: { select: { id: true, fullName: true } } },
+        include: { user: { select: { id: true, fullName: true, isActive: true } } },
       });
       for (const e of open) {
         await this.notifications.notifyUser(e.userId, {
@@ -448,7 +451,7 @@ export class CronService {
           updatedAt: { lt: weekAgo },
           managerId: { not: null },
         },
-        include: { manager: { select: { id: true, fullName: true } } },
+        include: { manager: { select: { id: true, fullName: true, isActive: true } } },
       });
 
       for (const app of stale) {
@@ -477,6 +480,7 @@ export class CronService {
       this.logger.log('Cron: kpiMonthlyIncrease');
       const users = await this.prisma.user.findMany({
         where: {
+          isActive: true,
           OR: [
             { role: { in: ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] } },
             { roles: { hasSome: ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] } },

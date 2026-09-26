@@ -9,6 +9,7 @@ import { useRoleLabel } from '../lib/labels';
 import { tjLastDaysRange } from '../lib/tjTime';
 import KpiDetailsModal from '../components/KpiDetailsModal';
 import FitNumber from '../components/FitNumber';
+import BonusProgress from '../components/BonusProgress';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
 function fmtMoney(n: number, c = 'TJS') {
@@ -70,6 +71,8 @@ export default function Kpi() {
     { key: 'conversion', label: t('kpi.col.conversion'), type: 'number', value: (r) => r.conversionRate },
     { key: 'students', label: t('kpi.col.students'), type: 'number', value: (r) => r.studentsCount },
     { key: 'sales', label: t('kpi.col.sales'), type: 'number', value: (r) => r.salesAmount },
+    // Бонус ТЕКУЩЕГО месяца (ставка месячная и от периода на экране не зависит).
+    { key: 'bonus', label: t('kpi.col.bonusMonth'), type: 'number', value: (r) => r.bonusProgress?.volume ?? 0 },
     { key: 'tasks', label: t('kpi.col.tasks'), type: 'number', value: (r) => r.tasksDone },
   ]);
 
@@ -146,6 +149,15 @@ export default function Kpi() {
         </motion.div>
       )}
 
+      {/* Бонус за месяц: сколько набрано и сколько осталось до следующей ставки. */}
+      {!isElevated(me) && myRow?.bonusProgress && (
+        <div className="card" style={{ marginBottom: 24 }}>
+          <div className="card-body">
+            <BonusProgress p={myRow.bonusProgress} testId="kpi-my-bonus" />
+          </div>
+        </div>
+      )}
+
       {/* Top performer banner for ADMIN */}
       {isElevated(me) && top && (
         <motion.div
@@ -219,7 +231,7 @@ export default function Kpi() {
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={8} className="empty">{t('kpi.empty')}</td></tr>
+              <tr><td colSpan={9} className="empty">{t('kpi.empty')}</td></tr>
             )}
             {sort.sorted.map((r, i) => {
               const isMe = r.id === me?.id;
@@ -294,6 +306,9 @@ export default function Kpi() {
                         color: 'var(--text-light)',
                       }}>+ {nonTjsLine(r)}</div>
                     )}
+                  </td>
+                  <td className="kpi-c-bonus" data-label={t('kpi.col.bonusMonth')}>
+                    {r.bonusProgress ? <BonusProgress p={r.bonusProgress} variant="compact" testId="kpi-bonus" /> : '—'}
                   </td>
                   <td className="kpi-c-tasks" style={{ fontSize: 13, color: 'var(--text-soft)' }}>
                     <span style={{ color: 'var(--text)' }}>{r.tasksDone}</span> / {r.tasksDone + r.tasksOpen}

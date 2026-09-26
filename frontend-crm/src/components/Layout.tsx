@@ -9,6 +9,7 @@ import RealtimeStatusBanner from './RealtimeStatusBanner';
 import Dialpad from './Dialpad';
 import Icon from '../Icon';
 import { useRealtimeEvent } from '../realtime';
+import { useQueryClient } from '@tanstack/react-query';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { me as apiMe } from '../api/auth';
@@ -86,6 +87,7 @@ export default function Layout() {
   // личную комнату. JWT в localStorage уже устарел — backend RolesGuard
   // читает старые роли. Логаут даёт сразу взять новый JWT с актуальными
   // правами при следующем логине.
+  const queryClient = useQueryClient();
   useRealtimeEvent('user:roles-updated', () => {
     toast(t('layout.rolesUpdated'), 'info');
     setTimeout(() => logout(), 4000);
@@ -94,6 +96,15 @@ export default function Layout() {
   useRealtimeEvent('user:deleted', () => {
     toast(t('layout.accountDeleted'), 'error');
     setTimeout(() => logout(), 3000);
+  });
+
+  // Кого-то уволили: его дела переданы другим, а сам он пропал из списков,
+  // рейтинга и чатов. Обновляем открытые экраны у всех, не дожидаясь
+  // перезагрузки (у увольнявшего это уже сделало окно увольнения).
+  useRealtimeEvent('user:dismissed', () => {
+    for (const key of ['users', 'applications', 'students', 'submissions', 'submission', 'tasks', 'kpi', 'chat', 'groups', 'calls']) {
+      queryClient.invalidateQueries({ queryKey: [key] });
+    }
   });
 
   // Task 4: FOUNDER расширил permissions моей кастомной роли — backend шлёт

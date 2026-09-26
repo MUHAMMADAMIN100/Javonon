@@ -1,4 +1,5 @@
 import { managerSales } from '../common/manager-sales';
+import { managerBonusProgress, managerBonusVolumes } from '../common/manager-bonus-volume';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { isElevated, UserWithRoles } from '../auth/role-utils';
@@ -99,6 +100,8 @@ export class KpiService {
     const KPI_ROLES = ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'] as const;
     const users = await this.prisma.user.findMany({
       where: {
+        // Уволенных в рейтинге нет — ни в текущем, ни в прошлых периодах.
+        isActive: true,
         OR: [
           { role: { in: KPI_ROLES as any } },
           { roles: { hasSome: KPI_ROLES as any } },
@@ -113,8 +116,11 @@ export class KpiService {
     const ids = users.map((u) => u.id);
     // Всё сразу по всем сотрудникам — 4 группировки вместо 5 запросов на
     // каждого (при 30 сотрудниках было 150 запросов на одно открытие).
-    const [sales, appGroups, studentGroups, taskGroups] = await Promise.all([
+    const [sales, bonusVolumes, appGroups, studentGroups, taskGroups] = await Promise.all([
       managerSales(this.prisma, ids, filters),
+      // Бонус ТЕКУЩЕГО календарного месяца — полоска «набрано / до следующей
+      // ставки». Не зависит от периода на экране: ставка месячная.
+      managerBonusVolumes(this.prisma, ids, new Date()),
       this.prisma.application.groupBy({
         by: ['managerId', 'chinaManagerId', 'status'],
         where: this.applicationsWhere(ids, dateFilter),
@@ -191,6 +197,8 @@ export class KpiService {
           nonTjsSales: sales.get(u.id)?.nonTjs ?? {},
           tasksOpen,
           tasksDone,
+          // Бонус за текущий месяц тем же расчётом, что в зарплате.
+          bonusProgress: managerBonusProgress(bonusVolumes.get(u.id)!),
         };
       });
 
