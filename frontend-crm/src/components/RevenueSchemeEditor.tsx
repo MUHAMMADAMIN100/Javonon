@@ -84,11 +84,13 @@ export default function RevenueSchemeEditor({ scheme }: { scheme: RevenueScheme 
   };
 
   const handleReset = async () => {
+    // Кнопка подтверждения называет действие: по-таджикски common.reset («Бекор кардан»)
+    // рядом с «Бекор» читалось как вторая «Отмена», а она пересобирает всю схему.
     const ok = await confirm({
-      title: t('common.reset'),
+      title: t('settings.revenueScheme.reset') + '?',
       message: t('settings.revenueScheme.reset.confirm'),
       danger: true,
-      confirmText: t('common.reset'),
+      confirmText: t('settings.revenueScheme.reset'),
     });
     if (!ok) return;
     try {
@@ -112,9 +114,10 @@ export default function RevenueSchemeEditor({ scheme }: { scheme: RevenueScheme 
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Заголовок + процент + reset */}
+    <div className="rse" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Заголовок + процент + reset. Раскладка телефона — в index.css (.rse-*). */}
       <div
+        className="rse-top"
         style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -126,13 +129,13 @@ export default function RevenueSchemeEditor({ scheme }: { scheme: RevenueScheme 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <PercentSumBadge totalPercent={totalPercent} />
         </div>
-        <button className="btn btn-sm btn-secondary" onClick={handleReset}>
+        <button className="btn btn-sm btn-secondary rse-reset" data-testid="rse-reset" onClick={handleReset}>
           {t('settings.revenueScheme.reset')}
         </button>
       </div>
 
       {/* Список фондов */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="rse-buckets" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {buckets.map((b) => (
           <BucketCard key={b.id} bucket={b} onChanged={refresh} />
         ))}
@@ -143,7 +146,8 @@ export default function RevenueSchemeEditor({ scheme }: { scheme: RevenueScheme 
         <NewBucketForm onCancel={() => setCreating(false)} onCreate={handleAddBucket} />
       ) : (
         <button
-          className="btn btn-sm btn-primary"
+          className="btn btn-sm btn-primary rse-add-bucket"
+          data-testid="rse-add-bucket"
           onClick={() => setCreating(true)}
           style={{ alignSelf: 'flex-start' }}
         >
@@ -187,7 +191,7 @@ function PercentSumBadge({ totalPercent }: { totalPercent: number }) {
       >
         Σ {totalPercent}%
       </span>
-      <span style={{ fontSize: 11, color: 'var(--text-soft)' }}>
+      <span className="rse-sum-caption" style={{ fontSize: 11, color: 'var(--text-soft)' }}>
         {t('settings.revenueScheme.sumBadge.percent')}
       </span>
     </div>
@@ -330,6 +334,8 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
 
   return (
     <div
+      className="rse-bucket"
+      data-testid={`rse-bucket-${bucket.id}`}
       style={{
         border: `1.5px solid ${borderColor}`,
         borderLeft: `6px solid ${color === '#ffffff' ? 'var(--border)' : color}`,
@@ -338,8 +344,11 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
         background: 'var(--bg)',
       }}
     >
-      {/* Header: name + kind + color + percent + delete */}
+      {/* Header: name + kind + color + percent + delete. На телефоне — сетка
+          (index.css, .rse-bucket-head): название во всю ширину, ниже вид и цвет
+          слева, процент/итог справа; «Удалить» уезжает в нижнюю строку. */}
       <div
+        className="rse-bucket-head"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -350,6 +359,8 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
       >
         <input
           ref={nameInputRef}
+          className="rse-bucket-name"
+          data-testid="rse-bucket-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={commitName}
@@ -368,9 +379,11 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
         <KindBadge kind={bucket.kind} />
 
         {/* Color swatch */}
-        <div style={{ position: 'relative' }}>
+        <div className="rse-color" style={{ position: 'relative' }}>
           <button
             type="button"
+            className="rse-color-btn"
+            data-testid="rse-bucket-color"
             onClick={() => setColorPickerOpen((v) => !v)}
             aria-label={t('settings.revenueScheme.card.colorAria')}
             style={{
@@ -425,9 +438,11 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
         </div>
 
         {bucket.kind === 'PERCENTAGE' ? (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <div className="rse-percent" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <input
               ref={percentInputRef}
+              className="rse-percent-input"
+              data-testid="rse-bucket-percent"
               type="number"
               min={0}
               value={percent}
@@ -454,6 +469,8 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
           </div>
         ) : (
           <div
+            className="rse-total"
+            data-testid="rse-bucket-total"
             style={{
               display: 'inline-flex',
               alignItems: 'baseline',
@@ -489,8 +506,11 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
           </div>
         )}
 
+        {/* На компьютере «Удалить» здесь, справа; на телефоне эта кнопка скрыта,
+            а такая же стоит в нижней строке рядом с «+ Добавить статью». */}
         <button
-          className="btn btn-sm btn-danger"
+          className="btn btn-sm btn-danger rse-bucket-delete is-desk"
+          data-testid="rse-bucket-delete"
           onClick={handleDelete}
           style={{ marginLeft: 'auto' }}
         >
@@ -501,6 +521,7 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
       {/* Items list */}
       {items.length > 0 && (
         <div
+          className="rse-items"
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -527,13 +548,23 @@ function BucketCard({ bucket, onChanged }: { bucket: RevenueBucket; onChanged: (
           onCreate={handleAddItem}
         />
       ) : (
-        <button
-          className="btn btn-sm btn-secondary"
-          onClick={() => setAddingItem(true)}
-          style={{ marginTop: 8 }}
-        >
-          {t('settings.revenueScheme.addItem')}
-        </button>
+        <div className="rse-bucket-foot">
+          <button
+            className="btn btn-sm btn-secondary rse-add-item"
+            data-testid="rse-add-item"
+            onClick={() => setAddingItem(true)}
+            style={{ marginTop: 8 }}
+          >
+            {t('settings.revenueScheme.addItem')}
+          </button>
+          <button
+            className="btn btn-sm btn-danger rse-bucket-delete is-phone"
+            data-testid="rse-bucket-delete-phone"
+            onClick={handleDelete}
+          >
+            {t('settings.revenueScheme.deleteBucket')}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -632,6 +663,7 @@ function BucketItemRow({
   return (
     <div
       className="revenue-item-row"
+      data-testid="rse-item"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -645,6 +677,7 @@ function BucketItemRow({
       <input
         ref={nameInputRef}
         className="revenue-item-name"
+        data-testid="rse-item-name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         onBlur={commitName}
@@ -666,6 +699,7 @@ function BucketItemRow({
             <input
               ref={amountInputRef}
               className="revenue-item-amount"
+              data-testid="rse-item-amount"
               type="number"
               min={0}
               step={100}
@@ -698,6 +732,7 @@ function BucketItemRow({
         )}
         <button
           className="btn btn-sm btn-danger revenue-item-delete"
+          data-testid="rse-item-delete"
           onClick={handleDelete}
           aria-label={t('common.delete')}
           title={t('common.delete')}
@@ -721,9 +756,17 @@ function KindBadge({ kind }: { kind: BucketKind }) {
     kind === 'PERCENTAGE'
       ? t('settings.revenueScheme.percent')
       : t('settings.revenueScheme.fixed');
+  // На телефоне «Фиксированная сумма» не помещается рядом с цветом и итогом —
+  // показываем короткую подпись (переключение в index.css, .rse-kind-*).
+  const shortLabel =
+    kind === 'PERCENTAGE'
+      ? t('settings.revenueScheme.percent')
+      : t('settings.revenueScheme.fixedShort');
   const color = kind === 'PERCENTAGE' ? '#3b82f6' : '#f59e0b';
   return (
     <span
+      className="rse-kind"
+      data-testid="rse-bucket-kind"
       style={{
         padding: '2px 8px',
         border: `1px solid ${color}`,
@@ -736,7 +779,8 @@ function KindBadge({ kind }: { kind: BucketKind }) {
         whiteSpace: 'nowrap',
       }}
     >
-      {label}
+      <span className="rse-kind-full">{label}</span>
+      <span className="rse-kind-short">{shortLabel}</span>
     </span>
   );
 }
@@ -774,6 +818,8 @@ function NewBucketForm({
 
   return (
     <div
+      className="rse-new-bucket"
+      data-testid="rse-new-bucket"
       style={{
         border: '1px dashed var(--border)',
         borderRadius: 10,
@@ -784,8 +830,10 @@ function NewBucketForm({
         background: 'var(--bg-soft)',
       }}
     >
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <CrmSelect className="crm-select"
+      {/* На телефоне поля идут столбиком во всю ширину, палитра — сеткой (index.css). */}
+      <div className="rse-new-bucket-fields" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <CrmSelect className="crm-select rse-new-kind"
+          data-testid="rse-new-kind"
           value={kind}
           onChange={(e) => setKind(e.target.value as BucketKind)}
           style={{
@@ -798,6 +846,8 @@ function NewBucketForm({
           <option value="FIXED_SUM">{t('settings.revenueScheme.fixed')}</option>
         </CrmSelect>
         <input
+          className="rse-new-name"
+          data-testid="rse-new-name"
           placeholder={t('common.name')}
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -810,6 +860,8 @@ function NewBucketForm({
         />
         {kind === 'PERCENTAGE' && (
           <input
+            className="rse-new-percent"
+            data-testid="rse-new-percent"
             type="number"
             min={0}
             value={percent}
@@ -824,7 +876,7 @@ function NewBucketForm({
             }}
           />
         )}
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div className="rse-new-colors" style={{ display: 'flex', gap: 4 }}>
           {COLOR_PALETTE.map((c) => (
             <button
               key={c}
@@ -844,11 +896,11 @@ function NewBucketForm({
           ))}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button className="btn btn-sm btn-secondary" onClick={onCancel}>
+      <div className="rse-new-bucket-actions" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button className="btn btn-sm btn-secondary" data-testid="rse-new-cancel" onClick={onCancel}>
           {t('common.cancel')}
         </button>
-        <button className="btn btn-sm btn-primary" onClick={submit} disabled={!name.trim()}>
+        <button className="btn btn-sm btn-primary" data-testid="rse-new-create" onClick={submit} disabled={!name.trim()}>
           {t('common.create')}
         </button>
       </div>
@@ -888,6 +940,8 @@ function NewItemForm({
 
   return (
     <div
+      className="rse-new-item"
+      data-testid="rse-new-item"
       style={{
         display: 'flex',
         gap: 8,
@@ -898,7 +952,11 @@ function NewItemForm({
         border: '1px dashed var(--border)',
       }}
     >
+      {/* На телефоне название во всю ширину, ниже сумма и кнопки — в одну строку, а где не
+          помещаются (320 px), сумма над кнопками (index.css, .rse-new-item). */}
       <input
+        className="rse-new-item-name"
+        data-testid="rse-new-item-name"
         placeholder={t('common.name')}
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -911,8 +969,9 @@ function NewItemForm({
         }}
       />
       {parentKind === 'FIXED_SUM' && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <div className="rse-new-item-amount" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <input
+            data-testid="rse-new-item-sum"
             type="number"
             min={0}
             step={100}
@@ -941,12 +1000,14 @@ function NewItemForm({
           </span>
         </div>
       )}
-      <button className="btn btn-sm btn-secondary" onClick={onCancel} style={{ padding: '2px 8px', fontSize: 11 }}>
-        {t('common.cancel')}
-      </button>
-      <button className="btn btn-sm btn-primary" onClick={submit} style={{ padding: '2px 8px', fontSize: 11 }} disabled={!name.trim()}>
-        {t('common.add')}
-      </button>
+      <div className="rse-new-item-actions" style={{ display: 'contents' }}>
+        <button className="btn btn-sm btn-secondary" data-testid="rse-new-item-cancel" onClick={onCancel} style={{ padding: '2px 8px', fontSize: 11 }}>
+          {t('common.cancel')}
+        </button>
+        <button className="btn btn-sm btn-primary" data-testid="rse-new-item-add" onClick={submit} style={{ padding: '2px 8px', fontSize: 11 }} disabled={!name.trim()}>
+          {t('common.add')}
+        </button>
+      </div>
     </div>
   );
 }

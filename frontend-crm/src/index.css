@@ -3853,6 +3853,10 @@ textarea:focus {
   background: var(--border);
   border-radius: 4px;
 }
+/* Тело вкладок настроек: на телефоне 14 px, как .card-body везде (было 24 px — съедало ширину схемы и таблиц). */
+@media (max-width: 600px) {
+  .settings-body { padding: 14px !important; }
+}
 
 /* Универсальные row в Settings (правила штрафа, кастомные роли,
    тарифы бонусов). На мобиле кнопки переносятся под основной контент,
@@ -4357,68 +4361,89 @@ input[type="checkbox"].crm-checkbox:checked {
   }
 }
 
-/* ============================================================
- * RevenueSchemeEditor — mobile adapt
- * ============================================================
- * На узких экранах (<=480px) в строке статьи фиксированного фонда
- * не помещаются одновременно название + сумма + TJS + кнопка «Удалить»,
- * из-за чего название обрезалось и кнопка вываливалась за карточку.
- *
- * Решение:
- *  - имя переносится на отдельную строку (flex 1 1 100%) с крупным
- *    шрифтом 12/11 px — читается полностью «Академия (6 месяцев)»,
- *    «Сертификат IELTS», «Подача документов».
- *  - контролы (сумма + TJS + delete) уходят на нижнюю строку.
- *  - на ≤480 кнопка «Удалить» превращается в «×» — экономит ~50 px.
- *  - на ≤380 бэйдж TJS скрыт (валюта в контексте очевидна).
- * По умолчанию (desktop) — обычная одна строка как раньше.
- */
+/* ===================== Схема распределения (components/RevenueSchemeEditor) =====================
+   Компьютер — как раньше: одна строка шапки фонда, «Удалить» справа, статьи строкой.
+   Телефон (≤600): название фонда во всю ширину; ниже слева вид и цвет, справа процент
+   или итог; каждая статья — одна строка (название · сумма · квадратная «×» 36 px, как
+   кнопки пагинации); внизу «+ Добавить статью» и «Удалить фонд» пополам. Формы добавления —
+   полями во всю ширину, кнопки пополам. Раньше название статьи занимало всю строку, а сумма
+   и «×» падали на вторую; шапка фонда рассыпалась на три строки. */
 .revenue-item-delete-icon { display: none; }
-@media (max-width: 480px) {
-  .revenue-item-row {
-    gap: 6px !important;
-    padding: 6px 6px !important;
+.rse-bucket-delete.is-phone { display: none; }
+.rse-bucket-foot { display: block; }
+.rse-kind-short { display: none; }
+
+@media (max-width: 600px) {
+  /* Ширина полей: глобальное правило телефона «input { width: 100% !important }»
+     (специфичность 0,2,1) перебивает одиночный класс — поэтому у полей селекторы длиннее. */
+  .rse-top { gap: 8px !important; }
+  .rse-top .rse-sum-caption { display: none; }
+  .rse-top .rse-reset { flex: 1 1 auto; justify-content: center; min-height: 36px; }
+  .rse-add-bucket { align-self: stretch !important; justify-content: center; min-height: 40px; }
+
+  .rse-bucket { padding: 12px !important; }
+  .rse-bucket-head {
+    display: grid !important; grid-template-columns: minmax(0, auto) auto minmax(0, 1fr) auto;
+    gap: 6px !important; align-items: center;
   }
-  .revenue-item-name {
-    flex: 1 1 100% !important;
-    font-size: 12px !important;
-    padding: 3px 6px !important;
+  .rse-bucket-head .rse-bucket-name { grid-column: 1 / -1; width: 100%; min-width: 0; min-height: 38px; }
+  .rse-bucket-head .rse-kind {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; min-height: 28px; display: inline-flex; align-items: center;
+    letter-spacing: 0.04em !important; padding: 2px 7px !important;
   }
-  .revenue-item-amount {
-    width: 78px !important;
-    font-size: 11px !important;
-    padding: 3px 5px !important;
-  }
-  .revenue-item-currency {
-    font-size: 9px !important;
-  }
-  .revenue-item-delete {
-    padding: 2px 6px !important;
-    font-size: 10px !important;
-    min-width: 28px !important;
-  }
-  /* Иконка вместо «Удалить» — освобождаем ~50 px, кнопка перестаёт вываливаться. */
-  .revenue-item-delete-text { display: none; }
-  .revenue-item-delete-icon {
-    display: inline-block;
-    font-size: 16px;
-    line-height: 1;
-    font-weight: 600;
-  }
-}
-@media (max-width: 380px) {
-  .revenue-item-name {
-    font-size: 11px !important;
-  }
-  .revenue-item-amount {
-    width: 68px !important;
-    font-size: 10px !important;
-  }
-  /* На совсем узких прячем TJS — валюта в контексте фонда очевидна. */
+  .rse-bucket-head .rse-kind-full { display: none; }
+  .rse-bucket-head .rse-kind-short { display: inline; }
+  .rse-bucket-head .rse-color { grid-column: 2; display: flex; }
+  .rse-bucket-head .rse-color-btn { width: 28px !important; height: 28px !important; }
+  .rse-bucket-head .rse-percent, .rse-bucket-head .rse-total { grid-column: 4; justify-self: end; }
+  .rse .rse-bucket-head input.rse-percent-input { width: 64px !important; min-height: 34px; }
+  .rse-bucket-head .rse-total { min-height: 34px; align-items: center !important; padding: 4px 8px !important; }
+  .rse-bucket-head .rse-bucket-delete.is-desk { display: none; }
+
+  .rse-items { gap: 6px !important; }
+  .revenue-item-row { flex-wrap: nowrap !important; gap: 6px !important; padding: 4px !important; }
+  .rse .revenue-item-row input.revenue-item-name { flex: 1 1 0 !important; min-width: 0 !important; padding: 6px 8px !important; min-height: 36px; }
+  .revenue-item-controls { flex: 0 0 auto; gap: 4px !important; margin-left: 0 !important; }
+  .rse .revenue-item-row input.revenue-item-amount { width: 80px !important; min-width: 0 !important; padding: 6px !important; min-height: 36px; }
+  /* «TJS» в строках не показываем — валюта видна в итоге фонда, а названию нужно место. */
   .revenue-item-currency { display: none !important; }
   .revenue-item-delete {
-    padding: 2px 5px !important;
+    width: 36px !important; height: 36px !important; min-width: 0 !important; padding: 0 !important;
+    justify-content: center; flex: 0 0 auto; border-radius: 10px !important;
   }
+  .revenue-item-delete-text { display: none; }
+  .revenue-item-delete-icon { display: inline-block; font-size: 20px; line-height: 1; font-weight: 500; }
+
+  /* Кнопки низа ровно пополам; если хоть одна надпись не влезает в половину (320 px, длинные надписи TJ) —
+     обе встают друг под другом во всю ширину. */
+  .rse-bucket-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .rse-bucket-foot .btn {
+    flex: 1 1 calc(50% - 4px); min-width: max-content; margin-top: 0 !important;
+    justify-content: center; min-height: 40px; padding: 6px 8px !important;
+  }
+  .rse-bucket-foot .rse-bucket-delete.is-phone { display: inline-flex; }
+
+  .rse-new-bucket { padding: 10px !important; }
+  .rse-new-bucket-fields { flex-direction: column; align-items: stretch !important; }
+  .rse-new-bucket-fields .rse-new-kind { width: 100% !important; min-height: 38px; }
+  /* flex 0 0 auto: в столбике flex-basis 180px стал бы высотой поля. */
+  .rse-new-bucket-fields .rse-new-name { flex: 0 0 auto !important; min-height: 38px; }
+  .rse-new-bucket-fields .rse-new-percent { width: 100% !important; min-height: 38px; }
+  .rse-new-bucket-fields .rse-new-colors {
+    display: grid !important; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px !important; justify-items: center; padding: 2px 0;
+  }
+  .rse-new-bucket-fields .rse-new-colors button { width: 26px !important; height: 26px !important; border-radius: 6px !important; }
+  .rse-new-bucket-actions .btn { flex: 1 1 0; min-width: 0; justify-content: center; min-height: 40px; }
+
+  .rse-new-item { flex-wrap: wrap; gap: 8px !important; padding: 8px !important; }
+  .rse-new-item .rse-new-item-name { flex: 1 1 100% !important; min-height: 36px; }
+  /* Сумма и кнопки в одной строке; на узких экранах, где не влезают, сумма во всю ширину, кнопки строкой ниже. */
+  .rse-new-item .rse-new-item-amount { flex: 1 1 90px; min-width: 0; }
+  .rse-new-item .rse-new-item-amount input { width: 100% !important; min-width: 0; min-height: 36px; }
+  .rse-new-item .rse-new-item-amount span { white-space: nowrap; flex: 0 0 auto; }
+  /* «Отмена» и «Добавить» — две равные колонки (по ширине более длинной надписи). */
+  .rse-new-item .rse-new-item-actions { display: grid !important; grid-template-columns: 1fr 1fr; gap: 6px; flex: 1 1 0; min-width: max-content; }
+  .rse-new-item .rse-new-item-actions .btn { min-width: 0; justify-content: center; min-height: 36px; padding: 0 10px !important; font-size: 12px !important; }
 }
 
 /* ============================================================

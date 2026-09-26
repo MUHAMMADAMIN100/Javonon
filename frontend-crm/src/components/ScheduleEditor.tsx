@@ -82,11 +82,13 @@ export default function ScheduleEditor({
         <button
           className="btn btn-sm btn-secondary"
           onClick={async () => {
+            // Кнопка подтверждения называет действие (по-таджикски common.reset рядом
+            // с «Бекор» читалось как вторая «Отмена»).
             const ok = await confirm({
               title: t('schedule.confirm.reset'),
               message: '',
               danger: true,
-              confirmText: t('common.reset'),
+              confirmText: t('schedule.reset'),
             });
             if (!ok) return;
             try {

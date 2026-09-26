@@ -206,10 +206,11 @@ export default function StudentDetail() {
 
   const onRegenerate = async () => {
     if (!id) return;
+    // Кнопка подтверждения называет действие (по-таджикски common.reset — «Бекор кардан», «отменить»).
     const ok = await confirm({
       title: t('userDetail.action.resetPassword'),
       message: '',
-      confirmText: t('common.reset'),
+      confirmText: t('userDetail.action.resetPassword'),
       danger: true,
     });
     if (!ok) return;

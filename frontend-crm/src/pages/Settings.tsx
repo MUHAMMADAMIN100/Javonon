@@ -71,7 +71,8 @@ export default function Settings() {
           <TabButton active={tab === 'salary'} onClick={() => setTab('salary')} label={t('settings.tab.salary')} />
           <TabButton active={tab === 'revenueScheme'} onClick={() => setTab('revenueScheme')} label={t('settings.tabs.revenueScheme')} />
         </div>
-        <div style={{ padding: 24 }}>
+        {/* На телефоне отступ 14 px, как у .card-body на остальных страницах (index.css, .settings-body). */}
+        <div className="settings-body" style={{ padding: 24 }}>
           {tab === 'schedule' && <ScheduleTab />}
           {tab === 'penalties' && <PenaltiesTab />}
           {tab === 'location' && <LocationTab />}
