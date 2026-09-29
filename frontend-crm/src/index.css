@@ -6536,7 +6536,7 @@ a.profile-hero-contact:hover { color: var(--primary); }
    Общее правило (≤900px) ставит все ячейки таблицы столбиком без подписей — цифры
    «282 / 3 / 3 / 0» было не понять. Здесь строка — сетка: место | имя | конверсия,
    под именем — продажи. Лиды, зачисленные, студенты, задачи и роль — в окне
-   подробностей по нажатию на строку. */
+   подробностей по нажатию на строку; бонус месяца — колонкой на компьютере. */
 @media (max-width: 900px) {
   .kpi-table { --kpi-sales-fs: 20px; }
   .kpi-table tr.kpi-row {
@@ -6564,7 +6564,8 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .kpi-table tr.kpi-row td.kpi-c-leads,
   .kpi-table tr.kpi-row td.kpi-c-enrolled,
   .kpi-table tr.kpi-row td.kpi-c-students,
-  .kpi-table tr.kpi-row td.kpi-c-tasks { display: none; }
+  .kpi-table tr.kpi-row td.kpi-c-tasks,
+  .kpi-table tr.kpi-row td.kpi-c-bonus { display: none; }
   .kpi-table tr.kpi-row td.kpi-c-conv .badge { font-size: 13px; padding: 5px 10px; }
 }
 
@@ -6967,13 +6968,10 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .bonus-card-figures > div:last-child { grid-column: 1 / -1; }
   .bonus-card-figures b { font-size: 20px; }
 }
-/* KPI на телефоне: бонус — третьей строкой карточки, во всю ширину. */
-@media (max-width: 900px) {
-  .kpi-table tr.kpi-row { grid-template-areas: "rank who conv" "rank sales sales" "rank bonus bonus"; }
-  .kpi-table tr.kpi-row td.kpi-c-bonus { grid-area: bonus; padding-top: 6px; }
-  .kpi-table tr.kpi-row td.kpi-c-bonus::before { content: none !important; }
-  .bonus-progress.is-compact { max-width: none; }
-}
+/* KPI на телефоне бонус в карточке рейтинга НЕ показываем (решение пользователя
+   2026-09-29: на телефоне — только имя, конверсия и продажи). Ячейку прячет блок
+   «KPI: рейтинг на телефоне»; бонус месяца виден на компьютере колонкой, а менеджеру —
+   своей полоской над рейтингом и в профиле. */
 
 /* ===================== Окно «Уволить» / «Передать дела» (components/HandoverModal) ===================== */
 .handover-modal, .handover-modal * { text-align: left; }

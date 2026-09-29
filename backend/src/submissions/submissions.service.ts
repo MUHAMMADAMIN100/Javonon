@@ -2573,7 +2573,12 @@ export class SubmissionsService {
    *      на только что отклонённый платёж;
    *   6) гасим Application.paymentPending: по расторгнутому договору долга
    *      нет, а суточный cron просрочки трогает только ACTIVE-сделки и снять
-   *      флаг уже никогда бы не смог (студент навсегда в должниках).
+   *      флаг уже никогда бы не смог (студент навсегда в должниках);
+   *   7) НЕодобренные (PENDING) платежи сделки → REJECTED с причиной «Сделка
+   *      отменена». Раньше они оставались PENDING навсегда: одобрить нельзя
+   *      («сделка отменена»), отклонить нельзя («неактивная сделка»), и сделка
+   *      вечно висела во вкладке «На рассмотрении». Денег по ним не было —
+   *      возвращать нечего, меняется только статус.
    * Bug #25 из audit:edge-cases: раньше CANCEL не откатывал ничего, и
    * деньги по отменённой сделке оставались в выручке и бонусной базе.
    * Пункт (4) — тот же баг на партнёрской стороне: компания возвращала
@@ -2675,6 +2680,7 @@ export class SubmissionsService {
     // сумма комиссии менеджеру по продажам не видны нигде (см.
     // canSeePartnerAttribution). В HTTP-ответ changeStatus они тоже не идут.
     const commissionReversals: CommissionReversal[] = [];
+    let rejectedPending = 0;
 
     const updated = await this.prisma.$transaction(async (tx) => {
       for (const p of approvedPayments) {
@@ -2823,6 +2829,19 @@ export class SubmissionsService {
         });
       }
 
+      // (7) Неодобренные платежи — отклоняем вместе со сделкой (см. шапку).
+      //     Кто отменил, тот и «разобрал» их: reviewedById / reviewedAt.
+      const pending = await tx.submissionPayment.updateMany({
+        where: { submissionId, status: SubmissionPaymentStatus.PENDING },
+        data: {
+          status: SubmissionPaymentStatus.REJECTED,
+          reviewedById: user.id,
+          reviewedAt: reversedAt,
+          rejectReason: `Сделка отменена (${reversedAt.toISOString().slice(0, 10)})`,
+        },
+      });
+      rejectedPending = pending.count;
+
       return tx.saleSubmission.update({
         where: { id: submissionId },
         data: { status },
@@ -2896,7 +2915,13 @@ export class SubmissionsService {
     this.realtime.emitStaff('submission:cancelled', {
       submissionId,
       reversedPayments: approvedPayments.length,
+      rejectedPending,
     });
+    // Очереди «На рассмотрении» у сотрудников обновляются по этому же событию,
+    // что и при ручном отклонении.
+    if (rejectedPending > 0) {
+      this.realtime.emitStaff('submission:reviewed', { submissionId, status: 'REJECTED' });
+    }
 
     return updated;
   }
