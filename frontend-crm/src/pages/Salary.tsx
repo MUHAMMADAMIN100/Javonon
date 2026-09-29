@@ -23,7 +23,7 @@ import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
-import { tjStartOfMonthStr, tjEndOfMonthStr, tjFormatDate } from '../lib/tjTime';
+import { tjStartOfMonthStr, tjEndOfMonthStr, tjFormatDate, tjYMD } from '../lib/tjTime';
 import { bandRangeLabel } from '../lib/bonusBands';
 import CrmDatePicker from '../components/CrmDatePicker';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
@@ -47,6 +47,30 @@ function fmtMin(min: number) {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return m > 0 ? `${h}${tr('time.hShort')} ${m}${tr('time.m')}` : `${h}${tr('time.hShort')}`;
+}
+/** «Октябрь 2026» по ключу месяца «2026-10». */
+function monthKeyLabel(key: string): string {
+  const [y, m] = key.split('-').map(Number);
+  return y && m ? `${tr(`month.${m}`)} ${y}` : key;
+}
+/** Ключ месяца Asia/Dushanbe («2026-10») по ISO-дате внутри месяца. */
+function monthKeyOf(iso: string): string {
+  const { y, m } = tjYMD(new Date(iso));
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+/**
+ * Доплата за прошлые месяцы в сохранённой записи — доли bonusByMonth с
+ * ключами раньше её периода (платежи с датой оплаты в тех месяцах одобрили
+ * после их расчёта).
+ */
+function recordArrears(r: SalaryRecord): Array<{ key: string; amount: number }> {
+  const split = r.bonusByMonth;
+  if (!split || typeof split !== 'object') return [];
+  const own = monthKeyOf(r.periodStart);
+  return Object.entries(split)
+    .filter(([key, v]) => key < own && Number(v) > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, v]) => ({ key, amount: Number(v) }));
 }
 /**
  * Колонок в журнале выплат: сотрудник, период, часы, приход, база, бонус,
@@ -404,6 +428,11 @@ export default function Salary() {
                               {r.bonusPercent !== null && r.bonusPercent !== undefined && r.bonusAmount > 0 && (
                                 <span className="salary-pct"> · {r.bonusPercent}%</span>
                               )}
+                              {(r.bonusArrearsAmount ?? 0) > 0 && (
+                                <span className="salary-pct" data-testid="salary-arrears-note">
+                                  {' '}· {t('salary.bonus.inclArrears')} {fmtMoney(r.bonusArrearsAmount ?? 0, r.currency)}
+                                </span>
+                              )}
                             </td>
                             <td data-label={t('salary.cell.kpi')} style={{ color: kpi > 0 ? 'var(--primary-dark)' : 'var(--text-soft)' }}>
                               {kpi > 0 ? `+ ${fmtMoney(kpi, r.currency)}` : fmtMoney(0, r.currency)}
@@ -505,9 +534,10 @@ export default function Salary() {
               )}
               {sort.sorted.map((r) => {
                 const expanded = expandedId === r.id;
+                const arrearsSum = recordArrears(r).reduce((sum, a) => sum + a.amount, 0);
                 return (
                   <Fragment key={r.id}>
-                    <tr>
+                    <tr data-testid="salary-history-row" data-user={r.userId}>
                       <td style={{ fontWeight: 500 }}>{r.user?.fullName}</td>
                       <td data-label={periodLabel} style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
                         {tjFormatDate(r.periodStart)}
@@ -520,7 +550,14 @@ export default function Salary() {
                       {/* Только комиссия с продаж. KPI — отдельная колонка:
                           он назначается вручную и в споре обсуждается
                           отдельно от бонуса по полосе. */}
-                      <td data-label={t('salary.cell.bonus')} style={{ color: 'var(--primary-dark)' }}>+ {fmtMoney(r.bonusAmount, r.currency)}</td>
+                      <td data-label={t('salary.cell.bonus')} style={{ color: 'var(--primary-dark)' }}>
+                        + {fmtMoney(r.bonusAmount, r.currency)}
+                        {arrearsSum > 0 && (
+                          <span className="salary-pct" data-testid="salary-history-arrears">
+                            {' '}· {t('salary.bonus.inclArrears')} {fmtMoney(arrearsSum, r.currency)}
+                          </span>
+                        )}
+                      </td>
                       <td data-label={t('salary.cell.kpi')} style={{ color: r.kpiBonus > 0 ? 'var(--primary-dark)' : 'var(--text-soft)' }}>
                         {r.kpiBonus > 0 ? `+ ${fmtMoney(r.kpiBonus, r.currency)}` : fmtMoney(0, r.currency)}
                       </td>
@@ -653,7 +690,11 @@ function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onCommen
                 : t('salary.cell.bonus')
             }
             value={fmtMoney(row.bonusAmount, row.currency)}
-            sub={`${t('salary.bonus.volume')}: ${fmtMoney(row.salesAmount, row.currency)}`}
+            sub={`${t('salary.bonus.volume')}: ${fmtMoney(row.salesAmount, row.currency)}${
+              (row.bonusArrearsAmount ?? 0) > 0
+                ? ` · ${t('salary.bonus.inclArrears')} ${fmtMoney(row.bonusArrearsAmount ?? 0, row.currency)}`
+                : ''
+            }`}
           />
           <PreviewCell label="KPI" value={fmtMoney(row.kpiBonus, row.currency)} />
           <PreviewCell
@@ -726,7 +767,11 @@ function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onCommen
             (preview.bonusMonths?.length ?? 1) > 1
               ? t('salary.bonus.volumePeriod')
               : t('salary.bonus.volume')
-          }: ${fmtMoney(preview.salesAmount)}`}
+          }: ${fmtMoney(preview.salesAmount)}${
+            (preview.bonusArrearsAmount ?? 0) > 0
+              ? ` · ${t('salary.bonus.inclArrears')} ${fmtMoney(preview.bonusArrearsAmount ?? 0)}`
+              : ''
+          }`}
         />
         <PreviewCell label="KPI" value={fmtMoney(preview.kpiBonus)} />
         <PreviewCell
@@ -837,6 +882,9 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
   const bands = preview.bonusBands ?? [];
   const volume = preview.bonusVolume ?? preview.salesAmount;
   const personal = preview.bonusSource === 'PERSONAL';
+  const arrears = preview.bonusArrears ?? [];
+  /** К начислению за сам период — без доплаты за прошлые месяцы. */
+  const ownDue = Math.round((preview.bonusAmount - (preview.bonusArrearsAmount ?? 0)) * 100) / 100;
   const nonTjs = preview.nonTjsSales && Object.keys(preview.nonTjsSales).length > 0
     ? preview.nonTjsSales
     : null;
@@ -957,7 +1005,7 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
           <b>− {fmtMoney(preview.bonusAlreadyPaid)}</b>
           <span style={{ color: 'var(--text-light)' }}>→</span>
           <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.due')}</span>
-          <b>{fmtMoney(preview.bonusAmount)}</b>
+          <b>{fmtMoney(ownDue)}</b>
         </div>
       )}
 
@@ -970,8 +1018,56 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
             {t('salary.bonus.totalForMonths').replace('{n}', String(months.length))}
           </span>
           <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--primary-dark)' }}>
-            {fmtMoney(preview.bonusAmount)}
+            {fmtMoney(ownDue)}
           </b>
+        </div>
+      )}
+
+      {/* Доплата за прошлые месяцы: их зарплата уже зафиксирована, а платежи с
+          датой оплаты в них одобрили позже. По строке на месяц: сколько
+          одобрено после расчёта → объём и ставка месяца теперь → комиссия
+          месяца минус учтённое в расчёте (и доплаченное раньше) → к доплате. */}
+      {arrears.length > 0 && (
+        <div data-testid="salary-arrears" style={{ margin: '4px 0 12px', paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{t('salary.bonus.arrearsTitle')}</div>
+          {arrears.map((a) => (
+            <div
+              key={a.periodStart}
+              data-testid="salary-arrears-row"
+              style={{
+                display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '4px 8px',
+                fontFamily: 'var(--font-mono)', fontSize: 12, marginBottom: 6,
+              }}
+            >
+              <b>{monthKeyLabel(monthKeyOf(a.periodStart))}:</b>
+              <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.arrearsLate')}</span>
+              <b>+ {fmtMoney(a.lateVolume)}</b>
+              <span style={{ color: 'var(--text-light)' }}>→</span>
+              <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.volume')}</span>
+              <b>{fmtMoney(a.volume)}</b>
+              <span style={{ color: 'var(--text-light)' }}>→</span>
+              <b>{a.percent}%</b>
+              <span style={{ color: 'var(--text-light)' }}>→</span>
+              <b>{fmtMoney(a.monthTotal)}</b>
+              <span style={{ color: 'var(--text-soft)' }}>− {t('salary.bonus.arrearsKnown')}</span>
+              <b>{fmtMoney(a.knownTotal)}</b>
+              {a.alreadyPaid > 0 && (
+                <>
+                  <span style={{ color: 'var(--text-soft)' }}>− {t('salary.bonus.arrearsPaidBefore')}</span>
+                  <b>{fmtMoney(a.alreadyPaid)}</b>
+                </>
+              )}
+              <span style={{ color: 'var(--text-light)' }}>→</span>
+              <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.arrearsDue')}</span>
+              <b style={{ color: 'var(--primary-dark)' }}>+ {fmtMoney(a.due)}</b>
+            </div>
+          ))}
+          <div data-testid="salary-bonus-total" style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px', marginTop: 8 }}>
+            <span style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('salary.bonus.totalWithArrears')}</span>
+            <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--primary-dark)' }}>
+              {fmtMoney(preview.bonusAmount)}
+            </b>
+          </div>
         </div>
       )}
 
@@ -1063,6 +1159,10 @@ function SavedBonusBreakdown({ record }: { record: SalaryRecord }) {
   const monthTotal = record.bonusMonthTotal ?? record.bonusAmount;
   const alreadyPaid = record.bonusAlreadyPaid ?? 0;
   const personal = record.bonusSource === 'PERSONAL';
+  // Доплата за прошлые месяцы, вошедшая в запись: в bonusAmount она есть,
+  // в цепочке «объём → полоса → комиссия месяца» — нет.
+  const arrears = recordArrears(record);
+  const ownDue = Math.round((record.bonusAmount - arrears.reduce((s, a) => s + a.amount, 0)) * 100) / 100;
   // Запись за период длиннее месяца: полос было несколько, и в снимок ни
   // одна не пишется — иначе она выдавала бы себя за полосу всего периода.
   // Показываем объём и сумму без цепочки «полоса → ставка».
@@ -1121,7 +1221,25 @@ function SavedBonusBreakdown({ record }: { record: SalaryRecord }) {
           <b>− {fmtMoney(alreadyPaid, cur)}</b>
           <span style={{ color: 'var(--text-light)' }}>→</span>
           <span style={{ color: 'var(--text-soft)' }}>{t('salary.bonus.due')}</span>
-          <b>{fmtMoney(record.bonusAmount, cur)}</b>
+          <b>{fmtMoney(ownDue, cur)}</b>
+        </div>
+      )}
+
+      {arrears.length > 0 && (
+        <div data-testid="salary-arrears-saved" style={{ margin: '4px 0 10px', paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{t('salary.bonus.arrearsTitle')}</div>
+          {arrears.map((a) => (
+            <div key={a.key} style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 12, marginBottom: 4 }}>
+              <span>{monthKeyLabel(a.key)}:</span>
+              <b style={{ color: 'var(--primary-dark)' }}>+ {fmtMoney(a.amount, cur)}</b>
+            </div>
+          ))}
+          <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px', marginTop: 6 }}>
+            <span style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('salary.bonus.totalWithArrears')}</span>
+            <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--primary-dark)' }}>
+              {fmtMoney(record.bonusAmount, cur)}
+            </b>
+          </div>
         </div>
       )}
 

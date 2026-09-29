@@ -41,7 +41,8 @@ import {
 } from '@prisma/client';
 import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
 import { InstallmentsService } from '../installments/installments.service';
-import { BONUS_MONTH_RULE, MANAGER_BONUS_CURRENCY } from '../common/manager-bonus-volume';
+import { BONUS_MONTH_RULE, MANAGER_BONUS_CURRENCY, bonusMonthLockedFor } from '../common/manager-bonus-volume';
+import { tjLocalDay } from '../common/tj-time';
 
 /**
  * Bug #31 (HIGH): студент, созданный из SaleSubmission через approvePayment,
@@ -2064,11 +2065,11 @@ export class SubmissionsService {
 
       // Создаём финансовую транзакцию (доход).
       // date = payment.paidAt намеренно: это финансовый «факт прихода денег»,
-      // используется в дашборде доходов и для отчётности. Для бонусной базы
-      // зарплаты эта дата НЕ используется (см. bug #22): SalaryService.preview
-      // агрегирует бонус по SubmissionPayment.reviewedAt — иначе при задержке
-      // одобрения FOUNDER'ом бонус мог попасть в уже закрытый зарплатный период
-      // и потеряться (preview не пересчитывает PAID-записи).
+      // используется в дашборде доходов и для отчётности. Бонус менеджера тоже
+      // считается по месяцу оплаты (common/manager-bonus-volume.ts), так что
+      // «Финансы» и зарплата кладут платёж в один месяц. Задержка одобрения
+      // бонус не теряет: если зарплата за месяц оплаты уже рассчитана, разницу
+      // доплачивает следующая запись (salary.service → bonusArrearsMonths).
       //
       // Bug (CRITICAL, audit — currency-mixing, финальный фикс): транзакция
       // пишется В ИСТИННОЙ ВАЛЮТЕ СДЕЛКИ. Это опция (b) из аудита.
@@ -3340,6 +3341,16 @@ export class SubmissionsService {
       newPaidAt = parseClientDate(dto.paidAt as any);
       if (isNaN(newPaidAt.getTime())) {
         throw new BadRequestException('Некорректная дата платежа (paidAt)');
+      }
+      // Бонус считается по месяцу оплаты: перенос одобренного платежа в другой
+      // месяц при уже рассчитанной зарплате посчитал бы бонус дважды или
+      // потерял бы его (см. bonusMonthLockedFor).
+      const locked = await bonusMonthLockedFor(this.prisma, payment, payment.submission.managerId, newPaidAt);
+      if (locked) {
+        const [y, m] = tjLocalDay(locked).split('-');
+        throw new BadRequestException(
+          `Дату оплаты одобренного платежа нельзя перенести в другой месяц: зарплата менеджера за ${m}.${y} уже рассчитана, и бонус посчитался бы неверно. Если расчёт не выплачен — удалите его, перенесите дату и рассчитайте зарплату заново.`,
+        );
       }
       data.paidAt = newPaidAt;
     }

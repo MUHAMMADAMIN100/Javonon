@@ -49,6 +49,12 @@ export interface SalaryRecord {
   bonusAlreadyPaid?: number | null;
   /** 'BAND' — ставка из сетки; 'PERSONAL' — персональный процент. */
   bonusSource?: 'BAND' | 'PERSONAL' | null;
+  /**
+   * Начисленный бонус по календарным месяцам: { "2026-10": 1140, "2026-11": 5000 }.
+   * Ключи раньше периода записи — доплата за прошлые месяцы (платежи с датой
+   * оплаты в них одобрили после их расчёта).
+   */
+  bonusByMonth?: Record<string, number> | null;
 }
 
 /** Полоса комиссии менеджера. Границы включительные с обеих сторон. */
@@ -113,6 +119,32 @@ export interface SalaryPreview {
     alreadyPaid: number;
     due: number;
   }>;
+  /**
+   * Доплата за прошлые месяцы: их зарплата уже зафиксирована, а платежи с
+   * датой оплаты в них одобрили позже. Уже входит в bonusAmount.
+   */
+  bonusArrears?: Array<{
+    periodStart: string;
+    periodEnd: string;
+    /** Объём месяца сейчас — со всеми одобренными платежами. */
+    volume: number;
+    band: BonusBand;
+    percent: number;
+    /** Комиссия месяца по сегодняшнему объёму. */
+    monthTotal: number;
+    /** Объём, который видела зарплата месяца, и комиссия по нему. */
+    knownVolume: number;
+    knownTotal: number;
+    /** Сумма платежей месяца, одобренных после его расчёта. */
+    lateVolume: number;
+    arrearsTotal: number;
+    /** Уже доплачено за этот месяц прошлыми записями. */
+    alreadyPaid: number;
+    /** К доплате сейчас. */
+    due: number;
+  }>;
+  /** Сумма доплаты за прошлые месяцы (входит в bonusAmount). */
+  bonusArrearsAmount?: number;
   /** Сколько месячных окладов вошло в baseAmount (доли — неполный месяц). */
   monthsCovered?: number;
   /** Комиссия за месяц целиком, до вычета уже начисленного. */
@@ -174,6 +206,8 @@ export interface SalaryRosterRow {
   penaltiesExcused: number;
   netAmount: number;
   currency: string;
+  /** Доплата за прошлые месяцы, вошедшая в бонус (уже в bonusAmount). */
+  bonusArrearsAmount?: number;
   /** Начисление за этот период, если уже сделано. */
   record: { id: string; status: SalaryStatus; netAmount: number; periodStart: string; periodEnd: string } | null;
 }

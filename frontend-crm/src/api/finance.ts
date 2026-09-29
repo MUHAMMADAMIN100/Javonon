@@ -387,13 +387,12 @@ export interface FinanceBreakdown {
    * Метадата якоря дат для INCOME-разрезов. Помогает UI объяснить
    * бухгалтеру расхождение между /finance/breakdown byManager и
    * /salary/preview salesAmount: tuition-приход (SubmissionPayment)
-   * теперь учитывается в тот же период, в который FOUNDER одобрил
-   * платёж (reviewedAt) — совпадает с моментом начисления бонуса
-   * зарплаты. Ручной INCOME по-прежнему — по дате самой транзакции.
+   * учитывается по дате оплаты (Transaction.date = paidAt платежа) — в тот
+   * же месяц, что и бонус зарплаты. Ручной INCOME — по дате самой транзакции.
    * Поле опциональное — старые версии бэка его не отдают.
    */
   incomeAnchor?: {
-    tuition: string; // 'submissionPayment.reviewedAt'
+    tuition: string; // 'transaction.date' (= paidAt платежа)
     manual: string; // 'transaction.date'
   };
 }

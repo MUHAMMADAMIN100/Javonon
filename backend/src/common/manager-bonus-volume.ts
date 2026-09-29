@@ -9,11 +9,17 @@
  * ниже — копировать их куда-то ещё нельзя, иначе экраны разъедутся (ровно
  * так раньше KPI показывал одно, а зарплата платила другое).
  *
- * ═══ ПРАВИЛО (решение учредителя, 2026-09-26) ═══
+ * ═══ ПРАВИЛО (решение учредителя, 2026-09-29) ═══
  *  • В объём идёт СУММА КАЖДОГО ПЛАТЕЖА, одобренного основателем
  *    (SubmissionPayment.status = APPROVED). Неодобренный — не входит.
- *  • Месяц — МЕСЯЦ ОДОБРЕНИЯ: «одобрил — сумма сразу прибавилась к объёму
- *    этого месяца» (BONUS_MONTH_RULE ниже). Календарный месяц Asia/Dushanbe.
+ *  • Месяц — МЕСЯЦ ОПЛАТЫ (paidAt, «Дата оплаты» у платежа): «заплатил в
+ *    октябре — бонус за октябрь», даже если одобрили в ноябре
+ *    (BONUS_MONTH_RULE ниже). Календарный месяц Asia/Dushanbe.
+ *  • Одобрили, когда зарплата за месяц оплаты уже зафиксирована, — комиссия
+ *    того месяца выросла (иногда вместе со ставкой), а запись уже лежит.
+ *    Разницу доплачивает следующая зарплатная запись («доплата за месяц»,
+ *    salary.service → bonusArrearsMonths). Так платёж не теряется и не
+ *    платится дважды.
  *  • Кому — менеджеру, записанному в платёж в момент одобрения
  *    (creditedManagerId); у строк без снапшота — владельцу сделки.
  *  • Сумма в сомони. TJS-сделка — amount как есть. Сделка в другой валюте —
@@ -26,15 +32,17 @@
  *    одинаково для всех. Персонального процента больше нет: User.bonusPercent
  *    остался в схеме, но не читается.
  *
- * ═══ ПОЧЕМУ ПРАВИЛО МЕСЯЦА ХРАНИТСЯ У ПЛАТЕЖА ═══
- * До 2026-09-26 платёж ложился в месяц по paidAt (дате получения денег), и
- * уже начисленные зарплаты посчитаны именно так. Если просто переключить
- * якорь на reviewedAt для ВСЕХ строк, платёж, полученный 30 августа и
- * одобренный 2 сентября (до расчёта августа), попал бы и в августовскую
- * зарплату (по старому правилу), и в сентябрьскую (по новому) — двойная
- * выплата. Поэтому approvePayment пишет в платёж правило, по которому его
- * засчитали (SubmissionPayment.bonusMonthBy), а NULL у старых строк значит
- * «по paidAt». Смена BONUS_MONTH_RULE меняет только НОВЫЕ одобрения.
+ * ═══ ИСТОРИЯ ПРАВИЛА И ПОЧЕМУ ОНО ХРАНИТСЯ У ПЛАТЕЖА ═══
+ * До 2026-09-26 платёж ложился в месяц по paidAt, с 26.09 по 29.09 — по
+ * месяцу одобрения (reviewedAt), с 29.09 снова по paidAt, теперь уже с
+ * доплатой за поздно одобренные. approvePayment пишет в платёж правило, по
+ * которому его засчитали (SubmissionPayment.bonusMonthBy), NULL у старых
+ * строк значит «по paidAt»: смена BONUS_MONTH_RULE меняет только НОВЫЕ
+ * одобрения и не переносит платёж, за который уже заплатили, в другой месяц
+ * (иначе он попал бы в две зарплаты). Одобренные 26–29.09 строки переведены
+ * на месяц оплаты скриптом prisma/migrate-bonus-month-payment.ts — кроме тех,
+ * что уже вошли в зафиксированную зарплату месяца одобрения: они остаются
+ * 'APPROVAL' и считаются по reviewedAt.
  */
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -55,11 +63,11 @@ export const MANAGER_BONUS_CURRENCY = REPORTING_CURRENCY;
 export type BonusMonthRule = 'APPROVAL' | 'PAYMENT';
 
 /**
- * Правило для НОВЫХ одобрений. Учредитель выбрал месяц одобрения, оговорив,
- * что может передумать: тогда достаточно поменять значение на 'PAYMENT' —
- * уже одобренные платежи останутся в своих месяцах (см. шапку файла).
+ * Правило для НОВЫХ одобрений — месяц оплаты (решение учредителя
+ * 2026-09-29; с 26.09 было 'APPROVAL'). Уже одобренные платежи остаются по
+ * правилу, записанному в них самих (см. шапку файла).
  */
-export const BONUS_MONTH_RULE: BonusMonthRule = 'APPROVAL';
+export const BONUS_MONTH_RULE: BonusMonthRule = 'PAYMENT';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -70,7 +78,7 @@ export interface CountedPayment {
   managerId: string;
   /** По какому правилу лёг в месяц. */
   rule: BonusMonthRule;
-  /** Момент, определяющий месяц: reviewedAt ('APPROVAL') или paidAt ('PAYMENT'). */
+  /** Момент, определяющий месяц: paidAt ('PAYMENT') или reviewedAt (строки 'APPROVAL' 26–29.09). */
   countedAt: Date;
   paidAt: Date;
   reviewedAt: Date | null;
@@ -102,9 +110,9 @@ function rangeFilter(range: { from?: Date; to?: Date }): Prisma.DateTimeFilter |
  * Все одобренные платежи, засчитанные этим менеджерам за период.
  * ЕДИНСТВЕННОЕ место, где живут фильтры бонусной базы.
  *
- * Период режется по countedAt: у платежей с правилом 'APPROVAL' — по
- * reviewedAt, у остальных (включая старые строки с NULL) — по paidAt.
- * Без границ — за всё время.
+ * Период режется по countedAt: по paidAt, а у оставшихся строк с правилом
+ * 'APPROVAL' (одобрены 26–29.09 и уже вошли в зарплату месяца одобрения) —
+ * по reviewedAt. Без границ — за всё время.
  */
 export async function loadCountedPayments(
   db: Db,
@@ -130,7 +138,7 @@ export async function loadCountedPayments(
               {
                 OR: [
                   { bonusMonthBy: 'APPROVAL', reviewedAt: date },
-                  // NULL — одобрено до 2026-09-26, считалось по paidAt.
+                  // NULL — одобрено до 2026-09-26, 'PAYMENT' — с 2026-09-29: по paidAt.
                   { OR: [{ bonusMonthBy: null }, { bonusMonthBy: 'PAYMENT' }], paidAt: date },
                 ],
               },
@@ -192,6 +200,45 @@ export async function loadCountedPayments(
   }
   out.sort((a, b) => b.countedAt.getTime() - a.countedAt.getTime());
   return out;
+}
+
+/**
+ * Можно ли сменить дату оплаты ОДОБРЕННОГО платежа.
+ *
+ * Бонус считается по месяцу оплаты, поэтому смена МЕСЯЦА в paidAt переносит
+ * платёж между бонусными месяцами. Если зарплата менеджера за старый месяц
+ * уже рассчитана, бонус за платёж там уже учтён (или доплачен) — перенос
+ * начислил бы его второй раз. Если рассчитана зарплата за новый месяц, её
+ * расчёт платёж не видел, а доплата его не узнает (одобрен раньше расчёта) —
+ * бонус потерялся бы. Поэтому такой перенос запрещён, пока расчёт не удалён:
+ * черновик можно удалить, перенести дату и рассчитать заново.
+ *
+ * Внутри месяца дата меняется свободно. Неодобренный платёж в бонус ещё не
+ * входит. Строки 'APPROVAL' (одобрены 26–29.09) считаются по дате одобрения —
+ * их дата оплаты на бонус не влияет.
+ *
+ * Возвращает начало месяца, который мешает переносу, или null — можно.
+ */
+export async function bonusMonthLockedFor(
+  db: Db,
+  payment: { status: string; paidAt: Date; bonusMonthBy: string | null; creditedManagerId: string | null },
+  ownerManagerId: string | null,
+  newPaidAt: Date,
+): Promise<Date | null> {
+  if (payment.status !== 'APPROVED' || payment.bonusMonthBy === 'APPROVAL') return null;
+  const from = tjStartOfMonth(payment.paidAt);
+  const to = tjStartOfMonth(newPaidAt);
+  if (from.getTime() === to.getTime()) return null;
+  const managerId = payment.creditedManagerId ?? ownerManagerId;
+  if (!managerId) return null;
+  for (const m of [from, to]) {
+    const fixed = await db.salaryRecord.findFirst({
+      where: { userId: managerId, periodStart: { lte: tjEndOfMonth(m) }, periodEnd: { gte: m } },
+      select: { id: true },
+    });
+    if (fixed) return m;
+  }
+  return null;
 }
 
 /** Сумма в сомони по засчитанным платежам (валютные без суммы в сомони — мимо). */

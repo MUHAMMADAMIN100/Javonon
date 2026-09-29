@@ -13,9 +13,11 @@ import {
 import {
   MANAGER_BONUS_BANDS,
   ManagerBonusBand,
+  computeManagerBonus,
 } from '../common/bonus-bands';
 import {
   MANAGER_BONUS_CURRENCY,
+  effectiveManagerBonus,
   loadCountedPayments,
   managerBonusMonths,
   monthCoverageShare,
@@ -133,10 +135,16 @@ export class SalaryService {
         }),
         loadCountedPayments(this.prisma, ids, { from: tjStartOfMonth(periodStart), to: tjEndOfMonth(periodEnd) }),
       ]);
+      // Доплата за прошлые месяцы — тоже долг: платёж с датой оплаты в уже
+      // рассчитанном месяце могли одобрить после увольнения.
+      const withArrears = await Promise.all(
+        ids.map(async (id) => ((await bonusArrearsMonths(this.prisma, id, periodStart)).length ? id : null)),
+      );
       const owed = new Set<string>([
         ...worked.map((w) => w.userId),
         ...counted.map((c) => c.managerId),
         ...ids.filter((id) => recordByUser.has(id)),
+        ...withArrears.filter((x): x is string => !!x),
       ]);
       users.push(...dismissed.filter((u) => owed.has(u.id)));
     }
@@ -167,6 +175,8 @@ export class SalaryService {
               penaltiesExcused: 0,
               netAmount: rec.netAmount,
               currency: rec.currency,
+              /** Доплата за прошлые месяцы, вошедшая в запись (уже в bonusAmount). */
+              bonusArrearsAmount: recordArrearsAmount(rec),
               record: { id: rec.id, status: rec.status, netAmount: rec.netAmount, periodStart: rec.periodStart, periodEnd: rec.periodEnd },
             };
           }
@@ -188,6 +198,8 @@ export class SalaryService {
             penaltiesExcused: p.penaltiesExcused,
             netAmount: p.netAmount,
             currency: p.currency,
+            /** Доплата за прошлые месяцы (уже в bonusAmount). */
+            bonusArrearsAmount: p.bonusArrearsAmount,
             record: null,
           };
         }),
@@ -202,8 +214,9 @@ export class SalaryService {
    *   - hours/minutes — берём из TimeEntry за ЗАПРОШЕННЫЙ период
    *   - объём продаж (бонусная база) — сумма в сомони одобренных основателем
    *     платежей, засчитанных в КАЛЕНДАРНЫЙ МЕСЯЦ (Asia/Dushanbe) по месяцу
-   *     одобрения (старые строки — по месяцу получения денег). Правило и
-   *     фильтры — только в common/manager-bonus-volume.ts.
+   *     оплаты. Правило и фильтры — только в common/manager-bonus-volume.ts.
+   *   - доплата за прошлые месяцы — платежи с датой оплаты в уже
+   *     рассчитанном месяце, одобренные после его расчёта (bonusArrearsMonths)
    *   - bonus = ВЕСЬ объём × ставка ОДНОЙ полосы (см. common/bonus-bands.ts:
    *     flat-по-полосе, не прогрессивно)
    *   - penalty — эффективные штрафы за период (не тронуты этой доработкой)
@@ -246,12 +259,11 @@ export class SalaryService {
     // ИСТОЧНИК БОНУСНОЙ БАЗЫ — два разных «триггера»:
     //
     // 1) Платежи по сделкам (SubmissionPayment) — одобренные основателем, в
-    //    месяц одобрения (новые строки) или получения денег (одобренные до
-    //    2026-09-26); сумма — в сомони (у валютной сделки её вводит
+    //    месяц оплаты (paidAt); сумма — в сомони (у валютной сделки её вводит
     //    основатель при одобрении). Отбор — loadCountedPayments() в
     //    common/manager-bonus-volume.ts, общий с KPI и профилем.
-    //    Transaction.date при этом = paidAt — это «факт прихода денег» для
-    //    финансовой отчётности, к бонусу отношения не имеет.
+    //    Transaction.date при этом тоже = paidAt, так что «Финансы» и бонус
+    //    кладут одни и те же деньги в один и тот же месяц.
     //
     // 2) Ручные INCOME-транзакции (импорт / исторические данные /
     //    операции без сделки) — считаются по date и с новым правилом
@@ -440,8 +452,12 @@ export class SalaryService {
       });
     }
     const bonusAlreadyPaid = round(monthsWithDue.reduce((sum, x) => sum + x.alreadyPaid, 0));
-    /** К начислению сейчас = месячные комиссии минус уже начисленное. */
-    const bonusAmount = round(monthsWithDue.reduce((sum, x) => sum + x.due, 0));
+    // ДОПЛАТА ЗА ПРОШЛЫЕ МЕСЯЦЫ: платежи с датой оплаты в уже рассчитанном
+    // месяце, одобренные после его расчёта (см. bonusArrearsMonths).
+    const arrears = await bonusArrearsMonths(this.prisma, userId, bonusPeriodStart);
+    const bonusArrearsAmount = round(arrears.reduce((sum, x) => sum + x.due, 0));
+    /** К начислению сейчас = месячные комиссии минус уже начисленное плюс доплата за прошлые месяцы. */
+    const bonusAmount = round(monthsWithDue.reduce((sum, x) => sum + x.due, 0) + bonusArrearsAmount);
 
     const baseSalary = user.baseSalary || 0;
     const hourlyRate = user.hourlyRate || 0;
@@ -532,6 +548,14 @@ export class SalaryService {
         alreadyPaid: x.alreadyPaid,
         due: x.due,
       })),
+      /**
+       * Доплата за прошлые месяцы — уже входит в bonusAmount. По каждому
+       * месяцу: объём сейчас и тот, что видела его зарплата, сумма поздно
+       * одобренных платежей, комиссия по обоим объёмам, уже доплаченное и
+       * остаток к доплате. Пусто — доплачивать нечего.
+       */
+      bonusArrears: arrears,
+      bonusArrearsAmount,
       /** Сколько месячных окладов вошло в baseAmount (доли — неполный месяц). */
       monthsCovered: Math.round(monthsCovered * 1000) / 1000,
       /** Ручные INCOME-транзакции за месяц: НЕ входят в объём и бонус. */
@@ -624,6 +648,11 @@ export class SalaryService {
         periodEnd: m.periodEnd,
         monthTotal: m.monthTotal,
       })),
+      bonusArrears: preview.bonusArrears.map((m) => ({
+        periodStart: m.periodStart,
+        periodEnd: m.periodEnd,
+        arrearsTotal: m.arrearsTotal,
+      })),
       // Снимок расшифровки комиссии — сохраняется вместе с записью, чтобы
       // выплаченную строку можно было объяснить спустя месяцы. Ставку и
       // полосу берём из того же preview, из которого получился
@@ -703,6 +732,11 @@ export class SalaryService {
      * начисленного делается по каждому месяцу отдельно внутри транзакции.
      */
     bonusMonths: Array<{ periodStart: Date; periodEnd: Date; monthTotal: number }>;
+    /**
+     * Доплата за прошлые месяцы (bonusArrearsMonths): положенная за месяц
+     * целиком; уже доплаченное вычитается внутри транзакции.
+     */
+    bonusArrears: Array<{ periodStart: Date; periodEnd: Date; arrearsTotal: number }>;
     /** Снимок расшифровки комиссии — пишется в запись как есть. */
     bonusVolume: number;
     /** null — период задел несколько месяцев, одной полосы у него нет. */
@@ -751,6 +785,22 @@ export class SalaryService {
               bonusAlreadyPaid += paid;
               bonusAmount += due;
               bonusByMonth[key] = due;
+            }
+            // Доплата за прошлые месяцы — тем же приёмом: уже доплаченное
+            // читается в этой же транзакции, и если параллельная запись успела
+            // доплатить месяц, здесь выйдет 0, а не вторая доплата. Долю
+            // пишем в bonusByMonth под ключом прошлого месяца — по ней следующие
+            // записи увидят, что за этот месяц уже доплачено.
+            if (args.bonusArrears.length) {
+              const arrearsPaid = await bonusArrearsPaidByMonth(tx, args.userId, args.bonusArrears);
+              for (const m of args.bonusArrears) {
+                const key = monthKey(m.periodStart);
+                const due = Math.max(0, round(m.arrearsTotal - (arrearsPaid.get(key) ?? 0)));
+                if (due > 0) {
+                  bonusAmount += due;
+                  bonusByMonth[key] = due;
+                }
+              }
             }
             bonusAmount = round(bonusAmount);
             bonusAlreadyPaid = round(bonusAlreadyPaid);
@@ -850,6 +900,16 @@ export class SalaryService {
       const bonusFrom = tjStartOfMonth(rec.periodStart);
       const bonusTo = tjEndOfMonth(rec.periodEnd);
       const counted = await loadCountedPayments(tx, [rec.userId], { from: bonusFrom, to: bonusTo });
+      // Доплата за прошлые месяцы (доли bonusByMonth с ключами раньше
+      // периода) — платежи этих месяцев тоже оплачены этой выплатой.
+      const split = rec.bonusByMonth as Record<string, number> | null;
+      if (split && typeof split === 'object') {
+        for (const [key, due] of Object.entries(split)) {
+          const start = monthStartFromKey(key);
+          if (!start || start >= bonusFrom || !(Number(due) > 0)) continue;
+          counted.push(...(await loadCountedPayments(tx, [rec.userId], { from: start, to: tjEndOfMonth(start) })));
+        }
+      }
       const txIds = counted.map((p) => p.financeTransactionId).filter((x): x is string => !!x);
       if (txIds.length) {
         await tx.transaction.updateMany({ where: { id: { in: txIds }, reversedAt: null }, data: { bonusApplied: true } });
@@ -917,9 +977,11 @@ function monthKey(d: Date): string {
 /**
  * Уже начисленный бонус по каждому месяцу. Запись с разбивкой bonusByMonth
  * отдаёт месяцу ровно его долю: запись «май–июнь» больше не гасит весь июнь
- * своим майским бонусом. У старых записей без разбивки весь bonusAmount
- * ложится на каждый задетый месяц — лучше недоплатить на виду, чем
- * начислить дважды.
+ * своим майским бонусом. Долю берём у ЛЮБОЙ записи, где она есть, — в том
+ * числе у более поздней, которая доплачивала этот месяц (доплата за прошлые
+ * месяцы, см. bonusArrearsMonths), иначе доплата ушла бы второй раз. У старых
+ * записей без разбивки весь bonusAmount ложится на каждый задетый месяц —
+ * лучше недоплатить на виду, чем начислить дважды.
  */
 async function bonusPaidByMonth(
   db: Prisma.TransactionClient | PrismaService,
@@ -928,21 +990,208 @@ async function bonusPaidByMonth(
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (!months.length) return out;
+  const earliest = new Date(Math.min(...months.map((m) => m.periodStart.getTime())));
+  // Запись, закончившаяся раньше самого раннего месяца, ни задеть его, ни
+  // доплатить за него не может: доплату несут только более поздние записи.
   const records = await db.salaryRecord.findMany({
-    where: {
-      userId,
-      periodStart: { lte: months[months.length - 1].periodEnd },
-      periodEnd: { gte: months[0].periodStart },
-    },
+    where: { userId, periodEnd: { gte: earliest } },
     select: { periodStart: true, periodEnd: true, bonusAmount: true, bonusByMonth: true },
   });
   for (const m of months) {
     const key = monthKey(m.periodStart);
     let paid = 0;
     for (const r of records) {
-      if (r.periodStart > m.periodEnd || r.periodEnd < m.periodStart) continue;
       const split = r.bonusByMonth as Record<string, number> | null;
-      paid += split && typeof split === 'object' ? Number(split[key] || 0) : r.bonusAmount || 0;
+      if (split && typeof split === 'object') {
+        paid += Number(split[key] || 0);
+      } else if (!(r.periodStart > m.periodEnd || r.periodEnd < m.periodStart)) {
+        paid += r.bonusAmount || 0;
+      }
+    }
+    out.set(key, round(paid));
+  }
+  return out;
+}
+
+/** Доплата за прошлые месяцы, вошедшая в запись: доли bonusByMonth с ключами раньше её периода. */
+function recordArrearsAmount(rec: { periodStart: Date; bonusByMonth: Prisma.JsonValue | null }): number {
+  const split = rec.bonusByMonth as Record<string, number> | null;
+  if (!split || typeof split !== 'object') return 0;
+  const own = monthKey(rec.periodStart);
+  let sum = 0;
+  for (const [key, v] of Object.entries(split)) if (key < own) sum += Number(v) || 0;
+  return round(sum);
+}
+
+/** Начало месяца Asia/Dushanbe по ключу «2026-10»; null — ключ не месяц. */
+function monthStartFromKey(key: string): Date | null {
+  if (!/^\d{4}-\d{2}$/.test(key)) return null;
+  const d = tjParseLocalDate(`${key}-01`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * С какого момента одобрение считается поздним и даёт доплату за прошлый
+ * месяц. До 26.09.2026 доплат не было: платёж, одобренный после расчёта
+ * своего месяца, в бонус не попадал, и такие случаи основатель закрывал сам.
+ * Задним числом их не доплачиваем — иначе система сама выплатила бы за давно
+ * закрытые месяцы.
+ */
+const BONUS_ARREARS_SINCE = new Date('2026-09-26T00:00:00+05:00');
+
+/** Как далеко назад искать недоплату, месяцев. */
+const ARREARS_LOOKBACK_MONTHS = 24;
+
+/** Доплата за один прошлый месяц — строка расшифровки в зарплате. */
+export interface BonusArrearsMonth {
+  periodStart: Date;
+  periodEnd: Date;
+  /** Объём месяца сейчас — со всеми одобренными платежами. */
+  volume: number;
+  band: ManagerBonusBand;
+  percent: number;
+  /** Комиссия месяца по сегодняшнему объёму. */
+  monthTotal: number;
+  /** Объём, который видела зарплата месяца, — без поздно одобренных платежей. */
+  knownVolume: number;
+  /** Комиссия по этому объёму. */
+  knownTotal: number;
+  /** Сумма платежей месяца, одобренных после его расчёта. */
+  lateVolume: number;
+  /** Доплата за месяц целиком: monthTotal − knownTotal, не меньше нуля. */
+  arrearsTotal: number;
+  /** Уже доплачено за этот месяц прошлыми записями. */
+  alreadyPaid: number;
+  /** К доплате сейчас. */
+  due: number;
+}
+
+/**
+ * ДОПЛАТА ЗА ПРОШЛЫЕ МЕСЯЦЫ.
+ *
+ * Бонус считается по месяцу ОПЛАТЫ (common/manager-bonus-volume.ts), а
+ * одобряет платёж основатель, когда успеет: бывает, что зарплата за месяц
+ * оплаты к этому времени уже зафиксирована. Комиссия того месяца выросла, а
+ * запись уже лежит — разницу доплачивает следующая запись.
+ *
+ * Считаем НЕ «комиссия сейчас минус начисленное тогда»: начисленное тогда
+ * могло считаться по другим правилам (до 26.09 — личный процент и другая
+ * сетка), и пересчёт по сегодняшним правилам выдал бы «доплату» за смену
+ * правил — автоматическую выплату за давно закрытые месяцы. Доплата — ровно
+ * эффект поздних одобрений:
+ *
+ *   комиссия(объём со всеми) − комиссия(объём без поздних) − уже доплаченное,
+ *
+ * где поздний — одобрен после последней зарплатной записи, задевающей месяц,
+ * и не раньше BONUS_ARREARS_SINCE. Ставка — по сетке на весь объём: если
+ * поздний платёж перевёл месяц в следующую полосу, доплата включает и подъём
+ * ставки на весь объём месяца.
+ *
+ * Месяцы БЕЗ зарплатных записей не берём: их бонус начислит их собственная
+ * запись. Назад ничего не забираем — отмена сделки уменьшает объём, но
+ * разница ограничена нулём, как и в основном расчёте.
+ */
+async function bonusArrearsMonths(
+  db: Prisma.TransactionClient | PrismaService,
+  userId: string,
+  before: Date,
+): Promise<BonusArrearsMonth[]> {
+  const ownStart = tjStartOfMonth(before);
+  let horizon = ownStart;
+  for (let i = 0; i < ARREARS_LOOKBACK_MONTHS; i++) horizon = tjStartOfMonth(new Date(horizon.getTime() - 1));
+  const records = await db.salaryRecord.findMany({
+    where: { userId, periodStart: { lt: ownStart }, periodEnd: { gte: horizon } },
+    select: { periodStart: true, periodEnd: true, createdAt: true },
+  });
+  // Прошлые месяцы с зарплатными записями и момент последней записи по
+  // каждому: платежи, одобренные позже него, эта зарплата не видела.
+  const lastFixAt = new Map<number, number>();
+  for (const r of records) {
+    let cursor = tjStartOfMonth(r.periodStart);
+    for (let guard = 0; cursor < ownStart && cursor <= r.periodEnd && guard < 24; guard++) {
+      if (cursor >= horizon) {
+        const t = cursor.getTime();
+        lastFixAt.set(t, Math.max(lastFixAt.get(t) ?? 0, r.createdAt.getTime()));
+      }
+      cursor = tjStartOfMonth(new Date(tjEndOfMonth(cursor).getTime() + 1));
+    }
+  }
+  if (!lastFixAt.size) return [];
+  const starts = [...lastFixAt.keys()].sort((a, b) => a - b);
+  const payments = await loadCountedPayments(db, [userId], {
+    from: new Date(starts[0]),
+    to: tjEndOfMonth(new Date(starts[starts.length - 1])),
+  });
+  const now = new Map<number, number>();
+  const known = new Map<number, number>();
+  for (const p of payments) {
+    const t = tjStartOfMonth(p.countedAt).getTime();
+    const fixAt = lastFixAt.get(t);
+    // Месяц без зарплатной записи — его бонус начислит его собственная запись.
+    if (fixAt === undefined) continue;
+    const sum = p.amountTjs ?? 0;
+    now.set(t, (now.get(t) ?? 0) + sum);
+    const late = !!p.reviewedAt && p.reviewedAt.getTime() > fixAt && p.reviewedAt >= BONUS_ARREARS_SINCE;
+    if (!late) known.set(t, (known.get(t) ?? 0) + sum);
+  }
+  const candidates = starts.filter((t) => round(now.get(t) ?? 0) > round(known.get(t) ?? 0));
+  if (!candidates.length) return [];
+  const months = candidates.map((t) => ({ periodStart: new Date(t), periodEnd: tjEndOfMonth(new Date(t)) }));
+  const paid = await bonusArrearsPaidByMonth(db, userId, months);
+  const out: BonusArrearsMonth[] = [];
+  for (const m of months) {
+    const t = m.periodStart.getTime();
+    const volume = round(now.get(t) ?? 0);
+    const knownVolume = round(known.get(t) ?? 0);
+    const eff = effectiveManagerBonus(volume);
+    const monthTotal = computeManagerBonus(volume).amount;
+    const knownTotal = computeManagerBonus(knownVolume).amount;
+    const arrearsTotal = Math.max(0, round(monthTotal - knownTotal));
+    const alreadyPaid = paid.get(monthKey(m.periodStart)) ?? 0;
+    const due = Math.max(0, round(arrearsTotal - alreadyPaid));
+    if (due <= 0) continue;
+    out.push({
+      periodStart: m.periodStart,
+      periodEnd: m.periodEnd,
+      volume,
+      band: eff.band,
+      percent: eff.percent,
+      monthTotal,
+      knownVolume,
+      knownTotal,
+      lateVolume: round(volume - knownVolume),
+      arrearsTotal,
+      alreadyPaid,
+      due,
+    });
+  }
+  return out;
+}
+
+/**
+ * Уже доплачено за прошлые месяцы: доли bonusByMonth у записей, которые месяц
+ * НЕ задевают, — то есть у более поздних, несших доплату. Свои записи месяца
+ * доплатой не считаются: что они видели, учитывает момент последней записи.
+ */
+async function bonusArrearsPaidByMonth(
+  db: Prisma.TransactionClient | PrismaService,
+  userId: string,
+  months: Array<{ periodStart: Date; periodEnd: Date }>,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!months.length) return out;
+  const earliestEnd = new Date(Math.min(...months.map((m) => m.periodEnd.getTime())));
+  const records = await db.salaryRecord.findMany({
+    where: { userId, periodStart: { gt: earliestEnd } },
+    select: { periodStart: true, periodEnd: true, bonusByMonth: true },
+  });
+  for (const m of months) {
+    const key = monthKey(m.periodStart);
+    let paid = 0;
+    for (const r of records) {
+      if (r.periodStart <= m.periodEnd) continue;
+      const split = r.bonusByMonth as Record<string, number> | null;
+      if (split && typeof split === 'object') paid += Number(split[key] || 0);
     }
     out.set(key, round(paid));
   }

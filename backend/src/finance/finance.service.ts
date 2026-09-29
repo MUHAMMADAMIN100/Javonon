@@ -1891,9 +1891,9 @@ export class FinanceService {
       currency: REPORTING_CURRENCY,
       nonTjsTotals: nonTjs,
       // Метадата якоря — фронт может показать подсказку бухгалтеру:
-      // «tuition-приход учтён по дате одобрения FOUNDER'ом (совпадает с
-      // датой начисления бонуса зарплаты); ручной INCOME — по дате
-      // самой транзакции». Помогает при сверке с /salary/preview,
+      // «tuition-приход учтён по дате оплаты (transaction.date = paidAt
+      // платежа) — в тот же месяц, что и бонус зарплаты; ручной INCOME — по
+      // дате самой транзакции». Помогает при сверке с /salary/preview,
       // если менеджер спрашивает «почему разные числа?».
       incomeAnchor: {
         tuition: 'transaction.date',
