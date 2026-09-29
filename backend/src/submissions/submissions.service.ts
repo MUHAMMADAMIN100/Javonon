@@ -45,6 +45,13 @@ import { BONUS_MONTH_RULE, MANAGER_BONUS_CURRENCY, bonusMonthLockedFor } from '.
 import { tjLocalDay } from '../common/tj-time';
 
 /**
+ * Отказ закрыть сделку, пока у неё есть неодобренные платежи. Фронт узнаёт
+ * этот текст и показывает свой перевод (ключ deal.close.pendingBlocked).
+ */
+const CLOSE_WITH_PENDING_MESSAGE =
+  'Нельзя закрыть сделку: есть неодобренные платежи. Сначала основатель должен одобрить или отклонить их.';
+
+/**
  * Bug #31 (HIGH): студент, созданный из SaleSubmission через approvePayment,
  * раньше шёл в prisma.student.create без поля password — оно оставалось null,
  * и студент никогда не мог залогиниться в LMS / payments (JWT-стратегия
@@ -1612,19 +1619,20 @@ export class SubmissionsService {
     }
 
     const submission = payment.submission;
-    // Защита от одобрения платежей по отменённым/закрытым сделкам.
+    // Защита от одобрения платежей по отменённым сделкам.
     // Сценарий атаки: менеджер ставит CANCELLED после создания PENDING-платежа,
     // FOUNDER не глядя на статус сделки жмёт Approve в /pending-payments →
     // создаётся Transaction (доход) + Student/Application для несостоявшейся
-    // продажи. По COMPLETED новые платежи добавить нельзя, но старые PENDING
-    // могут висеть — их тоже блокируем.
+    // продажи. (Отмена теперь и сама отклоняет неодобренные платежи.)
+    //
+    // ЗАВЕРШЁННАЯ сделка одобрение НЕ блокирует: закрыть сделку с неодобренным
+    // платежом больше нельзя (changeStatus), а зависшие с прошлого — настоящие
+    // деньги, и основатель разбирает их как обычно. Новые платежи в
+    // завершённую сделку по-прежнему не добавить (addPayment).
     if (submission.status === SubmissionStatus.CANCELLED) {
       throw new BadRequestException('Сделка отменена, платежи нельзя одобрять');
     }
-    if (submission.status === SubmissionStatus.COMPLETED) {
-      throw new BadRequestException('Сделка завершена, новые платежи одобрять нельзя');
-    }
-    if (submission.status !== SubmissionStatus.ACTIVE) {
+    if (submission.status !== SubmissionStatus.ACTIVE && submission.status !== SubmissionStatus.COMPLETED) {
       throw new BadRequestException('Нельзя одобрить платёж по неактивной сделке');
     }
     // СУММА В СОМОНИ ДЛЯ БОНУСА. Курса валют в системе нет, поэтому у сделки
@@ -2521,7 +2529,9 @@ export class SubmissionsService {
     if (payment.status !== SubmissionPaymentStatus.PENDING) {
       throw new BadRequestException('Платёж уже разобран');
     }
-    if (payment.submission.status !== SubmissionStatus.ACTIVE) {
+    // Завершённая — можно: зависшие с прошлого неодобренные платежи основатель
+    // разбирает как обычно (закрыть сделку с такими теперь нельзя, changeStatus).
+    if (payment.submission.status !== SubmissionStatus.ACTIVE && payment.submission.status !== SubmissionStatus.COMPLETED) {
       throw new BadRequestException('Нельзя отклонить платёж по неактивной сделке');
     }
     // Конфликт интересов: FOUNDER-менеджер своей же сделки не должен
@@ -2640,6 +2650,14 @@ export class SubmissionsService {
     // признаком должника — ровно то расхождение, которое этот блок убирает.
     if (status === SubmissionStatus.COMPLETED) {
       return this.prisma.$transaction(async (tx) => {
+        // Неодобренный платёж завершённой сделки раньше зависал навсегда: ни
+        // одобрить, ни отклонить. Теперь сначала разбор, потом закрытие.
+        const pending = await tx.submissionPayment.count({
+          where: { submissionId, status: SubmissionPaymentStatus.PENDING },
+        });
+        if (pending > 0) {
+          throw new BadRequestException(CLOSE_WITH_PENDING_MESSAGE);
+        }
         const row = await tx.saleSubmission.update({
           where: { id: submissionId },
           data: { status },

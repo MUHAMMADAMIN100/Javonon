@@ -42,6 +42,9 @@ import { isTouchDevice } from '../lib/touch';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import DismissedMark from '../components/DismissedMark';
 
+/** Отказ бэкенда закрыть сделку с неодобренными платежами (changeStatus) — его текст узнаём, чтобы показать перевод. */
+const CLOSE_WITH_PENDING_MESSAGE = 'Нельзя закрыть сделку: есть неодобренные платежи. Сначала основатель должен одобрить или отклонить их.';
+
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: '#0ea5e9',
   COMPLETED: '#10b981',
@@ -98,7 +101,12 @@ export default function SubmissionDetail() {
       qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
     },
-    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
+    // Отказ бэкенда «есть неодобренные платежи» приходит по-русски — показываем
+    // свой перевод, чтобы таджикский интерфейс не получил русскую строку.
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message;
+      toast(msg === CLOSE_WITH_PENDING_MESSAGE ? t('deal.close.pendingBlocked') : msg || t('toast.error'), 'error');
+    },
   });
 
   // Realtime: обновляем детальный экран при любых событиях по сделке/платежу.
@@ -189,6 +197,12 @@ export default function SubmissionDetail() {
   };
 
   const onComplete = async () => {
+    // Сначала разбор неодобренных платежей, потом закрытие: у завершённой сделки
+    // их потом было бы некому разобрать. Сервер проверяет то же самое.
+    if (s.payments?.some((p) => p.status === 'PENDING')) {
+      toast(t('deal.close.pendingBlocked'), 'error');
+      return;
+    }
     if (await confirm({ title: t('deal.close.title'), message: t('deal.close.message') })) {
       statusMut.mutate('COMPLETED');
     }
@@ -384,7 +398,9 @@ export default function SubmissionDetail() {
             key={p.id}
             p={p}
             currency={s.currency}
-            canReview={founder && p.status === 'PENDING' && s.status === 'ACTIVE' && !isOwnSubmission}
+            // Завершённая сделка — тоже: зависшие с прошлого неодобренные платежи
+            // основатель разбирает как обычно (закрыть с такими теперь нельзя).
+            canReview={founder && p.status === 'PENDING' && (s.status === 'ACTIVE' || s.status === 'COMPLETED') && !isOwnSubmission}
             onApprove={() => (s.currency === 'TJS' ? approveMut.mutate({ paymentId: p.id }) : setApproveTarget(p))}
             onReject={() => onReject(p.id)}
             busy={approveMut.isPending || rejectMut.isPending}
