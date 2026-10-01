@@ -17,6 +17,7 @@ import {
   fmtCommissionRate,
   fmtMoneyCents,
   commissionRateSortKey,
+  payoutMethodLabel,
   type AdminCreatePartnerResponse,
   type Partner,
 } from '../api/partners';
@@ -1022,7 +1023,7 @@ function PayoutsList({ search }: { search: SearchCtl }) {
       { key: 'requestedAt', label: t('partners.payout.col.requestedAt'), type: 'date', value: (p) => p.requestedAt },
       { key: 'partner', label: t('partners.tab.list'), value: (p) => p.partner?.fullName },
       { key: 'amount', label: t('partners.payout.col.amount'), type: 'number', value: (p) => p.amountCents },
-      { key: 'method', label: t('partners.payout.col.method'), value: (p) => p.method },
+      { key: 'method', label: t('partners.payout.col.method'), value: (p) => payoutMethodLabel(p.method) },
       { key: 'details', label: t('partners.payout.col.details'), value: (p) => p.details },
       { key: 'status', label: t('partners.payout.col.status'), value: (p) => t(`partners.payout.status.${p.status}`) },
     ],
@@ -1087,7 +1088,7 @@ function PayoutsList({ search }: { search: SearchCtl }) {
                 <td>{new Date(p.requestedAt).toLocaleString('ru-RU')}</td>
                 <td data-label={sort.label('partner')}>{p.partner?.fullName}</td>
                 <td data-label={sort.label('amount')}>{fmtMoneyCents(p.amountCents, p.currency)}</td>
-                <td data-label={sort.label('method')}>{p.method || '—'}</td>
+                <td data-label={sort.label('method')}>{payoutMethodLabel(p.method)}</td>
                 <td data-label={sort.label('details')} className="td-stack" style={{ wordBreak: 'break-all' }}>{p.details || '—'}</td>
                 <td data-label={sort.label('status')}>{t(`partners.payout.status.${p.status}`)}</td>
                 <td>

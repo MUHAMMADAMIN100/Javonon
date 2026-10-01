@@ -10,6 +10,7 @@ import {
   fmtCommissionRate,
   fmtMoneyCents,
   commissionRateSortKey,
+  payoutMethodLabel,
   type PartnerAttribution,
 } from '../api/partners';
 import { useT } from '../lib/i18n';
@@ -558,7 +559,7 @@ function PayoutsTab({ partnerId }: { partnerId: string }) {
     [
       { key: 'requestedAt', label: t('partners.payout.col.requestedAt'), type: 'date', value: (p) => p.requestedAt },
       { key: 'amount', label: t('partners.payout.col.amount'), type: 'number', value: (p) => p.amountCents },
-      { key: 'method', label: t('partners.payout.col.method'), value: (p) => p.method },
+      { key: 'method', label: t('partners.payout.col.method'), value: (p) => payoutMethodLabel(p.method) },
       { key: 'details', label: t('partners.payout.col.details'), value: (p) => p.details },
       { key: 'status', label: t('partners.payout.col.status'), value: (p) => t(`partners.payout.status.${p.status}`) },
     ],
@@ -582,7 +583,7 @@ function PayoutsTab({ partnerId }: { partnerId: string }) {
               <tr key={p.id}>
                 <td>{new Date(p.requestedAt).toLocaleString('ru-RU')}</td>
                 <td data-label={sort.label('amount')}>{fmtMoneyCents(p.amountCents, p.currency)}</td>
-                <td data-label={sort.label('method')}>{p.method || '—'}</td>
+                <td data-label={sort.label('method')}>{payoutMethodLabel(p.method)}</td>
                 <td data-label={sort.label('details')} className="td-stack" style={{ wordBreak: 'break-all' }}>{p.details || '—'}</td>
                 <td data-label={sort.label('status')}>{t(`partners.payout.status.${p.status}`)}</td>
               </tr>

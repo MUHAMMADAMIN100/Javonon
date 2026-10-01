@@ -1,4 +1,5 @@
 import { api } from './client';
+import { localized } from '../lib/i18n';
 
 export interface Partner {
   id: string;
@@ -176,6 +177,23 @@ export interface AdminPayout {
   requestedAt: string;
   paidAt?: string | null;
   rejectedAt?: string | null;
+}
+
+/** Способ вывода — коды сервера (partners.service requestPayout, VALID_METHODS). */
+export type PayoutMethod = 'bank_card' | 'bank_transfer' | 'crypto' | 'cash' | 'other';
+
+export const PAYOUT_METHOD_LABEL: Record<PayoutMethod, string> = localized('partners.payout.method', {
+  bank_card: 'Карта',
+  bank_transfer: 'Банковский перевод',
+  crypto: 'Криптовалюта (USDT)',
+  cash: 'Наличные',
+  other: 'Другое',
+});
+
+/** Способ вывода словами; незнакомый код показываем как есть, пустой — «—». */
+export function payoutMethodLabel(method?: string | null): string {
+  if (!method) return '—';
+  return (PAYOUT_METHOD_LABEL as Record<string, string>)[method] ?? method;
 }
 
 export const adminListPartners = () =>

@@ -16,7 +16,11 @@ export default function PartnerCabinet() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutMethod, setPayoutMethod] = useState('CARD');
+  // Коды способа — ровно те, что принимает сервер (partners.service
+  // requestPayout, VALID_METHODS). Раньше здесь были CARD/CRYPTO/…: сервер
+  // приводит к нижнему регистру, «card» в его списке нет — вывод на карту
+  // (а это значение по умолчанию) падал с 400.
+  const [payoutMethod, setPayoutMethod] = useState('bank_card');
   const [payoutDetails, setPayoutDetails] = useState('');
   const [payoutErr, setPayoutErr] = useState<string | null>(null);
 
@@ -190,10 +194,10 @@ export default function PartnerCabinet() {
               onChange={(e) => setPayoutMethod(e.target.value)}
               style={{ padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 16 }}
             >
-              <option value="CARD">Корт</option>
-              <option value="CRYPTO">Crypto (USDT)</option>
-              <option value="CASH">Нақд</option>
-              <option value="OTHER">Дигар</option>
+              <option value="bank_card">Корт</option>
+              <option value="crypto">Crypto (USDT)</option>
+              <option value="cash">Нақд</option>
+              <option value="other">Дигар</option>
             </select>
             <input
               type="text"
