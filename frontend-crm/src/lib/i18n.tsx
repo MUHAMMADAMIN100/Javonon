@@ -1612,11 +1612,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     'userDetail.field.customRole': 'Кастомная роль',
     'userDetail.field.baseSalary': 'Базовый оклад (TJS/мес)',
     'userDetail.field.hourlyRate': 'Почасовая (TJS/ч)',
-    // ДЕЙСТВУЮЩАЯ ставка (сетка или личный процент) — то, что совпадает
-    // с экраном Зарплаты. Персональный override редактируется под
-    // ключом bonusPercentPersonal ниже — путать их нельзя.
+    // ДЕЙСТВУЮЩАЯ ставка по сетке — то же число, что на экране Зарплаты.
+    // Личного процента больше нет, поля для его правки тоже.
     'userDetail.field.bonusPercent': 'Бонус % с продаж',
-    'userDetail.field.bonusPercentPersonal': 'Бонус % (персональный, 0 = по сетке)',
     'userDetail.bonus.fromBand': 'по сетке',
     'userDetail.bonus.personal': 'персональный процент',
     'userDetail.field.kpiTarget': 'KPI цель %',
@@ -4295,7 +4293,6 @@ const DICT: Record<Lang, Record<string, string>> = {
     'userDetail.field.baseSalary': 'Маоши асосӣ (TJS/моҳ)',
     'userDetail.field.hourlyRate': 'Соатона (TJS/соат)',
     'userDetail.field.bonusPercent': 'Бонус % аз фурӯш',
-    'userDetail.field.bonusPercentPersonal': 'Бонус % (шахсӣ, 0 = аз тӯр)',
     'userDetail.bonus.fromBand': 'аз тӯр',
     'userDetail.bonus.personal': 'фоизи шахсӣ',
     'userDetail.field.kpiTarget': 'Ҳадафи KPI %',

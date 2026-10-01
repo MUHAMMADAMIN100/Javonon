@@ -660,13 +660,17 @@ function PersonalEditor({
   );
 }
 
-/** Форма «Оплата»: оклад, почасовая, личный бонус, настройки KPI. */
+/**
+ * Форма «Оплата»: оклад, почасовая, настройки KPI.
+ * Личного процента бонуса здесь нет: ставка у всех по сетке (решение
+ * учредителя 2026-09-26), расчёт User.bonusPercent не читает. Поле
+ * в запрос не отправляем — старое значение в базе остаётся нетронутым.
+ */
 function PayEditor({ user, userId, onSaved, onClose }: { user: FullProfile['user']; userId: string; onSaved: () => void; onClose: () => void }) {
   const { toast } = useUI();
   const { t } = useT();
   const [baseSalary, setBaseSalary] = useState(String(user.baseSalary ?? 0));
   const [hourlyRate, setHourlyRate] = useState(String(user.hourlyRate ?? 0));
-  const [bonusPercent, setBonusPercent] = useState(String(user.bonusPercent ?? 0));
   const [kpiTargetPct, setKpiTargetPct] = useState(String(user.kpiTargetPct ?? 1));
   const [kpiAutoStepPct, setKpiAutoStepPct] = useState(String(user.kpiAutoStepPct ?? 0));
   const [kpiMaxPct, setKpiMaxPct] = useState(String(user.kpiMaxPct ?? 3));
@@ -678,7 +682,6 @@ function PayEditor({ user, userId, onSaved, onClose }: { user: FullProfile['user
       await updateUserHR(userId, {
         baseSalary: Number(baseSalary) || 0,
         hourlyRate: Number(hourlyRate) || 0,
-        bonusPercent: Number(bonusPercent) || 0,
         kpiTargetPct: Number(kpiTargetPct) || 0,
         kpiAutoStepPct: Number(kpiAutoStepPct) || 0,
         kpiMaxPct: Number(kpiMaxPct) || 0,
@@ -696,7 +699,6 @@ function PayEditor({ user, userId, onSaved, onClose }: { user: FullProfile['user
     <EditForm title={t('userDetail.section.salary')} saving={saving} onSave={save} onCancel={onClose}>
       <LabelInput label={t('userDetail.field.baseSalary')} value={baseSalary} onChange={setBaseSalary} type="number" />
       <LabelInput label={t('userDetail.field.hourlyRate')} value={hourlyRate} onChange={setHourlyRate} type="number" />
-      <LabelInput label={t('userDetail.field.bonusPercentPersonal')} value={bonusPercent} onChange={setBonusPercent} type="number" />
       <LabelInput label={t('userDetail.field.kpiTarget')} value={kpiTargetPct} onChange={setKpiTargetPct} type="number" />
       <LabelInput label={t('userDetail.field.kpiAutoStep')} value={kpiAutoStepPct} onChange={setKpiAutoStepPct} type="number" />
       <LabelInput label={t('userDetail.field.kpiMax')} value={kpiMaxPct} onChange={setKpiMaxPct} type="number" />
