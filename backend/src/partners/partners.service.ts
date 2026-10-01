@@ -172,6 +172,9 @@ export class PartnersService {
         email: partner.email,
         referralCode: partner.referralCode,
         commissionPct: partner.commissionPct,
+        // Действующая ставка — фиксированная сумма за клиента; кабинет
+        // показывает её в шапке вместо устаревшего commissionPct.
+        commissionAmountCents: partner.commissionAmountCents,
         balanceCents: partner.balanceCents,
         totalEarnedCents: partner.totalEarnedCents,
         totalPaidCents: partner.totalPaidCents,

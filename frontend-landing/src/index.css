@@ -1458,11 +1458,20 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   font-weight: 500;
   font-size: 14px;
 }
-.stu-header .btn-pill.ghost {
+/* .btn-pill.ghost рассчитан на тёмный фон (белый текст) — на светлых
+   кабинетах студента и партнёра делаем его тёмным, иначе кнопку не видно. */
+.stu-header .btn-pill.ghost,
+.partner-header .btn-pill.ghost {
   color: var(--ink);
   border-color: var(--bg-mute);
 }
-.stu-header .btn-pill.ghost:hover { background: var(--bg-soft); border-color: var(--ink-mute); }
+.stu-header .btn-pill.ghost:hover,
+.partner-header .btn-pill.ghost:hover { background: var(--bg-soft); border-color: var(--ink-mute); }
+/* Плитки статистики кабинета партнёра на телефоне — 2×2 в ширину экрана
+   (minmax(180px) из разметки дал бы один столбец из четырёх плиток). */
+@media (max-width: 600px) {
+  .partner-stats { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
 
 .stu-tabs {
   display: inline-flex;

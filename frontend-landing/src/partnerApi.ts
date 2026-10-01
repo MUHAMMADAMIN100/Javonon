@@ -69,6 +69,11 @@ export interface Partner {
   phone?: string | null;
   referralCode: string;
   commissionPct: number;
+  /**
+   * Фиксированная комиссия за клиента (TJS × 100). Опционально: лендинг может
+   * выехать раньше бэкенда — тогда в шапке просто нет строки комиссии.
+   */
+  commissionAmountCents?: number;
   balanceCents: number;
   totalEarnedCents: number;
   totalPaidCents: number;

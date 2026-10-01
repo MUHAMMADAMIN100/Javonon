@@ -110,13 +110,18 @@ export default function PartnerCabinet() {
   return (
     <div className="stu-page" style={{ padding: 'max(16px, 4vw)' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <header className="partner-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <div>
             <Link to="/" style={{ fontSize: 12, color: 'var(--ink-mute)', textDecoration: 'none' }}>← Ба саҳифаи асосӣ</Link>
             <h1 style={{ fontFamily: 'var(--display)', fontSize: 28, fontWeight: 600, margin: '8px 0 4px' }}>
               {partner.fullName}
             </h1>
-            <div style={{ fontSize: 13, color: 'var(--ink-mute)' }}>{partner.email} · комиссия {partner.commissionPct}%</div>
+            {/* Комиссия — фиксированная сумма за клиента; старый commissionPct
+                ничего не значит и не показывается. */}
+            <div style={{ fontSize: 13, color: 'var(--ink-mute)' }}>
+              {partner.email}
+              {partner.commissionAmountCents != null && <> · комиссия: {fmtMoney(partner.commissionAmountCents)} барои ҳар мизоҷ</>}
+            </div>
           </div>
           <button
             onClick={() => { clearPartnerToken(); nav('/'); }}
@@ -150,7 +155,7 @@ export default function PartnerCabinet() {
         </section>
 
         {/* Статистика */}
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+        <section className="partner-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
           <StatCard label="Гузаришҳо" value={stats.clicks} />
           <StatCard label="Лидҳо" value={stats.leads} />
           <StatCard label="Фурӯшҳо" value={stats.sales} />
@@ -183,7 +188,7 @@ export default function PartnerCabinet() {
             <input
               type="number"
               step="0.01"
-              placeholder="Маблағ (USD)"
+              placeholder="Маблағ (TJS)"
               value={payoutAmount}
               onChange={(e) => setPayoutAmount(e.target.value)}
               required
@@ -204,10 +209,10 @@ export default function PartnerCabinet() {
               placeholder="Реквизитҳо (рақами корт / суроғаи ҳамён)"
               value={payoutDetails}
               onChange={(e) => setPayoutDetails(e.target.value)}
-              style={{ padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 16, gridColumn: 'span 2' }}
+              style={{ padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 16, gridColumn: '1 / -1' }}
             />
-            {payoutErr && <div style={{ color: 'var(--danger)', fontSize: 13, gridColumn: 'span 2' }}>{payoutErr}</div>}
-            <button type="submit" className="btn btn-primary" style={{ padding: '12px 20px', borderRadius: 10, gridColumn: 'span 2' }}>
+            {payoutErr && <div style={{ color: 'var(--danger)', fontSize: 13, gridColumn: '1 / -1' }}>{payoutErr}</div>}
+            <button type="submit" className="btn btn-primary" style={{ padding: '12px 20px', borderRadius: 10, gridColumn: '1 / -1' }}>
               Дархости пардохт
             </button>
           </form>
@@ -239,7 +244,11 @@ export default function PartnerCabinet() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 500, fontSize: 15 }}>
                       {fmtMoney(c.amountCents, c.currency)} <span style={{ color: 'var(--ink-mute)', fontSize: 12 }}>
-                        ({c.percent}% аз {fmtMoney(c.baseAmountCents, c.baseCurrency ?? c.currency)})
+                        {/* Фиксированная комиссия пишется с percent = 0 — «0% аз …»
+                            врал бы; процент показываем только у старых начислений. */}
+                        {c.percent > 0
+                          ? `(${c.percent}% аз ${fmtMoney(c.baseAmountCents, c.baseCurrency ?? c.currency)})`
+                          : '(собит барои мизоҷ)'}
                       </span>
                     </div>
                     {c.note && <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>{c.note}</div>}
