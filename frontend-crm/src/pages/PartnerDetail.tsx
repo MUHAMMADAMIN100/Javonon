@@ -559,7 +559,7 @@ function PayoutsTab({ partnerId }: { partnerId: string }) {
     [
       { key: 'requestedAt', label: t('partners.payout.col.requestedAt'), type: 'date', value: (p) => p.requestedAt },
       { key: 'amount', label: t('partners.payout.col.amount'), type: 'number', value: (p) => p.amountCents },
-      { key: 'method', label: t('partners.payout.col.method'), value: (p) => payoutMethodLabel(p.method) },
+      { key: 'method', label: t('partners.payout.col.method'), value: (p) => (p.method ? payoutMethodLabel(p.method) : null) },
       { key: 'details', label: t('partners.payout.col.details'), value: (p) => p.details },
       { key: 'status', label: t('partners.payout.col.status'), value: (p) => t(`partners.payout.status.${p.status}`) },
     ],

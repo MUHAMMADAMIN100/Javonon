@@ -47,3 +47,55 @@ export const approveLunchExcuse = (id: string) =>
 
 export const rejectLunchExcuse = (id: string) =>
   api.post<{ ok: true }>(`/excuses/${id}/reject-lunch`).then((r) => r.data);
+
+/**
+ * Статус опоздания в «Истории»: решение по причине (APPROVED / REJECTED /
+ * PENDING), NONE — причины нет и опоздание от 10 минут (штраф), MINOR —
+ * причины нет, короче 10 минут (без штрафа).
+ */
+export type LatenessStatus = ExcuseStatus | 'NONE' | 'MINOR';
+/** Фильтр «История»: пусто — все; not_approved — отклонено или без причины. */
+export type LatenessStatusFilter = '' | 'approved' | 'not_approved' | 'pending';
+
+export interface LatenessItem {
+  /** id отметки прихода — общий у утра и обеда одного дня. */
+  id: string;
+  kind: ExcuseKind;
+  user: { id: string; fullName: string; email: string; isActive: boolean };
+  clockIn: string;
+  minutes: number;
+  status: LatenessStatus;
+  reason: string | null;
+  url: string | null;
+  reviewedAt: string | null;
+  /** Штрафы за этот день и вид опоздания, TJS; 0 — штрафа нет. */
+  penalty: number;
+}
+
+/** Итоги «Истории» — по всем найденным опозданиям, а не по странице. */
+export interface LatenessTotals {
+  count: number;
+  minutes: number;
+  arrivalMinutes: number;
+  lunchMinutes: number;
+  approvedMinutes: number;
+  notApprovedMinutes: number;
+  pendingMinutes: number;
+  minorMinutes: number;
+  penalties: number;
+}
+
+export const listLateness = (params: {
+  userId?: string;
+  from?: string;
+  to?: string;
+  status?: Exclude<LatenessStatusFilter, ''>;
+  page?: number;
+  pageSize?: number;
+}) =>
+  api
+    .get<{ items: LatenessItem[]; total: number; page: number; pageSize: number; totals: LatenessTotals }>(
+      '/excuses/history',
+      { params },
+    )
+    .then((r) => r.data);
