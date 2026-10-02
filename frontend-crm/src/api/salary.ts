@@ -229,3 +229,30 @@ export const paySalary = (id: string) =>
 
 export const deleteSalary = (id: string) =>
   api.delete(`/salary/${id}`).then((r) => r.data);
+
+/** «Было → станет» по одной записи (к выплате и штрафы). */
+export interface SalaryRecalcPreview {
+  id: string;
+  userId: string;
+  fullName: string;
+  before: number;
+  after: number;
+  penaltiesBefore: number;
+  penaltiesAfter: number;
+}
+
+/** Пересчёт невыплаченной зарплаты: что получится — без сохранения. */
+export const recalculateSalaryPreview = (id: string) =>
+  api.get<SalaryRecalcPreview>(`/salary/${id}/recalculate-preview`).then((r) => r.data);
+
+/** Пересчитать невыплаченную зарплату по текущим данным (KPI и комментарий сохраняются). */
+export const recalculateSalary = (id: string) =>
+  api.post<{ id: string; fullName: string; before: number; after: number }>(`/salary/${id}/recalculate`).then((r) => r.data);
+
+export const recalculateAllPreview = (params: { periodStart: string; periodEnd: string }) =>
+  api.get<{ count: number; before: number; after: number; items: SalaryRecalcPreview[] }>('/salary/recalculate-preview', { params })
+    .then((r) => r.data);
+
+export const recalculateAllSalaries = (body: { periodStart: string; periodEnd: string }) =>
+  api.post<{ done: number; failed: Array<{ id: string; message: string }>; before: number; after: number }>('/salary/recalculate-all', body)
+    .then((r) => r.data);

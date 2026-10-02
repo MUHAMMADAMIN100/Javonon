@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -56,8 +56,42 @@ export class SalaryController {
     return this.svc.markPaid(id);
   }
 
+  /** «Было → станет» для всех невыплаченных записей периода — без сохранения. */
+  @Get('recalculate-preview')
+  recalculatePreviewAll(@Query('periodStart') periodStart: string, @Query('periodEnd') periodEnd: string) {
+    const [from, to] = parsePeriod(periodStart, periodEnd);
+    return this.svc.recalculatePreviewAll(from, to);
+  }
+
+  /** Пересчитать все невыплаченные записи периода по текущим данным. */
+  @Post('recalculate-all')
+  recalculateAll(@Body() body: { periodStart: string; periodEnd: string }) {
+    const [from, to] = parsePeriod(body?.periodStart, body?.periodEnd);
+    return this.svc.recalculateAll(from, to);
+  }
+
+  @Get(':id/recalculate-preview')
+  recalculatePreview(@Param('id') id: string) {
+    return this.svc.recalculatePreview(id);
+  }
+
+  @Post(':id/recalculate')
+  recalculate(@Param('id') id: string) {
+    return this.svc.recalculate(id);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.svc.remove(id);
   }
+}
+
+/** Период «YYYY-MM-DD — YYYY-MM-DD» по Душанбе; мусор — 400, а не 500. */
+function parsePeriod(start?: string, end?: string): [Date, Date] {
+  const from = tjParseLocalDate(String(start ?? ''));
+  const to = tjParseLocalDateEnd(String(end ?? ''));
+  if (!start || !end || isNaN(from.getTime()) || isNaN(to.getTime()) || to < from) {
+    throw new BadRequestException('Некорректный период');
+  }
+  return [from, to];
 }

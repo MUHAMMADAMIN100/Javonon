@@ -13,6 +13,10 @@ import {
   createSalary,
   paySalary,
   deleteSalary,
+  recalculateSalaryPreview,
+  recalculateSalary,
+  recalculateAllPreview,
+  recalculateAllSalaries,
 } from '../api/salary';
 import { ROLE_LABEL, type Role } from '../api/types';
 import SearchField from '../components/SearchField';
@@ -37,6 +41,7 @@ import DismissedMark from '../components/DismissedMark';
 const SALARY_ERROR_KEYS: Record<string, string> = {
   'Зарплата за этот период уже начислена': 'salary.error.duplicatePeriod',
   'Расчёт не сохранён из-за одновременного запроса. Повторите попытку': 'salary.error.concurrent',
+  'Выплаченную зарплату пересчитать нельзя': 'salary.error.recalcPaid',
 };
 
 function fmtMoney(n: number, c = 'TJS') {
@@ -126,6 +131,8 @@ export default function Salary() {
   /** Раскрытая расшифровка бонуса в журнале — одна за раз. */
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [accruing, setAccruing] = useState(false);
+  /** Идёт пересчёт: id записи или 'all' — пока он в полёте, кнопки пересчёта заблокированы. */
+  const [recalcBusy, setRecalcBusy] = useState<string | null>(null);
 
   // Таблица за период: все работающие сотрудники одним запросом.
   const rosterKey = keys.salary.previewAll({ start, end });
@@ -181,6 +188,8 @@ export default function Salary() {
    * Вручную, из раскрытой строки, такую запись создать по-прежнему можно.
    */
   const pending = shown.filter((r) => !r.record && (r.hasRate || netOf(r) !== 0));
+  /** Невыплаченные начисления периода — их берёт «Пересчитать всех». */
+  const recalcable = rows.filter((r) => r.record && r.record.status !== 'PAID').length;
 
   const recordsKey = keys.salary.list();
   const recordsQuery = useQuery({
@@ -312,6 +321,94 @@ export default function Salary() {
     }
   };
 
+  const errorText = (e: any) => {
+    const raw = e?.response?.data?.message;
+    const key = typeof raw === 'string' ? SALARY_ERROR_KEYS[raw] : undefined;
+    return key ? t(key) : raw || t('toast.error');
+  };
+
+  /**
+   * Пересчитать невыплаченную зарплату: сначала показываем «было → станет»
+   * (сервер считает без сохранения), и только после согласия — пересчёт.
+   */
+  const onRecalc = async (r: SalaryRecord) => {
+    if (recalcBusy) return;
+    setRecalcBusy(r.id);
+    try {
+      const p = await recalculateSalaryPreview(r.id);
+      const ok = await confirm({
+        title: t('salary.recalc.title'),
+        message:
+          t('salary.recalc.text')
+            .replace('{name}', p.fullName)
+            .replace('{from}', tjFormatDate(r.periodStart))
+            .replace('{to}', tjFormatDate(r.periodEnd))
+            .replace('{before}', fmtMoney(p.before))
+            .replace('{after}', fmtMoney(p.after))
+            .replace('{pBefore}', fmtMoney(p.penaltiesBefore))
+            .replace('{pAfter}', fmtMoney(p.penaltiesAfter))
+          + (Math.round(p.before) === Math.round(p.after) ? ` ${t('salary.recalc.same')}` : ''),
+        confirmText: t('salary.recalc.button'),
+      });
+      if (!ok) return;
+      const res = await recalculateSalary(r.id);
+      qc.invalidateQueries({ queryKey: keys.salary.all });
+      toast(
+        t('salary.recalc.done').replace('{before}', fmtMoney(res.before)).replace('{after}', fmtMoney(res.after)),
+        'success',
+      );
+    } catch (e: any) {
+      toast(errorText(e), 'error');
+      qc.invalidateQueries({ queryKey: keys.salary.all });
+    } finally {
+      setRecalcBusy(null);
+    }
+  };
+
+  /** Пересчитать все невыплаченные начисления выбранного периода. */
+  const onRecalcAll = async () => {
+    if (recalcBusy || accruing) return;
+    setRecalcBusy('all');
+    try {
+      const p = await recalculateAllPreview({ periodStart: start, periodEnd: end });
+      if (!p.count) {
+        toast(t('salary.recalcAll.none'), 'info');
+        return;
+      }
+      const ok = await confirm({
+        title: t('salary.recalcAll.title').replace('{n}', String(p.count)),
+        message: t('salary.recalcAll.text')
+          .replace('{from}', tjFormatDate(start))
+          .replace('{to}', tjFormatDate(end))
+          .replace('{before}', fmtMoney(p.before))
+          .replace('{after}', fmtMoney(p.after)),
+        confirmText: t('salary.recalc.button'),
+      });
+      if (!ok) return;
+      const res = await recalculateAllSalaries({ periodStart: start, periodEnd: end });
+      qc.invalidateQueries({ queryKey: keys.salary.all });
+      if (res.failed.length) {
+        toast(
+          t('salary.recalcAll.partial').replace('{n}', String(res.done)).replace('{failed}', String(res.failed.length)),
+          'error',
+        );
+      } else {
+        toast(
+          t('salary.recalcAll.done')
+            .replace('{n}', String(res.done))
+            .replace('{before}', fmtMoney(res.before))
+            .replace('{after}', fmtMoney(res.after)),
+          'success',
+        );
+      }
+    } catch (e: any) {
+      toast(errorText(e), 'error');
+      qc.invalidateQueries({ queryKey: keys.salary.all });
+    } finally {
+      setRecalcBusy(null);
+    }
+  };
+
   const onPay = async (r: SalaryRecord) => {
     const ok = await confirm({
       title: t('salary.confirmPay'),
@@ -353,18 +450,32 @@ export default function Salary() {
               letterSpacing: '-0.02em',
             }}>{t('salary.calc.title')}</h3>
           </div>
-          <button
-            className="btn btn-primary"
-            data-testid="salary-accrue-all"
-            onClick={onAccrueAll}
-            disabled={!pending.length || accruing || createMut.isPending}
-            title={pending.length ? undefined : t('salary.accrueAll.none')}
-          >
-            <Icon name="bookmark_add" size={18} />{' '}
-            {accruing
-              ? t('salary.saving')
-              : `${t('salary.accrueAll.button')}${pending.length ? ` · ${pending.length}` : ''}`}
-          </button>
+          <div className="salary-head-actions">
+            <button
+              className="btn btn-secondary"
+              data-testid="salary-recalc-all"
+              onClick={onRecalcAll}
+              disabled={!recalcable || !!recalcBusy || accruing}
+              title={recalcable ? undefined : t('salary.recalcAll.none')}
+            >
+              <Icon name="refresh" size={18} />{' '}
+              {recalcBusy === 'all'
+                ? t('salary.saving')
+                : `${t('salary.recalcAll.button')}${recalcable ? ` · ${recalcable}` : ''}`}
+            </button>
+            <button
+              className="btn btn-primary"
+              data-testid="salary-accrue-all"
+              onClick={onAccrueAll}
+              disabled={!pending.length || accruing || createMut.isPending || !!recalcBusy}
+              title={pending.length ? undefined : t('salary.accrueAll.none')}
+            >
+              <Icon name="bookmark_add" size={18} />{' '}
+              {accruing
+                ? t('salary.saving')
+                : `${t('salary.accrueAll.button')}${pending.length ? ` · ${pending.length}` : ''}`}
+            </button>
+          </div>
         </div>
 
         <div className="card-body">
@@ -588,6 +699,16 @@ export default function Salary() {
                               onClick={() => setExpandedId(expanded ? null : r.id)}
                             >
                               <Icon name={expanded ? 'expand_less' : 'expand_more'} size={14} />
+                            </button>
+                          )}
+                          {r.status === 'DRAFT' && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              data-testid="salary-recalc"
+                              onClick={() => onRecalc(r)}
+                              disabled={!!recalcBusy}
+                            >
+                              <Icon name="refresh" size={14} /> {recalcBusy === r.id ? t('salary.saving') : t('salary.recalc.button')}
                             </button>
                           )}
                           {r.status === 'DRAFT' && (

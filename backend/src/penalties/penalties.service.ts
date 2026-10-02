@@ -255,9 +255,17 @@ export class PenaltiesService {
    *  По ТЗ §5: штраф за опоздание идёт в зарплату ТОЛЬКО если
    *  основатель не одобрил причину. До решения — не списываем.
    */
-  async effectivePenaltiesForUser(userId: string, from: Date, to: Date) {
+  async effectivePenaltiesForUser(userId: string, from: Date, to: Date, alsoAppliedIds: string[] = []) {
+    // alsoAppliedIds — учтённые штрафы, которые надо считать неучтёнными:
+    // предпросмотр пересчёта зарплаты, где её штрафы вот-вот вернутся.
     const penalties = await this.prisma.penalty.findMany({
-      where: { userId, applied: false, date: { gte: tjCalendarDay(from), lte: tjCalendarDay(to) } },
+      where: {
+        userId,
+        date: { gte: tjCalendarDay(from), lte: tjCalendarDay(to) },
+        ...(alsoAppliedIds.length
+          ? { OR: [{ applied: false }, { id: { in: alsoAppliedIds } }] }
+          : { applied: false }),
+      },
       orderBy: { date: 'asc' },
     });
     if (penalties.length === 0) {
@@ -363,7 +371,19 @@ export class PenaltiesService {
     userId: string,
     period: { periodStart: Date; periodEnd: Date },
     remaining: Array<{ periodStart: Date; periodEnd: Date }>,
-  ) {
+  ): Promise<string[]> {
+    const ids = await this.appliedBySalary(db, userId, period, remaining);
+    if (ids.length) await db.penalty.updateMany({ where: { id: { in: ids } }, data: { applied: false } });
+    return ids;
+  }
+
+  /** Какие учтённые штрафы приходятся на эту запись зарплаты (только чтение) — см. releaseForRemovedSalary. */
+  async appliedBySalary(
+    db: Prisma.TransactionClient | PrismaService,
+    userId: string,
+    period: { periodStart: Date; periodEnd: Date },
+    remaining: Array<{ periodStart: Date; periodEnd: Date }>,
+  ): Promise<string[]> {
     const DAY = 24 * 60 * 60 * 1000;
     const from = new Date(tjCalendarDay(period.periodStart).getTime() - DAY);
     const to = new Date(tjCalendarDay(period.periodEnd).getTime() + DAY);
@@ -373,10 +393,7 @@ export class PenaltiesService {
     });
     const covered = (d: Date) =>
       remaining.some((r) => d >= tjCalendarDay(r.periodStart) && d <= tjCalendarDay(r.periodEnd));
-    const ids = applied.filter((p) => !covered(p.date)).map((p) => p.id);
-    if (ids.length === 0) return 0;
-    const res = await db.penalty.updateMany({ where: { id: { in: ids } }, data: { applied: false } });
-    return res.count;
+    return applied.filter((p) => !covered(p.date)).map((p) => p.id);
   }
 }
 

@@ -6126,6 +6126,12 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 @media (max-width: 720px) {
   .salary-detail { padding: 14px; }
 }
+/* «Пересчитать всех» + «Начислить всем» в шапке; на телефоне — во всю ширину друг под другом. */
+.salary-head-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 600px) {
+  .salary-head-actions { width: 100%; flex-direction: column; }
+  .salary-head-actions > .btn { width: 100%; justify-content: center; }
+}
 
 /* ===================== Финансы: главные цифры для владельца ===================== */
 .owner-kpis {

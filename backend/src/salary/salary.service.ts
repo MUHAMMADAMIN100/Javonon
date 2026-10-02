@@ -61,6 +61,7 @@ export type NonTjsSalesBreakdown = Record<string, number>;
  * перевод, а не сырую строку бэкенда.
  */
 const DUPLICATE_PERIOD_MESSAGE = 'Зарплата за этот период уже начислена';
+const RECALC_PAID_MESSAGE = 'Выплаченную зарплату пересчитать нельзя';
 
 /**
  * Сообщение при проигранной гонке SERIALIZABLE-транзакции после
@@ -236,7 +237,18 @@ export class SalaryService {
    *     («две недели») занижал бы ставку. На практике окна совпадают:
    *     CRM по умолчанию открывает текущий месяц.
    */
-  async preview(userId: string, periodStart: Date, periodEnd: Date, kpiBonus = 0) {
+  async preview(
+    userId: string,
+    periodStart: Date,
+    periodEnd: Date,
+    kpiBonus = 0,
+    /**
+     * Предпросмотр пересчёта: считать так, будто записи excludeRecordId нет,
+     * а её штрафы (alsoAppliedPenaltyIds) снова не учтены, — ровно то, что
+     * получится после recalculate().
+     */
+    opts: { excludeRecordId?: string; alsoAppliedPenaltyIds?: string[] } = {},
+  ) {
     // Валидация дат: невалидные / неверный порядок / слишком далёкое будущее
     if (!(periodStart instanceof Date) || !(periodEnd instanceof Date) ||
         isNaN(periodStart.getTime()) || isNaN(periodEnd.getTime())) {
@@ -442,7 +454,7 @@ export class SalaryService {
     // SERIALIZABLE-транзакции (insertRecordAtomically). Числа совпадают,
     // пока нет гонки; при гонке авторитетно значение из транзакции.
     const monthsWithDue: Array<{ month: (typeof bonusMonths)[number]; alreadyPaid: number; due: number }> = [];
-    const paidPerMonth = await bonusPaidByMonth(this.prisma, userId, bonusMonths);
+    const paidPerMonth = await bonusPaidByMonth(this.prisma, userId, bonusMonths, opts.excludeRecordId);
     for (const m of bonusMonths) {
       const alreadyPaid = paidPerMonth.get(monthKey(m.periodStart)) ?? 0;
       monthsWithDue.push({
@@ -454,7 +466,7 @@ export class SalaryService {
     const bonusAlreadyPaid = round(monthsWithDue.reduce((sum, x) => sum + x.alreadyPaid, 0));
     // ДОПЛАТА ЗА ПРОШЛЫЕ МЕСЯЦЫ: платежи с датой оплаты в уже рассчитанном
     // месяце, одобренные после его расчёта (см. bonusArrearsMonths).
-    const arrears = await bonusArrearsMonths(this.prisma, userId, bonusPeriodStart);
+    const arrears = await bonusArrearsMonths(this.prisma, userId, bonusPeriodStart, opts.excludeRecordId);
     const bonusArrearsAmount = round(arrears.reduce((sum, x) => sum + x.due, 0));
     /** К начислению сейчас = месячные комиссии минус уже начисленное плюс доплата за прошлые месяцы. */
     const bonusAmount = round(monthsWithDue.reduce((sum, x) => sum + x.due, 0) + bonusArrearsAmount);
@@ -488,7 +500,9 @@ export class SalaryService {
     // FOUNDER не одобрил причину. PENDING (ждёт решения) и APPROVED
     // не вычитаются — но показываем их отдельными строками в превью,
     // чтобы было видно «висит на рассмотрении ещё X TJS».
-    const eff = await this.penaltiesSvc.effectivePenaltiesForUser(userId, periodStart, periodEnd);
+    const eff = await this.penaltiesSvc.effectivePenaltiesForUser(
+      userId, periodStart, periodEnd, opts.alsoAppliedPenaltyIds,
+    );
     const penalties = eff.effective;
 
     const net = baseAmount + bonusAmount + kpiBonus - penalties;
@@ -622,22 +636,26 @@ export class SalaryService {
       if (/[<>]/.test(c)) throw new BadRequestException('comment не должен содержать HTML-теги');
       commentClean = c || null;
     }
+    return this.accrue(dto.userId, start, end, dto.kpiBonus || 0, commentClean);
+  }
 
+  /** Начисление за уже проверенный период — общее для create() и recalculate(). */
+  private async accrue(userId: string, start: Date, end: Date, kpiBonus: number, commentClean: string | null) {
     // Быстрый отказ до тяжёлого preview: запись за этот период уже есть.
     // Это НЕ гард (проверка гоночная сама по себе) — настоящие гарды ниже:
     // SERIALIZABLE-транзакция и уникальный индекс. Здесь — только чтобы не
     // гонять агрегаты по платежам ради заведомо отклонённого запроса и
     // чтобы бухгалтер увидел внятное 400, а не 500 от индекса.
     const alreadyExists = await this.prisma.salaryRecord.findFirst({
-      where: { userId: dto.userId, periodStart: start },
+      where: { userId: userId, periodStart: start },
       select: { id: true },
     });
     if (alreadyExists) throw new BadRequestException(DUPLICATE_PERIOD_MESSAGE);
 
-    const preview = await this.preview(dto.userId, start, end, dto.kpiBonus || 0);
+    const preview = await this.preview(userId, start, end, kpiBonus);
 
     const record = await this.insertRecordAtomically({
-      userId: dto.userId,
+      userId: userId,
       periodStart: start,
       periodEnd: end,
       bonusPeriodStart: preview.bonusPeriodStart,
@@ -678,11 +696,11 @@ export class SalaryService {
     // Помечаем applied ТОЛЬКО те штрафы, которые реально вошли в
     // netAmount. Pending/excused оставляем — они либо станут REJECTED
     // (тогда учтутся в следующей зарплате), либо умрут.
-    const eff = await this.penaltiesSvc.effectivePenaltiesForUser(dto.userId, start, end);
+    const eff = await this.penaltiesSvc.effectivePenaltiesForUser(userId, start, end);
     const effectiveIds = eff.items
       .filter((i: any) => i.excuseStatus !== 'PENDING' && i.excuseStatus !== 'APPROVED')
       .map((i: any) => i.id as string);
-    await this.penaltiesSvc.markApplied(dto.userId, start, end, effectiveIds);
+    await this.penaltiesSvc.markApplied(userId, start, end, effectiveIds);
     return record;
   }
 
@@ -973,6 +991,133 @@ export class SalaryService {
       return tx.salaryRecord.delete({ where: { id } });
     });
   }
+
+  // ===== ПЕРЕСЧЁТ НЕВЫПЛАЧЕННОЙ ЗАРПЛАТЫ =====
+  //
+  // Начисленная запись — снимок: штрафы, часы и бонус, появившиеся позже,
+  // в неё не попадают. «Пересчитать» считает период заново по текущим данным
+  // (KPI-бонус, комментарий и сам период — прежние), как будто записи не
+  // было: её бонус не идёт в «уже начислено», её штрафы снова не учтены.
+  // Выплаченную не трогаем — деньги ушли, расход в финансах записан.
+  //
+  // Технически это «снять запись → начислить заново» через тот же accrue(),
+  // что и обычное начисление: та же SERIALIZABLE-вставка, тот же снимок
+  // бонуса, и момент записи обновляется — доплата за прошлые месяцы
+  // (bonusArrearsMonths) больше не считает поздними платежи, которые новая
+  // запись уже учла.
+
+  private async recalculable(id: string) {
+    const rec = await this.prisma.salaryRecord.findUnique({
+      where: { id },
+      include: { user: { select: { fullName: true } } },
+    });
+    if (!rec) throw new NotFoundException('Запись не найдена');
+    if (rec.status === 'PAID') throw new BadRequestException(RECALC_PAID_MESSAGE);
+    return rec;
+  }
+
+  /** Сколько станет после пересчёта — ничего не сохраняя. */
+  async recalculatePreview(id: string) {
+    const rec = await this.recalculable(id);
+    const remaining = await this.prisma.salaryRecord.findMany({
+      where: { userId: rec.userId, id: { not: rec.id } },
+      select: { periodStart: true, periodEnd: true },
+    });
+    const freed = await this.penaltiesSvc.appliedBySalary(this.prisma, rec.userId, rec, remaining);
+    const p = await this.preview(rec.userId, rec.periodStart, rec.periodEnd, rec.kpiBonus, {
+      excludeRecordId: rec.id,
+      alsoAppliedPenaltyIds: freed,
+    });
+    return {
+      id: rec.id,
+      userId: rec.userId,
+      fullName: rec.user?.fullName ?? '',
+      before: round(rec.netAmount),
+      after: p.netAmount,
+      penaltiesBefore: round(rec.penalties),
+      penaltiesAfter: p.penalties,
+    };
+  }
+
+  async recalculate(id: string) {
+    const old = await this.recalculable(id);
+    const { user, ...row } = old;
+    const freed = await this.prisma.$transaction(async (tx) => {
+      // Между чтением и снятием запись могли выплатить — проверяем ещё раз.
+      const fresh = await tx.salaryRecord.findUnique({ where: { id }, select: { status: true } });
+      if (!fresh || fresh.status === 'PAID') throw new BadRequestException(RECALC_PAID_MESSAGE);
+      const remaining = await tx.salaryRecord.findMany({
+        where: { userId: old.userId, id: { not: id } },
+        select: { periodStart: true, periodEnd: true },
+      });
+      const ids = await this.penaltiesSvc.releaseForRemovedSalary(tx, old.userId, old, remaining);
+      await tx.salaryRecord.delete({ where: { id } });
+      return ids;
+    });
+    try {
+      const rec = await this.accrue(old.userId, old.periodStart, old.periodEnd, old.kpiBonus, old.comment);
+      return {
+        id: rec.id,
+        userId: old.userId,
+        fullName: user?.fullName ?? '',
+        before: round(old.netAmount),
+        after: round(rec.netAmount),
+      };
+    } catch (e) {
+      // Начислить заново не вышло — возвращаем прежнюю запись и её штрафы
+      // ровно как были, чтобы пересчёт не оставил сотрудника без зарплаты.
+      const { bonusByMonth, ...rest } = row;
+      await this.prisma.$transaction([
+        this.prisma.salaryRecord.create({
+          data: { ...rest, ...(bonusByMonth !== null ? { bonusByMonth: bonusByMonth as Prisma.InputJsonValue } : {}) },
+        }),
+        this.prisma.penalty.updateMany({ where: { id: { in: freed } }, data: { applied: true } }),
+      ]);
+      throw e;
+    }
+  }
+
+  /** Невыплаченные записи периода — те, что таблица показывает «начисленными». */
+  private recalculableInPeriod(start: Date, end: Date) {
+    return this.prisma.salaryRecord.findMany({
+      where: { status: { not: 'PAID' }, periodStart: { gte: start, lte: end } },
+      orderBy: [{ periodStart: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true },
+    });
+  }
+
+  async recalculatePreviewAll(start: Date, end: Date) {
+    const recs = await this.recalculableInPeriod(start, end);
+    const items: Awaited<ReturnType<SalaryService['recalculatePreview']>>[] = [];
+    for (const r of recs) items.push(await this.recalculatePreview(r.id));
+    return {
+      count: items.length,
+      before: round(items.reduce((s, x) => s + x.before, 0)),
+      after: round(items.reduce((s, x) => s + x.after, 0)),
+      items,
+    };
+  }
+
+  /** По одной записи подряд: пересчёт сотрудника зависит от уже пересчитанных записей того же месяца. */
+  async recalculateAll(start: Date, end: Date) {
+    const recs = await this.recalculableInPeriod(start, end);
+    const items: Awaited<ReturnType<SalaryService['recalculate']>>[] = [];
+    const failed: Array<{ id: string; message: string }> = [];
+    for (const r of recs) {
+      try {
+        items.push(await this.recalculate(r.id));
+      } catch (e: any) {
+        failed.push({ id: r.id, message: e?.message || String(e) });
+      }
+    }
+    return {
+      done: items.length,
+      failed,
+      before: round(items.reduce((s, x) => s + x.before, 0)),
+      after: round(items.reduce((s, x) => s + x.after, 0)),
+      items,
+    };
+  }
 }
 
 function round(n: number): number {
@@ -997,6 +1142,8 @@ async function bonusPaidByMonth(
   db: Prisma.TransactionClient | PrismaService,
   userId: string,
   months: Array<{ periodStart: Date; periodEnd: Date }>,
+  /** Пересчитываемая запись — её бонус в «уже начислено» не входит. */
+  excludeRecordId?: string,
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (!months.length) return out;
@@ -1004,7 +1151,7 @@ async function bonusPaidByMonth(
   // Запись, закончившаяся раньше самого раннего месяца, ни задеть его, ни
   // доплатить за него не может: доплату несут только более поздние записи.
   const records = await db.salaryRecord.findMany({
-    where: { userId, periodEnd: { gte: earliest } },
+    where: { userId, periodEnd: { gte: earliest }, ...(excludeRecordId && { id: { not: excludeRecordId } }) },
     select: { periodStart: true, periodEnd: true, bonusAmount: true, bonusByMonth: true },
   });
   for (const m of months) {
@@ -1105,12 +1252,18 @@ async function bonusArrearsMonths(
   db: Prisma.TransactionClient | PrismaService,
   userId: string,
   before: Date,
+  excludeRecordId?: string,
 ): Promise<BonusArrearsMonth[]> {
   const ownStart = tjStartOfMonth(before);
   let horizon = ownStart;
   for (let i = 0; i < ARREARS_LOOKBACK_MONTHS; i++) horizon = tjStartOfMonth(new Date(horizon.getTime() - 1));
   const records = await db.salaryRecord.findMany({
-    where: { userId, periodStart: { lt: ownStart }, periodEnd: { gte: horizon } },
+    where: {
+      userId,
+      periodStart: { lt: ownStart },
+      periodEnd: { gte: horizon },
+      ...(excludeRecordId && { id: { not: excludeRecordId } }),
+    },
     select: { periodStart: true, periodEnd: true, createdAt: true },
   });
   // Прошлые месяцы с зарплатными записями и момент последней записи по
@@ -1147,7 +1300,7 @@ async function bonusArrearsMonths(
   const candidates = starts.filter((t) => round(now.get(t) ?? 0) > round(known.get(t) ?? 0));
   if (!candidates.length) return [];
   const months = candidates.map((t) => ({ periodStart: new Date(t), periodEnd: tjEndOfMonth(new Date(t)) }));
-  const paid = await bonusArrearsPaidByMonth(db, userId, months);
+  const paid = await bonusArrearsPaidByMonth(db, userId, months, excludeRecordId);
   const out: BonusArrearsMonth[] = [];
   for (const m of months) {
     const t = m.periodStart.getTime();
@@ -1187,12 +1340,13 @@ async function bonusArrearsPaidByMonth(
   db: Prisma.TransactionClient | PrismaService,
   userId: string,
   months: Array<{ periodStart: Date; periodEnd: Date }>,
+  excludeRecordId?: string,
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (!months.length) return out;
   const earliestEnd = new Date(Math.min(...months.map((m) => m.periodEnd.getTime())));
   const records = await db.salaryRecord.findMany({
-    where: { userId, periodStart: { gt: earliestEnd } },
+    where: { userId, periodStart: { gt: earliestEnd }, ...(excludeRecordId && { id: { not: excludeRecordId } }) },
     select: { periodStart: true, periodEnd: true, bonusByMonth: true },
   });
   for (const m of months) {
