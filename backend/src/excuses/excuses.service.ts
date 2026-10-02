@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { tjStartOfDay, tjStartOfNextDay } from '../common/tj-time';
+import { PenaltiesService } from '../penalties/penalties.service';
+import { tjCalendarDay } from '../common/tj-time';
 
 /**
  * Workflow одобрения причин опоздания (ТЗ §5).
@@ -11,11 +12,15 @@ import { tjStartOfDay, tjStartOfNextDay } from '../common/tj-time';
  * (см. ExcusesController) видит pending-список и решает:
  *   APPROVE — штраф не списывается. Если cron уже создал штраф
  *             за это опоздание — удаляем его.
- *   REJECT  — штраф остаётся (или создаётся при следующем cron'е).
+ *   REJECT  — штраф остаётся, а если его ещё нет — создаётся сразу.
  */
 @Injectable()
 export class ExcusesService {
-  constructor(private prisma: PrismaService, private realtime: RealtimeGateway) {}
+  constructor(
+    private prisma: PrismaService,
+    private realtime: RealtimeGateway,
+    private penalties: PenaltiesService,
+  ) {}
 
   /** Список pending-причин для FOUNDER'а — что нужно разобрать.
    *  Объединяем утренние и обеденные опоздания. У каждой записи
@@ -89,17 +94,14 @@ export class ExcusesService {
     if (!entry.lateExcuseAt) {
       throw new BadRequestException('У этой записи нет причины опоздания');
     }
-    // Если cron уже создал штраф за этот день — отменяем его.
-    // Границы дня — по Asia/Dushanbe, иначе при отметке clockIn в 04:00 ТJT
-    // UTC-день уже «вчера», и фильтр промахивается мимо реального штрафа.
-    const dayStart = tjStartOfDay(entry.clockIn);
-    const dayEnd = tjStartOfNextDay(entry.clockIn);
+    // Если cron уже создал штраф за этот день — отменяем его. Penalty.date —
+    // календарный день по Душанбе (см. tjCalendarDay).
     const deleted = await this.prisma.penalty.deleteMany({
       where: {
         userId: entry.userId,
         reason: 'LATE_ARRIVAL',
         applied: false,  // если уже учтён в зарплате — не трогаем
-        date: { gte: dayStart, lt: dayEnd },
+        date: tjCalendarDay(entry.clockIn),
       },
     });
     await this.prisma.timeEntry.update({
@@ -130,14 +132,15 @@ export class ExcusesService {
         lateExcuseStatus: 'REJECTED' as any,
         lateExcuseReviewedAt: new Date(),
         lateExcuseReviewedBy: reviewerId,
-        // latePenaltyApplied НЕ трогаем — следующий cron штраф создаст.
-        // Если cron уже был и пропустил из-за PENDING, теперь увидит
-        // REJECTED + applied=false и создаст штраф.
       },
     });
+    // Штраф — сразу. Раньше ждали «следующего cron'а», но он смотрел только
+    // свои сутки, и штраф за отклонённую причину не появлялся никогда.
+    // Если штраф за этот день уже есть, проход его не задвоит.
+    const penalty = await this.penalties.settleLateEntry(entryId, 'arrival');
     this.realtime.emitUser(entry.userId, 'excuse:rejected', { entryId });
     this.realtime.emitStaff('excuse:reviewed', { entryId });
-    return { ok: true };
+    return { ok: true, penaltyCreated: penalty === 'created' };
   }
 
   /** APPROVE для обеденного опоздания. */
@@ -147,14 +150,12 @@ export class ExcusesService {
     if (!entry.lunchLateExcuseAt) {
       throw new BadRequestException('У этой записи нет причины опоздания с обеда');
     }
-    const dayStart = tjStartOfDay(entry.clockIn);
-    const dayEnd = tjStartOfNextDay(entry.clockIn);
     const deleted = await this.prisma.penalty.deleteMany({
       where: {
         userId: entry.userId,
         reason: 'LATE_FROM_LUNCH',
         applied: false,
-        date: { gte: dayStart, lt: dayEnd },
+        date: tjCalendarDay(entry.clockIn),
       },
     });
     await this.prisma.timeEntry.update({
@@ -186,8 +187,9 @@ export class ExcusesService {
         lunchLateExcuseReviewedBy: reviewerId,
       },
     });
+    const penalty = await this.penalties.settleLateEntry(entryId, 'lunch');
     this.realtime.emitUser(entry.userId, 'excuse:rejected', { entryId, kind: 'lunch' });
     this.realtime.emitStaff('excuse:reviewed', { entryId, kind: 'lunch' });
-    return { ok: true };
+    return { ok: true, penaltyCreated: penalty === 'created' };
   }
 }

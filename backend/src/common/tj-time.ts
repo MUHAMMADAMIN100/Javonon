@@ -137,6 +137,21 @@ export function parseCalendarDateUtc(input: string): Date {
   return new Date(`${asInstant.toISOString().slice(0, 10)}T00:00:00.000Z`);
 }
 
+/**
+ * Душанбинский календарный день момента `d` в виде UTC-полуночи — для
+ * колонок `@db.Date` (Penalty.date).
+ *
+ * Postgres хранит в DATE только дату, а Prisma берёт её из UTC-значения.
+ * tjStartOfDay(10.09) = `2026-09-09T19:00Z` ложилось бы в DATE как 09.09 —
+ * штраф за опоздание 10-го жил вчерашним числом и на границе месяца уезжал
+ * в прошлый месяц. UTC-полночь того же дня (`2026-09-10T00:00Z`) — та же
+ * конвенция, что у parseCalendarDateUtc. Годится и для фильтров по DATE:
+ * day(from) … day(to) включительно — ровно календарные дни периода.
+ */
+export function tjCalendarDay(d: Date = new Date()): Date {
+  return new Date(`${tjLocalDay(d)}T00:00:00.000Z`);
+}
+
 /** Парсинг конца периода: 23:59:59.999 ТJT для указанного YYYY-MM-DD. */
 export function tjParseLocalDateEnd(input: string): Date {
   if (hasExplicitTimezone(input)) return new Date(input);

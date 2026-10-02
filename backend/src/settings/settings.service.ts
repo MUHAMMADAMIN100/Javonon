@@ -266,20 +266,35 @@ export class SettingsService {
 
   /**
    * Подобрать активное правило для конкретного опоздания (в минутах).
-   * Используется PenaltiesService вместо хардкода. Возвращает null если
-   * правил нет (тогда штраф не начисляется).
+   *
+   *  - Опоздание внутри «от — до» правила → это правило.
+   *  - Длиннее последнего правила (или попало в дыру между правилами) →
+   *    ближайшее правило снизу: «60–120 → 250» действует и на 150 минут
+   *    (решение учредителя 2026-10-02). Раньше такое опоздание уходило на
+   *    встроенную шкалу 200/250/300…, которой в настройках не видно.
+   *  - Короче самого первого правила → rule = null при hasRules = true:
+   *    шкала компании такое опоздание не штрафует.
+   *  - Правил нет совсем → hasRules = false, вызывающий берёт встроенную шкалу.
    */
-  async findPenaltyForLate(lateMinutes: number) {
+  async findPenaltyForLate(lateMinutes: number): Promise<{
+    rule: { minLateMinutes: number; maxLateMinutes: number | null; amount: number; comment: string | null } | null;
+    hasRules: boolean;
+    /** Опоздание длиннее подобранного правила (взято правило снизу). */
+    beyond: boolean;
+  }> {
     const rules = await this.prisma.penaltyRule.findMany({
       where: { isActive: true },
       orderBy: { minLateMinutes: 'desc' },
     });
-    // Берём первое (по убыванию) правило, у которого minLateMinutes <= late
-    // и (maxLateMinutes IS NULL OR late < maxLateMinutes).
-    return rules.find((r) =>
+    if (rules.length === 0) return { rule: null, hasRules: false, beyond: false };
+    const exact = rules.find((r) =>
       lateMinutes >= r.minLateMinutes &&
       (r.maxLateMinutes === null || lateMinutes < r.maxLateMinutes),
-    ) || null;
+    );
+    if (exact) return { rule: exact, hasRules: true, beyond: false };
+    // По убыванию minLateMinutes первое подходящее снизу — ближайшее.
+    const below = rules.find((r) => lateMinutes >= r.minLateMinutes);
+    return { rule: below ?? null, hasRules: true, beyond: !!below };
   }
 
   // ===== Work Location =====

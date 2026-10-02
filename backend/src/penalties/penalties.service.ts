@@ -1,8 +1,30 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PenaltyReason } from '@prisma/client';
+import { Prisma, PenaltyReason } from '@prisma/client';
 import { SettingsService } from '../settings/settings.service';
-import { tjStartOfDay, tjStartOfNextDay, tjStartOfMonth, tjStartOfNextMonth, tjLocalDay } from '../common/tj-time';
+import {
+  parseCalendarDateUtc,
+  tjCalendarDay,
+  tjLocalDay,
+  tjStartOfDay,
+  tjStartOfMonth,
+  tjStartOfNextDay,
+} from '../common/tj-time';
+
+/** Утреннее опоздание или позднее возвращение с обеда. */
+export type LateKind = 'arrival' | 'lunch';
+type SettleOutcome = 'created' | 'excused' | 'pending' | 'below' | 'none';
+
+const ENTRY_SELECT = {
+  id: true,
+  userId: true,
+  clockIn: true,
+  lateMinutes: true,
+  lateLunchMinutes: true,
+  lateExcuseStatus: true,
+  lunchLateExcuseStatus: true,
+} as const;
+type LateEntry = Prisma.TimeEntryGetPayload<{ select: typeof ENTRY_SELECT }>;
 
 const VALID_REASONS: PenaltyReason[] = ['LATE_ARRIVAL', 'LATE_FROM_LUNCH', 'ABSENCE', 'TASK_OVERDUE', 'CUSTOM'];
 
@@ -15,13 +37,9 @@ const RATE_PER_LATE_MINUTE = 0.5; // $0.50 за минуту опоздания 
 const LATE_THRESHOLD_MIN = 10;
 
 /**
- * Прогрессивная шкала штрафов за повторные опоздания в течение месяца:
- *  1-е опоздание → 200 TJS (сомони)
- *  2-е → 250 TJS
- *  3-е → 300 TJS
- *  каждое следующее +50 TJS
- *
- * Эти суммы можно настраивать через env или БД позже, пока зашиты.
+ * Встроенная шкала — ТОЛЬКО когда в Настройках нет ни одного активного
+ * правила штрафов (см. SettingsService.findPenaltyForLate):
+ *  1-е опоздание за месяц → 200 TJS, 2-е → 250, 3-е → 300, далее +50.
  */
 const LATE_BASE_AMOUNT_TJS = 200;
 const LATE_INCREMENT_TJS = 50;
@@ -39,8 +57,15 @@ export class PenaltiesService {
       where: {
         ...(filters.userId && { userId: filters.userId }),
         ...(filters.applied !== undefined && { applied: filters.applied }),
+        // Penalty.date — календарный день (DATE), границы периода переводим
+        // в дни по Душанбе, см. tjCalendarDay.
         ...(filters.from || filters.to
-          ? { date: { ...(filters.from && { gte: filters.from }), ...(filters.to && { lte: filters.to }) } }
+          ? {
+              date: {
+                ...(filters.from && { gte: tjCalendarDay(filters.from) }),
+                ...(filters.to && { lte: tjCalendarDay(filters.to) }),
+              },
+            }
           : {}),
       },
       orderBy: { date: 'desc' },
@@ -66,13 +91,15 @@ export class PenaltiesService {
     if (details.length > 500) throw new BadRequestException('Описание слишком длинное (макс. 500 символов)');
     if (/[<>]/.test(details)) throw new BadRequestException('Описание содержит недопустимые символы');
 
+    // Календарный день: «YYYY-MM-DD» как есть, без даты — сегодня по
+    // Душанбе (сырое new Date() ночью легло бы вчерашним UTC-числом).
     let date: Date;
     if (dto.date) {
-      const d = new Date(dto.date);
+      const d = parseCalendarDateUtc(dto.date);
       if (isNaN(d.getTime())) throw new BadRequestException('Некорректная дата');
       date = d;
     } else {
-      date = new Date();
+      date = tjCalendarDay();
     }
 
     // Проверяем существование пользователя — иначе FK даёт 500.
@@ -89,196 +116,124 @@ export class PenaltiesService {
   }
 
   /**
-   * Cron-задача: для каждого TimeEntry за указанную дату
-   * с lateMinutes > 15 — создаём Penalty (LATE_ARRIVAL).
+   * Догоняющий проход штрафов за опоздания (утро и обед).
    *
-   * Новая логика:
-   *  - Если сотрудник предоставил оправдание (lateExcuseAt не null) —
-   *    штраф НЕ начисляется (записываем latePenaltyApplied=true чтобы
-   *    больше не проверять).
-   *  - Если оправдания нет — начисляем штраф ПРОГРЕССИВНО:
-   *    считаем сколько раз в текущем месяце сотрудник уже получал
-   *    LATE_ARRIVAL штраф, и берём BASE + N × INCREMENT TJS.
-   *  - Помечаем TimeEntry.latePenaltyApplied=true для идемпотентности.
+   * ПОЧЕМУ НЕ «ТОЛЬКО СЕГОДНЯ». Раньше cron в 22:00 пн–пт брал опоздания
+   * ровно за текущие сутки. Всё, что в этот момент не обработалось, не
+   * обрабатывалось уже никогда: суббота/воскресенье, вечер, когда сервер
+   * перезапускался на выкладке, и — главное — причина «на рассмотрении»:
+   * cron её пропускал, а после отклонения следующий запуск смотрел уже
+   * свой день. Теперь проход берёт ВСЕ ещё не обработанные опоздания окна
+   * (текущий и прошлый месяц по Душанбе); пропущенный день догоняется
+   * первым же проходом.
+   *
+   * includeToday=false — проход при старте сервера: сегодняшний день не
+   * трогаем до вечера, сотрудник ещё может объяснить опоздание.
+   *
+   * Повторно одну запись не обработать: см. settleEntry (захват флага).
    */
-  async generateLatePenaltiesForDate(targetDate: Date) {
-    // Границы суток — по Asia/Dushanbe. setHours использует
-    // часовой пояс сервера (UTC на Railway), из-за чего «день» съезжает
-    // на 5 часов и penalty cron может промахнуться по записям, сделанным
-    // около полуночи Душанбе.
-    const from = tjStartOfDay(targetDate);
-    const to = tjStartOfNextDay(targetDate);
-
-    const entries = await this.prisma.timeEntry.findMany({
-      where: {
-        clockIn: { gte: from, lt: to },
-        // ТЗ §3: «10-15 минут» — 10 ВКЛЮЧИТЕЛЬНО. gte, не gt.
-        // Раньше было gt: 15, потом gt: 10 — и то и то пропускало
-        // граничные значения, противореча примеру ТЗ.
-        lateMinutes: { gte: LATE_THRESHOLD_MIN },
-        latePenaltyApplied: false,
-      },
-      include: { user: { select: { id: true, fullName: true, isActive: true } } },
-    });
-
-    let created = 0;
-    let excused = 0;
-    let pending = 0;
-    for (const e of entries) {
-      // По ТЗ §5 — причина уходит на одобрение FOUNDER'у. Только
-      // APPROVED отменяет штраф. PENDING — ждём решения (cron сегодня
-      // пропускает, латеPenaltyApplied остаётся false → завтра попробуем
-      // снова). REJECTED — штраф начисляем как обычно.
-      const status = (e as any).lateExcuseStatus as string | null;
-      if (status === 'APPROVED') {
-        await this.prisma.timeEntry.update({
-          where: { id: e.id },
-          data: { latePenaltyApplied: true },
-        });
-        excused++;
-        continue;
-      }
-      if (status === 'PENDING') {
-        // Не штрафуем пока, но и не помечаем applied — следующий cron
-        // ещё раз посмотрит. FOUNDER должен разобрать pending.
-        pending++;
-        continue;
-      }
-      // null (нет причины) или REJECTED → штрафуем.
-
-      // Считаем сколько LATE_ARRIVAL штрафов уже было в этом месяце.
-      // Границы месяца — в Asia/Dushanbe, иначе у юзера-полуночника
-      // первое опоздание месяца может посчитаться вторым.
-      const monthStart = tjStartOfMonth(from);
-      const monthEnd = tjStartOfNextMonth(from);
-      const priorLateCount = await this.prisma.penalty.count({
-        where: {
-          userId: e.userId,
-          reason: 'LATE_ARRIVAL',
-          date: { gte: monthStart, lt: monthEnd },
-        },
-      });
-
-      // Сумма штрафа: сначала пробуем правило из SettingsService
-      // (FOUNDER задаёт через /settings/penalty-rules). Если ни одно
-      // не подходит — fallback на старую прогрессивную шкалу.
-      let amount: number;
-      let detailsRule: string;
-      const rule = await this.settings.findPenaltyForLate(e.lateMinutes);
-      if (rule) {
-        amount = rule.amount;
-        detailsRule = rule.comment
-          ? ` · правило «${rule.comment}»`
-          : ` · по правилу ${rule.minLateMinutes}-${rule.maxLateMinutes ?? '∞'} мин`;
-      } else {
-        amount = LATE_BASE_AMOUNT_TJS + priorLateCount * LATE_INCREMENT_TJS;
-        detailsRule = ` · ${priorLateCount + 1}-е в этом месяце`;
-      }
-
-      // Создаём штраф + помечаем entry в одной транзакции
-      await this.prisma.$transaction([
-        this.prisma.penalty.create({
-          data: {
-            userId: e.userId,
-            reason: 'LATE_ARRIVAL',
-            amount,
-            details: `Опоздание ${e.lateMinutes} мин${detailsRule} · без оправдания`,
-            date: from,
-          },
-        }),
-        this.prisma.timeEntry.update({
-          where: { id: e.id },
-          data: { latePenaltyApplied: true },
-        }),
-      ]);
-      created++;
-    }
-    return { created, excused, pending, scanned: entries.length };
+  async generatePendingLatePenalties(opts: { includeToday: boolean; now?: Date }) {
+    const now = opts.now ?? new Date();
+    const prevMonthStart = tjStartOfMonth(new Date(tjStartOfMonth(now).getTime() - 1));
+    const until = opts.includeToday ? tjStartOfNextDay(now) : tjStartOfDay(now);
+    const arrival = await this.settleWindow('arrival', prevMonthStart, until);
+    const lunch = await this.settleWindow('lunch', prevMonthStart, until);
+    return { arrival, lunch };
   }
 
   /**
-   * Cron-задача: штрафы за позднее возвращение с обеда (lateLunchMinutes
-   * > LATE_THRESHOLD_MIN). Логика идентична LATE_ARRIVAL — та же шкала
-   * PenaltyRule, тот же fallback.
-   *
-   * Учёт excuse (по аналогии с утренним опозданием):
-   *   APPROVED — не штрафуем, помечаем applied=true
-   *   PENDING  — пропускаем, FOUNDER должен разобрать (applied=false)
-   *   REJECTED / null — штрафуем как обычно.
-   *
-   * Идемпотентность через флаг lateLunchPenaltyApplied.
+   * Начислить (или закрыть без штрафа) одно опоздание — вызывается при
+   * отклонении причины, чтобы штраф появился сразу, а не «следующим cron'ом».
    */
-  async generateLunchLatePenaltiesForDate(targetDate: Date) {
-    const from = tjStartOfDay(targetDate);
-    const to = tjStartOfNextDay(targetDate);
+  async settleLateEntry(entryId: string, kind: LateKind) {
+    const e = await this.prisma.timeEntry.findUnique({ where: { id: entryId }, select: ENTRY_SELECT });
+    if (!e) return 'none' as const;
+    return this.settleEntry(kind, e);
+  }
 
+  private async settleWindow(kind: LateKind, from: Date, until: Date) {
     const entries = await this.prisma.timeEntry.findMany({
       where: {
-        clockIn: { gte: from, lt: to },
-        lateLunchMinutes: { gte: LATE_THRESHOLD_MIN },
-        lateLunchPenaltyApplied: false,
+        clockIn: { gte: from, lt: until },
+        ...(kind === 'arrival'
+          ? { lateMinutes: { gte: LATE_THRESHOLD_MIN }, latePenaltyApplied: false }
+          : { lateLunchMinutes: { gte: LATE_THRESHOLD_MIN }, lateLunchPenaltyApplied: false }),
       },
-      include: { user: { select: { id: true, fullName: true, isActive: true } } },
+      select: ENTRY_SELECT,
+      // По порядку дней: встроенная шкала (когда правил нет) считает
+      // «N-е опоздание в месяце» по уже созданным штрафам.
+      orderBy: { clockIn: 'asc' },
     });
-
-    let created = 0;
-    let excused = 0;
-    let pending = 0;
+    const stats = { created: 0, excused: 0, pending: 0, below: 0, scanned: entries.length };
     for (const e of entries) {
-      const status = (e as any).lunchLateExcuseStatus as string | null;
-      if (status === 'APPROVED') {
-        await this.prisma.timeEntry.update({
-          where: { id: e.id },
-          data: { lateLunchPenaltyApplied: true },
-        });
-        excused++;
-        continue;
-      }
-      if (status === 'PENDING') {
-        // Ждём решения FOUNDER'а — следующий cron посмотрит снова.
-        pending++;
-        continue;
-      }
-
-      let amount: number;
-      let detailsRule: string;
-      const rule = await this.settings.findPenaltyForLate(e.lateLunchMinutes);
-      if (rule) {
-        amount = rule.amount;
-        detailsRule = rule.comment
-          ? ` · правило «${rule.comment}»`
-          : ` · по правилу ${rule.minLateMinutes}-${rule.maxLateMinutes ?? '∞'} мин`;
-      } else {
-        // Fallback — та же база/инкремент, что и для утреннего опоздания.
-        const priorCount = await this.prisma.penalty.count({
-          where: {
-            userId: e.userId,
-            reason: 'LATE_FROM_LUNCH',
-            date: { gte: tjStartOfMonth(from), lt: tjStartOfNextMonth(from) },
-          },
-        });
-        amount = LATE_BASE_AMOUNT_TJS + priorCount * LATE_INCREMENT_TJS;
-        detailsRule = ` · ${priorCount + 1}-е в этом месяце`;
-      }
-
-      await this.prisma.$transaction([
-        this.prisma.penalty.create({
-          data: {
-            userId: e.userId,
-            reason: 'LATE_FROM_LUNCH',
-            amount,
-            details: `Позднее возвращение с обеда ${e.lateLunchMinutes} мин${detailsRule}${status === 'REJECTED' ? ' · причина отклонена' : ' · без оправдания'}`,
-            date: from,
-          },
-        }),
-        this.prisma.timeEntry.update({
-          where: { id: e.id },
-          data: { lateLunchPenaltyApplied: true },
-        }),
-      ]);
-      created++;
+      const outcome = await this.settleEntry(kind, e);
+      if (outcome === 'created') stats.created++;
+      else if (outcome === 'excused') stats.excused++;
+      else if (outcome === 'pending') stats.pending++;
+      else if (outcome === 'below') stats.below++;
     }
-    return { created, excused, pending, scanned: entries.length };
+    return stats;
+  }
+
+  /**
+   * Решение по одному опозданию:
+   *   APPROVED — штрафа нет, запись закрыта;
+   *   PENDING  — ждём основателя, запись остаётся открытой;
+   *   нет причины / REJECTED — штраф по шкале из Настроек.
+   *
+   * Запись «захватывается» условным UPDATE флага в той же транзакции, что и
+   * создание штрафа: проход при старте, вечерний cron и отклонение причины
+   * могут встретиться на одной записи — штраф всё равно будет один.
+   */
+  private async settleEntry(kind: LateKind, e: LateEntry): Promise<SettleOutcome> {
+    const minutes = kind === 'arrival' ? e.lateMinutes : e.lateLunchMinutes;
+    const status = (kind === 'arrival' ? e.lateExcuseStatus : e.lunchLateExcuseStatus) as string | null;
+    const claimWhere = kind === 'arrival'
+      ? { id: e.id, latePenaltyApplied: false }
+      : { id: e.id, lateLunchPenaltyApplied: false };
+    const claimData = kind === 'arrival' ? { latePenaltyApplied: true } : { lateLunchPenaltyApplied: true };
+    const claim = async (db: Prisma.TransactionClient) =>
+      (await db.timeEntry.updateMany({ where: claimWhere, data: claimData })).count === 1;
+
+    if (minutes < LATE_THRESHOLD_MIN) return 'none';
+    if (status === 'APPROVED') return (await claim(this.prisma)) ? 'excused' : 'none';
+    if (status === 'PENDING') return 'pending';
+
+    const reason: PenaltyReason = kind === 'arrival' ? 'LATE_ARRIVAL' : 'LATE_FROM_LUNCH';
+    const day = tjCalendarDay(e.clockIn);
+    const { rule, hasRules, beyond } = await this.settings.findPenaltyForLate(minutes);
+    // Правила есть, но опоздание короче самого первого — шкала компании его
+    // не штрафует.
+    if (hasRules && !rule) return (await claim(this.prisma)) ? 'below' : 'none';
+
+    let amount: number;
+    let ruleText: string;
+    if (rule) {
+      amount = rule.amount;
+      ruleText = rule.comment
+        ? `правило «${rule.comment}»`
+        : `${beyond ? 'по последнему правилу' : 'по правилу'} ${rule.minLateMinutes}-${rule.maxLateMinutes ?? '∞'} мин`;
+    } else {
+      // Правил в Настройках нет — встроенная шкала: 200, 250, 300… за
+      // каждое следующее опоздание этого вида в месяце.
+      const prior = await this.prisma.penalty.count({
+        where: { userId: e.userId, reason, date: { gte: tjCalendarDay(tjStartOfMonth(e.clockIn)), lt: day } },
+      });
+      amount = LATE_BASE_AMOUNT_TJS + prior * LATE_INCREMENT_TJS;
+      ruleText = `${prior + 1}-е в этом месяце`;
+    }
+    const [, mm, dd] = tjLocalDay(e.clockIn).split('-');
+    // Дата в скобках — не только для людей: по ней миграция
+    // migrate-penalty-dates.ts отличает новые штрафы от старых (у старых
+    // после минут сразу « · »).
+    const label = kind === 'arrival' ? 'Опоздание' : 'Позднее возвращение с обеда';
+    const details = `${label} ${minutes} мин (${dd}.${mm}) · ${ruleText} · ${status === 'REJECTED' ? 'причина отклонена' : 'без оправдания'}`;
+
+    return this.prisma.$transaction(async (tx) => {
+      if (!(await claim(tx))) return 'none' as const;
+      await tx.penalty.create({ data: { userId: e.userId, reason, amount, details, date: day } });
+      return 'created' as const;
+    });
   }
 
   /** Сумма неучтённых штрафов за период (для зарплатного расчёта).
@@ -302,7 +257,7 @@ export class PenaltiesService {
    */
   async effectivePenaltiesForUser(userId: string, from: Date, to: Date) {
     const penalties = await this.prisma.penalty.findMany({
-      where: { userId, applied: false, date: { gte: from, lte: to } },
+      where: { userId, applied: false, date: { gte: tjCalendarDay(from), lte: tjCalendarDay(to) } },
       orderBy: { date: 'asc' },
     });
     if (penalties.length === 0) {
@@ -385,10 +340,43 @@ export class PenaltiesService {
       where: {
         userId,
         applied: false,
-        date: { gte: from, lte: to },
+        date: { gte: tjCalendarDay(from), lte: tjCalendarDay(to) },
       },
       data: { applied: true },
     });
+  }
+
+  /**
+   * Удалили начисленную (не выплаченную) зарплату — её штрафы снова
+   * «не учтены», иначе при новом начислении за тот же период они бы не
+   * вычлись: effectivePenaltiesForUser берёт только applied = false.
+   *
+   * Связи «штраф → запись зарплаты» в БД нет, поэтому снимаем отметку у
+   * учтённых штрафов периода, которые не попадают ни в одну ОСТАВШУЮСЯ
+   * запись этого сотрудника — их могла учесть только удаляемая. Окно шире
+   * периода на день с каждой стороны: до 2026-10-02 штраф за опоздание
+   * писался на день раньше (см. migrate-penalty-dates.ts), и запись за
+   * сентябрь могла учесть опоздание 1 октября.
+   */
+  async releaseForRemovedSalary(
+    db: Prisma.TransactionClient,
+    userId: string,
+    period: { periodStart: Date; periodEnd: Date },
+    remaining: Array<{ periodStart: Date; periodEnd: Date }>,
+  ) {
+    const DAY = 24 * 60 * 60 * 1000;
+    const from = new Date(tjCalendarDay(period.periodStart).getTime() - DAY);
+    const to = new Date(tjCalendarDay(period.periodEnd).getTime() + DAY);
+    const applied = await db.penalty.findMany({
+      where: { userId, applied: true, date: { gte: from, lte: to } },
+      select: { id: true, date: true },
+    });
+    const covered = (d: Date) =>
+      remaining.some((r) => d >= tjCalendarDay(r.periodStart) && d <= tjCalendarDay(r.periodEnd));
+    const ids = applied.filter((p) => !covered(p.date)).map((p) => p.id);
+    if (ids.length === 0) return 0;
+    const res = await db.penalty.updateMany({ where: { id: { in: ids } }, data: { applied: false } });
+    return res.count;
   }
 }
 

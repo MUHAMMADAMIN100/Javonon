@@ -4,7 +4,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { PenaltiesService } from './penalties.service';
 import { PenaltyReason } from '@prisma/client';
-import { tjParseLocalDate, tjParseLocalDateEnd, tjStartOfDay } from '../common/tj-time';
+import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
 @Controller('penalties')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -60,13 +60,17 @@ export class PenaltiesController {
     return this.svc.remove(id);
   }
 
-  /** Ручной запуск авто-генерации штрафов за вчера — чтобы можно было
-   *  тыкнуть из CRM. «Вчера» считается по Asia/Dushanbe. */
+  /** Ручной запуск догоняющего прохода штрафов за опоздания по уже
+   *  прошедшим дням (вчера и раньше, текущий и прошлый месяц) — тот же, что
+   *  сервер делает при старте. Путь прежний ради совместимости. */
   @Post('generate-yesterday')
   @Roles('ADMIN', 'ACCOUNTANT')
   async runYesterday() {
-    const todayTjStart = tjStartOfDay();
-    const yesterday = new Date(todayTjStart.getTime() - 60_000);
-    return this.svc.generateLatePenaltiesForDate(yesterday);
+    const r = await this.svc.generatePendingLatePenalties({ includeToday: false });
+    return {
+      created: r.arrival.created + r.lunch.created,
+      scanned: r.arrival.scanned + r.lunch.scanned,
+      ...r,
+    };
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -13,7 +13,7 @@ import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 const TASK_OVERDUE_PENALTY_USD = 10; // ТЗ §3.9: «Нарушение → штраф» за просроченную задачу
 
 @Injectable()
-export class CronService {
+export class CronService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CronService.name);
 
   constructor(
@@ -48,6 +48,23 @@ export class CronService {
   private jobFailed(job: string, e: unknown) {
     const err = e instanceof Error ? e : new Error(String(e));
     this.logger.error(`Cron ${job} упал: ${err.message}`, err.stack);
+  }
+
+  /**
+   * После старта сервера — догоняющий проход штрафов за опоздания по уже
+   * прошедшим дням. Выкладка или падение сервера в 22:00 больше не съедает
+   * штрафы этого дня: их добирает следующий старт (или вечерний проход).
+   * Сегодняшний день не трогаем — сотрудник ещё может объяснить опоздание.
+   *
+   * Не ждём: старт API не должен зависеть от этого прохода. Ошибка — в лог.
+   */
+  onApplicationBootstrap() {
+    setTimeout(() => {
+      this.penalties
+        .generatePendingLatePenalties({ includeToday: false })
+        .then((r) => this.logger.log(`Старт: штрафы за опоздания догнаны — ${JSON.stringify(r)}`))
+        .catch((e) => this.jobFailed('latePenaltiesOnStart', e));
+    }, 5_000);
   }
 
   /**
@@ -188,20 +205,17 @@ export class CronService {
   }
 
   /**
-   * Каждый рабочий день в 22:00 — генерируем штрафы за опоздания
-   * за этот день. По ТЗ §3.9: «Нарушение → штраф».
+   * Каждый день в 22:00, включая выходные, — штрафы за опоздания утром и с
+   * обеда (ТЗ §3.9: «Нарушение → штраф»). Не только за сегодня: проход
+   * добирает все ещё не обработанные опоздания текущего и прошлого месяца —
+   * см. PenaltiesService.generatePendingLatePenalties.
    */
-  @Cron('0 22 * * 1-5', { timeZone: 'Asia/Dushanbe' })
+  @Cron('0 22 * * *', { timeZone: 'Asia/Dushanbe' })
   async autoLatePenalties() {
     try {
       this.logger.log('Cron: autoLatePenalties');
-      const today = new Date();
-      const result = await this.penalties.generateLatePenaltiesForDate(today);
-      this.logger.log(`Created ${result.created} penalties from ${result.scanned} late entries`);
-      // По ТЗ — штраф за позднее возвращение с обеда. Тот же cron, тот же
-      // источник данных (TimeEntry), но другой признак (lateLunchMinutes).
-      const lunchResult = await this.penalties.generateLunchLatePenaltiesForDate(today);
-      this.logger.log(`Created ${lunchResult.created} lunch-late penalties from ${lunchResult.scanned} entries`);
+      const r = await this.penalties.generatePendingLatePenalties({ includeToday: true });
+      this.logger.log(`Штрафы за опоздания: ${JSON.stringify(r)}`);
     } catch (e) {
       this.jobFailed('autoLatePenalties', e);
     }

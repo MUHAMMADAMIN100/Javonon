@@ -953,7 +953,7 @@ export class SalaryService {
   async remove(id: string) {
     const rec = await this.prisma.salaryRecord.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, userId: true, periodStart: true, periodEnd: true },
     });
     if (!rec) throw new NotFoundException('Запись не найдена');
     if (rec.status === 'PAID') {
@@ -961,7 +961,17 @@ export class SalaryService {
         'Выплаченную зарплату нельзя удалить — используйте сторнирование',
       );
     }
-    return this.prisma.salaryRecord.delete({ where: { id } });
+    // Штрафы, которые учла эта запись, снова «не учтены» — при новом
+    // начислении за этот период они вычтутся. Без этого удалить и
+    // начислить заново значило молча простить все её штрафы.
+    return this.prisma.$transaction(async (tx) => {
+      const remaining = await tx.salaryRecord.findMany({
+        where: { userId: rec.userId, id: { not: rec.id } },
+        select: { periodStart: true, periodEnd: true },
+      });
+      await this.penaltiesSvc.releaseForRemovedSalary(tx, rec.userId, rec, remaining);
+      return tx.salaryRecord.delete({ where: { id } });
+    });
   }
 }
 
