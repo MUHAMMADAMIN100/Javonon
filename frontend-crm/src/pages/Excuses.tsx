@@ -76,6 +76,7 @@ export default function Excuses() {
       },
       { replace: true },
     );
+  const tabs = <SubTabs tab={tab} onChange={setTab} />;
 
   return (
     <>
@@ -84,25 +85,70 @@ export default function Excuses() {
         <h2 className="crm-section-title">{t('excuses.title')}</h2>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      {tab === 'pending' ? <PendingTab tabs={tabs} /> : <HistoryTab tabs={tabs} />}
+    </>
+  );
+}
+
+/**
+ * «Ожидают» / «История» — в правом краю полосы фильтров, высотой с поля
+ * (filter-height-btn, как «Сбросить»). Над кнопками — невидимая подпись той
+ * же высоты, что «Сотрудник» / «С» / «По»: кнопки стоят на одной линии с
+ * полями, и на «Ожидают» (там фильтров нет) — ровно на том же месте.
+ * На планшете (index.css, .exc-bar-row) — отдельной первой строкой справа,
+ * на телефоне — первой строкой, пополам.
+ */
+function SubTabs({ tab, onChange }: { tab: 'pending' | 'history'; onChange: (next: 'pending' | 'history') => void }) {
+  const { t } = useT();
+  return (
+    <div className="form-group exc-tabs-group">
+      <label aria-hidden="true">&nbsp;</label>
+      <div className="exc-tabs" role="tablist">
         <button
-          className={`btn btn-sm ${tab === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
+          type="button"
+          role="tab"
+          aria-selected={tab === 'pending'}
+          className={`btn ${tab === 'pending' ? 'btn-primary' : 'btn-secondary'} filter-height-btn`}
           data-testid="excuses-tab-pending"
-          onClick={() => setTab('pending')}
+          onClick={() => onChange('pending')}
         >
           {t('excuses.tab.pending')}
         </button>
         <button
-          className={`btn btn-sm ${tab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
+          type="button"
+          role="tab"
+          aria-selected={tab === 'history'}
+          className={`btn ${tab === 'history' ? 'btn-primary' : 'btn-secondary'} filter-height-btn`}
           data-testid="excuses-tab-history"
-          onClick={() => setTab('history')}
+          onClick={() => onChange('history')}
         >
           {t('excuses.tab.history')}
         </button>
       </div>
+    </div>
+  );
+}
 
-      {tab === 'pending' ? <PendingTab /> : <HistoryTab />}
-    </>
+/**
+ * Полоса над списком: слева фильтры (только у «Истории»), справа вкладки.
+ * Не помещаются в строку — переносятся поля, а вкладки остаются в первой
+ * строке у правого края: не прыгают ни при «Сбросить», ни при смене вкладки.
+ * Без анимации появления — иначе кнопки при каждом переключении «въезжают».
+ */
+function FilterBar({ tabs, children }: { tabs: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div className="card exc-bar" data-testid="excuses-bar" style={{ padding: 18, marginBottom: 14 }}>
+      <div className="exc-bar-row">
+        {children && (
+          // Та же сетка на телефоне, что у «Посещаемости» (index.css, .att-filters):
+          // сотрудник и статус во всю ширину, даты пополам, «Сбросить» ниже.
+          <div className="att-filters exc-filters" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            {children}
+          </div>
+        )}
+        {tabs}
+      </div>
+    </div>
   );
 }
 
@@ -136,7 +182,7 @@ function fromPending(entry: ExcuseEntry): CardView {
   };
 }
 
-function PendingTab() {
+function PendingTab({ tabs }: { tabs: React.ReactNode }) {
   const { toast } = useUI();
   const { t } = useT();
   const qc = useQueryClient();
@@ -173,28 +219,30 @@ function PendingTab() {
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
-  if (query.isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
   const items = query.data || [];
-  if (items.length === 0) {
-    return (
-      <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
-        {t('excuses.empty')}
-      </div>
-    );
-  }
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {items.map((e) => (
-        <ExcuseCard
-          key={`${e.id}-${e.kind}`}
-          view={fromPending(e)}
-          onApprove={() => approveMut.mutate({ id: e.id, kind: e.kind })}
-          onReject={() => rejectMut.mutate({ id: e.id, kind: e.kind })}
-          busy={approveMut.isPending || rejectMut.isPending}
-        />
-      ))}
-    </div>
+    <>
+      <FilterBar tabs={tabs} />
+      {query.isLoading ? (
+        <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>
+      ) : items.length === 0 ? (
+        <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
+          {t('excuses.empty')}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {items.map((e) => (
+            <ExcuseCard
+              key={`${e.id}-${e.kind}`}
+              view={fromPending(e)}
+              onApprove={() => approveMut.mutate({ id: e.id, kind: e.kind })}
+              onReject={() => rejectMut.mutate({ id: e.id, kind: e.kind })}
+              busy={approveMut.isPending || rejectMut.isPending}
+            />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -204,7 +252,7 @@ function PendingTab() {
  * сколько опозданий и минут (утром / с обеда, по статусам) и штрафов.
  * Фильтры и страница живут в адресе (?hEmp=&hFrom=&hTo=&hSt=&hPage=).
  */
-function HistoryTab() {
+function HistoryTab({ tabs }: { tabs: React.ReactNode }) {
   const { t } = useT();
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
@@ -260,53 +308,49 @@ function HistoryTab() {
 
   return (
     <>
-      <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ padding: 18, marginBottom: 14 }}>
-        {/* Та же сетка на телефоне, что у «Посещаемости» (index.css, .att-filters):
-            сотрудник и статус во всю ширину, даты пополам, «Сбросить» ниже. */}
-        <div className="att-filters" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div className="form-group att-f-employee" style={{ minWidth: 220, margin: 0 }}>
-            <label>{t('attendance.col.employee')}</label>
-            <CrmSelect
-              className="crm-select"
-              data-testid="lateness-employee"
-              value={userId}
-              onChange={(e) => update({ hEmp: e.target.value })}
-            >
-              <option value="">{t('excuses.filter.allEmployees')}</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{withDismissed(u.fullName, u, t('users.dismissed'))}</option>
-              ))}
-            </CrmSelect>
-          </div>
-          <div className="form-group att-f-date" style={{ margin: 0 }} data-testid="lateness-from">
-            <label>{t('common.from')}</label>
-            <CrmDatePicker className="crm-input" value={from} onChange={(v) => update({ hFrom: v })} />
-          </div>
-          <div className="form-group att-f-date" style={{ margin: 0 }} data-testid="lateness-to">
-            <label>{t('common.to')}</label>
-            <CrmDatePicker className="crm-input" value={to} onChange={(v) => update({ hTo: v })} />
-          </div>
-          <div className="form-group att-f-employee" style={{ minWidth: 200, margin: 0 }}>
-            <label>{t('excuses.filter.status')}</label>
-            <CrmSelect
-              className="crm-select"
-              data-testid="lateness-status"
-              value={status}
-              onChange={(e) => update({ hSt: e.target.value })}
-            >
-              <option value="">{t('excuses.filter.allStatuses')}</option>
-              <option value="approved">{t('excuses.filter.approved')}</option>
-              <option value="not_approved">{t('excuses.filter.notApproved')}</option>
-              <option value="pending">{t('excuses.filter.pending')}</option>
-            </CrmSelect>
-          </div>
-          {anyFilter && (
-            <button className="btn btn-secondary filter-height-btn att-f-btn" data-testid="lateness-reset" onClick={reset}>
-              {t('filter.reset')}
-            </button>
-          )}
+      <FilterBar tabs={tabs}>
+        <div className="form-group att-f-employee" style={{ minWidth: 220, margin: 0 }}>
+          <label>{t('attendance.col.employee')}</label>
+          <CrmSelect
+            className="crm-select"
+            data-testid="lateness-employee"
+            value={userId}
+            onChange={(e) => update({ hEmp: e.target.value })}
+          >
+            <option value="">{t('excuses.filter.allEmployees')}</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{withDismissed(u.fullName, u, t('users.dismissed'))}</option>
+            ))}
+          </CrmSelect>
         </div>
-      </motion.div>
+        <div className="form-group att-f-date" style={{ margin: 0 }} data-testid="lateness-from">
+          <label>{t('common.from')}</label>
+          <CrmDatePicker className="crm-input" value={from} onChange={(v) => update({ hFrom: v })} />
+        </div>
+        <div className="form-group att-f-date" style={{ margin: 0 }} data-testid="lateness-to">
+          <label>{t('common.to')}</label>
+          <CrmDatePicker className="crm-input" value={to} onChange={(v) => update({ hTo: v })} />
+        </div>
+        <div className="form-group att-f-employee" style={{ minWidth: 200, margin: 0 }}>
+          <label>{t('excuses.filter.status')}</label>
+          <CrmSelect
+            className="crm-select"
+            data-testid="lateness-status"
+            value={status}
+            onChange={(e) => update({ hSt: e.target.value })}
+          >
+            <option value="">{t('excuses.filter.allStatuses')}</option>
+            <option value="approved">{t('excuses.filter.approved')}</option>
+            <option value="not_approved">{t('excuses.filter.notApproved')}</option>
+            <option value="pending">{t('excuses.filter.pending')}</option>
+          </CrmSelect>
+        </div>
+        {anyFilter && (
+          <button className="btn btn-secondary filter-height-btn att-f-btn" data-testid="lateness-reset" onClick={reset}>
+            {t('filter.reset')}
+          </button>
+        )}
+      </FilterBar>
 
       {badRange ? (
         <div className="card" style={{ padding: 24, color: 'var(--danger)' }} data-testid="lateness-bad-range">

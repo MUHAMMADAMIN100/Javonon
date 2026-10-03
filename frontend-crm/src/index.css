@@ -6858,6 +6858,45 @@ a.profile-hero-contact:hover { color: var(--primary); }
   .att-filters .att-f-btn + .att-f-btn { grid-column: auto; }
 }
 
+/* ===================== Причины опозданий (pages/Excuses): полоса фильтров и вкладки =====================
+   «Ожидают» / «История» — в правом краю полосы, высотой с поля (filter-height-btn).
+   Над ними невидимая подпись той же высоты, что у полей: кнопки на одной линии с
+   полями и на том же месте на обеих вкладках. Не хватает ширины — переносятся
+   поля (внутри .exc-filters), вкладки остаются в первой строке справа.
+   Планшет — вкладки отдельной первой строкой справа: рядом с ними поля встали
+   бы узким столбиком, а «С» и «По» разъехались бы по разным строкам.
+   Телефон — вкладки первой строкой, пополам, фильтры ниже. */
+.exc-bar-row { display: flex; gap: 12px; align-items: flex-start; }
+.exc-bar-row > .exc-filters { flex: 1 1 auto; min-width: 0; }
+.exc-bar-row > .exc-tabs-group { flex: none; margin: 0 0 0 auto; }
+.exc-tabs-group > label { visibility: hidden; }
+.exc-tabs { display: flex; gap: 8px; }
+/* Поля — ровно 40 px, как «Сбросить» и вкладки. Сами по себе список выходил
+   39 px, а дата 40 (её иконка выше строки текста), и на экранах с масштабом
+   рамка 1.5 px добавляла ещё доли пикселя. До 1024 px всё и так 38 px. */
+.exc-filters .crm-select,
+.exc-filters .crm-datepicker-trigger { height: 40px; }
+/* Полоса прокрутки появляется только у длинного списка («История», много
+   причин) и сдвигала бы всё, что прижато вправо, — вкладки прыгали на её
+   ширину при переключении. Пока страница открыта, место под неё занято
+   всегда. До 900 px прокручивается body (overflow-x: hidden у html, body). */
+html:has(.exc-bar) { scrollbar-gutter: stable; }
+@media (max-width: 1024px) {
+  .exc-bar-row { flex-direction: column; align-items: stretch; }
+  .exc-bar-row > .exc-tabs-group { order: -1; }
+  .exc-tabs-group > label { display: none; }
+}
+@media (max-width: 900px) {
+  html:has(.exc-bar) { scrollbar-gutter: auto; }
+  body:has(.exc-bar) { scrollbar-gutter: stable; }
+}
+@media (max-width: 600px) {
+  .exc-bar-row { gap: 10px; }
+  .exc-bar-row > .exc-tabs-group { margin: 0; }
+  .exc-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .exc-tabs > .btn { width: 100%; justify-content: center; }
+}
+
 /* ===================== Причины опозданий (pages/Excuses): итог «Истории» =====================
    Плитки: опозданий, минут (утром / с обеда), одобрено, не одобрено, на рассмотрении,
    штрафов. На телефоне — по две в ряд. */
