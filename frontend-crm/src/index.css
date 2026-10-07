@@ -3766,8 +3766,8 @@ textarea:focus {
   /* Salary "Зафиксировать" — кнопка с input в одной строке.
      Мобиле: оба full-width, в столбик. */
   .salary-confirm-row { flex-direction: column !important; align-items: stretch !important; }
-  /* flex-basis у поля комментария (flex: 1 1 200px) в колонке становится
-     ВЫСОТОЙ — поле растягивалось до 200 px. В столбике размер по содержимому. */
+  /* flex-basis у поля комментария (flex: 1 1 160px) в колонке становится
+     ВЫСОТОЙ — поле растягивалось до 160 px. В столбике размер по содержимому. */
   .salary-confirm-row > * { flex: 0 0 auto !important; }
   .salary-confirm-row input { width: 100% !important; min-width: 0 !important; }
   .salary-confirm-row .btn {
@@ -6132,6 +6132,17 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   .salary-head-actions { width: 100%; flex-direction: column; }
   .salary-head-actions > .btn { width: 100%; justify-content: center; }
 }
+/* «KPI бонус», комментарий и «Зафиксировать» — одна линия и одна высота. Ряд
+   выровнен по низу (Salary.tsx): у поля KPI сверху подпись, и по центру оно
+   стояло ниже соседей. Сами по себе поля и кнопка выходили 39–41 px (зависит
+   от масштаба экрана) — задаём явно. На планшете поля 38 px по общему правилу,
+   кнопка — столько же (общие 42 px «под палец» здесь делали её выше полей).
+   На телефоне ряд — столбик, кнопка 44 px (выше, .salary-confirm-row). */
+.salary-confirm-row .crm-input,
+.salary-confirm-row > .btn { height: 40px; }
+@media (min-width: 601px) and (max-width: 1024px) {
+  .salary-confirm-row > .btn { height: 38px; min-height: 0; }
+}
 
 /* ===================== Финансы: главные цифры для владельца ===================== */
 .owner-kpis {
@@ -6733,12 +6744,17 @@ a.profile-hero-contact:hover { color: var(--primary); }
   }
   .deal-card-files { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1 / -1; }
 }
-/* Фильтры «Сделок»: поиск и «Все партнёры» во всю ширину, даты «с» и «по» рядом —
+/* Фильтры «Сделок»: поиск, «Все партнёры» и «Все сотрудники» во всю ширину, даты «с» и «по» рядом —
    одинаково от 320 до 900 px (общее правило ставит фильтры по два в ряд, и «Дата по»
    оставалась одна, а до 380 px всё шло столбиком). */
 @media (max-width: 900px) {
   .deals-filters > .crm-select { flex: 1 1 100% !important; }
   .deals-filters > .crm-datepicker-wrapper { flex: 1 1 calc(50% - 4px) !important; }
+}
+/* С фильтром по сотруднику списков два, и на ноутбуке 1280 px «Сбросить» перестала
+   помещаться в строку. До 1340 px оба списка чуть уже (190 вместо 220 из --filter-w). */
+@media (min-width: 1025px) and (max-width: 1340px) {
+  .deals-filters > .crm-select { flex-basis: 190px; }
 }
 
 /* ===================== Партнёры (pages/Partners): действия в строке =====================

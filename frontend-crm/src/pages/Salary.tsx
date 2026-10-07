@@ -945,7 +945,9 @@ function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onCommen
             overflowWrap: 'anywhere',
           }} data-testid="salary-detail-net">{fmtMoney(preview.netAmount, preview.currency)}</div>
         </div>
-        <div className="salary-confirm-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* По низу, а не по центру: у поля KPI сверху подпись, и по центру оно
+            оказывалось ниже комментария и кнопки. Высота трёх — index.css. */}
+        <div className="salary-confirm-row" style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label>{t('salary.field.kpiBonus')}</label>
               <input
@@ -967,7 +969,11 @@ function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onCommen
               onChange={(e) => onComment(e.target.value)}
               placeholder={t('salary.field.commentPlaceholder')}
               data-testid="salary-comment"
-              style={{ flex: '1 1 200px', minWidth: 0 }}
+              // 160, а не 200: ширина ряда считается по естественной ширине
+              // поля (на планшете ~197 px), и с базой 200 кнопке не хватало
+              // 3 px — она уезжала на вторую строку. Лишнее место поле
+              // забирает само (flex-grow).
+              style={{ flex: '1 1 160px', minWidth: 0 }}
             />
           <button
             className="btn btn-primary"

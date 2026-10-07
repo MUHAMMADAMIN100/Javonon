@@ -1424,6 +1424,8 @@ export class SubmissionsService {
   async listPendingPayments(opts: {
     /** Показать только платежи клиентов, закреплённых за этим партнёром. */
     partnerId?: string;
+    /** Показать только платежи по сделкам этого менеджера (владелец сделки). */
+    managerId?: string;
     /**
      * Период — по ДАТЕ ОПЛАТЫ (paidAt): карточка на этой вкладке — платёж,
      * и дата, которую человек видит в ней, — именно дата оплаты. По умолчанию
@@ -1443,8 +1445,13 @@ export class SubmissionsService {
     if (paidAt) where.paidAt = paidAt;
     const search = await this.searchWhere(opts.search);
     // Сделку платежа ниже может сузить ещё и фильтр по партнёру — поэтому
-    // поиск кладём в AND платежа, а не в where.submission.
-    if (search) where.AND = [{ submission: search }];
+    // поиск и менеджера кладём в AND платежа, а не в where.submission.
+    const and: Prisma.SubmissionPaymentWhereInput[] = [];
+    if (search) and.push({ submission: search });
+    // Менеджер — владелец сделки, тот же, кто подписан на карточке платежа
+    // (и тот же фильтр, что managerId у listAll).
+    if (opts.managerId) and.push({ submission: { managerId: opts.managerId } });
+    if (and.length) where.AND = and;
 
     // Фильтр по партнёру — ровно тот же способ, что в listAll: клиент сделки
     // лежит в трёх разных полях (студент, заявка, заявка-источник), поэтому

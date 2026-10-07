@@ -244,6 +244,8 @@ export const listPendingPayments = (params?: {
   to?: string;
   /** Поиск по сделке платежа: клиент, телефон, менеджер, программа. */
   search?: string;
+  /** Только платежи по сделкам этого менеджера (как `managerId` у `listAllSubmissions`). */
+  managerId?: string;
 }) => api.get<PendingPayment[]>('/submissions/pending-payments', { params }).then((r) => r.data);
 
 /**

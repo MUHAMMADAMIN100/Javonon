@@ -145,9 +145,11 @@ export class SubmissionsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('search') search?: string,
+    @Query('managerId') managerId?: string,
   ) {
     return this.svc.listPendingPayments({
       partnerId: partnerId || undefined,
+      managerId: managerId || undefined,
       from: parseDate(from, 'from'),
       to: parseDate(to, 'to', true),
       search: checkSearch(search),

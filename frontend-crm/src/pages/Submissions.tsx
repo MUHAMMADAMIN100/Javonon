@@ -8,6 +8,7 @@ import { isFounder } from '../lib/roles';
 import { useRealtime } from '../realtime';
 import { useT } from '../lib/i18n';
 import { adminListPartners, fmtCommissionRate, fmtMoneyCents } from '../api/partners';
+import { listUsers } from '../api/users';
 import {
   listMySubmissions,
   listAllSubmissions,
@@ -25,7 +26,7 @@ import SearchField, { useUrlSearch } from '../components/SearchField';
 import ListTotal, { type ListNoun } from '../components/ListTotal';
 import { dateParam, enumParam, ignoredParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
-import DismissedMark from '../components/DismissedMark';
+import DismissedMark, { withDismissed } from '../components/DismissedMark';
 
 const STATUS_COLOR: Record<SubmissionStatus, string> = {
   ACTIVE: '#0ea5e9',
@@ -42,7 +43,7 @@ const PAYMENT_STATUS_COLOR: Record<string, string> = {
 type Tab = 'mine' | 'pending' | 'all' | 'approved';
 
 /** Фильтры экрана — одни на все вкладки. */
-type DealFilters = { partner: string; from: string; to: string; search: string };
+type DealFilters = { partner: string; manager: string; from: string; to: string; search: string };
 
 export default function Submissions() {
   const me = useAuth((s) => s.user);
@@ -55,7 +56,7 @@ export default function Submissions() {
   // Вкладка и фильтры — в ссылке: из карточки сделки возвращаются кнопкой
   // «назад», и открыться должна та же вкладка с той же выборкой. Фильтры
   // ОБЩИЕ на все вкладки: переключая «На рассмотрении» → «Все», человек
-  // ждёт, что партнёр, период и поиск останутся.
+  // ждёт, что партнёр, сотрудник, период и поиск останутся.
   const { values, setValue, reset } = useUrlListState({
     tab: founder
       ? enumParam<Tab, Tab>(['pending', 'approved', 'all'], 'pending')
@@ -63,13 +64,22 @@ export default function Submissions() {
     // id партнёра белым списком не проверить (список грузится асинхронно) —
     // ограничиваем длину, как в остальных списках.
     partner: founder ? stringParam('', 64) : ignoredParam(''),
+    // Сотрудник — менеджер сделки. Тоже только основателю: у менеджера на
+    // этой странице и так одни его сделки.
+    manager: founder ? stringParam('', 64) : ignoredParam(''),
     from: dateParam(),
     to: dateParam(),
     search: stringParam('', 200),
   });
   const { tab } = values;
-  const f: DealFilters = { partner: values.partner, from: values.from, to: values.to, search: values.search };
-  const narrowed = !!(f.partner || f.from || f.to || f.search);
+  const f: DealFilters = {
+    partner: values.partner,
+    manager: values.manager,
+    from: values.from,
+    to: values.to,
+    search: values.search,
+  };
+  const narrowed = !!(f.partner || f.manager || f.from || f.to || f.search);
 
   const setUrlSearch = useCallback((v: string) => setValue('search', v), [setValue]);
   const { input: searchInput, setInput: setSearchInput, clear: clearSearch } = useUrlSearch(values.search, setUrlSearch);
@@ -82,6 +92,15 @@ export default function Submissions() {
     enabled: founder,
   });
   const partners = partnersQuery.data ?? [];
+
+  // Сотрудники — для фильтра по менеджеру сделки. Все и вместе с уволенными:
+  // сделки уволенного остаются в списке, и найти их можно только так.
+  const employeesQuery = useQuery({
+    queryKey: ['users', 'withDismissed'],
+    queryFn: () => listUsers(undefined, true),
+    enabled: founder,
+  });
+  const employees = [...(employeesQuery.data ?? [])].sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru'));
 
   // Realtime: бэкенд эмитит submission:new (staff), submission:payment-new (staff),
   // submission:reviewed (staff), submission:approved/rejected (юзеру-менеджеру).
@@ -147,6 +166,23 @@ export default function Submissions() {
             ))}
           </CrmSelect>
         )}
+        {founder && employees.length > 0 && (
+          <CrmSelect
+            className="crm-select"
+            value={f.manager}
+            onChange={(e) => setValue('manager', e.target.value)}
+            style={{ ['--filter-w' as string]: '220px' }}
+            title={t('deals.manager.all')}
+            data-testid="deals-filter-manager"
+          >
+            <option value="">{t('deals.manager.all')}</option>
+            {employees.map((u) => (
+              <option key={u.id} value={u.id}>
+                {withDismissed(u.fullName, u, t('users.dismissed'))}
+              </option>
+            ))}
+          </CrmSelect>
+        )}
         <PeriodFilter
           from={f.from}
           to={f.to}
@@ -168,7 +204,7 @@ export default function Submissions() {
               // Поле гасим сразу: недобежавший дебаунс иначе вернул бы
               // текст обратно в ссылку.
               setSearchInput('');
-              reset(['partner', 'from', 'to', 'search']);
+              reset(['partner', 'manager', 'from', 'to', 'search']);
             }}
           >
             <Icon name="close" size={14} /> {t('common.reset')}
@@ -185,6 +221,13 @@ export default function Submissions() {
                 key: 'partner',
                 label: `${t('list.chip.partner')}: ${partners.find((p) => p.id === f.partner)?.fullName ?? '…'}`,
                 onClear: () => reset(['partner']),
+              }]
+            : []),
+          ...(f.manager
+            ? [{
+                key: 'manager',
+                label: `${t('list.chip.employee')}: ${employees.find((u) => u.id === f.manager)?.fullName ?? '…'}`,
+                onClear: () => reset(['manager']),
               }]
             : []),
           ...(f.from || f.to
@@ -213,6 +256,7 @@ export default function Submissions() {
 function params(f: DealFilters) {
   return {
     partnerId: f.partner || undefined,
+    managerId: f.manager || undefined,
     from: f.from || undefined,
     to: f.to || undefined,
     search: f.search || undefined,
