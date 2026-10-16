@@ -27,15 +27,6 @@ export async function updateUser(id: string, payload: Partial<{ email: string; f
 }
 
 /** Кому передать дела: выбранному сотруднику или «автоматически» по нагрузке. */
-/**
- * Личные доступы сотрудника (только основатель): «все студенты / заявки /
- * лиды». Список целиком — что не передано, снимается.
- */
-export async function setUserExtraPermissions(id: string, extraPermissions: string[]) {
-  const { data } = await api.put<{ id: string; extraPermissions: string[] }>(`/users/${id}/extra-permissions`, { extraPermissions });
-  return data;
-}
-
 export type HandoverBody = { mode: 'AUTO' } | { mode: 'USER'; toUserId: string };
 
 /** Что числится за сотрудником (см. backend/src/users/handover.ts). */

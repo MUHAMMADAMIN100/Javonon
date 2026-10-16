@@ -22,7 +22,6 @@ import {
 } from '../api/userProfile';
 import { offerCurrent, offerSign, type CurrentOfferState } from '../api/offers';
 import { listCustomRoles, setUserCustomRole, type CustomRole } from '../api/customRoles';
-import { setUserExtraPermissions } from '../api/users';
 import { updateUser } from '../api/users';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
@@ -79,8 +78,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   const presence = usePresence(isAdmin && isFounder(meStore));
 
   /** Какая форма правки открыта под «Личными данными / Оплатой». */
-  const [editing, setEditing] = useState<'personal' | 'pay' | 'roles' | 'custom' | 'access' | null>(null);
-  const toggleEdit = (k: 'personal' | 'pay' | 'roles' | 'custom' | 'access') => setEditing((cur) => (cur === k ? null : k));
+  const [editing, setEditing] = useState<'personal' | 'pay' | 'roles' | 'custom' | null>(null);
+  const toggleEdit = (k: 'personal' | 'pay' | 'roles' | 'custom') => setEditing((cur) => (cur === k ? null : k));
   const closeEdit = () => setEditing(null);
   const roleLabel = useRoleLabel();
   const navigate = useNavigate();
@@ -278,22 +277,6 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                   </div>
                 ) : undefined}
               />
-              {/* Доступ к клиентам — «все студенты / заявки / лиды»: видит и
-                  меняет основатель; роль и остальные права не меняются. */}
-              {canEditRoles && !isFounderTarget && (
-                <Field
-                  label={t('userDetail.field.clientAccess')}
-                  value={clientAccessText(user.extraPermissions, t)}
-                  testId="field-client-access"
-                  extra={
-                    <div className="profile-role-actions">
-                      <button type="button" className={`profile-link-btn${editing === 'access' ? ' is-active' : ''}`} onClick={() => toggleEdit('access')} data-testid="edit-client-access">
-                        {t('userDetail.clientAccess.change')}
-                      </button>
-                    </div>
-                  }
-                />
-              )}
               <Field label={t('userDetail.field.phone')} value={user.phone || '—'} />
               <Field label={t('userDetail.field.passport')} value={user.passportNo || '—'} />
               <Field label={t('userDetail.field.hiredAt')} value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
@@ -371,7 +354,6 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
             {editing === 'pay' && <PayEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
             {editing === 'roles' && <RolesEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
             {editing === 'custom' && <CustomRoleEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
-            {editing === 'access' && <ClientAccessEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
           </div>
         )}
       </section>
@@ -1136,76 +1118,6 @@ function CustomRoleEditor({
             <option key={r.id} value={r.id}>{r.name} ({r.permissions.length})</option>
           ))}
         </CrmSelect>
-      </div>
-      <div className="profile-edit-actions">
-        <button type="button" className="btn btn-sm btn-secondary" onClick={onClose} disabled={saving}>
-          {t('common.cancel')}
-        </button>
-        <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving} data-testid="edit-save">
-          {saving ? t('common.saving') : t('common.save')}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Личные доступы сотрудника (backend auth/client-access.ts) — в порядке показа. */
-const CLIENT_ACCESS_ITEMS: Array<{ key: string; label: string; testId: string }> = [
-  { key: 'students:all', label: 'userDetail.clientAccess.students', testId: 'client-access-students' },
-  { key: 'applications:all', label: 'userDetail.clientAccess.applications', testId: 'client-access-applications' },
-  { key: 'leads:all', label: 'userDetail.clientAccess.leads', testId: 'client-access-leads' },
-];
-
-/** «Все студенты, все лиды» или «Только свои». */
-function clientAccessText(list: string[] | undefined, t: (k: string) => string): string {
-  const on = CLIENT_ACCESS_ITEMS.filter((it) => (list || []).includes(it.key));
-  return on.length ? on.map((it) => t(it.label)).join(', ') : t('userDetail.clientAccess.none');
-}
-
-/**
- * Доступ к клиентам: видеть и вести всех студентов / заявки / лиды, а не
- * только своих. Ставит основатель; роль сотрудника и остальные права не
- * меняются, удаление и назначение менеджера этим не открываются.
- */
-function ClientAccessEditor({
-  user, userId, onSaved, onClose,
-}: {
-  user: FullProfile['user'];
-  userId: string;
-  onSaved: () => void;
-  onClose: () => void;
-}) {
-  const { toast } = useUI();
-  const { t } = useT();
-  const [picked, setPicked] = useState<string[]>(user.extraPermissions ?? []);
-  const [saving, setSaving] = useState(false);
-  const toggle = (key: string) =>
-    setPicked((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]));
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await setUserExtraPermissions(userId, picked);
-      toast(t('toast.updated'), 'success');
-      onSaved();
-    } catch (e: any) {
-      toast(e?.response?.data?.message || t('toast.error'), 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="profile-edit-form" data-testid="client-access-editor">
-      <div className="profile-edit-title">{t('userDetail.field.clientAccess')}</div>
-      <p className="client-access-hint">{t('userDetail.clientAccess.hint')}</p>
-      <div className="client-access-list">
-        {CLIENT_ACCESS_ITEMS.map((it) => (
-          <label key={it.key} className="client-access-item">
-            <input type="checkbox" checked={picked.includes(it.key)} onChange={() => toggle(it.key)} data-testid={it.testId} />
-            <span>{t(it.label)}</span>
-          </label>
-        ))}
       </div>
       <div className="profile-edit-actions">
         <button type="button" className="btn btn-sm btn-secondary" onClick={onClose} disabled={saving}>

@@ -180,7 +180,8 @@ export default function Finance() {
   // (см. roles.guard.ts skipBaseRole). Держим тот же флаг, чтобы
   // SALES_MANAGER с custom-role «Наблюдатель» (только finance:read) не
   // получал по base-role доступ к POST /finance/transactions.
-  const hasCustomRole = !!(me?.customRoleId);
+  // Действующая роль — своя или роль должности (как на сервере).
+  const hasCustomRole = !!me?.customRole && me.customRole.isActive !== false;
   const managerBaseRole = hasRole(me, 'SALES_MANAGER', 'CLIENT_MANAGER');
   // POST /finance/transactions: @Roles('ADMIN','ACCOUNTANT','SALES_MANAGER',
   // 'CLIENT_MANAGER'). custom-role пропускает по явному permission.

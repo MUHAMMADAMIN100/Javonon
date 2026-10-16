@@ -310,22 +310,6 @@ export class UsersController {
     return this.users.setCustomRole(id, cid);
   }
 
-  /**
-   * FOUNDER-only: личные доступы сотрудника — «все студенты / заявки / лиды»
-   * (auth/client-access.ts). Список целиком: что не передано — снимается.
-   */
-  @Put(':id/extra-permissions')
-  @Roles(Role.FOUNDER)
-  setExtraPermissions(
-    @Param('id') id: string,
-    @Body() body: { extraPermissions: string[] },
-  ) {
-    if (!Array.isArray(body?.extraPermissions) || body.extraPermissions.some((k) => typeof k !== 'string')) {
-      throw new BadRequestException('extraPermissions должно быть массивом строк');
-    }
-    return this.users.setExtraPermissions(id, body.extraPermissions);
-  }
-
   // ===== Зарплатные настройки (ТЗ-доработка) =====
 
   /** Список всех сотрудников + их зарплатные поля. FOUNDER-only. */

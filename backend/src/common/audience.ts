@@ -1,6 +1,6 @@
 import { canSeeAllApplications } from '../applications/application-access';
 import { hasRole, isFounder, type UserWithRoles } from '../auth/role-utils';
-import { cleanExtraPermissions } from '../auth/client-access';
+import { CUSTOM_ROLE_SELECT, pickEffectiveCustomRole, type CustomRoleRow } from '../auth/position-role';
 
 /**
  * Кому положено видеть данные — одно правило для REST, сокета и
@@ -27,20 +27,24 @@ export function inAudience(kind: AudienceKind, user: UserWithRoles | null | unde
   return kind === 'finance' ? canSeeFinance(user) : canSeeAllApplications(user);
 }
 
-/** Строка пользователя из БД → UserWithRoles (активная кастомная роль заменяет базовую). */
-export function toUserWithRoles(u: {
-  role: string;
-  roles?: string[] | null;
-  customRole?: { isActive: boolean; permissions: string[] } | null;
-  extraPermissions?: string[] | null;
-}): UserWithRoles {
-  const custom = u.customRole && u.customRole.isActive ? u.customRole : null;
+/**
+ * Строка пользователя из БД → UserWithRoles. Действующая кастомная роль (своя
+ * или роль должности — positionRoles из loadPositionRoles) заменяет базовую.
+ */
+export function toUserWithRoles(
+  u: {
+    role: string;
+    roles?: string[] | null;
+    customRole?: CustomRoleRow | null;
+  },
+  positionRoles: Map<string, CustomRoleRow> = new Map(),
+): UserWithRoles {
+  const custom = pickEffectiveCustomRole(u, positionRoles);
   return {
     role: u.role as any,
     roles: (u.roles || []) as any,
     permissions: custom ? custom.permissions : [],
     hasCustomRole: !!custom,
-    extraPermissions: cleanExtraPermissions(u.extraPermissions),
   };
 }
 
@@ -50,6 +54,5 @@ export const AUDIENCE_USER_SELECT = {
   role: true,
   roles: true,
   isActive: true,
-  customRole: { select: { isActive: true, permissions: true } },
-  extraPermissions: true,
+  customRole: { select: CUSTOM_ROLE_SELECT },
 } as const;

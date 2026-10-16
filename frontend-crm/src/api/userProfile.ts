@@ -45,8 +45,6 @@ export interface FullProfile {
     kpiAutoStepPct?: number | null;
     kpiMaxPct?: number | null;
     createdAt: string;
-    /** Личные доступы — «все студенты / заявки / лиды» (видит основатель). */
-    extraPermissions?: string[];
   };
   documents: UserDocument[];
   salary: {

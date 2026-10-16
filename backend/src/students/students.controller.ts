@@ -118,7 +118,6 @@ export class StudentsController {
       currentUserRoles: user?.roles,
       currentUserPermissions: user?.permissions,
       currentUserHasCustomRole: user?.hasCustomRole,
-      currentUserExtraPermissions: user?.extraPermissions,
       paid: paid === 'true' ? true : paid === 'false' ? false : undefined,
       limit: limitN,
       from: parseDate(from, 'from'),

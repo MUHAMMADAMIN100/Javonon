@@ -4,7 +4,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException,
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { cleanExtraPermissions } from './client-access';
+import { CUSTOM_ROLE_SELECT, effectiveCustomRole } from './position-role';
 
 @Injectable()
 export class AuthService {
@@ -76,12 +76,14 @@ export class AuthService {
     const fullUser = await this.prisma.user.findUnique({
       where: { id: user.id },
       select: {
+        role: true,
         customRoleId: true,
-        customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
-        extraPermissions: true,
+        customRole: { select: CUSTOM_ROLE_SELECT },
       },
     });
-    const perms = fullUser?.customRole?.isActive ? (fullUser.customRole.permissions || []) : [];
+    // Действующая роль: своя или роль должности (byPosition) — по ней CRM
+    // строит меню и права, как сервер.
+    const custom = fullUser ? await effectiveCustomRole(this.prisma, fullUser) : null;
 
     return {
       token,
@@ -92,9 +94,8 @@ export class AuthService {
         role: user.role,
         roles: user.roles || [],
         customRoleId: fullUser?.customRoleId || null,
-        customRole: fullUser?.customRole || null,
-        permissions: perms,
-        extraPermissions: cleanExtraPermissions(fullUser?.extraPermissions),
+        customRole: custom,
+        permissions: custom?.permissions || [],
       },
     };
   }
@@ -105,12 +106,11 @@ export class AuthService {
       select: {
         id: true, email: true, fullName: true, role: true, roles: true,
         customRoleId: true,
-        customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
-        extraPermissions: true,
+        customRole: { select: CUSTOM_ROLE_SELECT },
       },
     });
     if (!user) throw new UnauthorizedException();
-    const perms = user.customRole?.isActive ? (user.customRole.permissions || []) : [];
+    const custom = await effectiveCustomRole(this.prisma, user);
     return {
       id: user.id,
       email: user.email,
@@ -118,9 +118,10 @@ export class AuthService {
       role: user.role,
       roles: user.roles || [],
       customRoleId: user.customRoleId || null,
-      customRole: user.customRole || null,
-      permissions: perms,
-      extraPermissions: cleanExtraPermissions(user.extraPermissions),
+      // Действующая роль (своя или роль должности, byPosition) — не только
+      // назначенная лично: меню CRM обязано совпадать с правами на сервере.
+      customRole: custom,
+      permissions: custom?.permissions || [],
     };
   }
 

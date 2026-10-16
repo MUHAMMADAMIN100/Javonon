@@ -21,6 +21,8 @@ import {
 import {
   type CustomRole,
   type PermissionDef,
+  type PositionRole,
+  POSITION_ROLES,
   listCustomRoles,
   listPermissionsCatalog,
   createCustomRole,
@@ -32,6 +34,7 @@ import RevenueSchemeEditor from '../components/RevenueSchemeEditor';
 import RevenueSchemeMindMap from '../components/RevenueSchemeMindMap';
 import { getRevenueScheme } from '../api/revenue-scheme';
 import { tr, useT } from '../lib/i18n';
+import CrmSelect from '../components/CrmSelect';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { useRealtime } from '../realtime';
@@ -352,12 +355,14 @@ function RolesTab() {
     'customRole:new': () => {
       qc.invalidateQueries({ queryKey: ['custom-roles'] });
     },
-    'customRole:updated': async (payload: { id?: string; userId?: string }) => {
+    'customRole:updated': async (payload: { id?: string; userId?: string; baseRoles?: string[] }) => {
       qc.invalidateQueries({ queryKey: ['custom-roles'] });
-      // Если моя кастомная роль обновилась — подхватываем свежие permissions.
+      // Если моя кастомная роль обновилась — подхватываем свежие permissions
+      // (в том числе роль моей должности — baseRoles).
       const affectsMe =
         (payload?.id && me?.customRole?.id === payload.id) ||
-        (payload?.userId && me?.id === payload.userId);
+        (payload?.userId && me?.id === payload.userId) ||
+        (!!me?.role && (payload?.baseRoles || []).includes(me.role));
       if (affectsMe) {
         try {
           const fresh = await apiMe();
@@ -445,6 +450,13 @@ function RolesTab() {
                 <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
                   {r.permissions.length} · {r._count?.users ?? 0}
                 </div>
+                {r.baseRole && (
+                  <div className="role-position-note" data-testid="role-position-note">
+                    {t('settings.roles.position.forAll')
+                      .replace('{role}', t(`role.${r.baseRole}`))
+                      .replace('{n}', String(r.positionUsers ?? 0))}
+                  </div>
+                )}
               </div>
               <div className="settings-row-actions">
                 <button className="btn btn-sm btn-secondary" onClick={() => onToggle(r)}>
@@ -478,6 +490,8 @@ function RoleForm({
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [perms, setPerms] = useState<Set<string>>(new Set(initial?.permissions ?? []));
+  // Должность, на всех сотрудников которой роль действует сама ('' — ни на какую).
+  const [baseRole, setBaseRole] = useState<PositionRole | ''>(initial?.baseRole ?? '');
   const [saving, setSaving] = useState(false);
 
   /**
@@ -523,6 +537,7 @@ function RoleForm({
           name: name.trim(),
           description: description.trim() || undefined,
           permissions: Array.from(perms),
+          baseRole: baseRole || null,
         });
         toast(t('toast.updated'), 'success');
       } else {
@@ -530,6 +545,7 @@ function RoleForm({
           name: name.trim(),
           description: description.trim() || undefined,
           permissions: Array.from(perms),
+          baseRole: baseRole || null,
         });
         toast(t('toast.created'), 'success');
       }
@@ -556,7 +572,27 @@ function RoleForm({
         <Field label={t('settings.roles.description')}>
           <input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
         </Field>
+        <Field label={t('settings.roles.position')}>
+          <CrmSelect
+            className="crm-select"
+            value={baseRole}
+            onChange={(e) => setBaseRole(e.target.value as PositionRole | '')}
+            data-testid="role-position"
+          >
+            <option value="">{t('settings.roles.position.none')}</option>
+            {POSITION_ROLES.map((r) => (
+              <option key={r} value={r}>{t(`role.${r}`)}</option>
+            ))}
+          </CrmSelect>
+        </Field>
       </div>
+      {/* Роль должности заменяет права должности целиком — говорим это прямо,
+          пока основатель ещё не нажал «Сохранить». */}
+      {baseRole && (
+        <p className="role-position-hint" data-testid="role-position-hint">
+          {t('settings.roles.position.hint').replace('{role}', t(`role.${baseRole}`))}
+        </p>
+      )}
 
       <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600 }}>
         {t('settings.roles.permissions')} ({perms.size})

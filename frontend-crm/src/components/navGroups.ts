@@ -167,7 +167,11 @@ export function buildNavCtx(user: unknown): NavCtx {
   const elevated = hasRole(user as any, 'FOUNDER', 'ADMIN', 'ACCOUNTANT');
   const isFounder = isFounderFn(user as any);
   const isWorkforce = hasRole(user as any, 'FOUNDER', 'ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER');
-  const hasCustomRole = !!(user as any)?.customRoleId;
+  // Действующая роль из /auth/me — своя или роль должности (Настройки → Роли).
+  // Раньше смотрели на customRoleId (только назначенную лично): роль должности
+  // меню не меняла, а выключенная личная роль оставляла пустое меню.
+  const cr = (user as any)?.customRole;
+  const hasCustomRole = !!cr && cr.isActive !== false;
   const can = (...perms: string[]) => hasPermission(user as any, ...perms);
   const show = (perms: string | string[], baseCond: boolean) =>
     hasCustomRole ? can(...(Array.isArray(perms) ? perms : [perms])) : baseCond;

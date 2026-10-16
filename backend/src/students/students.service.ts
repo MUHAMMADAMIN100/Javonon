@@ -60,8 +60,8 @@ export class StudentsService {
 
   /**
    * Кто видит и правит студента — то же правило, что у списка (findAll):
-   * руководство (FOUNDER/ADMIN/ACCOUNTANT) и те, кому выданы «все студенты»
-   * (лично или ролью, auth/client-access.ts), — всех; остальные — только
+   * руководство (FOUNDER/ADMIN/ACCOUNTANT) и те, чья роль даёт «все
+   * студенты» (auth/client-access.ts), — всех; остальные — только
    * тех, где они назначены менеджером (TJ или CN). Раньше список был
    * «только свои», а карточка, платежи и правка по прямой ссылке — чьи
    * угодно (правка — любого студента без менеджера).
@@ -230,11 +230,10 @@ export class StudentsService {
     currentUserId?: string;
     currentUserRole?: Role;
     currentUserRoles?: Role[];
-    // Кастомная роль и личные доступы — чтобы решить, видит ли сотрудник
-    // всех студентов («все студенты», auth/client-access.ts).
+    // Действующая роль — чтобы решить, видит ли сотрудник всех студентов
+    // («все студенты», auth/client-access.ts).
     currentUserPermissions?: string[];
     currentUserHasCustomRole?: boolean;
-    currentUserExtraPermissions?: string[];
     // По ТЗ: «база студентов — только оплатившие». Фильтр включается
     // как ?paid=true с фронтенда (отдельная вкладка/режим).
     paid?: boolean;
@@ -258,15 +257,14 @@ export class StudentsService {
       where.transactions = UNPAID_STUDENT_WHERE.transactions;
     }
     const and: Prisma.StudentWhereInput[] = [];
-    // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) видят только своих, если им не
-    // выданы «все студенты» (лично или ролью). Руководство
+    // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) видят только своих, если их
+    // роль не даёт «все студенты». Руководство
     // (FOUNDER/ADMIN/ACCOUNTANT) — всех. «Мои» (mine) сужает у любого.
     const elevated = canSeeAllStudents({
       role: filters.currentUserRole,
       roles: filters.currentUserRoles,
       permissions: filters.currentUserPermissions,
       hasCustomRole: filters.currentUserHasCustomRole,
-      extraPermissions: filters.currentUserExtraPermissions,
     });
     const restrictToMine =
       (filters.mine && filters.currentUserId) ||
@@ -662,7 +660,7 @@ export class StudentsService {
     range?: { from?: Date; to?: Date },
   ) {
     // Видимость — та же, что у списка: своих, или всех — руководству и тем,
-    // кому выданы «все студенты».
+    // чья роль даёт «все студенты».
     const scope: Prisma.StudentWhereInput | undefined =
       user && !canSeeAllStudents(user)
         ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }

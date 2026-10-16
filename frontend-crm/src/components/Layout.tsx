@@ -113,10 +113,13 @@ export default function Layout() {
   // Sidebar/ProtectedRoute перечитали `user.permissions` и открытые разделы
   // появились без релогина. Логика: если payload.id совпадает с моей
   // customRole.id — обновляемся; иначе игнорируем событие (это чужая роль).
-  useRealtimeEvent('customRole:updated', async (payload: { id?: string; userId?: string }) => {
+  useRealtimeEvent('customRole:updated', async (payload: { id?: string; userId?: string; baseRoles?: string[] }) => {
+    // baseRoles — должности, на которые роль действует сама (Настройки → Роли):
+    // их сотрудникам права поменялись, даже если роль им лично не назначена.
     const affectsMe =
       (payload?.id && me?.customRole?.id === payload.id) ||
-      (payload?.userId && me?.id === payload.userId);
+      (payload?.userId && me?.id === payload.userId) ||
+      (!!me?.role && (payload?.baseRoles || []).includes(me.role));
     if (!affectsMe) return;
     try {
       const fresh = await apiMe();
@@ -128,20 +131,6 @@ export default function Layout() {
       // Тихо игнорируем — cold-start Railway/network. Следующая навигация
       // подтянет /auth/me, а RolesGuard на бэке уже видит новые permissions.
     }
-  });
-
-  // Основатель выдал или снял мне личный доступ «все студенты / заявки /
-  // лиды» (карточка сотрудника). Выходить не нужно: сервер читает доступы
-  // из БД на каждом запросе — перечитываем /auth/me и списки.
-  useRealtimeEvent('user:access-updated', async () => {
-    toast(t('layout.accessUpdated'), 'info');
-    try {
-      const fresh = await apiMe();
-      useAuth.setState({ user: fresh });
-    } catch {
-      // Сеть — подхватится при следующей загрузке страницы.
-    }
-    for (const key of ['applications', 'students']) queryClient.invalidateQueries({ queryKey: [key] });
   });
 
   // Close mobile drawer on route change

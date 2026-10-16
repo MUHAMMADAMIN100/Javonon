@@ -130,7 +130,6 @@ export class ApplicationsController {
       currentUserRoles: user?.roles,
       currentUserPermissions: user?.permissions,
       currentUserHasCustomRole: user?.hasCustomRole,
-      currentUserExtraPermissions: user?.extraPermissions,
       page: page ? Math.max(1, parseInt(page, 10) || 1) : undefined,
       pageSize: pageSize ? Math.min(100, Math.max(1, parseInt(pageSize, 10) || 20)) : undefined,
       sort,

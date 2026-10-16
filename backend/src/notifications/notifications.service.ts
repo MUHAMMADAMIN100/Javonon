@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { AUDIENCE_USER_SELECT, inAudience, toUserWithRoles, type AudienceKind } from '../common/audience';
+import { loadPositionRoles } from '../auth/position-role';
 
 interface NotifyPayload {
   type: string;
@@ -23,7 +24,9 @@ export class NotificationsService {
   async notifyAudience(kind: AudienceKind, extraUserIds: (string | null | undefined)[], data: NotifyPayload) {
     const extra = new Set(extraUserIds.filter((x): x is string => !!x));
     const users = await this.prisma.user.findMany({ where: { isActive: true }, select: AUDIENCE_USER_SELECT });
-    const ids = users.filter((u) => extra.has(u.id) || inAudience(kind, toUserWithRoles(u as any))).map((u) => u.id);
+    // Права считаем с ролью должности (auth/position-role.ts) — как сервер на запросах.
+    const positionRoles = await loadPositionRoles(this.prisma);
+    const ids = users.filter((u) => extra.has(u.id) || inAudience(kind, toUserWithRoles(u as any, positionRoles))).map((u) => u.id);
     if (!ids.length) return;
     await this.prisma.notification.createMany({
       data: ids.map((userId) => ({

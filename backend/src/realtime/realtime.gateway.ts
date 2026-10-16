@@ -18,6 +18,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AUDIENCE_USER_SELECT, canSeeFinance, toUserWithRoles } from '../common/audience';
 import { canSeeAllApplications, clientRoomForStatus } from '../applications/application-access';
 import { canSeeAllStudents, hasSeeAllGrant } from '../auth/client-access';
+import { loadPositionRoles, POSITION_ROLE_BASES } from '../auth/position-role';
 
 type JwtPayload = {
   sub: string;
@@ -216,7 +217,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
           client.disconnect(true);
           return;
         }
-        const who = toUserWithRoles(u as any);
+        // С ролью должности (auth/position-role.ts) — как права на запросах.
+        // Она нужна только менеджеру без своей активной роли: остальным лишний
+        // запрос не делаем — комнаты должны появиться как можно раньше.
+        const needsPositionRole = !u.customRole?.isActive && (POSITION_ROLE_BASES as string[]).includes(u.role);
+        const who = toUserWithRoles(u as any, needsPositionRole ? await loadPositionRoles(this.prisma) : undefined);
         client.join('staff');
         client.join(`user:${id}`);
         for (const [event, handler] of this.clientHandlers) {

@@ -31,13 +31,13 @@ export class CustomRolesController {
 
   @Post()
   @Roles(Role.FOUNDER)
-  create(@Body() body: { name: string; description?: string; permissions: string[] }) {
+  create(@Body() body: { name: string; description?: string; permissions: string[]; baseRole?: string | null }) {
     return this.svc.create(body);
   }
 
   @Patch(':id')
   @Roles(Role.FOUNDER)
-  update(@Param('id') id: string, @Body() body: { name?: string; description?: string; permissions?: string[]; isActive?: boolean }) {
+  update(@Param('id') id: string, @Body() body: { name?: string; description?: string; permissions?: string[]; isActive?: boolean; baseRole?: string | null }) {
     return this.svc.update(id, body);
   }
 

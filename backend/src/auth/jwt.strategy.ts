@@ -4,7 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { requireJwtSecret } from './jwt-secret';
 import { PrismaService } from '../prisma/prisma.service';
-import { cleanExtraPermissions } from './client-access';
+import { CUSTOM_ROLE_SELECT, effectiveCustomRole } from './position-role';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -51,7 +51,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     let dbRoles: string[] = [];
     let permissions: string[] = [];
     let hasCustomRole = false;
-    let extraPermissions: string[] = [];
     try {
       const [u, session] = await Promise.all([
         this.prisma.user.findUnique({
@@ -60,8 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             role: true,
             roles: true,
             isActive: true,
-            customRole: { select: { permissions: true, isActive: true } },
-            extraPermissions: true,
+            customRole: { select: CUSTOM_ROLE_SELECT },
           },
         }),
         this.prisma.session.findUnique({
@@ -80,12 +78,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
       dbRole = u.role;
       dbRoles = u.roles || [];
-      if (u.customRole?.isActive) {
-        permissions = u.customRole.permissions || [];
+      // Своя активная роль, иначе роль должности (Настройки → Роли, «Действует
+      // на всех с должностью») — auth/position-role.ts.
+      const custom = await effectiveCustomRole(this.prisma, u);
+      if (custom) {
+        permissions = custom.permissions || [];
         hasCustomRole = true;
       }
-      // «Все студенты / заявки / лиды», выданные лично (auth/client-access.ts).
-      extraPermissions = cleanExtraPermissions(u.extraPermissions);
     } catch (e) {
       if (e instanceof UnauthorizedException) throw e;
       // БД недоступна — единственный безопасный вариант отклонить запрос:
@@ -103,7 +102,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // FOUNDER неявно имеет доступ ко всему (см. RolesGuard).
       roles: dbRoles.map((r) => normalize(r)).filter((r): r is string => !!r),
       permissions,
-      extraPermissions,
       // Флаг для RolesGuard: если у юзера активная кастомная роль —
       // base role (которая в БД как «подложка») не должна давать доступ
       // через @Roles(). Только permissions из custom role + неявные

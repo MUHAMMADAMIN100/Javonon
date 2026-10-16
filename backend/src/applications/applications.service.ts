@@ -675,8 +675,6 @@ export class ApplicationsService {
     // был бы пуст.
     currentUserPermissions?: string[];
     currentUserHasCustomRole?: boolean;
-    /** Личные доступы сотрудника — «все заявки» / «все лиды» (auth/client-access.ts). */
-    currentUserExtraPermissions?: string[];
     /** Страница (с 1). Задана — ответ { items, total } вместо массива. */
     page?: number;
     pageSize?: number;
@@ -722,8 +720,8 @@ export class ApplicationsService {
     const createdAt = dateRangeFilter({ from: filters.from, to: filters.to });
     if (createdAt) where.createdAt = createdAt;
     // Видимость. Свои (менеджер TJ или CN) — всегда. Чужие — руководству
-    // (FOUNDER/ADMIN/ACCOUNTANT, кастомная роль с «назначением»), а тем, кому
-    // выданы «все лиды» / «все заявки», — чужие этого вида
+    // (FOUNDER/ADMIN/ACCOUNTANT, кастомная роль с «назначением»), а тем, чья
+    // роль даёт «все лиды» / «все заявки», — чужие этого вида
     // (application-access.ts). «Мои» (mine) сужает до своих у любого.
     // Корзина — только то, что можно вернуть: чужие удалённые видит лишь
     // руководство (удаление и возврат «все» не дают).
@@ -734,7 +732,6 @@ export class ApplicationsService {
         roles: filters.currentUserRoles,
         permissions: filters.currentUserPermissions,
         hasCustomRole: filters.currentUserHasCustomRole,
-        extraPermissions: filters.currentUserExtraPermissions,
       };
       const own: Prisma.ApplicationWhereInput = {
         OR: [{ managerId: filters.currentUserId }, { chinaManagerId: filters.currentUserId }],

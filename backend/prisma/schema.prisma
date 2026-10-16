@@ -205,9 +205,9 @@ model User {
   // Если задана — пермиссии custom-роли ДОБАВЛЯЮТСЯ к базовым.
   customRoleId       String?
   customRole         CustomRole? @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
-  // Доступы, выданные основателем лично в карточке сотрудника, сверх роли:
-  // 'students:all' | 'applications:all' | 'leads:all' — видеть и вести всех
-  // студентов / заявки / лиды, а не только своих (src/auth/client-access.ts).
+  // НЕ ИСПОЛЬЗУЕТСЯ. Были личные доступы «все студенты / заявки / лиды» из
+  // карточки сотрудника; 16.10.2026 их заменила роль должности
+  // (CustomRole.baseRole). Колонку не удаляем: из боевой базы ничего не удаляется.
   extraPermissions   String[]    @default([])
   // Доп. поля для HR-профиля (паспорт, телефон, дата приёма на работу)
   phone              String?
@@ -1993,12 +1993,21 @@ model CustomRole {
   description String?
   permissions String[] @default([])
   isActive    Boolean  @default(true)
+  // Должность, на которую роль действует сама («Действует на всех с
+  // должностью» в Настройки → Роли): все сотрудники с этой основной
+  // должностью (User.role) без своей активной роли работают по этой роли.
+  // Только должности менеджеров; одна роль на должность — проверяет сервис
+  // (custom-roles.service checkBaseRole). Не @unique намеренно: новое уникальное
+  // ограничение `prisma db push` в start:prod без --accept-data-loss не
+  // применяет и роняет запуск — в схему идут только добавочные изменения.
+  baseRole    Role?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   users User[]
 
   @@index([isActive])
+  @@index([baseRole])
 }
 
 // ============================================================

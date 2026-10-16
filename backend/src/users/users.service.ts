@@ -16,7 +16,6 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { PresenceService } from '../realtime/presence.service';
 import { isElevated, isFounder } from '../auth/role-utils';
-import { cleanExtraPermissions, EXTRA_PERMISSION_KEYS } from '../auth/client-access';
 import { tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
 import { SettingsService } from '../settings/settings.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
@@ -245,7 +244,6 @@ export class UsersService {
         createdAt: true,
         customRoleId: true,
         customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
-        extraPermissions: true,
       },
     });
     if (!user) throw new NotFoundException('Пользователь не найден');
@@ -954,26 +952,6 @@ export class UsersService {
       customRoleId: updated.customRoleId,
       customRole: updated.customRole,
     });
-    return updated;
-  }
-
-  /**
-   * Личные доступы сотрудника (auth/client-access.ts): «все студенты /
-   * заявки / лиды». Неизвестные ключи отбрасываются. Права применятся со
-   * следующего запроса (JwtStrategy читает их из БД каждый раз); сотруднику
-   * шлём событие — CRM перечитает /auth/me и списки без выхода из системы.
-   */
-  async setExtraPermissions(targetId: string, list: string[]) {
-    const target = await this.prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
-    if (!target) throw new NotFoundException('Пользователь не найден');
-    const unknown = list.filter((k) => !EXTRA_PERMISSION_KEYS.includes(k));
-    if (unknown.length) throw new BadRequestException(`Неизвестный доступ: ${unknown.join(', ')}`);
-    const updated = await this.prisma.user.update({
-      where: { id: targetId },
-      data: { extraPermissions: cleanExtraPermissions(list) },
-      select: { id: true, extraPermissions: true },
-    });
-    this.realtime.emitUser(targetId, 'user:access-updated', { extraPermissions: updated.extraPermissions });
     return updated;
   }
 

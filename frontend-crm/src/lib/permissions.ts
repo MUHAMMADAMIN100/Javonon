@@ -189,8 +189,8 @@ export const PERMISSION_KEYS = {
  * backend/src/auth/client-access.ts и applications/application-access.ts.
  *
  * Обычно менеджер видит и ведёт только тех, где он назначен менеджером.
- * Всех — руководство, а ещё те, кому выдан доступ: лично (галочка в карточке
- * сотрудника, user.extraPermissions) или пунктом кастомной роли. Лид — заявка
+ * Всех — руководство, а ещё те, чья действующая роль (своя или роль
+ * должности, user.customRole из /auth/me) отмечает эти пункты. Лид — заявка
  * в статусе «Новый лид». Удаление и назначение менеджера этим не открываются.
  */
 export type ClientScope = 'students' | 'applications' | 'leads';
@@ -201,18 +201,16 @@ export const SEE_ALL_PERMISSION: Record<ClientScope, string> = {
   leads: PERMISSION_KEYS.leadsAll,
 };
 
-type AccessUser = UserWithPerms & { id?: string; extraPermissions?: string[] | null };
+type AccessUser = UserWithPerms & { id?: string };
 
 function customRoleActive(user: AccessUser): boolean {
   return !!user.customRole && user.customRole.isActive !== false;
 }
 
-/** Выданы ли «все» этой области — лично или кастомной ролью (руководство здесь не учитывается). */
+/** Выданы ли «все» этой области действующей ролью (руководство здесь не учитывается). */
 export function hasSeeAllGrant(user: AccessUser | null | undefined, scope: ClientScope): boolean {
   if (!user) return false;
-  const key = SEE_ALL_PERMISSION[scope];
-  if ((user.extraPermissions || []).includes(key)) return true;
-  return customRoleActive(user) && hasPermission(user, key);
+  return customRoleActive(user) && hasPermission(user, SEE_ALL_PERMISSION[scope]);
 }
 
 /**
