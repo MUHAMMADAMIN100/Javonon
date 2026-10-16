@@ -1,4 +1,5 @@
 import { isElevated } from '../auth/role-utils';
+import { canSeeAllStudents } from '../auth/client-access';
 import { BadRequestException, ForbiddenException, NotFoundException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InteractionType } from '@prisma/client';
@@ -9,13 +10,14 @@ export class InteractionsService {
   constructor(private prisma: PrismaService, private realtime: RealtimeGateway) {}
 
   /**
-   * История общения — тем, кто видит студента (руководство или его менеджер,
-   * как список студентов); править/удалять запись — автору или руководству.
-   * Раньше любой сотрудник читал, правил и удалял чужие записи.
+   * История общения — тем, кто видит студента (руководство, его менеджер или
+   * тот, кому выданы «все студенты», — как список студентов); править/удалять
+   * запись — автору или руководству. Раньше любой сотрудник читал, правил и
+   * удалял чужие записи.
    */
   async assertCanSeeStudent(studentId: string, user: { id: string; role?: string; roles?: string[] }) {
     if (!studentId) throw new BadRequestException('studentId обязателен');
-    if (isElevated(user as any)) return;
+    if (canSeeAllStudents(user as any)) return;
     const s = await this.prisma.student.findUnique({ where: { id: studentId }, select: { managerId: true, chinaManagerId: true } });
     if (!s) throw new NotFoundException('Студент не найден');
     if (s.managerId !== user.id && s.chinaManagerId !== user.id) {

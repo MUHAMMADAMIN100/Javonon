@@ -10,6 +10,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { canSeePartnerAttribution, isElevated, UserWithRoles } from '../auth/role-utils';
+import { canSeeAllStudents } from '../auth/client-access';
 import { ReferralsService } from '../partners/referrals.service';
 import { CABINET_BY_DIRECTION } from '../common/cabinets';
 import { parseCalendarDateUtc } from '../common/tj-time';
@@ -59,13 +60,14 @@ export class StudentsService {
 
   /**
    * Кто видит и правит студента — то же правило, что у списка (findAll):
-   * руководство (FOUNDER/ADMIN/ACCOUNTANT) — всех; остальные — только тех,
-   * где они назначены менеджером (TJ или CN). Раньше список был «только
-   * свои», а карточка, платежи и правка по прямой ссылке — чьи угодно
-   * (правка — любого студента без менеджера).
+   * руководство (FOUNDER/ADMIN/ACCOUNTANT) и те, кому выданы «все студенты»
+   * (лично или ролью, auth/client-access.ts), — всех; остальные — только
+   * тех, где они назначены менеджером (TJ или CN). Раньше список был
+   * «только свои», а карточка, платежи и правка по прямой ссылке — чьи
+   * угодно (правка — любого студента без менеджера).
    */
   canAccess(student: { managerId: string | null; chinaManagerId?: string | null }, user: CurrentUser) {
-    if (isElevated(user as any)) return true;
+    if (canSeeAllStudents(user as any)) return true;
     return student.managerId === user.id || student.chinaManagerId === user.id;
   }
 
@@ -228,6 +230,11 @@ export class StudentsService {
     currentUserId?: string;
     currentUserRole?: Role;
     currentUserRoles?: Role[];
+    // Кастомная роль и личные доступы — чтобы решить, видит ли сотрудник
+    // всех студентов («все студенты», auth/client-access.ts).
+    currentUserPermissions?: string[];
+    currentUserHasCustomRole?: boolean;
+    currentUserExtraPermissions?: string[];
     // По ТЗ: «база студентов — только оплатившие». Фильтр включается
     // как ?paid=true с фронтенда (отдельная вкладка/режим).
     paid?: boolean;
@@ -251,11 +258,15 @@ export class StudentsService {
       where.transactions = UNPAID_STUDENT_WHERE.transactions;
     }
     const and: Prisma.StudentWhereInput[] = [];
-    // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только своих,
-    // независимо от mine. Elevated (FOUNDER/ADMIN/ACCOUNTANT) — всех.
-    const elevated = isElevated({
+    // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) видят только своих, если им не
+    // выданы «все студенты» (лично или ролью). Руководство
+    // (FOUNDER/ADMIN/ACCOUNTANT) — всех. «Мои» (mine) сужает у любого.
+    const elevated = canSeeAllStudents({
       role: filters.currentUserRole,
       roles: filters.currentUserRoles,
+      permissions: filters.currentUserPermissions,
+      hasCustomRole: filters.currentUserHasCustomRole,
+      extraPermissions: filters.currentUserExtraPermissions,
     });
     const restrictToMine =
       (filters.mine && filters.currentUserId) ||
@@ -647,12 +658,13 @@ export class StudentsService {
    *   Без периода where остаётся ровно прежним — «за всё время».
    */
   async stats(
-    user?: { id: string; role: Role; roles?: Role[] },
+    user?: UserWithRoles & { id: string },
     range?: { from?: Date; to?: Date },
   ) {
-    // Менеджеры видят только своих. Elevated (FOUNDER/ADMIN/ACCOUNTANT) — всех.
+    // Видимость — та же, что у списка: своих, или всех — руководству и тем,
+    // кому выданы «все студенты».
     const scope: Prisma.StudentWhereInput | undefined =
-      user && !isElevated(user)
+      user && !canSeeAllStudents(user)
         ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
         : undefined;
     // Период накладывается ПОВЕРХ скоупа, не заменяя его.

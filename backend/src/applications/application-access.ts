@@ -1,4 +1,7 @@
+import { ApplicationStatus, Prisma } from '@prisma/client';
 import { hasPermission, isElevated, isFounder, isStaff, UserWithRoles } from '../auth/role-utils';
+import { hasSeeAllGrant } from '../auth/client-access';
+import { NEW_LEAD_APPLICATION_STATUSES } from '../common/application-status';
 
 /**
  * Гейты доступа к операциям над заявками, ЕДИНЫЕ для контроллера и сервиса.
@@ -103,4 +106,63 @@ export function canSeeAllApplications(user: UserWithRoles | undefined | null): b
   if (isFounder(user)) return true;
   if (user.hasCustomRole) return hasPermission(user, 'applications:assign');
   return isElevated(user);
+}
+
+/**
+ * «Все лиды» / «Все заявки» (auth/client-access.ts) — поверх правила выше.
+ * Лид — заявка в статусе «Новый лид» (NEW_LEAD; NEW — легаси-хвост), всё
+ * остальное — заявка. Ушёл лид дальше по статусу — к нему применяется доступ
+ * «все заявки».
+ *
+ * canSeeAllApplications() сам по себе НЕ меняется: на нём держатся комната
+ * сокета 'apps-all' и адресаты уведомлений, а ещё право удалять чужие заявки
+ * (applications.service ensureCanDelete) — «все» удаления не дают.
+ */
+export function isLeadStatus(status: ApplicationStatus | string | null | undefined): boolean {
+  return !!status && (NEW_LEAD_APPLICATION_STATUSES as string[]).includes(status);
+}
+
+/**
+ * Комната сокета для чужих заявок этого вида (realtime.gateway): туда входят
+ * те, кому выданы «все лиды» / «все заявки». Руководство — в 'apps-all'.
+ */
+export function clientRoomForStatus(status: ApplicationStatus | string | null | undefined): 'leads-all' | 'applications-all' {
+  return isLeadStatus(status) ? 'leads-all' : 'applications-all';
+}
+
+/** Видит и ведёт все лиды, а не только свои. */
+export function canSeeAllLeads(user: UserWithRoles | undefined | null): boolean {
+  return canSeeAllApplications(user) || hasSeeAllGrant(user, 'leads');
+}
+
+/** Видит и ведёт все заявки (кроме лидов), а не только свои. */
+export function canSeeAllNonLeadApplications(user: UserWithRoles | undefined | null): boolean {
+  return canSeeAllApplications(user) || hasSeeAllGrant(user, 'applications');
+}
+
+/** Открыть и вести эту заявку: своя (менеджер TJ или CN) или «все» её вида. */
+export function canAccessApplication(
+  user: (UserWithRoles & { id: string }) | undefined | null,
+  app: { managerId: string | null; chinaManagerId?: string | null; status: ApplicationStatus | string },
+): boolean {
+  if (!user) return false;
+  if (app.managerId === user.id || app.chinaManagerId === user.id) return true;
+  return isLeadStatus(app.status) ? canSeeAllLeads(user) : canSeeAllNonLeadApplications(user);
+}
+
+/**
+ * Условие видимости заявок для списков и счётчиков; null — видны все.
+ * Свои — всегда; «все лиды» добавляют чужие лиды, «все заявки» — чужие
+ * заявки остальных статусов.
+ */
+export function applicationVisibilityWhere(
+  user: UserWithRoles & { id: string },
+): Prisma.ApplicationWhereInput | null {
+  const leads = canSeeAllLeads(user);
+  const apps = canSeeAllNonLeadApplications(user);
+  if (leads && apps) return null;
+  const or: Prisma.ApplicationWhereInput[] = [{ managerId: user.id }, { chinaManagerId: user.id }];
+  if (leads) or.push({ status: { in: NEW_LEAD_APPLICATION_STATUSES } });
+  if (apps) or.push({ status: { notIn: NEW_LEAD_APPLICATION_STATUSES } });
+  return { OR: or };
 }

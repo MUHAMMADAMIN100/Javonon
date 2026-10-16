@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listStudents } from '../api/students';
 import { listUsers } from '../api/users';
+import { listAssignableManagers } from '../api/applications';
+import { canSeeAllClients } from '../lib/permissions';
 import type { Direction } from '../api/types';
 import { APPLICATION_STATUSES, DIRECTION_LABEL, STATUS_BADGE, STATUS_LABEL, STUDENT_STATUS_BADGE, STUDENT_STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
@@ -74,6 +76,9 @@ export default function Students() {
   const qc = useQueryClient();
   const isAdmin = isElevated(me);
   const founder = isFounder(me);
+  // Видит всех студентов — руководство и те, кому выданы «все студенты»:
+  // им же переключатель «Мои / Все» и фильтр по менеджеру.
+  const wide = isAdmin || canSeeAllClients(me, 'students');
 
   // Состояние списка — в query-string (см. lib/useUrlListState): клик по
   // строке уводит на карточку студента, список размонтируется, и «назад»
@@ -86,10 +91,10 @@ export default function Students() {
       // «stage», хотя внутри дропдаун смешивает этап заявки и статус студента.
       status: enumParam(STAGE_FILTER_VALUES),
       cabinet: enumParam(CABINET_VALUES),
-      manager: isAdmin ? stringParam('', 64) : ignoredParam(''),
+      manager: wide ? stringParam('', 64) : ignoredParam(''),
       scope: enumParam<Scope, Scope>(
-        isAdmin ? (['all', 'mine'] as const) : (['mine'] as const),
-        isAdmin ? 'all' : 'mine',
+        wide ? (['all', 'mine'] as const) : (['mine'] as const),
+        wide ? 'all' : 'mine',
       ),
       // Период по дате заведения карточки — приходит ссылкой с дашборда
       // (разрез «Студенты по кабинетам» считает тот же период).
@@ -222,9 +227,17 @@ export default function Students() {
     queryFn: () => listUsers(),
     enabled: isAdmin,
   });
+  // Не руководству список сотрудников закрыт — менеджеров для фильтра берём
+  // там же, где экран лидов (назначаемые менеджеры).
+  const managersQuery = useQuery({
+    queryKey: ['applications', 'assignable-managers'] as const,
+    queryFn: listAssignableManagers,
+    enabled: wide && !isAdmin,
+    staleTime: 5 * 60_000,
+  });
   // Дропдаун «менеджер» — только SALES_MANAGER/CLIENT_MANAGER, с учётом
   // мульти-ролей по ТЗ §2 (юзер с roles=[SALES_MANAGER, ADMIN] попадает).
-  const users = (usersQuery.data ?? []).filter((u) => {
+  const users = ((isAdmin ? usersQuery.data : managersQuery.data) ?? []).filter((u) => {
     const all = [u.role, ...((u as any).roles || [])].filter(Boolean);
     return all.some((r) => MANAGER_ROLES.has(r as string));
   });
@@ -296,7 +309,7 @@ export default function Students() {
           testId="students-total"
         />
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {isAdmin && (
+          {wide && (
             <div className="scope-switch">
               <button
                 className={`scope-btn${scope === 'mine' ? ' active' : ''}`}
@@ -370,7 +383,7 @@ export default function Students() {
             <option value="2">{t('app.field.cabinet')} 2</option>
             <option value="3">{t('app.field.cabinet')} 3</option>
           </CrmSelect>
-          {isAdmin && (
+          {wide && users.length > 0 && (
             <CrmSelect
               className="crm-select"
              

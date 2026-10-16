@@ -35,6 +35,7 @@ import {
   type ClientContact,
 } from '../components/ClientCard';
 import { isElevated } from '../lib/roles';
+import { canSeeAllApplicationsByRole, canSeeAllClients, canSeeAllOfApplication } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useChannelLabel, useCountryLabel, useDirectionLabel, useStudentStatusLabel } from '../lib/labels';
 import { tjFormatFull } from '../lib/tjTime';
@@ -204,8 +205,14 @@ export default function ApplicationDetail() {
   const isAdmin = isElevated(me);
   const assigned = !!app.managerId || !!app.chinaManagerId;
   const isMine = !assigned || app.managerId === me?.id || app.chinaManagerId === me?.id;
-  // Админ и назначенный менеджер (TJ/CN) могут вести заявку на любом этапе.
-  const canAct = isAdmin || isMine;
+  // Админ и назначенный менеджер (TJ/CN) могут вести заявку на любом этапе;
+  // с доступом «все лиды» / «все заявки» — и чужую этого вида.
+  const canAct = isAdmin || isMine || canSeeAllOfApplication(me, app.status);
+  // Удалить — как раньше: свою или руководство (сервер — ensureCanDelete).
+  const canDelete = canSeeAllApplicationsByRole(me) || app.managerId === me?.id || app.chinaManagerId === me?.id;
+  // Документы, анкета и история общения — данные студента заявки: чужого
+  // студента ведёт тот, кому выданы «все студенты».
+  const canActStudent = canAct && (isAdmin || isMine || canSeeAllClients(me, 'students'));
   // Новая заявка (и заявка без студента) показывает и правит свои поля;
   // после создания студента — данные студента. Пока студент грузится,
   // видны поля заявки, а правка ждёт загрузки.
@@ -243,7 +250,7 @@ export default function ApplicationDetail() {
         avatarId={app.studentId || app.id}
         photoUrl={withStudent ? student!.photoUrl : null}
         enrolled={isEnrolled}
-        onPhotoPick={withStudent && canAct ? (file) => photoMut.mutate(file) : undefined}
+        onPhotoPick={withStudent && canActStudent ? (file) => photoMut.mutate(file) : undefined}
         photoBusy={photoMut.isPending}
         controls={
           <>
@@ -270,7 +277,10 @@ export default function ApplicationDetail() {
               одобрением первого платежа, и новая сделка по ней — почти всегда
               ошибка. Через список сделок этот путь по-прежнему доступен.
             */}
-            {canAct && !isEnrolled && (
+            {/* Только своя заявка (или руководство): сделка засчитывается тому,
+                кто её оформил, — по чужому клиенту это была бы чужая продажа.
+                Доступ «все заявки / лиды» сделок не открывает. */}
+            {(isAdmin || isMine) && !isEnrolled && (
               <button
                 type="button"
                 className="btn btn-secondary client-deal-btn"
@@ -286,7 +296,7 @@ export default function ApplicationDetail() {
                 <Icon name="edit" size={18} /> {t('profile.edit')}
               </button>
             )}
-            {canAct && (
+            {canDelete && (
               <button
                 type="button"
                 className="btn btn-secondary client-delete-btn"
@@ -394,18 +404,18 @@ export default function ApplicationDetail() {
               documents={student!.documents || []}
               applicationForm={student!.applicationForm}
               onChange={reload}
-              editable={canAct}
+              editable={canActStudent}
             />
           </section>
 
           {/* Вместо прежнего блока «Комментарии» (он ничего не сохранял) —
               настоящая история общения клиента: звонки, переписка, заметки. */}
-          <InteractionsLog studentId={student!.id} canEdit={canAct} />
+          <InteractionsLog studentId={student!.id} canEdit={canActStudent} />
 
           <ApplicationFormSection
             studentId={student!.id}
             initialForm={student!.applicationForm}
-            canEdit={canAct}
+            canEdit={canActStudent}
             onSaved={reload}
           />
         </>

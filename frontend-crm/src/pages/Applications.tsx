@@ -3,7 +3,8 @@ import CrmSelect from '../components/CrmSelect';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listApplicationsPage } from '../api/applications';
+import { listApplicationsPage, listAssignableManagers } from '../api/applications';
+import { canSeeAllClients } from '../lib/permissions';
 import { listUsers } from '../api/users';
 import type { Application, ApplicationSource, ApplicationStatus, Country, Direction } from '../api/types';
 import {
@@ -76,6 +77,9 @@ export default function Applications() {
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
   const isAdmin = isElevated(me);
+  // Видит чужие заявки или лиды — руководство и те, кому выданы «все
+  // заявки» / «все лиды»: им же переключатель «Мои / Все» и фильтр по менеджеру.
+  const wide = isAdmin || canSeeAllClients(me, 'applications') || canSeeAllClients(me, 'leads');
 
   // Всё состояние списка — в query-string (см. lib/useUrlListState).
   // useState здесь не годится: клик по строке уводит на карточку заявки,
@@ -91,13 +95,14 @@ export default function Applications() {
       // id менеджера белым списком не проверить — пользователи грузятся
       // асинхронно. Ограничиваем длину; неизвестный id бэкенд отдаст
       // пустым списком, а не ошибкой (User.id — обычная String-колонка).
-      manager: isAdmin ? stringParam('', 64) : ignoredParam(''),
-      // Менеджер видит только свои заявки; админ может переключать.
-      // Дефолт зависит от роли и потому в URL не пишется: чистый
-      // /applications у админа значит «все», у менеджера — «мои».
+      manager: wide ? stringParam('', 64) : ignoredParam(''),
+      // Менеджер видит только свои заявки; руководство и те, кому выданы
+      // «все заявки» / «все лиды», могут переключать. Дефолт зависит от прав
+      // и потому в URL не пишется: чистый /applications у них значит «все»,
+      // у менеджера — «мои».
       scope: enumParam<Scope, Scope>(
-        isAdmin ? (['all', 'mine'] as const) : (['mine'] as const),
-        isAdmin ? 'all' : 'mine',
+        wide ? (['all', 'mine'] as const) : (['mine'] as const),
+        wide ? 'all' : 'mine',
       ),
       // Период приходит ссылкой с дашборда: карточка «Заявки по
       // направлениям» показывает цифру за выбранный там период, и список
@@ -192,9 +197,17 @@ export default function Applications() {
     queryFn: () => listUsers(),
     enabled: isAdmin,
   });
+  // Не руководству список сотрудников закрыт — менеджеров для фильтра берём
+  // там же, где экран лидов (назначаемые менеджеры).
+  const managersQuery = useQuery({
+    queryKey: ['applications', 'assignable-managers'] as const,
+    queryFn: listAssignableManagers,
+    enabled: wide && !isAdmin,
+    staleTime: 5 * 60_000,
+  });
   // Фильтр дропдауна «менеджер»: только SALES_MANAGER/CLIENT_MANAGER.
   // По мульти-ролям (ТЗ §2) — попадает если хотя бы одна из ролей в наборе.
-  const users = (usersQuery.data ?? []).filter((u) => {
+  const users = ((isAdmin ? usersQuery.data : managersQuery.data) ?? []).filter((u) => {
     const all = [u.role, ...((u as any).roles || [])].filter(Boolean);
     return all.some((r) => MANAGER_ROLES.has(r as string));
   });
@@ -255,7 +268,7 @@ export default function Applications() {
           filtered={narrowed}
           testId="applications-total"
         />
-        {isAdmin && (
+        {wide && (
           <div className="scope-switch">
             <button
               className={`scope-btn${scope === 'mine' ? ' active' : ''}`}
@@ -285,7 +298,7 @@ export default function Applications() {
               <option key={s} value={s}>{statusLabel(s)}</option>
             ))}
           </CrmSelect>
-          {isAdmin && (
+          {wide && users.length > 0 && (
             <CrmSelect className="crm-select" value={manager} onChange={(e) => setValue('manager', e.target.value)} title={t('app.filter.manager')}>
               <option value="">{t('app.filter.manager')}</option>
               {users.map((u) => (

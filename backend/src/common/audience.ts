@@ -1,5 +1,6 @@
 import { canSeeAllApplications } from '../applications/application-access';
 import { hasRole, isFounder, type UserWithRoles } from '../auth/role-utils';
+import { cleanExtraPermissions } from '../auth/client-access';
 
 /**
  * Кому положено видеть данные — одно правило для REST, сокета и
@@ -31,6 +32,7 @@ export function toUserWithRoles(u: {
   role: string;
   roles?: string[] | null;
   customRole?: { isActive: boolean; permissions: string[] } | null;
+  extraPermissions?: string[] | null;
 }): UserWithRoles {
   const custom = u.customRole && u.customRole.isActive ? u.customRole : null;
   return {
@@ -38,6 +40,7 @@ export function toUserWithRoles(u: {
     roles: (u.roles || []) as any,
     permissions: custom ? custom.permissions : [],
     hasCustomRole: !!custom,
+    extraPermissions: cleanExtraPermissions(u.extraPermissions),
   };
 }
 
@@ -48,4 +51,5 @@ export const AUDIENCE_USER_SELECT = {
   roles: true,
   isActive: true,
   customRole: { select: { isActive: true, permissions: true } },
+  extraPermissions: true,
 } as const;

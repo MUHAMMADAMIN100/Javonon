@@ -8,17 +8,20 @@ import {
   STAFF_DEFAULT_SOURCE,
 } from './dto/create-staff-application.dto';
 import {
+  applicationVisibilityWhere,
+  canAccessApplication,
   canCreateApplication,
   canReassignApplicationManager,
   canSeeAllApplications,
   canTouchApplicationManager,
+  clientRoomForStatus,
 } from './application-access';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { MailService } from '../mail/mail.service';
 import { SmsService } from '../sms/sms.service';
 import { ActivityService } from '../activity/activity.service';
-import { canSeePartnerAttribution, isElevated, UserWithRoles } from '../auth/role-utils';
+import { canSeePartnerAttribution, UserWithRoles } from '../auth/role-utils';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
@@ -672,6 +675,8 @@ export class ApplicationsService {
     // был бы пуст.
     currentUserPermissions?: string[];
     currentUserHasCustomRole?: boolean;
+    /** Личные доступы сотрудника — «все заявки» / «все лиды» (auth/client-access.ts). */
+    currentUserExtraPermissions?: string[];
     /** Страница (с 1). Задана — ответ { items, total } вместо массива. */
     page?: number;
     pageSize?: number;
@@ -716,24 +721,30 @@ export class ApplicationsService {
     // посчитала.
     const createdAt = dateRangeFilter({ from: filters.from, to: filters.to });
     if (createdAt) where.createdAt = createdAt;
-    // Менеджеры (SALES_MANAGER/CLIENT_MANAGER) всегда видят только свои
-    // заявки. FOUNDER/ADMIN/ACCOUNTANT — все, если только не запросили mine.
-    const elevated = canSeeAllApplications({
-      role: filters.currentUserRole,
-      roles: filters.currentUserRoles,
-      permissions: filters.currentUserPermissions,
-      hasCustomRole: filters.currentUserHasCustomRole,
-    });
-    const restrictToMine =
-      (filters.mine && filters.currentUserId) ||
-      (!elevated && filters.currentUserId);
-    if (restrictToMine) {
-      and.push({
-        OR: [
-          { managerId: filters.currentUserId },
-          { chinaManagerId: filters.currentUserId },
-        ],
-      });
+    // Видимость. Свои (менеджер TJ или CN) — всегда. Чужие — руководству
+    // (FOUNDER/ADMIN/ACCOUNTANT, кастомная роль с «назначением»), а тем, кому
+    // выданы «все лиды» / «все заявки», — чужие этого вида
+    // (application-access.ts). «Мои» (mine) сужает до своих у любого.
+    // Корзина — только то, что можно вернуть: чужие удалённые видит лишь
+    // руководство (удаление и возврат «все» не дают).
+    if (filters.currentUserId) {
+      const viewer = {
+        id: filters.currentUserId,
+        role: filters.currentUserRole,
+        roles: filters.currentUserRoles,
+        permissions: filters.currentUserPermissions,
+        hasCustomRole: filters.currentUserHasCustomRole,
+        extraPermissions: filters.currentUserExtraPermissions,
+      };
+      const own: Prisma.ApplicationWhereInput = {
+        OR: [{ managerId: filters.currentUserId }, { chinaManagerId: filters.currentUserId }],
+      };
+      const scope = filters.mine
+        ? own
+        : filters.deleted
+          ? (canSeeAllApplications(viewer) ? null : own)
+          : applicationVisibilityWhere(viewer);
+      if (scope) and.push(scope);
     }
     // Фильтр по конкретному менеджеру: показываем заявки где он
     // назначен либо локальным, либо китайским менеджером.
@@ -864,29 +875,46 @@ export class ApplicationsService {
 
   /**
    * Кто видит и правит заявку — то же правило, что у списка (findAll):
-   * кто видит все заявки (canSeeAllApplications) — любую; остальные — только
-   * те, где они назначены (TJ или CN). Раньше карточка по прямой ссылке
-   * открывалась любому сотруднику, а заявку без менеджера мог править любой.
+   * свою (TJ или CN) — всегда; чужую — руководство и те, кому выданы «все
+   * лиды» / «все заявки» её вида (canAccessApplication). Раньше карточка по
+   * прямой ссылке открывалась любому сотруднику, а заявку без менеджера мог
+   * править любой.
    */
-  canAccess(app: { managerId: string | null; chinaManagerId?: string | null }, user: CurrentUser) {
-    if (canSeeAllApplications(user as any)) return true;
-    return app.managerId === user.id || app.chinaManagerId === user.id;
+  canAccess(
+    app: { managerId: string | null; chinaManagerId?: string | null; status: ApplicationStatus },
+    user: CurrentUser,
+  ) {
+    return canAccessApplication(user as any, app);
   }
 
   async assertCanView(id: string, user: CurrentUser) {
-    const a = await this.prisma.application.findUnique({ where: { id }, select: { managerId: true, chinaManagerId: true } });
+    const a = await this.prisma.application.findUnique({ where: { id }, select: { managerId: true, chinaManagerId: true, status: true } });
     if (!a) throw new NotFoundException('Заявка не найдена');
     if (!this.canAccess(a, user)) throw new ForbiddenException('Нет доступа к этой заявке');
   }
 
   private ensureCanEdit(
-    app: { managerId: string | null; chinaManagerId?: string | null },
+    app: { managerId: string | null; chinaManagerId?: string | null; status: ApplicationStatus },
     user: CurrentUser,
   ) {
     if (this.canAccess(app, user)) return;
     throw new ForbiddenException(
       'Только назначенные менеджеры или администратор могут редактировать эту заявку',
     );
+  }
+
+  /**
+   * Удалить в корзину и вернуть — как раньше: свою заявку или кто видит все
+   * по роли (canSeeAllApplications). «Все лиды» / «все заявки» удаления
+   * чужих не дают — у удаления своё правило.
+   */
+  private ensureCanDelete(
+    app: { managerId: string | null; chinaManagerId?: string | null },
+    user: CurrentUser,
+  ) {
+    if (canSeeAllApplications(user as any)) return;
+    if (app.managerId === user.id || app.chinaManagerId === user.id) return;
+    throw new ForbiddenException('Удалять и возвращать чужие заявки может только руководство');
   }
 
   async update(id: string, dto: UpdateApplicationDto, user: CurrentUser) {
@@ -1060,7 +1088,7 @@ export class ApplicationsService {
         }
       }
 
-      this.realtime.emitApplication('application:updated', updated, { application: updated }, [existing.managerId, existing.chinaManagerId]);
+      this.realtime.emitApplication('application:updated', updated, { application: updated }, [existing.managerId, existing.chinaManagerId], [clientRoomForStatus(existing.status)]);
       if (updated.studentId) {
         this.realtime.emitStudent(updated.studentId, 'student:updated', { studentId: updated.studentId });
       }
@@ -1121,7 +1149,7 @@ export class ApplicationsService {
         .catch(() => undefined);
     }
 
-    this.realtime.emitApplication('application:updated', updated, { application: updated }, [existing.managerId, existing.chinaManagerId]);
+    this.realtime.emitApplication('application:updated', updated, { application: updated }, [existing.managerId, existing.chinaManagerId], [clientRoomForStatus(existing.status)]);
     if (updated.studentId) {
       this.realtime.emitStudent(updated.studentId, 'student:updated', { studentId: updated.studentId });
       this.realtime.emitStudent(updated.studentId, 'application:updated', { application: updated });
@@ -1256,7 +1284,7 @@ export class ApplicationsService {
       data,
       include: MANAGER_INCLUDE,
     });
-    this.realtime.emitApplication('application:updated', updated, { application: updated }, [existing.managerId, existing.chinaManagerId]);
+    this.realtime.emitApplication('application:updated', updated, { application: updated }, [existing.managerId, existing.chinaManagerId], [clientRoomForStatus(existing.status)]);
     if (updated.studentId) {
       this.realtime.emitStudent(updated.studentId, 'student:updated', { studentId: updated.studentId });
     }
@@ -1592,7 +1620,7 @@ export class ApplicationsService {
    */
   async remove(id: string, user: CurrentUser) {
     const app = await this.findOne(id);
-    this.ensureCanEdit(app, user);
+    this.ensureCanDelete(app, user);
     await this.prisma.application.update({
       where: { id },
       data: { deletedAt: new Date(), deletedById: user.id },
@@ -1605,7 +1633,7 @@ export class ApplicationsService {
   async restore(id: string, user: CurrentUser) {
     const app = await this.prisma.application.findFirst({ where: { id, deletedAt: { not: null } } });
     if (!app) throw new NotFoundException('Заявка не найдена в удалённых');
-    this.ensureCanEdit(app, user);
+    this.ensureCanDelete(app, user);
     // Пока лид лежал в корзине, по этому номеру могла прийти новая заявка —
     // вторую открытую с тем же номером не заводим.
     const key = phoneKey(app.phone);
@@ -1632,14 +1660,13 @@ export class ApplicationsService {
    *   Без периода where остаётся ровно прежним — «за всё время».
    */
   async stats(
-    user?: { id: string; role: Role; roles?: Role[] },
+    user?: UserWithRoles & { id: string },
     range?: { from?: Date; to?: Date },
   ) {
-    // Менеджеры видят только свои заявки. Elevated (FOUNDER/ADMIN/ACCOUNTANT) — все.
+    // Видимость — та же, что у списка (applicationVisibilityWhere): иначе
+    // клик по строке дашборда открывал бы другой набор, чем посчитан.
     const scope: Prisma.ApplicationWhereInput | undefined =
-      user && !isElevated(user)
-        ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
-        : undefined;
+      (user && applicationVisibilityWhere(user)) || undefined;
     // Период накладывается ПОВЕРХ скоупа, не заменяя его: менеджер и с
     // фильтром по месяцу обязан видеть только свои заявки.
     const createdAt = dateRangeFilter(range);

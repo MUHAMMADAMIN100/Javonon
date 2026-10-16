@@ -16,7 +16,8 @@ import { requireJwtSecret } from '../auth/jwt-secret';
 import { PresenceService } from './presence.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AUDIENCE_USER_SELECT, canSeeFinance, toUserWithRoles } from '../common/audience';
-import { canSeeAllApplications } from '../applications/application-access';
+import { canSeeAllApplications, clientRoomForStatus } from '../applications/application-access';
+import { canSeeAllStudents, hasSeeAllGrant } from '../auth/client-access';
 
 type JwtPayload = {
   sub: string;
@@ -231,7 +232,15 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         }
         if (canSeeFinance(who)) client.join('finance-staff');
         // Все заявки/студенты — только тем, кто видит их все (как список).
-        if (canSeeAllApplications(who)) client.join('apps-all');
+        if (canSeeAllApplications(who)) {
+          client.join('apps-all');
+        } else {
+          // «Все лиды» / «все заявки» / «все студенты», выданные лично или
+          // ролью (auth/client-access.ts): события чужих — только своего вида.
+          if (hasSeeAllGrant(who, 'leads')) client.join('leads-all');
+          if (hasSeeAllGrant(who, 'applications')) client.join('applications-all');
+          if (canSeeAllStudents(who)) client.join('students-all');
+        }
         if (u.role === 'FOUNDER' || (u.roles || []).includes('FOUNDER')) {
           client.join('founders');
         }
@@ -285,6 +294,9 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     extraRooms: string[] = [],
   ) {
     const rooms = new Set<string>(['apps-all', ...extraRooms]);
+    // Заявка (есть статус) — ещё и тем, кому выданы «все» её вида.
+    const status = (app as { status?: string | null }).status;
+    if (status) rooms.add(clientRoomForStatus(status));
     for (const uid of [app.managerId, app.chinaManagerId, ...extraUserIds]) if (uid) rooms.add(`user:${uid}`);
     this.server?.to([...rooms]).emit(event, payload);
   }
@@ -350,7 +362,8 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         where: { id: studentId },
         select: { managerId: true, chinaManagerId: true },
       });
-      this.emitApplication(event, s || {}, payload, [], extraRooms);
+      // + те, кому выданы «все студенты» (комната 'students-all').
+      this.emitApplication(event, s || {}, payload, [], [...extraRooms, 'students-all']);
     } catch (err) {
       this.logger.warn(`emitStudentScoped failed: ${(err as Error).message}`);
     }

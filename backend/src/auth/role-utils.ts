@@ -18,6 +18,10 @@ export type UserWithRoles = {
   roles?: (Role | string)[] | null;
   // Пермиссии из CustomRole. Заполняются JwtStrategy при validate.
   permissions?: string[] | null;
+  // Доступы, выданные лично в карточке сотрудника (User.extraPermissions):
+  // «все студенты / заявки / лиды» — см. auth/client-access.ts. Действуют
+  // при любой роли, в отличие от permissions кастомной роли.
+  extraPermissions?: string[] | null;
   // true, если у юзера привязана АКТИВНАЯ CustomRole (ставит JwtStrategy).
   // Означает: base role в БД — техническая «подложка», она НЕ даёт прав
   // сама по себе (см. RolesGuard.skipBaseRole).

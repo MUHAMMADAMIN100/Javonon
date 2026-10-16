@@ -205,6 +205,10 @@ model User {
   // Если задана — пермиссии custom-роли ДОБАВЛЯЮТСЯ к базовым.
   customRoleId       String?
   customRole         CustomRole? @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
+  // Доступы, выданные основателем лично в карточке сотрудника, сверх роли:
+  // 'students:all' | 'applications:all' | 'leads:all' — видеть и вести всех
+  // студентов / заявки / лиды, а не только своих (src/auth/client-access.ts).
+  extraPermissions   String[]    @default([])
   // Доп. поля для HR-профиля (паспорт, телефон, дата приёма на работу)
   phone              String?
   passportNo         String?

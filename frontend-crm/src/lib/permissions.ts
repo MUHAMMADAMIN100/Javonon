@@ -1,4 +1,4 @@
-import { isFounder } from './roles';
+import { isElevated, isFounder } from './roles';
 
 /**
  * Permission helpers — фронтовое зеркало backend/src/auth/role-utils.ts
@@ -71,6 +71,11 @@ export const PERMISSION_KEYS = {
   studentsUpdate: 'students:update',
   studentsDelete: 'students:delete',
   /** @deprecated */ studentsWrite: 'students:write',
+
+  // «Все, не только свои» — см. canSeeAllClients ниже.
+  studentsAll: 'students:all',
+  applicationsAll: 'applications:all',
+  leadsAll: 'leads:all',
 
   // Programs (CRUD)
   programsRead: 'programs:read',
@@ -178,3 +183,64 @@ export const PERMISSION_KEYS = {
   attendanceRead: 'attendance:read',
   excusesWrite: 'excuses:write',
 } as const;
+
+/**
+ * «Все, не только свои» — студенты / заявки / лиды. Зеркало
+ * backend/src/auth/client-access.ts и applications/application-access.ts.
+ *
+ * Обычно менеджер видит и ведёт только тех, где он назначен менеджером.
+ * Всех — руководство, а ещё те, кому выдан доступ: лично (галочка в карточке
+ * сотрудника, user.extraPermissions) или пунктом кастомной роли. Лид — заявка
+ * в статусе «Новый лид». Удаление и назначение менеджера этим не открываются.
+ */
+export type ClientScope = 'students' | 'applications' | 'leads';
+
+export const SEE_ALL_PERMISSION: Record<ClientScope, string> = {
+  students: PERMISSION_KEYS.studentsAll,
+  applications: PERMISSION_KEYS.applicationsAll,
+  leads: PERMISSION_KEYS.leadsAll,
+};
+
+type AccessUser = UserWithPerms & { id?: string; extraPermissions?: string[] | null };
+
+function customRoleActive(user: AccessUser): boolean {
+  return !!user.customRole && user.customRole.isActive !== false;
+}
+
+/** Выданы ли «все» этой области — лично или кастомной ролью (руководство здесь не учитывается). */
+export function hasSeeAllGrant(user: AccessUser | null | undefined, scope: ClientScope): boolean {
+  if (!user) return false;
+  const key = SEE_ALL_PERMISSION[scope];
+  if ((user.extraPermissions || []).includes(key)) return true;
+  return customRoleActive(user) && hasPermission(user, key);
+}
+
+/**
+ * Видит ли пользователь ВСЕ заявки по роли — как backend canSeeAllApplications:
+ * основатель; под кастомной ролью — с «Заявки — назначение менеджера»; иначе
+ * админ/бухгалтер. Только так можно удалять и возвращать чужие заявки.
+ */
+export function canSeeAllApplicationsByRole(user: AccessUser | null | undefined): boolean {
+  if (!user) return false;
+  if (isFounder(user as any)) return true;
+  if (customRoleActive(user)) return hasPermission(user, PERMISSION_KEYS.applicationsAssign);
+  return isElevated(user as any);
+}
+
+/** Видит и ведёт всех: студентов / заявки (кроме лидов) / лиды. */
+export function canSeeAllClients(user: AccessUser | null | undefined, scope: ClientScope): boolean {
+  if (!user) return false;
+  if (scope === 'students') return isElevated(user as any) || hasSeeAllGrant(user, 'students');
+  return canSeeAllApplicationsByRole(user) || hasSeeAllGrant(user, scope);
+}
+
+/** Лид — заявка в статусе «Новый лид» (NEW_LEAD; NEW — старое значение). */
+export function isLeadStatus(status?: string | null): boolean {
+  return status === 'NEW_LEAD' || status === 'NEW';
+}
+
+/** «Все» того вида, к которому относится заявка с этим статусом. */
+export function canSeeAllOfApplication(user: AccessUser | null | undefined, status?: string | null): boolean {
+  return canSeeAllClients(user, isLeadStatus(status) ? 'leads' : 'applications');
+}
+

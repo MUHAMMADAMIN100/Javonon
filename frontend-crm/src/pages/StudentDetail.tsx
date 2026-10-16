@@ -35,6 +35,7 @@ import {
   type ClientContact,
 } from '../components/ClientCard';
 import { isElevated } from '../lib/roles';
+import { canSeeAllClients, canSeeAllOfApplication } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useOnboardingLabel, useChannelLabel, useCountryLabel } from '../lib/labels';
 import { tjFormatFull } from '../lib/tjTime';
@@ -245,7 +246,14 @@ export default function StudentDetail() {
   const isAdmin = isElevated(me);
   const assigned = !!student.managerId || !!student.chinaManagerId;
   const isMine = !assigned || student.managerId === me?.id || student.chinaManagerId === me?.id;
-  const canEdit = isAdmin || isMine;
+  // Вести карточку — свою, а с доступом «все студенты» и чужую. Удалить —
+  // как раньше (своего или руководство; сервер удаление пускает только
+  // руководству) — «все» удаления не дают.
+  const canEdit = isAdmin || isMine || canSeeAllClients(me, 'students');
+  const canDelete = isAdmin || isMine;
+  // Статус, этап и долг принадлежат заявке студента: чужую заявку ведёт тот,
+  // кому выданы «все» её вида (лиды / заявки).
+  const canEditApp = !!app0 && (isAdmin || isMine || canSeeAllOfApplication(me, app0.status));
 
   // «Успех» — новое SUCCESSFUL_LEAD ИЛИ старые ENROLLED/COMPLETED: пока
   // миграция строк не отработала, API отдаёт и то и другое.
@@ -275,15 +283,15 @@ export default function StudentDetail() {
         controls={
           app0 ? (
             <>
-              <StatusPill status={app0.status} canEdit={canEdit} busy={appStatusMut.isPending} onChange={(s) => appStatusMut.mutate(s)} />
+              <StatusPill status={app0.status} canEdit={canEditApp} busy={appStatusMut.isPending} onChange={(s) => appStatusMut.mutate(s)} />
               <StagePill
                 applicationId={app0.id}
                 pipelineId={app0.pipelineId}
                 stageId={app0.pipelineStageId}
-                canEdit={canEdit}
+                canEdit={canEditApp}
                 onChanged={reload}
               />
-              <DebtPill pending={!!app0.paymentPending} canEdit={canEdit} busy={debtMut.isPending} onChange={(v) => debtMut.mutate(v)} />
+              <DebtPill pending={!!app0.paymentPending} canEdit={canEditApp} busy={debtMut.isPending} onChange={(v) => debtMut.mutate(v)} />
               <SmsNote status={app0.status} />
             </>
           ) : canEdit ? (
@@ -303,16 +311,18 @@ export default function StudentDetail() {
               <button type="button" className="btn btn-primary" onClick={() => setEditing((v) => !v)} data-testid="client-edit">
                 <Icon name="edit" size={18} /> {t('profile.edit')}
               </button>
-              <button
-                type="button"
-                className="btn btn-secondary client-delete-btn"
-                onClick={onDeleteStudent}
-                title={t('common.delete')}
-                aria-label={t('common.delete')}
-                data-testid="client-delete"
-              >
-                <Icon name="delete" size={18} />
-              </button>
+              {canDelete && (
+                <button
+                  type="button"
+                  className="btn btn-secondary client-delete-btn"
+                  onClick={onDeleteStudent}
+                  title={t('common.delete')}
+                  aria-label={t('common.delete')}
+                  data-testid="client-delete"
+                >
+                  <Icon name="delete" size={18} />
+                </button>
+              )}
             </>
           ) : undefined
         }

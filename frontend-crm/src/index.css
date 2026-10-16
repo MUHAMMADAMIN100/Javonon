@@ -5611,6 +5611,11 @@ input[type="checkbox"].crm-checkbox:indeterminate {
   padding: 14px 16px; border: 1px solid var(--primary); border-radius: 12px; background: var(--bg-soft);
 }
 .profile-edit-title { font-weight: 600; font-size: 14px; margin-bottom: 12px; }
+/* Доступ к клиентам (pages/UserDetail, ClientAccessEditor): три галочки столбиком. */
+.client-access-hint { font-size: 13px; line-height: 1.45; color: var(--text-soft); margin: -4px 0 12px; max-width: 560px; }
+.client-access-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.client-access-item { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; width: fit-content; }
+.client-access-item input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); cursor: pointer; }
 .profile-edit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; align-items: end; }
 .profile-edit-field { display: flex; flex-direction: column; min-width: 0; }
 .profile-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }

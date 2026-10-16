@@ -284,6 +284,12 @@ export interface User {
   roles?: Role[];
   /** Permissions (берём из customRole) — backend кладёт в JWT-payload при validate. */
   permissions?: string[];
+  /**
+   * Личные доступы, выданные основателем в карточке сотрудника:
+   * 'students:all' | 'applications:all' | 'leads:all' — видеть и вести всех,
+   * а не только своих (lib/permissions.ts → canSeeAllClients).
+   */
+  extraPermissions?: string[];
   /** Кастомная роль, если назначена. */
   customRoleId?: string | null;
   customRole?: {

@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isElevated } from '../auth/role-utils';
+import { hasSeeAllGrant } from '../auth/client-access';
+import { isLeadStatus } from '../applications/application-access';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 
 /**
@@ -48,7 +50,10 @@ export class SalesService {
   ) {
     const app = await this.prisma.application.findUnique({ where: { id: applicationId } });
     if (!app) throw new NotFoundException('Заявка не найдена');
-    if (!isElevated(requester) && app.managerId !== requester.id) {
+    // «Все лиды» / «все заявки» (auth/client-access.ts) — работать с чужими
+    // этого вида, в том числе двигать по этапам.
+    const seeAll = hasSeeAllGrant(requester as any, isLeadStatus(app.status) ? 'leads' : 'applications');
+    if (!isElevated(requester) && app.managerId !== requester.id && !seeAll) {
       throw new ForbiddenException('Можно двигать только свои заявки');
     }
     if (!pipelineStageId) {

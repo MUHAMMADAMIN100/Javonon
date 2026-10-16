@@ -112,6 +112,17 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
     label: 'Воронки — редактирование',
     paths: [{ prefix: '/sales' }, { prefix: '/pipelines' }] },
 
+  // «Все, не только свои» (auth/client-access.ts). Своих URL нет намеренно:
+  // раздел они не открывают, а снимают ограничение «только где я менеджер» с
+  // того, что роль уже умеет в разделе (просмотр, правка…). Те же пункты
+  // основатель выдаёт и лично, галочками в карточке сотрудника.
+  { key: 'students:all', section: 'students', group: 'CRM',
+    label: 'Студенты — все, не только свои' },
+  { key: 'applications:all', section: 'applications', group: 'CRM',
+    label: 'Заявки — все, не только свои' },
+  { key: 'leads:all', section: 'leads', group: 'CRM',
+    label: 'Лиды — все, не только свои' },
+
   // ─── Связь ─────────────────────────────────────────────────────────────
   { key: 'chat:read',  section: 'chat', group: 'Связь',
     label: 'Чат — просмотр',

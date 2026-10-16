@@ -20,6 +20,7 @@ import type { Application, ApplicationStatus, Country } from '../api/types';
 import { COUNTRIES } from '../api/types';
 import { useAuth } from '../store/auth';
 import { buildNavCtx } from '../components/navGroups';
+import { canSeeAllApplicationsByRole } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useCountryLabel } from '../lib/labels';
 import { keys } from '../lib/queryKeys';
@@ -110,6 +111,8 @@ export default function Leads() {
   const nav = useMemo(() => buildNavCtx(me), [me]);
   const canCreate = nav.show('applications:create', nav.isWorkforce);
   const canAssign = nav.show('applications:assign', nav.isWorkforce);
+  /** Удалять и возвращать чужие лиды — только по роли (как сервер). */
+  const canDeleteAny = canSeeAllApplicationsByRole(me);
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -1315,16 +1318,20 @@ export default function Leads() {
                               >
                                 <Icon name="edit" size={16} />
                               </button>
-                              <button
-                                type="button"
-                                className="icon-btn danger"
-                                data-testid="lead-delete"
-                                title={t('common.delete')}
-                                aria-label={`${t('common.delete')}: ${a.fullName}`}
-                                onClick={() => onDelete(a)}
-                              >
-                                <Icon name="delete" size={16} />
-                              </button>
+                              {/* Удалить — свой лид или руководство: доступ «все лиды»
+                                  удаление чужих не даёт (сервер — ensureCanDelete). */}
+                              {(canDeleteAny || a.managerId === me?.id || a.chinaManagerId === me?.id) && (
+                                <button
+                                  type="button"
+                                  className="icon-btn danger"
+                                  data-testid="lead-delete"
+                                  title={t('common.delete')}
+                                  aria-label={`${t('common.delete')}: ${a.fullName}`}
+                                  onClick={() => onDelete(a)}
+                                >
+                                  <Icon name="delete" size={16} />
+                                </button>
+                              )}
                             </>
                           )}
                         </td>

@@ -121,10 +121,27 @@ export default function Layout() {
     try {
       const fresh = await apiMe();
       useAuth.setState({ user: fresh });
+      // В роли могли включить или снять «все студенты / заявки / лиды» —
+      // списки и счётчики перечитываем сразу.
+      for (const key of ['applications', 'students']) queryClient.invalidateQueries({ queryKey: [key] });
     } catch {
       // Тихо игнорируем — cold-start Railway/network. Следующая навигация
       // подтянет /auth/me, а RolesGuard на бэке уже видит новые permissions.
     }
+  });
+
+  // Основатель выдал или снял мне личный доступ «все студенты / заявки /
+  // лиды» (карточка сотрудника). Выходить не нужно: сервер читает доступы
+  // из БД на каждом запросе — перечитываем /auth/me и списки.
+  useRealtimeEvent('user:access-updated', async () => {
+    toast(t('layout.accessUpdated'), 'info');
+    try {
+      const fresh = await apiMe();
+      useAuth.setState({ user: fresh });
+    } catch {
+      // Сеть — подхватится при следующей загрузке страницы.
+    }
+    for (const key of ['applications', 'students']) queryClient.invalidateQueries({ queryKey: [key] });
   });
 
   // Close mobile drawer on route change

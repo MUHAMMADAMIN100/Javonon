@@ -4,6 +4,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException,
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { cleanExtraPermissions } from './client-access';
 
 @Injectable()
 export class AuthService {
@@ -77,6 +78,7 @@ export class AuthService {
       select: {
         customRoleId: true,
         customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
+        extraPermissions: true,
       },
     });
     const perms = fullUser?.customRole?.isActive ? (fullUser.customRole.permissions || []) : [];
@@ -92,6 +94,7 @@ export class AuthService {
         customRoleId: fullUser?.customRoleId || null,
         customRole: fullUser?.customRole || null,
         permissions: perms,
+        extraPermissions: cleanExtraPermissions(fullUser?.extraPermissions),
       },
     };
   }
@@ -103,6 +106,7 @@ export class AuthService {
         id: true, email: true, fullName: true, role: true, roles: true,
         customRoleId: true,
         customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
+        extraPermissions: true,
       },
     });
     if (!user) throw new UnauthorizedException();
@@ -116,6 +120,7 @@ export class AuthService {
       customRoleId: user.customRoleId || null,
       customRole: user.customRole || null,
       permissions: perms,
+      extraPermissions: cleanExtraPermissions(user.extraPermissions),
     };
   }
 
