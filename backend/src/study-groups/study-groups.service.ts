@@ -9,9 +9,9 @@ import { ClassSessionStatus, Prisma, StudyGroupStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserWithRoles } from '../auth/role-utils';
-import { parseCalendarDateUtc, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
-import { canMarkSession, canRunGroup, isAcademyManager } from '../academy/academy-access';
-import { addDaysToKey, weeklyPattern } from '../academy/journal-math';
+import { parseCalendarDateUtc, tjLocalDay, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { canMarkSession, canRunGroup, isAcademyManager, teachesGroup } from '../academy/academy-access';
+import { addDaysToKey, daysBetweenKeys, weeklyPattern } from '../academy/journal-math';
 import {
   AddGroupMembersDto,
   BulkClassSessionsDto,
@@ -66,8 +66,19 @@ const ACTIVE_MEMBER: Prisma.GroupMemberWhereInput = { leftAt: null };
 
 /** Отметка в журнале, из-за которой занятие нельзя удалить (только отменить). */
 const MARKED_ENTRY: Prisma.JournalEntryWhereInput = {
-  OR: [{ present: { not: null } }, { score: { not: null } }, { comment: { not: null } }],
+  OR: [
+    { present: { not: null } },
+    { score: { not: null } },
+    { attendance: { not: null } },
+    { homeworkPct: { not: null } },
+    { vocabularyPct: { not: null } },
+    { performancePct: { not: null } },
+    { comment: { not: null } },
+  ],
 };
+
+/** Срок ДЗ — не дальше стольких дней от урока (столько колонок в дневнике). */
+const HOMEWORK_MAX_DAYS = 60;
 
 type Viewer = (UserWithRoles & { id: string }) | null | undefined;
 
@@ -143,6 +154,7 @@ export class StudyGroupsService {
       include: {
         program: { select: { id: true, name: true } },
         teacher: { select: { id: true, fullName: true, isActive: true } },
+        completedBy: { select: { id: true, fullName: true, isActive: true } },
         members: {
           orderBy: { joinedAt: 'asc' },
           include: {
@@ -156,6 +168,7 @@ export class StudyGroupsService {
                 photoUrl: true,
                 academyOnly: true,
                 academyExpelledAt: true,
+                academyLevel: { select: { id: true, name: true } },
               },
             },
           },
@@ -169,18 +182,24 @@ export class StudyGroupsService {
               orderBy: { createdAt: 'asc' },
               select: { id: true, kind: true, title: true, url: true, size: true, mimeType: true, createdAt: true },
             },
-            _count: { select: { journal: { where: MARKED_ENTRY } } },
+            _count: { select: { journal: { where: MARKED_ENTRY }, homeworkLogs: true } },
           },
         },
       },
     });
     if (!group) throw new NotFoundException('Группа не найдена');
     await this.assertCanSeeGroup(user, group.id, group.teacherId);
+    const run = canRunGroup(user, group);
+    const active = group.status === StudyGroupStatus.ACTIVE;
     return {
       ...group,
       access: {
         manage: this.isElevatedViewer(user),
-        run: canRunGroup(user, group),
+        run,
+        // Учитель группы добавляет учеников сам (новых и из базы без группы).
+        addStudents: run && active,
+        // «Завершить курс»: учитель группы и руководство, пока группа идёт.
+        complete: run && active && !group.completedAt,
       },
     };
   }
@@ -281,22 +300,50 @@ export class StudyGroupsService {
     if (graded > 0) {
       throw new BadRequestException('В группе есть оценки — удалить нельзя, переведите её в архив');
     }
+    const diary = await this.prisma.homeworkLog.count({ where: { session: { groupId: id } } });
+    if (diary > 0) {
+      throw new BadRequestException('Ученики вели дневник ДЗ — удалить нельзя, переведите группу в архив');
+    }
     await this.prisma.studyGroup.delete({ where: { id } });
     return { ok: true };
   }
 
   // ───────────────────────────── СОСТАВ ГРУППЫ ────────────────────────────
 
+  /**
+   * Добавить в группу. Руководство — любых студентов агентства и учеников
+   * академии. Учитель — в свою действующую группу и только учеников
+   * академии, которые сейчас ни в одной группе: клиентов агентства и чужих
+   * учеников он не видит и посадить к себе не может.
+   */
   async addMembers(user: Viewer, groupId: string, dto: AddGroupMembersDto) {
-    this.assertCanAdminGroups(user);
     const group = await this.prisma.studyGroup.findUnique({
       where: { id: groupId },
-      select: { id: true },
+      select: { id: true, teacherId: true, status: true },
     });
     if (!group) throw new NotFoundException('Группа не найдена');
+    const manager = this.isElevatedViewer(user);
+    if (!manager) {
+      if (!user || !teachesGroup(user, group)) {
+        throw new ForbiddenException('Управлять группами может только руководство');
+      }
+      if (group.status !== StudyGroupStatus.ACTIVE) throw new BadRequestException('Группа в архиве');
+    }
 
     const studentIds = await this.validateStudentIds(dto.studentIds);
     if (studentIds.length === 0) throw new BadRequestException('Не выбран ни один студент');
+    if (!manager) {
+      const allowed = await this.prisma.student.count({
+        where: {
+          id: { in: studentIds },
+          OR: [{ academyOnly: true }, { groupMemberships: { some: {} } }],
+          groupMemberships: { none: { leftAt: null } },
+        },
+      });
+      if (allowed !== studentIds.length) {
+        throw new ForbiddenException('Учитель добавляет только учеников академии, которые сейчас без группы');
+      }
+    }
     const expelled = await this.prisma.student.findMany({
       where: { id: { in: studentIds }, academyExpelledAt: { not: null } },
       select: { fullName: true },
@@ -470,15 +517,8 @@ export class StudyGroupsService {
       if (windowMoved) data.reminderSentAt = null;
     }
     if (dto.topic !== undefined) data.topic = dto.topic.trim().slice(0, 200) || null;
-    if (dto.homework !== undefined) data.homework = dto.homework.trim().slice(0, 4000) || null;
-    if (dto.homeworkDue !== undefined) {
-      const raw = dto.homeworkDue.trim();
-      if (!raw) data.homeworkDue = null;
-      else {
-        const due = parseCalendarDateUtc(raw);
-        if (Number.isNaN(due.getTime())) throw new BadRequestException('Срок ДЗ указан неверно');
-        data.homeworkDue = due;
-      }
+    if (dto.homework !== undefined || dto.homeworkDue !== undefined) {
+      await this.applyHomework(session, dto, data);
     }
     if (dto.status !== undefined) data.status = dto.status;
     if (dto.teacherId !== undefined) {
@@ -501,6 +541,54 @@ export class StudyGroupsService {
     });
   }
 
+  /**
+   * ДЗ урока и срок. С заданием срок обязателен: с дня урока по срок ученик
+   * ведёт дневник ДЗ. Срок — не раньше дня урока и не дальше 60 дней.
+   * Задание, по которому ученики уже пишут дневник, можно поправить, но не
+   * стереть — иначе их записи остались бы без задания.
+   */
+  private async applyHomework(
+    session: { id: string; startsAt: Date; homework: string | null; homeworkDue: Date | null },
+    dto: UpdateClassSessionDto,
+    data: Prisma.ClassSessionUpdateInput,
+  ) {
+    const homework =
+      dto.homework !== undefined ? dto.homework.trim().slice(0, 4000) || null : session.homework;
+    let due: Date | null = session.homeworkDue;
+    if (dto.homeworkDue !== undefined) {
+      const raw = dto.homeworkDue.trim();
+      if (!raw) due = null;
+      else {
+        due = parseCalendarDateUtc(raw);
+        if (Number.isNaN(due.getTime())) throw new BadRequestException('Срок ДЗ указан неверно');
+      }
+    }
+    if (!homework) {
+      if (session.homework) {
+        const logs = await this.prisma.homeworkLog.count({ where: { sessionId: session.id } });
+        if (logs > 0) {
+          throw new BadRequestException('Ученики уже ведут дневник по этому ДЗ — задание можно изменить, но не удалить');
+        }
+      }
+      data.homework = null;
+      data.homeworkDue = null;
+      data.homeworkSetAt = null;
+      return;
+    }
+    // Задание появилось только сейчас — отсюда считаются дни дневника.
+    if (!session.homework) data.homeworkSetAt = new Date();
+    if (!due) throw new BadRequestException('Укажите срок сдачи ДЗ');
+    const startsAt = (data.startsAt as Date | undefined) ?? session.startsAt;
+    const lessonDay = tjLocalDay(startsAt);
+    const dueDay = due.toISOString().slice(0, 10);
+    if (dueDay < lessonDay) throw new BadRequestException('Срок сдачи не может быть раньше дня урока');
+    if (daysBetweenKeys(lessonDay, dueDay) > HOMEWORK_MAX_DAYS) {
+      throw new BadRequestException(`Срок сдачи — не дальше ${HOMEWORK_MAX_DAYS} дней от урока`);
+    }
+    data.homework = homework;
+    data.homeworkDue = due;
+  }
+
   async removeSession(user: Viewer, sessionId: string) {
     const session = await this.prisma.classSession.findUnique({
       where: { id: sessionId },
@@ -511,6 +599,10 @@ export class StudyGroupsService {
     const marked = await this.prisma.journalEntry.count({ where: { sessionId, ...MARKED_ENTRY } });
     if (marked > 0) {
       throw new BadRequestException('По занятию есть отметки в журнале — его можно только отменить');
+    }
+    const diary = await this.prisma.homeworkLog.count({ where: { sessionId } });
+    if (diary > 0) {
+      throw new BadRequestException('По занятию ученики ведут дневник ДЗ — его можно только отменить');
     }
     await this.prisma.classSession.delete({ where: { id: sessionId } });
     return { ok: true };

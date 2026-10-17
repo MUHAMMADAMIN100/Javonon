@@ -3,63 +3,63 @@ import type { ClassMaterial } from './studyGroups';
 
 /**
  * Академия (backend/src/academy): журнал, материалы уроков, ученики,
- * красные флаги. Итоги недель считает сервер (journal-math.ts) — фронт их
- * только показывает, чтобы цифры журнала, карточки ученика и кабинета
- * студента не разошлись.
+ * уровни, красные флаги, дневник ДЗ, завершение курса. Итоги считает
+ * сервер (journal-math.ts) — фронт их только показывает, чтобы цифры
+ * журнала, карточки ученика и кабинета студента не разошлись.
  */
 
 export type AcademyStatus = 'ACTIVE' | 'PENDING' | 'EXPELLED' | 'NO_GROUP';
+export type Attendance = 'PRESENT' | 'ABSENT' | 'LATE';
+export type LeftReason = 'REMOVED' | 'EXPELLED' | 'COMPLETED';
 
-/** Границы шкалы — те же, что на сервере. */
-export const SCORE_MAX = 5;
-export const EXAM_MAX = 70;
-export const BONUS_MAX = 10;
-export const FLAGS_FOR_DECISION = 3;
+/** Красных флагов до решения руководства — как на сервере. */
+export const FLAGS_FOR_DECISION = 4;
+export const PCT_MAX = 100;
 
-export interface JournalCell {
-  present: boolean | null;
-  score: number | null;
-  comment: string | null;
+export interface LevelRef {
+  id: string;
+  name: string;
 }
 
-export interface JournalRow {
-  studentId: string;
-  entries: Record<string, JournalCell>;
-  bonus: number | null;
-  exam: number | null;
-  held: number;
-  attended: number;
-  lessonPoints: number;
-  total: number;
-  final: boolean;
+/** Строка листа урока: посещение, три процента и итог (среднее процентов, «не был» = 0). */
+export interface LessonMark {
+  attendance: Attendance | null;
+  homeworkPct: number | null;
+  vocabularyPct: number | null;
+  performancePct: number | null;
+  comment: string | null;
+  total: number | null;
 }
 
 export interface JournalLesson {
   id: string;
+  number: number;
   startsAt: string;
   endsAt: string;
   status: string;
   topic: string | null;
   teacherId: string | null;
-  /** Урок уже начался — отмечать можно, идёт в итог. */
+  /** День урока по Душанбе 'YYYY-MM-DD'. */
+  day: string;
+  weekKey: string;
+  /** Урок уже начался. */
   past: boolean;
-}
-
-export interface JournalWeek {
-  key: string;
-  index: number;
-  from: string;
-  to: string;
-  lessons: JournalLesson[];
-  rows: JournalRow[];
+  /** Отмечать можно с дня урока. */
+  markable: boolean;
+  hasHomework: boolean;
 }
 
 export interface StudentSummary {
   avg: number | null;
   attendancePct: number | null;
-  finalWeeks: number;
   held: number;
   attended: number;
+  late: number;
+  absent: number;
+  graded: number;
+  homeworkAvg: number | null;
+  vocabularyAvg: number | null;
+  performanceAvg: number | null;
 }
 
 export interface JournalStudent {
@@ -68,11 +68,22 @@ export interface JournalStudent {
   photoUrl: string | null;
   joinedAt: string;
   leftAt: string | null;
-  leftReason: 'REMOVED' | 'EXPELLED' | null;
+  leftReason: LeftReason | null;
   active: boolean;
   expelled: boolean;
   flags: number;
+  level: LevelRef | null;
   summary: StudentSummary;
+}
+
+export interface JournalWeek {
+  key: string;
+  index: number;
+  from: string;
+  to: string;
+  groupAvg: number | null;
+  /** studentId → средний итог недели. */
+  values: Record<string, number>;
 }
 
 export interface Journal {
@@ -82,27 +93,28 @@ export interface Journal {
     status: 'ACTIVE' | 'ARCHIVED';
     teacherId: string | null;
     teacher: { id: string; fullName: string; isActive: boolean } | null;
+    completedAt: string | null;
   };
   /** Руководство или учитель группы — правят всё; иначе (замена) — только свои уроки. */
   canEditAll: boolean;
   canManage: boolean;
-  /** Понедельник текущей недели 'YYYY-MM-DD'. */
-  currentWeek: string;
+  today: string;
+  lessons: JournalLesson[];
+  /** lessonId → ученики листа. */
+  sheet: Record<string, string[]>;
+  /** lessonId → studentId → отметка. */
+  marks: Record<string, Record<string, LessonMark>>;
   students: JournalStudent[];
   weeks: JournalWeek[];
 }
 
 export interface EntryPatch {
   studentId: string;
-  present?: boolean | null;
-  score?: number | null;
+  attendance?: Attendance | null;
+  homeworkPct?: number | null;
+  vocabularyPct?: number | null;
+  performancePct?: number | null;
   comment?: string | null;
-}
-
-export interface WeekPatch {
-  studentId: string;
-  bonus?: number | null;
-  exam?: number | null;
 }
 
 export async function getJournal(groupId: string) {
@@ -111,16 +123,19 @@ export async function getJournal(groupId: string) {
 }
 
 export async function saveEntries(sessionId: string, items: EntryPatch[]) {
-  const { data } = await api.put<{ sessionId: string; entries: Array<JournalCell & { studentId: string }> }>(
+  const { data } = await api.put<{ sessionId: string; entries: Array<LessonMark & { studentId: string }> }>(
     '/academy/journal/entries',
     { sessionId, items },
   );
   return data;
 }
 
-export async function saveWeeks(groupId: string, weekStart: string, items: WeekPatch[]) {
-  const { data } = await api.put('/academy/journal/weeks', { groupId, weekStart, items });
-  return data;
+/** Итог урока по тем же правилам, что на сервере (для мгновенного отклика). */
+export function lessonTotal(m: Pick<LessonMark, 'attendance' | 'homeworkPct' | 'vocabularyPct' | 'performancePct'>): number | null {
+  if (m.attendance === 'ABSENT') return 0;
+  const pcts = [m.homeworkPct, m.vocabularyPct, m.performancePct].filter((v): v is number => v !== null);
+  if (!pcts.length) return null;
+  return Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
 }
 
 // ─── Материалы урока ───
@@ -145,6 +160,44 @@ export async function deleteMaterial(id: string) {
   return data;
 }
 
+// ─── Уровни ───
+
+export interface AcademyLevel extends LevelRef {
+  sortOrder: number;
+  /** Сколько учеников с этим уровнем. */
+  students: number;
+}
+
+export async function listLevels() {
+  const { data } = await api.get<AcademyLevel[]>('/academy/levels');
+  return data;
+}
+
+export async function createLevel(name: string) {
+  const { data } = await api.post<AcademyLevel[]>('/academy/levels', { name });
+  return data;
+}
+
+export async function renameLevel(id: string, name: string) {
+  const { data } = await api.patch<AcademyLevel[]>(`/academy/levels/${id}`, { name });
+  return data;
+}
+
+export async function deleteLevel(id: string) {
+  const { data } = await api.delete<AcademyLevel[]>(`/academy/levels/${id}`);
+  return data;
+}
+
+export async function reorderLevels(ids: string[]) {
+  const { data } = await api.post<AcademyLevel[]>('/academy/levels/reorder', { ids });
+  return data;
+}
+
+export async function seedDefaultLevels() {
+  const { data } = await api.post<AcademyLevel[]>('/academy/levels/defaults', {});
+  return data;
+}
+
 // ─── Ученики ───
 
 export interface AcademyGroupRef {
@@ -165,6 +218,7 @@ export interface AcademyStudentRow {
   createdAt: string;
   status: AcademyStatus;
   flags: number;
+  level: LevelRef | null;
   groups: AcademyGroupRef[];
   summary: StudentSummary;
 }
@@ -175,6 +229,8 @@ export interface AcademyStudentFilters {
   teacherId?: string;
   status?: AcademyStatus | '';
   type?: 'ACADEMY' | 'AGENCY' | '';
+  /** id уровня или 'NONE' — без уровня. */
+  levelId?: string;
 }
 
 export async function listAcademyStudents(filters: AcademyStudentFilters = {}) {
@@ -194,10 +250,12 @@ export interface PickedStudent {
   email: string | null;
   academyOnly: boolean;
   expelled: boolean;
+  level: LevelRef | null;
   inGroup: boolean;
   groups: string[];
 }
 
+/** Руководство — поиск по всей базе (от 2 символов); учитель — ученики академии без группы. */
 export async function pickStudents(search: string, groupId?: string) {
   const { data } = await api.get<PickedStudent[]>('/academy/students/pick', { params: { search, groupId } });
   return data;
@@ -210,6 +268,9 @@ export interface NewAcademyStudent {
   birthday?: string;
   comment?: string;
   groupId?: string;
+  fatherPhone?: string;
+  motherPhone?: string;
+  levelId?: string;
 }
 
 export async function createAcademyStudent(payload: NewAcademyStudent) {
@@ -231,24 +292,40 @@ export interface AcademyFlag {
   removedBy: { id: string; fullName: string; isActive: boolean } | null;
 }
 
-export interface AcademyWeekResult {
-  key: string;
-  index: number;
-  from: string;
-  to: string;
-  held: number;
-  attended: number;
-  lessonPoints: number;
-  bonus: number | null;
-  exam: number | null;
-  total: number;
-  final: boolean;
+export interface LevelChange {
+  id: string;
+  fromName: string | null;
+  toName: string | null;
+  reason: 'START' | 'MANUAL' | 'COURSE' | string;
+  createdAt: string;
+  group: { id: string; name: string } | null;
+  changedBy?: { id: string; fullName: string } | null;
+}
+
+export interface DiaryLog {
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentDiary {
+  sessionId: string;
+  startsAt: string;
+  topic: string | null;
+  homework: string | null;
+  homeworkDue: string | null;
+  group: { id: string; name: string };
+  days: string[];
+  logs: Record<string, DiaryLog>;
 }
 
 export interface AcademyStudentCard {
   id: string;
   fullName: string;
   phones: string[];
+  phoneLabels: string[];
+  fatherPhone: string | null;
+  motherPhone: string | null;
   email: string | null;
   birthday: string | null;
   age: number | null;
@@ -257,24 +334,27 @@ export interface AcademyStudentCard {
   comment: string | null;
   createdAt: string;
   status: AcademyStatus;
+  level: LevelRef | null;
+  levelHistory: LevelChange[];
   flagsActive: number;
   expelled: { at: string; note: string | null; by: { id: string; fullName: string } | null } | null;
   flags: AcademyFlag[];
   groups: Array<{
     membershipId: string;
-    group: AcademyGroupRef & { teacherId: string | null };
+    group: AcademyGroupRef & { teacherId: string | null; completedAt?: string | null };
     joinedAt: string;
     leftAt: string | null;
-    leftReason: 'REMOVED' | 'EXPELLED' | null;
+    leftReason: LeftReason | null;
     active: boolean;
     summary: StudentSummary;
-    weeks: AcademyWeekResult[];
+    lessons: Array<{ id: string; number: number; startsAt: string; topic: string | null; mark: LessonMark | null }>;
+    weeks: Array<{ key: string; index: number; from: string; to: string; value: number }>;
   }>;
   summary: StudentSummary;
+  diary: StudentDiary[];
   comments: Array<{
     comment: string;
-    score: number | null;
-    present: boolean | null;
+    mark: LessonMark;
     author: { id: string; fullName: string } | null;
     sessionId: string;
     date: string;
@@ -282,6 +362,9 @@ export interface AcademyStudentCard {
     group: { id: string; name: string };
   }>;
   canManage: boolean;
+  canEdit: boolean;
+  canEditLevel: boolean;
+  canResetPassword: boolean;
   canFlag: boolean;
   flagGroups: Array<{ id: string; name: string }>;
 }
@@ -291,10 +374,20 @@ export async function getAcademyStudent(id: string) {
   return data;
 }
 
-export async function updateAcademyStudent(
-  id: string,
-  patch: { fullName?: string; phone?: string; email?: string; birthday?: string; comment?: string },
-) {
+export interface AcademyStudentPatch {
+  fullName?: string;
+  phone?: string;
+  email?: string;
+  birthday?: string;
+  comment?: string;
+  /** Пустая строка — стереть номер. */
+  fatherPhone?: string;
+  motherPhone?: string;
+  /** Пустая строка — без уровня. */
+  levelId?: string;
+}
+
+export async function updateAcademyStudent(id: string, patch: AcademyStudentPatch) {
   const { data } = await api.patch<AcademyStudentCard>(`/academy/students/${id}`, patch);
   return data;
 }
@@ -334,6 +427,60 @@ export async function reinstate(studentId: string, groupId?: string) {
   return data;
 }
 
+// ─── Завершение курса ───
+
+export interface CoursePreview {
+  group: { id: string; name: string; status: 'ACTIVE' | 'ARCHIVED'; completedAt: string | null };
+  levels: LevelRef[];
+  futureLessons: number;
+  students: Array<{
+    id: string;
+    fullName: string;
+    photoUrl: string | null;
+    level: LevelRef | null;
+    suggestedLevelId: string | null;
+  }>;
+}
+
+export async function getCoursePreview(groupId: string) {
+  const { data } = await api.get<CoursePreview>(`/academy/groups/${groupId}/complete`);
+  return data;
+}
+
+export async function completeCourse(groupId: string, items: Array<{ studentId: string; levelId: string | null }>) {
+  const { data } = await api.post<{ ok: true; changed: number; students: number; cancelledLessons: number }>(
+    `/academy/groups/${groupId}/complete`,
+    { items },
+  );
+  return data;
+}
+
+// ─── Дневник ДЗ урока ───
+
+export interface SessionDiary {
+  session: {
+    id: string;
+    startsAt: string;
+    endsAt: string;
+    status: string;
+    topic: string | null;
+    homework: string | null;
+    homeworkDue: string | null;
+    group: { id: string; name: string };
+  };
+  today: string;
+  days: string[];
+  /** joinedDay — день прихода в группу: раньше него дни дневника ученику не засчитываются. */
+  students: Array<{ id: string; fullName: string; photoUrl: string | null; active: boolean; joinedDay?: string }>;
+  /** studentId → день → запись. */
+  logs: Record<string, Record<string, DiaryLog>>;
+}
+
+export async function getSessionDiary(sessionId: string) {
+  const { data } = await api.get<SessionDiary>(`/academy/sessions/${sessionId}/diary`);
+  return data;
+}
+
 // ─── Блок в карточке студента CRM ───
 
 export type CrmAcademySummary =
@@ -341,6 +488,7 @@ export type CrmAcademySummary =
   | {
       inAcademy: true;
       status: AcademyStatus;
+      level: LevelRef | null;
       flagsActive: number;
       groups: Array<{ id: string; name: string; teacher: { id: string; fullName: string; isActive: boolean } | null }>;
       summary: StudentSummary;

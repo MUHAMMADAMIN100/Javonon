@@ -3,7 +3,6 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -24,19 +23,34 @@ import {
  * отсутствие поля): undefined = не трогать, null = очистить.
  */
 
+export const ATTENDANCE_VALUES = ['PRESENT', 'ABSENT', 'LATE'] as const;
+
+/** Отметка за урок — строка бумажного листа: посещение и три процента 0–100. */
 export class JournalEntryItemDto {
   @IsUUID()
   studentId: string;
 
   @IsOptional()
-  @IsBoolean()
-  present?: boolean | null;
+  @IsIn(ATTENDANCE_VALUES as unknown as string[])
+  attendance?: 'PRESENT' | 'ABSENT' | 'LATE' | null;
 
   @IsOptional()
   @IsInt()
-  @Min(1)
-  @Max(5)
-  score?: number | null;
+  @Min(0)
+  @Max(100)
+  homeworkPct?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  vocabularyPct?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  performancePct?: number | null;
 
   @IsOptional()
   @IsString()
@@ -54,40 +68,6 @@ export class SaveJournalEntriesDto {
   @ValidateNested({ each: true })
   @Type(() => JournalEntryItemDto)
   items: JournalEntryItemDto[];
-}
-
-export class JournalWeekItemDto {
-  @IsUUID()
-  studentId: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(10)
-  bonus?: number | null;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(70)
-  exam?: number | null;
-}
-
-export class SaveJournalWeeksDto {
-  @IsUUID()
-  groupId: string;
-
-  /** Понедельник недели 'YYYY-MM-DD' (проверяется в сервисе). */
-  @IsString()
-  @MaxLength(10)
-  weekStart: string;
-
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(200)
-  @ValidateNested({ each: true })
-  @Type(() => JournalWeekItemDto)
-  items: JournalWeekItemDto[];
 }
 
 export class AddMaterialLinkDto {
@@ -126,10 +106,26 @@ export class CreateAcademyStudentDto {
   @MaxLength(1000)
   comment?: string;
 
-  /** Сразу добавить в группу. */
+  /** Сразу добавить в группу. Учителю обязательно — своя группа. */
   @IsOptional()
   @IsUUID()
   groupId?: string;
+
+  /** Телефоны родителей — необязательные. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  fatherPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  motherPhone?: string;
+
+  /** Уровень из «Академия → Уровни». */
+  @IsOptional()
+  @IsUUID()
+  levelId?: string;
 }
 
 export class UpdateAcademyStudentDto {
@@ -159,6 +155,23 @@ export class UpdateAcademyStudentDto {
   @IsString()
   @MaxLength(1000)
   comment?: string;
+
+  /** Пустая строка — стереть номер. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  fatherPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  motherPhone?: string;
+
+  /** Пустая строка — без уровня. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  levelId?: string;
 }
 
 export class GiveFlagDto {
@@ -194,4 +207,53 @@ export class ReinstateDto {
   @IsOptional()
   @IsUUID()
   groupId?: string;
+}
+
+// ─── Уровни ───
+
+export class AcademyLevelDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  name: string;
+}
+
+export class ReorderLevelsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @IsUUID(undefined, { each: true })
+  ids: string[];
+}
+
+// ─── Завершение курса ───
+
+export class CompleteCourseItemDto {
+  @IsUUID()
+  studentId: string;
+
+  /** Новый уровень; null — без уровня. */
+  @IsOptional()
+  @IsUUID()
+  levelId?: string | null;
+}
+
+export class CompleteCourseDto {
+  @IsArray()
+  @ArrayMaxSize(300)
+  @ValidateNested({ each: true })
+  @Type(() => CompleteCourseItemDto)
+  items: CompleteCourseItemDto[];
+}
+
+// ─── Дневник ДЗ (кабинет студента) ───
+
+export class HomeworkLogDto {
+  @IsUUID()
+  sessionId: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  text: string;
 }

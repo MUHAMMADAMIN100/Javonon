@@ -93,5 +93,6 @@ export const lkeys = {
     lessons: () => ['student-academy', 'lessons'] as const,
     homework: () => ['student-academy', 'homework'] as const,
     progress: () => ['student-academy', 'progress'] as const,
+    calendar: (from: string, to: string) => ['student-academy', 'calendar', from, to] as const,
   },
 } as const;

@@ -29,9 +29,9 @@ export interface GroupMember {
   groupId: string;
   studentId: string;
   joinedAt: string;
-  /** Вышел из группы (убран или отчислен) — в журнале остаётся за свои недели. */
+  /** Вышел из группы (убран, отчислен, окончил курс) — в журнале остаётся за свои уроки. */
   leftAt: string | null;
-  leftReason: 'REMOVED' | 'EXPELLED' | null;
+  leftReason: 'REMOVED' | 'EXPELLED' | 'COMPLETED' | null;
   student: {
     id: string;
     fullName: string;
@@ -42,6 +42,7 @@ export interface GroupMember {
     /** Ученик только академии (не клиент агентства). */
     academyOnly?: boolean;
     academyExpelledAt?: string | null;
+    academyLevel?: { id: string; name: string } | null;
   };
 }
 
@@ -84,8 +85,8 @@ export interface ClassSession {
   teacher?: TeacherRef | null;
   /** Только в карточке группы. */
   materials?: ClassMaterial[];
-  /** Сколько отметок в журнале — с ними занятие нельзя удалить, только отменить. */
-  _count?: { journal: number };
+  /** Сколько отметок в журнале и записей дневника ДЗ — с ними занятие нельзя удалить, только отменить. */
+  _count?: { journal: number; homeworkLogs?: number };
 }
 
 export interface StudyGroup {
@@ -95,6 +96,8 @@ export interface StudyGroup {
   teacherId: string | null;
   status: StudyGroupStatus;
   description: string | null;
+  /** «Завершить курс»: ученикам выставлены уровни, группа в архиве. */
+  completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   program?: { id: string; name: string } | null;
@@ -108,8 +111,13 @@ export interface StudyGroup {
 export interface StudyGroupDetail extends StudyGroup {
   members: GroupMember[];
   sessions: ClassSession[];
-  /** manage — руководство академии; run — ведёт группу (учитель или руководство). */
-  access: { manage: boolean; run: boolean };
+  completedBy?: TeacherRef | null;
+  /**
+   * manage — руководство академии; run — ведёт группу (учитель или
+   * руководство); addStudents — добавлять учеников (учитель своей идущей
+   * группы, руководство); complete — «Завершить курс».
+   */
+  access: { manage: boolean; run: boolean; addStudents: boolean; complete: boolean };
 }
 
 export interface CreateStudyGroupDto {

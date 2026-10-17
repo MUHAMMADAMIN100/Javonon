@@ -1,29 +1,25 @@
 import { tjLocalDay, tjWeekday } from '../common/tj-time';
 
 /**
- * Журнал академии: недели, засчитанные уроки и итог недели. Чистые функции —
- * одна формула для журнала группы, карточки ученика, списка учеников и
- * кабинета студента, чтобы цифры нигде не разошлись.
+ * Журнал академии: уроки, отметки, «Итого» урока и сводки ученика. Чистые
+ * функции — одна формула для журнала группы, карточки ученика, списка
+ * учеников и кабинета студента, чтобы цифры нигде не разошлись.
  *
- * Итог недели (как в журнале с образца заказчика):
- *   уроки   — до 30 баллов: за каждый засчитанный урок 1 балл за посещение
- *             и оценка 1–5; сумма пересчитывается к 30, поэтому неделя из 3
- *             уроков весит столько же, сколько неделя из 5;
- *   экзамен — 0–70;
- *   бонус   — 0–10;
- *   итог    — min(100, round(уроки + экзамен + бонус)).
- * Пока экзамен не выставлен, итог «не окончательный» (final = false): в
- * журнале он серый, в график и среднее не идёт — иначе середина недели
- * выглядела бы провалом.
+ * Журнал — как бумажный лист заказчика: за урок у ученика
+ *   Attendance        — был / не был / опоздал;
+ *   Homework          — 0–100 %;
+ *   Vocabulary        — 0–100 %;
+ *   Class Performance — 0–100 %;
+ *   Итого             — среднее заполненных процентов (80, 90, 70 → 80).
+ * «Не был» — итог урока 0 %: пропуск снижает успеваемость. «Опоздал» —
+ * присутствие. Отметки без процентов (только посещение) в средний не идут.
+ *
+ * Успеваемость ученика — средний «Итого» его уроков; посещаемость — доля
+ * «был» и «опоздал» среди отмеченных уроков.
  */
-export const LESSON_POINTS_MAX = 30;
-export const EXAM_MAX = 70;
-export const BONUS_MAX = 10;
-export const TOTAL_MAX = 100;
-export const SCORE_MIN = 1;
-export const SCORE_MAX = 5;
-/** Максимум за урок: посещение (1) + оценка (до 5). */
-const PER_LESSON_MAX = 1 + SCORE_MAX;
+export const PCT_MAX = 100;
+
+export type Attendance = 'PRESENT' | 'ABSENT' | 'LATE';
 
 /** Понедельник недели (Душанбе) для момента — 'YYYY-MM-DD'. */
 export function weekKeyOf(d: Date): string {
@@ -38,11 +34,9 @@ export function addDaysToKey(key: string, days: number): string {
   return t.toISOString().slice(0, 10);
 }
 
-/** Корректный ли ключ недели: дата 'YYYY-MM-DD', и это понедельник. */
-export function isWeekKey(key: unknown): key is string {
-  if (typeof key !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return false;
-  const t = new Date(`${key}T00:00:00.000Z`);
-  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === key && t.getUTCDay() === 1;
+/** Сколько календарных дней от a до b ('YYYY-MM-DD'). */
+export function daysBetweenKeys(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00.000Z`) - Date.parse(`${a}T00:00:00.000Z`)) / 86_400_000);
 }
 
 export interface JSession {
@@ -52,6 +46,7 @@ export interface JSession {
   status: string;
   topic: string | null;
   teacherId: string | null;
+  homework?: string | null;
 }
 export interface JMember {
   studentId: string;
@@ -61,209 +56,254 @@ export interface JMember {
 export interface JEntry {
   sessionId: string;
   studentId: string;
+  /** Старые отметки (до листа с процентами) — только «был / не был». */
   present: boolean | null;
-  score: number | null;
-  comment: string | null;
-}
-export interface JWeekData {
-  studentId: string;
-  weekStart: string;
-  bonus: number | null;
-  exam: number | null;
-}
-
-export interface WeekCell {
-  present: boolean | null;
-  score: number | null;
+  attendance: Attendance | null;
+  homeworkPct: number | null;
+  vocabularyPct: number | null;
+  performancePct: number | null;
   comment: string | null;
 }
 
-export interface WeekStudentResult {
-  studentId: string;
-  /** sessionId → отметка. Пустые уроки сюда не попадают. */
-  entries: Record<string, WeekCell>;
-  bonus: number | null;
-  exam: number | null;
-  /** Засчитанных уроков (прошли и относятся к ученику). */
-  held: number;
-  attended: number;
-  lessonPoints: number;
-  total: number;
-  final: boolean;
+export interface LessonMark {
+  attendance: Attendance | null;
+  homeworkPct: number | null;
+  vocabularyPct: number | null;
+  performancePct: number | null;
+  comment: string | null;
+  /** Итого урока; null — процентов ещё нет. */
+  total: number | null;
 }
+
+/** Посещение с учётом старых отметок: attendance, иначе present. */
+export function attendanceOf(e: { attendance: Attendance | null; present: boolean | null }): Attendance | null {
+  if (e.attendance) return e.attendance;
+  if (e.present === true) return 'PRESENT';
+  if (e.present === false) return 'ABSENT';
+  return null;
+}
+
+/** Итого урока: «не был» — 0; иначе среднее заполненных процентов. */
+export function lessonTotal(m: {
+  attendance: Attendance | null;
+  homeworkPct: number | null;
+  vocabularyPct: number | null;
+  performancePct: number | null;
+}): number | null {
+  if (m.attendance === 'ABSENT') return 0;
+  const pcts = [m.homeworkPct, m.vocabularyPct, m.performancePct].filter((v): v is number => v !== null);
+  if (!pcts.length) return null;
+  return Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+}
+
+export function markOf(e: JEntry): LessonMark {
+  const attendance = attendanceOf(e);
+  const absent = attendance === 'ABSENT';
+  const base = {
+    attendance,
+    // У «не был» процентов нет — даже если в старой строке что-то осталось.
+    homeworkPct: absent ? null : e.homeworkPct,
+    vocabularyPct: absent ? null : e.vocabularyPct,
+    performancePct: absent ? null : e.performancePct,
+  };
+  return { ...base, comment: e.comment, total: lessonTotal(base) };
+}
+
+const isEmptyMark = (m: LessonMark) =>
+  m.attendance === null && m.homeworkPct === null && m.vocabularyPct === null && m.performancePct === null && !m.comment;
 
 export interface JournalLesson {
   id: string;
+  /** Номер урока в журнале группы (отменённые не считаются), с 1. */
+  number: number;
   startsAt: Date;
   endsAt: Date;
   status: string;
   topic: string | null;
   teacherId: string | null;
-  /** Урок уже начался — его можно отмечать и он идёт в итог. */
+  /** Календарный день урока по Душанбе. */
+  day: string;
+  weekKey: string;
+  /** Урок уже начался. */
   past: boolean;
+  /** Отмечать можно с дня урока (как на сервере). */
+  markable: boolean;
+  hasHomework: boolean;
 }
 
-export interface JournalWeek {
+export interface JournalWeekRef {
   key: string;
   index: number;
   from: string;
   to: string;
-  lessons: JournalLesson[];
-  rows: WeekStudentResult[];
 }
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
+export interface GroupJournal {
+  lessons: JournalLesson[];
+  weeks: JournalWeekRef[];
+  /** lessonId → studentId → отметка (только непустые). */
+  marks: Map<string, Map<string, LessonMark>>;
+  /** lessonId → ученики листа урока. */
+  sheet: Map<string, string[]>;
+}
 
 /**
- * Недели журнала группы. Неделя есть, если в ней есть хоть одно
- * неотменённое занятие; номер — по порядку таких недель, с 1.
- *
- * Строки недели: действующие ученики группы (во всех неделях — учитель
- * может заполнить и прошлые) и вышедшие — до недели выхода включительно
- * или если у них есть отметки в этой неделе.
- *
- * Урок засчитывается ученику, если он уже начался и либо по нему есть
- * отметка о посещении, либо ученик в этот день состоял в группе.
- * Поэтому позже добавленный ученик не получает нули за уроки до него,
- * а отметки «задним числом» всё равно учитываются.
+ * Журнал группы. Уроки — неотменённые, по времени. На листе урока —
+ * действующие ученики (учитель может заполнить и прошлые уроки за ученика,
+ * которого добавили позже), вышедшие — на уроках до своего выхода, и все,
+ * у кого по уроку есть отметка.
  */
-export function buildJournal(input: {
+export function buildGroupJournal(input: {
   sessions: JSession[];
   members: JMember[];
   entries: JEntry[];
-  weeks: JWeekData[];
   now?: Date;
-}): JournalWeek[] {
+}): GroupJournal {
   const now = input.now ?? new Date();
+  const today = tjLocalDay(now);
   const live = input.sessions
     .filter((s) => s.status !== 'CANCELLED')
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 
-  const byWeek = new Map<string, JSession[]>();
-  for (const s of live) {
-    const key = weekKeyOf(s.startsAt);
-    const list = byWeek.get(key);
-    if (list) list.push(s);
-    else byWeek.set(key, [s]);
-  }
-
-  const entryMap = new Map<string, JEntry>();
-  for (const e of input.entries) entryMap.set(`${e.sessionId}:${e.studentId}`, e);
-  const weekMap = new Map<string, JWeekData>();
-  for (const w of input.weeks) weekMap.set(`${w.studentId}:${w.weekStart}`, w);
-
-  const keys = [...byWeek.keys()].sort();
-  return keys.map((key, i) => {
-    const lessons = byWeek.get(key)!;
-    const weekEnd = addDaysToKey(key, 6);
-    const rows: WeekStudentResult[] = [];
-    for (const m of input.members) {
-      const leftDay = m.leftAt ? tjLocalDay(m.leftAt) : null;
-      const hasData =
-        weekMap.has(`${m.studentId}:${key}`) ||
-        lessons.some((l) => entryMap.has(`${l.id}:${m.studentId}`));
-      if (leftDay && leftDay < key && !hasData) continue;
-      rows.push(scoreWeek(m, lessons, entryMap, weekMap.get(`${m.studentId}:${key}`), now));
-    }
+  const lessons: JournalLesson[] = live.map((s, i) => {
+    const day = tjLocalDay(s.startsAt);
     return {
-      key,
-      index: i + 1,
-      from: key,
-      to: weekEnd,
-      lessons: lessons.map((l) => ({
-        id: l.id,
-        startsAt: l.startsAt,
-        endsAt: l.endsAt,
-        status: l.status,
-        topic: l.topic,
-        teacherId: l.teacherId,
-        past: l.startsAt.getTime() <= now.getTime(),
-      })),
-      rows,
+      id: s.id,
+      number: i + 1,
+      startsAt: s.startsAt,
+      endsAt: s.endsAt,
+      status: s.status,
+      topic: s.topic,
+      teacherId: s.teacherId,
+      day,
+      weekKey: weekKeyOf(s.startsAt),
+      past: s.startsAt.getTime() <= now.getTime(),
+      markable: day <= today,
+      hasHomework: !!s.homework,
     };
   });
+
+  const weekKeys = Array.from(new Set(lessons.map((l) => l.weekKey))).sort();
+  const weeks = weekKeys.map((key, i) => ({ key, index: i + 1, from: key, to: addDaysToKey(key, 6) }));
+
+  const liveIds = new Set(lessons.map((l) => l.id));
+  const marks = new Map<string, Map<string, LessonMark>>();
+  for (const e of input.entries) {
+    if (!liveIds.has(e.sessionId)) continue;
+    const m = markOf(e);
+    if (isEmptyMark(m)) continue;
+    let byStudent = marks.get(e.sessionId);
+    if (!byStudent) marks.set(e.sessionId, (byStudent = new Map()));
+    byStudent.set(e.studentId, m);
+  }
+
+  const sheet = new Map<string, string[]>();
+  for (const l of lessons) {
+    const marked = marks.get(l.id);
+    const ids: string[] = [];
+    for (const m of input.members) {
+      const onSheet = !m.leftAt || l.startsAt.getTime() <= m.leftAt.getTime() || !!marked?.has(m.studentId);
+      if (onSheet) ids.push(m.studentId);
+    }
+    sheet.set(l.id, ids);
+  }
+
+  return { lessons, weeks, marks, sheet };
 }
 
-function scoreWeek(
-  m: JMember,
-  lessons: JSession[],
-  entryMap: Map<string, JEntry>,
-  week: JWeekData | undefined,
-  now: Date,
-): WeekStudentResult {
-  const joinedDay = tjLocalDay(m.joinedAt);
-  const entries: Record<string, WeekCell> = {};
-  let held = 0;
-  let attended = 0;
-  let scoreSum = 0;
-  for (const l of lessons) {
-    const e = entryMap.get(`${l.id}:${m.studentId}`);
-    if (e && (e.present !== null || e.score !== null || e.comment)) {
-      entries[l.id] = { present: e.present, score: e.score, comment: e.comment };
-    }
-    if (l.startsAt.getTime() > now.getTime()) continue;
-    const marked = !!e && e.present !== null;
-    const inGroup =
-      tjLocalDay(l.startsAt) >= joinedDay && (!m.leftAt || l.startsAt.getTime() <= m.leftAt.getTime());
-    if (!marked && !inGroup) continue;
-    held++;
-    if (e?.present === true) {
-      attended++;
-      scoreSum += e.score ?? 0;
-    }
+/** Уроки одного ученика с его отметками (уроки, где он на листе). */
+export function studentLessons(j: GroupJournal, studentId: string): Array<{ lesson: JournalLesson; mark: LessonMark | null }> {
+  const out: Array<{ lesson: JournalLesson; mark: LessonMark | null }> = [];
+  for (const l of j.lessons) {
+    if (!j.sheet.get(l.id)?.includes(studentId)) continue;
+    out.push({ lesson: l, mark: j.marks.get(l.id)?.get(studentId) ?? null });
   }
-  const lessonPoints = held > 0 ? round1(((attended + scoreSum) / (held * PER_LESSON_MAX)) * LESSON_POINTS_MAX) : 0;
-  const bonus = week?.bonus ?? null;
-  const exam = week?.exam ?? null;
-  const total = Math.min(TOTAL_MAX, Math.round(lessonPoints + (exam ?? 0) + (bonus ?? 0)));
-  return {
-    studentId: m.studentId,
-    entries,
-    bonus,
-    exam,
-    held,
-    attended,
-    lessonPoints,
-    total,
-    final: exam !== null,
-  };
+  return out;
 }
 
 export interface StudentSummary {
-  /** Среднее окончательных итогов недель (целое), null — таких недель нет. */
+  /** Средний «Итого» уроков (целое); null — итогов ещё нет. */
   avg: number | null;
-  /** Посещаемость, % засчитанных уроков; null — уроков ещё не было. */
+  /** Посещаемость, % «был» и «опоздал» среди отмеченных уроков. */
   attendancePct: number | null;
-  finalWeeks: number;
+  /** Отмеченных уроков. */
   held: number;
+  /** Был + опоздал. */
   attended: number;
+  late: number;
+  absent: number;
+  /** Уроков с итогом (вошли в средний). */
+  graded: number;
+  homeworkAvg: number | null;
+  vocabularyAvg: number | null;
+  performanceAvg: number | null;
 }
 
-export function summarize(rows: WeekStudentResult[]): StudentSummary {
+const mean = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
+
+export function summarize(marks: Array<LessonMark | null>): StudentSummary {
   let held = 0;
   let attended = 0;
-  const finals: number[] = [];
-  for (const r of rows) {
-    held += r.held;
-    attended += r.attended;
-    if (r.final) finals.push(r.total);
+  let late = 0;
+  let absent = 0;
+  const totals: number[] = [];
+  const hw: number[] = [];
+  const vocab: number[] = [];
+  const perf: number[] = [];
+  for (const m of marks) {
+    if (!m) continue;
+    if (m.attendance) {
+      held++;
+      if (m.attendance === 'ABSENT') absent++;
+      else attended++;
+      if (m.attendance === 'LATE') late++;
+    }
+    if (m.total !== null) totals.push(m.total);
+    if (m.homeworkPct !== null) hw.push(m.homeworkPct);
+    if (m.vocabularyPct !== null) vocab.push(m.vocabularyPct);
+    if (m.performancePct !== null) perf.push(m.performancePct);
   }
   return {
-    avg: finals.length ? Math.round(finals.reduce((a, b) => a + b, 0) / finals.length) : null,
+    avg: mean(totals),
     attendancePct: held > 0 ? Math.round((attended / held) * 100) : null,
-    finalWeeks: finals.length,
     held,
     attended,
+    late,
+    absent,
+    graded: totals.length,
+    homeworkAvg: mean(hw),
+    vocabularyAvg: mean(vocab),
+    performanceAvg: mean(perf),
   };
 }
 
-/** Строки одного ученика по всем неделям журнала. */
-export function rowsOf(weeks: JournalWeek[], studentId: string): WeekStudentResult[] {
-  const out: WeekStudentResult[] = [];
-  for (const w of weeks) {
-    const r = w.rows.find((x) => x.studentId === studentId);
-    if (r) out.push(r);
+/** Средний «Итого» ученика по неделям — точки графика (недели без итогов пропускаются). */
+export function weekAverages(j: GroupJournal, studentId: string): Map<string, number> {
+  const byWeek = new Map<string, number[]>();
+  for (const l of j.lessons) {
+    const total = j.marks.get(l.id)?.get(studentId)?.total;
+    if (total === null || total === undefined) continue;
+    const list = byWeek.get(l.weekKey);
+    if (list) list.push(total);
+    else byWeek.set(l.weekKey, [total]);
   }
+  const out = new Map<string, number>();
+  for (const [key, list] of byWeek) out.set(key, mean(list)!);
+  return out;
+}
+
+/** Среднее по группе за неделю — среднее недельных итогов учеников. */
+export function groupWeekAverages(j: GroupJournal, studentIds: string[]): Map<string, number> {
+  const acc = new Map<string, number[]>();
+  for (const id of studentIds) {
+    for (const [key, v] of weekAverages(j, id)) {
+      const list = acc.get(key);
+      if (list) list.push(v);
+      else acc.set(key, [v]);
+    }
+  }
+  const out = new Map<string, number>();
+  for (const [key, list] of acc) out.set(key, mean(list)!);
   return out;
 }
 
@@ -272,12 +312,12 @@ export type AcademyStatus = 'ACTIVE' | 'PENDING' | 'EXPELLED' | 'NO_GROUP';
 /**
  * Статус ученика академии:
  *   EXPELLED — отчислен решением руководства;
- *   PENDING  — 3+ действующих флага и среди них есть поставленный после
+ *   PENDING  — 4+ действующих флага и среди них есть поставленный после
  *              последнего решения «Оставить» — ждёт решения;
  *   ACTIVE   — состоит хотя бы в одной группе;
  *   NO_GROUP — ни в одной группе сейчас.
  */
-export const FLAGS_FOR_DECISION = 3;
+export const FLAGS_FOR_DECISION = 4;
 
 export function academyStatusOf(s: {
   academyExpelledAt: Date | null;
@@ -318,4 +358,21 @@ export function weeklyPattern(sessions: Array<{ startsAt: Date; endsAt: Date }>)
     if (!seen.has(key)) seen.set(key, { weekday, from, to });
   }
   return [...seen.values()].sort((a, b) => a.weekday - b.weekday || a.from.localeCompare(b.from));
+}
+
+/**
+ * Первый день дневника ДЗ: день урока, а если задание выдали позже (внесли
+ * задним числом) — день выдачи.
+ */
+export function diaryStart(startsAt: Date, homeworkSetAt: Date | null): string {
+  const lessonDay = tjLocalDay(startsAt);
+  const setDay = homeworkSetAt ? tjLocalDay(homeworkSetAt) : lessonDay;
+  return setDay > lessonDay ? setDay : lessonDay;
+}
+
+/** Дни дневника ДЗ: с первого дня по срок сдачи включительно. */
+export function diaryDays(lessonDay: string, dueDay: string): string[] {
+  const n = daysBetweenKeys(lessonDay, dueDay);
+  if (n < 0) return [lessonDay];
+  return Array.from({ length: n + 1 }, (_, i) => addDaysToKey(lessonDay, i));
 }

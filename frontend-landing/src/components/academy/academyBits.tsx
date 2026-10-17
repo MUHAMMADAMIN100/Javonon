@@ -1,11 +1,43 @@
+import Icon from '../../Icon';
 import { tjFields } from '../../tjDate';
-import type { WeeklySlot } from '../../studentApi';
+import type { Attendance, WeeklySlot } from '../../studentApi';
 
 /**
- * Общие мелочи вкладки «Академия» в кабинете: цвет итога недели, краткие
- * дни недели, «по каким дням», короткие даты. Цвета итога — как в журнале
- * CRM: от 90 зелёный, 80–89 жёлтый, ниже — красный, без экзамена — серый.
+ * Общие мелочи вкладки «Академия» в кабинете: цвет итога, уровень,
+ * давомот, краткие дни недели, «по каким дням», короткие даты. Цвета
+ * итога — как в журнале CRM: от 90 зелёный, 80–89 жёлтый, ниже — красный.
  */
+
+/** Ҳозир / Ғоиб / Дер омад — как в журнале CRM. */
+export const ATTENDANCE_TJ: Record<Attendance, string> = {
+  PRESENT: 'Ҳозир',
+  ABSENT: 'Ғоиб',
+  LATE: 'Дер омад',
+};
+
+const MONTHS_TJ = ['Январ', 'Феврал', 'Март', 'Апрел', 'Май', 'Июн', 'Июл', 'Август', 'Сентябр', 'Октябр', 'Ноябр', 'Декабр'];
+
+/** «Октябр 2026». */
+export function monthTitle(year: number, month: number): string {
+  return `${MONTHS_TJ[month - 1] ?? ''} ${year}`;
+}
+
+/** Процент простым текстом: «85%» или «—». */
+export function pct(v: number | null | undefined): string {
+  return v === null || v === undefined ? '—' : `${v}%`;
+}
+
+/** Уровень плашкой; без уровня — «Бе сатҳ». */
+export function LevelPill({ name }: { name: string | null | undefined }) {
+  return name ? (
+    <span className="acad-cab-level">
+      <Icon name="stairs" size={15} />
+      {name}
+    </span>
+  ) : (
+    <span className="acad-cab-level is-empty">Бе сатҳ</span>
+  );
+}
 
 const WEEKDAY_SHORT = ['Дш', 'Сш', 'Чш', 'Пш', 'Ҷм', 'Шн', 'Яш'];
 
@@ -45,20 +77,33 @@ export function calendarDate(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
-export function totalTone(total: number | null | undefined, final = true): 'good' | 'mid' | 'low' | 'draft' {
-  if (total === null || total === undefined || !final) return 'draft';
+export function totalTone(total: number | null | undefined): 'good' | 'mid' | 'low' | 'empty' {
+  if (total === null || total === undefined) return 'empty';
   if (total >= 90) return 'good';
   if (total >= 80) return 'mid';
   return 'low';
 }
 
-export function TotalPill({ total, final = true, title }: { total: number | null | undefined; final?: boolean; title?: string }) {
+/** Итог в процентах цветной плашкой. */
+export function TotalPill({ total, title }: { total: number | null | undefined; title?: string }) {
   if (total === null || total === undefined) return <span className="acad-pill is-empty">—</span>;
   return (
-    <span className={`acad-pill is-${totalTone(total, final)}`} title={title}>
-      {total}
+    <span className={`acad-pill is-${totalTone(total)}`} title={title}>
+      {total}%
     </span>
   );
+}
+
+/** Сдвиг дня 'YYYY-MM-DD' на N дней. */
+export function addDaysKey(day: string, n: number): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** День недели дня 'YYYY-MM-DD': 1 = душанбе … 7 = якшанбе. */
+export function weekdayOfKey(day: string): number {
+  return ((new Date(`${day}T00:00:00.000Z`).getUTCDay() + 6) % 7) + 1;
 }
 
 export function fileSize(bytes: number | null | undefined): string {

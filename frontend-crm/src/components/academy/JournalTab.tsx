@@ -1,90 +1,101 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import Icon from '../../Icon';
-import CrmSelect from '../CrmSelect';
 import FormModal from '../FormModal';
 import Loading from '../Loading';
+import { SortSelect, SortTh, useTableSort } from '../TableSort';
 import { useT } from '../../lib/i18n';
 import { useUI } from '../../ui/Dialogs';
 import { keys } from '../../lib/queryKeys';
-import { tjFormatTime, tjToday } from '../../lib/tjTime';
+import { tjFormatDate, tjFormatTime } from '../../lib/tjTime';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import {
-  BONUS_MAX,
-  EXAM_MAX,
+  PCT_MAX,
   getJournal,
+  lessonTotal,
   saveEntries,
-  saveWeeks,
+  type Attendance,
   type EntryPatch,
   type Journal,
   type JournalLesson,
-  type JournalRow,
-  type JournalWeek,
-  type WeekPatch,
+  type JournalStudent,
+  type LessonMark,
 } from '../../api/academy';
 import ScoreChart, { type ChartSeries } from './ScoreChart';
-import { Avatar, FlagDots, TotalBadge, shortDate, tjWeekdayOf, weekRange, weekdayKey } from './academyUi';
+import {
+  ATTENDANCE,
+  FlagDots,
+  LevelBadge,
+  TotalBadge,
+  leftKey,
+  pct,
+  shortDate,
+  tjWeekdayOf,
+  weekKeyOfDay,
+  weekdayKey,
+} from './academyUi';
 
 /**
- * Журнал группы — как журнал с образца заказчика: сверху график итогов
- * недель, ниже недели (свежие сверху) раскрываются таблицей «ученик ×
- * урок»: посещение, оценка 1–5, комментарий; в конце недели бонус, экзамен
- * и итог из 100. На телефоне неделя открывается по одному уроку — так
- * учителю удобно отмечать прямо на занятии.
+ * Журнал группы — как бумажный лист заказчика: выбираешь урок (полоса дат
+ * сверху), ниже таблица «№ / Ф.И.О. / Attendance (Был · Нет · Опоздал) /
+ * Homework % / Vocabulary % / Class Performance % / Итого». Итого — среднее
+ * заполненных процентов, «Нет» — 0 %. Внизу листа — среднее по группе.
  *
- * Итоги считает сервер (academy/journal-math.ts): после сохранения журнал
- * перечитывается, а сама отметка меняется на экране сразу.
+ * Над листом — сводка и график «Итого по неделям», под ним — итоги каждого
+ * ученика. Сводки и график считает сервер (academy/journal-math.ts): после
+ * сохранения журнал перечитывается, а сама отметка меняется на экране сразу.
+ * На телефоне лист — карточками учеников, удобно отмечать прямо на уроке.
  */
 
-const SCORES = [1, 2, 3, 4, 5];
+type PctField = 'homeworkPct' | 'vocabularyPct' | 'performancePct';
+const PCT_FIELDS: PctField[] = ['homeworkPct', 'vocabularyPct', 'performancePct'];
+const PCT_LABEL: Record<PctField, string> = {
+  homeworkPct: 'academy.journal.col.homework',
+  vocabularyPct: 'academy.journal.col.vocabulary',
+  performancePct: 'academy.journal.col.performance',
+};
 
-function applyEntries(j: Journal, sessionId: string, items: EntryPatch[]): Journal {
-  return {
-    ...j,
-    weeks: j.weeks.map((w) =>
-      w.lessons.some((l) => l.id === sessionId)
-        ? {
-            ...w,
-            rows: w.rows.map((r) => {
-              const item = items.find((i) => i.studentId === r.studentId);
-              if (!item) return r;
-              const prev = r.entries[sessionId] ?? { present: null, score: null, comment: null };
-              const next = { ...prev };
-              if (item.present !== undefined) next.present = item.present;
-              if (item.score !== undefined) next.score = item.score;
-              if (item.comment !== undefined) next.comment = item.comment || null;
-              if (item.present === false) next.score = null;
-              else if (next.score !== null) next.present = true;
-              return { ...r, entries: { ...r.entries, [sessionId]: next } };
-            }),
-          }
-        : w,
-    ),
-  };
+const EMPTY_MARK: LessonMark = {
+  attendance: null,
+  homeworkPct: null,
+  vocabularyPct: null,
+  performancePct: null,
+  comment: null,
+  total: null,
+};
+
+/** Отметки урока сразу на экране — по тем же правилам, что на сервере. */
+function applyEntries(j: Journal, lessonId: string, items: EntryPatch[]): Journal {
+  const byStudent = { ...(j.marks[lessonId] ?? {}) };
+  for (const item of items) {
+    const next: LessonMark = { ...(byStudent[item.studentId] ?? EMPTY_MARK) };
+    if (item.attendance !== undefined) next.attendance = item.attendance;
+    for (const f of PCT_FIELDS) if (item[f] !== undefined) next[f] = item[f] as number | null;
+    if (item.comment !== undefined) next.comment = item.comment || null;
+    if (item.attendance === 'ABSENT' || item.attendance === null) {
+      next.homeworkPct = null;
+      next.vocabularyPct = null;
+      next.performancePct = null;
+    } else if (PCT_FIELDS.some((f) => next[f] !== null) && (next.attendance === null || next.attendance === 'ABSENT')) {
+      next.attendance = 'PRESENT';
+    }
+    next.total = lessonTotal(next);
+    byStudent[item.studentId] = next;
+  }
+  return { ...j, marks: { ...j.marks, [lessonId]: byStudent } };
 }
 
-function applyWeeks(j: Journal, weekKey: string, items: WeekPatch[]): Journal {
-  return {
-    ...j,
-    weeks: j.weeks.map((w) =>
-      w.key === weekKey
-        ? {
-            ...w,
-            rows: w.rows.map((r) => {
-              const item = items.find((i) => i.studentId === r.studentId);
-              if (!item) return r;
-              return {
-                ...r,
-                bonus: item.bonus !== undefined ? item.bonus : r.bonus,
-                exam: item.exam !== undefined ? item.exam : r.exam,
-              };
-            }),
-          }
-        : w,
-    ),
-  };
+/** Урок по умолчанию: сегодняшний, иначе последний наступивший, иначе первый. */
+function defaultLesson(j: Journal): JournalLesson | undefined {
+  const todays = j.lessons.filter((l) => l.day === j.today);
+  if (todays.length) return todays[0];
+  const reached = j.lessons.filter((l) => l.markable);
+  return reached[reached.length - 1] ?? j.lessons[0];
 }
+
+const mean = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
 
 export default function JournalTab({
   groupId,
@@ -101,39 +112,18 @@ export default function JournalTab({
   const qc = useQueryClient();
   const jKey = keys.academy.journal(groupId);
   const narrow = useMediaQuery('(max-width: 760px)');
+  const [params, setParams] = useSearchParams();
 
   const query = useQuery({ queryKey: jKey, queryFn: () => getJournal(groupId) });
   const j = query.data;
-
-  const [open, setOpen] = useState<Set<string> | null>(null);
   const [commentFor, setCommentFor] = useState<{ lesson: JournalLesson; studentId: string } | null>(null);
 
-  // Открыта по умолчанию текущая неделя, иначе последняя начавшаяся.
-  useEffect(() => {
-    if (!j || open !== null) return;
-    const started = j.weeks.filter((w) => w.key <= j.currentWeek);
-    const def = j.weeks.find((w) => w.key === j.currentWeek) ?? started[started.length - 1] ?? j.weeks[0];
-    setOpen(new Set(def ? [def.key] : []));
-  }, [j, open]);
-
-  // Отметка меняется на экране СРАЗУ, в том же обработчике клика: если ждать
-  // отмены запросов (await), управляемая галочка на миг возвращается назад.
-  // Ошибка сервера откатывает к снимку, после ответа журнал перечитывается
-  // (итоги недели считает сервер).
+  // Отметка меняется на экране СРАЗУ, в том же обработчике: если ждать отмены
+  // запросов (await), кнопка на миг возвращается назад. Ошибка сервера
+  // откатывает к снимку, после ответа журнал перечитывается (сводки и
+  // график считает сервер).
   const entryMut = useMutation({
-    mutationFn: (v: { sessionId: string; items: EntryPatch[]; prev?: Journal }) => saveEntries(v.sessionId, v.items),
-    onError: (e: any, v) => {
-      if (v.prev) qc.setQueryData(jKey, v.prev);
-      toast(e?.response?.data?.message || t('toast.error'), 'error');
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: jKey });
-      qc.invalidateQueries({ queryKey: keys.academy.all });
-    },
-  });
-
-  const weekMut = useMutation({
-    mutationFn: (v: { weekKey: string; items: WeekPatch[]; prev?: Journal }) => saveWeeks(groupId, v.weekKey, v.items),
+    mutationFn: (v: { lessonId: string; items: EntryPatch[]; prev?: Journal }) => saveEntries(v.lessonId, v.items),
     onError: (e: any, v) => {
       if (v.prev) qc.setQueryData(jKey, v.prev);
       toast(e?.response?.data?.message || t('toast.error'), 'error');
@@ -146,28 +136,29 @@ export default function JournalTab({
 
   const students = useMemo(() => new Map((j?.students ?? []).map((s) => [s.id, s])), [j?.students]);
 
-  // График: окончательные итоги недель (с экзаменом) до текущей недели.
+  // Новый формат журнала (лист урока). Пока сервер не обновился после выкладки,
+  // уроков в ответе нет — показываем пустой журнал, а не ошибку.
+  const fresh = !!j && Array.isArray(j.lessons) && !!j.today;
+
   const chart = useMemo(() => {
-    if (!j) return { series: [] as ChartSeries[], weeks: [] as Array<{ x: number; label: string }> };
-    const started = j.weeks.filter((w) => w.key <= j.currentWeek);
+    if (!j || !fresh) return { series: [] as ChartSeries[], weeks: [] as Array<{ x: number; label: string }> };
+    const current = weekKeyOfDay(j.today);
+    const started = j.weeks.filter((w) => w.key <= current);
     const series: ChartSeries[] = j.students
-      .filter((s) => s.active || s.summary.finalWeeks > 0)
+      .filter((s) => s.active || s.summary.graded > 0)
       .map((s) => ({
         id: s.id,
         name: s.fullName,
-        points: started.flatMap((w) => {
-          const r = w.rows.find((x) => x.studentId === s.id);
-          return r && r.final ? [{ x: w.index, y: r.total }] : [];
-        }),
+        points: started.flatMap((w) => (w.values && s.id in w.values ? [{ x: w.index, y: w.values[s.id] }] : [])),
         avg: s.summary.avg,
       }));
     return { series, weeks: started.map((w) => ({ x: w.index, label: `${t('academy.week')} ${w.index}` })) };
-  }, [j, t]);
+  }, [j, fresh, t]);
 
   if (query.isLoading || !j) return <Loading />;
   if (query.isError) return <div className="acad-empty">{t('toast.error')}</div>;
 
-  if (j.weeks.length === 0) {
+  if (!fresh || j.lessons.length === 0) {
     return (
       <div className="acad-empty" data-testid="journal-empty">
         <Icon name="event_note" size={40} />
@@ -181,115 +172,115 @@ export default function JournalTab({
     );
   }
 
+  const lesson = j.lessons.find((l) => l.id === params.get('lesson')) ?? defaultLesson(j)!;
+  const selectLesson = (id: string) => {
+    const p = new URLSearchParams(params);
+    p.set('lesson', id);
+    setParams(p, { replace: true });
+  };
+
   const canEditLesson = (l: JournalLesson) => j.canEditAll || (!!meId && l.teacherId === meId);
-  const weeksDesc = [...j.weeks].reverse();
-  const toggle = (key: string) =>
-    setOpen((prev) => {
-      const next = new Set(prev ?? []);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const editable = canEditLesson(lesson) && lesson.markable;
 
-  const markEntry = (lesson: JournalLesson, items: EntryPatch[]) => {
+  const mark = (l: JournalLesson, items: EntryPatch[]) => {
     const prev = qc.getQueryData<Journal>(jKey);
     void qc.cancelQueries({ queryKey: jKey });
-    if (prev) qc.setQueryData(jKey, applyEntries(prev, lesson.id, items));
-    entryMut.mutate({ sessionId: lesson.id, items, prev });
-  };
-  const markWeek = (week: JournalWeek, items: WeekPatch[]) => {
-    const prev = qc.getQueryData<Journal>(jKey);
-    void qc.cancelQueries({ queryKey: jKey });
-    if (prev) qc.setQueryData(jKey, applyWeeks(prev, week.key, items));
-    weekMut.mutate({ weekKey: week.key, items, prev });
+    if (prev) qc.setQueryData(jKey, applyEntries(prev, l.id, items));
+    entryMut.mutate({ lessonId: l.id, items, prev });
   };
 
-  const activeCount = j.students.filter((s) => s.active).length;
-  const avgs = j.students.filter((s) => s.active && s.summary.avg !== null).map((s) => s.summary.avg as number);
-  const att = j.students.filter((s) => s.active && s.summary.attendancePct !== null).map((s) => s.summary.attendancePct as number);
-  const mean = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
+  // Лист урока: ученики по алфавиту, вышедшие — в конце.
+  const sheetIds = j.sheet[lesson.id] ?? [];
+  const rows = sheetIds
+    .map((id) => students.get(id))
+    .filter((s): s is JournalStudent => !!s)
+    .sort((a, b) => Number(b.active) - Number(a.active) || a.fullName.localeCompare(b.fullName, 'ru'));
+  const marksOf = (studentId: string) => j.marks[lesson.id]?.[studentId] ?? EMPTY_MARK;
+  const unmarked = rows.filter((s) => s.active && !marksOf(s.id).attendance);
 
-  const commentRow = commentFor
-    ? j.weeks.flatMap((w) => w.rows).find((r) => r.studentId === commentFor.studentId && commentFor.lesson.id in r.entries)
-    : null;
+  const active = j.students.filter((s) => s.active);
+  const groupAvg = mean(active.flatMap((s) => (s.summary.avg !== null ? [s.summary.avg] : [])));
+  const groupAtt = mean(active.flatMap((s) => (s.summary.attendancePct !== null ? [s.summary.attendancePct] : [])));
+  const lessonsHeld = j.lessons.filter((l) => l.past).length;
+
+  const commentMark = commentFor ? j.marks[commentFor.lesson.id]?.[commentFor.studentId] : null;
 
   return (
     <div className="acad-journal" data-testid="journal">
       <div className="acad-journal-stats">
-        <div><span>{t('academy.stats.students')}</span><b>{activeCount}</b></div>
-        <div><span>{t('academy.stats.groupAvg')}</span><b data-testid="journal-group-avg">{mean(avgs) ?? '—'}</b></div>
-        <div><span>{t('academy.stats.attendance')}</span><b>{mean(att) !== null ? `${mean(att)}%` : '—'}</b></div>
-        <div><span>{t('academy.stats.weeks')}</span><b>{j.weeks.filter((w) => w.key <= j.currentWeek).length}</b></div>
+        <div><span>{t('academy.stats.students')}</span><b>{active.length}</b></div>
+        <div><span>{t('academy.stats.groupAvg')}</span><b data-testid="journal-group-avg">{pct(groupAvg)}</b></div>
+        <div><span>{t('academy.stats.attendance')}</span><b>{pct(groupAtt)}</b></div>
+        <div><span>{t('academy.stats.lessons')}</span><b>{lessonsHeld}</b></div>
       </div>
 
       <div className="card acad-chart-card">
-        <ScoreChart series={chart.series} weeks={chart.weeks} height={narrow ? 220 : 280} testId="journal-chart" />
+        <div className="acad-chart-head">{t('academy.chart.title')}</div>
+        <ScoreChart series={chart.series} weeks={chart.weeks} height={narrow ? 220 : 260} testId="journal-chart" />
       </div>
 
-      <div className="acad-weeks">
-        {weeksDesc.map((w) => {
-          const isOpen = !!open?.has(w.key);
-          const isCurrent = w.key === j.currentWeek;
-          return (
-            <div key={w.key} className={`card acad-week${isOpen ? ' is-open' : ''}`} data-testid={`week-${w.index}`}>
-              <button type="button" className="acad-week-head" onClick={() => toggle(w.key)} aria-expanded={isOpen}>
-                <span className="acad-week-title">
-                  {t('academy.week')} {w.index}
-                  <Icon name={isOpen ? 'expand_less' : 'expand_more'} size={22} />
-                </span>
-                <span className="acad-week-range">{weekRange(w.from, w.to)}</span>
-                {isCurrent && <span className="acad-week-now">{t('academy.week.current')}</span>}
-                <span className="acad-week-meta">
-                  {t('academy.week.lessons')}: {w.lessons.length}
-                </span>
-              </button>
-              <AnimatePresence initial={false}>
-                {isOpen && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    style={{ overflow: 'hidden' }}
-                  >
-                    {narrow ? (
-                      <WeekPhone
-                        week={w}
-                        students={students}
-                        canEditLesson={canEditLesson}
-                        canEditWeek={j.canEditAll}
-                        onMark={markEntry}
-                        onWeek={(items) => markWeek(w, items)}
-                        onComment={(lesson, studentId) => setCommentFor({ lesson, studentId })}
-                      />
-                    ) : (
-                      <WeekTable
-                        week={w}
-                        students={students}
-                        canEditLesson={canEditLesson}
-                        canEditWeek={j.canEditAll}
-                        onMark={markEntry}
-                        onWeek={(items) => markWeek(w, items)}
-                        onComment={(lesson, studentId) => setCommentFor({ lesson, studentId })}
-                      />
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
+      <div className="card acad-sheet-card" data-testid="journal-sheet">
+        <LessonStrip lessons={j.lessons} today={j.today} activeId={lesson.id} marks={j.marks} sheet={j.sheet} onSelect={selectLesson} />
+
+        <div className="acad-sheet-head">
+          <div className="acad-sheet-title" data-testid="sheet-title">
+            <b>{t('academy.journal.lesson')} {lesson.number}</b>
+            <span>
+              {t(`weekday.short.${weekdayKey(tjWeekdayOf(lesson.startsAt))}`)}, {tjFormatDate(lesson.startsAt)} ·{' '}
+              {tjFormatTime(lesson.startsAt)}–{tjFormatTime(lesson.endsAt)}
+            </span>
+            {lesson.day === j.today && <span className="acad-week-now">{t('academy.journal.today')}</span>}
+            {!lesson.markable && <span className="acad-sheet-future">{t('academy.journal.future')}</span>}
+          </div>
+          <div className="acad-sheet-topic">{lesson.topic || t('classes.noTopic')}</div>
+          {editable && unmarked.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm acad-sheet-allbtn"
+              data-testid="mark-all"
+              title={t('academy.journal.markAllHint')}
+              onClick={() => mark(lesson, unmarked.map((s) => ({ studentId: s.id, attendance: 'PRESENT' as Attendance })))}
+            >
+              <Icon name="done_all" size={16} /> {t('academy.journal.markAll')}
+            </button>
+          )}
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="acad-hint" style={{ padding: '12px 4px' }}>{t('academy.journal.notOnSheet')}</div>
+        ) : narrow ? (
+          <SheetCards
+            lesson={lesson}
+            rows={rows}
+            marksOf={marksOf}
+            editable={editable}
+            onMark={(items) => mark(lesson, items)}
+            onComment={(studentId) => setCommentFor({ lesson, studentId })}
+          />
+        ) : (
+          <SheetTable
+            lesson={lesson}
+            rows={rows}
+            marksOf={marksOf}
+            editable={editable}
+            onMark={(items) => mark(lesson, items)}
+            onComment={(studentId) => setCommentFor({ lesson, studentId })}
+          />
+        )}
+        <div className="acad-jt-legend">{t('academy.journal.pctHint')}</div>
       </div>
+
+      <SummaryCard students={j.students} />
 
       <AnimatePresence>
         {commentFor && (
           <CommentModal
             title={`${students.get(commentFor.studentId)?.fullName ?? ''} · ${shortDate(commentFor.lesson.startsAt)}`}
-            initial={commentRow?.entries[commentFor.lesson.id]?.comment ?? ''}
-            readOnly={!canEditLesson(commentFor.lesson) || !commentFor.lesson.past}
+            initial={commentMark?.comment ?? ''}
+            readOnly={!canEditLesson(commentFor.lesson) || !commentFor.lesson.markable}
             onClose={() => setCommentFor(null)}
             onSave={(text) => {
-              markEntry(commentFor.lesson, [{ studentId: commentFor.studentId, comment: text.trim() || null }]);
+              mark(commentFor.lesson, [{ studentId: commentFor.studentId, comment: text.trim() || null }]);
               setCommentFor(null);
             }}
           />
@@ -299,216 +290,376 @@ export default function JournalTab({
   );
 }
 
-type WeekProps = {
-  week: JournalWeek;
-  students: Map<string, Journal['students'][number]>;
-  canEditLesson: (l: JournalLesson) => boolean;
-  canEditWeek: boolean;
-  onMark: (lesson: JournalLesson, items: EntryPatch[]) => void;
-  onWeek: (items: WeekPatch[]) => void;
-  onComment: (lesson: JournalLesson, studentId: string) => void;
+/**
+ * Полоса дат уроков: стрелки «предыдущий / следующий», выбранный урок
+ * прокручивается в середину. Точка под датой — урок отмечен полностью
+ * (зелёная) или частично (жёлтая).
+ */
+function LessonStrip({
+  lessons,
+  today,
+  activeId,
+  marks,
+  sheet,
+  onSelect,
+}: {
+  lessons: JournalLesson[];
+  today: string;
+  activeId: string;
+  marks: Journal['marks'];
+  sheet: Journal['sheet'];
+  onSelect: (id: string) => void;
+}) {
+  const { t } = useT();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const idx = lessons.findIndex((l) => l.id === activeId);
+
+  useEffect(() => {
+    const box = scrollRef.current;
+    const chip = box?.querySelector<HTMLElement>(`[data-lesson="${activeId}"]`);
+    if (!box || !chip) return;
+    const left = chip.offsetLeft - box.clientWidth / 2 + chip.clientWidth / 2;
+    box.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+  }, [activeId]);
+
+  const fill = (l: JournalLesson): 'done' | 'partial' | 'none' => {
+    const ids = sheet[l.id] ?? [];
+    if (!ids.length) return 'none';
+    const marked = ids.filter((id) => marks[l.id]?.[id]?.attendance).length;
+    if (!marked) return 'none';
+    return marked >= ids.length ? 'done' : 'partial';
+  };
+
+  return (
+    <div className="acad-lesson-strip">
+      <button
+        type="button"
+        className="acad-ls-nav"
+        aria-label={t('academy.journal.prevLesson')}
+        disabled={idx <= 0}
+        onClick={() => idx > 0 && onSelect(lessons[idx - 1].id)}
+        data-testid="lesson-prev"
+      >
+        <Icon name="chevron_left" size={20} />
+      </button>
+      <div className="acad-ls-scroll" ref={scrollRef}>
+        {lessons.map((l) => {
+          const f = fill(l);
+          return (
+            <button
+              key={l.id}
+              type="button"
+              data-lesson={l.id}
+              data-testid={`lesson-chip-${l.id}`}
+              className={`acad-ls-chip${l.id === activeId ? ' is-active' : ''}${l.day === today ? ' is-today' : ''}${
+                l.markable ? '' : ' is-future'
+              } is-${f}`}
+              onClick={() => onSelect(l.id)}
+              title={l.topic || undefined}
+            >
+              <b>{t(`weekday.short.${weekdayKey(tjWeekdayOf(l.startsAt))}`)}</b>
+              <span>{shortDate(l.startsAt)}</span>
+              <i aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        className="acad-ls-nav"
+        aria-label={t('academy.journal.nextLesson')}
+        disabled={idx >= lessons.length - 1}
+        onClick={() => idx < lessons.length - 1 && onSelect(lessons[idx + 1].id)}
+        data-testid="lesson-next"
+      >
+        <Icon name="chevron_right" size={20} />
+      </button>
+    </div>
+  );
+}
+
+type SheetProps = {
+  lesson: JournalLesson;
+  rows: JournalStudent[];
+  marksOf: (studentId: string) => LessonMark;
+  editable: boolean;
+  onMark: (items: EntryPatch[]) => void;
+  onComment: (studentId: string) => void;
 };
 
-function rowName(students: WeekProps['students'], r: JournalRow) {
-  return students.get(r.studentId)?.fullName ?? '—';
+/** Средние строки «Среднее по группе»: по заполненным значениям. */
+function footer(rows: JournalStudent[], marksOf: SheetProps['marksOf']) {
+  const ms = rows.map((s) => marksOf(s.id));
+  const avgOf = (f: PctField | 'total') => mean(ms.flatMap((m) => (m[f] !== null ? [m[f] as number] : [])));
+  return {
+    present: ms.filter((m) => m.attendance === 'PRESENT').length,
+    absent: ms.filter((m) => m.attendance === 'ABSENT').length,
+    late: ms.filter((m) => m.attendance === 'LATE').length,
+    homeworkPct: avgOf('homeworkPct'),
+    vocabularyPct: avgOf('vocabularyPct'),
+    performancePct: avgOf('performancePct'),
+    total: avgOf('total'),
+  };
 }
 
-/** Ученики недели по алфавиту; вышедшие — в конце. */
-function sortedRows(week: JournalWeek, students: WeekProps['students']) {
-  return [...week.rows].sort((a, b) => {
-    const sa = students.get(a.studentId);
-    const sb = students.get(b.studentId);
-    return Number(!!sb?.active) - Number(!!sa?.active) || (sa?.fullName ?? '').localeCompare(sb?.fullName ?? '', 'ru');
-  });
-}
-
-/** Неделя таблицей (компьютер, планшет). */
-function WeekTable({ week, students, canEditLesson, canEditWeek, onMark, onWeek, onComment }: WeekProps) {
+/** Лист урока таблицей — как на бумаге (компьютер, планшет). */
+function SheetTable({ lesson, rows, marksOf, editable, onMark, onComment }: SheetProps) {
   const { t } = useT();
-  const rows = sortedRows(week, students);
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const foot = footer(rows, marksOf);
+
+  // Enter в поле процента — к тому же столбцу в следующей строке, как в таблице.
+  const focusNext = (row: number, col: number) => {
+    const next = tableRef.current?.querySelector<HTMLInputElement>(`input[data-row="${row + 1}"][data-col="${col}"]`);
+    if (next) {
+      next.focus();
+      next.select();
+    } else {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+  };
+
   return (
-    <div className="acad-jt-wrap">
-      <table className="acad-jt" data-testid={`week-table-${week.index}`}>
+    <div className="acad-sheet-wrap">
+      <table className="acad-sheet" ref={tableRef} data-testid={`sheet-${lesson.id}`}>
         <thead>
           <tr>
-            <th rowSpan={2} className="acad-jt-name">{t('academy.journal.students')}</th>
-            {week.lessons.map((l) => {
-              const editable = canEditLesson(l) && l.past;
-              const unmarked = rows.filter((r) => students.get(r.studentId)?.active && r.entries[l.id]?.present == null);
-              return (
-                <th key={l.id} colSpan={2} className="acad-jt-lesson" title={l.topic || undefined}>
-                  <div className="acad-jt-date">
-                    {shortDate(l.startsAt)} <span>{t(`weekday.short.${weekdayKey(tjWeekdayOf(l.startsAt))}`)}</span>
-                  </div>
-                  <div className="acad-jt-time">{tjFormatTime(l.startsAt)}</div>
-                  {editable && unmarked.length > 0 && (
-                    <button
-                      type="button"
-                      className="acad-jt-allbtn"
-                      data-testid={`mark-all-${l.id}`}
-                      title={t('academy.journal.markAllHint')}
-                      onClick={() => onMark(l, unmarked.map((r) => ({ studentId: r.studentId, present: true })))}
-                    >
-                      <Icon name="done_all" size={14} /> {t('academy.journal.markAll')}
-                    </button>
-                  )}
-                </th>
-              );
-            })}
-            <th colSpan={3} className="acad-jt-end">{t('academy.journal.endOfWeek')}</th>
-          </tr>
-          <tr className="acad-jt-sub">
-            {week.lessons.map((l) => (
-              <Fragment key={l.id}>
-                <th>{t('academy.journal.att')}</th>
-                <th>{t('academy.journal.score')}</th>
-              </Fragment>
+            <th className="acad-sh-no">{t('academy.journal.no')}</th>
+            <th className="acad-sh-name">{t('academy.journal.studentCol')}</th>
+            <th className="acad-sh-att">{t('academy.journal.col.attendance')}</th>
+            {PCT_FIELDS.map((f) => (
+              <th key={f} className="acad-sh-pct">{t(PCT_LABEL[f])}</th>
             ))}
-            <th>{t('academy.journal.bonus')}</th>
-            <th>{t('academy.journal.exam')}</th>
-            <th>{t('academy.journal.total')}</th>
+            <th className="acad-sh-total">{t('academy.journal.col.total')}</th>
+            <th className="acad-sh-comment" aria-label={t('academy.journal.comment')} />
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => {
-            const st = students.get(r.studentId);
+          {rows.map((s, i) => {
+            const m = marksOf(s.id);
+            const absent = m.attendance === 'ABSENT';
             return (
-              <tr key={r.studentId} className={st?.active ? '' : 'is-left'} data-testid={`jrow-${r.studentId}`}>
-                <td className="acad-jt-name">
-                  <span className="acad-jt-num">{i + 1}.</span>
-                  <span className="acad-jt-student">{rowName(students, r)}</span>
-                  {st && st.flags > 0 && <FlagDots count={st.flags} />}
-                  {st && !st.active && (
-                    <span className="acad-jt-left">{t(st.expelled ? 'academy.left.expelled' : 'academy.left.removed')}</span>
-                  )}
+              <tr key={s.id} className={s.active ? '' : 'is-left'} data-testid={`jrow-${s.id}`}>
+                <td className="acad-sh-no">{i + 1}</td>
+                <td className="acad-sh-name">
+                  <span className="acad-sh-student">{s.fullName}</span>
+                  <span className="acad-sh-tags">
+                    <LevelBadge level={s.level} hideEmpty />
+                    {s.flags > 0 && <FlagDots count={s.flags} />}
+                    {!s.active && <span className="acad-jt-left">{t(leftKey(s.leftReason))}</span>}
+                  </span>
                 </td>
-                {week.lessons.map((l) => {
-                  const cell = r.entries[l.id];
-                  const editable = canEditLesson(l) && l.past;
-                  return (
-                    <Fragment key={l.id}>
-                      <td className="acad-jt-att">
-                        <button
-                          type="button"
-                          className={`acad-comment-btn${cell?.comment ? ' has-comment' : ''}`}
-                          title={cell?.comment || t('academy.journal.comment')}
-                          disabled={!l.past || (!editable && !cell?.comment)}
-                          data-testid={`comment-${l.id}-${r.studentId}`}
-                          onClick={() => onComment(l, r.studentId)}
-                        >
-                          <Icon name={cell?.comment ? 'chat' : 'chat_bubble'} size={16} />
-                        </button>
-                        <AttCheck
-                          value={cell?.present ?? null}
-                          disabled={!editable}
-                          title={!l.past ? t('academy.journal.future') : undefined}
-                          testId={`att-${l.id}-${r.studentId}`}
-                          onChange={(present) => onMark(l, [{ studentId: r.studentId, present }])}
-                        />
-                      </td>
-                      <td className="acad-jt-score">
-                        <CrmSelect
-                          className="crm-select acad-score-select"
-                          value={cell?.score ? String(cell.score) : ''}
-                          disabled={!editable}
-                          data-testid={`score-${l.id}-${r.studentId}`}
-                          onChange={(e) =>
-                            onMark(l, [{ studentId: r.studentId, score: e.target.value ? Number(e.target.value) : null }])
-                          }
-                        >
-                          <option value="">—</option>
-                          {SCORES.map((s) => (
-                            <option key={s} value={String(s)}>{s}</option>
-                          ))}
-                        </CrmSelect>
-                      </td>
-                    </Fragment>
-                  );
-                })}
-                <td className="acad-jt-num-cell">
-                  <NumberCell
-                    value={r.bonus}
-                    max={BONUS_MAX}
-                    disabled={!canEditWeek}
-                    testId={`bonus-${week.key}-${r.studentId}`}
-                    onSave={(v) => onWeek([{ studentId: r.studentId, bonus: v }])}
+                <td className="acad-sh-att">
+                  <AttSegment
+                    value={m.attendance}
+                    disabled={!editable}
+                    testId={`att-${s.id}`}
+                    onChange={(attendance) => onMark([{ studentId: s.id, attendance }])}
                   />
                 </td>
-                <td className="acad-jt-num-cell">
-                  <NumberCell
-                    value={r.exam}
-                    max={EXAM_MAX}
-                    disabled={!canEditWeek}
-                    testId={`exam-${week.key}-${r.studentId}`}
-                    onSave={(v) => onWeek([{ studentId: r.studentId, exam: v }])}
-                  />
+                {PCT_FIELDS.map((f, col) => (
+                  <td key={f} className="acad-sh-pct">
+                    <PctInput
+                      value={m[f]}
+                      disabled={!editable || absent}
+                      title={absent ? t('academy.journal.absentLocked') : undefined}
+                      testId={`${f}-${s.id}`}
+                      row={i}
+                      col={col}
+                      onSave={(v) => onMark([{ studentId: s.id, [f]: v }])}
+                      onEnter={() => focusNext(i, col)}
+                    />
+                  </td>
+                ))}
+                <td className="acad-sh-total">
+                  <TotalBadge total={m.total} testId={`total-${s.id}`} />
                 </td>
-                <td className="acad-jt-total">
-                  <TotalBadge total={r.total} final={r.final} testId={`total-${week.key}-${r.studentId}`} />
+                <td className="acad-sh-comment">
+                  <button
+                    type="button"
+                    className={`acad-comment-btn${m.comment ? ' has-comment' : ''}`}
+                    title={m.comment || t('academy.journal.comment')}
+                    disabled={!lesson.markable || (!editable && !m.comment)}
+                    data-testid={`comment-${s.id}`}
+                    onClick={() => onComment(s.id)}
+                  >
+                    <Icon name={m.comment ? 'chat' : 'chat_bubble'} size={16} />
+                  </button>
                 </td>
               </tr>
             );
           })}
         </tbody>
+        <tfoot>
+          <tr className="acad-sheet-foot" data-testid="sheet-foot">
+            <td />
+            <td className="acad-sh-name">{t('academy.journal.groupAvg')}</td>
+            <td className="acad-sh-att acad-sh-counts">
+              {t('academy.journal.counts')
+                .replace('{p}', String(foot.present))
+                .replace('{a}', String(foot.absent))
+                .replace('{l}', String(foot.late))}
+            </td>
+            {PCT_FIELDS.map((f) => (
+              <td key={f} className="acad-sh-pct">{pct(foot[f])}</td>
+            ))}
+            <td className="acad-sh-total">
+              <TotalBadge total={foot.total} testId="sheet-avg-total" />
+            </td>
+            <td />
+          </tr>
+        </tfoot>
       </table>
-      <div className="acad-jt-legend">
-        {t('academy.journal.formula')}
+    </div>
+  );
+}
+
+/** Лист урока на телефоне: карточка на ученика — посещение, три процента, итог. */
+function SheetCards({ lesson, rows, marksOf, editable, onMark, onComment }: SheetProps) {
+  const { t } = useT();
+  const foot = footer(rows, marksOf);
+  return (
+    <div className="acad-sheet-cards" data-testid={`sheet-cards-${lesson.id}`}>
+      {rows.map((s, i) => {
+        const m = marksOf(s.id);
+        const absent = m.attendance === 'ABSENT';
+        return (
+          <div key={s.id} className={`acad-sc-card${s.active ? '' : ' is-left'}`} data-testid={`jcard-${s.id}`}>
+            <div className="acad-sc-head">
+              <span className="acad-sc-name">
+                <span className="acad-sc-num">{i + 1}.</span> {s.fullName}
+              </span>
+              <TotalBadge total={m.total} testId={`total-${s.id}`} />
+            </div>
+            {(s.level || s.flags > 0 || !s.active) && (
+              <div className="acad-sh-tags">
+                <LevelBadge level={s.level} hideEmpty />
+                {s.flags > 0 && <FlagDots count={s.flags} />}
+                {!s.active && <span className="acad-jt-left">{t(leftKey(s.leftReason))}</span>}
+              </div>
+            )}
+            <AttSegment
+              value={m.attendance}
+              disabled={!editable}
+              testId={`att-${s.id}`}
+              onChange={(attendance) => onMark([{ studentId: s.id, attendance }])}
+              wide
+            />
+            <div className="acad-sc-pcts">
+              {PCT_FIELDS.map((f, col) => (
+                <label key={f} className="acad-sc-pct">
+                  <span>{t(PCT_LABEL[f])}</span>
+                  <PctInput
+                    value={m[f]}
+                    disabled={!editable || absent}
+                    testId={`${f}-${s.id}`}
+                    row={i}
+                    col={col}
+                    onSave={(v) => onMark([{ studentId: s.id, [f]: v }])}
+                  />
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              className={`acad-sc-comment${m.comment ? ' has-comment' : ''}`}
+              disabled={!lesson.markable || (!editable && !m.comment)}
+              onClick={() => onComment(s.id)}
+              data-testid={`comment-${s.id}`}
+            >
+              <Icon name={m.comment ? 'chat' : 'chat_bubble'} size={16} />
+              <span>{m.comment || t('academy.journal.comment')}</span>
+            </button>
+          </div>
+        );
+      })}
+      <div className="acad-sc-foot" data-testid="sheet-foot">
+        <div className="acad-sc-foot-head">
+          <b>{t('academy.journal.groupAvg')}</b>
+          <TotalBadge total={foot.total} testId="sheet-avg-total" />
+        </div>
+        <div className="acad-hint">
+          {t('academy.journal.counts')
+            .replace('{p}', String(foot.present))
+            .replace('{a}', String(foot.absent))
+            .replace('{l}', String(foot.late))}
+        </div>
+        <div className="acad-sc-foot-pcts">
+          {PCT_FIELDS.map((f) => (
+            <span key={f}>
+              {t(PCT_LABEL[f])}: <b>{pct(foot[f])}</b>
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
 /**
- * Галочка «был» со своим мгновенным состоянием: новые данные журнала
- * приходят в таблицу со следующим тиком, и без него управляемая галочка
- * на миг возвращалась бы назад после клика.
+ * Был / Нет / Опоздал — как три клетки на бумажном листе. Выбор держится
+ * локально до ответа: новые данные журнала приходят со следующим тиком.
  */
-function AttCheck({
+function AttSegment({
+  value,
+  disabled,
+  testId,
+  onChange,
+  wide,
+}: {
+  value: Attendance | null;
+  disabled: boolean;
+  testId: string;
+  onChange: (a: Attendance) => void;
+  wide?: boolean;
+}) {
+  const { t } = useT();
+  const [local, setLocal] = useState<Attendance | null | undefined>(undefined);
+  useEffect(() => setLocal(undefined), [value]);
+  const v = local !== undefined ? local : value;
+  return (
+    <div className={`acad-att${wide ? ' is-wide' : ''}`} role="radiogroup" data-testid={testId} data-value={v ?? ''}>
+      {ATTENDANCE.map((a) => (
+        <button
+          key={a}
+          type="button"
+          role="radio"
+          aria-checked={v === a}
+          disabled={disabled}
+          className={`acad-att-btn is-${a.toLowerCase()}${v === a ? ' is-active' : ''}`}
+          data-testid={`${testId}-${a}`}
+          onClick={() => {
+            if (v === a) return;
+            setLocal(a);
+            onChange(a);
+          }}
+        >
+          {t(`academy.att.${a}`)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Процент 0–100: сохраняется по уходу из поля или Enter; Esc — отменить. */
+function PctInput({
   value,
   disabled,
   title,
   testId,
-  onChange,
-}: {
-  value: boolean | null;
-  disabled: boolean;
-  title?: string;
-  testId: string;
-  onChange: (present: boolean) => void;
-}) {
-  const [local, setLocal] = useState<boolean | null | undefined>(undefined);
-  useEffect(() => setLocal(undefined), [value]);
-  const v = local !== undefined ? local : value;
-  return (
-    <label className={`acad-check${v ? ' is-on' : ''}${v === false ? ' is-off' : ''}${disabled ? ' is-disabled' : ''}`} title={title}>
-      <input
-        type="checkbox"
-        checked={!!v}
-        disabled={disabled}
-        data-testid={testId}
-        onChange={(e) => {
-          setLocal(e.target.checked);
-          onChange(e.target.checked);
-        }}
-      />
-      <Icon name="check" size={14} />
-    </label>
-  );
-}
-
-/** Число в ячейке (бонус/экзамен): сохраняется по уходу из поля или Enter. */
-function NumberCell({
-  value,
-  max,
-  disabled,
+  row,
+  col,
   onSave,
-  testId,
+  onEnter,
 }: {
   value: number | null;
-  max: number;
   disabled?: boolean;
-  onSave: (v: number | null) => void;
+  title?: string;
   testId?: string;
+  row: number;
+  col: number;
+  onSave: (v: number | null) => void;
+  onEnter?: () => void;
 }) {
   const { t } = useT();
   const { toast } = useUI();
@@ -517,155 +668,96 @@ function NumberCell({
   const commit = () => {
     const trimmed = text.trim();
     const next = trimmed === '' ? null : Number(trimmed);
-    if (next !== null && (!Number.isInteger(next) || next < 0 || next > max)) {
-      toast(t('academy.journal.range').replace('{max}', String(max)), 'error');
+    if (next !== null && (!Number.isInteger(next) || next < 0 || next > PCT_MAX)) {
+      toast(t('academy.journal.range').replace('{max}', String(PCT_MAX)), 'error');
       setText(value === null ? '' : String(value));
       return;
     }
     if (next !== value) onSave(next);
   };
   return (
-    <input
-      className="crm-input acad-num-input"
-      inputMode="numeric"
-      value={text}
-      disabled={disabled}
-      placeholder="—"
-      data-testid={testId}
-      onChange={(e) => setText(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        if (e.key === 'Escape') {
-          setText(value === null ? '' : String(value));
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
-    />
+    <span className={`acad-pct${disabled ? ' is-disabled' : ''}`} title={title}>
+      <input
+        className="acad-pct-input"
+        inputMode="numeric"
+        value={text}
+        disabled={disabled}
+        placeholder="—"
+        data-testid={testId}
+        data-row={row}
+        data-col={col}
+        aria-label={testId}
+        onChange={(e) => setText(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+        onBlur={commit}
+        onFocus={(e) => e.currentTarget.select()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (onEnter) {
+              commit();
+              onEnter();
+            } else (e.target as HTMLInputElement).blur();
+          }
+          if (e.key === 'Escape') {
+            setText(value === null ? '' : String(value));
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+      />
+      <span className="acad-pct-sign">%</span>
+    </span>
   );
 }
 
-/** Неделя на телефоне: выбор урока → список учеников с отметками; ниже — итоги недели. */
-function WeekPhone({ week, students, canEditLesson, canEditWeek, onMark, onWeek, onComment }: WeekProps) {
+/** Итоги учеников по всем урокам группы: посещение и средние по столбцам листа. */
+function SummaryCard({ students }: { students: JournalStudent[] }) {
   const { t } = useT();
-  const today = tjToday();
-  const defaultLesson = () => {
-    const todays = week.lessons.find((l) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dushanbe' }).format(new Date(l.startsAt)) === today);
-    const past = week.lessons.filter((l) => l.past);
-    return (todays ?? past[past.length - 1] ?? week.lessons[0])?.id;
-  };
-  const [lessonId, setLessonId] = useState<string | undefined>(defaultLesson);
-  const [showTotals, setShowTotals] = useState(false);
-  const lesson = week.lessons.find((l) => l.id === lessonId) ?? week.lessons[0];
-  const rows = sortedRows(week, students);
-  const editable = !!lesson && canEditLesson(lesson) && lesson.past;
-
+  const sort = useTableSort(
+    students,
+    [
+      { key: 'fullName', label: t('common.fullName'), value: (s) => s.fullName },
+      { key: 'level', label: t('academy.col.level'), value: (s) => s.level?.name },
+      { key: 'att', label: t('academy.col.attendance'), type: 'number', value: (s) => s.summary.attendancePct },
+      { key: 'late', label: t('academy.col.late'), type: 'number', value: (s) => s.summary.late },
+      { key: 'hw', label: t('academy.journal.col.homework'), type: 'number', value: (s) => s.summary.homeworkAvg },
+      { key: 'vocab', label: t('academy.journal.col.vocabulary'), type: 'number', value: (s) => s.summary.vocabularyAvg },
+      { key: 'perf', label: t('academy.journal.col.performance'), type: 'number', value: (s) => s.summary.performanceAvg },
+      { key: 'avg', label: t('academy.col.avg'), type: 'number', value: (s) => s.summary.avg },
+    ],
+    { param: 'jsort' },
+  );
+  if (!students.length) return null;
   return (
-    <div className="acad-jp" data-testid={`week-phone-${week.index}`}>
-      <div className="acad-jp-lessons">
-        {week.lessons.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            className={`acad-jp-lesson${l.id === lesson?.id ? ' is-active' : ''}${l.past ? '' : ' is-future'}`}
-            onClick={() => setLessonId(l.id)}
-          >
-            <b>{t(`weekday.short.${weekdayKey(tjWeekdayOf(l.startsAt))}`)}</b>
-            <span>{shortDate(l.startsAt)}</span>
-          </button>
-        ))}
+    <div className="card acad-card-pad acad-summary-card" data-testid="journal-summary">
+      <h3 className="acad-section-title">{t('academy.journal.summary')}</h3>
+      <div className="table-wrap">
+        <SortSelect sort={sort} />
+        <table className="table acad-summary-table">
+          <thead>
+            <tr>{sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}</tr>
+          </thead>
+          <tbody>
+            {sort.sorted.map((s) => (
+              <tr key={s.id} className={s.active ? '' : 'is-left'} data-testid={`jsum-${s.id}`}>
+                <td>
+                  <strong>{s.fullName}</strong>
+                  {!s.active && <span className="acad-jt-left">{t(leftKey(s.leftReason))}</span>}
+                </td>
+                <td data-label={t('academy.col.level')}><LevelBadge level={s.level} /></td>
+                <td data-label={t('academy.col.attendance')}>
+                  {pct(s.summary.attendancePct)}
+                  {s.summary.held > 0 && <small className="acad-muted"> · {s.summary.attended}/{s.summary.held}</small>}
+                </td>
+                <td data-label={t('academy.col.late')}>{s.summary.late}</td>
+                <td data-label={t('academy.journal.col.homework')}>{pct(s.summary.homeworkAvg)}</td>
+                <td data-label={t('academy.journal.col.vocabulary')}>{pct(s.summary.vocabularyAvg)}</td>
+                <td data-label={t('academy.journal.col.performance')}>{pct(s.summary.performanceAvg)}</td>
+                <td data-label={t('academy.col.avg')}><TotalBadge total={s.summary.avg} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      {lesson && (
-        <>
-          <div className="acad-jp-head">
-            <span>{lesson.topic || t('classes.noTopic')}</span>
-            {!lesson.past && <span className="acad-jp-future">{t('academy.journal.future')}</span>}
-          </div>
-          <div className="acad-jp-list">
-            {rows.map((r, i) => {
-              const cell = r.entries[lesson.id];
-              const st = students.get(r.studentId);
-              return (
-                <div key={r.studentId} className={`acad-jp-row${st?.active ? '' : ' is-left'}`} data-testid={`jp-row-${r.studentId}`}>
-                  <div className="acad-jp-name">
-                    <span>{i + 1}. {rowName(students, r)}</span>
-                    <button
-                      type="button"
-                      className={`acad-comment-btn${cell?.comment ? ' has-comment' : ''}`}
-                      disabled={!lesson.past || (!editable && !cell?.comment)}
-                      onClick={() => onComment(lesson, r.studentId)}
-                      aria-label={t('academy.journal.comment')}
-                    >
-                      <Icon name={cell?.comment ? 'chat' : 'chat_bubble'} size={18} />
-                    </button>
-                  </div>
-                  <div className="acad-jp-controls">
-                    <div className="acad-jp-att">
-                      <button
-                        type="button"
-                        disabled={!editable}
-                        className={`acad-jp-attbtn is-yes${cell?.present === true ? ' is-active' : ''}`}
-                        data-testid={`jp-yes-${r.studentId}`}
-                        onClick={() => onMark(lesson, [{ studentId: r.studentId, present: true }])}
-                      >
-                        <Icon name="check" size={16} /> {t('academy.journal.present')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!editable}
-                        className={`acad-jp-attbtn is-no${cell?.present === false ? ' is-active' : ''}`}
-                        data-testid={`jp-no-${r.studentId}`}
-                        onClick={() => onMark(lesson, [{ studentId: r.studentId, present: false }])}
-                      >
-                        <Icon name="close" size={16} /> {t('academy.journal.absent')}
-                      </button>
-                    </div>
-                    <div className="acad-jp-scores">
-                      {SCORES.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          disabled={!editable}
-                          className={`acad-jp-score${cell?.score === s ? ' is-active' : ''}`}
-                          data-testid={`jp-score-${s}-${r.studentId}`}
-                          onClick={() =>
-                            onMark(lesson, [{ studentId: r.studentId, score: cell?.score === s ? null : s }])
-                          }
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-      <button type="button" className="acad-jp-totals-toggle" onClick={() => setShowTotals((v) => !v)}>
-        {t('academy.journal.endOfWeek')}
-        <Icon name={showTotals ? 'expand_less' : 'expand_more'} size={20} />
-      </button>
-      {showTotals && (
-        <div className="acad-jp-totals">
-          {rows.map((r) => (
-            <div key={r.studentId} className="acad-jp-total-row">
-              <span className="acad-jp-total-name">{rowName(students, r)}</span>
-              <label>
-                {t('academy.journal.bonus')}
-                <NumberCell value={r.bonus} max={BONUS_MAX} disabled={!canEditWeek} onSave={(v) => onWeek([{ studentId: r.studentId, bonus: v }])} />
-              </label>
-              <label>
-                {t('academy.journal.exam')}
-                <NumberCell value={r.exam} max={EXAM_MAX} disabled={!canEditWeek} onSave={(v) => onWeek([{ studentId: r.studentId, exam: v }])} />
-              </label>
-              <TotalBadge total={r.total} final={r.final} />
-            </div>
-          ))}
-          <div className="acad-jt-legend">{t('academy.journal.formula')}</div>
-        </div>
-      )}
     </div>
   );
 }

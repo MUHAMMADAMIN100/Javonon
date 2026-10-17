@@ -43,6 +43,7 @@ import GroupDetail from './pages/GroupDetail';
 import Schedule from './pages/Schedule';
 import AcademyStudents from './pages/AcademyStudents';
 import AcademyStudentDetail from './pages/AcademyStudentDetail';
+import AcademyLevels from './pages/AcademyLevels';
 import Loading from './components/Loading';
 
 export default function App() {
@@ -86,6 +87,7 @@ export default function App() {
         {/* Академия: ученики (агентские в группах + только академии) и их карточки. */}
         <Route path="/academy/students" element={<AcademyStudents />} />
         <Route path="/academy/students/:id" element={<AcademyStudentDetail />} />
+        <Route path="/academy/levels" element={<AcademyLevels />} />
         <Route path="/users" element={<Users />} />
         <Route path="/users/:id" element={<UserDetail />} />
         {/* /profile/:id — для сотрудников с выданным доступом к чужому досье */}

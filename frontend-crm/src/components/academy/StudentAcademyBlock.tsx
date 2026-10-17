@@ -6,12 +6,12 @@ import { useT } from '../../lib/i18n';
 import { keys } from '../../lib/queryKeys';
 import { isAcademyManager } from '../../lib/permissions';
 import { FLAGS_FOR_DECISION, getStudentAcademySummary } from '../../api/academy';
-import { AcademyStatusBadge, FlagDots, TotalBadge } from './academyUi';
+import { AcademyStatusBadge, FlagDots, LevelBadge, TotalBadge, pct } from './academyUi';
 
 /**
- * Блок «Академия» в карточке студента CRM: группа и учитель, средний балл,
- * посещаемость, красные флаги и статус. Студенту, который в академии не
- * учится, блок не показывается вовсе.
+ * Блок «Академия» в карточке студента CRM: группа и учитель, уровень,
+ * средний итог, посещаемость, красные флаги и статус. Студенту, который в
+ * академии не учится, блок не показывается вовсе.
  */
 export default function StudentAcademyBlock({ studentId }: { studentId: string }) {
   const { t } = useT();
@@ -40,12 +40,16 @@ export default function StudentAcademyBlock({ studentId }: { studentId: string }
           </span>
         </div>
         <div>
+          <span className="acad-crm-label">{t('academy.col.level')}</span>
+          <LevelBadge level={d.level} />
+        </div>
+        <div>
           <span className="acad-crm-label">{t('academy.col.avg')}</span>
           <TotalBadge total={d.summary.avg} />
         </div>
         <div>
           <span className="acad-crm-label">{t('academy.col.attendance')}</span>
-          <span className="acad-crm-value">{d.summary.attendancePct !== null ? `${d.summary.attendancePct}%` : '—'}</span>
+          <span className="acad-crm-value">{pct(d.summary.attendancePct)}</span>
         </div>
         <div>
           <span className="acad-crm-label">{t('academy.flags.title')}</span>

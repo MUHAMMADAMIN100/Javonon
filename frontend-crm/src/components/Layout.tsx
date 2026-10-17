@@ -58,6 +58,7 @@ const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; title
   { path: '/groups',       eyebrowKey: 'eyebrow.academy',        num: '23', titleKey: 'groups.title' },
   { path: '/schedule',     eyebrowKey: 'eyebrow.academy',        num: '24', titleKey: 'classes.title' },
   { path: '/academy/students', eyebrowKey: 'eyebrow.academy',    num: '27', titleKey: 'academy.students.title' },
+  { path: '/academy/levels',   eyebrowKey: 'eyebrow.academy',    num: '28', titleKey: 'academy.levels.title' },
   { path: '/settings',     eyebrowKey: 'eyebrow.system',         num: '25', titleKey: 'settings.title' },
   // Четыре маршрута одной страницы «Рабочий день» (вкладки табеля,
   // посещаемости и отгулов) — заголовок у них общий.

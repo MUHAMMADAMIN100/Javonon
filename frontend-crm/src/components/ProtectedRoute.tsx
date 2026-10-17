@@ -31,7 +31,7 @@ const ROUTE_ROLES: Array<{ prefix: string; roles: Role[]; perms?: string[] }> = 
  * белый список, что на сервере (auth/teacher-scope.ts). Всё остальное, в
  * том числе «/» и дашборд, ведёт в его группы.
  */
-const TEACHER_PREFIXES = ['/groups', '/academy', '/schedule', '/chat', '/me'];
+const TEACHER_PREFIXES = ['/groups', '/academy', '/schedule', '/me'];
 export const TEACHER_HOME = '/groups';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {

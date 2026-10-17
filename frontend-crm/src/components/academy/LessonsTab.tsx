@@ -6,6 +6,7 @@ import { absFileUrl, useFileToken } from '../../lib/fileUrl';
 import { tjFormatDate, tjFormatTime } from '../../lib/tjTime';
 import ClassSessionModal from '../ClassSessionModal';
 import ScheduleTemplateModal from './ScheduleTemplateModal';
+import HomeworkDiaryModal from './HomeworkDiaryModal';
 import { fileSize, materialIcon, shortDate, tjWeekdayOf, weekdayKey } from './academyUi';
 import type { ClassSession, StudyGroupDetail } from '../../api/studyGroups';
 
@@ -20,7 +21,8 @@ const PAGE = 8;
 /**
  * Уроки группы: ближайшие и прошедшие занятия с темой, ДЗ и материалами.
  * Учитель и руководство добавляют занятия по шаблону или по одному и
- * открывают урок, чтобы задать тему, ДЗ, срок и прикрепить файлы.
+ * открывают урок, чтобы задать тему, ДЗ, срок и прикрепить файлы. У урока
+ * с ДЗ — «Дневник ДЗ»: что ученики писали по дням до срока.
  */
 export default function LessonsTab({
   group,
@@ -35,6 +37,7 @@ export default function LessonsTab({
   useFileToken();
   const [modal, setModal] = useState<{ session?: ClassSession | null } | null>(null);
   const [template, setTemplate] = useState(false);
+  const [diaryFor, setDiaryFor] = useState<string | null>(null);
   const [upcomingLimit, setUpcomingLimit] = useState(PAGE);
   const [pastLimit, setPastLimit] = useState(PAGE);
 
@@ -80,7 +83,12 @@ export default function LessonsTab({
           ) : (
             <div className="acad-lesson-list">
               {upcoming.slice(0, upcomingLimit).map((s) => (
-                <LessonCard key={s.id} s={s} onOpen={canOpen(s) ? () => setModal({ session: s }) : undefined} />
+                <LessonCard
+                  key={s.id}
+                  s={s}
+                  onOpen={canOpen(s) ? () => setModal({ session: s }) : undefined}
+                  onDiary={canOpen(s) ? () => setDiaryFor(s.id) : undefined}
+                />
               ))}
               {upcoming.length > upcomingLimit && (
                 <button className="btn btn-secondary btn-sm acad-more" onClick={() => setUpcomingLimit((n) => n + PAGE * 2)}>
@@ -97,7 +105,13 @@ export default function LessonsTab({
               </h3>
               <div className="acad-lesson-list">
                 {past.slice(0, pastLimit).map((s) => (
-                  <LessonCard key={s.id} s={s} dim onOpen={canOpen(s) ? () => setModal({ session: s }) : undefined} />
+                  <LessonCard
+                    key={s.id}
+                    s={s}
+                    dim
+                    onOpen={canOpen(s) ? () => setModal({ session: s }) : undefined}
+                    onDiary={canOpen(s) ? () => setDiaryFor(s.id) : undefined}
+                  />
                 ))}
                 {past.length > pastLimit && (
                   <button className="btn btn-secondary btn-sm acad-more" onClick={() => setPastLimit((n) => n + PAGE * 2)}>
@@ -121,15 +135,29 @@ export default function LessonsTab({
           />
         )}
         {template && <ScheduleTemplateModal groupId={group.id} onClose={() => setTemplate(false)} onDone={onChanged} />}
+        {diaryFor && <HomeworkDiaryModal sessionId={diaryFor} onClose={() => setDiaryFor(null)} />}
       </AnimatePresence>
     </div>
   );
 }
 
-function LessonCard({ s, onOpen, dim }: { s: ClassSession; onOpen?: () => void; dim?: boolean }) {
+function LessonCard({
+  s,
+  onOpen,
+  onDiary,
+  dim,
+}: {
+  s: ClassSession;
+  onOpen?: () => void;
+  onDiary?: () => void;
+  dim?: boolean;
+}) {
   const { t } = useT();
   const wd = t(`weekday.short.${weekdayKey(tjWeekdayOf(s.startsAt))}`);
   const materials = s.materials ?? [];
+  // Дневник ведут с начала урока; записи могли остаться, даже если урок сдвинули.
+  const logs = s._count?.homeworkLogs ?? 0;
+  const diary = !!onDiary && !!s.homework && (new Date(s.startsAt).getTime() <= Date.now() || logs > 0);
   return (
     <div
       className={`acad-lesson${dim ? ' is-past' : ''}${s.status === 'CANCELLED' ? ' is-cancelled' : ''}${onOpen ? ' is-clickable' : ''}`}
@@ -165,9 +193,27 @@ function LessonCard({ s, onOpen, dim }: { s: ClassSession; onOpen?: () => void; 
             <span>{s.homework}</span>
           </div>
         )}
-        {s.homeworkDue && (
-          <div className="acad-lesson-due">
-            {t('academy.lessons.due')}: {tjFormatDate(s.homeworkDue)}
+        {(s.homeworkDue || diary) && (
+          <div className="acad-lesson-due-row">
+            {s.homeworkDue && (
+              <span className="acad-lesson-due">
+                {t('academy.lessons.due')}: {tjFormatDate(s.homeworkDue)}
+              </span>
+            )}
+            {diary && (
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary acad-diary-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDiary!();
+                }}
+                data-testid={`diary-${s.id}`}
+              >
+                <Icon name="edit_note" size={16} /> {t('academy.diary.title')}
+                <span className="acad-tab-count">{logs}</span>
+              </button>
+            )}
           </div>
         )}
         {materials.length > 0 && (

@@ -294,6 +294,8 @@ model User {
   academyFlagsGiven      RedFlag[]       @relation("RedFlagGivenBy")
   academyFlagsRemoved    RedFlag[]       @relation("RedFlagRemovedBy")
   academyExpelledStudents Student[]      @relation("StudentAcademyExpelledBy")
+  academyLevelChanges    AcademyLevelChange[] @relation("AcademyLevelChangedBy")
+  academyCompletedGroups StudyGroup[]    @relation("StudyGroupCompletedBy")
 }
 
 // ============================================================
@@ -610,11 +612,18 @@ model Student {
   // Руководство решило «Оставить»: флаги, поставленные до этого момента,
   // рассмотрены. Следующий флаг снова требует решения.
   academyFlagsReviewedAt DateTime?
+  // Уровень (Beginner, Elementary…) из списка «Академия → Уровни». Уровень,
+  // который стоит у учеников, удалить нельзя (сервис), SetNull — страховка.
+  academyLevelId         String?
+  academyLevel           AcademyLevel? @relation("StudentAcademyLevel", fields: [academyLevelId], references: [id], onDelete: SetNull)
+  academyLevelChanges    AcademyLevelChange[]
   journalEntries         JournalEntry[]
   journalWeeks           JournalWeek[]
   redFlags               RedFlag[]
+  homeworkLogs           HomeworkLog[]
 
   @@index([academyOnly])
+  @@index([academyLevelId])
   @@index([direction])
   @@index([cabinet])
   @@index([status])
@@ -2400,6 +2409,11 @@ model StudyGroup {
   teacher     User?            @relation("StudyGroupTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   status      StudyGroupStatus @default(ACTIVE)
   description String?
+  // «Завершить курс»: ученикам выставлены новые уровни, группа ушла в архив.
+  // У группы, просто переведённой в архив, completedAt пустой.
+  completedAt   DateTime?
+  completedById String?
+  completedBy   User?          @relation("StudyGroupCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -2407,6 +2421,7 @@ model StudyGroup {
   sessions     ClassSession[]
   journalWeeks JournalWeek[]
   redFlags     RedFlag[]
+  levelChanges AcademyLevelChange[]
 
   @@index([status])
   @@index([teacherId])
@@ -2462,14 +2477,20 @@ model ClassSession {
   reminderSentAt DateTime?
   // Домашнее задание к уроку (видят ученики группы в кабинете) и срок —
   // UTC-полночь календарного дня, как Student.birthday. Сдавать ДЗ через
-  // кабинет не нужно: как сделано, учитель отражает оценкой в журнале.
+  // кабинет не нужно: как сделано, учитель отражает оценкой в журнале
+  // (Homework %); с дня урока по срок ученик ведёт дневник ДЗ (HomeworkLog).
   homework       String?
   homeworkDue    DateTime?
+  // Когда задание выдано (впервые заполнено). Дневник начинается с более
+  // позднего из дня урока и этого дня: ДЗ, внесённое задним числом, не даёт
+  // ученикам «пропущенных» дней до выдачи. NULL — старые строки (с дня урока).
+  homeworkSetAt  DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  materials ClassMaterial[]
-  journal   JournalEntry[]
+  materials    ClassMaterial[]
+  journal      JournalEntry[]
+  homeworkLogs HomeworkLog[]
 
   @@index([groupId, startsAt])
   @@index([startsAt])
@@ -2511,17 +2532,33 @@ model ClassMaterial {
   @@index([sessionId])
 }
 
-/// Отметка ученика за урок. present: null — ещё не отмечен; score 1–5
-/// ставится только присутствующему.
+/// Посещение урока — как на бумажном листе журнала: был / не был / опоздал.
+enum LessonAttendance {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+/// Отметка ученика за урок — лист журнала: посещение (attendance) и три
+/// процента 0–100: Homework, Vocabulary, Class Performance. «Итого» урока —
+/// среднее заполненных процентов, «не был» = 0 (academy/journal-math.ts).
+///
+/// present дублирует attendance (true — был или опоздал): по нему старые
+/// выборки и отметки до 17.10.2026, когда в журнале были «был» и оценка
+/// 1–5 (score). Старые оценки остаются в базе, но больше не показываются.
 model JournalEntry {
-  id          String       @id @default(uuid())
-  sessionId   String
-  session     ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  studentId   String
-  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  present     Boolean?
-  score       Int?
-  comment     String?
+  id             String            @id @default(uuid())
+  sessionId      String
+  session        ClassSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  present        Boolean?
+  score          Int?
+  attendance     LessonAttendance?
+  homeworkPct    Int?
+  vocabularyPct  Int?
+  performancePct Int?
+  comment        String?
   updatedById String?
   updatedBy   User?        @relation("JournalEntryAuthor", fields: [updatedById], references: [id], onDelete: SetNull)
   createdAt   DateTime     @default(now())
@@ -2533,6 +2570,8 @@ model JournalEntry {
 
 /// Конец недели: бонус (0–10) и экзамен (0–70). weekStart — понедельник
 /// недели по Душанбе, строкой 'YYYY-MM-DD' (без часовых поясов).
+/// Из журнала до 17.10.2026: сейчас журнал — лист урока с процентами, сюда
+/// больше не пишут, строки остаются в базе.
 model JournalWeek {
   id          String     @id @default(uuid())
   groupId     String
@@ -2552,7 +2591,7 @@ model JournalWeek {
 }
 
 /// Красный флаг ученику — всегда с причиной. Снятый флаг (removedAt) не
-/// считается, но остаётся в истории. 3 действующих флага → руководство
+/// считается, но остаётся в истории. 4 действующих флага → руководство
 /// решает: отчислить или оставить (Student.academy*).
 model RedFlag {
   id           String      @id @default(uuid())
@@ -2571,6 +2610,61 @@ model RedFlag {
 
   @@index([studentId, removedAt])
   @@index([groupId])
+}
+
+/// Уровень ученика (Beginner, Elementary…). Список ведёт руководство
+/// («Академия → Уровни»): добавить, переименовать, удалить, порядок.
+/// Порядок задаёт «следующий уровень» при завершении курса.
+model AcademyLevel {
+  id        String   @id @default(uuid())
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students Student[] @relation("StudentAcademyLevel")
+
+  @@index([sortOrder])
+}
+
+/// История уровней ученика. Названия — снимком: переименование или
+/// удаление уровня историю не переписывает.
+///   START  — уровень при заведении ученика;
+///   MANUAL — смена в карточке или форме;
+///   COURSE — «Завершить курс» в группе (groupId).
+model AcademyLevelChange {
+  id          String      @id @default(uuid())
+  studentId   String
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  fromName    String?
+  toName      String?
+  reason      String      @default("MANUAL")
+  groupId     String?
+  group       StudyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  changedById String?
+  changedBy   User?       @relation("AcademyLevelChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([groupId])
+}
+
+/// Дневник ДЗ: что ученик сделал по заданию урока в этот день. С дня урока
+/// по срок сдачи — по записи на день; писать можно только в тот же день
+/// (day — 'YYYY-MM-DD' по Душанбе), поэтому пропуски у учителя честные.
+model HomeworkLog {
+  id        String       @id @default(uuid())
+  sessionId String
+  session   ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  day       String
+  text      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([sessionId, studentId, day])
+  @@index([studentId, day])
 }
 
 // ============================================================

@@ -22,7 +22,7 @@ export interface NavCtx {
   /** FOUNDER / ADMIN / SALES_MANAGER / CLIENT_MANAGER (ACCOUNTANT — нет) */
   isWorkforce: boolean;
   hasCustomRole: boolean;
-  /** Только учитель академии: открыты лишь «Академия», чат и профиль. */
+  /** Только учитель академии: открыты лишь «Академия» и профиль. */
   isTeacherOnly: boolean;
   /** Руководство академии (основатель, админ, роль с «Академия — управление»). */
   academyManager: boolean;
@@ -112,6 +112,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/groups', icon: 'diversity_2', labelKey: 'sidebar.groups', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
       { to: '/academy/students', icon: 'person_book', labelKey: 'sidebar.academyStudents', visible: (c) => c.isTeacherOnly || c.academyManager || c.can('groups:read', 'groups:write') },
+      // Уровни (Beginner, Elementary…) ведёт руководство академии.
+      { to: '/academy/levels', icon: 'stairs', labelKey: 'sidebar.academyLevels', visible: (c) => c.academyManager },
       { to: '/schedule', icon: 'calendar_month', labelKey: 'sidebar.schedule', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
       { to: '/lms', icon: 'auto_stories', labelKey: 'sidebar.lms', visible: (c) => c.show('lms:read', c.elevated) },
     ],
@@ -122,7 +124,8 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.comms',
     items: [
       // База-условие здесь буквально `true` — чат доступен и ACCOUNTANT'у.
-      { to: '/chat', icon: 'forum', labelKey: 'sidebar.chat', visible: (c) => c.show('chat:read', true) },
+      // Учителю академии чата нет (17.10.2026).
+      { to: '/chat', icon: 'forum', labelKey: 'sidebar.chat', visible: (c) => !c.isTeacherOnly && c.show('chat:read', true) },
       { to: '/inbox', icon: 'inbox', labelKey: 'sidebar.inbox', visible: (c) => c.show('inbox:read', c.isWorkforce) },
       { to: '/calls', icon: 'call', labelKey: 'sidebar.calls', visible: (c) => c.show('calls:read', c.isWorkforce) },
       // В PERMISSION_CATALOG живут ОБА ключа: канонический massmail:write

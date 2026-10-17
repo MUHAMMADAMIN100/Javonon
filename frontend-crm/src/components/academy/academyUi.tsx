@@ -2,16 +2,16 @@ import Icon from '../../Icon';
 import { useT } from '../../lib/i18n';
 import { absFileUrl } from '../../lib/fileUrl';
 import { TJ_TZ } from '../../lib/tjTime';
-import { FLAGS_FOR_DECISION, type AcademyStatus } from '../../api/academy';
+import { FLAGS_FOR_DECISION, type AcademyStatus, type Attendance, type LeftReason, type LevelRef } from '../../api/academy';
 import type { WeeklySlot } from '../../api/studyGroups';
 
 /**
- * Мелкие общие кусочки академии: цвет итога недели, статус ученика,
+ * Мелкие общие кусочки академии: цвет итога, статус ученика, уровень,
  * точки флагов, «по каким дням», аватар, короткие даты. Один источник,
  * чтобы журнал, списки и карточки выглядели одинаково.
  */
 
-/** Цвет итога недели — как в журнале с образца: от 90 зелёный, 80–89 жёлтый, ниже — красный. */
+/** Цвет итога (в процентах): от 90 зелёный, 80–89 жёлтый, ниже — красный. */
 export type TotalTone = 'good' | 'mid' | 'low' | 'draft';
 
 export function totalTone(total: number | null | undefined, final = true): TotalTone {
@@ -21,29 +21,44 @@ export function totalTone(total: number | null | undefined, final = true): Total
   return 'low';
 }
 
-export function TotalBadge({
-  total,
-  final = true,
-  testId,
-}: {
-  total: number | null | undefined;
-  final?: boolean;
-  testId?: string;
-}) {
-  const { t } = useT();
-  const tone = totalTone(total, final);
+/** Итог в процентах цветной плашкой; null — «—». */
+export function TotalBadge({ total, testId }: { total: number | null | undefined; testId?: string }) {
   if (total === null || total === undefined) {
     return <span className="acad-total is-empty" data-testid={testId}>—</span>;
   }
   return (
-    <span
-      className={`acad-total is-${tone}`}
-      data-testid={testId}
-      title={final ? undefined : t('academy.total.draftHint')}
-    >
-      {total}
+    <span className={`acad-total is-${totalTone(total)}`} data-testid={testId}>
+      {total}%
     </span>
   );
+}
+
+/** Процент простым текстом: «85 %» или «—». */
+export function pct(v: number | null | undefined): string {
+  return v === null || v === undefined ? '—' : `${v}%`;
+}
+
+/** Уровень ученика плашкой; без уровня — серое «Без уровня» (или ничего при hideEmpty). */
+export function LevelBadge({ level, hideEmpty, testId }: { level: LevelRef | null | undefined; hideEmpty?: boolean; testId?: string }) {
+  const { t } = useT();
+  if (!level) {
+    return hideEmpty ? null : <span className="acad-level is-empty" data-testid={testId}>{t('academy.level.none')}</span>;
+  }
+  return (
+    <span className="acad-level" data-testid={testId}>
+      <Icon name="stairs" size={13} />
+      {level.name}
+    </span>
+  );
+}
+
+export const ATTENDANCE: Attendance[] = ['PRESENT', 'ABSENT', 'LATE'];
+
+/** Подпись причины выхода из группы. */
+export function leftKey(reason: LeftReason | null | undefined): string {
+  if (reason === 'EXPELLED') return 'academy.left.expelled';
+  if (reason === 'COMPLETED') return 'academy.left.completed';
+  return 'academy.left.removed';
 }
 
 const STATUS_CLASS: Record<AcademyStatus, string> = {
@@ -63,7 +78,7 @@ export function AcademyStatusBadge({ status, testId }: { status: AcademyStatus; 
   );
 }
 
-/** Красные флаги: три кружка, закрашенные по числу флагов (и «+N» сверх трёх). */
+/** Красные флаги: четыре кружка, закрашенные по числу флагов (и «+N» сверх четырёх). */
 export function FlagDots({ count, testId }: { count: number; testId?: string }) {
   const { t } = useT();
   const dots = Array.from({ length: FLAGS_FOR_DECISION }, (_, i) => i < count);
@@ -127,6 +142,20 @@ export function shortDate(iso: string | Date): string {
 export function shortKey(key: string): string {
   const [, m, d] = key.split('-');
   return `${d}.${m}`;
+}
+
+/** Понедельник недели для дня 'YYYY-MM-DD' — как weekKey на сервере. */
+export function weekKeyOfDay(day: string): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Сдвиг дня 'YYYY-MM-DD' на N дней. */
+export function addDaysKey(day: string, n: number): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 /** «05.11 – 11.11» для недели по ключам. */

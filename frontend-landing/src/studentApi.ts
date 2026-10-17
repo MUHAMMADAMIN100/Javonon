@@ -371,11 +371,35 @@ export async function listStudentInstallments(): Promise<StudentInstallments> {
 }
 
 /* ──────────────────────────── АКАДЕМИЯ (кабинет) ────────────────────────────
- * /student-academy/* — группа, расписание, ДЗ с материалами, успеваемость.
- * Итог недели считает сервер (journal-math.ts): кабинет только показывает.
+ * /student-academy/* — группа, уровень, расписание и календарь, ДЗ с
+ * материалами и дневником, успеваемость. Итоги считает сервер
+ * (journal-math.ts): кабинет только показывает.
  */
 export type AcademyStatus = 'ACTIVE' | 'PENDING' | 'EXPELLED' | 'NO_GROUP';
 export type WeeklySlot = { weekday: number; from: string; to: string };
+export type Attendance = 'PRESENT' | 'ABSENT' | 'LATE';
+
+export type AcademySummary = {
+  avg: number | null;
+  attendancePct: number | null;
+  held: number;
+  attended: number;
+  late: number;
+  absent: number;
+  graded: number;
+  homeworkAvg: number | null;
+  vocabularyAvg: number | null;
+  performanceAvg: number | null;
+};
+
+export type AcademyLevelChange = {
+  id: string;
+  fromName: string | null;
+  toName: string | null;
+  reason: string;
+  createdAt: string;
+  group: { id: string; name: string } | null;
+};
 
 export type AcademyOverview =
   | { hasAcademy: false; academyOnly: false }
@@ -384,6 +408,9 @@ export type AcademyOverview =
       academyOnly: boolean;
       fullName: string;
       status: AcademyStatus;
+      level: { id: string; name: string } | null;
+      levelHistory: AcademyLevelChange[];
+      completedCourses: Array<{ id: string; name: string; completedAt: string | null }>;
       expelled: { at: string; note: string | null } | null;
       flags: Array<{ id: string; reason: string; createdAt: string; group: { id: string; name: string } | null }>;
       groups: Array<{
@@ -395,7 +422,9 @@ export type AcademyOverview =
         nextLesson: { startsAt: string; endsAt: string; topic: string | null } | null;
         pattern: WeeklySlot[];
       }>;
-      summary: { avg: number | null; attendancePct: number | null; finalWeeks: number; held: number; attended: number };
+      summary: AcademySummary;
+      /** ДЗ, по которым сегодня ещё нет записи в дневнике. */
+      diaryDue: Array<{ sessionId: string; startsAt: string; topic: string | null; homeworkDue: string | null; group: { id: string; name: string } }>;
     };
 
 export type AcademyLesson = {
@@ -421,6 +450,8 @@ export type AcademyMaterial = {
   mimeType: string | null;
 };
 
+export type DiaryLog = { text: string; createdAt: string; updatedAt: string };
+
 export type AcademyHomework = {
   id: string;
   startsAt: string;
@@ -430,33 +461,42 @@ export type AcademyHomework = {
   homeworkDue: string | null;
   group: { id: string; name: string };
   materials: AcademyMaterial[];
+  /** Дневник ДЗ: дни с урока по срок, записи по дням; писать можно только за сегодня. */
+  diary: { days: string[]; logs: Record<string, DiaryLog>; today: string; canWrite: boolean; open: boolean } | null;
 };
 
-export type AcademyMark = { present: boolean | null; score: number | null; comment: string | null };
+export type AcademyCalendarLesson = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  status: 'SCHEDULED' | 'DONE' | 'CANCELLED';
+  topic: string | null;
+  group: { id: string; name: string };
+  teacher: { fullName: string } | null;
+  started: boolean;
+  homework: string | null;
+  homeworkDue: string | null;
+  materials: AcademyMaterial[];
+};
 
-export type AcademyProgressWeek = {
-  key: string;
-  index: number;
-  from: string;
-  to: string;
-  lessons: Array<{ id: string; startsAt: string; topic: string | null; past: boolean; mark: AcademyMark | null }>;
-  held: number;
-  attended: number;
-  lessonPoints: number;
-  bonus: number | null;
-  exam: number | null;
-  total: number;
-  final: boolean;
-  groupAvg: number | null;
+export type AcademyMark = {
+  attendance: Attendance | null;
+  homeworkPct: number | null;
+  vocabularyPct: number | null;
+  performancePct: number | null;
+  comment: string | null;
+  total: number | null;
 };
 
 export type AcademyProgressGroup = {
   group: { id: string; name: string; teacher: { fullName: string } | null };
   active: boolean;
+  completed: boolean;
   joinedAt: string;
   leftAt: string | null;
-  summary: { avg: number | null; attendancePct: number | null; finalWeeks: number; held: number; attended: number };
-  weeks: AcademyProgressWeek[];
+  summary: AcademySummary;
+  lessons: Array<{ id: string; number: number; startsAt: string; topic: string | null; mark: AcademyMark | null }>;
+  weeks: Array<{ key: string; index: number; from: string; to: string; me: number | null; groupAvg: number | null }>;
 };
 
 export async function getAcademyOverview(): Promise<AcademyOverview> {
@@ -469,8 +509,19 @@ export async function getAcademyLessons(): Promise<{ upcoming: AcademyLesson[]; 
   return data;
 }
 
+export async function getAcademyCalendar(from: string, to: string): Promise<AcademyCalendarLesson[]> {
+  const { data } = await client.get<AcademyCalendarLesson[]>('/student-academy/calendar', { params: { from, to } });
+  return data;
+}
+
 export async function getAcademyHomework(): Promise<AcademyHomework[]> {
   const { data } = await client.get<AcademyHomework[]>('/student-academy/homework');
+  return data;
+}
+
+/** Запись в дневник ДЗ — за сегодняшний день. */
+export async function writeAcademyDiary(sessionId: string, text: string): Promise<{ day: string; text: string; createdAt: string; updatedAt: string }> {
+  const { data } = await client.post('/student-academy/diary', { sessionId, text });
   return data;
 }
 

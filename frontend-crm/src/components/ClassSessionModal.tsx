@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import CrmSelect from './CrmSelect';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Icon from '../Icon';
@@ -14,6 +14,7 @@ import CrmDatePicker from './CrmDatePicker';
 import { listUsers } from '../api/users';
 import {
   createSession,
+  listSessions,
   updateSession,
   deleteSession,
   type ClassMaterial,
@@ -21,7 +22,7 @@ import {
   type ClassSessionStatus,
 } from '../api/studyGroups';
 import { addMaterialLink, deleteMaterial, uploadMaterials } from '../api/academy';
-import { fileSize, materialIcon } from './academy/academyUi';
+import { addDaysKey, fileSize, materialIcon } from './academy/academyUi';
 
 /**
  * Занятие: время, тема, ДЗ со сроком, файлы и ссылки, замена учителя,
@@ -36,6 +37,9 @@ import { fileSize, materialIcon } from './academy/academyUi';
  * Даты собираются CrmDatePicker'ом (showTime) в наивную строку
  * `YYYY-MM-DDTHH:mm`. Бэкенд читает её как ДУШАНБИНСКОЕ время; никакой
  * конвертации в UTC на фронте быть не должно — она сдвинет расписание.
+ *
+ * У ДЗ срок сдачи обязателен: с дня урока по срок ученик ведёт дневник ДЗ.
+ * По умолчанию подставляется день следующего занятия группы.
  */
 export default function ClassSessionModal({
   session,
@@ -180,7 +184,31 @@ export default function ClassSessionModal({
     () => !!startsAt && !!endsAt && endsAt <= startsAt,
     [startsAt, endsAt],
   );
-  const canSubmit = !!group && !!startsAt && !!endsAt && !rangeInvalid && !saveMut.isPending;
+
+  // Срок ДЗ по умолчанию — день следующего занятия группы (иначе через неделю).
+  const lessonDay = startsAt.slice(0, 10);
+  const nextParams = useMemo(
+    () => ({ groupId: group, from: lessonDay ? addDaysKey(lessonDay, 1) : '', to: lessonDay ? addDaysKey(lessonDay, 45) : '' }),
+    [group, lessonDay],
+  );
+  const nextQuery = useQuery({
+    queryKey: keys.groups.sessions(nextParams),
+    queryFn: () => listSessions(nextParams),
+    enabled: !!group && /^\d{4}-\d{2}-\d{2}$/.test(lessonDay),
+  });
+  const suggestedDue = useMemo(() => {
+    if (!lessonDay) return '';
+    const next = (nextQuery.data ?? []).find((x) => x.status !== 'CANCELLED' && x.id !== session?.id);
+    return next ? tjDateInput(next.startsAt) : addDaysKey(lessonDay, 7);
+  }, [nextQuery.data, lessonDay, session?.id]);
+  // Старое ДЗ без срока: срок подставляется, как только известен следующий урок.
+  useEffect(() => {
+    if (homework.trim() && !homeworkDue && suggestedDue && nextQuery.isFetched) setHomeworkDue(suggestedDue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestedDue, nextQuery.isFetched]);
+  const dueMissing = !!homework.trim() && !homeworkDue;
+  const dueTooEarly = !!homework.trim() && !!homeworkDue && !!lessonDay && homeworkDue < lessonDay;
+  const canSubmit = !!group && !!startsAt && !!endsAt && !rangeInvalid && !dueMissing && !dueTooEarly && !saveMut.isPending;
   const marked = (session?._count?.journal ?? 0) > 0;
 
   const onDelete = async () => {
@@ -254,15 +282,30 @@ export default function ClassSessionModal({
           maxLength={4000}
           value={homework}
           placeholder={t('academy.lessons.homeworkPh')}
-          onChange={(e) => setHomework(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            // Появилось задание — сразу подставляем срок (следующий урок).
+            if (!homework.trim() && v.trim() && !homeworkDue && suggestedDue) setHomeworkDue(suggestedDue);
+            setHomework(v);
+          }}
           data-testid="session-homework"
         />
-        <div className="acad-hint" style={{ marginTop: 6 }}>{t('academy.lessons.releaseHint')}</div>
+        <div className="acad-hint" style={{ marginTop: 6 }}>
+          {t('academy.lessons.releaseHint')} {t('academy.lessons.diaryHint')}
+        </div>
       </div>
       <div className="form-grid-2 acad-form-grid">
         <div className="form-group">
-          <label>{t('academy.lessons.due')}</label>
-          <CrmDatePicker value={homeworkDue} onChange={setHomeworkDue} placeholder={t('academy.lessons.dueNone')} />
+          <label>{t('academy.lessons.due')}{homework.trim() ? ' *' : ''}</label>
+          <CrmDatePicker
+            value={homeworkDue}
+            onChange={setHomeworkDue}
+            min={lessonDay || undefined}
+            disabled={!homework.trim()}
+            placeholder={t('academy.lessons.dueNone')}
+          />
+          {dueMissing && <div className="form-error-text" data-testid="session-due-error">{t('academy.lessons.dueRequired')}</div>}
+          {dueTooEarly && <div className="form-error-text" data-testid="session-due-error">{t('academy.lessons.dueBeforeLesson')}</div>}
         </div>
         {editing && canRun && (
           <div className="form-group">

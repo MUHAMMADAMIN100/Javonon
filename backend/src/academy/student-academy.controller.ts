@@ -1,10 +1,11 @@
-import { Controller, Get, NotFoundException, Param, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { existsSync } from 'fs';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { StudentJwtGuard } from '../student-auth/student-jwt.guard';
 import { contentDisposition } from '../common/upload-name';
 import { AcademyService } from './academy.service';
+import { HomeworkLogDto } from './dto/academy.dto';
 
 /**
  * КАБИНЕТ СТУДЕНТА — вкладка «Академия». StudentJwtGuard кладёт в
@@ -34,6 +35,18 @@ export class StudentAcademyController {
   @Get('progress')
   progress(@CurrentUser() me: any) {
     return this.svc.cabinetProgress(me.id);
+  }
+
+  /** Календарь: занятия за период 'YYYY-MM-DD' … 'YYYY-MM-DD' (до двух месяцев). */
+  @Get('calendar')
+  calendar(@CurrentUser() me: any, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.svc.cabinetCalendar(me.id, from, to);
+  }
+
+  /** Запись в дневник ДЗ — за сегодняшний день. */
+  @Post('diary')
+  diary(@CurrentUser() me: any, @Body() body: HomeworkLogDto) {
+    return this.svc.writeDiary(me.id, body);
   }
 
   /**

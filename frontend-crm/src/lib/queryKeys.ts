@@ -109,6 +109,10 @@ export const keys = {
     student: (id: string) => ['academy', 'student', id] as const,
     pick: (search: string, groupId?: string) => ['academy', 'pick', search, groupId ?? ''] as const,
     crm: (studentId: string) => ['academy', 'crm', studentId] as const,
+    levels: () => ['academy', 'levels'] as const,
+    // Под 'groups' — правка занятий (keys.groups.all) перечитывает и дневник.
+    diary: (sessionId: string) => ['groups', 'diary', sessionId] as const,
+    course: (groupId: string) => ['groups', 'course', groupId] as const,
   },
   installments: {
     all: ['installments'] as const,

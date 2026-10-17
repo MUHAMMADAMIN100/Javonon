@@ -14,7 +14,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { canSeeAllStudents } from '../auth/client-access';
 import { DEFAULT_CABINET } from '../common/cabinets';
 import { secureRandomString } from '../common/random';
-import { parseCalendarDateUtc, tjLocalDay } from '../common/tj-time';
+import { parseCalendarDateUtc, tjLocalDay, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 import { utf8Name } from '../common/upload-name';
 import {
   assertAcademyManager,
@@ -27,26 +27,33 @@ import {
 } from './academy-access';
 import {
   academyStatusOf,
-  buildJournal,
-  isWeekKey,
+  attendanceOf,
+  buildGroupJournal,
+  diaryDays,
+  diaryStart,
+  groupWeekAverages,
+  markOf,
   needsDecision,
-  rowsOf,
+  studentLessons,
   summarize,
-  weekKeyOf,
-  type AcademyStatus,
-  type JournalWeek,
-  type WeekStudentResult,
+  weekAverages,
   weeklyPattern,
+  type AcademyStatus,
+  type GroupJournal,
+  type LessonMark,
 } from './journal-math';
 import {
   AcademyDecisionDto,
+  AcademyLevelDto,
   AddMaterialLinkDto,
+  CompleteCourseDto,
   CreateAcademyStudentDto,
   GiveFlagDto,
+  HomeworkLogDto,
   ReinstateDto,
   RemoveFlagDto,
+  ReorderLevelsDto,
   SaveJournalEntriesDto,
-  SaveJournalWeeksDto,
   UpdateAcademyStudentDto,
 } from './dto/academy.dto';
 
@@ -58,6 +65,7 @@ export function uploadsRoot(): string {
 }
 
 const USER_REF = { select: { id: true, fullName: true, isActive: true } } as const;
+const LEVEL_REF = { select: { id: true, name: true } } as const;
 
 const SESSION_SELECT = {
   id: true,
@@ -66,12 +74,33 @@ const SESSION_SELECT = {
   status: true,
   topic: true,
   teacherId: true,
+  homework: true,
+} as const;
+
+const ENTRY_SELECT = {
+  sessionId: true,
+  studentId: true,
+  present: true,
+  attendance: true,
+  homeworkPct: true,
+  vocabularyPct: true,
+  performancePct: true,
+  comment: true,
 } as const;
 
 /** Сколько последних комментариев учителей показывать в карточке ученика. */
 const RECENT_COMMENTS = 15;
+/** Сколько последних ДЗ с дневником показывать в карточке ученика. */
+const RECENT_DIARIES = 20;
 /** Потолок списка учеников за один запрос — предохранитель. */
 const STUDENTS_TAKE_LIMIT = 3000;
+/** «Из базы» у учителя: сколько учеников без группы показывать за раз. */
+const TEACHER_PICK_LIMIT = 60;
+/** Календарь кабинета: не больше двух месяцев за запрос. */
+const CALENDAR_MAX_DAYS = 62;
+
+/** Стандартный набор уровней — кнопка «Заполнить стандартными». */
+export const DEFAULT_LEVELS = ['Beginner', 'Elementary', 'Pre-Intermediate', 'Intermediate', 'Upper-Intermediate', 'Advanced'];
 
 function generatePassword(length = 8): string {
   return secureRandomString('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789', length);
@@ -91,12 +120,75 @@ function ageOf(birthday: Date | null): number | null {
   return age >= 0 && age < 130 ? age : null;
 }
 
+/** «у 1 ученика», «у 3 учеников». */
+function studentsGen(n: number): string {
+  return n % 10 === 1 && n % 100 !== 11 ? `${n} ученика` : `${n} учеников`;
+}
+
+// ─── Телефоны родителей ───
+// Живут в общих Student.phones / phoneLabels — как в карточке CRM, где у
+// номера есть подпись («сам», «Отец», «Мать»). Поиск по телефону и карточка
+// студента видят их без отдельных колонок.
+const OWN_LABEL = 'сам';
+const FATHER_LABEL = 'Отец';
+const MOTHER_LABEL = 'Мать';
+const FATHER_RE = /^(отец|падар|father)$/i;
+const MOTHER_RE = /^(мать|модар|mother)$/i;
+
+export function parentPhonesOf(phones: string[], labels: string[]): { father: string | null; mother: string | null } {
+  let father: string | null = null;
+  let mother: string | null = null;
+  phones.forEach((p, i) => {
+    if (i === 0) return;
+    const label = (labels[i] || '').trim();
+    if (!father && FATHER_RE.test(label)) father = p;
+    else if (!mother && MOTHER_RE.test(label)) mother = p;
+  });
+  return { father, mother };
+}
+
+/** Свой номер первым, прочие номера как были, затем отец и мать. */
+function withParents(
+  phones: string[],
+  labels: string[],
+  own: string,
+  father: string | null,
+  mother: string | null,
+): { phones: string[]; phoneLabels: string[] } {
+  const outPhones = [own];
+  const outLabels = [(labels[0] || '').trim() || OWN_LABEL];
+  phones.forEach((p, i) => {
+    if (i === 0) return;
+    const label = (labels[i] || '').trim();
+    if (FATHER_RE.test(label) || MOTHER_RE.test(label)) return;
+    outPhones.push(p);
+    outLabels.push(labels[i] || '');
+  });
+  if (father) {
+    outPhones.push(father);
+    outLabels.push(FATHER_LABEL);
+  }
+  if (mother) {
+    outPhones.push(mother);
+    outLabels.push(MOTHER_LABEL);
+  }
+  return { phones: outPhones, phoneLabels: outLabels };
+}
+
 type MembershipRow = {
   groupId: string;
   studentId: string;
   joinedAt: Date;
   leftAt: Date | null;
 };
+
+/** Срок ДЗ хранится UTC-полночью календарного дня — это и есть 'YYYY-MM-DD'. */
+const dueKey = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+
+/** Map → объект для JSON. */
+function mapToRecord<V>(m: Map<string, V>): Record<string, V> {
+  return Object.fromEntries(m);
+}
 
 @Injectable()
 export class AcademyService {
@@ -110,14 +202,15 @@ export class AcademyService {
   // ─────────────────────────────── ЖУРНАЛ ─────────────────────────────────
 
   /**
-   * Журнал группы: недели, уроки, отметки, итоги, сводка по ученикам.
-   * Смотрят руководство, учитель группы и подменный учитель её занятий
-   * (последний отмечает только свои уроки — canEditLessons на фронте).
+   * Журнал группы: уроки, листы уроков (кто на листе), отметки, сводка по
+   * ученикам и средние по неделям для графика. Смотрят руководство, учитель
+   * группы и подменный учитель её занятий (последний отмечает только свои
+   * уроки — canEditAll на фронте).
    */
   async getJournal(user: AcademyViewer, groupId: string) {
     const group = await this.prisma.studyGroup.findUnique({
       where: { id: groupId },
-      select: { id: true, name: true, status: true, teacherId: true, teacher: USER_REF },
+      select: { id: true, name: true, status: true, teacherId: true, teacher: USER_REF, completedAt: true },
     });
     if (!group) throw new NotFoundException('Группа не найдена');
     const canEditAll = canRunGroup(user, group);
@@ -128,7 +221,7 @@ export class AcademyService {
       if (!substitute) throw new ForbiddenException('Это не ваша группа');
     }
 
-    const [sessions, members, entries, weeks] = await Promise.all([
+    const [sessions, members, entries] = await Promise.all([
       this.prisma.classSession.findMany({ where: { groupId }, select: SESSION_SELECT, orderBy: { startsAt: 'asc' } }),
       this.prisma.groupMember.findMany({
         where: { groupId },
@@ -137,21 +230,16 @@ export class AcademyService {
           joinedAt: true,
           leftAt: true,
           leftReason: true,
-          student: { select: { id: true, fullName: true, photoUrl: true, academyExpelledAt: true } },
+          student: {
+            select: { id: true, fullName: true, photoUrl: true, academyExpelledAt: true, academyLevel: LEVEL_REF },
+          },
         },
       }),
-      this.prisma.journalEntry.findMany({
-        where: { session: { groupId } },
-        select: { sessionId: true, studentId: true, present: true, score: true, comment: true },
-      }),
-      this.prisma.journalWeek.findMany({
-        where: { groupId },
-        select: { studentId: true, weekStart: true, bonus: true, exam: true },
-      }),
+      this.prisma.journalEntry.findMany({ where: { session: { groupId } }, select: ENTRY_SELECT }),
     ]);
 
     const flagCounts = await this.activeFlagCounts(members.map((m) => m.studentId));
-    const built = buildJournal({ sessions, members, entries, weeks });
+    const j = buildGroupJournal({ sessions, members, entries });
 
     const students = members
       .map((m) => ({
@@ -164,24 +252,43 @@ export class AcademyService {
         active: !m.leftAt,
         expelled: !!m.student.academyExpelledAt,
         flags: flagCounts.get(m.studentId) ?? 0,
-        summary: summarize(rowsOf(built, m.studentId)),
+        level: m.student.academyLevel,
+        summary: summarize(studentLessons(j, m.studentId).map((x) => x.mark)),
       }))
       .sort((a, b) => Number(b.active) - Number(a.active) || a.fullName.localeCompare(b.fullName, 'ru'));
+
+    const perStudent = new Map(students.map((s) => [s.id, weekAverages(j, s.id)]));
+    const groupAvg = groupWeekAverages(
+      j,
+      students.map((s) => s.id),
+    );
 
     return {
       group,
       canEditAll,
       canManage: isAcademyManager(user),
-      currentWeek: weekKeyOf(new Date()),
+      today: tjLocalDay(),
+      lessons: j.lessons,
+      sheet: mapToRecord(j.sheet),
+      marks: Object.fromEntries([...j.marks].map(([lessonId, byStudent]) => [lessonId, mapToRecord(byStudent)])),
       students,
-      weeks: built,
+      weeks: j.weeks.map((w) => ({
+        ...w,
+        groupAvg: groupAvg.get(w.key) ?? null,
+        values: Object.fromEntries(
+          students.flatMap((s) => {
+            const v = perStudent.get(s.id)?.get(w.key);
+            return v === undefined ? [] : [[s.id, v]];
+          }),
+        ),
+      })),
     };
   }
 
   /**
-   * Отметки за урок (пакетом): посещение, оценка 1–5, комментарий.
-   * undefined — не трогать, null — стереть. Оценка ставится только
-   * присутствующему: «не был» стирает оценку, оценка без отметки ставит «был».
+   * Строки листа урока (пакетом): посещение, три процента, комментарий.
+   * undefined — не трогать, null — стереть. «Не был» стирает проценты;
+   * процент без отметки (или у «не был») ставит «был».
    */
   async saveEntries(user: AcademyViewer, dto: SaveJournalEntriesDto) {
     const session = await this.prisma.classSession.findUnique({
@@ -215,7 +322,7 @@ export class AcademyService {
 
     const existing = await this.prisma.journalEntry.findMany({
       where: { sessionId: session.id, studentId: { in: ids } },
-      select: { studentId: true, present: true, score: true, comment: true },
+      select: ENTRY_SELECT,
     });
     const byStudent = new Map(existing.map((e) => [e.studentId, e]));
     const updatedById = user?.id ?? null;
@@ -223,75 +330,52 @@ export class AcademyService {
     const saved = await this.prisma.$transaction(
       dto.items.map((item) => {
         const prev = byStudent.get(item.studentId);
-        let present = prev?.present ?? null;
-        let score = prev?.score ?? null;
+        let attendance = prev ? attendanceOf(prev) : null;
+        let homeworkPct = prev?.homeworkPct ?? null;
+        let vocabularyPct = prev?.vocabularyPct ?? null;
+        let performancePct = prev?.performancePct ?? null;
         let comment = prev?.comment ?? null;
-        if (item.present !== undefined) present = item.present;
-        if (item.score !== undefined) score = item.score;
+        if (item.attendance !== undefined) attendance = item.attendance;
+        if (item.homeworkPct !== undefined) homeworkPct = item.homeworkPct;
+        if (item.vocabularyPct !== undefined) vocabularyPct = item.vocabularyPct;
+        if (item.performancePct !== undefined) performancePct = item.performancePct;
         if (item.comment !== undefined) comment = item.comment?.trim().slice(0, 500) || null;
-        if (item.present === false) score = null;
-        else if (score !== null) present = true;
-        const data = { present, score, comment, updatedById };
+        if (item.attendance === 'ABSENT' || item.attendance === null) {
+          homeworkPct = null;
+          vocabularyPct = null;
+          performancePct = null;
+        } else if (
+          (homeworkPct !== null || vocabularyPct !== null || performancePct !== null) &&
+          (attendance === null || attendance === 'ABSENT')
+        ) {
+          attendance = 'PRESENT';
+        }
+        const data = {
+          attendance,
+          present: attendance === null ? null : attendance !== 'ABSENT',
+          homeworkPct,
+          vocabularyPct,
+          performancePct,
+          comment,
+          updatedById,
+        };
         return this.prisma.journalEntry.upsert({
           where: { sessionId_studentId: { sessionId: session.id, studentId: item.studentId } },
           create: { sessionId: session.id, studentId: item.studentId, ...data },
           update: data,
-          select: { studentId: true, present: true, score: true, comment: true },
+          select: ENTRY_SELECT,
         });
       }),
     );
 
     // Урок отмечен — значит состоялся.
-    if (session.status === ClassSessionStatus.SCHEDULED && saved.some((e) => e.present !== null)) {
+    if (session.status === ClassSessionStatus.SCHEDULED && saved.some((e) => e.attendance !== null)) {
       await this.prisma.classSession.update({
         where: { id: session.id },
         data: { status: ClassSessionStatus.DONE },
       });
     }
-    return { sessionId: session.id, entries: saved };
-  }
-
-  /** Конец недели: бонус 0–10, экзамен 0–70 (undefined — не трогать, null — стереть). */
-  async saveWeeks(user: AcademyViewer, dto: SaveJournalWeeksDto) {
-    if (!isWeekKey(dto.weekStart)) throw new BadRequestException('Неделя указана неверно');
-    const group = await this.prisma.studyGroup.findUnique({
-      where: { id: dto.groupId },
-      select: { id: true, teacherId: true },
-    });
-    if (!group) throw new NotFoundException('Группа не найдена');
-    assertCanRunGroup(user, group);
-
-    const ids = Array.from(new Set(dto.items.map((i) => i.studentId)));
-    const members = await this.prisma.groupMember.findMany({
-      where: { groupId: group.id, studentId: { in: ids } },
-      select: { studentId: true },
-    });
-    if (members.length !== ids.length) throw new BadRequestException('Ученик не состоит в этой группе');
-
-    const existing = await this.prisma.journalWeek.findMany({
-      where: { groupId: group.id, weekStart: dto.weekStart, studentId: { in: ids } },
-      select: { studentId: true, bonus: true, exam: true },
-    });
-    const byStudent = new Map(existing.map((w) => [w.studentId, w]));
-    const updatedById = user?.id ?? null;
-
-    const saved = await this.prisma.$transaction(
-      dto.items.map((item) => {
-        const prev = byStudent.get(item.studentId);
-        const bonus = item.bonus !== undefined ? item.bonus : prev?.bonus ?? null;
-        const exam = item.exam !== undefined ? item.exam : prev?.exam ?? null;
-        const data = { bonus, exam, updatedById };
-        return this.prisma.journalWeek.upsert({
-          where: {
-            groupId_studentId_weekStart: { groupId: group.id, studentId: item.studentId, weekStart: dto.weekStart },
-          },
-          create: { groupId: group.id, studentId: item.studentId, weekStart: dto.weekStart, ...data },
-          update: data,
-          select: { studentId: true, weekStart: true, bonus: true, exam: true },
-        });
-      }),
-    );
-    return { groupId: group.id, weekStart: dto.weekStart, weeks: saved };
+    return { sessionId: session.id, entries: saved.map((e) => ({ studentId: e.studentId, ...markOf(e) })) };
   }
 
   // ───────────────────────────── МАТЕРИАЛЫ УРОКА ───────────────────────────
@@ -381,6 +465,104 @@ export class AcademyService {
     return join(uploadsRoot(), ACADEMY_UPLOAD_SUBDIR, name);
   }
 
+  // ──────────────────────────────── УРОВНИ ─────────────────────────────────
+
+  private levelsOrdered() {
+    return this.prisma.academyLevel.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, name: true, sortOrder: true, _count: { select: { students: true } } },
+    });
+  }
+
+  /** Список уровней по порядку — для выбора в формах и страницы «Уровни». */
+  async listLevels(user: AcademyViewer) {
+    if (!user) throw new ForbiddenException('Недостаточно прав');
+    const rows = await this.levelsOrdered();
+    return rows.map((l) => ({ id: l.id, name: l.name, sortOrder: l.sortOrder, students: l._count.students }));
+  }
+
+  private normalizeLevelName(raw: string): string {
+    const name = (raw || '').trim().replace(/\s+/g, ' ');
+    if (!name) throw new BadRequestException('Напишите название уровня');
+    if (/[<>]/.test(name)) throw new BadRequestException('Название содержит недопустимые символы');
+    return name.slice(0, 60);
+  }
+
+  private async assertLevelNameFree(name: string, exceptId?: string) {
+    const dup = await this.prisma.academyLevel.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' }, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+      select: { id: true },
+    });
+    if (dup) throw new BadRequestException('Такой уровень уже есть');
+  }
+
+  async createLevel(user: AcademyViewer, dto: AcademyLevelDto) {
+    assertAcademyManager(user);
+    const name = this.normalizeLevelName(dto.name);
+    await this.assertLevelNameFree(name);
+    const last = await this.prisma.academyLevel.aggregate({ _max: { sortOrder: true } });
+    await this.prisma.academyLevel.create({ data: { name, sortOrder: (last._max.sortOrder ?? -1) + 1 } });
+    return this.listLevels(user);
+  }
+
+  async renameLevel(user: AcademyViewer, id: string, dto: AcademyLevelDto) {
+    assertAcademyManager(user);
+    const level = await this.prisma.academyLevel.findUnique({ where: { id }, select: { id: true } });
+    if (!level) throw new NotFoundException('Уровень не найден');
+    const name = this.normalizeLevelName(dto.name);
+    await this.assertLevelNameFree(name, id);
+    await this.prisma.academyLevel.update({ where: { id }, data: { name } });
+    return this.listLevels(user);
+  }
+
+  /** Удалить можно только уровень, которого нет ни у одного ученика. */
+  async deleteLevel(user: AcademyViewer, id: string) {
+    assertAcademyManager(user);
+    const level = await this.prisma.academyLevel.findUnique({
+      where: { id },
+      select: { id: true, name: true, _count: { select: { students: true } } },
+    });
+    if (!level) throw new NotFoundException('Уровень не найден');
+    if (level._count.students > 0) {
+      throw new BadRequestException(
+        `Уровень «${level.name}» стоит у ${studentsGen(level._count.students)} — сначала смените им уровень`,
+      );
+    }
+    await this.prisma.academyLevel.delete({ where: { id } });
+    return this.listLevels(user);
+  }
+
+  /** Новый порядок — полный список id уровней сверху вниз. */
+  async reorderLevels(user: AcademyViewer, dto: ReorderLevelsDto) {
+    assertAcademyManager(user);
+    const all = await this.prisma.academyLevel.findMany({ select: { id: true } });
+    const ids = Array.from(new Set(dto.ids));
+    if (ids.length !== all.length || !all.every((l) => ids.includes(l.id))) {
+      throw new BadRequestException('Список уровней изменился — обновите страницу');
+    }
+    await this.prisma.$transaction(
+      ids.map((id, i) => this.prisma.academyLevel.update({ where: { id }, data: { sortOrder: i } })),
+    );
+    return this.listLevels(user);
+  }
+
+  /** «Заполнить стандартными» — только пока список пуст. */
+  async seedDefaultLevels(user: AcademyViewer) {
+    assertAcademyManager(user);
+    const count = await this.prisma.academyLevel.count();
+    if (count > 0) throw new BadRequestException('Список уровней уже заполнен');
+    await this.prisma.academyLevel.createMany({
+      data: DEFAULT_LEVELS.map((name, i) => ({ name, sortOrder: i })),
+    });
+    return this.listLevels(user);
+  }
+
+  private async assertLevelExists(levelId: string) {
+    const level = await this.prisma.academyLevel.findUnique({ where: { id: levelId }, select: { id: true, name: true } });
+    if (!level) throw new BadRequestException('Уровень не найден — обновите список уровней');
+    return level;
+  }
+
   // ──────────────────────────────── УЧЕНИКИ ────────────────────────────────
 
   /**
@@ -390,7 +572,7 @@ export class AcademyService {
    */
   async listStudents(
     user: AcademyViewer,
-    f: { search?: string; groupId?: string; teacherId?: string; status?: string; type?: string },
+    f: { search?: string; groupId?: string; teacherId?: string; status?: string; type?: string; levelId?: string },
   ) {
     if (!user) throw new ForbiddenException('Недостаточно прав');
     const manager = isAcademyManager(user);
@@ -402,6 +584,8 @@ export class AcademyService {
     }
     if (f.type === 'ACADEMY') and.push({ academyOnly: true });
     else if (f.type === 'AGENCY') and.push({ academyOnly: false });
+    if (f.levelId === 'NONE') and.push({ academyLevelId: null });
+    else if (f.levelId) and.push({ academyLevelId: f.levelId });
 
     const rows = await this.prisma.student.findMany({
       where: { AND: and },
@@ -416,6 +600,7 @@ export class AcademyService {
         academyOnly: true,
         academyExpelledAt: true,
         academyFlagsReviewedAt: true,
+        academyLevel: LEVEL_REF,
         createdAt: true,
         groupMemberships: {
           select: {
@@ -440,7 +625,7 @@ export class AcademyService {
         )
       : rows;
 
-    const summaries = await this.summariesFor(
+    const marks = await this.marksByStudent(
       filtered.flatMap((s) =>
         s.groupMemberships.map((m) => ({ groupId: m.groupId, studentId: s.id, joinedAt: m.joinedAt, leftAt: m.leftAt })),
       ),
@@ -465,13 +650,14 @@ export class AcademyService {
         createdAt: s.createdAt,
         status,
         flags: s.redFlags.length,
+        level: s.academyLevel,
         groups: activeGroups.map((m) => ({
           id: m.group.id,
           name: m.group.name,
           status: m.group.status,
           teacher: m.group.teacher,
         })),
-        summary: summarize(summaries.get(s.id) ?? []),
+        summary: summarize(marks.get(s.id) ?? []),
       };
     });
 
@@ -484,58 +670,64 @@ export class AcademyService {
   }
 
   /**
-   * Итоги недель учеников по их группам (для сводок): одна выборка занятий,
-   * отметок и недель на все группы, затем общая формула journal-math.
+   * Журналы групп, урезанные до переданных членств: одна выборка занятий и
+   * отметок на все группы, затем общая формула journal-math.
    */
-  private async summariesFor(memberships: MembershipRow[]): Promise<Map<string, WeekStudentResult[]>> {
-    const out = new Map<string, WeekStudentResult[]>();
-    if (!memberships.length) return out;
+  private async journalsByGroup(memberships: MembershipRow[]): Promise<Map<string, GroupJournal>> {
+    const out = new Map<string, GroupJournal>();
     const groupIds = Array.from(new Set(memberships.map((m) => m.groupId)));
+    if (!groupIds.length) return out;
     const studentIds = Array.from(new Set(memberships.map((m) => m.studentId)));
-    const [sessions, entries, weeks] = await Promise.all([
+    const [sessions, entries] = await Promise.all([
       this.prisma.classSession.findMany({
         where: { groupId: { in: groupIds } },
         select: { ...SESSION_SELECT, groupId: true },
       }),
       this.prisma.journalEntry.findMany({
         where: { studentId: { in: studentIds }, session: { groupId: { in: groupIds } } },
-        select: { sessionId: true, studentId: true, present: true, score: true, comment: true },
-      }),
-      this.prisma.journalWeek.findMany({
-        where: { studentId: { in: studentIds }, groupId: { in: groupIds } },
-        select: { groupId: true, studentId: true, weekStart: true, bonus: true, exam: true },
+        select: ENTRY_SELECT,
       }),
     ]);
     for (const gid of groupIds) {
       const gSessions = sessions.filter((s) => s.groupId === gid);
-      const sessionIds = new Set(gSessions.map((s) => s.id));
-      const built = buildJournal({
-        sessions: gSessions,
-        members: memberships.filter((m) => m.groupId === gid),
-        entries: entries.filter((e) => sessionIds.has(e.sessionId)),
-        weeks: weeks.filter((w) => w.groupId === gid),
-      });
-      for (const w of built) {
-        for (const r of w.rows) {
-          const list = out.get(r.studentId);
-          if (list) list.push(r);
-          else out.set(r.studentId, [r]);
-        }
-      }
+      const ids = new Set(gSessions.map((s) => s.id));
+      out.set(
+        gid,
+        buildGroupJournal({
+          sessions: gSessions,
+          members: memberships.filter((m) => m.groupId === gid),
+          entries: entries.filter((e) => ids.has(e.sessionId)),
+        }),
+      );
+    }
+    return out;
+  }
+
+  /** Отметки учеников по всем их группам — для сводок. */
+  private async marksByStudent(memberships: MembershipRow[]): Promise<Map<string, Array<LessonMark | null>>> {
+    const out = new Map<string, Array<LessonMark | null>>();
+    const perGroup = await this.journalsByGroup(memberships);
+    for (const m of memberships) {
+      const j = perGroup.get(m.groupId);
+      if (!j) continue;
+      const list = out.get(m.studentId) ?? [];
+      list.push(...studentLessons(j, m.studentId).map((x) => x.mark));
+      out.set(m.studentId, list);
     }
     return out;
   }
 
   /**
-   * Поиск для «Добавить в группу»: студенты агентства и ученики академии
-   * по ФИО, e-mail или цифрам телефона. Отдельно от GET /students: тот —
-   * агентский список (без учеников академии и по правам «Студенты»), а
-   * руководству академии нужны все, кого можно посадить в группу.
+   * Поиск для «Добавить в группу».
+   *   Руководство — студенты агентства и ученики академии по ФИО, e-mail
+   *   или цифрам телефона (от 2 символов).
+   *   Учитель — только ученики академии, которые сейчас ни в одной группе
+   *   (и не отчислены): клиентов агентства и чужих учеников он не видит.
+   *   Список показывается сразу, поиск сужает его.
    */
   async pickStudents(user: AcademyViewer, search: string, groupId?: string) {
-    assertAcademyManager(user);
+    if (!user) throw new ForbiddenException('Недостаточно прав');
     const q = (search || '').trim();
-    if (q.length < 2) return [];
     const digits = q.replace(/\D/g, '');
     const select = {
       id: true,
@@ -544,8 +736,54 @@ export class AcademyService {
       email: true,
       academyOnly: true,
       academyExpelledAt: true,
+      academyLevel: LEVEL_REF,
       groupMemberships: { where: { leftAt: null }, select: { groupId: true, group: { select: { name: true } } } },
     } as const;
+    type Row = Prisma.StudentGetPayload<{ select: typeof select }>;
+    const shape = (s: Row) => ({
+      id: s.id,
+      fullName: s.fullName,
+      phone: s.phones[0] || null,
+      email: s.email,
+      academyOnly: s.academyOnly,
+      expelled: !!s.academyExpelledAt,
+      level: s.academyLevel,
+      inGroup: groupId ? s.groupMemberships.some((m) => m.groupId === groupId) : false,
+      groups: s.groupMemberships.map((m) => m.group.name),
+    });
+
+    if (!isAcademyManager(user)) {
+      if (!groupId) throw new BadRequestException('Не указана группа');
+      const g = await this.prisma.studyGroup.findUnique({ where: { id: groupId }, select: { teacherId: true } });
+      if (!g) throw new NotFoundException('Группа не найдена');
+      if (!teachesGroup(user, g)) throw new ForbiddenException('Это не ваша группа');
+      // Учеников без группы немного — берём всех и фильтруем на месте
+      // (телефон — по цифрам, как в списке учеников).
+      const base = await this.prisma.student.findMany({
+        where: {
+          AND: [
+            { OR: [{ academyOnly: true }, { groupMemberships: { some: {} } }] },
+            { academyExpelledAt: null },
+            { groupMemberships: { none: { leftAt: null } } },
+          ],
+        },
+        orderBy: { fullName: 'asc' },
+        take: STUDENTS_TAKE_LIMIT,
+        select,
+      });
+      const ql = q.toLowerCase();
+      const found = q
+        ? base.filter(
+            (s) =>
+              s.fullName.toLowerCase().includes(ql) ||
+              (s.email || '').toLowerCase().includes(ql) ||
+              (digits.length >= 3 && s.phones.some((p) => p.replace(/\D/g, '').includes(digits))),
+          )
+        : base;
+      return found.slice(0, TEACHER_PICK_LIMIT).map(shape);
+    }
+
+    if (q.length < 2) return [];
     const byText = await this.prisma.student.findMany({
       where: {
         OR: [
@@ -557,7 +795,7 @@ export class AcademyService {
       take: 30,
       select,
     });
-    let byPhone: typeof byText = [];
+    let byPhone: Row[] = [];
     if (digits.length >= 4) {
       const ids = await this.prisma.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "Student"
@@ -574,16 +812,7 @@ export class AcademyService {
     return [...byText, ...byPhone]
       .filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)))
       .slice(0, 30)
-      .map((s) => ({
-        id: s.id,
-        fullName: s.fullName,
-        phone: s.phones[0] || null,
-        email: s.email,
-        academyOnly: s.academyOnly,
-        expelled: !!s.academyExpelledAt,
-        inGroup: groupId ? s.groupMemberships.some((m) => m.groupId === groupId) : false,
-        groups: s.groupMemberships.map((m) => m.group.name),
-      }));
+      .map(shape);
   }
 
   private async activeFlagCounts(studentIds: string[]): Promise<Map<string, number>> {
@@ -604,6 +833,7 @@ export class AcademyService {
         id: true,
         fullName: true,
         phones: true,
+        phoneLabels: true,
         email: true,
         birthday: true,
         photoUrl: true,
@@ -614,6 +844,8 @@ export class AcademyService {
         academyExpelNote: true,
         academyExpelledBy: USER_REF,
         academyFlagsReviewedAt: true,
+        academyLevelId: true,
+        academyLevel: LEVEL_REF,
         managerId: true,
         chinaManagerId: true,
         groupMemberships: {
@@ -624,7 +856,9 @@ export class AcademyService {
             joinedAt: true,
             leftAt: true,
             leftReason: true,
-            group: { select: { id: true, name: true, status: true, teacherId: true, teacher: USER_REF } },
+            group: {
+              select: { id: true, name: true, status: true, teacherId: true, teacher: USER_REF, completedAt: true },
+            },
           },
         },
         redFlags: {
@@ -659,7 +893,15 @@ export class AcademyService {
     throw new ForbiddenException('Это не ваш ученик');
   }
 
-  /** Карточка ученика академии: контакты, группы, итоги по неделям, флаги, комментарии. */
+  /** Ученик сейчас учится в группе этого учителя — учитель правит его данные и уровень. */
+  private teachesStudentNow(
+    user: AcademyViewer,
+    s: { groupMemberships: Array<{ leftAt: Date | null; group: { teacherId: string | null } }> },
+  ): boolean {
+    return s.groupMemberships.some((m) => !m.leftAt && teachesGroup(user, m.group));
+  }
+
+  /** Карточка ученика академии: контакты, уровень, группы с уроками, флаги, дневник ДЗ, комментарии. */
   async getStudent(user: AcademyViewer, id: string) {
     const s = await this.loadAcademyStudent(id);
     if (!s || !this.isAcademyStudent(s)) throw new NotFoundException('Ученик академии не найден');
@@ -671,12 +913,13 @@ export class AcademyService {
       joinedAt: m.joinedAt,
       leftAt: m.leftAt,
     }));
-    const perGroup = await this.weeksByGroup(memberships);
-    const allRows: WeekStudentResult[] = [];
+    const perGroup = await this.journalsByGroup(memberships);
+    const allMarks: Array<LessonMark | null> = [];
     const groups = s.groupMemberships.map((m) => {
-      const weeks = perGroup.get(m.groupId) ?? [];
-      const rows = rowsOf(weeks, s.id);
-      allRows.push(...rows);
+      const j = perGroup.get(m.groupId);
+      const lessons = j ? studentLessons(j, s.id) : [];
+      allMarks.push(...lessons.map((x) => x.mark));
+      const weekly = j ? weekAverages(j, s.id) : new Map<string, number>();
       return {
         membershipId: m.id,
         group: m.group,
@@ -684,42 +927,36 @@ export class AcademyService {
         leftAt: m.leftAt,
         leftReason: m.leftReason,
         active: !m.leftAt,
-        summary: summarize(rows),
-        weeks: weeks
-          .map((w) => {
-            const r = w.rows.find((x) => x.studentId === s.id);
-            return r
-              ? {
-                  key: w.key,
-                  index: w.index,
-                  from: w.from,
-                  to: w.to,
-                  held: r.held,
-                  attended: r.attended,
-                  lessonPoints: r.lessonPoints,
-                  bonus: r.bonus,
-                  exam: r.exam,
-                  total: r.total,
-                  final: r.final,
-                }
-              : null;
-          })
-          .filter(Boolean),
+        summary: summarize(lessons.map((x) => x.mark)),
+        lessons: lessons
+          .filter((x) => x.lesson.past || x.mark)
+          .map((x) => ({
+            id: x.lesson.id,
+            number: x.lesson.number,
+            startsAt: x.lesson.startsAt,
+            topic: x.lesson.topic,
+            mark: x.mark,
+          })),
+        weeks: (j?.weeks ?? [])
+          .filter((w) => weekly.has(w.key))
+          .map((w) => ({ key: w.key, index: w.index, from: w.from, to: w.to, value: weekly.get(w.key)! })),
       };
     });
 
-    const comments = await this.prisma.journalEntry.findMany({
-      where: { studentId: s.id, comment: { not: null } },
-      orderBy: { session: { startsAt: 'desc' } },
-      take: RECENT_COMMENTS,
-      select: {
-        comment: true,
-        score: true,
-        present: true,
-        updatedBy: { select: { id: true, fullName: true } },
-        session: { select: { id: true, startsAt: true, topic: true, group: { select: { id: true, name: true } } } },
-      },
-    });
+    const [comments, levelHistory, diary] = await Promise.all([
+      this.prisma.journalEntry.findMany({
+        where: { studentId: s.id, comment: { not: null } },
+        orderBy: { session: { startsAt: 'desc' } },
+        take: RECENT_COMMENTS,
+        select: {
+          ...ENTRY_SELECT,
+          updatedBy: { select: { id: true, fullName: true } },
+          session: { select: { id: true, startsAt: true, topic: true, group: { select: { id: true, name: true } } } },
+        },
+      }),
+      this.levelHistoryOf(s.id),
+      this.diaryOfStudent(s.id, memberships),
+    ]);
 
     const activeFlags = s.redFlags.filter((f) => !f.removedAt);
     const activeGroups = s.groupMemberships.filter((m) => !m.leftAt);
@@ -730,12 +967,17 @@ export class AcademyService {
       activeGroups: activeGroups.length,
     });
     const manager = isAcademyManager(user);
+    const mine = this.teachesStudentNow(user, s);
     const myActiveGroups = activeGroups.filter((m) => manager || teachesGroup(user, m.group)).map((m) => m.group);
+    const parents = parentPhonesOf(s.phones, s.phoneLabels);
 
     return {
       id: s.id,
       fullName: s.fullName,
       phones: s.phones,
+      phoneLabels: s.phoneLabels,
+      fatherPhone: parents.father,
+      motherPhone: parents.mother,
       email: s.email,
       birthday: s.birthday,
       age: ageOf(s.birthday),
@@ -746,17 +988,19 @@ export class AcademyService {
       comment: s.academyOnly ? s.comment : null,
       createdAt: s.createdAt,
       status,
+      level: s.academyLevel,
+      levelHistory,
       flagsActive: activeFlags.length,
       expelled: s.academyExpelledAt
         ? { at: s.academyExpelledAt, note: s.academyExpelNote, by: s.academyExpelledBy }
         : null,
       flags: s.redFlags,
       groups,
-      summary: summarize(allRows),
+      summary: summarize(allMarks),
+      diary,
       comments: comments.map((c) => ({
         comment: c.comment,
-        score: c.score,
-        present: c.present,
+        mark: markOf(c),
         author: c.updatedBy,
         sessionId: c.session.id,
         date: c.session.startsAt,
@@ -764,45 +1008,104 @@ export class AcademyService {
         group: c.session.group,
       })),
       canManage: manager,
+      canEdit: s.academyOnly && (manager || mine),
+      canEditLevel: manager || mine,
+      canResetPassword: s.academyOnly && (manager || mine),
       canFlag: !s.academyExpelledAt && myActiveGroups.length > 0,
       flagGroups: myActiveGroups.map((g) => ({ id: g.id, name: g.name })),
     };
   }
 
-  /** Журнал каждой группы, урезанный до переданных членств. */
-  private async weeksByGroup(memberships: MembershipRow[]): Promise<Map<string, JournalWeek[]>> {
-    const out = new Map<string, JournalWeek[]>();
-    const groupIds = Array.from(new Set(memberships.map((m) => m.groupId)));
-    if (!groupIds.length) return out;
-    const studentIds = Array.from(new Set(memberships.map((m) => m.studentId)));
-    const [sessions, entries, weeks] = await Promise.all([
-      this.prisma.classSession.findMany({
-        where: { groupId: { in: groupIds } },
-        select: { ...SESSION_SELECT, groupId: true },
-      }),
-      this.prisma.journalEntry.findMany({
-        where: { studentId: { in: studentIds }, session: { groupId: { in: groupIds } } },
-        select: { sessionId: true, studentId: true, present: true, score: true, comment: true },
-      }),
-      this.prisma.journalWeek.findMany({
-        where: { studentId: { in: studentIds }, groupId: { in: groupIds } },
-        select: { groupId: true, studentId: true, weekStart: true, bonus: true, exam: true },
-      }),
-    ]);
-    for (const gid of groupIds) {
-      const gSessions = sessions.filter((s) => s.groupId === gid);
-      const ids = new Set(gSessions.map((s) => s.id));
-      out.set(
-        gid,
-        buildJournal({
-          sessions: gSessions,
-          members: memberships.filter((m) => m.groupId === gid),
-          entries: entries.filter((e) => ids.has(e.sessionId)),
-          weeks: weeks.filter((w) => w.groupId === gid),
-        }),
-      );
-    }
-    return out;
+  private async levelHistoryOf(studentId: string) {
+    return this.prisma.academyLevelChange.findMany({
+      where: { studentId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        fromName: true,
+        toName: true,
+        reason: true,
+        createdAt: true,
+        group: { select: { id: true, name: true } },
+        changedBy: { select: { id: true, fullName: true } },
+      },
+    });
+  }
+
+  /**
+   * Дневник ДЗ ученика по последним урокам с заданием (в его группах, за
+   * время членства): дни с урока по срок и записи по дням.
+   */
+  private async diaryOfStudent(studentId: string, memberships: MembershipRow[]) {
+    if (!memberships.length) return [];
+    const sessions = await this.prisma.classSession.findMany({
+      where: {
+        groupId: { in: memberships.map((m) => m.groupId) },
+        status: { not: ClassSessionStatus.CANCELLED },
+        homework: { not: null },
+        startsAt: { lte: new Date() },
+      },
+      orderBy: { startsAt: 'desc' },
+      take: RECENT_DIARIES * 3,
+      select: {
+        id: true,
+        groupId: true,
+        startsAt: true,
+        topic: true,
+        homework: true,
+        homeworkDue: true,
+        homeworkSetAt: true,
+        group: { select: { id: true, name: true } },
+        homeworkLogs: { where: { studentId }, select: { day: true, text: true, createdAt: true, updatedAt: true } },
+      },
+    });
+    return sessions
+      .filter((x) => {
+        const m = memberships.find((mm) => mm.groupId === x.groupId);
+        if (!m) return false;
+        if (x.homeworkLogs.length) return true;
+        return tjLocalDay(x.startsAt) >= tjLocalDay(m.joinedAt) && (!m.leftAt || x.startsAt <= m.leftAt);
+      })
+      .slice(0, RECENT_DIARIES)
+      .map((x) => {
+        const m = memberships.find((mm) => mm.groupId === x.groupId);
+        return this.diaryShape(x, m ? tjLocalDay(m.joinedAt) : undefined);
+      });
+  }
+
+  /**
+   * Окно дневника: с выдачи задания (не раньше дня урока и прихода ученика в
+   * группу) по срок — и шире, если записи остались за его пределами (срок
+   * сдвинули).
+   */
+  private diaryShape(x: {
+    id: string;
+    startsAt: Date;
+    topic: string | null;
+    homework: string | null;
+    homeworkDue: Date | null;
+    homeworkSetAt: Date | null;
+    group: { id: string; name: string };
+    homeworkLogs: Array<{ day: string; text: string; createdAt: Date; updatedAt: Date }>;
+  }, joinedDay?: string) {
+    const issued = diaryStart(x.startsAt, x.homeworkSetAt);
+    const start = joinedDay && joinedDay > issued ? joinedDay : issued;
+    const from = x.homeworkLogs.reduce((acc, l) => (l.day < acc ? l.day : acc), start);
+    const due = dueKey(x.homeworkDue) ?? start;
+    const lastLog = x.homeworkLogs.reduce((acc, l) => (l.day > acc ? l.day : acc), due);
+    return {
+      sessionId: x.id,
+      startsAt: x.startsAt,
+      topic: x.topic,
+      homework: x.homework,
+      homeworkDue: x.homeworkDue,
+      group: x.group,
+      days: diaryDays(from, lastLog > due ? lastLog : due),
+      logs: Object.fromEntries(
+        x.homeworkLogs.map((l) => [l.day, { text: l.text, createdAt: l.createdAt, updatedAt: l.updatedAt }]),
+      ),
+    };
   }
 
   private normalizeEmail(raw: string): string {
@@ -811,11 +1114,18 @@ export class AcademyService {
     return email;
   }
 
-  private normalizePhone(raw: string): string {
+  private normalizePhone(raw: string, what = 'Телефон'): string {
     const phone = (raw || '').trim();
     const digits = phone.replace(/\D/g, '');
-    if (digits.length < 9 || digits.length > 15) throw new BadRequestException('Телефон указан неверно');
+    if (digits.length < 9 || digits.length > 15) throw new BadRequestException(`${what} указан неверно`);
     return phone;
+  }
+
+  /** Необязательный телефон родителя: пусто — нет номера. */
+  private optionalPhone(raw: string | undefined, what: string): string | null {
+    const v = (raw || '').trim();
+    if (!v || v.replace(/\D/g, '').length <= 3) return null; // пустой или только код страны
+    return this.normalizePhone(v, what);
   }
 
   private normalizeName(raw: string): string {
@@ -846,21 +1156,36 @@ export class AcademyService {
    * Ученик только академии: без заявки, сделки и оплаты. Направление и
    * кабинет обязательны в схеме Student — ставим заглушки и помечаем
    * направление неподтверждённым (как у заявок с лендинга).
+   *
+   * Заводят руководство (в любую группу или без группы) и учитель — только
+   * сразу в свою действующую группу.
    */
   async createStudent(user: AcademyViewer, dto: CreateAcademyStudentDto) {
-    assertAcademyManager(user);
+    if (!user) throw new ForbiddenException('Недостаточно прав');
+    const manager = isAcademyManager(user);
+    if (!manager) {
+      if (!dto.groupId) throw new BadRequestException('Выберите свою группу');
+      const g = await this.prisma.studyGroup.findUnique({ where: { id: dto.groupId }, select: { teacherId: true } });
+      if (!g) throw new NotFoundException('Группа не найдена');
+      if (!teachesGroup(user, g)) throw new ForbiddenException('Это не ваша группа');
+    }
     const fullName = this.normalizeName(dto.fullName);
     const phone = this.normalizePhone(dto.phone);
+    const father = this.optionalPhone(dto.fatherPhone, 'Телефон отца');
+    const mother = this.optionalPhone(dto.motherPhone, 'Телефон матери');
     const email = this.normalizeEmail(dto.email);
     const birthday = this.parseBirthday(dto.birthday);
     await this.assertEmailFree(email);
     if (dto.groupId) await this.assertActiveGroup(dto.groupId);
+    const level = dto.levelId ? await this.assertLevelExists(dto.levelId) : null;
 
     const password = generatePassword(8);
+    const contacts = withParents([], [], phone, father, mother);
     const student = await this.prisma.student.create({
       data: {
         fullName,
-        phones: [phone],
+        phones: contacts.phones,
+        phoneLabels: contacts.phoneLabels,
         email,
         password: await bcrypt.hash(password, 10),
         birthday,
@@ -869,22 +1194,54 @@ export class AcademyService {
         directionConfirmed: false,
         cabinet: DEFAULT_CABINET,
         academyOnly: true,
+        academyLevelId: level?.id ?? null,
         ...(dto.groupId ? { groupMemberships: { create: { groupId: dto.groupId } } } : {}),
+        ...(level
+          ? { academyLevelChanges: { create: { toName: level.name, reason: 'START', changedById: user.id } } }
+          : {}),
       },
       select: { id: true, fullName: true, email: true },
     });
     return { ...student, password };
   }
 
-  /** Данные ученика академии. Агентского студента правят в его карточке CRM. */
+  /**
+   * Правка ученика. Данные (ФИО, телефоны, e-mail…) — только у ученика
+   * академии: агентского студента правят в его карточке CRM. Уровень — у
+   * любого ученика академии. Правят руководство и учитель, у которого
+   * ученик сейчас учится.
+   */
   async updateStudent(user: AcademyViewer, id: string, dto: UpdateAcademyStudentDto) {
-    assertAcademyManager(user);
-    const s = await this.prisma.student.findUnique({ where: { id }, select: { id: true, academyOnly: true, phones: true } });
-    if (!s) throw new NotFoundException('Ученик не найден');
-    if (!s.academyOnly) throw new BadRequestException('Данные студента агентства меняются в его карточке CRM');
-    const data: Prisma.StudentUpdateInput = {};
+    if (!user) throw new ForbiddenException('Недостаточно прав');
+    const s = await this.loadAcademyStudent(id);
+    if (!s || !this.isAcademyStudent(s)) throw new NotFoundException('Ученик не найден');
+    if (!isAcademyManager(user) && !this.teachesStudentNow(user, s)) {
+      throw new ForbiddenException('Это не ваш ученик');
+    }
+    const touchesProfile =
+      dto.fullName !== undefined ||
+      dto.phone !== undefined ||
+      dto.email !== undefined ||
+      dto.birthday !== undefined ||
+      dto.comment !== undefined ||
+      dto.fatherPhone !== undefined ||
+      dto.motherPhone !== undefined;
+    if (touchesProfile && !s.academyOnly) {
+      throw new BadRequestException('Данные студента агентства меняются в его карточке CRM');
+    }
+
+    const data: Prisma.StudentUncheckedUpdateInput = {};
     if (dto.fullName !== undefined) data.fullName = this.normalizeName(dto.fullName);
-    if (dto.phone !== undefined) data.phones = [this.normalizePhone(dto.phone), ...s.phones.slice(1)];
+    if (dto.phone !== undefined || dto.fatherPhone !== undefined || dto.motherPhone !== undefined) {
+      const current = parentPhonesOf(s.phones, s.phoneLabels);
+      const own = dto.phone !== undefined ? this.normalizePhone(dto.phone) : s.phones[0] || '';
+      if (!own) throw new BadRequestException('Телефон указан неверно');
+      const father = dto.fatherPhone !== undefined ? this.optionalPhone(dto.fatherPhone, 'Телефон отца') : current.father;
+      const mother = dto.motherPhone !== undefined ? this.optionalPhone(dto.motherPhone, 'Телефон матери') : current.mother;
+      const contacts = withParents(s.phones, s.phoneLabels, own, father, mother);
+      data.phones = contacts.phones;
+      data.phoneLabels = contacts.phoneLabels;
+    }
     if (dto.email !== undefined) {
       const email = this.normalizeEmail(dto.email);
       await this.assertEmailFree(email, id);
@@ -892,15 +1249,36 @@ export class AcademyService {
     }
     if (dto.birthday !== undefined) data.birthday = this.parseBirthday(dto.birthday);
     if (dto.comment !== undefined) data.comment = dto.comment.trim().slice(0, 1000) || null;
-    await this.prisma.student.update({ where: { id }, data });
+
+    let levelChange: Prisma.AcademyLevelChangeUncheckedCreateInput | null = null;
+    if (dto.levelId !== undefined) {
+      const next = dto.levelId.trim() ? await this.assertLevelExists(dto.levelId.trim()) : null;
+      if ((next?.id ?? null) !== s.academyLevelId) {
+        data.academyLevelId = next?.id ?? null;
+        levelChange = {
+          studentId: s.id,
+          fromName: s.academyLevel?.name ?? null,
+          toName: next?.name ?? null,
+          reason: 'MANUAL',
+          changedById: user.id,
+        };
+      }
+    }
+    await this.prisma.$transaction([
+      this.prisma.student.update({ where: { id }, data }),
+      ...(levelChange ? [this.prisma.academyLevelChange.create({ data: levelChange })] : []),
+    ]);
     return this.getStudent(user, id);
   }
 
   /** Новый пароль ученику академии (старые входы перестают работать). */
   async resetPassword(user: AcademyViewer, id: string) {
-    assertAcademyManager(user);
-    const s = await this.prisma.student.findUnique({ where: { id }, select: { id: true, academyOnly: true, email: true } });
+    if (!user) throw new ForbiddenException('Недостаточно прав');
+    const s = await this.loadAcademyStudent(id);
     if (!s) throw new NotFoundException('Ученик не найден');
+    if (!isAcademyManager(user) && !this.teachesStudentNow(user, s)) {
+      throw new ForbiddenException('Это не ваш ученик');
+    }
     if (!s.academyOnly) throw new BadRequestException('Пароль студента агентства меняется в его карточке CRM');
     const password = generatePassword(8);
     await this.prisma.student.update({
@@ -916,11 +1294,129 @@ export class AcademyService {
     if (g.status !== StudyGroupStatus.ACTIVE) throw new BadRequestException('Группа в архиве');
   }
 
+  // ─────────────────────────── ЗАВЕРШЕНИЕ КУРСА ────────────────────────────
+
+  private async groupForCourse(user: AcademyViewer, groupId: string) {
+    const g = await this.prisma.studyGroup.findUnique({
+      where: { id: groupId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        teacherId: true,
+        completedAt: true,
+        members: {
+          where: { leftAt: null },
+          select: {
+            studentId: true,
+            student: { select: { id: true, fullName: true, photoUrl: true, academyLevelId: true, academyLevel: LEVEL_REF } },
+          },
+        },
+      },
+    });
+    if (!g) throw new NotFoundException('Группа не найдена');
+    assertCanRunGroup(user, g);
+    return g;
+  }
+
+  /**
+   * Окно «Завершить курс»: ученики группы, их уровень и предложенный
+   * следующий (по порядку «Академия → Уровни»; у последнего — тот же).
+   */
+  async coursePreview(user: AcademyViewer, groupId: string) {
+    const g = await this.groupForCourse(user, groupId);
+    const levels = await this.levelsOrdered();
+    const next = (levelId: string | null) => {
+      if (!levelId) return null;
+      const i = levels.findIndex((l) => l.id === levelId);
+      if (i < 0) return null;
+      return levels[i + 1]?.id ?? levels[i].id;
+    };
+    const futureLessons = await this.prisma.classSession.count({
+      where: { groupId, status: ClassSessionStatus.SCHEDULED, startsAt: { gt: new Date() } },
+    });
+    return {
+      group: { id: g.id, name: g.name, status: g.status, completedAt: g.completedAt },
+      levels: levels.map((l) => ({ id: l.id, name: l.name })),
+      futureLessons,
+      students: g.members
+        .map((m) => ({
+          id: m.student.id,
+          fullName: m.student.fullName,
+          photoUrl: m.student.photoUrl,
+          level: m.student.academyLevel,
+          suggestedLevelId: next(m.student.academyLevelId),
+        }))
+        .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru')),
+    };
+  }
+
+  /**
+   * «Завершить курс»: новые уровни ученикам (с историей), ученики выходят из
+   * группы с отметкой «окончил курс» (журнал остаётся), будущие занятия
+   * отменяются, группа уходит в архив. Делают учитель группы и руководство.
+   */
+  async completeCourse(user: AcademyViewer, groupId: string, dto: CompleteCourseDto) {
+    const g = await this.groupForCourse(user, groupId);
+    if (g.completedAt) throw new BadRequestException('Курс уже завершён');
+    if (g.status !== StudyGroupStatus.ACTIVE) throw new BadRequestException('Группа в архиве');
+    const members = new Map(g.members.map((m) => [m.studentId, m.student]));
+    const levels = await this.prisma.academyLevel.findMany({ select: { id: true, name: true } });
+    const levelById = new Map(levels.map((l) => [l.id, l]));
+
+    const changes: Prisma.PrismaPromise<unknown>[] = [];
+    const seen = new Set<string>();
+    let changed = 0;
+    for (const item of dto.items) {
+      if (seen.has(item.studentId)) continue;
+      seen.add(item.studentId);
+      const st = members.get(item.studentId);
+      if (!st) throw new BadRequestException('Ученик не состоит в этой группе');
+      if (item.levelId === undefined) continue;
+      const nextLevel = item.levelId ? levelById.get(item.levelId) : null;
+      if (item.levelId && !nextLevel) throw new BadRequestException('Уровень не найден — обновите окно');
+      if ((nextLevel?.id ?? null) === st.academyLevelId) continue;
+      changed++;
+      changes.push(
+        this.prisma.student.update({ where: { id: st.id }, data: { academyLevelId: nextLevel?.id ?? null } }),
+        this.prisma.academyLevelChange.create({
+          data: {
+            studentId: st.id,
+            fromName: st.academyLevel?.name ?? null,
+            toName: nextLevel?.name ?? null,
+            reason: 'COURSE',
+            groupId,
+            changedById: user!.id,
+          },
+        }),
+      );
+    }
+
+    const now = new Date();
+    const res = await this.prisma.$transaction([
+      ...changes,
+      this.prisma.groupMember.updateMany({
+        where: { groupId, leftAt: null },
+        data: { leftAt: now, leftReason: 'COMPLETED' },
+      }),
+      this.prisma.studyGroup.update({
+        where: { id: groupId },
+        data: { status: StudyGroupStatus.ARCHIVED, completedAt: now, completedById: user!.id },
+      }),
+      this.prisma.classSession.updateMany({
+        where: { groupId, status: ClassSessionStatus.SCHEDULED, startsAt: { gt: now } },
+        data: { status: ClassSessionStatus.CANCELLED },
+      }),
+    ]);
+    const cancelled = res[res.length - 1] as { count: number };
+    return { ok: true, changed, students: members.size, cancelledLessons: cancelled.count };
+  }
+
   // ───────────────────────────── КРАСНЫЕ ФЛАГИ ─────────────────────────────
 
   /**
    * Красный флаг — учитель своему ученику (в своей группе) или руководство.
-   * Когда действующих флагов 3+ и среди них есть новый после последнего
+   * Когда действующих флагов 4+ и среди них есть новый после последнего
    * «Оставить», руководству уходит уведомление «нужно решение».
    */
   async giveFlag(user: AcademyViewer, studentId: string, dto: GiveFlagDto) {
@@ -983,7 +1479,7 @@ export class AcademyService {
 
   /**
    * Решение руководства. EXPEL — отчислить (в любой момент, не только после
-   * 3-го флага): ученик выходит из всех групп, оценки остаются. KEEP —
+   * 4-го флага): ученик выходит из всех групп, оценки остаются. KEEP —
    * оставить: флаги до этого момента считаются рассмотренными.
    */
   async decide(user: AcademyViewer, studentId: string, dto: AcademyDecisionDto) {
@@ -1063,6 +1559,123 @@ export class AcademyService {
     return this.getStudent(user, studentId);
   }
 
+  // ─────────────────────────────── ДНЕВНИК ДЗ ──────────────────────────────
+
+  /**
+   * Дневник ДЗ урока для учителя: ученики × дни (с дня урока по срок) и
+   * записи. Открывают руководство, учитель группы и подменный учитель урока.
+   */
+  async sessionDiary(user: AcademyViewer, sessionId: string) {
+    const session = await this.prisma.classSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        groupId: true,
+        startsAt: true,
+        endsAt: true,
+        status: true,
+        topic: true,
+        homework: true,
+        homeworkDue: true,
+        homeworkSetAt: true,
+        teacherId: true,
+        group: { select: { id: true, name: true, teacherId: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('Занятие не найдено');
+    if (!canMarkSession(user, session)) throw new ForbiddenException('Это не ваш урок');
+
+    const [logs, members] = await Promise.all([
+      this.prisma.homeworkLog.findMany({
+        where: { sessionId },
+        select: { studentId: true, day: true, text: true, createdAt: true, updatedAt: true },
+      }),
+      this.prisma.groupMember.findMany({
+        where: { groupId: session.groupId },
+        select: {
+          studentId: true,
+          joinedAt: true,
+          leftAt: true,
+          student: { select: { id: true, fullName: true, photoUrl: true } },
+        },
+      }),
+    ]);
+    const start = diaryStart(session.startsAt, session.homeworkSetAt);
+    const from = logs.reduce((acc, l) => (l.day < acc ? l.day : acc), start);
+    const due = dueKey(session.homeworkDue) ?? start;
+    const lastLog = logs.reduce((acc, l) => (l.day > acc ? l.day : acc), due);
+    const days = diaryDays(from, lastLog);
+    const writers = new Set(logs.map((l) => l.studentId));
+    const students = members
+      .filter((m) => !m.leftAt || m.leftAt >= session.startsAt || writers.has(m.studentId))
+      .map((m) => ({
+        id: m.student.id,
+        fullName: m.student.fullName,
+        photoUrl: m.student.photoUrl,
+        active: !m.leftAt,
+        // До прихода в группу дни дневника ученику не засчитываются.
+        joinedDay: tjLocalDay(m.joinedAt),
+      }))
+      .sort((a, b) => Number(b.active) - Number(a.active) || a.fullName.localeCompare(b.fullName, 'ru'));
+
+    const byStudent: Record<string, Record<string, { text: string; createdAt: Date; updatedAt: Date }>> = {};
+    for (const l of logs) {
+      (byStudent[l.studentId] ??= {})[l.day] = { text: l.text, createdAt: l.createdAt, updatedAt: l.updatedAt };
+    }
+    return {
+      session: {
+        id: session.id,
+        startsAt: session.startsAt,
+        endsAt: session.endsAt,
+        status: session.status,
+        topic: session.topic,
+        homework: session.homework,
+        homeworkDue: session.homeworkDue,
+        group: { id: session.group.id, name: session.group.name },
+      },
+      today: tjLocalDay(),
+      days,
+      students,
+      logs: byStudent,
+    };
+  }
+
+  /**
+   * Запись ученика в дневник ДЗ — только за сегодняшний день (Душанбе), в
+   * окне с дня урока по срок. Сегодняшнюю запись можно поправить до конца
+   * дня; прошедшие дни задним числом не пишутся.
+   */
+  async writeDiary(studentId: string, dto: HomeworkLogDto) {
+    const text = dto.text.trim();
+    if (!text) throw new BadRequestException('Напишите, что вы сделали');
+    const session = await this.prisma.classSession.findUnique({
+      where: { id: dto.sessionId },
+      select: { id: true, groupId: true, startsAt: true, status: true, homework: true, homeworkDue: true, homeworkSetAt: true },
+    });
+    if (!session || !session.homework || session.status === ClassSessionStatus.CANCELLED) {
+      throw new NotFoundException('Задание не найдено');
+    }
+    const member = await this.prisma.groupMember.findUnique({
+      where: { groupId_studentId: { groupId: session.groupId, studentId } },
+      select: { leftAt: true },
+    });
+    if (!member || member.leftAt) throw new ForbiddenException('Это задание не вашей группы');
+    if (session.startsAt.getTime() > Date.now()) throw new BadRequestException('Урок ещё не начался');
+    const today = tjLocalDay();
+    const from = diaryStart(session.startsAt, session.homeworkSetAt);
+    const to = dueKey(session.homeworkDue) ?? from;
+    if (today > to) throw new BadRequestException('Срок задания прошёл — дневник закрыт');
+    if (today < from) throw new BadRequestException('Урок ещё не начался');
+
+    const saved = await this.prisma.homeworkLog.upsert({
+      where: { sessionId_studentId_day: { sessionId: session.id, studentId, day: today } },
+      create: { sessionId: session.id, studentId, day: today, text: text.slice(0, 2000) },
+      update: { text: text.slice(0, 2000) },
+      select: { day: true, text: true, createdAt: true, updatedAt: true },
+    });
+    return saved;
+  }
+
   // ─────────────────────── БЛОК В КАРТОЧКЕ СТУДЕНТА CRM ─────────────────────
 
   /**
@@ -1082,10 +1695,9 @@ export class AcademyService {
     if (!allowed) throw new ForbiddenException('Нет доступа к этому студенту');
     if (!this.isAcademyStudent(s)) return { inAcademy: false as const };
 
-    const perGroup = await this.weeksByGroup(
+    const marks = await this.marksByStudent(
       s.groupMemberships.map((m) => ({ groupId: m.groupId, studentId: s.id, joinedAt: m.joinedAt, leftAt: m.leftAt })),
     );
-    const rows = s.groupMemberships.flatMap((m) => rowsOf(perGroup.get(m.groupId) ?? [], s.id));
     const activeFlags = s.redFlags.filter((f) => !f.removedAt);
     const activeGroups = s.groupMemberships.filter((m) => !m.leftAt);
     return {
@@ -1096,42 +1708,46 @@ export class AcademyService {
         activeFlagDates: activeFlags.map((f) => f.createdAt),
         activeGroups: activeGroups.length,
       }),
+      level: s.academyLevel,
       flagsActive: activeFlags.length,
       groups: activeGroups.map((m) => ({ id: m.group.id, name: m.group.name, teacher: m.group.teacher })),
-      summary: summarize(rows),
+      summary: summarize(marks.get(s.id) ?? []),
     };
   }
 
   // ──────────────────────────── КАБИНЕТ СТУДЕНТА ───────────────────────────
 
-  /** Главная вкладки «Академия»: статус, группы, флаги, сводка. */
+  /** Главная вкладки «Академия»: статус, уровень, группы, флаги, сводка, дневник на сегодня. */
   async cabinetOverview(studentId: string) {
     const s = await this.loadAcademyStudent(studentId);
     if (!s) throw new NotFoundException('Студент не найден');
     if (!this.isAcademyStudent(s)) return { hasAcademy: false as const, academyOnly: false };
 
-    const perGroup = await this.weeksByGroup(
+    const marks = await this.marksByStudent(
       s.groupMemberships.map((m) => ({ groupId: m.groupId, studentId: s.id, joinedAt: m.joinedAt, leftAt: m.leftAt })),
     );
-    const rows = s.groupMemberships.flatMap((m) => rowsOf(perGroup.get(m.groupId) ?? [], s.id));
     const activeFlags = s.redFlags.filter((f) => !f.removedAt);
     const active = s.groupMemberships.filter((m) => !m.leftAt);
 
     // Ближайшее занятие и «по каким дням» — по ближайшим неделям расписания.
     const now = new Date();
     const horizon = new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000);
-    const upcoming = active.length
-      ? await this.prisma.classSession.findMany({
-          where: {
-            groupId: { in: active.map((m) => m.groupId) },
-            status: { not: ClassSessionStatus.CANCELLED },
-            endsAt: { gte: now },
-            startsAt: { lte: horizon },
-          },
-          orderBy: { startsAt: 'asc' },
-          select: { groupId: true, startsAt: true, endsAt: true, topic: true },
-        })
-      : [];
+    const [upcoming, levelHistory, diaryDue] = await Promise.all([
+      active.length
+        ? this.prisma.classSession.findMany({
+            where: {
+              groupId: { in: active.map((m) => m.groupId) },
+              status: { not: ClassSessionStatus.CANCELLED },
+              endsAt: { gte: now },
+              startsAt: { lte: horizon },
+            },
+            orderBy: { startsAt: 'asc' },
+            select: { groupId: true, startsAt: true, endsAt: true, topic: true },
+          })
+        : Promise.resolve([] as Array<{ groupId: string; startsAt: Date; endsAt: Date; topic: string | null }>),
+      this.levelHistoryOf(s.id),
+      this.diaryDueToday(s.id, active.map((m) => m.groupId)),
+    ]);
 
     return {
       hasAcademy: true as const,
@@ -1143,6 +1759,18 @@ export class AcademyService {
         activeFlagDates: activeFlags.map((f) => f.createdAt),
         activeGroups: active.length,
       }),
+      level: s.academyLevel ? { id: s.academyLevel.id, name: s.academyLevel.name } : null,
+      levelHistory: levelHistory.map((h) => ({
+        id: h.id,
+        fromName: h.fromName,
+        toName: h.toName,
+        reason: h.reason,
+        createdAt: h.createdAt,
+        group: h.group,
+      })),
+      completedCourses: s.groupMemberships
+        .filter((m) => m.leftReason === 'COMPLETED')
+        .map((m) => ({ id: m.group.id, name: m.group.name, completedAt: m.group.completedAt ?? m.leftAt })),
       expelled: s.academyExpelledAt ? { at: s.academyExpelledAt, note: s.academyExpelNote } : null,
       flags: activeFlags.map((f) => ({ id: f.id, reason: f.reason, createdAt: f.createdAt, group: f.group })),
       groups: active.map((m) => {
@@ -1157,8 +1785,37 @@ export class AcademyService {
           pattern: weeklyPattern(mine),
         };
       }),
-      summary: summarize(rows),
+      summary: summarize(marks.get(s.id) ?? []),
+      diaryDue,
     };
+  }
+
+  /** ДЗ, по которым сегодня ещё нет записи в дневнике (для напоминания). */
+  private async diaryDueToday(studentId: string, groupIds: string[]) {
+    if (!groupIds.length) return [];
+    const today = tjLocalDay();
+    const rows = await this.prisma.classSession.findMany({
+      where: {
+        groupId: { in: groupIds },
+        status: { not: ClassSessionStatus.CANCELLED },
+        homework: { not: null },
+        startsAt: { lte: new Date() },
+        homeworkDue: { gte: new Date(`${today}T00:00:00.000Z`) },
+      },
+      orderBy: { startsAt: 'asc' },
+      select: {
+        id: true,
+        startsAt: true,
+        topic: true,
+        homeworkDue: true,
+        homeworkSetAt: true,
+        group: { select: { id: true, name: true } },
+        homeworkLogs: { where: { studentId, day: today }, select: { day: true } },
+      },
+    });
+    return rows
+      .filter((r) => r.homeworkLogs.length === 0 && diaryStart(r.startsAt, r.homeworkSetAt) <= today)
+      .map((r) => ({ sessionId: r.id, startsAt: r.startsAt, topic: r.topic, homeworkDue: r.homeworkDue, group: r.group }));
   }
 
   /**
@@ -1204,16 +1861,82 @@ export class AcademyService {
     return { upcoming, past };
   }
 
-  /** ДЗ и материалы начавшихся уроков действующих групп — новые сверху. */
-  async cabinetHomework(studentId: string) {
+  /**
+   * Календарь кабинета: занятия действующих групп за период (с отменёнными —
+   * ученик должен видеть, что урока не будет). ДЗ и материалы — только у
+   * начавшихся уроков, как в расписании.
+   */
+  async cabinetCalendar(studentId: string, fromRaw?: string, toRaw?: string) {
+    const today = tjLocalDay();
+    const from = fromRaw && /^\d{4}-\d{2}-\d{2}$/.test(fromRaw) ? fromRaw : today;
+    const to = toRaw && /^\d{4}-\d{2}-\d{2}$/.test(toRaw) ? toRaw : from;
+    const gte = tjParseLocalDate(from);
+    const lte = tjParseLocalDateEnd(to);
+    if (Number.isNaN(gte.getTime()) || Number.isNaN(lte.getTime()) || lte < gte) {
+      throw new BadRequestException('Период указан неверно');
+    }
+    if ((lte.getTime() - gte.getTime()) / 86_400_000 > CALENDAR_MAX_DAYS) {
+      throw new BadRequestException('Слишком большой период');
+    }
     const groupIds = await this.activeGroupIds(studentId);
     if (!groupIds.length) return [];
-    return this.prisma.classSession.findMany({
+    const now = Date.now();
+    const rows = await this.prisma.classSession.findMany({
+      where: { groupId: { in: groupIds }, startsAt: { gte, lte } },
+      orderBy: { startsAt: 'asc' },
+      take: 500,
+      select: {
+        id: true,
+        startsAt: true,
+        endsAt: true,
+        status: true,
+        topic: true,
+        homework: true,
+        homeworkDue: true,
+        group: { select: { id: true, name: true, teacher: { select: { fullName: true } } } },
+        teacher: { select: { fullName: true } },
+        materials: {
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, kind: true, title: true, url: true, size: true, mimeType: true },
+        },
+      },
+    });
+    return rows.map((r) => {
+      const started = r.startsAt.getTime() <= now;
+      return {
+        id: r.id,
+        startsAt: r.startsAt,
+        endsAt: r.endsAt,
+        status: r.status,
+        topic: r.topic,
+        group: { id: r.group.id, name: r.group.name },
+        teacher: r.teacher ?? r.group.teacher,
+        started,
+        homework: started ? r.homework : null,
+        homeworkDue: started ? r.homeworkDue : null,
+        materials: started
+          ? r.materials.map((m) => ({ ...m, url: m.kind === ClassMaterialKind.LINK ? m.url : null }))
+          : [],
+      };
+    });
+  }
+
+  /** ДЗ и материалы начавшихся уроков действующих групп — новые сверху, с дневником. */
+  async cabinetHomework(studentId: string) {
+    const memberships = await this.prisma.groupMember.findMany({
+      where: { studentId, leftAt: null },
+      select: { groupId: true, joinedAt: true },
+    });
+    const groupIds = memberships.map((m) => m.groupId);
+    if (!groupIds.length) return [];
+    const joinedDay = new Map(memberships.map((m) => [m.groupId, tjLocalDay(m.joinedAt)]));
+    const today = tjLocalDay();
+    const rows = await this.prisma.classSession.findMany({
       where: {
         groupId: { in: groupIds },
         status: { not: ClassSessionStatus.CANCELLED },
         startsAt: { lte: new Date() },
-        OR: [{ homework: { not: null } }, { materials: { some: {} } }, { topic: { not: null } }],
+        OR: [{ homework: { not: null } }, { materials: { some: {} } }],
       },
       orderBy: { startsAt: 'desc' },
       take: 100,
@@ -1224,25 +1947,45 @@ export class AcademyService {
         topic: true,
         homework: true,
         homeworkDue: true,
+        homeworkSetAt: true,
+        groupId: true,
         group: { select: { id: true, name: true } },
         materials: {
           orderBy: { createdAt: 'asc' },
           select: { id: true, kind: true, title: true, url: true, size: true, mimeType: true },
         },
+        homeworkLogs: { where: { studentId }, select: { day: true, text: true, createdAt: true, updatedAt: true } },
       },
-    }).then((rows) =>
-      rows
-        .filter((r) => r.homework || r.materials.length)
-        .map((r) => ({
-          ...r,
-          // Адрес файла ученику не нужен (он закрыт для студентов) — только
-          // id для скачивания; ссылки отдаём как есть.
-          materials: r.materials.map((m) => ({ ...m, url: m.kind === ClassMaterialKind.LINK ? m.url : null })),
-        })),
-    );
+    });
+    return rows.map((r) => {
+      const d = r.homework ? this.diaryShape(r, joinedDay.get(r.groupId)) : null;
+      const from = diaryStart(r.startsAt, r.homeworkSetAt);
+      const to = dueKey(r.homeworkDue) ?? from;
+      return {
+        id: r.id,
+        startsAt: r.startsAt,
+        endsAt: r.endsAt,
+        topic: r.topic,
+        homework: r.homework,
+        homeworkDue: r.homeworkDue,
+        group: r.group,
+        // Адрес файла ученику не нужен (он закрыт для студентов) — только
+        // id для скачивания; ссылки отдаём как есть.
+        materials: r.materials.map((m) => ({ ...m, url: m.kind === ClassMaterialKind.LINK ? m.url : null })),
+        diary: d
+          ? {
+              days: d.days,
+              logs: d.logs,
+              today,
+              canWrite: today >= from && today <= to,
+              open: today <= to,
+            }
+          : null,
+      };
+    });
   }
 
-  /** Успеваемость по каждой группе: недели, свои отметки, итоги, среднее группы по неделям. */
+  /** Успеваемость по каждой группе: уроки со своими отметками, сводка, недели (свои и группы). */
   async cabinetProgress(studentId: string) {
     const memberships = await this.prisma.groupMember.findMany({
       where: { studentId },
@@ -1251,6 +1994,7 @@ export class AcademyService {
         groupId: true,
         joinedAt: true,
         leftAt: true,
+        leftReason: true,
         group: { select: { id: true, name: true, teacher: { select: { fullName: true } } } },
       },
     });
@@ -1262,65 +2006,58 @@ export class AcademyService {
       where: { groupId: { in: groupIds } },
       select: { groupId: true, studentId: true, joinedAt: true, leftAt: true },
     });
-    const [sessions, entries, weeks] = await Promise.all([
+    const [sessions, entries] = await Promise.all([
       this.prisma.classSession.findMany({
         where: { groupId: { in: groupIds } },
         select: { ...SESSION_SELECT, groupId: true },
       }),
       this.prisma.journalEntry.findMany({
         where: { session: { groupId: { in: groupIds } } },
-        select: { sessionId: true, studentId: true, present: true, score: true, comment: true },
-      }),
-      this.prisma.journalWeek.findMany({
-        where: { groupId: { in: groupIds } },
-        select: { groupId: true, studentId: true, weekStart: true, bonus: true, exam: true },
+        select: ENTRY_SELECT,
       }),
     ]);
 
     return memberships.map((m) => {
       const gSessions = sessions.filter((s) => s.groupId === m.groupId);
       const ids = new Set(gSessions.map((s) => s.id));
-      const built = buildJournal({
+      const gMembers = allMembers.filter((x) => x.groupId === m.groupId);
+      const j = buildGroupJournal({
         sessions: gSessions,
-        members: allMembers.filter((x) => x.groupId === m.groupId),
+        members: gMembers,
         entries: entries.filter((e) => ids.has(e.sessionId)),
-        weeks: weeks.filter((w) => w.groupId === m.groupId),
       });
-      const mine = rowsOf(built, studentId);
+      const mine = studentLessons(j, studentId);
+      const myWeeks = weekAverages(j, studentId);
+      const groupWeeks = groupWeekAverages(
+        j,
+        gMembers.map((x) => x.studentId),
+      );
       return {
         group: m.group,
         active: !m.leftAt,
+        completed: m.leftReason === 'COMPLETED',
         joinedAt: m.joinedAt,
         leftAt: m.leftAt,
-        summary: summarize(mine),
-        weeks: built
-          .map((w) => {
-            const r = w.rows.find((x) => x.studentId === studentId);
-            if (!r) return null;
-            const finals = w.rows.filter((x) => x.final).map((x) => x.total);
-            return {
-              key: w.key,
-              index: w.index,
-              from: w.from,
-              to: w.to,
-              lessons: w.lessons.map((l) => ({
-                id: l.id,
-                startsAt: l.startsAt,
-                topic: l.topic,
-                past: l.past,
-                mark: r.entries[l.id] ?? null,
-              })),
-              held: r.held,
-              attended: r.attended,
-              lessonPoints: r.lessonPoints,
-              bonus: r.bonus,
-              exam: r.exam,
-              total: r.total,
-              final: r.final,
-              groupAvg: finals.length ? Math.round(finals.reduce((a, b) => a + b, 0) / finals.length) : null,
-            };
-          })
-          .filter(Boolean),
+        summary: summarize(mine.map((x) => x.mark)),
+        lessons: mine
+          .filter((x) => x.lesson.past || x.mark)
+          .map((x) => ({
+            id: x.lesson.id,
+            number: x.lesson.number,
+            startsAt: x.lesson.startsAt,
+            topic: x.lesson.topic,
+            mark: x.mark,
+          })),
+        weeks: j.weeks
+          .filter((w) => myWeeks.has(w.key) || groupWeeks.has(w.key))
+          .map((w) => ({
+            key: w.key,
+            index: w.index,
+            from: w.from,
+            to: w.to,
+            me: myWeeks.get(w.key) ?? null,
+            groupAvg: groupWeeks.get(w.key) ?? null,
+          })),
       };
     });
   }

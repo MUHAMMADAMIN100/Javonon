@@ -10,35 +10,53 @@ import CrmSelect from '../components/CrmSelect';
 import CrmDatePicker from '../components/CrmDatePicker';
 import PhoneInput from '../components/PhoneInput';
 import CredRow from '../components/CredRow';
+import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { useAuth } from '../store/auth';
 import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import { keys } from '../lib/queryKeys';
 import { isTeacherOnly } from '../lib/roles';
-import { tjDateInput, tjFormatDate, tjToday } from '../lib/tjTime';
+import { tjDateInput, tjFormatDate, tjFormatDateTime, tjToday } from '../lib/tjTime';
 import { STUDENT_LOGIN_URL } from '../lib/landingUrl';
+import { phoneRule } from '../utils/validators';
 import {
   FLAGS_FOR_DECISION,
   getAcademyStudent,
+  listLevels,
   reinstate,
   removeFlag,
   resetAcademyPassword,
   updateAcademyStudent,
   type AcademyFlag,
   type AcademyStudentCard,
+  type StudentDiary,
 } from '../api/academy';
 import { listGroups } from '../api/studyGroups';
 import ScoreChart from '../components/academy/ScoreChart';
 import FlagModal from '../components/academy/FlagModal';
 import DecisionModal from '../components/academy/DecisionModal';
-import { AcademyStatusBadge, Avatar, FlagDots, TotalBadge, shortDate, weekRange } from '../components/academy/academyUi';
+import {
+  AcademyStatusBadge,
+  Avatar,
+  FlagDots,
+  LevelBadge,
+  TotalBadge,
+  leftKey,
+  pct,
+  shortDate,
+  shortKey,
+  tjWeekdayOf,
+  weekdayKey,
+} from '../components/academy/academyUi';
 
 /**
- * Карточка ученика академии: контакты, статус, группы с итогами недель и
- * графиком, красные флаги, комментарии учителей. Руководство здесь же
- * решает «отчислить / оставить», возвращает отчисленного, правит данные и
- * выдаёт новый пароль ученику академии. Паспорт, документы, оплаты и сделки
- * сюда не выводятся — это карточка учёбы, а не клиента.
+ * Карточка ученика академии: контакты (и телефоны родителей), уровень с
+ * историей, статус, группы с листами уроков и графиком, дневник ДЗ, красные
+ * флаги, комментарии учителей. Руководство здесь же решает «отчислить /
+ * оставить» и возвращает отчисленного. Данные ученика академии правят
+ * руководство и его учитель; у студента агентства учитель меняет только
+ * уровень. Паспорт, документы, оплаты и сделки сюда не выводятся — это
+ * карточка учёбы, а не клиента.
  */
 export default function AcademyStudentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -59,6 +77,7 @@ export default function AcademyStudentDetail() {
   const [flagOpen, setFlagOpen] = useState(false);
   const [decision, setDecision] = useState<'EXPEL' | 'KEEP' | null>(null);
   const [editing, setEditing] = useState(false);
+  const [levelOnly, setLevelOnly] = useState(false);
   const [reinstating, setReinstating] = useState(false);
   const [creds, setCreds] = useState<{ email: string; password: string } | null>(null);
 
@@ -117,6 +136,16 @@ export default function AcademyStudentDetail() {
 
   const activeFlags = s.flags.filter((f) => !f.removedAt);
   const removedFlags = s.flags.filter((f) => !!f.removedAt);
+  const levelHistory = s.levelHistory ?? [];
+  const phoneLabels = s.phoneLabels ?? [];
+  // Подпись номера: «Отец» / «Мать» — на языке интерфейса, прочие — как записаны.
+  const labelOf = (i: number) => {
+    if (i === 0) return null;
+    const l = (phoneLabels[i] || '').trim();
+    if (/^(отец|падар|father)$/i.test(l)) return t('academy.student.father');
+    if (/^(мать|модар|mother)$/i.test(l)) return t('academy.student.mother');
+    return l || null;
+  };
 
   return (
     <>
@@ -130,9 +159,13 @@ export default function AcademyStudentDetail() {
             <h2 className="acad-student-name" data-testid="astudent-name">{s.fullName}</h2>
             <div className="acad-student-facts">
               <AcademyStatusBadge status={s.status} testId="astudent-status" />
+              <LevelBadge level={s.level} testId="astudent-level" />
               {s.age !== null && <span>{s.age} {t('academy.years')}</span>}
-              {s.phones.map((p) => (
-                <a key={p} href={`tel:${p.replace(/[^+\d]/g, '')}`}><Icon name="call" size={14} /> {p}</a>
+              {s.phones.map((p, i) => (
+                <a key={`${p}-${i}`} href={`tel:${p.replace(/[^+\d]/g, '')}`} data-testid={i === 0 ? 'astudent-phone' : undefined}>
+                  <Icon name="call" size={14} /> {p}
+                  {labelOf(i) && <span className="acad-phone-label"> · {labelOf(i)}</span>}
+                </a>
               ))}
               {s.email && <a href={`mailto:${s.email}`}><Icon name="mail" size={14} /> {s.email}</a>}
             </div>
@@ -144,15 +177,20 @@ export default function AcademyStudentDetail() {
               <Icon name="flag" size={16} /> {t('academy.flags.give')}
             </button>
           )}
-          {s.canManage && s.academyOnly && (
-            <>
-              <button className="btn btn-secondary" onClick={() => setEditing(true)} data-testid="astudent-edit">
-                <Icon name="edit" size={16} /> {t('common.edit')}
-              </button>
-              <button className="btn btn-secondary" onClick={onPassword} disabled={passwordMut.isPending} data-testid="astudent-password">
-                <Icon name="key" size={16} /> {t('academy.student.newPassword')}
-              </button>
-            </>
+          {s.canEdit && (
+            <button className="btn btn-secondary" onClick={() => setEditing(true)} data-testid="astudent-edit">
+              <Icon name="edit" size={16} /> {t('common.edit')}
+            </button>
+          )}
+          {!s.canEdit && s.canEditLevel && (
+            <button className="btn btn-secondary" onClick={() => setLevelOnly(true)} data-testid="astudent-level-edit">
+              <Icon name="stairs" size={16} /> {t('academy.level.change')}
+            </button>
+          )}
+          {s.canResetPassword && (
+            <button className="btn btn-secondary" onClick={onPassword} disabled={passwordMut.isPending} data-testid="astudent-password">
+              <Icon name="key" size={16} /> {t('academy.student.newPassword')}
+            </button>
           )}
           {!s.academyOnly && !teacherOnly && (
             <Link className="btn btn-secondary" to={`/students/${s.id}`}>
@@ -213,7 +251,7 @@ export default function AcademyStudentDetail() {
         </div>
         <div className="card acad-tile">
           <span>{t('academy.col.attendance')}</span>
-          <b>{s.summary.attendancePct !== null ? `${s.summary.attendancePct}%` : '—'}</b>
+          <b>{pct(s.summary.attendancePct)}</b>
           <small>{s.summary.attended} / {s.summary.held}</small>
         </div>
         <div className="card acad-tile">
@@ -222,79 +260,39 @@ export default function AcademyStudentDetail() {
           <small>{s.flagsActive} / {FLAGS_FOR_DECISION}</small>
         </div>
         <div className="card acad-tile">
-          <span>{t('academy.stats.finalWeeks')}</span>
-          <b>{s.summary.finalWeeks}</b>
+          <span>{t('academy.col.level')}</span>
+          <LevelBadge level={s.level} />
         </div>
       </div>
 
       {s.groups.length === 0 ? (
         <div className="card acad-card-pad acad-hint">{t('academy.student.noGroups')}</div>
       ) : (
-        s.groups.map((m) => (
-          <div key={m.membershipId} className="card acad-card-pad acad-student-group" data-testid={`astudent-group-${m.group.id}`}>
-            <div className="acad-student-group-head">
-              <div>
-                {teacherOnly && m.group.teacherId !== me?.id ? (
-                  <b>{m.group.name}</b>
-                ) : (
-                  <Link to={`/groups/${m.group.id}`} className="acad-link"><b>{m.group.name}</b></Link>
-                )}
-                <div className="acad-hint">
-                  {m.group.teacher?.fullName || t('groups.noTeacher')} · {t('groups.joinedAt')} {tjFormatDate(m.joinedAt)}
-                  {m.leftAt && ` · ${t(m.leftReason === 'EXPELLED' ? 'academy.left.expelled' : 'academy.left.removed')} ${tjFormatDate(m.leftAt)}`}
-                </div>
+        s.groups.map((m) => <GroupBlock key={m.membershipId} m={m} card={s} teacherOnly={teacherOnly} meId={me?.id} />)
+      )}
+
+      <DiaryBlock diary={s.diary ?? []} />
+
+      {levelHistory.length > 0 && (
+        <div className="card acad-card-pad" data-testid="astudent-level-history">
+          <h3 className="acad-section-title">{t('academy.level.history')}</h3>
+          <div className="acad-level-history">
+            {levelHistory.map((h) => (
+              <div key={h.id} className="acad-level-change">
+                <span className="acad-level-change-names">
+                  {h.fromName ? <span className="acad-level is-empty">{h.fromName}</span> : null}
+                  {h.fromName && <Icon name="arrow_forward" size={15} />}
+                  <span className="acad-level">{h.toName || t('academy.level.none')}</span>
+                </span>
+                <span className="acad-hint">
+                  {tjFormatDate(h.createdAt)} · {t(`academy.level.reason.${h.reason}`)}
+                  {h.group ? ` · ${h.group.name}` : ''}
+                  {h.changedBy ? ` · ${h.changedBy.fullName}` : ''}
+                </span>
               </div>
-              <div className="acad-student-group-sum">
-                <span>{t('academy.col.avg')}: <TotalBadge total={m.summary.avg} /></span>
-                <span>{t('academy.col.attendance')}: <b>{m.summary.attendancePct !== null ? `${m.summary.attendancePct}%` : '—'}</b></span>
-              </div>
-            </div>
-            {m.weeks.some((w) => w.final) && (
-              <ScoreChart
-                series={[{
-                  id: m.membershipId,
-                  name: s.fullName,
-                  points: m.weeks.filter((w) => w.final).map((w) => ({ x: w.index, y: w.total })),
-                  avg: m.summary.avg,
-                }]}
-                weeks={m.weeks.filter((w) => w.held > 0 || w.final).map((w) => ({ x: w.index, label: `${t('academy.week')} ${w.index}` }))}
-                height={220}
-              />
-            )}
-            {m.weeks.length === 0 ? (
-              <div className="acad-hint">{t('academy.student.noWeeks')}</div>
-            ) : (
-              <div className="table-wrap">
-                <table className="table acad-weeks-table">
-                  <thead>
-                    <tr>
-                      <th>{t('academy.col.week')}</th>
-                      <th>{t('academy.col.dates')}</th>
-                      <th>{t('academy.col.attended')}</th>
-                      <th>{t('academy.col.lessonPoints')}</th>
-                      <th>{t('academy.journal.bonus')}</th>
-                      <th>{t('academy.journal.exam')}</th>
-                      <th>{t('academy.journal.total')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...m.weeks].reverse().map((w) => (
-                      <tr key={w.key}>
-                        <td><b>{w.index}</b></td>
-                        <td data-label={t('academy.col.dates')}>{weekRange(w.from, w.to)}</td>
-                        <td data-label={t('academy.col.attended')}>{w.held ? `${w.attended} / ${w.held}` : '—'}</td>
-                        <td data-label={t('academy.col.lessonPoints')}>{w.held ? w.lessonPoints : '—'}</td>
-                        <td data-label={t('academy.journal.bonus')}>{w.bonus ?? '—'}</td>
-                        <td data-label={t('academy.journal.exam')}>{w.exam ?? '—'}</td>
-                        <td data-label={t('academy.journal.total')}><TotalBadge total={w.held || w.final ? w.total : null} final={w.final} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            ))}
           </div>
-        ))
+        </div>
       )}
 
       <div className="card acad-card-pad">
@@ -340,7 +338,7 @@ export default function AcademyStudentDetail() {
                 <div className="acad-comment-meta">
                   <b>{shortDate(c.date)}</b> · {c.group.name}
                   {c.topic ? ` · ${c.topic}` : ''}
-                  {c.score ? <span className="acad-comment-score">{c.score}</span> : null}
+                  {c.mark && c.mark.total !== null && <TotalBadge total={c.mark.total} />}
                 </div>
                 <div className="acad-comment-text">{c.comment}</div>
                 {c.author && <div className="acad-hint">{c.author.fullName}</div>}
@@ -363,6 +361,7 @@ export default function AcademyStudentDetail() {
           <DecisionModal student={s} action={decision} onClose={() => setDecision(null)} onDone={(card) => refresh(card)} />
         )}
         {editing && <EditStudentModal card={s} onClose={() => setEditing(false)} onSaved={(card) => refresh(card)} />}
+        {levelOnly && <LevelModal card={s} onClose={() => setLevelOnly(false)} onSaved={(card) => refresh(card)} />}
         {reinstating && <ReinstateModal card={s} onClose={() => setReinstating(false)} onDone={(card) => refresh(card)} />}
         {creds && (
           <FormModal open title={t('academy.student.newPassword')} onClose={() => setCreds(null)} dirty={false} width={500} testId="astudent-creds">
@@ -385,6 +384,148 @@ export default function AcademyStudentDetail() {
   );
 }
 
+type GroupRow = AcademyStudentCard['groups'][number];
+
+/** Группа ученика: сводка, график «Итого по неделям» и уроки листа (свежие сверху). */
+function GroupBlock({ m, card, teacherOnly, meId }: { m: GroupRow; card: AcademyStudentCard; teacherOnly: boolean; meId?: string }) {
+  const { t } = useT();
+  const lessons = [...(m.lessons ?? [])].reverse();
+  const weeks = (m.weeks ?? []).filter((w) => typeof w.value === 'number');
+  const sort = useTableSort(
+    lessons,
+    [
+      { key: 'number', label: t('academy.journal.no'), type: 'number', value: (l) => l.number },
+      { key: 'date', label: t('academy.col.date'), type: 'date', value: (l) => l.startsAt },
+      { key: 'topic', label: t('academy.col.topic'), value: (l) => l.topic },
+      { key: 'att', label: t('academy.journal.col.attendance'), value: (l) => (l.mark?.attendance ? t(`academy.att.${l.mark.attendance}`) : null) },
+      { key: 'hw', label: t('academy.journal.col.homework'), type: 'number', value: (l) => l.mark?.homeworkPct },
+      { key: 'vocab', label: t('academy.journal.col.vocabulary'), type: 'number', value: (l) => l.mark?.vocabularyPct },
+      { key: 'perf', label: t('academy.journal.col.performance'), type: 'number', value: (l) => l.mark?.performancePct },
+      { key: 'total', label: t('academy.journal.col.total'), type: 'number', value: (l) => l.mark?.total },
+    ],
+    { persist: false },
+  );
+  return (
+    <div className="card acad-card-pad acad-student-group" data-testid={`astudent-group-${m.group.id}`}>
+      <div className="acad-student-group-head">
+        <div>
+          {teacherOnly && m.group.teacherId !== meId ? (
+            <b>{m.group.name}</b>
+          ) : (
+            <Link to={`/groups/${m.group.id}`} className="acad-link"><b>{m.group.name}</b></Link>
+          )}
+          <div className="acad-hint">
+            {m.group.teacher?.fullName || t('groups.noTeacher')} · {t('groups.joinedAt')} {tjFormatDate(m.joinedAt)}
+            {m.leftAt && ` · ${t(leftKey(m.leftReason))} ${tjFormatDate(m.leftAt)}`}
+          </div>
+        </div>
+        <div className="acad-student-group-sum">
+          <span>{t('academy.col.avg')}: <TotalBadge total={m.summary.avg} /></span>
+          <span>{t('academy.col.attendance')}: <b>{pct(m.summary.attendancePct)}</b></span>
+        </div>
+      </div>
+      {weeks.length > 0 && (
+        <ScoreChart
+          series={[{ id: m.membershipId, name: card.fullName, points: weeks.map((w) => ({ x: w.index, y: w.value })), avg: m.summary.avg }]}
+          weeks={weeks.map((w) => ({ x: w.index, label: `${t('academy.week')} ${w.index}` }))}
+          height={220}
+        />
+      )}
+      {lessons.length === 0 ? (
+        <div className="acad-hint">{t('academy.student.noWeeks')}</div>
+      ) : (
+        <div className="table-wrap">
+          <SortSelect sort={sort} />
+          <table className="table acad-lessons-table">
+            <thead>
+              <tr>{sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}</tr>
+            </thead>
+            <tbody>
+              {sort.sorted.map((l) => (
+                <tr key={l.id}>
+                  <td><b>{l.number}</b></td>
+                  <td data-label={t('academy.col.date')}>
+                    {t(`weekday.short.${weekdayKey(tjWeekdayOf(l.startsAt))}`)} {shortDate(l.startsAt)}
+                  </td>
+                  <td data-label={t('academy.col.topic')}>{l.topic || '—'}</td>
+                  <td data-label={t('academy.journal.col.attendance')}>
+                    {l.mark?.attendance ? (
+                      <span className={`acad-att-tag is-${l.mark.attendance.toLowerCase()}`}>{t(`academy.att.${l.mark.attendance}`)}</span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td data-label={t('academy.journal.col.homework')}>{pct(l.mark?.homeworkPct)}</td>
+                  <td data-label={t('academy.journal.col.vocabulary')}>{pct(l.mark?.vocabularyPct)}</td>
+                  <td data-label={t('academy.journal.col.performance')}>{pct(l.mark?.performancePct)}</td>
+                  <td data-label={t('academy.journal.col.total')}><TotalBadge total={l.mark?.total ?? null} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Дневник ДЗ ученика: по каждому заданию — дни с урока по срок и что он писал. */
+function DiaryBlock({ diary }: { diary: StudentDiary[] }) {
+  const { t } = useT();
+  const today = tjToday();
+  return (
+    <div className="card acad-card-pad" data-testid="astudent-diary">
+      <h3 className="acad-section-title">
+        {t('academy.diary.title')} <span>{diary.length}</span>
+      </h3>
+      {diary.length === 0 ? (
+        <div className="acad-hint">{t('academy.diary.empty')}</div>
+      ) : (
+        <div className="acad-sdiary-list">
+          {diary.map((d) => {
+            const written = d.days.filter((day) => d.logs[day]);
+            return (
+              <div key={d.sessionId} className="acad-sdiary" data-testid={`astudent-diary-${d.sessionId}`}>
+                <div className="acad-sdiary-head">
+                  <b>{shortDate(d.startsAt)} · {d.topic || t('classes.noTopic')}</b>
+                  <span className="acad-hint">
+                    {d.group.name}
+                    {d.homeworkDue ? ` · ${t('academy.diary.due').replace('{date}', tjFormatDate(d.homeworkDue))}` : ''}
+                    {' · '}
+                    {t('academy.diary.entries').replace('{n}', `${written.length}/${d.days.length}`)}
+                  </span>
+                </div>
+                {d.homework && <div className="acad-sdiary-hw">{d.homework}</div>}
+                <div className="acad-sdiary-days">
+                  {d.days.map((day) => {
+                    const state = d.logs[day] ? 'is-done' : day < today ? 'is-missed' : day === today ? 'is-today' : 'is-future';
+                    return (
+                      <span key={day} className={`acad-sdiary-day ${state}`} title={d.logs[day]?.text}>
+                        {shortKey(day)}
+                      </span>
+                    );
+                  })}
+                </div>
+                {written.length > 0 && (
+                  <div className="acad-sdiary-entries">
+                    {written.map((day) => (
+                      <div key={day} className="acad-sdiary-entry">
+                        <span className="acad-sdiary-entry-day">{shortKey(day)}</span>
+                        <span className="acad-sdiary-entry-text">{d.logs[day].text}</span>
+                        <span className="acad-hint">{tjFormatDateTime(d.logs[day].createdAt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EditStudentModal({
   card,
   onClose,
@@ -398,18 +539,28 @@ function EditStudentModal({
   const { toast } = useUI();
   const [fullName, setFullName] = useState(card.fullName);
   const [phone, setPhone] = useState(card.phones[0] || '');
+  const [fatherPhone, setFatherPhone] = useState(card.fatherPhone || '');
+  const [motherPhone, setMotherPhone] = useState(card.motherPhone || '');
   const [email, setEmail] = useState(card.email || '');
   const [birthday, setBirthday] = useState(card.birthday ? tjDateInput(card.birthday) : '');
+  const [levelId, setLevelId] = useState(card.level?.id || '');
   const [comment, setComment] = useState(card.comment || '');
+  const levels = useQuery({ queryKey: keys.academy.levels(), queryFn: listLevels });
+
+  const fatherErr = phoneRule(t('academy.newStudent.errParentPhone'))(fatherPhone);
+  const motherErr = phoneRule(t('academy.newStudent.errParentPhone'))(motherPhone);
 
   const mut = useMutation({
     mutationFn: () =>
       updateAcademyStudent(card.id, {
         fullName: fullName.trim(),
         phone,
+        fatherPhone,
+        motherPhone,
         email: email.trim(),
         birthday: birthday || '',
         comment,
+        levelId,
       }),
     onSuccess: (res) => {
       toast(t('toast.saved'), 'success');
@@ -420,10 +571,10 @@ function EditStudentModal({
   });
 
   return (
-    <FormModal open title={`${t('common.edit')} — ${card.fullName}`} onClose={onClose} busy={mut.isPending} width={600} testId="astudent-edit-modal">
+    <FormModal open title={`${t('common.edit')} — ${card.fullName}`} onClose={onClose} busy={mut.isPending} width={640} testId="astudent-edit-modal">
       <div className="form-group">
         <label>{t('common.fullName')} *</label>
-        <input className="crm-input" value={fullName} maxLength={120} onChange={(e) => setFullName(e.target.value)} />
+        <input className="crm-input" value={fullName} maxLength={120} onChange={(e) => setFullName(e.target.value)} data-testid="ae-name" />
       </div>
       <div className="form-grid-2 acad-form-grid">
         <div className="form-group">
@@ -435,9 +586,36 @@ function EditStudentModal({
           <input className="crm-input" type="email" value={email} maxLength={160} onChange={(e) => setEmail(e.target.value)} />
         </div>
       </div>
-      <div className="form-group">
-        <label>{t('app.field.birthday')}</label>
-        <CrmDatePicker value={birthday} onChange={setBirthday} max={tjToday()} />
+      <div className="form-grid-2 acad-form-grid">
+        <div className="form-group">
+          <label>
+            {t('academy.newStudent.fatherPhone')} <span className="acad-optional">· {t('academy.newStudent.optional')}</span>
+          </label>
+          <PhoneInput value={fatherPhone} onChange={setFatherPhone} error={!!fatherErr} />
+          {fatherErr && <div className="form-error-text">{fatherErr}</div>}
+        </div>
+        <div className="form-group">
+          <label>
+            {t('academy.newStudent.motherPhone')} <span className="acad-optional">· {t('academy.newStudent.optional')}</span>
+          </label>
+          <PhoneInput value={motherPhone} onChange={setMotherPhone} error={!!motherErr} />
+          {motherErr && <div className="form-error-text">{motherErr}</div>}
+        </div>
+      </div>
+      <div className="form-grid-2 acad-form-grid">
+        <div className="form-group">
+          <label>{t('academy.col.level')}</label>
+          <CrmSelect className="crm-select" value={levelId} onChange={(e) => setLevelId(e.target.value)} data-testid="ae-level">
+            <option value="">{t('academy.level.none')}</option>
+            {(levels.data ?? []).map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </CrmSelect>
+        </div>
+        <div className="form-group">
+          <label>{t('app.field.birthday')}</label>
+          <CrmDatePicker value={birthday} onChange={setBirthday} max={tjToday()} />
+        </div>
       </div>
       <div className="form-group">
         <label>{t('common.comment')}</label>
@@ -445,7 +623,56 @@ function EditStudentModal({
       </div>
       <div className="form-actions">
         <button className="btn btn-secondary" onClick={onClose} disabled={mut.isPending}>{t('common.cancel')}</button>
-        <button className="btn btn-primary" onClick={() => mut.mutate()} disabled={mut.isPending || fullName.trim().length < 2 || !email.trim()}>
+        <button
+          className="btn btn-primary"
+          onClick={() => mut.mutate()}
+          disabled={mut.isPending || fullName.trim().length < 2 || !email.trim() || !!fatherErr || !!motherErr}
+          data-testid="ae-save"
+        >
+          {mut.isPending ? t('common.saving') : t('common.save')}
+        </button>
+      </div>
+    </FormModal>
+  );
+}
+
+/** Только уровень — у студента агентства (его данные правят в карточке CRM). */
+function LevelModal({
+  card,
+  onClose,
+  onSaved,
+}: {
+  card: AcademyStudentCard;
+  onClose: () => void;
+  onSaved: (card: AcademyStudentCard) => void;
+}) {
+  const { t } = useT();
+  const { toast } = useUI();
+  const [levelId, setLevelId] = useState(card.level?.id || '');
+  const levels = useQuery({ queryKey: keys.academy.levels(), queryFn: listLevels });
+  const mut = useMutation({
+    mutationFn: () => updateAcademyStudent(card.id, { levelId }),
+    onSuccess: (res) => {
+      toast(t('toast.saved'), 'success');
+      onSaved(res);
+      onClose();
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
+  });
+  return (
+    <FormModal open title={`${t('academy.level.change')} — ${card.fullName}`} onClose={onClose} busy={mut.isPending} width={460} testId="astudent-level-modal">
+      <div className="form-group">
+        <label>{t('academy.col.level')}</label>
+        <CrmSelect className="crm-select" value={levelId} onChange={(e) => setLevelId(e.target.value)} data-testid="al-level">
+          <option value="">{t('academy.level.none')}</option>
+          {(levels.data ?? []).map((l) => (
+            <option key={l.id} value={l.id}>{l.name}</option>
+          ))}
+        </CrmSelect>
+      </div>
+      <div className="form-actions">
+        <button className="btn btn-secondary" onClick={onClose} disabled={mut.isPending}>{t('common.cancel')}</button>
+        <button className="btn btn-primary" onClick={() => mut.mutate()} disabled={mut.isPending} data-testid="al-save">
           {mut.isPending ? t('common.saving') : t('common.save')}
         </button>
       </div>

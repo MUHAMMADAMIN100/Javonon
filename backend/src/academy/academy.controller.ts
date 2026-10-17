@@ -26,13 +26,15 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { ACADEMY_UPLOAD_SUBDIR, AcademyService, uploadsRoot } from './academy.service';
 import {
   AcademyDecisionDto,
+  AcademyLevelDto,
   AddMaterialLinkDto,
+  CompleteCourseDto,
   CreateAcademyStudentDto,
   GiveFlagDto,
   ReinstateDto,
   RemoveFlagDto,
+  ReorderLevelsDto,
   SaveJournalEntriesDto,
-  SaveJournalWeeksDto,
   UpdateAcademyStudentDto,
 } from './dto/academy.dto';
 
@@ -87,9 +89,53 @@ export class AcademyController {
     return this.svc.saveEntries(me, body);
   }
 
-  @Put('journal/weeks')
-  saveWeeks(@CurrentUser() me: any, @Body() body: SaveJournalWeeksDto) {
-    return this.svc.saveWeeks(me, body);
+  // ─── Завершение курса ───
+  @Get('groups/:id/complete')
+  coursePreview(@CurrentUser() me: any, @Param('id') id: string) {
+    return this.svc.coursePreview(me, id);
+  }
+
+  @Post('groups/:id/complete')
+  completeCourse(@CurrentUser() me: any, @Param('id') id: string, @Body() body: CompleteCourseDto) {
+    return this.svc.completeCourse(me, id, body);
+  }
+
+  // ─── Дневник ДЗ урока ───
+  @Get('sessions/:id/diary')
+  diary(@CurrentUser() me: any, @Param('id') id: string) {
+    return this.svc.sessionDiary(me, id);
+  }
+
+  // ─── Уровни ───
+  @Get('levels')
+  levels(@CurrentUser() me: any) {
+    return this.svc.listLevels(me);
+  }
+
+  @Post('levels')
+  createLevel(@CurrentUser() me: any, @Body() body: AcademyLevelDto) {
+    return this.svc.createLevel(me, body);
+  }
+
+  // Литеральные маршруты — выше параметрических levels/:id.
+  @Post('levels/defaults')
+  seedLevels(@CurrentUser() me: any) {
+    return this.svc.seedDefaultLevels(me);
+  }
+
+  @Post('levels/reorder')
+  reorderLevels(@CurrentUser() me: any, @Body() body: ReorderLevelsDto) {
+    return this.svc.reorderLevels(me, body);
+  }
+
+  @Patch('levels/:id')
+  renameLevel(@CurrentUser() me: any, @Param('id') id: string, @Body() body: AcademyLevelDto) {
+    return this.svc.renameLevel(me, id, body);
+  }
+
+  @Delete('levels/:id')
+  deleteLevel(@CurrentUser() me: any, @Param('id') id: string) {
+    return this.svc.deleteLevel(me, id);
   }
 
   // ─── Материалы урока ───
@@ -132,6 +178,7 @@ export class AcademyController {
     @Query('teacherId') teacherId?: string,
     @Query('status') status?: string,
     @Query('type') type?: string,
+    @Query('levelId') levelId?: string,
   ) {
     return this.svc.listStudents(me, {
       search: search ? search.slice(0, 200) : undefined,
@@ -139,6 +186,7 @@ export class AcademyController {
       teacherId: teacherId || undefined,
       status: status || undefined,
       type: type || undefined,
+      levelId: levelId ? levelId.slice(0, 64) : undefined,
     });
   }
 

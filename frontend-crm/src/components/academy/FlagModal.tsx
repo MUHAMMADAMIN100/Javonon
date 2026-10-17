@@ -10,7 +10,8 @@ import { FlagDots } from './academyUi';
 
 /**
  * Красный флаг ученику — всегда с причиной. Окно предупреждает, что этот
- * флаг станет третьим: после него руководство решает, отчислять ли.
+ * флаг станет четвёртым (FLAGS_FOR_DECISION): после него руководство
+ * решает, отчислять ли.
  */
 export default function FlagModal({
   student,
@@ -80,7 +81,7 @@ export default function FlagModal({
       {willDecide && (
         <div className="acad-warn" data-testid="flag-third-warning">
           <Icon name="warning" size={18} />
-          <span>{t('academy.flags.thirdWarning')}</span>
+          <span>{t('academy.flags.thirdWarning').replace('{n}', String(FLAGS_FOR_DECISION))}</span>
         </div>
       )}
       <div className="form-actions">

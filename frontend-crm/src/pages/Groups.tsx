@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
@@ -19,6 +19,7 @@ import { listGroups, createGroup, listSessions, type StudyGroupStatus } from '..
 import { listPrograms } from '../api/programs';
 import { listUsers } from '../api/users';
 import DismissedMark from '../components/DismissedMark';
+import LessonsCalendar from '../components/academy/LessonsCalendar';
 import { useRoleLabel } from '../lib/labels';
 
 /**
@@ -32,6 +33,8 @@ import { useRoleLabel } from '../lib/labels';
  * что в StudyGroupsService.assertCanAdminGroups). Учитель видит только
  * свои группы: бэк режет выборку в `where`, поэтому фронту фильтровать нечего.
  * Сверху — занятия на сегодня: учитель сразу открывает журнал урока.
+ * «Список / Календарь»: календарь — занятия всех видимых групп по дням,
+ * у каждой группы свой цвет (?view=calendar — вид переживает обновление).
  */
 export default function Groups() {
   const { t } = useT();
@@ -53,6 +56,14 @@ export default function Groups() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StudyGroupStatus | ''>('ACTIVE');
   const [creating, setCreating] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const view: 'list' | 'calendar' = params.get('view') === 'calendar' ? 'calendar' : 'list';
+  const setView = (next: 'list' | 'calendar') => {
+    const p = new URLSearchParams(params);
+    if (next === 'list') p.delete('view');
+    else p.set('view', next);
+    setParams(p, { replace: true });
+  };
 
   const filters = useMemo(
     () => ({ search: search.trim() || undefined, status: status || undefined }),
@@ -121,27 +132,53 @@ export default function Groups() {
           </FormModal>
         )}
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
-          <input
-            className="crm-input"
-            style={{ flex: '1 1 220px', minWidth: 180 }}
-            placeholder={t('groups.searchGroup')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <CrmSelect
-            className="crm-select"
-            style={{ width: 190 }}
-            value={status}
-            onChange={(e) => setStatus(e.target.value as StudyGroupStatus | '')}
-          >
-            <option value="">{t('common.all')}</option>
-            <option value="ACTIVE">{t('groups.status.ACTIVE')}</option>
-            <option value="ARCHIVED">{t('groups.status.ARCHIVED')}</option>
-          </CrmSelect>
+        <div className="acad-groups-filters">
+          {view === 'list' && (
+            <>
+              <input
+                className="crm-input"
+                style={{ flex: '1 1 220px', minWidth: 180 }}
+                placeholder={t('groups.searchGroup')}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <CrmSelect
+                className="crm-select"
+                style={{ width: 190 }}
+                value={status}
+                onChange={(e) => setStatus(e.target.value as StudyGroupStatus | '')}
+              >
+                <option value="">{t('common.all')}</option>
+                <option value="ACTIVE">{t('groups.status.ACTIVE')}</option>
+                <option value="ARCHIVED">{t('groups.status.ARCHIVED')}</option>
+              </CrmSelect>
+            </>
+          )}
+          <div className="acad-view-toggle" role="tablist">
+            {(['list', 'calendar'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={view === v}
+                className={`btn btn-sm ${view === v ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setView(v)}
+                data-testid={`groups-view-${v}`}
+              >
+                <Icon name={v === 'list' ? 'view_list' : 'calendar_month'} size={16} />
+                {t(v === 'list' ? 'academy.groups.viewList' : 'academy.groups.viewCalendar')}
+              </button>
+            ))}
+          </div>
         </div>
       </motion.div>
 
+      {view === 'calendar' ? (
+        <div className="card acad-card-pad">
+          <LessonsCalendar testId="groups-calendar" />
+        </div>
+      ) : (
+      <>
       {todayLessons.length > 0 && (
         <div className="card acad-today" data-testid="today-lessons">
           <div className="acad-today-title">
@@ -222,6 +259,8 @@ export default function Groups() {
           </table>
         </div>
         </>
+      )}
+      </>
       )}
     </>
   );

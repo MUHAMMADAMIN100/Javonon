@@ -10,16 +10,17 @@ import { tjFormatDate } from '../../lib/tjTime';
 import { SortSelect, SortTh, useTableSort } from '../TableSort';
 import { addGroupMembers, removeGroupMember, type StudyGroupDetail } from '../../api/studyGroups';
 import { getJournal, pickStudents, type JournalStudent } from '../../api/academy';
-import { Avatar, FlagDots, TotalBadge } from './academyUi';
+import { Avatar, FlagDots, LevelBadge, TotalBadge, leftKey, pct } from './academyUi';
 import FlagModal from './FlagModal';
 import NewAcademyStudentModal from './NewAcademyStudentModal';
 
 /**
- * Ученики группы: средний балл, посещаемость, флаги, «в группе с».
- * Руководство добавляет студентов агентства и учеников академии (поиск
- * по ФИО, e-mail или телефону), заводит нового ученика прямо в группу и
- * убирает из группы. Учитель и руководство ставят красный флаг.
- * Вышедшие (убранные, отчисленные) — отдельным списком ниже.
+ * Ученики группы: уровень, средний итог, посещаемость, флаги, «в группе с».
+ * Добавляют учеников руководство (студентов агентства и учеников академии —
+ * поиском по ФИО, e-mail или телефону) и учитель группы (нового ученика
+ * формой или ученика академии без группы «из базы»). Убирает из группы
+ * только руководство. Учитель и руководство ставят красный флаг.
+ * Вышедшие (убранные, отчисленные, окончившие курс) — отдельным списком.
  */
 export default function GroupStudentsTab({ group, onChanged }: { group: StudyGroupDetail; onChanged: () => void }) {
   const { t } = useT();
@@ -31,7 +32,7 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
   const [flagFor, setFlagFor] = useState<JournalStudent | null>(null);
   const [creating, setCreating] = useState(false);
 
-  // Сводки (средний балл, посещаемость, флаги) — из журнала группы.
+  // Сводки (средний итог, посещаемость, флаги) — из журнала группы.
   const journal = useQuery({ queryKey: keys.academy.journal(group.id), queryFn: () => getJournal(group.id) });
   const byId = useMemo(() => new Map((journal.data?.students ?? []).map((s) => [s.id, s])), [journal.data]);
 
@@ -40,6 +41,7 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
 
   const sort = useTableSort(active, [
     { key: 'fullName', label: t('common.fullName'), value: (m) => m.student.fullName },
+    { key: 'level', label: t('academy.col.level'), value: (m) => m.student.academyLevel?.name },
     { key: 'phone', label: t('common.phone'), value: (m) => m.student.phones?.[0] },
     { key: 'avg', label: t('academy.col.avg'), type: 'number', value: (m) => byId.get(m.studentId)?.summary.avg ?? null },
     { key: 'att', label: t('academy.col.attendance'), type: 'number', value: (m) => byId.get(m.studentId)?.summary.attendancePct ?? null },
@@ -74,8 +76,13 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
 
   return (
     <div className="acad-group-students" data-testid="group-students">
-      {canManage && group.status === 'ACTIVE' && (
-        <AddStudentsBox groupId={group.id} onAdded={invalidate} onCreate={() => setCreating(true)} />
+      {group.access.addStudents && (
+        <AddStudentsBox
+          groupId={group.id}
+          manager={canManage}
+          onAdded={invalidate}
+          onCreate={() => setCreating(true)}
+        />
       )}
 
       {active.length === 0 ? (
@@ -107,19 +114,20 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
                         </span>
                       </span>
                     </td>
-                    <td data-label={t('common.phone')}>{m.student.phones?.[0] || '—'}</td>
+                    <td data-label={t('academy.col.level')}>
+                      <LevelBadge level={m.student.academyLevel} testId={`member-level-${m.studentId}`} />
+                    </td>
+                    <td data-label={t('common.phone')} className="acad-nowrap">{m.student.phones?.[0] || '—'}</td>
                     <td data-label={t('academy.col.avg')}>
                       <TotalBadge total={js?.summary.avg ?? null} />
                     </td>
-                    <td data-label={t('academy.col.attendance')}>
-                      {js?.summary.attendancePct !== null && js?.summary.attendancePct !== undefined ? `${js.summary.attendancePct}%` : '—'}
-                    </td>
+                    <td data-label={t('academy.col.attendance')}>{pct(js?.summary.attendancePct)}</td>
                     <td data-label={t('academy.flags.title')}>
                       <FlagDots count={js?.flags ?? 0} />
                     </td>
                     <td data-label={t('groups.joinedAt')} style={{ color: 'var(--text-soft)' }}>{tjFormatDate(m.joinedAt)}</td>
                     <td className="acad-row-actions" onClick={(e) => e.stopPropagation()}>
-                      {canRun && js && (
+                      {canRun && js && group.status === 'ACTIVE' && (
                         <button
                           className="btn btn-sm btn-secondary acad-flag-btn"
                           title={t('academy.flags.give')}
@@ -150,15 +158,24 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
       )}
 
       {left.length > 0 && (
-        <details className="acad-left-list">
+        <details className="acad-left-list" open={active.length === 0}>
           <summary>
             {t('academy.students.left')} ({left.length})
           </summary>
           {left.map((m) => (
             <div key={m.id} className="acad-left-row" onClick={() => navigate(`/academy/students/${m.studentId}`)}>
               <span>{m.student.fullName}</span>
-              <span className={m.leftReason === 'EXPELLED' ? 'acad-status is-expelled' : 'acad-status is-nogroup'}>
-                {t(m.leftReason === 'EXPELLED' ? 'academy.left.expelled' : 'academy.left.removed')}
+              <LevelBadge level={m.student.academyLevel} hideEmpty />
+              <span
+                className={
+                  m.leftReason === 'EXPELLED'
+                    ? 'acad-status is-expelled'
+                    : m.leftReason === 'COMPLETED'
+                      ? 'acad-status is-active'
+                      : 'acad-status is-nogroup'
+                }
+              >
+                {t(leftKey(m.leftReason))}
               </span>
               <small>{tjFormatDate(m.leftAt)}</small>
             </div>
@@ -184,26 +201,41 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
 }
 
 /**
- * Добавление в группу: поиск с задержкой по ФИО, e-mail или телефону среди
- * студентов агентства и учеников академии; выбранные — плашками, потом
- * «Добавить (N)». Отчисленных выбрать нельзя — сначала вернуть в академию.
+ * Добавление в группу.
+ *   Руководство — поиск с задержкой по ФИО, e-mail или телефону среди
+ *   студентов агентства и учеников академии.
+ *   Учитель — «Из базы»: список учеников академии без группы показывается
+ *   сразу, поиск сужает его. Клиентов агентства учитель не видит.
+ * Выбранные — плашками, потом «Добавить (N)». Отчисленных выбрать нельзя.
  */
-function AddStudentsBox({ groupId, onAdded, onCreate }: { groupId: string; onAdded: () => void; onCreate: () => void }) {
+function AddStudentsBox({
+  groupId,
+  manager,
+  onAdded,
+  onCreate,
+}: {
+  groupId: string;
+  manager: boolean;
+  onAdded: () => void;
+  onCreate: () => void;
+}) {
   const { t } = useT();
   const { toast } = useUI();
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [picked, setPicked] = useState<Array<{ id: string; fullName: string }>>([]);
+  const [fromBase, setFromBase] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search.trim()), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
+  const listOpen = manager ? debounced.length >= 2 : fromBase;
   const results = useQuery({
     queryKey: keys.academy.pick(debounced, groupId),
     queryFn: () => pickStudents(debounced, groupId),
-    enabled: debounced.length >= 2,
+    enabled: listOpen,
   });
 
   const mut = useMutation({
@@ -221,28 +253,67 @@ function AddStudentsBox({ groupId, onAdded, onCreate }: { groupId: string; onAdd
   const options = (results.data ?? []).filter((s) => !pickedIds.has(s.id));
 
   return (
-    <div className="acad-add-box">
+    <div className="acad-add-box" data-testid="add-students-box">
       <div className="acad-add-head">
-        <div className="acad-add-search">
-          <Icon name="search" size={18} />
-          <input
-            className="crm-input"
-            placeholder={t('academy.students.searchPh')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            data-testid="add-student-search"
-          />
+        {manager ? (
+          <div className="acad-add-search">
+            <Icon name="search" size={18} />
+            <input
+              className="crm-input"
+              placeholder={t('academy.students.searchPh')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="add-student-search"
+            />
+          </div>
+        ) : (
+          <div className="acad-add-title">
+            <Icon name="group_add" size={20} />
+            <b>{t('academy.students.addTitle')}</b>
+          </div>
+        )}
+        <div className="acad-add-actions">
+          {!manager && (
+            <button
+              type="button"
+              className={`btn ${fromBase ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFromBase((v) => !v)}
+              aria-expanded={fromBase}
+              data-testid="add-from-base"
+            >
+              <Icon name="person_search" size={16} /> {t('academy.students.fromBase')}
+            </button>
+          )}
+          <button className="btn btn-secondary" onClick={onCreate} data-testid="new-academy-student">
+            <Icon name="person_add" size={16} /> {t('academy.newStudent.title')}
+          </button>
         </div>
-        <button className="btn btn-secondary" onClick={onCreate} data-testid="new-academy-student">
-          <Icon name="person_add" size={16} /> {t('academy.newStudent.title')}
-        </button>
       </div>
-      {debounced.length >= 2 && (
-        <div className="acad-add-results">
+
+      {!manager && fromBase && (
+        <div className="acad-add-base">
+          <div className="acad-hint">{t('academy.students.fromBaseHint')}</div>
+          <div className="acad-add-search">
+            <Icon name="search" size={18} />
+            <input
+              className="crm-input"
+              placeholder={t('academy.students.filterPh')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="add-student-search"
+            />
+          </div>
+        </div>
+      )}
+
+      {listOpen && (
+        <div className="acad-add-results" data-testid="add-results">
           {results.isFetching && !results.data ? (
             <span className="acad-hint">{t('common.loading')}</span>
           ) : options.length === 0 ? (
-            <span className="acad-hint">{t('academy.students.notFound')}</span>
+            <span className="acad-hint">
+              {!manager && !debounced ? t('academy.students.fromBaseEmpty') : t('academy.students.notFound')}
+            </span>
           ) : (
             options.map((s) => {
               const disabled = s.inGroup || s.expelled;
@@ -260,7 +331,8 @@ function AddStudentsBox({ groupId, onAdded, onCreate }: { groupId: string; onAdd
                   <small>
                     {[
                       s.phone,
-                      s.academyOnly ? t('academy.tag.academyOnly') : t('academy.tag.agency'),
+                      s.level?.name,
+                      manager ? (s.academyOnly ? t('academy.tag.academyOnly') : t('academy.tag.agency')) : null,
                       s.inGroup ? t('academy.students.alreadyIn') : null,
                       s.expelled ? t('academy.status.EXPELLED') : null,
                     ]

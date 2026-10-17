@@ -5,6 +5,7 @@ import { keys } from './queryKeys';
 import { useRealtime, useRealtimeConnState } from '../realtime';
 import { useAuth } from '../store/auth';
 import { playChatSound } from './chatSound';
+import { isTeacherOnly } from './roles';
 
 /**
  * Непрочитанные сообщения чата — одно место на всё приложение.
@@ -33,12 +34,17 @@ function isViewing(roomId: string) {
   return viewingRoomId === roomId && typeof document !== 'undefined' && !document.hidden;
 }
 
+/** Учителю академии чат закрыт (сервер отвечает 403) — счётчик и звук ему не нужны. */
+function chatAllowed(me: unknown): boolean {
+  return !!me && !isTeacherOnly(me as any);
+}
+
 function useUnreadQuery() {
   const me = useAuth((s) => s.user);
   return useQuery<Unread>({
     queryKey: keys.chat.unread(),
     queryFn: chatUnread,
-    enabled: !!me,
+    enabled: chatAllowed(me),
     staleTime: 60_000,
   });
 }
@@ -62,6 +68,7 @@ export function useChatUnreadSync() {
 
   useRealtime({
     'chat:message': (d: any) => {
+      if (!chatAllowed(me)) return;
       if (!d?.message || !d.roomId) return;
       if (d.message.authorId === me?.id) return;
       if (isViewing(d.roomId)) return;
@@ -83,7 +90,7 @@ export function useChatUnreadSync() {
 
   // После переподключения сокета события могли потеряться — сверяемся с сервером.
   useEffect(() => {
-    if (conn === 'connected' && me) qc.invalidateQueries({ queryKey: keys.chat.unread() });
+    if (conn === 'connected' && chatAllowed(me)) qc.invalidateQueries({ queryKey: keys.chat.unread() });
   }, [conn, me, qc]);
 }
 

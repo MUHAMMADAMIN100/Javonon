@@ -2,12 +2,12 @@ import { useMemo, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import { keys } from '../lib/queryKeys';
-import { tjFormatFull } from '../lib/tjTime';
+import { tjFormatDate, tjFormatFull } from '../lib/tjTime';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
 import BackButton from '../components/BackButton';
@@ -15,6 +15,8 @@ import DismissedMark from '../components/DismissedMark';
 import JournalTab from '../components/academy/JournalTab';
 import LessonsTab from '../components/academy/LessonsTab';
 import GroupStudentsTab from '../components/academy/GroupStudentsTab';
+import LessonsCalendar from '../components/academy/LessonsCalendar';
+import CompleteCourseModal from '../components/academy/CompleteCourseModal';
 import { usePatternText, weekdayKey, tjWeekdayOf } from '../components/academy/academyUi';
 import { weeklyPatternOf } from '../components/academy/pattern';
 import { useRoleLabel } from '../lib/labels';
@@ -28,15 +30,23 @@ import {
 import { listPrograms } from '../api/programs';
 import { listUsers } from '../api/users';
 
-type Tab = 'journal' | 'lessons' | 'students' | 'settings';
-const TABS: Tab[] = ['journal', 'lessons', 'students', 'settings'];
+type Tab = 'journal' | 'lessons' | 'students' | 'calendar' | 'settings';
+const TABS: Tab[] = ['journal', 'lessons', 'students', 'calendar', 'settings'];
+const TAB_ICON: Record<Tab, string> = {
+  journal: 'grading',
+  lessons: 'event_note',
+  students: 'group',
+  calendar: 'calendar_month',
+  settings: 'tune',
+};
 
 /**
  * Карточка группы академии: шапка (учитель, программа, дни занятий,
- * ближайшее занятие) и вкладки:
- *   «Журнал»   — посещение, оценки, комментарии, итоги недель, график;
- *   «Уроки»    — занятия с темой, ДЗ и материалами, шаблон расписания;
- *   «Ученики»  — состав, средний балл, флаги, добавление и выход;
+ * ближайшее занятие, «Завершить курс») и вкладки:
+ *   «Журнал»    — лист урока: посещение, проценты, итого, график, итоги;
+ *   «Уроки»     — занятия с темой, ДЗ и материалами, дневник ДЗ, шаблон;
+ *   «Ученики»   — состав, уровень, средний итог, флаги, добавление и выход;
+ *   «Календарь» — занятия группы по дням месяца;
  *   «Настройки» — название, учитель, программа, статус (руководство).
  *
  * Кто что может — с сервера (access): manage — руководство академии,
@@ -57,6 +67,7 @@ export default function GroupDetail() {
     enabled: !!id,
   });
   const g = query.data;
+  const [completing, setCompleting] = useState(false);
 
   const rawTab = params.get('tab') as Tab | null;
   const tab: Tab = rawTab && TABS.includes(rawTab) && (rawTab !== 'settings' || g?.access.manage) ? rawTab : 'journal';
@@ -103,9 +114,16 @@ export default function GroupDetail() {
             <div className="acad-eyebrow">{t('groups.eyebrow')}</div>
             <h2 className="acad-group-name" data-testid="group-name">{g.name}</h2>
           </div>
-          <span className={g.status === 'ACTIVE' ? 'badge badge-success' : 'badge badge-gray'}>
-            {t(`groups.status.${g.status}`)}
-          </span>
+          <div className="acad-group-head-right">
+            {g.access.complete && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setCompleting(true)} data-testid="course-complete">
+                <Icon name="school" size={16} /> {t('academy.course.complete')}
+              </button>
+            )}
+            <span className={g.status === 'ACTIVE' ? 'badge badge-success' : 'badge badge-gray'}>
+              {t(`groups.status.${g.status}`)}
+            </span>
+          </div>
         </div>
         <div className="acad-group-facts">
           <span className="acad-fact">
@@ -133,6 +151,15 @@ export default function GroupDetail() {
             </span>
           )}
         </div>
+        {g.completedAt && (
+          <div className="acad-course-done" data-testid="course-done">
+            <Icon name="school" size={18} />
+            <span>
+              {t('academy.course.completedBanner').replace('{date}', tjFormatDate(g.completedAt))}
+              {g.completedBy ? ` · ${g.completedBy.fullName}` : ''}
+            </span>
+          </div>
+        )}
         {g.description && <div className="acad-group-desc">{g.description}</div>}
       </motion.div>
 
@@ -147,7 +174,7 @@ export default function GroupDetail() {
             onClick={() => setTab(k)}
             data-testid={`group-tab-${k}`}
           >
-            <Icon name={k === 'journal' ? 'grading' : k === 'lessons' ? 'event_note' : k === 'students' ? 'group' : 'tune'} size={16} />
+            <Icon name={TAB_ICON[k]} size={16} />
             {t(`academy.tab.${k}`)}
             {k === 'students' && <span className="acad-tab-count">{activeCount}</span>}
           </button>
@@ -165,11 +192,30 @@ export default function GroupDetail() {
           <GroupStudentsTab group={g} onChanged={invalidate} />
         </div>
       )}
+      {tab === 'calendar' && (
+        <div className="card acad-card-pad">
+          <LessonsCalendar groupId={g.id} testId="group-calendar" />
+        </div>
+      )}
       {tab === 'settings' && g.access.manage && (
         <div className="card acad-card-pad">
           <GroupSettings group={g} onSaved={invalidate} />
         </div>
       )}
+
+      <AnimatePresence>
+        {completing && (
+          <CompleteCourseModal
+            groupId={g.id}
+            groupName={g.name}
+            onClose={() => setCompleting(false)}
+            onDone={() => {
+              invalidate();
+              qc.invalidateQueries({ queryKey: keys.academy.all });
+            }}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

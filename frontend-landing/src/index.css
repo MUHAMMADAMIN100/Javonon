@@ -3746,10 +3746,15 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 }
 
 /* ═══════════════ АКАДЕМИЯ (кабинет студента) ═══════════════
-   Вкладка «Академия»: группа и муаллим, сводка, флаги, ҷадвал, вазифаи
-   хонагӣ, баҳоҳо. Цвет итога недели — как в журнале CRM: от 90 зелёный,
-   80–89 жёлтый, ниже — красный, без экзамена — серый. */
+   Вкладка «Академия»: группа и муаллим, сатҳ, сводка, флаги, тақвим,
+   ҷадвал, вазифаи хонагӣ с рӯзнома, баҳоҳо. Цвет итога (в процентах) — как
+   в журнале CRM: от 90 зелёный, 80–89 жёлтый, ниже — красный. */
 .acad-cab { display: flex; flex-direction: column; }
+/* Ширина кабинета не должна зависеть от вкладки: .container с margin: auto во
+   flex-колонке .stu-page иначе сжимается по содержимому. */
+.stu-main { width: 100%; }
+/* Глобальный section { padding: 120px 0 } лендинга — не для списков кабинета. */
+.acad-cab-hw-list { padding: 0; }
 .acad-cab-only { padding-top: 28px; }
 .acad-cab-hello { font-family: var(--display); font-size: 28px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 18px; }
 .acad-cab-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--emerald); margin-bottom: 4px; }
@@ -3764,19 +3769,30 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 .acad-cab-banner > div { display: flex; flex-direction: column; gap: 3px; font-size: 14px; line-height: 1.45; }
 .acad-cab-banner b { font-size: 16px; }
 .acad-cab-banner.is-expelled { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.acad-cab-banner.is-diary { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; align-items: center; }
+.acad-cab-banner.is-diary > div { flex: 1; min-width: 0; }
+.acad-cab-banner-btn { flex: none; border: none; border-radius: 999px; padding: 10px 18px; background: #92400e; color: #fff; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.acad-cab-banner-btn:hover { background: #78350f; }
 
-.acad-cab-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.acad-cab-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .acad-cab-tile { background: var(--surface); border: 1px solid var(--bg-mute); border-radius: var(--radius-lg); padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.acad-cab-tile > span { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
+.acad-cab-tile > span:first-child { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
 .acad-cab-tile > b { font-family: var(--display); font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .acad-cab-tile.is-flags > b { color: #dc2626; }
 
 .acad-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; height: 28px; padding: 0 10px; border-radius: 999px; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
 .acad-pill.is-good { background: #dcfce7; color: #15803d; }
-.acad-pill.is-mid { background: #fef3c7; color: #a16207; }
+.acad-pill.is-mid { background: #fef3c7; color: #92400e; }
 .acad-pill.is-low { background: #fee2e2; color: #b91c1c; }
-.acad-pill.is-draft { background: var(--bg-soft); color: var(--ink-soft); border: 1px dashed #cbd5e1; }
 .acad-pill.is-empty { background: transparent; color: var(--ink-mute); }
+/* Сатҳ (уровень) */
+.acad-cab-level { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 999px; background: #ecfeff; color: #0e7490; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.acad-cab-level.is-empty { background: var(--bg-mute); color: var(--ink-soft); font-weight: 600; }
+.acad-cab-levels h2 { margin-bottom: 12px; }
+.acad-cab-level-list { display: flex; flex-direction: column; gap: 8px; }
+.acad-cab-level-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 12px; border-radius: var(--radius); background: var(--bg-soft); }
+.acad-cab-level-names { display: inline-flex; align-items: center; gap: 6px; }
+.acad-cab-level-meta { font-size: 13px; color: var(--ink-soft); }
 
 .acad-cab-flags h2 { margin-bottom: 12px; }
 .acad-cab-warn { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius); background: #fffbeb; color: #92400e; font-size: 13.5px; margin-bottom: 12px; }
@@ -3791,6 +3807,9 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 .acad-cab-subtab { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 999px; border: none; background: transparent; font-family: inherit; font-size: 14px; font-weight: 500; color: var(--ink-soft); cursor: pointer; }
 .acad-cab-subtab:hover:not(.active) { color: var(--ink); }
 .acad-cab-subtab.active { background: var(--emerald); color: white; }
+.acad-cab-subtab { position: relative; }
+.acad-cab-subtab-dot { position: absolute; top: 6px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 2px var(--bg-mute); }
+.acad-cab-subtab.active .acad-cab-subtab-dot { box-shadow: 0 0 0 2px var(--emerald); }
 
 .acad-cab-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; color: var(--ink-soft); font-size: 15px; padding: 40px 20px !important; }
 .acad-cab-empty .material-symbols-rounded { color: var(--ink-mute); }
@@ -3802,7 +3821,7 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 .acad-cab-hw-list { display: flex; flex-direction: column; }
 .acad-cab-hw-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .acad-cab-hw-head h3 { font-family: var(--display); font-size: 19px; font-weight: 600; margin: 2px 0 0; }
-.acad-cab-due { font-size: 13px; font-weight: 600; color: #a16207; background: #fef3c7; border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
+.acad-cab-due { font-size: 13px; font-weight: 600; color: #92400e; background: #fef3c7; border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
 .acad-cab-hw-text { margin: 12px 0 0; font-size: 15px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--ink-2); }
 .acad-cab-materials { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .acad-cab-material { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--bg-mute); background: var(--bg-soft); color: var(--ink); font-family: inherit; font-size: 14px; text-align: left; text-decoration: none; cursor: pointer; transition: border-color var(--t-fast), background var(--t-fast); }
@@ -3812,38 +3831,97 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 .acad-cab-material > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; text-align: left; }
 .acad-cab-material > small { color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
 .acad-cab-error { padding: 10px 14px; border-radius: var(--radius); background: #fef2f2; color: #b91c1c; font-size: 14px; margin-bottom: 12px; }
+.acad-cab-link { border: none; background: transparent; padding: 4px 2px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--emerald); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.acad-cab-link:hover { color: var(--emerald-2); }
+
+/* Рӯзномаи вазифа (дневник ДЗ) */
+.acad-cab-diary { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--bg-mute); display: flex; flex-direction: column; gap: 12px; }
+.acad-cab-diary-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.acad-cab-diary-head b { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; }
+.acad-cab-diary-head > span { font-size: 13px; color: var(--ink-soft); }
+.acad-cab-diary-days { display: flex; flex-wrap: wrap; gap: 6px; }
+.acad-cab-diary-day { display: inline-flex; flex-direction: column; align-items: center; min-width: 50px; padding: 6px 8px; border-radius: 10px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.acad-cab-diary-day b { font-size: 13px; }
+.acad-cab-diary-day small { font-size: 11px; }
+.acad-cab-diary-day.is-done { background: #dcfce7; color: #15803d; }
+.acad-cab-diary-day.is-missed { background: #fee2e2; color: #b91c1c; }
+.acad-cab-diary-day.is-today { background: #fef3c7; color: #92400e; box-shadow: inset 0 0 0 1.5px #f59e0b; }
+.acad-cab-diary-day.is-future { background: var(--bg-soft); color: var(--ink-soft); }
+.acad-cab-diary-write { display: flex; flex-direction: column; gap: 8px; }
+.acad-cab-diary-write label { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.acad-cab-diary-write textarea { width: 100%; min-height: 84px; padding: 12px 14px; border-radius: var(--radius); border: 1.5px solid #c5cedb; background: var(--surface); font-family: inherit; font-size: 15px; line-height: 1.5; color: var(--ink); resize: vertical; outline: none; }
+.acad-cab-diary-write textarea:focus { border-color: var(--emerald); box-shadow: 0 0 0 3px var(--emerald-soft); }
+.acad-cab-diary-actions { display: flex; justify-content: flex-end; align-items: center; gap: 14px; }
+.acad-cab-diary-actions .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+.acad-cab-diary-saved { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius); background: #f0fdf4; color: #166534; font-size: 14px; }
+.acad-cab-diary-saved .acad-cab-link { margin-left: auto; }
+.acad-cab-diary-closed { font-size: 13.5px; color: var(--ink-soft); }
+.acad-cab-diary-entries { display: flex; flex-direction: column; gap: 6px; }
+.acad-cab-diary-entry { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; padding: 10px 12px; border-radius: var(--radius); background: var(--bg-soft); }
+.acad-cab-diary-entry-day { font-weight: 700; color: #15803d; font-variant-numeric: tabular-nums; }
+.acad-cab-diary-entry-day small { font-weight: 500; color: var(--ink-soft); }
+.acad-cab-diary-entry-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+
+/* Тақвим (календарь) */
+.acad-cab-cal-head { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 14px; }
+.acad-cab-cal-head h2 { margin: 0; min-width: 170px; text-align: center; }
+.acad-cab-cal-nav { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--bg-mute); background: var(--surface); color: var(--ink-3); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.acad-cab-cal-nav:hover { border-color: var(--emerald); color: var(--emerald); }
+.acad-cab-cal-weekdays, .acad-cab-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.acad-cab-cal-weekdays { margin-bottom: 6px; }
+.acad-cab-cal-weekdays span { text-align: center; font-size: 12px; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.acad-cab-cal-day { min-height: 84px; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 6px; border-radius: 12px; border: 1.5px solid var(--bg-mute); background: var(--bg-soft); text-align: left; font-family: inherit; color: var(--ink); cursor: pointer; }
+.acad-cab-cal-day:hover { border-color: var(--emerald-3); }
+.acad-cab-cal-day.is-today { border-color: var(--emerald); }
+.acad-cab-cal-day.is-selected { background: var(--emerald-soft); border-color: var(--emerald); }
+.acad-cab-cal-num { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.acad-cab-cal-day.is-today .acad-cab-cal-num { color: var(--emerald); font-weight: 800; }
+.acad-cab-cal-items { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.acad-cab-cal-item { display: block; font-size: 11.5px; line-height: 1.3; padding: 2px 6px; border-radius: 6px; background: var(--surface); border-left: 3px solid var(--c); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acad-cab-cal-item.is-cancelled { text-decoration: line-through; color: var(--ink-soft); }
+.acad-cab-cal-more { font-size: 11px; color: var(--ink-soft); }
+.acad-cab-cal-dots { display: none; gap: 3px; justify-content: center; }
+.acad-cab-cal-dots i { width: 6px; height: 6px; border-radius: 50%; }
+.acad-cab-cal-day-panel { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.acad-cab-cal-day-title { font-family: var(--display); font-size: 17px; font-weight: 600; }
+.acad-cab-cal-none { color: var(--ink-soft); font-size: 14px; }
+.acad-cab-cal-lesson { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: var(--radius-lg); border: 1px solid var(--bg-mute); border-left: 4px solid var(--c); background: var(--surface); }
+.acad-cab-cal-lesson.is-cancelled .acad-cab-cal-lesson-topic { text-decoration: line-through; color: var(--ink-soft); }
+.acad-cab-cal-lesson-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.acad-cab-cal-lesson-top b { font-family: var(--mono); font-size: 15px; }
+.acad-cab-cal-lesson-topic { font-size: 16px; font-weight: 600; word-break: break-word; }
+.acad-cab-cal-lesson-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-3); }
+.acad-cab-cal-lesson-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.acad-cab-cal-hw { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius); background: var(--emerald-soft); color: var(--emerald-deep); font-size: 14px; line-height: 1.5; }
+.acad-cab-cal-hw > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; white-space: pre-wrap; word-break: break-word; }
+.acad-cab-cal-hw small { font-weight: 600; color: #92400e; }
+.acad-cab-cal-soon { font-size: 13px; color: var(--ink-soft); }
 
 .acad-cab-grades-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
 .acad-cab-grades-head h2 { margin-bottom: 14px; }
 .acad-cab-grades-sum { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-soft); }
 .acad-cab-grades-sum span { display: inline-flex; align-items: center; gap: 8px; }
 .acad-cab-grades-sum b { color: var(--ink); font-size: 15px; }
-.acad-cab-weeks { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
-.acad-cab-week { border: 1px solid var(--bg-mute); border-radius: var(--radius-lg); overflow: hidden; }
-.acad-cab-week.is-open { border-color: #c7d6f0; }
-.acad-cab-week-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: none; background: var(--bg-soft); cursor: pointer; font-family: inherit; color: var(--ink); text-align: left; }
-.acad-cab-week-title { display: inline-flex; align-items: center; gap: 2px; font-size: 16px; font-weight: 600; }
-.acad-cab-week-range { font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
-.acad-cab-week-total { margin-left: auto; }
-.acad-cab-lessons { display: flex; flex-direction: column; }
-.acad-cab-lesson { display: flex; gap: 14px; align-items: flex-start; padding: 12px 16px; border-top: 1px solid var(--bg-mute); }
-.acad-cab-lesson.is-future { opacity: 0.55; }
-.acad-cab-lesson-date { display: flex; flex-direction: column; min-width: 74px; line-height: 1.3; }
-.acad-cab-lesson-date b { font-family: var(--mono); font-size: 15px; }
-.acad-cab-lesson-date span { font-size: 12px; color: var(--ink-soft); }
-.acad-cab-lesson-body { flex: 1; min-width: 0; }
-.acad-cab-lesson-topic { font-size: 14.5px; font-weight: 500; }
-.acad-cab-comment { display: flex; gap: 6px; align-items: flex-start; margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--emerald-soft); color: var(--emerald-deep); font-size: 13.5px; line-height: 1.45; }
+.acad-cab-marks { display: flex; flex-direction: column; margin-top: 14px; border: 1px solid var(--bg-mute); border-radius: var(--radius-lg); overflow: hidden; }
+.acad-cab-mark { display: grid; grid-template-columns: 72px minmax(0, 1fr) 96px repeat(3, 84px) 70px; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--bg-mute); }
+.acad-cab-mark.is-head { border-top: none; background: var(--bg-soft); font-size: 11.5px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.acad-cab-mark.is-head span:nth-child(n+3) { text-align: center; }
+.acad-cab-mark-date { display: flex; flex-direction: column; line-height: 1.3; }
+.acad-cab-mark-date b { font-family: var(--mono); font-size: 14.5px; }
+.acad-cab-mark-date small { font-size: 12px; color: var(--ink-soft); }
+.acad-cab-mark-topic { font-size: 14.5px; font-weight: 500; min-width: 0; word-break: break-word; }
+.acad-cab-mark-att, .acad-cab-mark-pct, .acad-cab-mark-total { text-align: center; }
+.acad-cab-mark-pct { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14.5px; }
+.acad-cab-att { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.acad-cab-att.is-present { background: #dcfce7; color: #15803d; }
+.acad-cab-att.is-absent { background: #fee2e2; color: #b91c1c; }
+.acad-cab-att.is-late { background: #fef3c7; color: #92400e; }
+.acad-cab-comment { display: flex; gap: 6px; align-items: flex-start; margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--emerald-soft); color: var(--emerald-deep); font-size: 13.5px; font-weight: 400; line-height: 1.45; }
 .acad-cab-comment .material-symbols-rounded { flex-shrink: 0; margin-top: 1px; }
-.acad-cab-lesson-marks { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .acad-cab-tag { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--bg-mute); color: var(--ink-soft); white-space: nowrap; }
 .acad-cab-tag.is-yes { background: var(--emerald-soft); color: var(--emerald); }
-.acad-cab-tag.is-no { background: #fee2e2; color: #b91c1c; }
-.acad-cab-tag.is-soon { background: transparent; color: var(--ink-mute); font-weight: 500; }
-.acad-cab-score { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: var(--emerald); color: white; font-weight: 700; font-size: 15px; }
-.acad-cab-week-end { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 12px 16px; border-top: 1px solid var(--bg-mute); background: #fafbfd; font-size: 13.5px; color: var(--ink-soft); }
-.acad-cab-week-end b { color: var(--ink); }
-.acad-cab-week-end-total { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); }
+.acad-cab-more { margin-top: 12px; border: 1px solid var(--bg-mute); background: var(--surface); border-radius: 999px; padding: 9px 18px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--emerald); cursor: pointer; }
+.acad-cab-more:hover { border-color: var(--emerald); }
 .acad-cab-formula { margin: 14px 0 0; font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
 
 /* График */
@@ -3864,20 +3942,32 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
   .acad-cab-hello { font-size: 23px; }
   .acad-cab-tile > b { font-size: 22px; }
 }
+@media (max-width: 900px) {
+  .acad-cab-mark.is-head { display: none; }
+  .acad-cab-mark { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .acad-cab-mark-date { order: 1; flex-direction: row; gap: 6px; align-items: baseline; }
+  .acad-cab-mark-total { order: 2; margin-left: auto; }
+  .acad-cab-mark-topic { order: 3; flex-basis: 100%; }
+  .acad-cab-mark-att { order: 4; }
+  .acad-cab-mark-pct { order: 5; font-size: 13.5px; }
+  .acad-cab-mark-pct::before { content: attr(data-label) ' '; font-size: 11px; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.03em; }
+}
 @media (max-width: 600px) {
-  .acad-cab-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .acad-cab-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .acad-cab-tile { padding: 12px; border-radius: 14px; }
-  .acad-cab-tile > span { font-size: 10.5px; letter-spacing: 0.03em; }
+  .acad-cab-tile > span:first-child { font-size: 10.5px; letter-spacing: 0.03em; }
   .acad-cab-tile > b { font-size: 19px; }
-  .acad-cab-subtabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; border-radius: 16px; }
+  .acad-cab-subtabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; border-radius: 16px; }
   .acad-cab-subtab { justify-content: center; padding: 10px 6px; font-size: 12.5px; flex-direction: column; gap: 2px; border-radius: 12px; }
-  .acad-cab-banner { padding: 14px; }
-  .acad-cab-lesson { flex-wrap: wrap; gap: 8px 12px; padding: 12px; }
-  .acad-cab-lesson-date { flex-direction: row; gap: 8px; align-items: baseline; min-width: 0; }
-  .acad-cab-lesson-body { flex-basis: 100%; order: 3; }
-  .acad-cab-lesson-marks { margin-left: auto; }
-  .acad-cab-week-head { padding: 12px; gap: 8px; }
-  .acad-cab-week-end { padding: 12px; }
-  .acad-cab-week-end-total { margin-left: 0; width: 100%; justify-content: space-between; }
+  .acad-cab-banner { padding: 14px; flex-wrap: wrap; }
+  .acad-cab-banner-btn { width: 100%; }
   .acad-cab-hw-head h3 { font-size: 17px; }
+  .acad-cab-cal-day { min-height: 48px; padding: 4px; align-items: center; gap: 4px; }
+  .acad-cab-cal-items { display: none; }
+  .acad-cab-cal-dots { display: flex; }
+  .acad-cab-cal-weekdays, .acad-cab-cal-grid { gap: 4px; }
+  .acad-cab-cal-head h2 { min-width: 0; font-size: 19px; }
+  .acad-cab-cal-lesson { padding: 12px; }
+  .acad-cab-diary-entry { grid-template-columns: 1fr; gap: 4px; }
+  .acad-cab-diary-actions .btn { flex: 1; }
 }
