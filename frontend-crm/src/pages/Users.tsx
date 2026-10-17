@@ -130,7 +130,7 @@ export default function Users() {
   const narrowed = !!(roleFilter || values.search || presenceFilter);
   const roleFilterLabel = roleOptions.find((r) => r.key === roleFilter)?.label;
   const sort = useTableSort(items, [
-    { key: 'fullName', label: t('app.field.fullName'), value: (u) => u.fullName },
+    { key: 'fullName', label: t('common.fullName'), value: (u) => u.fullName },
     ...(founder
       ? [{ key: 'presence', label: t('presence.col'), type: 'number' as const, value: (u: User) => presenceSortValue(presenceOf(u)) }]
       : []),
@@ -496,7 +496,7 @@ export default function Users() {
               <input type="password" name="fake-password" autoComplete="current-password" style={{ display: 'none' }} />
 
               <div className="form-group" style={{ textAlign: 'left', marginBottom: 12 }}>
-                <label>{t('app.field.fullName')} *</label>
+                <label>{t('common.fullName')} *</label>
                 <input
                   name="newUserFullName"
                   value={form.fullName}
@@ -568,6 +568,7 @@ export default function Users() {
                     <option value="base:ACCOUNTANT">{roleLabel('ACCOUNTANT' as any)}</option>
                     <option value="base:SALES_MANAGER">{roleLabel('SALES_MANAGER' as any)}</option>
                     <option value="base:CLIENT_MANAGER">{roleLabel('CLIENT_MANAGER' as any)}</option>
+                    <option value="base:TEACHER">{roleLabel('TEACHER' as any)}</option>
                   </optgroup>
                   {/* Кастомную роль назначает только основатель (так же проверяет сервер). */}
                   {founder && customRoles.length > 0 && (

@@ -27,7 +27,7 @@ import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
-import { isElevated, isFounder, displayRoleLabel } from '../lib/roles';
+import { isElevated, isFounder, displayRoleLabel, isTeacherOnly } from '../lib/roles';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import BackButton from '../components/BackButton';
@@ -183,6 +183,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
     return base || '—';
   })();
   const canManageDocs = isAdmin || isSelf;
+  // Учитель академии: продажи, KPI, табель и ежедневные отчёты его не касаются.
+  const teacherProfile = isTeacherOnly(user as any);
 
   return (
     <>
@@ -301,7 +303,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                 взялась цифра: полоса + объём за месяц (или «личный процент»).
                 Старый бэк без bonusPercentEffective — падаем на прежнее поведение.
               */}
-              <Field
+              {!teacherProfile && <Field
                 label={t('userDetail.field.bonusPercent')}
                 value={`${salary.bonusPercentEffective ?? salary.bonusPercent}%`}
                 hint={
@@ -311,12 +313,12 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                       ? `${t('userDetail.bonus.fromBand')} · ${bandRangeLabel(salary.bonusBand.minAmount, salary.bonusBand.maxAmount)} · ${t('salary.bonus.volume')} ${fmtMoney(salary.bonusVolume ?? 0)}`
                       : undefined
                 }
-              />
-              <Field label={t('userDetail.field.kpiTarget')} value={`${kpi.targetPct}%`} />
+              />}
+              {!teacherProfile && <Field label={t('userDetail.field.kpiTarget')} value={`${kpi.targetPct}%`} />}
             </div>
             {/* Бонус за месяц: набрано, ставка, сколько до следующей — тем же
                 расчётом, что в «Зарплате» и KPI. */}
-            {salary.bonusProgress && (
+            {salary.bonusProgress && !teacherProfile && (
               <div className="profile-bonus">
                 <BonusProgress p={salary.bonusProgress} testId="profile-bonus" />
               </div>
@@ -362,7 +364,9 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           в Настройки → График работы. Индивидуальный ScheduleEditor убран,
           чтобы FOUNDER не мог случайно рассинхронизировать сотрудников. */}
 
-      {/* Текущий месяц — фактика */}
+      {/* Текущий месяц — фактика (у учителя академии её нет: он не отмечает
+          рабочий день и не продаёт). */}
+      {!teacherProfile && (
       <section className="card profile-section">
         <h3 className="profile-h">{t('profile.month.current')}</h3>
         <div className="profile-stats">
@@ -382,6 +386,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           onClose={() => setMonthTile(null)}
         />
       </section>
+      )}
 
       {salary && (
       <>
@@ -536,6 +541,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       {isAdmin && <AccessSection userId={realId} userName={user.fullName} />}
 
       {/* Ежедневные отчёты текущего месяца */}
+      {!teacherProfile && (
       <section className={`card profile-section${dailyReports.length === 0 ? ' is-empty' : ''}`}>
         <h3 className="profile-h">{t('profile.reportsMonth')}</h3>
         {dailyReports.length === 0 ? (
@@ -564,6 +570,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           </div>
         )}
       </section>
+      )}
     </>
   );
 }
@@ -959,7 +966,7 @@ function OfferSection() {
  * и legacy-проверок. FOUNDER не редактируется через этот UI (его роль
  * меняется только в seed/CLI).
  */
-const ASSIGNABLE_ROLE_VALUES: string[] = ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'];
+const ASSIGNABLE_ROLE_VALUES: string[] = ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER', 'TEACHER'];
 
 function RolesEditor({ user, userId, onSaved, onClose }: { user: FullProfile['user']; userId: string; onSaved: () => void; onClose: () => void }) {
   const { toast } = useUI();

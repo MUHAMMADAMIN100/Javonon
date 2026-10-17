@@ -29,6 +29,7 @@ const ROLE_TAB_KEYS: { key: Role | null }[] = [
   { key: 'ACCOUNTANT' },
   { key: 'SALES_MANAGER' },
   { key: 'CLIENT_MANAGER' },
+  { key: 'TEACHER' },
 ];
 
 /**

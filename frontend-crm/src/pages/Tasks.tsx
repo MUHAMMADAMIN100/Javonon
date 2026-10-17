@@ -20,7 +20,7 @@ import ListTotal from '../components/ListTotal';
 import SearchField from '../components/SearchField';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import CrmDatePicker from '../components/CrmDatePicker';
-import { hasRole, isElevated, displayRoleLabel } from '../lib/roles';
+import { hasRole, isElevated, displayRoleLabel, isTeacherOnly } from '../lib/roles';
 import { useT } from '../lib/i18n';
 
 type Scope = 'all' | 'mine';
@@ -119,7 +119,8 @@ export default function Tasks() {
     queryFn: () => listUsers(),
     enabled: isAdmin,
   });
-  const users = usersQuery.data ?? [];
+  // Учителю академии раздел задач закрыт — в исполнители и контролёры его не предлагаем.
+  const users = (usersQuery.data ?? []).filter((u) => !isTeacherOnly(u as any));
 
   // Realtime → инвалидируем кеш, TanStack сам перечитает.
   useRealtime({

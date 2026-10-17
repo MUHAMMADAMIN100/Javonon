@@ -4,7 +4,7 @@ import CrmSelect from '../components/CrmSelect';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
-import { isFounder } from '../lib/roles';
+import { isFounder, isTeacherOnly } from '../lib/roles';
 import { useRealtimeEvent } from '../realtime';
 import { listAttendance } from '../api/attendance';
 import { listUsers } from '../api/users';
@@ -50,7 +50,8 @@ export default function Attendance() {
 
   const qc = useQueryClient();
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => listUsers() });
-  const users = usersQuery.data || [];
+  // Учитель академии рабочий день не отмечает — в фильтре табеля его нет.
+  const users = (usersQuery.data || []).filter((u) => !isTeacherOnly(u as any));
 
   const query = useQuery({
     queryKey: ['attendance', userId, from, to],

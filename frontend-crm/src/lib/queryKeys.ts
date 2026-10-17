@@ -100,6 +100,16 @@ export const keys = {
     // переключение месяца отдавало бы из кеша прошлый месяц.
     sessions: (p: Record<string, unknown> = {}) => ['groups', 'sessions', p] as const,
   },
+  // Академия: журнал группы, ученики, карточка ученика. Префикс 'groups'
+  // у журнала — чтобы правка занятий (keys.groups.all) перечитывала и его.
+  academy: {
+    all: ['academy'] as const,
+    journal: (groupId: string) => ['groups', 'journal', groupId] as const,
+    students: (p: Record<string, unknown> = {}) => ['academy', 'students', p] as const,
+    student: (id: string) => ['academy', 'student', id] as const,
+    pick: (search: string, groupId?: string) => ['academy', 'pick', search, groupId ?? ''] as const,
+    crm: (studentId: string) => ['academy', 'crm', studentId] as const,
+  },
   installments: {
     all: ['installments'] as const,
     /** Этапы рассрочки сделки. */

@@ -1,11 +1,17 @@
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 import { ClassSessionStatus, StudyGroupStatus } from '@prisma/client';
@@ -110,6 +116,18 @@ export class UpdateClassSessionDto {
   @MaxLength(40)
   startsAt?: string;
 
+  /** Домашнее задание к уроку. Пустая строка = стереть. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  homework?: string;
+
+  /** Срок ДЗ 'YYYY-MM-DD'. Пустая строка = без срока. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  homeworkDue?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(40)
@@ -128,4 +146,39 @@ export class UpdateClassSessionDto {
   @IsOptional()
   @IsEnum(ClassSessionStatus)
   status?: ClassSessionStatus;
+}
+
+/**
+ * Занятия по шаблону: дни недели (1 = Пн … 7 = Вс), время и даты «с … по …»
+ * включительно (душанбинские). dryRun — только посчитать, ничего не создавая.
+ */
+export class BulkClassSessionsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(7)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  weekdays: number[];
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  startTime: string;
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  endTime: string;
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  from: string;
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  to: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  topic?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 }

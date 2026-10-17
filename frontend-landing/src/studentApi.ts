@@ -369,3 +369,128 @@ export async function listStudentInstallments(): Promise<StudentInstallments> {
   const { data } = await client.get<StudentInstallments>('/student-installments/mine');
   return data;
 }
+
+/* ──────────────────────────── АКАДЕМИЯ (кабинет) ────────────────────────────
+ * /student-academy/* — группа, расписание, ДЗ с материалами, успеваемость.
+ * Итог недели считает сервер (journal-math.ts): кабинет только показывает.
+ */
+export type AcademyStatus = 'ACTIVE' | 'PENDING' | 'EXPELLED' | 'NO_GROUP';
+export type WeeklySlot = { weekday: number; from: string; to: string };
+
+export type AcademyOverview =
+  | { hasAcademy: false; academyOnly: false }
+  | {
+      hasAcademy: true;
+      academyOnly: boolean;
+      fullName: string;
+      status: AcademyStatus;
+      expelled: { at: string; note: string | null } | null;
+      flags: Array<{ id: string; reason: string; createdAt: string; group: { id: string; name: string } | null }>;
+      groups: Array<{
+        id: string;
+        name: string;
+        status: 'ACTIVE' | 'ARCHIVED';
+        teacher: { fullName: string } | null;
+        joinedAt: string;
+        nextLesson: { startsAt: string; endsAt: string; topic: string | null } | null;
+        pattern: WeeklySlot[];
+      }>;
+      summary: { avg: number | null; attendancePct: number | null; finalWeeks: number; held: number; attended: number };
+    };
+
+export type AcademyLesson = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  status: 'SCHEDULED' | 'DONE' | 'CANCELLED';
+  topic: string | null;
+  homework: string | null;
+  homeworkDue: string | null;
+  group: { id: string; name: string; teacher: { fullName: string } | null };
+  teacher: { fullName: string } | null;
+  _count: { materials: number };
+};
+
+export type AcademyMaterial = {
+  id: string;
+  kind: 'FILE' | 'LINK';
+  title: string;
+  /** У файла — null (скачивается через API), у ссылки — адрес. */
+  url: string | null;
+  size: number | null;
+  mimeType: string | null;
+};
+
+export type AcademyHomework = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  topic: string | null;
+  homework: string | null;
+  homeworkDue: string | null;
+  group: { id: string; name: string };
+  materials: AcademyMaterial[];
+};
+
+export type AcademyMark = { present: boolean | null; score: number | null; comment: string | null };
+
+export type AcademyProgressWeek = {
+  key: string;
+  index: number;
+  from: string;
+  to: string;
+  lessons: Array<{ id: string; startsAt: string; topic: string | null; past: boolean; mark: AcademyMark | null }>;
+  held: number;
+  attended: number;
+  lessonPoints: number;
+  bonus: number | null;
+  exam: number | null;
+  total: number;
+  final: boolean;
+  groupAvg: number | null;
+};
+
+export type AcademyProgressGroup = {
+  group: { id: string; name: string; teacher: { fullName: string } | null };
+  active: boolean;
+  joinedAt: string;
+  leftAt: string | null;
+  summary: { avg: number | null; attendancePct: number | null; finalWeeks: number; held: number; attended: number };
+  weeks: AcademyProgressWeek[];
+};
+
+export async function getAcademyOverview(): Promise<AcademyOverview> {
+  const { data } = await client.get<AcademyOverview>('/student-academy/overview');
+  return data;
+}
+
+export async function getAcademyLessons(): Promise<{ upcoming: AcademyLesson[]; past: AcademyLesson[] }> {
+  const { data } = await client.get<{ upcoming: AcademyLesson[]; past: AcademyLesson[] }>('/student-academy/lessons');
+  return data;
+}
+
+export async function getAcademyHomework(): Promise<AcademyHomework[]> {
+  const { data } = await client.get<AcademyHomework[]>('/student-academy/homework');
+  return data;
+}
+
+export async function getAcademyProgress(): Promise<AcademyProgressGroup[]> {
+  const { data } = await client.get<AcademyProgressGroup[]>('/student-academy/progress');
+  return data;
+}
+
+/**
+ * Файл урока. /uploads студентам закрыт, поэтому файл приходит из API с
+ * токеном и сохраняется через временную ссылку на blob.
+ */
+export async function downloadAcademyMaterial(id: string, fileName: string): Promise<void> {
+  const { data } = await client.get<Blob>(`/student-academy/materials/${id}/download`, { responseType: 'blob' });
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName || 'file';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}

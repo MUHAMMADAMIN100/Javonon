@@ -1,6 +1,7 @@
 import { canSeeAllApplications } from '../applications/application-access';
 import { hasRole, isFounder, type UserWithRoles } from '../auth/role-utils';
 import { CUSTOM_ROLE_SELECT, pickEffectiveCustomRole, type CustomRoleRow } from '../auth/position-role';
+import { isAcademyManager } from '../academy/academy-access';
 
 /**
  * Кому положено видеть данные — одно правило для REST, сокета и
@@ -12,9 +13,11 @@ import { CUSTOM_ROLE_SELECT, pickEffectiveCustomRole, type CustomRoleRow } from 
  *    базовой роли, кастомная роль с правом «Заявки — назначение»
  *    (canSeeAllApplications); плюс назначенные менеджеры — отдельно;
  *  - finance      — финансы: основатель, админ/бухгалтер по базовой роли,
- *    кастомная роль с любым правом «Финансы — …».
+ *    кастомная роль с любым правом «Финансы — …»;
+ *  - academy      — руководство академии (academy/academy-access.ts):
+ *    решения по красным флагам и т.п.
  */
-export type AudienceKind = 'applications' | 'finance';
+export type AudienceKind = 'applications' | 'finance' | 'academy';
 
 export function canSeeFinance(user: UserWithRoles | null | undefined): boolean {
   if (!user) return false;
@@ -24,6 +27,7 @@ export function canSeeFinance(user: UserWithRoles | null | undefined): boolean {
 }
 
 export function inAudience(kind: AudienceKind, user: UserWithRoles | null | undefined): boolean {
+  if (kind === 'academy') return isAcademyManager(user);
   return kind === 'finance' ? canSeeFinance(user) : canSeeAllApplications(user);
 }
 

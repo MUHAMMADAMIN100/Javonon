@@ -29,13 +29,40 @@ export interface GroupMember {
   groupId: string;
   studentId: string;
   joinedAt: string;
+  /** Вышел из группы (убран или отчислен) — в журнале остаётся за свои недели. */
+  leftAt: string | null;
+  leftReason: 'REMOVED' | 'EXPELLED' | null;
   student: {
     id: string;
     fullName: string;
     phones: string[];
     email: string | null;
     status: string;
+    photoUrl?: string | null;
+    /** Ученик только академии (не клиент агентства). */
+    academyOnly?: boolean;
+    academyExpelledAt?: string | null;
   };
+}
+
+export type ClassMaterialKind = 'FILE' | 'LINK';
+
+export interface ClassMaterial {
+  id: string;
+  kind: ClassMaterialKind;
+  title: string;
+  /** FILE — /uploads/academy/…, LINK — внешний адрес. */
+  url: string;
+  size: number | null;
+  mimeType: string | null;
+  createdAt?: string;
+}
+
+/** «По каким дням»: weekday 1 = Пн … 7 = Вс, время 'HH:mm'. */
+export interface WeeklySlot {
+  weekday: number;
+  from: string;
+  to: string;
 }
 
 export interface ClassSession {
@@ -47,11 +74,18 @@ export interface ClassSession {
   teacherId: string | null;
   status: ClassSessionStatus;
   reminderSentAt?: string | null;
+  /** ДЗ к уроку и срок (UTC-полночь календарного дня). */
+  homework?: string | null;
+  homeworkDue?: string | null;
   createdAt: string;
   updatedAt: string;
   /** В ленте календаря приходит группа, в карточке группы — нет. */
   group?: GroupRef;
   teacher?: TeacherRef | null;
+  /** Только в карточке группы. */
+  materials?: ClassMaterial[];
+  /** Сколько отметок в журнале — с ними занятие нельзя удалить, только отменить. */
+  _count?: { journal: number };
 }
 
 export interface StudyGroup {
@@ -66,11 +100,16 @@ export interface StudyGroup {
   program?: { id: string; name: string } | null;
   teacher?: TeacherRef | null;
   _count?: { members: number; sessions: number };
+  /** Только в списке: ближайшее занятие и «по каким дням» (4 недели вперёд). */
+  nextSession?: { startsAt: string; endsAt: string; topic: string | null } | null;
+  pattern?: WeeklySlot[];
 }
 
 export interface StudyGroupDetail extends StudyGroup {
   members: GroupMember[];
   sessions: ClassSession[];
+  /** manage — руководство академии; run — ведёт группу (учитель или руководство). */
+  access: { manage: boolean; run: boolean };
 }
 
 export interface CreateStudyGroupDto {
@@ -103,8 +142,23 @@ export interface UpdateClassSessionDto {
   startsAt?: string;
   endsAt?: string;
   topic?: string;
+  /** Пустая строка — стереть. */
+  homework?: string;
+  /** 'YYYY-MM-DD' или пустая строка — без срока. */
+  homeworkDue?: string;
   teacherId?: string;
   status?: ClassSessionStatus;
+}
+
+/** Занятия по шаблону: дни недели 1 = Пн … 7 = Вс, время 'HH:mm', даты 'YYYY-MM-DD'. */
+export interface BulkSessionsDto {
+  weekdays: number[];
+  startTime: string;
+  endTime: string;
+  from: string;
+  to: string;
+  topic?: string;
+  dryRun?: boolean;
 }
 
 export interface GroupFilters {
@@ -176,5 +230,14 @@ export async function updateSession(sessionId: string, payload: UpdateClassSessi
 
 export async function deleteSession(sessionId: string) {
   const { data } = await api.delete<{ ok: true }>(`/study-groups/sessions/${sessionId}`);
+  return data;
+}
+
+/** Шаблон расписания. dryRun → { count, skipped }, иначе → { created, skipped }. */
+export async function bulkSessions(groupId: string, payload: BulkSessionsDto) {
+  const { data } = await api.post<{ count?: number; created?: number; skipped: number }>(
+    `/study-groups/${groupId}/sessions/bulk`,
+    payload,
+  );
   return data;
 }

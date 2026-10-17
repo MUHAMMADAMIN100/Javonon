@@ -44,7 +44,7 @@ import { fmtDateText, TJ_TZ, tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
 import { useRealtime } from '../realtime';
 import { useAuth } from '../store/auth';
-import { hasRole, isElevated } from '../lib/roles';
+import { hasRole, isElevated, isTeacherOnly } from '../lib/roles';
 import { hasPermission } from '../lib/permissions';
 import DismissedMark from '../components/DismissedMark';
 
@@ -375,7 +375,8 @@ export default function Finance() {
     queryKey: keys.users.list(),
     queryFn: () => listUsers(),
   });
-  const users = usersQuery.data ?? [];
+  // Учитель академии продаж не ведёт — в выборе менеджера прихода его нет.
+  const users = (usersQuery.data ?? []).filter((u) => !isTeacherOnly(u as any));
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.finance.all });

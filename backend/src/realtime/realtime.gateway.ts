@@ -39,7 +39,11 @@ type SocketData = {
   expiryTimer?: ReturnType<typeof setTimeout>;
 };
 
-const STAFF_ROLES = new Set(['FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER']);
+// TEACHER — учитель академии: попадает в 'staff' (там только id и
+// безобидные события — их и так получает любой менеджер) и в свою комнату
+// user:<id> для уведомлений и чата; в клиентские комнаты его не пускают
+// проверки ниже (canSeeAllApplications и пр. для него ложны).
+const STAFF_ROLES = new Set(['FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER', 'TEACHER']);
 
 // Финансовые роли — подмножество STAFF_ROLES, у которых есть HTTP-доступ
 // к /finance/* (см. finance.controller.ts:@Roles('ADMIN','ACCOUNTANT') +

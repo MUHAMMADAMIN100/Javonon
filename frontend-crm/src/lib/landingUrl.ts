@@ -69,3 +69,10 @@ export function resolveLandingBaseUrl(): string {
 export function buildReferralUrl(code: string): string {
   return `${resolveLandingBaseUrl()}/?ref=${code}#apply`;
 }
+
+/**
+ * Вход студента в личный кабинет. Раньше в данных для входа стояло
+ * javonon.vercel.app/login — этот адрес открывал 404. Кабинет живёт на
+ * боевом домене сайта.
+ */
+export const STUDENT_LOGIN_URL = 'https://javonongroup.tj/login';

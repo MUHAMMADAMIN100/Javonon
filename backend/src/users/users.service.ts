@@ -15,7 +15,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { PresenceService } from '../realtime/presence.service';
-import { isElevated, isFounder } from '../auth/role-utils';
+import { isElevated, isFounder, isTeacherOnly } from '../auth/role-utils';
 import { tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
 import { SettingsService } from '../settings/settings.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
@@ -340,6 +340,9 @@ export class UsersService {
       totalLeadsMonth > 0
         ? Math.round((enrolledMonth / totalLeadsMonth) * 1000) / 10
         : 0;
+    // Учитель академии в продажах и KPI не участвует: число всех заявок
+    // агентства за месяц ему не показываем (досье учителя их не рисует).
+    const teacherOnly = isTeacherOnly({ role: user.role, roles: user.roles });
 
     return {
       user,
@@ -390,15 +393,17 @@ export class UsersService {
         lateMinutes: timeMonth._sum.lateMinutes || 0,
         daysWorked: timeMonth._count,
       },
-      kpi: {
-        targetPct: target,
-        totalLeadsMonth,
-        ownClientsMonth,
-        enrolledMonth,
-        requiredClosed,
-        achievedPct: kpiAchievedPct,
-        onTrack: enrolledMonth >= requiredClosed,
-      },
+      kpi: teacherOnly
+        ? { targetPct: 0, totalLeadsMonth: 0, ownClientsMonth: 0, enrolledMonth: 0, requiredClosed: 0, achievedPct: 0, onTrack: true }
+        : {
+            targetPct: target,
+            totalLeadsMonth,
+            ownClientsMonth,
+            enrolledMonth,
+            requiredClosed,
+            achievedPct: kpiAchievedPct,
+            onTrack: enrolledMonth >= requiredClosed,
+          },
       dailyReports: dailyReportsThisMonth,
     };
   }
@@ -876,7 +881,7 @@ export class UsersService {
    * FOUNDER нельзя добавить через этот endpoint (он единственный, только сидер).
    */
   async setRoles(targetId: string, requestedRoles: any[], byFounderId: string) {
-    const VALID: any[] = ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'];
+    const VALID: any[] = ['ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER', 'TEACHER'];
     const cleaned: any[] = Array.from(
       new Set(requestedRoles.filter((r) => VALID.includes(r))),
     );

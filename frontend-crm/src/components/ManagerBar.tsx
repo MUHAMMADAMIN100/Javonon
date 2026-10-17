@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { type ManagerInfo, type User } from '../api/types';
-import { displayRoleLabel } from '../lib/roles';
+import { displayRoleLabel, isTeacherOnly } from '../lib/roles';
 import { listUsers } from '../api/users';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
@@ -131,7 +131,8 @@ export default function ManagerBar({ manager, chinaManager, onReassign }: Props)
   const isAdmin = isElevated(me);
 
   useEffect(() => {
-    if (isAdmin) listUsers().then(setUsers).catch(() => {});
+    // Учитель академии не ведёт клиентов — в выборе менеджера его нет.
+    if (isAdmin) listUsers().then((list) => setUsers(list.filter((u) => !isTeacherOnly(u as any)))).catch(() => {});
   }, [isAdmin]);
 
   const pick = async (kind: Slot, userId: string | null) => {

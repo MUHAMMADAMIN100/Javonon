@@ -39,7 +39,7 @@ import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation, tempId } from '../lib/optimistic';
-import { isFounder, displayRoleLabel } from '../lib/roles';
+import { isFounder, displayRoleLabel, isTeacherOnly } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
 import { ROLE_LABEL, type Role } from '../api/types';
@@ -279,6 +279,9 @@ export default function Chat() {
   const usersQuery = useQuery({
     queryKey: keys.users.list(),
     queryFn: () => listUsers(),
+    // Учителю академии список сотрудников закрыт (сервер ответит 403) —
+    // собеседников он берёт из своих чатов.
+    enabled: !isTeacherOnly(me as any),
   });
   const users = usersQuery.data ?? [];
 

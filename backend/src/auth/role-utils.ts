@@ -130,7 +130,22 @@ export function canPreviewDealFormPartner(
   return isManager(user);
 }
 
-/** Любой сотрудник компании (кроме студентов/партнёров). */
+/**
+ * Сотрудник агентства (кроме студентов/партнёров). Учитель академии
+ * (TEACHER) сюда намеренно не входит: заявки, лиды и сделки — не его зона.
+ */
 export function isStaff(user: UserWithRoles | undefined | null): boolean {
   return hasRole(user, 'FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER');
+}
+
+/**
+ * Только учитель: все роли — TEACHER и своей активной роли нет. Такому
+ * сотруднику в CRM открыты лишь «Академия», чат и свой профиль — белый
+ * список адресов в auth/teacher-scope.ts. Учитель, которому основатель
+ * дал вторую должность или свою роль, работает по ним, как все.
+ */
+export function isTeacherOnly(user: UserWithRoles | undefined | null): boolean {
+  if (!user || user.hasCustomRole) return false;
+  const all = [user.role, ...(user.roles || [])].filter(Boolean) as string[];
+  return all.length > 0 && all.every((r) => r === 'TEACHER');
 }

@@ -33,7 +33,7 @@ export interface FullProfile {
     id: string;
     email: string;
     fullName: string;
-    role: 'FOUNDER' | 'ADMIN' | 'ACCOUNTANT' | 'SALES_MANAGER' | 'CLIENT_MANAGER' | 'EMPLOYEE';
+    role: 'FOUNDER' | 'ADMIN' | 'ACCOUNTANT' | 'SALES_MANAGER' | 'CLIENT_MANAGER' | 'TEACHER' | 'EMPLOYEE';
     roles?: string[];
     phone?: string | null;
     passportNo?: string | null;

@@ -8,10 +8,13 @@ import {
 import { ClassSessionStatus, Prisma, StudyGroupStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { hasRole, isFounder, UserWithRoles } from '../auth/role-utils';
-import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { UserWithRoles } from '../auth/role-utils';
+import { parseCalendarDateUtc, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { canMarkSession, canRunGroup, isAcademyManager } from '../academy/academy-access';
+import { addDaysToKey, weeklyPattern } from '../academy/journal-math';
 import {
   AddGroupMembersDto,
+  BulkClassSessionsDto,
   CreateClassSessionDto,
   CreateStudyGroupDto,
   UpdateClassSessionDto,
@@ -26,13 +29,15 @@ import {
  * нельзя, иначе календарь CRM, напоминания cron'а и кабинет студента
  * пришлось бы писать дважды и они бы разъехались.
  *
- * Кто что видит:
- *   - FOUNDER / ADMIN — все группы и все занятия;
- *   - преподаватель (User в StudyGroup.teacherId или подменный в
- *     ClassSession.teacherId) — свои группы: видит и ведёт расписание;
- *   - состав группы и назначение преподавателя меняет только руководство —
- *     иначе преподаватель мог бы переписать себе нагрузку;
- *   - студент (лендинг-кабинет) — только занятия групп, где он состоит.
+ * Кто что видит (academy/academy-access.ts):
+ *   - руководство академии (основатель, админ, роль с «Академия —
+ *     управление») — все группы и все занятия;
+ *   - учитель (StudyGroup.teacherId) — свои группы: расписание, уроки, ДЗ;
+ *     подменный учитель (ClassSession.teacherId) — тему и ДЗ своего урока;
+ *   - состав группы и назначение учителя меняет только руководство —
+ *     иначе учитель мог бы переписать себе нагрузку;
+ *   - студент (лендинг-кабинет) — только занятия групп, где он состоит
+ *     сейчас (GroupMember.leftAt IS NULL).
  *
  * Напоминание перед занятием шлёт CronService через уже существующий
  * NotificationsService (sweepSessionReminders ниже). Второго канала
@@ -51,6 +56,18 @@ const CALENDAR_TAKE_LIMIT = 2000;
 
 /** Сколько ближайших занятий отдаём кабинету студента по умолчанию. */
 const STUDENT_UPCOMING_DEFAULT = 20;
+
+/** Шаблон расписания: не больше года и не больше 300 занятий за раз. */
+const BULK_MAX_DAYS = 366;
+const BULK_MAX_SESSIONS = 300;
+
+/** Действующий состав группы — вышедшие (leftAt) остаются только в журнале. */
+const ACTIVE_MEMBER: Prisma.GroupMemberWhereInput = { leftAt: null };
+
+/** Отметка в журнале, из-за которой занятие нельзя удалить (только отменить). */
+const MARKED_ENTRY: Prisma.JournalEntryWhereInput = {
+  OR: [{ present: { not: null } }, { score: { not: null } }, { comment: { not: null } }],
+};
 
 type Viewer = (UserWithRoles & { id: string }) | null | undefined;
 
@@ -84,18 +101,42 @@ export class StudyGroupsService {
       where.teacherId = opts.teacherId;
     }
 
-    return this.prisma.studyGroup.findMany({
+    const groups = await this.prisma.studyGroup.findMany({
       where,
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
       include: {
         program: { select: { id: true, name: true } },
         teacher: { select: { id: true, fullName: true, isActive: true } },
-        _count: { select: { members: true, sessions: true } },
+        _count: { select: { members: { where: ACTIVE_MEMBER }, sessions: true } },
       },
+    });
+
+    // Ближайшее занятие и «по каким дням» — одной выборкой на все группы
+    // (4 недели вперёд), чтобы список не делал запрос на каждую карточку.
+    const now = new Date();
+    const upcoming = groups.length
+      ? await this.prisma.classSession.findMany({
+          where: {
+            groupId: { in: groups.map((g) => g.id) },
+            status: { not: ClassSessionStatus.CANCELLED },
+            endsAt: { gte: now },
+            startsAt: { lte: new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000) },
+          },
+          orderBy: { startsAt: 'asc' },
+          select: { groupId: true, startsAt: true, endsAt: true, topic: true },
+        })
+      : [];
+    return groups.map((g) => {
+      const mine = upcoming.filter((s) => s.groupId === g.id);
+      return { ...g, nextSession: mine[0] ?? null, pattern: weeklyPattern(mine) };
     });
   }
 
-  /** Карточка группы: состав + ближайшие занятия. */
+  /**
+   * Карточка группы: состав (вместе с вышедшими — у них leftAt), занятия с
+   * ДЗ и материалами. Открывают руководство, учитель группы и подменный
+   * учитель её занятий; что из этого можно менять — в `access`.
+   */
   async getGroup(user: Viewer, id: string) {
     const group = await this.prisma.studyGroup.findUnique({
       where: { id },
@@ -106,20 +147,42 @@ export class StudyGroupsService {
           orderBy: { joinedAt: 'asc' },
           include: {
             student: {
-              select: { id: true, fullName: true, phones: true, email: true, status: true },
+              select: {
+                id: true,
+                fullName: true,
+                phones: true,
+                email: true,
+                status: true,
+                photoUrl: true,
+                academyOnly: true,
+                academyExpelledAt: true,
+              },
             },
           },
         },
         sessions: {
           orderBy: { startsAt: 'asc' },
-          take: 200,
-          include: { teacher: { select: { id: true, fullName: true, isActive: true } } },
+          take: 1000,
+          include: {
+            teacher: { select: { id: true, fullName: true, isActive: true } },
+            materials: {
+              orderBy: { createdAt: 'asc' },
+              select: { id: true, kind: true, title: true, url: true, size: true, mimeType: true, createdAt: true },
+            },
+            _count: { select: { journal: { where: MARKED_ENTRY } } },
+          },
         },
       },
     });
     if (!group) throw new NotFoundException('Группа не найдена');
-    this.assertCanSeeGroup(user, group.teacherId);
-    return group;
+    await this.assertCanSeeGroup(user, group.id, group.teacherId);
+    return {
+      ...group,
+      access: {
+        manage: this.isElevatedViewer(user),
+        run: canRunGroup(user, group),
+      },
+    };
   }
 
   async createGroup(user: Viewer, dto: CreateStudyGroupDto) {
@@ -211,6 +274,13 @@ export class StudyGroupsService {
       select: { id: true },
     });
     if (!group) throw new NotFoundException('Группа не найдена');
+    // Оценки и итоги недель удалились бы каскадом — такую группу только в архив.
+    const graded =
+      (await this.prisma.journalEntry.count({ where: { session: { groupId: id }, ...MARKED_ENTRY } })) +
+      (await this.prisma.journalWeek.count({ where: { groupId: id } }));
+    if (graded > 0) {
+      throw new BadRequestException('В группе есть оценки — удалить нельзя, переведите её в архив');
+    }
     await this.prisma.studyGroup.delete({ where: { id } });
     return { ok: true };
   }
@@ -227,23 +297,43 @@ export class StudyGroupsService {
 
     const studentIds = await this.validateStudentIds(dto.studentIds);
     if (studentIds.length === 0) throw new BadRequestException('Не выбран ни один студент');
+    const expelled = await this.prisma.student.findMany({
+      where: { id: { in: studentIds }, academyExpelledAt: { not: null } },
+      select: { fullName: true },
+    });
+    if (expelled.length) {
+      throw new BadRequestException(
+        `Отчислен из академии: ${expelled.map((s) => s.fullName).join(', ')} — сначала верните в академию`,
+      );
+    }
 
     // skipDuplicates вместо предварительной проверки: @@unique([groupId,
     // studentId]) и так не даст задвоить, а повторное нажатие «Добавить» не
-    // должно падать 500-й ошибкой.
-    await this.prisma.groupMember.createMany({
-      data: studentIds.map((studentId) => ({ groupId, studentId })),
-      skipDuplicates: true,
-    });
+    // должно падать 500-й ошибкой. Вышедших раньше возвращаем снятием leftAt —
+    // их прошлые отметки в журнале остаются на месте.
+    await this.prisma.$transaction([
+      this.prisma.groupMember.updateMany({
+        where: { groupId, studentId: { in: studentIds }, leftAt: { not: null } },
+        data: { leftAt: null, leftReason: null },
+      }),
+      this.prisma.groupMember.createMany({
+        data: studentIds.map((studentId) => ({ groupId, studentId })),
+        skipDuplicates: true,
+      }),
+    ]);
     return this.getGroup(user, groupId);
   }
 
   async removeMember(user: Viewer, groupId: string, studentId: string) {
     this.assertCanAdminGroups(user);
-    // deleteMany, а не delete: удаление уже удалённого не должно быть 500-й.
-    // Занятия группы при этом не трогаем — исключённый студент просто
-    // перестаёт их видеть в кабинете.
-    await this.prisma.groupMember.deleteMany({ where: { groupId, studentId } });
+    // Строку не удаляем, а закрываем (leftAt): журнал группы продолжает
+    // показывать ученика за недели, когда он учился. updateMany — чтобы
+    // повторное нажатие не было 500-й. Занятия группы ученик перестаёт
+    // видеть в кабинете.
+    await this.prisma.groupMember.updateMany({
+      where: { groupId, studentId, leftAt: null },
+      data: { leftAt: new Date(), leftReason: 'REMOVED' },
+    });
     return this.getGroup(user, groupId);
   }
 
@@ -297,10 +387,16 @@ export class StudyGroupsService {
             name: true,
             teacherId: true,
             program: { select: { id: true, name: true } },
-            _count: { select: { members: true } },
+            _count: { select: { members: { where: ACTIVE_MEMBER } } },
           },
         },
         teacher: { select: { id: true, fullName: true, isActive: true } },
+        // Окно занятия из календаря показывает и материалы урока.
+        materials: {
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, kind: true, title: true, url: true, size: true, mimeType: true, createdAt: true },
+        },
+        _count: { select: { journal: { where: MARKED_ENTRY } } },
       },
     });
   }
@@ -340,7 +436,12 @@ export class StudyGroupsService {
       include: { group: { select: { teacherId: true } } },
     });
     if (!session) throw new NotFoundException('Занятие не найдено');
-    this.assertCanManageSessions(user, session.group.teacherId);
+    // Время, статус и замену меняют учитель группы и руководство; тему и ДЗ
+    // своего урока — ещё и подменный учитель.
+    const touchesSchedule =
+      dto.startsAt !== undefined || dto.endsAt !== undefined || dto.status !== undefined || dto.teacherId !== undefined;
+    if (touchesSchedule) this.assertCanManageSessions(user, session.group.teacherId);
+    else if (!canMarkSession(user, session)) throw new ForbiddenException('Это не ваш урок');
 
     const data: Prisma.ClassSessionUpdateInput = {};
     if (dto.startsAt !== undefined || dto.endsAt !== undefined) {
@@ -369,6 +470,16 @@ export class StudyGroupsService {
       if (windowMoved) data.reminderSentAt = null;
     }
     if (dto.topic !== undefined) data.topic = dto.topic.trim().slice(0, 200) || null;
+    if (dto.homework !== undefined) data.homework = dto.homework.trim().slice(0, 4000) || null;
+    if (dto.homeworkDue !== undefined) {
+      const raw = dto.homeworkDue.trim();
+      if (!raw) data.homeworkDue = null;
+      else {
+        const due = parseCalendarDateUtc(raw);
+        if (Number.isNaN(due.getTime())) throw new BadRequestException('Срок ДЗ указан неверно');
+        data.homeworkDue = due;
+      }
+    }
     if (dto.status !== undefined) data.status = dto.status;
     if (dto.teacherId !== undefined) {
       const tid = dto.teacherId.trim();
@@ -397,8 +508,72 @@ export class StudyGroupsService {
     });
     if (!session) throw new NotFoundException('Занятие не найдено');
     this.assertCanManageSessions(user, session.group.teacherId);
+    const marked = await this.prisma.journalEntry.count({ where: { sessionId, ...MARKED_ENTRY } });
+    if (marked > 0) {
+      throw new BadRequestException('По занятию есть отметки в журнале — его можно только отменить');
+    }
     await this.prisma.classSession.delete({ where: { id: sessionId } });
     return { ok: true };
+  }
+
+  /**
+   * Занятия по шаблону: каждый выбранный день недели между `from` и `to`
+   * (включительно, по Душанбе) в одно и то же время. Занятие группы, уже
+   * стоящее на это же время, пропускается — шаблон можно запускать повторно,
+   * чтобы продлить курс. dryRun — только посчитать.
+   */
+  async bulkCreateSessions(user: Viewer, groupId: string, dto: BulkClassSessionsDto) {
+    const group = await this.prisma.studyGroup.findUnique({
+      where: { id: groupId },
+      select: { id: true, teacherId: true, status: true },
+    });
+    if (!group) throw new NotFoundException('Группа не найдена');
+    this.assertCanManageSessions(user, group.teacherId);
+    if (group.status === StudyGroupStatus.ARCHIVED) {
+      throw new BadRequestException('Группа в архиве — новые занятия не добавляются');
+    }
+    if (dto.endTime <= dto.startTime) throw new BadRequestException('Конец занятия должен быть позже начала');
+    const fromDay = parseCalendarDateUtc(dto.from);
+    const toDay = parseCalendarDateUtc(dto.to);
+    if (Number.isNaN(fromDay.getTime()) || Number.isNaN(toDay.getTime())) {
+      throw new BadRequestException('Даты указаны неверно');
+    }
+    if (toDay < fromDay) throw new BadRequestException('Дата «по» раньше даты «с»');
+    const days = Math.round((toDay.getTime() - fromDay.getTime()) / 86_400_000) + 1;
+    if (days > BULK_MAX_DAYS) throw new BadRequestException('Не больше года за один раз');
+
+    const weekdays = new Set(dto.weekdays);
+    const slots: Array<{ startsAt: Date; endsAt: Date }> = [];
+    for (let i = 0; i < days; i++) {
+      const key = addDaysToKey(dto.from, i);
+      const wd = ((new Date(`${key}T00:00:00.000Z`).getUTCDay() + 6) % 7) + 1; // 1 = Пн … 7 = Вс
+      if (!weekdays.has(wd)) continue;
+      slots.push({
+        startsAt: tjParseLocalDate(`${key}T${dto.startTime}`),
+        endsAt: tjParseLocalDate(`${key}T${dto.endTime}`),
+      });
+    }
+    if (slots.length > BULK_MAX_SESSIONS) {
+      throw new BadRequestException(`Слишком много занятий за раз (${slots.length}) — не больше ${BULK_MAX_SESSIONS}`);
+    }
+
+    const existing = slots.length
+      ? await this.prisma.classSession.findMany({
+          where: { groupId, startsAt: { in: slots.map((s) => s.startsAt) } },
+          select: { startsAt: true },
+        })
+      : [];
+    const taken = new Set(existing.map((e) => e.startsAt.getTime()));
+    const fresh = slots.filter((s) => !taken.has(s.startsAt.getTime()));
+    const skipped = slots.length - fresh.length;
+    if (dto.dryRun) return { count: fresh.length, skipped };
+    if (!fresh.length) return { created: 0, skipped };
+
+    const topic = dto.topic?.trim().slice(0, 200) || null;
+    const res = await this.prisma.classSession.createMany({
+      data: fresh.map((s) => ({ groupId, startsAt: s.startsAt, endsAt: s.endsAt, topic })),
+    });
+    return { created: res.count, skipped };
   }
 
   // ──────────────────── НАПОМИНАНИЯ ПЕРЕД ЗАНЯТИЕМ (CRON) ─────────────────
@@ -456,7 +631,7 @@ export class StudyGroupsService {
         topic: true,
         teacherId: true,
         group: {
-          select: { id: true, name: true, teacherId: true, _count: { select: { members: true } } },
+          select: { id: true, name: true, teacherId: true, _count: { select: { members: { where: ACTIVE_MEMBER } } } },
         },
       },
     });
@@ -515,7 +690,7 @@ export class StudyGroupsService {
       where: {
         status: ClassSessionStatus.SCHEDULED,
         endsAt: { gte: new Date() },
-        group: { members: { some: { studentId } } },
+        group: { members: { some: { studentId, leftAt: null } } },
       },
       orderBy: { startsAt: 'asc' },
       take,
@@ -538,7 +713,7 @@ export class StudyGroupsService {
   async listRangeForStudent(studentId: string, from?: string, to?: string) {
     const where: Prisma.ClassSessionWhereInput = {
       status: { not: ClassSessionStatus.CANCELLED },
-      group: { members: { some: { studentId } } },
+      group: { members: { some: { studentId, leftAt: null } } },
     };
     if (from || to) {
       const range: Prisma.DateTimeFilter = {};
@@ -575,18 +750,22 @@ export class StudyGroupsService {
   // ─────────────────────────── ВСПОМОГАТЕЛЬНОЕ ────────────────────────────
 
   /**
-   * FOUNDER/ADMIN — «видят всё». ACCOUNTANT сюда не входит: расписание это
+   * Руководство академии «видит всё» (academy-access.ts: основатель, админ,
+   * роль с «Академия — управление»). ACCOUNTANT сюда не входит: расписание —
    * не финансовая поверхность, а состав групп — персональные данные
    * студентов.
    */
   private isElevatedViewer(user: Viewer): boolean {
-    return !!user && (isFounder(user) || hasRole(user, 'ADMIN'));
+    return isAcademyManager(user);
   }
 
-  private assertCanSeeGroup(user: Viewer, teacherId: string | null) {
+  /** Руководство, учитель группы или подменный учитель хотя бы одного её занятия. */
+  private async assertCanSeeGroup(user: Viewer, groupId: string, teacherId: string | null) {
     if (!user) throw new ForbiddenException('Недостаточно прав');
     if (this.isElevatedViewer(user)) return;
     if (teacherId && teacherId === user.id) return;
+    const substitute = await this.prisma.classSession.count({ where: { groupId, teacherId: user.id } });
+    if (substitute > 0) return;
     throw new ForbiddenException('Это не ваша группа');
   }
 
@@ -597,11 +776,10 @@ export class StudyGroupsService {
     }
   }
 
-  /** Расписание своей группы ведёт и её преподаватель. */
+  /** Расписание своей группы ведёт и её учитель. */
   private assertCanManageSessions(user: Viewer, groupTeacherId: string | null) {
     if (!user) throw new ForbiddenException('Недостаточно прав');
-    if (this.isElevatedViewer(user)) return;
-    if (groupTeacherId && groupTeacherId === user.id) return;
+    if (canRunGroup(user, { teacherId: groupTeacherId })) return;
     throw new ForbiddenException('Это не ваша группа');
   }
 

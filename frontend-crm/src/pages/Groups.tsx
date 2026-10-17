@@ -4,29 +4,34 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
-import { hasRole } from '../lib/roles';
+import { isTeacherOnly } from '../lib/roles';
+import { isAcademyManager } from '../lib/permissions';
 import { useT } from '../lib/i18n';
+import { tjFormatTime, tjToday } from '../lib/tjTime';
+import { usePatternText, shortDate, tjWeekdayOf, weekdayKey } from '../components/academy/academyUi';
 import { useUI } from '../ui/Dialogs';
 import { keys } from '../lib/queryKeys';
 import Icon from '../Icon';
 import FormModal from '../components/FormModal';
 import Loading from '../components/Loading';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
-import { listGroups, createGroup, type StudyGroupStatus } from '../api/studyGroups';
+import { listGroups, createGroup, listSessions, type StudyGroupStatus } from '../api/studyGroups';
 import { listPrograms } from '../api/programs';
 import { listUsers } from '../api/users';
 import DismissedMark from '../components/DismissedMark';
+import { useRoleLabel } from '../lib/labels';
 
 /**
- * Учебные группы.
+ * Группы академии.
  *
  * Индивидуальный студент — это группа из ОДНОГО человека. Отдельной
  * «персональной» ветки в UI нет намеренно: расписание, напоминания и кабинет
  * студента читают одну и ту же связку StudyGroup → ClassSession.
  *
- * Создание группы и назначение преподавателя — FOUNDER/ADMIN (тот же рубеж,
- * что в StudyGroupsService.assertCanAdminGroups). Преподаватель видит только
+ * Создание группы и назначение учителя — руководство академии (тот же рубеж,
+ * что в StudyGroupsService.assertCanAdminGroups). Учитель видит только
  * свои группы: бэк режет выборку в `where`, поэтому фронту фильтровать нечего.
+ * Сверху — занятия на сегодня: учитель сразу открывает журнал урока.
  */
 export default function Groups() {
   const { t } = useT();
@@ -35,7 +40,15 @@ export default function Groups() {
   const { toast } = useUI();
   const qc = useQueryClient();
 
-  const canAdmin = hasRole(me, 'FOUNDER', 'ADMIN');
+  const canAdmin = isAcademyManager(me as any);
+  const teacherOnly = isTeacherOnly(me as any);
+  const patternText = usePatternText();
+  const today = tjToday();
+  const todayQuery = useQuery({
+    queryKey: keys.groups.sessions({ from: today, to: today }),
+    queryFn: () => listSessions({ from: today, to: today }),
+  });
+  const todayLessons = (todayQuery.data ?? []).filter((s) => s.status !== 'CANCELLED');
 
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StudyGroupStatus | ''>('ACTIVE');
@@ -57,7 +70,8 @@ export default function Groups() {
     { key: 'program', label: t('groups.field.program'), value: (g) => g.program?.name },
     { key: 'teacher', label: t('groups.field.teacher'), value: (g) => g.teacher?.fullName },
     { key: 'members', label: t('groups.membersCount'), type: 'number', value: (g) => g._count?.members ?? 0 },
-    { key: 'sessions', label: t('groups.sessionsCount'), type: 'number', value: (g) => g._count?.sessions ?? 0 },
+    { key: 'pattern', label: t('academy.group.days'), value: (g) => patternText(g.pattern) || null },
+    { key: 'next', label: t('academy.group.next'), type: 'date', value: (g) => g.nextSession?.startsAt ?? null },
     { key: 'status', label: t('common.status'), value: (g) => t(`groups.status.${g.status}`) },
   ]);
 
@@ -82,7 +96,7 @@ export default function Groups() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <p style={{ color: 'var(--text-soft)', fontSize: 13, margin: 0, maxWidth: 620 }}>
-            {t('groups.hint.individual')}
+            {teacherOnly ? t('academy.groups.teacherHint') : t('groups.hint.individual')}
           </p>
           {canAdmin && !creating && (
             <button className="btn btn-primary" data-testid="group-new" onClick={() => setCreating(true)}>
@@ -128,6 +142,31 @@ export default function Groups() {
         </div>
       </motion.div>
 
+      {todayLessons.length > 0 && (
+        <div className="card acad-today" data-testid="today-lessons">
+          <div className="acad-today-title">
+            <Icon name="today" size={18} /> {t('academy.groups.today')}
+          </div>
+          <div className="acad-today-list">
+            {todayLessons.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="acad-today-item"
+                onClick={() => navigate(`/groups/${s.groupId}`)}
+              >
+                <span className="acad-today-time">{tjFormatTime(s.startsAt)}–{tjFormatTime(s.endsAt)}</span>
+                <span className="acad-today-group">{s.group?.name}</span>
+                <span className="acad-today-topic">{s.topic || t('classes.noTopic')}</span>
+                <span className="acad-today-go">
+                  <Icon name="grading" size={16} /> {t('academy.groups.openJournal')}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {query.isLoading ? (
         <Loading />
       ) : groups.length === 0 ? (
@@ -145,7 +184,8 @@ export default function Groups() {
                 <SortTh sort={sort} col="program" />
                 <SortTh sort={sort} col="teacher" />
                 <SortTh sort={sort} col="members" style={{ textAlign: 'right' }} />
-                <SortTh sort={sort} col="sessions" style={{ textAlign: 'right' }} />
+                <SortTh sort={sort} col="pattern" />
+                <SortTh sort={sort} col="next" />
                 <SortTh sort={sort} col="status" />
               </tr>
             </thead>
@@ -165,7 +205,12 @@ export default function Groups() {
                     <DismissedMark person={g.teacher} />
                   </td>
                   <td data-label={t('groups.membersCount')} style={{ textAlign: 'right' }}>{g._count?.members ?? 0}</td>
-                  <td data-label={t('groups.sessionsCount')} style={{ textAlign: 'right' }}>{g._count?.sessions ?? 0}</td>
+                  <td data-label={t('academy.group.days')} style={{ color: 'var(--text-soft)' }}>{patternText(g.pattern) || '—'}</td>
+                  <td data-label={t('academy.group.next')} style={{ color: 'var(--text-soft)', whiteSpace: 'nowrap' }}>
+                    {g.nextSession
+                      ? `${t(`weekday.short.${weekdayKey(tjWeekdayOf(g.nextSession.startsAt))}`)} ${shortDate(g.nextSession.startsAt)}, ${tjFormatTime(g.nextSession.startsAt)}`
+                      : '—'}
+                  </td>
                   <td data-label={t('common.status')}>
                     <span className={g.status === 'ACTIVE' ? 'badge badge-success' : 'badge badge-gray'}>
                       {t(`groups.status.${g.status}`)}
@@ -192,6 +237,7 @@ function CreateGroupForm({
   busy: boolean;
 }) {
   const { t } = useT();
+  const roleLabel = useRoleLabel();
   const [name, setName] = useState('');
   const [programId, setProgramId] = useState('');
   const [teacherId, setTeacherId] = useState('');
@@ -226,11 +272,13 @@ function CreateGroupForm({
         </div>
         <div>
           <label style={labelStyle}>{t('groups.field.teacher')}</label>
-          <CrmSelect className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
+          <CrmSelect className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)} data-testid="group-form-teacher">
             <option value="">{t('groups.noTeacher')}</option>
-            {(users.data ?? []).map((u) => (
-              <option key={u.id} value={u.id}>{u.fullName}</option>
-            ))}
+            {[...(users.data ?? [])]
+              .sort((a, b) => Number(b.role === 'TEACHER') - Number(a.role === 'TEACHER') || a.fullName.localeCompare(b.fullName, 'ru'))
+              .map((u) => (
+                <option key={u.id} value={u.id}>{u.fullName} · {roleLabel(u.role as string)}</option>
+              ))}
           </CrmSelect>
         </div>
       </div>

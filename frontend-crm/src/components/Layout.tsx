@@ -14,6 +14,7 @@ import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { me as apiMe } from '../api/auth';
 import { useT } from '../lib/i18n';
+import { isTeacherOnly } from '../lib/roles';
 
 /**
  * Заголовок страницы — ОДИН, и живёт он здесь.
@@ -54,8 +55,9 @@ const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; title
   { path: '/massmail',     eyebrowKey: 'eyebrow.campaigns',      num: '20', titleKey: 'massmail.title' },
   { path: '/inbox',        eyebrowKey: 'eyebrow.unifiedInbox',   num: '21', titleKey: 'inbox.title' },
   { path: '/offers',       eyebrowKey: 'eyebrow.legal',          num: '22', titleKey: 'offers.title' },
-  { path: '/groups',       eyebrowKey: 'eyebrow.catalog',        num: '23', titleKey: 'groups.title' },
-  { path: '/schedule',     eyebrowKey: 'eyebrow.catalog',        num: '24', titleKey: 'classes.title' },
+  { path: '/groups',       eyebrowKey: 'eyebrow.academy',        num: '23', titleKey: 'groups.title' },
+  { path: '/schedule',     eyebrowKey: 'eyebrow.academy',        num: '24', titleKey: 'classes.title' },
+  { path: '/academy/students', eyebrowKey: 'eyebrow.academy',    num: '27', titleKey: 'academy.students.title' },
   { path: '/settings',     eyebrowKey: 'eyebrow.system',         num: '25', titleKey: 'settings.title' },
   // Четыре маршрута одной страницы «Рабочий день» (вкладки табеля,
   // посещаемости и отгулов) — заголовок у них общий.
@@ -158,7 +160,7 @@ export default function Layout() {
   return (
     <div className={`app-layout${mobileNavOpen ? ' nav-open' : ''}`}>
       <RealtimeStatusBanner />
-      <Dialpad />
+      {!isTeacherOnly(me as any) && <Dialpad />}
       <Sidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <AnimatePresence>
         {mobileNavOpen && (

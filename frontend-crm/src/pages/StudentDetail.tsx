@@ -39,6 +39,8 @@ import { canSeeAllClients, canSeeAllOfApplication } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useOnboardingLabel, useChannelLabel, useCountryLabel } from '../lib/labels';
 import { tjFormatFull } from '../lib/tjTime';
+import { STUDENT_LOGIN_URL } from '../lib/landingUrl';
+import StudentAcademyBlock from '../components/academy/StudentAcademyBlock';
 
 function CredRow({ label, value }: { label: string; value: string }) {
   const { t } = useT();
@@ -220,7 +222,7 @@ export default function StudentDetail() {
 
   const copyCreds = async () => {
     if (!credentials) return;
-    const text = `${t('userDetail.field.email')}: ${credentials.email}\n${t('login.password')}: ${credentials.password}\n${t('login.title')}: https://javonon.vercel.app/login`;
+    const text = `${t('userDetail.field.email')}: ${credentials.email}\n${t('login.password')}: ${credentials.password}\n${t('login.title')}: ${STUDENT_LOGIN_URL}`;
     try {
       await navigator.clipboard.writeText(text);
       toast(t('toast.copied'), 'success');
@@ -421,6 +423,8 @@ export default function StudentDetail() {
           </div>
         )}
       </section>
+
+      <StudentAcademyBlock studentId={student.id} />
 
       <section className="card profile-section" data-testid="client-docs">
         <h3 className="profile-h">{t('client.section.docs')}</h3>

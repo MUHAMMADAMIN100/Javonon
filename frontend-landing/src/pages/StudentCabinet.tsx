@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   API_BASE,
   clearToken,
+  getAcademyOverview,
   getToken,
   studentDeleteDocument,
   studentMe,
@@ -19,6 +20,7 @@ import PaymentsSection from '../components/PaymentsSection';
 import InstallmentPlanSection from '../components/InstallmentPlanSection';
 import ScheduleSection from '../components/ScheduleSection';
 import CoursesSection from '../components/CoursesSection';
+import AcademySection from '../components/academy/AcademySection';
 import InteractionsHistory from '../components/InteractionsHistory';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import Icon from '../Icon';
@@ -65,7 +67,7 @@ export default function StudentCabinet() {
   const qc = useQueryClient();
   const [uploading, setUploading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [tab, setTab] = useState<'home' | 'programs' | 'payments' | 'courses' | 'interactions'>('home');
+  const [tab, setTab] = useState<'home' | 'academy' | 'programs' | 'payments' | 'courses' | 'interactions'>('home');
   // QA-fix: красивая модалка вместо нативного confirm('Удалить документ?')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -92,6 +94,13 @@ export default function StudentCabinet() {
   });
   const me = meQuery.data ?? null;
   const loading = meQuery.isLoading;
+
+  // Академия: вкладка есть у тех, кто учится (или учился) в группе. Ученик
+  // только академии (не клиент агентства) видит одну её — без вкладок
+  // документов, программ и оплат агентства.
+  const academyQuery = useQuery({ queryKey: lkeys.academy.overview(), queryFn: getAcademyOverview });
+  const academy = academyQuery.data?.hasAcademy ? academyQuery.data : null;
+  const academyOnly = !!academy?.academyOnly;
 
   // QA-fix #4: при ЛЮБОЙ ошибке /me раньше делали logout → при cold-start
   // Railway пользователь без причины оказывался на /login. Теперь кикаем
@@ -181,7 +190,7 @@ export default function StudentCabinet() {
       );
     }
   }
-  if (loading || !me) {
+  if (loading || !me || academyQuery.isLoading) {
     return <Loading fullscreen />;
   }
 
@@ -209,6 +218,13 @@ export default function StudentCabinet() {
       </header>
 
       <main className="container stu-main">
+        {academyOnly && academy ? (
+          <div className="acad-cab-only">
+            <h1 className="acad-cab-hello">Салом, {me.fullName.split(/\s+/)[0]}!</h1>
+            <AcademySection overview={academy} />
+          </div>
+        ) : (
+        <>
         <div className="stu-tabs">
           <button
             type="button"
@@ -218,6 +234,17 @@ export default function StudentCabinet() {
             <Icon name="dashboard" size={18} />
             Асосӣ
           </button>
+          {academy && (
+            <button
+              type="button"
+              className={`stu-tab${tab === 'academy' ? ' active' : ''}`}
+              onClick={() => setTab('academy')}
+              data-testid="tab-academy"
+            >
+              <Icon name="cast_for_education" size={18} />
+              Академия
+            </button>
+          )}
           <button
             type="button"
             className={`stu-tab${tab === 'programs' ? ' active' : ''}`}
@@ -265,6 +292,15 @@ export default function StudentCabinet() {
           )}
         </AnimatePresence>
 
+        {tab === 'academy' && academy && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <AcademySection overview={academy} />
+          </motion.div>
+        )}
         {tab === 'programs' && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -607,6 +643,8 @@ export default function StudentCabinet() {
           <ApplicationFormSection />
         </motion.div>
         </>)}
+        </>
+        )}
       </main>
 
       {/* Красивая модалка подтверждения удаления документа */}

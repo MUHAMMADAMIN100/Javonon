@@ -1,4 +1,4 @@
-import { isElevated, isFounder } from './roles';
+import { hasRole, isElevated, isFounder } from './roles';
 
 /**
  * Permission helpers — фронтовое зеркало backend/src/auth/role-utils.ts
@@ -242,3 +242,15 @@ export function canSeeAllOfApplication(user: AccessUser | null | undefined, stat
   return canSeeAllClients(user, isLeadStatus(status) ? 'leads' : 'applications');
 }
 
+
+/**
+ * Руководство академии — зеркало backend/src/academy/academy-access.ts:
+ * основатель; под своей ролью — с «Академия — управление»; иначе админ.
+ * Создаёт группы и учеников, меняет состав, решает по красным флагам.
+ */
+export function isAcademyManager(user: AccessUser | null | undefined): boolean {
+  if (!user) return false;
+  if (isFounder(user as any)) return true;
+  if (customRoleActive(user)) return hasPermission(user, 'academy:manage');
+  return hasRole(user as any, 'ADMIN');
+}

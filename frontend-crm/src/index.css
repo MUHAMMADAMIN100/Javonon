@@ -7074,3 +7074,361 @@ html:has(.exc-bar) { scrollbar-gutter: stable; }
 /* Пометка «уволен» рядом с именем в истории (чат, зарплата, схема выручки). */
 .profile-bonus { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
 .dismissed-mark { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; background: var(--bg-soft); color: var(--text-soft); vertical-align: middle; }
+
+/* ===================== Академия: журнал, уроки, ученики, флаги =====================
+   Классы .acad-* — только для разделов академии (pages/Groups, GroupDetail,
+   AcademyStudents, AcademyStudentDetail, components/academy/*). Цвета итога
+   недели — как в журнале с образца заказчика: от 90 зелёный, 80–89 жёлтый,
+   ниже — красный; пока нет экзамена — серый. */
+.acad-card-pad { padding: 20px; margin-bottom: 16px; }
+.acad-eyebrow { font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: .08em; }
+.acad-hint { font-size: 12.5px; color: var(--text-soft); line-height: 1.45; }
+.acad-link { color: var(--primary); text-decoration: none; }
+.acad-link:hover { text-decoration: underline; }
+.acad-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 36px 16px; color: var(--text-soft); text-align: center; font-size: 14px; }
+.acad-empty .material-symbols-rounded { color: var(--text-light); }
+.acad-section-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; margin: 4px 0 12px; }
+.acad-section-title span { font-size: 12px; font-weight: 600; color: var(--text-soft); background: var(--bg-soft); border-radius: 999px; padding: 1px 8px; }
+.acad-note, .acad-warn { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; }
+.acad-note { background: var(--primary-soft); color: var(--primary-dark); }
+.acad-warn { background: var(--warning-soft); color: #92400e; }
+.acad-warn.is-danger { background: var(--danger-soft); color: #991b1b; }
+.acad-note .material-symbols-rounded, .acad-warn .material-symbols-rounded { flex: none; margin-top: 1px; }
+.acad-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 600; background: #f5f3ff; color: #6d28d9; vertical-align: middle; white-space: nowrap; }
+.acad-person { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.acad-person > span:last-child { min-width: 0; }
+.acad-person-sub { display: block; font-size: 12px; color: var(--text-soft); font-weight: 400; }
+.acad-avatar { border-radius: 50%; object-fit: cover; flex: none; }
+.acad-avatar.is-initials { display: inline-flex; align-items: center; justify-content: center; background: var(--primary-soft); color: var(--primary); font-weight: 700; }
+.acad-avatar.is-initials::before { content: attr(data-initials); }
+.acad-icon-btn { border: none; background: transparent; color: var(--text-soft); cursor: pointer; padding: 4px; border-radius: 8px; display: inline-flex; }
+.acad-icon-btn:hover { background: var(--bg-soft); color: var(--danger); }
+.acad-form-grid { gap: 0 16px; }
+@media (max-width: 600px) { .acad-form-grid { grid-template-columns: 1fr; } }
+
+/* Итог недели и средний балл */
+.acad-total { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 26px; padding: 0 10px; border-radius: 999px; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+.acad-total.is-good { background: #dcfce7; color: #15803d; }
+.acad-total.is-mid { background: #fef3c7; color: #a16207; }
+.acad-total.is-low { background: #fee2e2; color: #b91c1c; }
+.acad-total.is-draft { background: var(--bg-soft); color: var(--text-soft); border: 1px dashed var(--input-border); }
+.acad-total.is-empty { background: transparent; color: var(--text-light); font-weight: 500; }
+
+/* Статус ученика */
+.acad-status { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.acad-status.is-active { background: var(--primary-soft); color: var(--primary-dark); }
+.acad-status.is-pending { background: #fef3c7; color: #a16207; }
+.acad-status.is-expelled { background: #fee2e2; color: #b91c1c; }
+.acad-status.is-nogroup { background: var(--bg-soft); color: var(--text-soft); }
+
+/* Красные флаги: три кружка */
+.acad-flags { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
+.acad-flag-dot { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #fca5a5; background: transparent; }
+.acad-flag-dot.is-on { background: #ef4444; border-color: #ef4444; }
+.acad-flags.is-full .acad-flag-dot.is-on { box-shadow: 0 0 0 2px #fee2e2; }
+.acad-flag-more { font-size: 11px; font-weight: 700; color: #b91c1c; }
+
+/* ── График ── */
+.acad-chart-card { padding: 16px 16px 10px; margin-bottom: 16px; }
+.acad-chart { width: 100%; }
+.acad-chart-box { position: relative; width: 100%; user-select: none; }
+.acad-chart-empty { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-soft); font-size: 13px; text-align: center; padding: 0 16px; }
+.acad-chart-grid { stroke: var(--border); stroke-dasharray: 3 4; }
+.acad-chart-vgrid { stroke: var(--border-soft); stroke-dasharray: 2 6; }
+.acad-chart-cursor { stroke: var(--input-border); stroke-width: 1; }
+.acad-chart-tick { font-size: 11.5px; fill: var(--text-soft); font-family: inherit; }
+.acad-chart-tick.is-avg { font-weight: 700; fill: var(--text); }
+.acad-chart-tip { position: absolute; pointer-events: none; background: white; border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 8px 12px; font-size: 12.5px; font-weight: 600; line-height: 1.6; min-width: 150px; max-width: 220px; z-index: 2; }
+.acad-chart-tip-title { color: var(--text-soft); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.acad-chart-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; margin-top: 6px; }
+.acad-chart-legend-item { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; cursor: pointer; font-size: 13px; font-weight: 500; padding: 3px 4px; border-radius: 6px; }
+.acad-chart-legend-item:hover { background: var(--bg-soft); }
+.acad-chart-legend-item.is-off { opacity: .35; text-decoration: line-through; }
+.acad-chart-dot { width: 9px; height: 9px; border-radius: 50%; }
+
+/* ── Карточка группы ── */
+.acad-group-head { padding: 22px 24px; margin-bottom: 14px; }
+.acad-group-head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.acad-group-name { font-size: 24px; font-weight: 700; margin: 4px 0 0; word-break: break-word; }
+.acad-group-facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; font-size: 13.5px; color: var(--text-soft); }
+.acad-fact { display: inline-flex; align-items: center; gap: 6px; }
+.acad-fact.is-next { color: var(--primary-dark); font-weight: 600; }
+.acad-group-desc { margin-top: 12px; padding: 10px 12px; background: var(--bg-soft); border-radius: 10px; font-size: 13px; white-space: pre-wrap; }
+.acad-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.acad-tabs .btn { display: inline-flex; align-items: center; gap: 6px; }
+.acad-tab-count { font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 999px; background: rgba(255,255,255,.25); }
+.acad-tabs .btn-secondary .acad-tab-count { background: var(--bg-soft); }
+.acad-danger-zone { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+
+/* ── Журнал ── */
+.acad-journal-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.acad-journal-stats > div { background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; box-shadow: var(--shadow); }
+.acad-journal-stats span { font-size: 11.5px; color: var(--text-soft); text-transform: uppercase; letter-spacing: .06em; }
+.acad-journal-stats b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.acad-weeks { display: flex; flex-direction: column; gap: 10px; }
+.acad-week { padding: 0; overflow: hidden; }
+.acad-week-head { width: 100%; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 18px; border: none; background: transparent; cursor: pointer; text-align: left; font-family: inherit; color: var(--text); }
+.acad-week-head:hover { background: var(--bg-soft); }
+.acad-week-title { display: inline-flex; align-items: center; gap: 2px; font-size: 18px; font-weight: 700; }
+.acad-week-range { font-size: 13px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.acad-week-now { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--primary); color: #fff; }
+.acad-week-meta { margin-left: auto; font-size: 12px; color: var(--text-soft); }
+.acad-jt-wrap { overflow-x: auto; padding: 0 12px 14px; }
+.acad-jt { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
+.acad-jt th, .acad-jt td { border-bottom: 1px solid var(--border-soft); padding: 8px 6px; text-align: center; white-space: nowrap; }
+.acad-jt thead th { background: var(--bg-soft); font-weight: 600; }
+.acad-jt thead tr:first-child th:first-child { border-top-left-radius: 10px; }
+.acad-jt thead tr:first-child th:last-child { border-top-right-radius: 10px; }
+.acad-jt .acad-jt-name { text-align: left; position: sticky; left: 0; z-index: 1; background: var(--bg-card); min-width: 200px; max-width: 260px; }
+.acad-jt thead .acad-jt-name { background: var(--bg-soft); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-soft); }
+.acad-jt-num { color: var(--text-soft); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.acad-jt-student { font-weight: 500; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 170px; vertical-align: middle; }
+.acad-jt .acad-flags { margin-left: 6px; }
+.acad-jt-left { display: block; font-size: 11px; color: var(--text-soft); }
+.acad-jt tr.is-left td { opacity: .6; }
+.acad-jt-lesson { border-left: 1px solid var(--border); min-width: 120px; }
+.acad-jt-date { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.acad-jt-date span { font-size: 12px; font-weight: 600; color: var(--text-soft); margin-left: 2px; }
+.acad-jt-time { font-size: 11.5px; font-weight: 500; color: var(--text-soft); }
+.acad-jt-allbtn { margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--input-border); background: white; border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 600; color: var(--primary); cursor: pointer; font-family: inherit; }
+.acad-jt-allbtn:hover { background: var(--primary-soft); }
+.acad-jt-end { border-left: 1px solid var(--border); font-size: 14px; }
+.acad-jt-sub th { font-size: 11px !important; font-weight: 600; color: var(--text-soft); text-transform: uppercase; letter-spacing: .05em; padding-top: 4px !important; }
+.acad-jt-sub th:nth-child(odd) { border-left: 1px solid var(--border); }
+.acad-jt-att { border-left: 1px solid var(--border-soft); }
+.acad-jt-att, .acad-jt-score { min-width: 54px; }
+.acad-comment-btn { border: none; background: transparent; color: #cbd5e1; cursor: pointer; padding: 2px; border-radius: 6px; vertical-align: middle; display: inline-flex; }
+.acad-comment-btn:hover:not(:disabled) { color: var(--primary); background: var(--primary-soft); }
+.acad-comment-btn.has-comment { color: var(--primary); }
+.acad-comment-btn:disabled { cursor: default; opacity: .5; }
+.acad-check { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--input-border); background: white; cursor: pointer; vertical-align: middle; margin-left: 4px; color: transparent; transition: background .12s, border-color .12s; }
+.acad-check input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.acad-check.is-on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.acad-check.is-off { border-color: #fca5a5; background: #fff5f5; }
+.acad-check.is-disabled { cursor: not-allowed; opacity: .45; }
+.acad-check.is-disabled input { cursor: not-allowed; }
+.acad-check:focus-within { box-shadow: 0 0 0 3px var(--primary-soft); }
+.crm-select.acad-score-select { width: 60px; min-width: 60px; padding: 5px 22px 5px 10px; background-position: right 6px center; font-size: 14px; font-weight: 600; border-radius: 8px; height: 32px; }
+.acad-jt-num-cell { min-width: 64px; }
+.crm-input.acad-num-input { width: 56px; height: 32px; padding: 4px 6px !important; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 8px; }
+.acad-jt-total { min-width: 64px; }
+.acad-jt-legend { margin-top: 10px; font-size: 12px; color: var(--text-soft); line-height: 1.45; }
+
+/* Журнал на телефоне: по одному уроку */
+.acad-jp { padding: 0 12px 14px; }
+.acad-jp-lessons { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+.acad-jp-lesson { flex: none; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 64px; padding: 8px 10px; border-radius: 12px; border: 1.5px solid var(--border); background: white; cursor: pointer; font-family: inherit; color: var(--text); }
+.acad-jp-lesson b { font-size: 13px; }
+.acad-jp-lesson span { font-size: 12px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.acad-jp-lesson.is-active { border-color: var(--primary); background: var(--primary); color: #fff; }
+.acad-jp-lesson.is-active span { color: rgba(255,255,255,.85); }
+.acad-jp-lesson.is-future:not(.is-active) { opacity: .55; }
+.acad-jp-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin: 10px 2px; font-size: 13px; color: var(--text-soft); }
+.acad-jp-future { font-size: 11px; font-weight: 600; color: #a16207; background: #fef3c7; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.acad-jp-list { display: flex; flex-direction: column; gap: 8px; }
+.acad-jp-row { border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px 12px; background: var(--bg-card); }
+.acad-jp-row.is-left { opacity: .6; }
+.acad-jp-name { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.acad-jp-controls { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.acad-jp-att { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.acad-jp-attbtn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 38px; border-radius: 10px; border: 1.5px solid var(--border); background: white; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text-soft); cursor: pointer; }
+.acad-jp-attbtn.is-yes.is-active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.acad-jp-attbtn.is-no.is-active { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.acad-jp-attbtn:disabled, .acad-jp-score:disabled { opacity: .45; cursor: not-allowed; }
+.acad-jp-scores { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.acad-jp-score { height: 40px; border-radius: 10px; border: 1.5px solid var(--border); background: white; font-family: inherit; font-size: 16px; font-weight: 700; color: var(--text); cursor: pointer; }
+.acad-jp-score.is-active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.acad-jp-totals-toggle { width: 100%; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--input-border); background: var(--bg-soft); font-family: inherit; font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; }
+.acad-jp-totals { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.acad-jp-total-row { display: grid; grid-template-columns: minmax(0, 1fr) 76px 76px auto; align-items: end; gap: 8px; border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px 12px; }
+.acad-jp-total-row .crm-input.acad-num-input { width: 100%; }
+.acad-jp-total-name { font-weight: 600; font-size: 13.5px; align-self: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.acad-jp-total-row label { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 10.5px; color: var(--text-soft); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; white-space: nowrap; }
+
+/* ── Уроки ── */
+.acad-lessons-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.acad-lessons-toolbar .btn { display: inline-flex; align-items: center; gap: 6px; }
+.acad-lesson-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.acad-lesson { display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--bg-card); transition: border-color .12s, box-shadow .12s; }
+.acad-lesson.is-clickable { cursor: pointer; }
+.acad-lesson.is-clickable:hover { border-color: var(--primary-tint); box-shadow: var(--shadow); }
+.acad-lesson.is-past { background: #fafbfd; }
+.acad-lesson.is-cancelled .acad-lesson-topic { text-decoration: line-through; color: var(--text-soft); }
+.acad-lesson-date { flex: none; width: 78px; display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-dark); }
+.acad-lesson.is-past .acad-lesson-date { background: var(--bg-soft); color: var(--text-soft); }
+.acad-lesson-date b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.acad-lesson-date span { font-size: 12px; font-weight: 600; }
+.acad-lesson-date small { font-size: 10.5px; margin-top: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.acad-lesson-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.acad-lesson-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.acad-lesson-topic { font-weight: 600; font-size: 14.5px; word-break: break-word; }
+.acad-lesson-sub { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-soft); }
+.acad-lesson-hw { display: flex; gap: 6px; font-size: 13px; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.acad-lesson-hw .material-symbols-rounded { color: var(--primary); flex: none; margin-top: 1px; }
+.acad-lesson-due { font-size: 12px; font-weight: 600; color: #a16207; }
+.acad-lesson-go { color: var(--text-light); align-self: center; }
+.acad-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.acad-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 260px; padding: 4px 10px; border-radius: 999px; background: var(--bg-soft); color: var(--primary-dark); font-size: 12px; font-weight: 600; text-decoration: none; border: 1px solid var(--border-soft); }
+.acad-chip:hover { border-color: var(--primary-tint); }
+.acad-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acad-chip small { color: var(--text-soft); font-weight: 500; }
+.acad-more { align-self: flex-start; }
+
+/* Окно урока: материалы */
+.acad-materials { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.acad-material { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--bg-soft); }
+.acad-material > .material-symbols-rounded { color: var(--primary); flex: none; }
+.acad-material-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 500; font-size: 13.5px; text-decoration: none; }
+.acad-material-title:hover { color: var(--primary); text-decoration: underline; }
+.acad-material-size { font-size: 12px; color: var(--text-soft); flex: none; }
+.acad-material-add { margin-bottom: 8px; }
+.acad-material-add .btn, .acad-link-add .btn { display: inline-flex; align-items: center; gap: 6px; }
+.acad-link-add { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 8px; align-items: center; }
+.acad-session-actions .acad-session-delete { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; }
+
+/* Шаблон расписания */
+.acad-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.acad-day { height: 40px; border-radius: 10px; border: 1.5px solid var(--input-border); background: white; font-family: inherit; font-weight: 700; font-size: 13.5px; color: var(--text-soft); cursor: pointer; }
+.acad-day:hover { border-color: var(--primary-tint); }
+.acad-day.is-on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.acad-template-preview { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--bg-soft); color: var(--text-soft); font-size: 13.5px; }
+.acad-template-preview.is-ready { background: var(--primary-soft); color: var(--primary-dark); }
+.acad-template-preview b { font-size: 16px; }
+.acad-template-error { color: var(--danger); font-weight: 600; }
+
+/* Флаг, создание ученика */
+.acad-flag-now { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 13.5px; color: var(--text-soft); }
+.acad-flag-now b { color: var(--text); }
+.acad-created { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.acad-created-icon { width: 48px; height: 48px; border-radius: 50%; background: var(--success-soft); color: var(--success); display: flex; align-items: center; justify-content: center; flex: none; }
+.acad-created-text { font-size: 14px; line-height: 1.45; }
+
+/* ── Ученики группы ── */
+.acad-add-box { padding: 14px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--bg-soft); margin-bottom: 16px; }
+.acad-add-head { display: flex; gap: 10px; flex-wrap: wrap; }
+.acad-add-head .btn { display: inline-flex; align-items: center; gap: 6px; }
+.acad-add-search { position: relative; flex: 1 1 260px; }
+.acad-add-search > .material-symbols-rounded { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-light); pointer-events: none; }
+.acad-add-search .crm-input { padding-left: 38px !important; background-color: white; }
+.acad-add-results { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.acad-add-option { display: flex; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border-soft); background: white; cursor: pointer; font-family: inherit; color: var(--text); }
+.acad-add-option:hover:not(:disabled) { border-color: var(--primary-tint); }
+.acad-add-option:disabled { cursor: not-allowed; opacity: .55; }
+.acad-add-name { font-weight: 600; font-size: 13.5px; }
+.acad-add-option small { color: var(--text-soft); font-size: 12px; margin-left: auto; text-align: right; }
+.acad-add-picked { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; }
+.acad-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 12px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-dark); font-size: 13px; font-weight: 600; }
+.acad-pill button { border: none; background: transparent; cursor: pointer; color: inherit; display: inline-flex; padding: 0; }
+.acad-members-num { color: var(--text-soft); font-variant-numeric: tabular-nums; min-width: 18px; }
+.table tr.acad-row { cursor: pointer; }
+@media (hover: hover) { .table tr.acad-row:hover td { background: var(--bg-soft); } }
+.acad-row-actions { white-space: nowrap; text-align: right; }
+.acad-row-actions .btn + .btn { margin-left: 6px; }
+.acad-flag-btn:hover { color: #b91c1c; border-color: #fca5a5; }
+.acad-left-list { margin-top: 16px; border-top: 1px solid var(--border-soft); padding-top: 12px; }
+.acad-left-list summary { cursor: pointer; font-weight: 600; font-size: 13.5px; color: var(--text-soft); }
+.acad-left-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 4px; border-bottom: 1px dashed var(--border-soft); cursor: pointer; font-size: 13.5px; }
+.acad-left-row small { color: var(--text-soft); margin-left: auto; }
+
+/* ── Список групп: занятия сегодня ── */
+.acad-today { padding: 16px 18px; margin-bottom: 16px; }
+.acad-today-title { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; margin-bottom: 10px; color: var(--primary-dark); }
+.acad-today-list { display: flex; flex-direction: column; gap: 8px; }
+.acad-today-item { display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1.4fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border-soft); background: var(--bg-soft); text-align: left; font-family: inherit; cursor: pointer; color: var(--text); }
+.acad-today-item:hover { border-color: var(--primary-tint); background: var(--primary-soft); }
+.acad-today-time { font-weight: 700; font-variant-numeric: tabular-nums; }
+.acad-today-group { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acad-today-topic { color: var(--text-soft); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acad-today-go { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); font-weight: 600; font-size: 13px; }
+
+/* ── Ученики академии ── */
+.acad-pending-banner { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 14px; margin-bottom: 14px; border-radius: 12px; border: 1px solid #fcd34d; background: #fffbeb; color: #92400e; font-family: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+.acad-pending-banner:hover { background: #fef3c7; }
+.acad-pending-go { margin-left: auto; font-weight: 700; }
+
+/* ── Карточка ученика ── */
+.acad-student-head { padding: 22px 24px; margin-bottom: 14px; }
+.acad-student-top { display: flex; gap: 16px; align-items: flex-start; }
+.acad-student-main { min-width: 0; flex: 1; }
+.acad-student-name { font-size: 22px; font-weight: 700; margin: 2px 0 8px; word-break: break-word; }
+.acad-student-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 13.5px; color: var(--text-soft); }
+.acad-student-facts a { display: inline-flex; align-items: center; gap: 4px; color: var(--text); text-decoration: none; }
+.acad-student-facts a:hover { color: var(--primary); }
+.acad-student-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.acad-student-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+.acad-decision-card, .acad-expelled-card { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 18px; margin-bottom: 14px; }
+.acad-decision-card { border: 1px solid #fcd34d; background: #fffbeb; color: #92400e; }
+.acad-expelled-card { border: 1px solid #fca5a5; background: #fef2f2; color: #991b1b; }
+.acad-decision-text { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
+.acad-decision-text b { font-size: 15px; }
+.acad-decision-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.acad-decision-card .btn, .acad-expelled-card .btn { display: inline-flex; align-items: center; gap: 6px; }
+.acad-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.acad-tile { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.acad-tile > span { font-size: 11.5px; color: var(--text-soft); text-transform: uppercase; letter-spacing: .06em; }
+.acad-tile > b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.acad-tile > small { font-size: 12px; color: var(--text-soft); }
+.acad-student-group-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.acad-student-group-sum { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--text-soft); }
+.acad-weeks-table td, .acad-weeks-table th { white-space: nowrap; }
+.acad-flag-list { display: flex; flex-direction: column; gap: 8px; }
+.acad-flag-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border: 1px solid #fecaca; background: #fff5f5; }
+.acad-flag-item > .material-symbols-rounded { color: #ef4444; flex: none; margin-top: 1px; }
+.acad-flag-item.is-removed { border-color: var(--border-soft); background: var(--bg-soft); }
+.acad-flag-item.is-removed > .material-symbols-rounded { color: var(--text-light); }
+.acad-flag-item.is-removed .acad-flag-reason { text-decoration: line-through; color: var(--text-soft); }
+.acad-flag-body { flex: 1; min-width: 0; }
+.acad-flag-reason { font-weight: 600; font-size: 14px; word-break: break-word; }
+.acad-comment-list { display: flex; flex-direction: column; gap: 10px; }
+.acad-comment-item { padding: 10px 12px; border-left: 3px solid var(--primary-tint); background: var(--bg-soft); border-radius: 0 10px 10px 0; }
+.acad-comment-meta { font-size: 12.5px; color: var(--text-soft); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.acad-comment-score { margin-left: auto; font-weight: 700; color: var(--primary-dark); background: var(--primary-soft); border-radius: 999px; padding: 0 8px; }
+.acad-comment-text { font-size: 14px; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+
+/* Блок в карточке студента CRM */
+.acad-crm-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
+.acad-crm-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 10px; }
+.acad-crm-grid > div { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.acad-crm-label { font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: .06em; }
+.acad-crm-value { font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.acad-crm-open { margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; }
+
+@media (max-width: 1024px) {
+  .acad-journal-stats, .acad-tiles, .acad-crm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .acad-today-item { grid-template-columns: 96px minmax(0, 1fr) auto; }
+  .acad-today-topic { display: none; }
+  .crm-input.acad-num-input { padding: 4px 6px !important; }
+}
+/* Таблицы учеников на телефоне — общая раскладка «подпись слева, значение справа»;
+   первая ячейка (имя) — заголовок карточки, кнопки — строкой внизу справа. */
+@media (max-width: 900px) {
+  .table tr.acad-row td.acad-name-cell { padding-bottom: 8px; }
+  .table tr.acad-row td.acad-row-actions { text-align: right; padding-top: 8px; }
+  .table tr.acad-row td.acad-row-actions::before { display: none; }
+}
+@media (max-width: 600px) {
+  .acad-card-pad { padding: 14px; }
+  .acad-group-head, .acad-student-head { padding: 16px; }
+  .acad-group-name { font-size: 20px; }
+  .acad-student-name { font-size: 19px; }
+  .acad-week-head { padding: 14px; gap: 8px; }
+  .acad-week-title { font-size: 16px; }
+  .acad-week-meta { margin-left: 0; width: 100%; }
+  .acad-journal-stats b, .acad-tile > b { font-size: 19px; }
+  .acad-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .acad-tabs .btn { justify-content: center; }
+  .acad-lesson { gap: 10px; padding: 10px; }
+  .acad-lesson-date { width: 56px; }
+  .acad-link-add { grid-template-columns: 1fr; }
+  .acad-today-item { grid-template-columns: 1fr auto; }
+  .acad-today-time { grid-column: 1 / -1; }
+  .acad-student-actions .btn { flex: 1 1 calc(50% - 8px); justify-content: center; }
+  .acad-decision-actions, .acad-decision-actions .btn { width: 100%; }
+  .acad-decision-actions .btn { justify-content: center; }
+  .acad-expelled-card .btn { width: 100%; justify-content: center; }
+  .acad-add-head .btn { width: 100%; justify-content: center; }
+  .acad-add-option small { display: none; }
+  .acad-jp-total-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .acad-jp-total-row .acad-jp-total-name { grid-column: 1 / -1; }
+  .acad-danger-zone .btn { width: 100%; justify-content: center; }
+}

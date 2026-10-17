@@ -48,6 +48,20 @@ export function isStaff(user: UserWithRoles | undefined | null): boolean {
 }
 
 /**
+ * Только учитель академии: все роли — TEACHER и своей действующей роли нет.
+ * Зеркало isTeacherOnly на бэке (auth/role-utils.ts): такому сотруднику CRM
+ * открывает только «Академию», чат и свой профиль.
+ */
+export function isTeacherOnly(
+  user: (UserWithRoles & { customRole?: { isActive?: boolean } | null }) | undefined | null,
+): boolean {
+  if (!user) return false;
+  if (user.customRole && user.customRole.isActive !== false) return false;
+  const all = [user.role, ...(user.roles || [])].filter(Boolean);
+  return all.length > 0 && all.every((r) => r === 'TEACHER');
+}
+
+/**
  * Лейбл роли для отображения. Если у юзера привязана активная кастомная
  * роль (Настройки → Роли и доступы) — показываем её имя; иначе — лейбл
  * базовой роли из ROLE_LABEL. Используется везде в UI чтобы «Таргетолог»

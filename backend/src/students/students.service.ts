@@ -244,7 +244,10 @@ export class StudentsService {
     from?: Date;
     to?: Date;
   }) {
-    const where: Prisma.StudentWhereInput = {};
+    // Ученики только академии — не клиенты агентства: ни в списке, ни в
+    // пикерах сделок/платежей их нет (в группы их добавляют через
+    // GET /academy/students/pick).
+    const where: Prisma.StudentWhereInput = { academyOnly: false };
     const createdAt = dateRangeFilter({ from: filters.from, to: filters.to });
     if (createdAt) where.createdAt = createdAt;
     if (filters.direction) where.direction = filters.direction;

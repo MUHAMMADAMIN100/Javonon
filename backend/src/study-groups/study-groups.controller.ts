@@ -18,6 +18,7 @@ import { StudentJwtGuard } from '../student-auth/student-jwt.guard';
 import { StudyGroupsService } from './study-groups.service';
 import {
   AddGroupMembersDto,
+  BulkClassSessionsDto,
   CreateClassSessionDto,
   CreateStudyGroupDto,
   UpdateClassSessionDto,
@@ -27,12 +28,12 @@ import {
 /**
  * CRM: группы и календарь занятий.
  *
- * @Roles здесь ШИРОКИЙ и это намеренно. Преподавателем группы может быть
- * любой сотрудник — отдельной роли TEACHER в enum Role нет, — поэтому
- * декоратор пускает весь штат, а настоящий рубеж стоит в сервисе:
- * руководство (FOUNDER/ADMIN) управляет всем, преподаватель — только своими
- * группами, остальные не видят ничего. Ровно тот же приём, что в
- * SubmissionsController: роль пускает к разделу, владение проверяет сервис.
+ * @Roles здесь ШИРОКИЙ и это намеренно. Учителем группы может быть любой
+ * сотрудник (не только с ролью TEACHER), поэтому декоратор пускает весь
+ * штат, а настоящий рубеж стоит в сервисе (academy/academy-access.ts):
+ * руководство академии управляет всем, учитель — только своими группами,
+ * остальные не видят ничего. Ровно тот же приём, что в SubmissionsController:
+ * роль пускает к разделу, владение проверяет сервис.
  */
 const STAFF_ROLES = [
   Role.FOUNDER,
@@ -40,6 +41,7 @@ const STAFF_ROLES = [
   Role.ACCOUNTANT,
   Role.SALES_MANAGER,
   Role.CLIENT_MANAGER,
+  Role.TEACHER,
 ] as const;
 
 @Controller('study-groups')
@@ -141,6 +143,16 @@ export class StudyGroupsController {
     @Body() body: CreateClassSessionDto,
   ) {
     return this.svc.createSession(me, id, body);
+  }
+
+  /** Занятия по шаблону (дни недели + время + «с … по …»); dryRun — только посчитать. */
+  @Post(':id/sessions/bulk')
+  bulkSessions(
+    @CurrentUser() me: any,
+    @Param('id') id: string,
+    @Body() body: BulkClassSessionsDto,
+  ) {
+    return this.svc.bulkCreateSessions(me, id, body);
   }
 }
 

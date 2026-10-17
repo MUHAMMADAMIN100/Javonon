@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-const VALID_ROLES: Role[] = ['FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER'];
+const VALID_ROLES: Role[] = ['FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER', 'TEACHER'];
 
 const DEFAULT_OFFER = `# Оферта сотрудника Javonon
 

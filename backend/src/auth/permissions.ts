@@ -304,12 +304,20 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   // получал бы 403 на разделе, который ему открыли в сайдбаре.
   // Пара read/write (а не полный CRUD) — как у lms/partners/settings: тонкой
   // детализации внутри расписания не требуется.
+  //
+  // Академия (17.10.2026): те же ключи открывают и /academy — журнал, уроки,
+  // ДЗ, учеников. Что именно можно, решает сервис (academy-access.ts): с
+  // groups:* сотрудник ведёт только СВОИ группы как учитель, а всеми
+  // группами и учениками управляет только academy:manage.
   { key: 'groups:read',  section: 'groups', group: 'Обучение',
-    label: 'Группы и расписание — просмотр',
-    paths: [{ method: 'GET', prefix: '/study-groups' }] },
+    label: 'Академия — просмотр своих групп',
+    paths: [{ method: 'GET', prefix: '/study-groups' }, { method: 'GET', prefix: '/academy' }] },
   { key: 'groups:write', section: 'groups', group: 'Обучение',
-    label: 'Группы и расписание — редактирование',
-    paths: [{ prefix: '/study-groups' }] },
+    label: 'Академия — ведение своих групп (журнал, уроки, ДЗ)',
+    paths: [{ prefix: '/study-groups' }, { prefix: '/academy' }] },
+  { key: 'academy:manage', section: 'groups', group: 'Обучение',
+    label: 'Академия — управление (все группы, ученики, флаги)',
+    paths: [{ prefix: '/study-groups' }, { prefix: '/academy' }] },
 
   // ─── Партнёры ──────────────────────────────────────────────────────────
   { key: 'partners:read',  section: 'partners', group: 'Партнёры',

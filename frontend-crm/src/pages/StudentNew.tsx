@@ -14,35 +14,8 @@ import { keys } from '../lib/queryKeys';
 import { useInvalidatingMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useChannelLabel } from '../lib/labels';
-
-// Строка-копируемое поле для модалки выдачи доступа.
-function CredRow({ label, value, small }: { label: string; value: string; small?: boolean }) {
-  const { t } = useT();
-  const [copied, setCopied] = useState(false);
-  const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* ignore */
-    }
-  };
-  return (
-    <div className="creds-row">
-      <span className="creds-label">{label}:</span>
-      <code className="creds-value" style={small ? { fontSize: 12 } : undefined}>{value}</code>
-      <button
-        type="button"
-        onClick={onCopy}
-        className="creds-copy-btn"
-        title={copied ? t('toast.copied') : t('common.copy')}
-      >
-        <Icon name={copied ? 'check' : 'content_copy'} size={15} />
-      </button>
-    </div>
-  );
-}
+import CredRow from '../components/CredRow';
+import { STUDENT_LOGIN_URL } from '../lib/landingUrl';
 
 export default function StudentNew() {
   const navigate = useNavigate();
@@ -126,7 +99,7 @@ export default function StudentNew() {
 
   const copyBoth = async () => {
     if (!credentials) return;
-    const text = `${t('userDetail.field.email')}: ${credentials.email}\n${t('login.password')}: ${credentials.password}\n${t('login.title')}: https://javonon.vercel.app/login`;
+    const text = `${t('userDetail.field.email')}: ${credentials.email}\n${t('login.password')}: ${credentials.password}\n${t('login.title')}: ${STUDENT_LOGIN_URL}`;
     try {
       await navigator.clipboard.writeText(text);
       toast(t('toast.copied'), 'success');
@@ -287,7 +260,7 @@ export default function StudentNew() {
               <div className="creds-box">
                 <CredRow label={t('userDetail.field.email')} value={credentials.email} />
                 <CredRow label={t('login.password')} value={credentials.password} />
-                <CredRow label={t('login.title')} value="javonon.vercel.app/login" small />
+                <CredRow label={t('login.title')} value={STUDENT_LOGIN_URL.replace('https://', '')} small />
               </div>
 
               <div className="dialog-actions">

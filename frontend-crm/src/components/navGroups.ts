@@ -1,5 +1,5 @@
-import { hasRole, isFounder as isFounderFn } from '../lib/roles';
-import { hasPermission } from '../lib/permissions';
+import { hasRole, isFounder as isFounderFn, isTeacherOnly as isTeacherOnlyFn } from '../lib/roles';
+import { hasPermission, isAcademyManager } from '../lib/permissions';
 
 /**
  * ЕДИНСТВЕННЫЙ источник правды о структуре навигации CRM.
@@ -22,6 +22,10 @@ export interface NavCtx {
   /** FOUNDER / ADMIN / SALES_MANAGER / CLIENT_MANAGER (ACCOUNTANT — нет) */
   isWorkforce: boolean;
   hasCustomRole: boolean;
+  /** Только учитель академии: открыты лишь «Академия», чат и профиль. */
+  isTeacherOnly: boolean;
+  /** Руководство академии (основатель, админ, роль с «Академия — управление»). */
+  academyManager: boolean;
   /** Хотя бы один из перечисленных permission'ов (OR). */
   can: (...perms: string[]) => boolean;
   /**
@@ -58,19 +62,20 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-const always = () => true;
-
 /** Канонический ключ рассылок + legacy-алиас с дефисом (см. PERMISSION_CATALOG). */
 const MASSMAIL_WRITE = ['massmail:write', 'mass-mail:write'];
 
-/** 6 групп, порядок и состав утверждены основателем. */
+/** Ключи прав академии — любой из них открывает раздел своей роли. */
+const ACADEMY_PERMS = ['groups:read', 'groups:write', 'academy:manage'];
+
+/** Группы меню; «Академия» добавлена 17.10.2026 вслед за «Продажами». */
 export const NAV_GROUPS: NavGroup[] = [
   {
     key: 'dashboard',
     icon: 'space_dashboard',
     labelKey: 'nav.group.dashboard',
     items: [
-      { to: '/dashboard', icon: 'dashboard', labelKey: 'sidebar.dashboard', visible: always },
+      { to: '/dashboard', icon: 'dashboard', labelKey: 'sidebar.dashboard', visible: (c) => !c.isTeacherOnly },
       { to: '/kpi', icon: 'leaderboard', labelKey: 'sidebar.kpi', visible: (c) => c.show('kpi:read', c.isWorkforce) },
       { to: '/reports', icon: 'description', labelKey: 'sidebar.reports', visible: (c) => c.show('reports:read', c.isWorkforce) },
     ],
@@ -90,9 +95,25 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/leads', icon: 'person_add', labelKey: 'sidebar.leads', visible: (c) => c.show('applications:create', c.isWorkforce) },
       { to: '/students', icon: 'school', labelKey: 'sidebar.students', visible: (c) => c.show('students:read', c.isWorkforce) },
       // «Сделки» — менеджеры оформляют закрытых студентов; FOUNDER одобряет.
-      { to: '/submissions', icon: 'handshake', labelKey: 'sidebar.submissions', visible: always },
+      { to: '/submissions', icon: 'handshake', labelKey: 'sidebar.submissions', visible: (c) => !c.isTeacherOnly },
       { to: '/pipelines', icon: 'route', labelKey: 'sidebar.pipelines', visible: (c) => c.show('pipelines:write', c.elevated) },
       { to: '/partners', icon: 'diversity_3', labelKey: 'sidebar.partners', visible: (c) => c.show('partners:read', c.elevated) },
+    ],
+  },
+  {
+    // Академия: группы с журналом и уроками, ученики, расписание, LMS.
+    // Учитель видит свои группы и учеников (сервер режет выборку сам),
+    // руководство — все. «Группы» и «Расписание» по-прежнему видны всей
+    // рабочей группе: учить может любой сотрудник, а пустой список —
+    // не утечка.
+    key: 'academy',
+    icon: 'school',
+    labelKey: 'nav.group.academy',
+    items: [
+      { to: '/groups', icon: 'diversity_2', labelKey: 'sidebar.groups', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
+      { to: '/academy/students', icon: 'person_book', labelKey: 'sidebar.academyStudents', visible: (c) => c.isTeacherOnly || c.academyManager || c.can('groups:read', 'groups:write') },
+      { to: '/schedule', icon: 'calendar_month', labelKey: 'sidebar.schedule', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
+      { to: '/lms', icon: 'auto_stories', labelKey: 'sidebar.lms', visible: (c) => c.show('lms:read', c.elevated) },
     ],
   },
   {
@@ -131,7 +152,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/tasks', icon: 'task_alt', labelKey: 'sidebar.tasks', visible: (c) => c.show('tasks:read', c.isWorkforce) },
       // «Время / Посещаемость / Причины» схлопнуты в /workday со вкладками,
       // но старые роуты живы в App.tsx и рендерят тот же Workday.
-      { to: '/workday', icon: 'schedule', labelKey: 'sidebar.workday', aliases: ['/time', '/attendance', '/excuses'], visible: always },
+      { to: '/workday', icon: 'schedule', labelKey: 'sidebar.workday', aliases: ['/time', '/attendance', '/excuses'], visible: (c) => !c.isTeacherOnly },
       // Аудит-лог — единолично у FOUNDER (Activity.tsx блокирует остальных).
       { to: '/activity', icon: 'history', labelKey: 'sidebar.activity', visible: (c) => c.isFounder },
     ],
@@ -142,15 +163,6 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.settings',
     items: [
       { to: '/programs', icon: 'menu_book', labelKey: 'sidebar.programs', visible: (c) => c.show('programs:read', c.isWorkforce) },
-      // Учебный блок: группы и календарь занятий стоят рядом с «Программами»
-      // и LMS — это тот же контур обучения, а не продажи и не HR. Условие
-      // видимости в стиле соседа-«Программ»: permission у кастомной роли,
-      // иначе базовая роль (isWorkforce). Бэкенд пускает к /study-groups весь
-      // штат, но не-руководство видит только СВОИ группы (скоуп в сервисе),
-      // поэтому пункт безопасно показывать всей рабочей группе.
-      { to: '/groups', icon: 'diversity_2', labelKey: 'sidebar.groups', visible: (c) => c.show('groups:read', c.isWorkforce) },
-      { to: '/schedule', icon: 'calendar_month', labelKey: 'sidebar.schedule', visible: (c) => c.show('groups:read', c.isWorkforce) },
-      { to: '/lms', icon: 'auto_stories', labelKey: 'sidebar.lms', visible: (c) => c.show('lms:read', c.elevated) },
       // Осознанно НЕ через show(): custom-роль не открывает оферты никаким
       // permission'ом — так было и в старом сайдбаре.
       { to: '/offers', icon: 'description', labelKey: 'sidebar.offers', visible: (c) => !c.hasCustomRole && c.elevated },
@@ -175,7 +187,9 @@ export function buildNavCtx(user: unknown): NavCtx {
   const can = (...perms: string[]) => hasPermission(user as any, ...perms);
   const show = (perms: string | string[], baseCond: boolean) =>
     hasCustomRole ? can(...(Array.isArray(perms) ? perms : [perms])) : baseCond;
-  return { elevated, isFounder, isWorkforce, hasCustomRole, can, show };
+  const isTeacherOnly = isTeacherOnlyFn(user as any);
+  const academyManager = isAcademyManager(user as any);
+  return { elevated, isFounder, isWorkforce, hasCustomRole, isTeacherOnly, academyManager, can, show };
 }
 
 export type VisibleGroup = NavGroup;

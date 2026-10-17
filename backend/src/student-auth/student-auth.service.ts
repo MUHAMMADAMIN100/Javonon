@@ -63,7 +63,7 @@ export class StudentAuthService {
       },
     });
     // Отправляем письмо со ссылкой и новым паролем
-    const loginUrl = process.env.STUDENT_LOGIN_URL || 'https://javonon.vercel.app/login';
+    const loginUrl = process.env.STUDENT_LOGIN_URL || 'https://javonongroup.tj/login';
     this.mail
       .send(
         student.email!,

@@ -17,6 +17,9 @@ enum Role {
   SALES_MANAGER
   // Клиентский менеджер — ведут уже зачисленных студентов
   CLIENT_MANAGER
+  // Учитель академии: в CRM видит только «Академию» (свои группы, учеников,
+  // расписание), чат и свой профиль — белый список в JwtAuthGuard.
+  TEACHER
 }
 
 enum TimeEntryStatus {
@@ -281,6 +284,16 @@ model User {
   // сотрудника не уносит ни группу, ни историю занятий.
   taughtGroups   StudyGroup[]   @relation("StudyGroupTeacher")
   taughtSessions ClassSession[] @relation("ClassSessionTeacher")
+
+  // Академия: кто выставил оценки/итоги недели, загрузил материалы, поставил
+  // или снял красный флаг, отчислил ученика. Всё SetNull — увольнение
+  // сотрудника историю не уносит.
+  academyJournalEntries  JournalEntry[]  @relation("JournalEntryAuthor")
+  academyJournalWeeks    JournalWeek[]   @relation("JournalWeekAuthor")
+  academyMaterials       ClassMaterial[] @relation("ClassMaterialAuthor")
+  academyFlagsGiven      RedFlag[]       @relation("RedFlagGivenBy")
+  academyFlagsRemoved    RedFlag[]       @relation("RedFlagRemovedBy")
+  academyExpelledStudents Student[]      @relation("StudentAcademyExpelledBy")
 }
 
 // ============================================================
@@ -582,6 +595,26 @@ model Student {
   // Членство в учебных группах — единственный путь студента к расписанию.
   groupMemberships GroupMember[] @relation("StudentGroupMemberships")
 
+  // ─── Академия ───
+  // Ученик только академии (не клиент агентства): заведён в «Академия →
+  // Ученики», без заявки и сделки. В «Студенты», лиды, сделки и отчёты
+  // агентства не попадает; в кабинете видит только вкладку «Академия».
+  academyOnly            Boolean   @default(false)
+  // Отчисление из академии — решение руководства (обычно после 3-го
+  // красного флага). Отчисленный выходит из групп (GroupMember.leftAt),
+  // оценки и история остаются.
+  academyExpelledAt      DateTime?
+  academyExpelledById    String?
+  academyExpelledBy      User?     @relation("StudentAcademyExpelledBy", fields: [academyExpelledById], references: [id], onDelete: SetNull)
+  academyExpelNote       String?
+  // Руководство решило «Оставить»: флаги, поставленные до этого момента,
+  // рассмотрены. Следующий флаг снова требует решения.
+  academyFlagsReviewedAt DateTime?
+  journalEntries         JournalEntry[]
+  journalWeeks           JournalWeek[]
+  redFlags               RedFlag[]
+
+  @@index([academyOnly])
   @@index([direction])
   @@index([cabinet])
   @@index([status])
@@ -2360,9 +2393,9 @@ model StudyGroup {
   // с историей занятий, ссылка обнуляется.
   programId   String?
   program     Program?         @relation("ProgramStudyGroups", fields: [programId], references: [id], onDelete: SetNull)
-  // Преподаватель — обычный User (отдельной роли TEACHER в enum Role нет,
-  // права разруливает RolesGuard + принцип «свои группы»). Уволили/удалили
-  // сотрудника → группа не пропадает, преподавателя переназначают.
+  // Преподаватель — сотрудник с ролью «Учитель» (TEACHER) или любой другой
+  // сотрудник; права — принцип «свои группы» (academy/academy-access.ts).
+  // Уволили/удалили сотрудника → группа не пропадает, учителя переназначают.
   teacherId   String?
   teacher     User?            @relation("StudyGroupTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   status      StudyGroupStatus @default(ACTIVE)
@@ -2370,8 +2403,10 @@ model StudyGroup {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  members  GroupMember[]
-  sessions ClassSession[]
+  members      GroupMember[]
+  sessions     ClassSession[]
+  journalWeeks JournalWeek[]
+  redFlags     RedFlag[]
 
   @@index([status])
   @@index([teacherId])
@@ -2383,13 +2418,21 @@ model StudyGroup {
 /// Инвариант: один студент — максимум одна строка на группу (@@unique).
 /// Cascade с ОБЕИХ сторон удаляет только саму строку членства: удаление
 /// группы НЕ удаляет студентов, удаление студента НЕ удаляет группу.
+///
+/// Выход из группы строку НЕ удаляет, а ставит leftAt: журнал группы
+/// продолжает показывать ученика за недели, когда он учился, а его
+/// успеваемость не теряется. Действующий состав — leftAt IS NULL;
+/// повторное добавление снимает leftAt.
 model GroupMember {
-  id        String     @id @default(uuid())
-  groupId   String
-  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  studentId String
-  student   Student    @relation("StudentGroupMemberships", fields: [studentId], references: [id], onDelete: Cascade)
-  joinedAt  DateTime   @default(now())
+  id         String     @id @default(uuid())
+  groupId    String
+  group      StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student    @relation("StudentGroupMemberships", fields: [studentId], references: [id], onDelete: Cascade)
+  joinedAt   DateTime   @default(now())
+  leftAt     DateTime?
+  // 'REMOVED' — убрали из группы; 'EXPELLED' — отчислен из академии.
+  leftReason String?
 
   @@unique([groupId, studentId])
   @@index([studentId])
@@ -2417,14 +2460,117 @@ model ClassSession {
   // уведомление, и по этой сессии больше не срабатывает. Без колонки
   // повторный запуск (или рестарт пода) шлёт напоминание заново.
   reminderSentAt DateTime?
+  // Домашнее задание к уроку (видят ученики группы в кабинете) и срок —
+  // UTC-полночь календарного дня, как Student.birthday. Сдавать ДЗ через
+  // кабинет не нужно: как сделано, учитель отражает оценкой в журнале.
+  homework       String?
+  homeworkDue    DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
+
+  materials ClassMaterial[]
+  journal   JournalEntry[]
 
   @@index([groupId, startsAt])
   @@index([startsAt])
   // Выборка cron'а напоминаний: SCHEDULED в ближайшем окне.
   @@index([status, startsAt])
   @@index([teacherId])
+}
+
+// ============================================================
+// АКАДЕМИЯ — журнал, материалы уроков, красные флаги.
+// ============================================================
+// Итог недели считается на лету (academy/journal-math.ts), в базе только
+// исходные отметки: посещение/оценка/комментарий за урок и бонус/экзамен
+// за неделю.
+
+enum ClassMaterialKind {
+  FILE
+  LINK
+}
+
+/// Файл или ссылка к уроку. Файл лежит в uploads/academy; ученику он
+/// отдаётся только через GET /student-academy/materials/:id/download с
+/// проверкой членства в группе.
+model ClassMaterial {
+  id          String            @id @default(uuid())
+  sessionId   String
+  session     ClassSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  kind        ClassMaterialKind
+  // Имя файла или подпись ссылки.
+  title       String
+  // FILE — /uploads/academy/<uuid>.<ext>; LINK — http(s)-адрес.
+  url         String
+  size        Int?
+  mimeType    String?
+  createdById String?
+  createdBy   User?             @relation("ClassMaterialAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+
+  @@index([sessionId])
+}
+
+/// Отметка ученика за урок. present: null — ещё не отмечен; score 1–5
+/// ставится только присутствующему.
+model JournalEntry {
+  id          String       @id @default(uuid())
+  sessionId   String
+  session     ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  present     Boolean?
+  score       Int?
+  comment     String?
+  updatedById String?
+  updatedBy   User?        @relation("JournalEntryAuthor", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([sessionId, studentId])
+  @@index([studentId])
+}
+
+/// Конец недели: бонус (0–10) и экзамен (0–70). weekStart — понедельник
+/// недели по Душанбе, строкой 'YYYY-MM-DD' (без часовых поясов).
+model JournalWeek {
+  id          String     @id @default(uuid())
+  groupId     String
+  group       StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  weekStart   String
+  bonus       Int?
+  exam        Int?
+  updatedById String?
+  updatedBy   User?      @relation("JournalWeekAuthor", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([groupId, studentId, weekStart])
+  @@index([studentId])
+}
+
+/// Красный флаг ученику — всегда с причиной. Снятый флаг (removedAt) не
+/// считается, но остаётся в истории. 3 действующих флага → руководство
+/// решает: отчислить или оставить (Student.academy*).
+model RedFlag {
+  id           String      @id @default(uuid())
+  studentId    String
+  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  groupId      String?
+  group        StudyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  reason       String
+  givenById    String?
+  givenBy      User?       @relation("RedFlagGivenBy", fields: [givenById], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  removedAt    DateTime?
+  removedById  String?
+  removedBy    User?       @relation("RedFlagRemovedBy", fields: [removedById], references: [id], onDelete: SetNull)
+  removeReason String?
+
+  @@index([studentId, removedAt])
+  @@index([groupId])
 }
 
 // ============================================================

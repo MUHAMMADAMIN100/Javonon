@@ -56,6 +56,7 @@ import { InboxModule } from './integrations/inbox/inbox.module';
 import { SmsIntegrationModule } from './integrations/sms/sms-integration.module';
 import { RevenueSchemeModule } from './revenue-scheme/revenue-scheme.module';
 import { StudyGroupsModule } from './study-groups/study-groups.module';
+import { AcademyModule } from './academy/academy.module';
 import { InstallmentsModule } from './installments/installments.module';
 
 @Module({
@@ -141,6 +142,8 @@ import { InstallmentsModule } from './installments/installments.module';
     // ProgramsModule; обратных зависимостей нет.
     StudyGroupsModule,
     InstallmentsModule,
+    // Академия: журнал, материалы уроков, ученики, красные флаги, кабинет.
+    AcademyModule,
   ],
   controllers: [HealthController],
   providers: [

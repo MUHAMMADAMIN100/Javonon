@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../store/auth';
-import { hasRole } from '../lib/roles';
+import { hasRole, isTeacherOnly } from '../lib/roles';
 import { hasPermission } from '../lib/permissions';
 import type { Role } from '../api/types';
 
@@ -26,10 +26,23 @@ const ROUTE_ROLES: Array<{ prefix: string; roles: Role[]; perms?: string[] }> = 
   { prefix: '/attendance',  roles: ['FOUNDER'] },
 ];
 
+/**
+ * Учителю академии (isTeacherOnly) открыты только эти разделы — тот же
+ * белый список, что на сервере (auth/teacher-scope.ts). Всё остальное, в
+ * том числе «/» и дашборд, ведёт в его группы.
+ */
+const TEACHER_PREFIXES = ['/groups', '/academy', '/schedule', '/chat', '/me'];
+export const TEACHER_HOME = '/groups';
+
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const user = useAuth((s) => s.user);
   const location = useLocation();
   if (!user) return <Navigate to="/login" replace />;
+
+  if (isTeacherOnly(user as any)) {
+    const allowed = TEACHER_PREFIXES.some((p) => location.pathname === p || location.pathname.startsWith(p + '/'));
+    return allowed ? <>{children}</> : <Navigate to={TEACHER_HOME} replace />;
+  }
 
   const match = ROUTE_ROLES.find((r) => location.pathname.startsWith(r.prefix));
   if (!match) return <>{children}</>;

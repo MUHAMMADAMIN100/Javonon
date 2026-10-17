@@ -6,6 +6,8 @@ export type Role =
   | 'ACCOUNTANT'
   | 'SALES_MANAGER'
   | 'CLIENT_MANAGER'
+  // Учитель академии: в CRM видит только «Академию», чат и свой профиль.
+  | 'TEACHER'
   // Legacy: бэкенд нормализует EMPLOYEE → SALES_MANAGER при разборе JWT,
   // но старые токены/кэш могут вернуть это значение до релогина.
   | 'EMPLOYEE';
@@ -16,6 +18,7 @@ export const ROLE_LABEL: Record<Role, string> = localized('role', {
   ACCOUNTANT: 'Бухгалтер',
   SALES_MANAGER: 'Менеджер по продажам',
   CLIENT_MANAGER: 'Клиентский менеджер',
+  TEACHER: 'Учитель',
   EMPLOYEE: 'Менеджер по продажам',
 });
 export type Direction =

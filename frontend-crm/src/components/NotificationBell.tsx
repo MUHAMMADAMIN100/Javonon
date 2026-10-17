@@ -20,6 +20,10 @@ function notificationHref(n: Notification): string | null {
     return p.roomId ? `/chat?room=${p.roomId}` : '/chat';
   }
   if (p.applicationId) return `/applications/${p.applicationId}`;
+  // Академия: флаги и отчисление — карточка ученика академии (учителю
+  // карточка студента CRM закрыта), напоминание о занятии — группа.
+  if (n.type.startsWith('ACADEMY_') && p.studentId) return `/academy/students/${p.studentId}`;
+  if (n.type.startsWith('CLASS_SESSION_') && p.groupId) return `/groups/${p.groupId}`;
   if (p.studentId) return `/students/${p.studentId}`;
   // Сводное уведомление о массовом назначении («Назначено 12 лидов → …»):
   // заявок много, вести на одну некуда — открываем список. Менеджер увидит в
