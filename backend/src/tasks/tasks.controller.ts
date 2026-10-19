@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -17,11 +18,12 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Permissions } from '../auth/permissions.decorator';
+import { TaskDiaryService } from './task-diary.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
 export class TasksController {
-  constructor(private tasks: TasksService) {}
+  constructor(private tasks: TasksService, private diary: TaskDiaryService) {}
 
   @Permissions('tasks:read')
   @Get()
@@ -70,6 +72,23 @@ export class TasksController {
   @Get(':id')
   one(@Param('id') id: string, @CurrentUser() user: any) {
     return this.tasks.findOneFor(id, user);
+  }
+
+  /** Дневник задачи: «исполнители × дни» и что можно мне (как дневник ДЗ). */
+  @Permissions('tasks:read')
+  @Get(':id/diary')
+  diaryView(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.diary.view(id, user);
+  }
+
+  /** Моя запись за сегодня — только исполнителю и до конца рабочего дня по графику. */
+  @Permissions('tasks:read')
+  @Put(':id/diary')
+  diaryWrite(@Param('id') id: string, @Body() body: { text?: string }, @CurrentUser() user: any) {
+    if (typeof body?.text === 'string' && body.text.length > 5000) {
+      throw new BadRequestException('Запись слишком длинная');
+    }
+    return this.diary.write(id, user, body?.text);
   }
 
   @Permissions('tasks:create')

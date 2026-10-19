@@ -6,17 +6,8 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { hasPermission, hasRole, isElevated, isFounder, roleAllows } from '../auth/role-utils';
-
-/**
- * Видит и ведёт все задачи, а не только свои: руководство по должности;
- * сотрудник с ролью — с «Задачи — все, не только свои».
- */
-function seesAllTasks(user: any): boolean {
-  if (isFounder(user)) return true;
-  if (user?.hasCustomRole) return hasPermission(user, 'tasks:all');
-  return isElevated(user);
-}
+import { hasRole, isElevated, isFounder, roleAllows } from '../auth/role-utils';
+import { canSeeTask, seesAllTasks, TaskDiaryService } from './task-diary.service';
 
 type CurrentUser = { id: string; role: Role; roles?: Role[] };
 
@@ -37,6 +28,7 @@ export class TasksService {
     private notifications: NotificationsService,
     private mail: MailService,
     private realtime: RealtimeGateway,
+    private diary: TaskDiaryService,
   ) {}
 
   // Единая точка рассылки уведомлений по задаче: все исполнители + контролёр
@@ -123,6 +115,8 @@ export class TasksService {
         controllerId,
         createdById: user.id,
         deadline: dto.deadline ? new Date(dto.deadline) : null,
+        // Дневник задачи начинается с постановки (или со следующего рабочего дня).
+        diaryFrom: dto.deadline ? await this.diary.diaryFromNow() : null,
       },
       include: TASK_INCLUDE,
     });
@@ -200,11 +194,14 @@ export class TasksService {
     );
     const where = andParts.length ? { AND: andParts } : {};
 
-    return this.prisma.task.findMany({
+    const tasks = await this.prisma.task.findMany({
       where,
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
       include: TASK_INCLUDE,
     });
+    // Моя запись в дневнике за сегодня: для отсчёта «до конца рабочего дня» в списке.
+    const today = await this.diary.myToday(tasks, filters.currentUserId);
+    return tasks.map((t) => ({ ...t, myDiary: today.get(t.id) ?? null }));
   }
 
   async findOne(id: string) {
@@ -213,10 +210,14 @@ export class TasksService {
     return task;
   }
 
-  /** Карточка задачи: сотруднику с ролью — своя (исполнитель, контролёр) или все с «Задачи — все». */
+  /**
+   * Карточка задачи: все задачи — руководству и роли с «Задачи — все»;
+   * остальным — своя (исполнитель, контролёр, автор). Раньше по прямому
+   * адресу сотрудник без роли открывал любую задачу.
+   */
   async findOneFor(id: string, user: CurrentUser) {
     const task = await this.findOne(id);
-    if ((user as any)?.hasCustomRole && !seesAllTasks(user) && !this.isMine(task, user.id)) {
+    if (!canSeeTask(task as any, user)) {
       throw new ForbiddenException('Это не ваша задача');
     }
     return task;
@@ -280,6 +281,12 @@ export class TasksService {
       ...(dto.title !== undefined ? { title: dto.title } : {}),
       ...(dto.description !== undefined ? { description: dto.description } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
+      // «Готово» закрывает дневник задачи; вернули в работу — снова открыт.
+      ...(dto.status !== undefined && dto.status !== task.status
+        ? { doneAt: dto.status === TaskStatus.DONE ? new Date() : null }
+        : {}),
+      // Дедлайн поставили впервые — дневник начинается сейчас (или со следующего рабочего дня).
+      ...(dto.deadline && !(task as any).diaryFrom ? { diaryFrom: await this.diary.diaryFromNow() } : {}),
       ...(dto.deadline !== undefined
         ? {
             deadline: dto.deadline ? new Date(dto.deadline) : null,

@@ -8,6 +8,7 @@ export const keys = {
     list: (p: { mine?: boolean; search?: string } = {}) => ['tasks', 'list', p] as const,
     one: (id: string) => ['tasks', 'one', id] as const,
     stats: () => ['tasks', 'stats'] as const,
+    diary: (id: string) => ['tasks', 'diary', id] as const,
   },
   students: {
     all: ['students'] as const,

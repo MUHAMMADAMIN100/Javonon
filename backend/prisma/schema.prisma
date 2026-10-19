@@ -252,6 +252,8 @@ model User {
   // Задачи, где юзер — контролёр (следит за выполнением, но не исполнитель).
   controlledTasks          Task[]         @relation("TaskController")
   createdTasks             Task[]         @relation("TaskCreator")
+  // Записи в дневниках задач (что сделал за день).
+  taskLogs                 TaskLog[]      @relation("TaskLogAuthor")
 
   timeEntries              TimeEntry[]
   transactionsAsManager    Transaction[]       @relation("TransactionManager")
@@ -678,6 +680,12 @@ model Task {
   controller           User?      @relation("TaskController", fields: [controllerId], references: [id], onDelete: SetNull)
   createdById          String?
   createdBy            User?      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  // Дневник задачи (19.10.2026, tasks/task-diary.ts): первый день дневника
+  // 'YYYY-MM-DD' по Душанбе. null — задача поставлена до появления дневника.
+  diaryFrom            String?
+  // Когда задачу отметили «Готово» (дневник закрывается); null — не готова.
+  doneAt               DateTime?
+  logs                 TaskLog[]
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
 
@@ -685,6 +693,26 @@ model Task {
   @@index([controllerId])
   @@index([status])
   @@index([deadline])
+}
+
+/// Дневник задачи: что исполнитель сделал за рабочий день (как дневник ДЗ).
+/// Одна запись на исполнителя в день; пишется только за сегодня до конца
+/// рабочего дня по графику (tasks/task-diary.ts).
+model TaskLog {
+  id        String   @id @default(uuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("TaskLogAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  // 'YYYY-MM-DD' по Душанбе.
+  day       String
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([taskId, userId, day])
+  @@index([userId, day])
+  @@index([taskId])
 }
 
 model Program {

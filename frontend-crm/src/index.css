@@ -7739,3 +7739,107 @@ html:has(.exc-bar) { scrollbar-gutter: stable; }
   .client-list tr.client-row .cl-mgr .mgr-row { max-width: 100%; }
   .client-list tr.client-row .cl-mgr .mgr-row > span:not(.mgr-tag) { white-space: normal; overflow-wrap: anywhere; }
 }
+
+/* ===================== Дневник задачи (components/TaskDiary) =====================
+   Как дневник ДЗ: запись «что сделал» за сегодня до конца рабочего дня,
+   отсчёт, таблица «исполнители × дни», на телефоне — по дням. */
+/* Общий .dialog-card ограничен 420–460 px — окну задачи с дневником нужно шире. */
+.dialog-card.task-modal { width: min(760px, calc(100vw - 32px)); max-width: min(760px, calc(100vw - 32px)); }
+.tdiary { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+.tdiary.is-off { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); }
+.tdiary-head { display: flex; flex-direction: column; gap: 2px; }
+.tdiary-title { display: flex; align-items: center; gap: 6px; margin: 0; font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--text); }
+.tdiary-sub { font-size: 12.5px; color: var(--text-soft); }
+.tdiary-muted { font-size: 12.5px; color: var(--text-soft); }
+
+.tdiary-write {
+  margin: 12px 0; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  background: color-mix(in srgb, var(--primary) 4%, var(--bg-card));
+}
+.tdiary-write-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tdiary-write-head b { font-size: 14px; }
+.tdiary-text { width: 100%; min-height: 76px; margin-top: 8px; resize: vertical; }
+.tdiary-write-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.tdiary-write-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+
+.tdiary-countdown {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--primary-dark); background: var(--bg-card);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+}
+.tdiary-countdown.is-urgent { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.tdiary-countdown.is-compact { font-size: 12px; padding: 2px 8px; gap: 4px; }
+.tdiary-countdown.is-over { color: var(--text-soft); background: var(--bg-soft); border-color: var(--border); }
+.tdiary-closed {
+  display: flex; align-items: center; gap: 8px; margin: 12px 0; padding: 10px 12px;
+  border-radius: 10px; background: var(--bg-soft); color: var(--text-soft); font-size: 13px;
+}
+
+.tdiary-grid-wrap { margin-top: 12px; overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+.tdiary-grid { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 13px; }
+.tdiary-grid th, .tdiary-grid td { padding: 6px 8px; text-align: center; border-bottom: 1px solid var(--border-soft); }
+.tdiary-grid tbody tr:last-child th, .tdiary-grid tbody tr:last-child td { border-bottom: none; }
+.tdiary-grid thead th { font-size: 11px; font-weight: 600; color: var(--text-soft); vertical-align: bottom; }
+.tdiary-grid .tdiary-name {
+  position: sticky; left: 0; z-index: 1; text-align: left; background: var(--bg-card);
+  max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: var(--text);
+}
+.tdiary-grid thead .tdiary-name { font-size: 11px; color: var(--text-soft); }
+.tdiary-wd { display: block; text-transform: uppercase; letter-spacing: 0.04em; }
+.tdiary-date { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+.tdiary-grid th.is-today, .tdiary-grid td.is-today { background: color-mix(in srgb, var(--primary) 7%, transparent); }
+.tdiary-grid .tdiary-sum { font-family: var(--font-mono); font-weight: 600; color: var(--text-soft); white-space: nowrap; }
+
+.tdiary-cell {
+  display: inline-grid; place-items: center; width: 28px; height: 28px;
+  border-radius: 8px; border: 1px solid transparent; vertical-align: middle;
+}
+.tdiary-cell.is-written {
+  cursor: pointer; color: var(--success); background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+}
+.tdiary-cell.is-written:hover { border-color: var(--success); }
+.tdiary-cell.is-written.is-active { color: #fff; background: var(--success); border-color: var(--success); }
+.tdiary-cell.is-open { color: #b45309; background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 50%, transparent); }
+.tdiary-cell.is-missed { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.tdiary-cell.is-future { color: var(--text-light); background: var(--bg-soft); }
+.tdiary-cell.is-done { color: var(--text-soft); background: var(--bg-soft); }
+.tdiary-cell.is-off { color: var(--text-light); background: transparent; border-style: dashed; border-color: var(--border); }
+.tdiary-day-row.is-off .tdiary-day-state { color: var(--text-light); }
+.tdiary-cell.is-mini { width: 12px; height: 12px; border-radius: 4px; }
+
+.tdiary-note { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg-soft); border: 1px solid var(--border); }
+.tdiary-note-head { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.tdiary-note-head span { color: var(--text-soft); }
+.tdiary-note-close { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: var(--text-soft); }
+.tdiary-note-close:hover { background: var(--bg-card); color: var(--text); }
+.tdiary-note-text { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.5; }
+
+.tdiary-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--text-soft); }
+.tdiary-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Телефон: по дням */
+.tdiary-days { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.tdiary-day { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); }
+.tdiary-day-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 13px; }
+.tdiary-today-chip {
+  padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: #b45309; background: var(--warning-soft);
+}
+.tdiary-day-row {
+  display: grid; grid-template-columns: minmax(0, 38%) minmax(0, 1fr); gap: 8px;
+  padding: 6px 0; border-top: 1px solid var(--border-soft); font-size: 13px;
+}
+.tdiary-day-name { font-weight: 600; overflow-wrap: anywhere; }
+.tdiary-day-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tdiary-day-row.is-missed .tdiary-day-state { color: var(--danger); font-weight: 600; }
+.tdiary-day-row.is-open .tdiary-day-state { color: #b45309; font-weight: 600; }
+.tdiary-day-row.is-future .tdiary-day-state { color: var(--text-light); }
+.tdiary-day-row.is-done .tdiary-day-state { color: var(--text-soft); }
+.tdiary-ahead { padding: 8px 12px; border-radius: 10px; background: var(--bg-soft); font-size: 12.5px; color: var(--text-soft); }
+
+/* Список задач: моя запись за сегодня под сроком */
+.tdiary-rowmark { margin-top: 6px; }
+.tdiary-written-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--success); }

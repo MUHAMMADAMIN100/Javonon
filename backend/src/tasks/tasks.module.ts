@@ -4,10 +4,12 @@ import { TasksService } from './tasks.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MailModule } from '../mail/mail.module';
+import { SettingsModule } from '../settings/settings.module';
+import { TaskDiaryService } from './task-diary.service';
 
 @Module({
-  imports: [NotificationsModule, MailModule],
+  imports: [NotificationsModule, MailModule, SettingsModule],
   controllers: [TasksController],
-  providers: [TasksService, PrismaService],
+  providers: [TasksService, TaskDiaryService, PrismaService],
 })
 export class TasksModule {}

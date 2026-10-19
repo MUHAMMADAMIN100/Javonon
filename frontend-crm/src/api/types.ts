@@ -549,6 +549,16 @@ export interface Task {
   createdBy?: TaskUserSummary | null;
   createdAt: string;
   updatedAt: string;
+  /** Первый день дневника задачи ('YYYY-MM-DD'); null — поставлена до дневника. */
+  diaryFrom?: string | null;
+  /** Когда отметили «Готово» (дневник закрыт). */
+  doneAt?: string | null;
+  /**
+   * Моя запись в дневнике за сегодня (только в списке и только исполнителю
+   * с открытым сегодня дневником): 'open' — ещё не написал, 'written' —
+   * написал; closesAt — конец рабочего дня по графику.
+   */
+  myDiary?: { state: 'open' | 'written'; closesAt: string } | null;
 }
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = localized('task.status', {

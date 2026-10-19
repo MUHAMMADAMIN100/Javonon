@@ -23,6 +23,7 @@ import CrmDatePicker from '../components/CrmDatePicker';
 import { hasRole, isElevated, displayRoleLabel, isTeacherOnly } from '../lib/roles';
 import { roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
+import TaskDiary, { DiaryCountdown } from '../components/TaskDiary';
 
 type Scope = 'all' | 'mine';
 /** Значение фильтра «Исполнитель» для задач, которые ещё никому не назначены. */
@@ -97,8 +98,26 @@ export default function Tasks() {
   // «Найдено X из N»: N — все задачи этого режима, без поиска и фильтров.
   const totalAll = debouncedSearch ? allQuery.data?.length : items.length;
 
-  /** Открытая в окне задача (id — чтобы окно видело свежие данные списка). */
-  const [openId, setOpenId] = useState<string | null>(null);
+  /**
+   * Открытая в окне задача (id — чтобы окно видело свежие данные списка).
+   * ?task=<id> в адресе — из уведомления («Запишите, что сделали»): окно
+   * открывается само, когда список пришёл.
+   */
+  const [openId, setOpenIdState] = useState<string | null>(() => params.get('task'));
+  const setOpenId = (id: string | null) => {
+    setOpenIdState(id);
+    if (!id && params.get('task')) {
+      setParams((cur) => {
+        const next = new URLSearchParams(cur);
+        next.delete('task');
+        return next;
+      }, { replace: true });
+    }
+  };
+  useEffect(() => {
+    const fromUrl = params.get('task');
+    if (fromUrl) setOpenIdState(fromUrl);
+  }, [params]);
   const openTask = items.find((x) => x.id === openId) ?? null;
   const canChangeTask = (task: Task) =>
     seesAll ||
@@ -132,6 +151,8 @@ export default function Tasks() {
     'task:new': () => qc.invalidateQueries({ queryKey: keys.tasks.all }),
     'task:updated': () => qc.invalidateQueries({ queryKey: keys.tasks.all }),
     'task:deleted': () => qc.invalidateQueries({ queryKey: keys.tasks.all }),
+    // Запись в дневнике задачи: таблица дней и отметки «записано» в списке.
+    'task:diary': () => qc.invalidateQueries({ queryKey: keys.tasks.all }),
   });
 
   // CREATE — серверный id auto-gen, поэтому без оптимистики (только invalidate).
@@ -226,7 +247,7 @@ export default function Tasks() {
       danger: true,
     });
     if (!ok) return;
-    setOpenId((cur) => (cur === task.id ? null : cur));
+    if (openId === task.id) setOpenId(null);
     deleteMut.mutate(task.id);
   };
 
@@ -530,6 +551,14 @@ export default function Tasks() {
                       <td data-label={t('task.author')}>{task.createdBy?.fullName ?? <span className="task-empty">—</span>}</td>
                       <td data-label={t('task.deadline')}>
                         {task.deadline ? <DeadlineBadge deadline={task.deadline} status={task.status} /> : <span className="task-empty">—</span>}
+                        {/* Моя запись в дневнике за сегодня: отсчёт до конца рабочего дня или «записано». */}
+                        {task.myDiary && (
+                          <div className="tdiary-rowmark" data-testid="task-diary-mark" data-state={task.myDiary.state}>
+                            {task.myDiary.state === 'open'
+                              ? <DiaryCountdown closesAt={task.myDiary.closesAt} compact testId="task-diary-countdown" />
+                              : <span className="tdiary-written-chip"><Icon name="check" size={14} /> {t('taskDiary.writtenToday')}</span>}
+                          </div>
+                        )}
                       </td>
                       <td data-label={t('task.created')}>{new Date(task.createdAt).toLocaleDateString('ru-RU')}</td>
                       {/* Выпадающий список рисуется порталом, но события React идут
@@ -668,6 +697,7 @@ function TaskModal({
           <div><span>{t('task.author')}</span><b>{task.createdBy?.fullName ?? '—'}</b></div>
           <div><span>{t('task.created')}</span><b>{new Date(task.createdAt).toLocaleDateString('ru-RU')}</b></div>
         </div>
+        <TaskDiary taskId={task.id} />
         <div className="task-modal-actions">
           {canDelete && (
             <button type="button" className="btn btn-sm btn-danger" onClick={onDelete} data-testid="task-modal-delete">
