@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isTeacherOnly } from '../lib/roles';
-import { isAcademyManager } from '../lib/permissions';
+import { academyCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { tjFormatTime, tjToday } from '../lib/tjTime';
 import { usePatternText, shortDate, tjWeekdayOf, weekdayKey } from '../components/academy/academyUi';
@@ -48,7 +48,11 @@ export default function Groups() {
   const { toast } = useUI();
   const qc = useQueryClient();
 
-  const canAdmin = isAcademyManager(me as any);
+  // Создать / изменить / удалить группу: руководство академии; роль — свои галочки.
+  const canCreate = academyCan(me as any, 'academy:groups-create');
+  const canEditGroup = academyCan(me as any, 'academy:groups-update');
+  const canDeleteGroup = academyCan(me as any, 'academy:groups-delete');
+  const rowActions = canEditGroup || canDeleteGroup;
   const teacherOnly = isTeacherOnly(me as any);
   const patternText = usePatternText();
   const today = tjToday();
@@ -116,7 +120,7 @@ export default function Groups() {
           <p style={{ color: 'var(--text-soft)', fontSize: 13, margin: 0, maxWidth: 620 }}>
             {teacherOnly ? t('academy.groups.teacherHint') : t('groups.hint.individual')}
           </p>
-          {canAdmin && !creating && (
+          {canCreate && !creating && (
             <button className="btn btn-primary" data-testid="group-new" onClick={() => setCreating(true)}>
               <Icon name="add" size={16} /> {t('groups.new')}
             </button>
@@ -233,7 +237,7 @@ export default function Groups() {
                 <SortTh sort={sort} col="pattern" />
                 <SortTh sort={sort} col="next" />
                 <SortTh sort={sort} col="status" />
-                {canAdmin && <th aria-label={t('common.actions')} />}
+                {rowActions && <th aria-label={t('common.actions')} />}
               </tr>
             </thead>
             <tbody>
@@ -263,8 +267,9 @@ export default function Groups() {
                       {t(`groups.status.${g.status}`)}
                     </span>
                   </td>
-                  {canAdmin && (
+                  {rowActions && (
                     <td className="acad-row-actions" onClick={(e) => e.stopPropagation()}>
+                      {canEditGroup && (
                       <button
                         type="button"
                         className="icon-btn"
@@ -275,6 +280,8 @@ export default function Groups() {
                       >
                         <Icon name="edit" size={16} />
                       </button>
+                      )}
+                      {canDeleteGroup && (
                       <button
                         type="button"
                         className="icon-btn danger"
@@ -286,6 +293,7 @@ export default function Groups() {
                       >
                         <Icon name={removal.busyId === g.id ? 'hourglass_empty' : 'delete'} size={16} />
                       </button>
+                      )}
                     </td>
                   )}
                 </tr>

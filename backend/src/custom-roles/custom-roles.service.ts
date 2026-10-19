@@ -1,13 +1,45 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { isValidPermission, PERMISSION_CATALOG } from '../auth/permissions';
+import { isValidPermission, migratePermissionsV2, PERMISSION_CATALOG, PERMISSIONS_VERSION } from '../auth/permissions';
 import { POSITION_LABEL, POSITION_ROLE_BASES, positionUsersWhere } from '../auth/position-role';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @Injectable()
-export class CustomRolesService {
+export class CustomRolesService implements OnModuleInit {
+  private readonly logger = new Logger(CustomRolesService.name);
+
   constructor(private prisma: PrismaService, private realtime: RealtimeGateway) {}
+
+  /**
+   * Разовый перенос ролей на подробный каталог (auth/permissions.ts) —
+   * при запуске, до первого запроса. Только роли со старой версией: после
+   * переноса версия поднята, и правки основателя сервер больше не трогает.
+   * updateMany с условием на версию — два одновременных запуска не
+   * перенесут роль дважды.
+   *
+   * Старые ключи остаются в массиве рядом с новыми: сервер их больше не
+   * читает, зато откат на прошлую версию увидит роль прежней, и из базы
+   * ничего не пропадает. Уберёт их первое сохранение роли основателем
+   * (sanitizePermissions оставляет только пункты каталога).
+   */
+  async onModuleInit() {
+    const old = await this.prisma.customRole.findMany({
+      where: { permVersion: { lt: PERMISSIONS_VERSION } },
+      select: { id: true, name: true, permissions: true, permVersion: true },
+    });
+    for (const role of old) {
+      const legacy = role.permissions.filter((k) => !isValidPermission(k));
+      const next = [...migratePermissionsV2(role.permissions), ...legacy];
+      const done = await this.prisma.customRole.updateMany({
+        where: { id: role.id, permVersion: role.permVersion },
+        data: { permissions: next, permVersion: PERMISSIONS_VERSION },
+      });
+      if (done.count) {
+        this.logger.log(`Роль «${role.name}»: права перенесены на подробный каталог (${role.permissions.length} → ${next.length})`);
+      }
+    }
+  }
 
   catalog() {
     return PERMISSION_CATALOG;
@@ -59,7 +91,7 @@ export class CustomRolesService {
     const baseRole = await this.checkBaseRole(dto.baseRole);
 
     const role = await this.prisma.customRole.create({
-      data: { name, description, permissions: perms, baseRole },
+      data: { name, description, permissions: perms, baseRole, permVersion: PERMISSIONS_VERSION },
     });
     this.realtime.emitStaff('customRole:new', { id: role.id, name: role.name });
     // Роль сразу действует на должность — у этих сотрудников CRM перечитает права.
@@ -89,6 +121,7 @@ export class CustomRolesService {
     }
     if (dto.permissions !== undefined) {
       data.permissions = sanitizePermissions(dto.permissions);
+      data.permVersion = PERMISSIONS_VERSION;
     }
     if (dto.isActive !== undefined) {
       data.isActive = !!dto.isActive;

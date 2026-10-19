@@ -21,6 +21,7 @@ import FormModal from '../components/FormModal';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { isElevated } from '../lib/roles';
+import { roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 
 export default function Lms() {
@@ -30,7 +31,11 @@ export default function Lms() {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
-  const isAdmin = isElevated(me);
+  // Права роли «Курсы — …»; должность — руководство, как раньше. Уроки
+  // курса добавляют, меняют и удаляют с «Курсы — изменение» (как сервер).
+  const canCreate = roleCan(me, 'lms:create', isElevated(me));
+  const canUpdate = roleCan(me, 'lms:update', isElevated(me));
+  const canRemove = roleCan(me, 'lms:delete', isElevated(me));
 
   const coursesKey = keys.lms.courses();
   const coursesQuery = useQuery({
@@ -122,14 +127,14 @@ export default function Lms() {
               color: 'var(--text-soft)',
               textTransform: 'uppercase',
             }}>{t('lms.courses')}</div>
-            {isAdmin && (
+            {canCreate && (
               <button className="btn btn-sm btn-secondary" data-testid="lms-course-new" onClick={() => setShowNew((v) => !v)}>
                 <Icon name="add" size={14} />
               </button>
             )}
           </div>
           <AnimatePresence>
-            {showNew && isAdmin && (
+            {showNew && canCreate && (
               <FormModal
                 open
                 title={t('lms.new')}
@@ -205,7 +210,8 @@ export default function Lms() {
           ) : (
             <CourseEditor
               course={selected}
-              isAdmin={isAdmin}
+              canUpdate={canUpdate}
+              canRemove={canRemove}
               onChange={refresh}
               onTogglePublish={() => togglePublish(selected)}
               onDelete={() => onDeleteCourse(selected)}
@@ -242,9 +248,10 @@ function NewCourseForm({ onSubmit, onCancel }: {
   );
 }
 
-function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: {
+function CourseEditor({ course, canUpdate, canRemove, onChange, onTogglePublish, onDelete }: {
   course: CourseDetail;
-  isAdmin: boolean;
+  canUpdate: boolean;
+  canRemove: boolean;
   onChange: () => void;
   onTogglePublish: () => void;
   onDelete: () => void;
@@ -338,17 +345,23 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
             </>
           )}
         </div>
-        {isAdmin && !editingMeta && (
+        {(canUpdate || canRemove) && !editingMeta && (
           <div className="lms-course-actions" style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-            <button className="btn btn-sm btn-secondary" onClick={() => setEditingMeta(true)}>
-              <Icon name="edit" size={14} /> {t('common.edit')}
-            </button>
-            <button className="btn btn-sm btn-secondary" onClick={onTogglePublish}>
-              {course.published ? t('lms.unpublish') : t('lms.publish')}
-            </button>
-            <button className="btn btn-sm btn-danger" onClick={onDelete}>
-              <Icon name="delete" size={14} />
-            </button>
+            {canUpdate && (
+              <button className="btn btn-sm btn-secondary" data-testid="lms-course-edit" onClick={() => setEditingMeta(true)}>
+                <Icon name="edit" size={14} /> {t('common.edit')}
+              </button>
+            )}
+            {canUpdate && (
+              <button className="btn btn-sm btn-secondary" data-testid="lms-course-publish" onClick={onTogglePublish}>
+                {course.published ? t('lms.unpublish') : t('lms.publish')}
+              </button>
+            )}
+            {canRemove && (
+              <button className="btn btn-sm btn-danger" data-testid="lms-course-delete" onClick={onDelete}>
+                <Icon name="delete" size={14} />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -368,7 +381,7 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
           color: 'var(--text-soft)',
           textTransform: 'uppercase',
         }}>{t('lms.lessonsTitle')} · {course.lessons.length}</div>
-        {isAdmin && (
+        {canUpdate && (
           <button className="btn btn-sm btn-primary" data-testid="lms-lesson-new" onClick={() => setShowLessonForm((v) => !v)}>
             <Icon name="add" size={14} /> {t('lms.addLesson')}
           </button>
@@ -436,7 +449,7 @@ function CourseEditor({ course, isAdmin, onChange, onTogglePublish, onDelete }: 
                 </>
               )}
             </div>
-            {isAdmin && editingLesson?.id !== l.id && (
+            {canUpdate && editingLesson?.id !== l.id && (
               <div style={{ display: 'flex', gap: 4 }}>
                 <button className="btn btn-sm btn-secondary" onClick={() => setEditingLesson(l)}>
                   <Icon name="edit" size={14} />

@@ -28,6 +28,7 @@ import { useRoleLabel } from '../lib/labels';
 import { useUI } from '../ui/Dialogs';
 import { useAuth } from '../store/auth';
 import { isElevated, isFounder, displayRoleLabel, isTeacherOnly } from '../lib/roles';
+import { hasActiveRole, hiddenAmount, roleCan } from '../lib/permissions';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import BackButton from '../components/BackButton';
@@ -160,13 +161,20 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
   const { user, salary, penalties, sales, attendance, kpi, documents, dailyReports } = data;
   const realId = user.id;
-  // Self-view: пользователь смотрит свой профиль (/me или /users/:id своего id).
-  // Тогда даём ему те же возможности — загрузить/удалить свой документ,
-  // подписать оферту.
-  const isSelf = !isAdmin || meStore?.id === user.id;
+  // Чужой профиль у сотрудника с ролью — по галочкам «Сотрудники — …»
+  // (должность ему ничего не добавляет); остальных ведёт должность, как раньше.
+  const viewerRole = hasActiveRole(meStore) && !isFounder(meStore);
+  // Что сервер скрыл по «Видимости данных» роли: оклад и штрафы; телефон,
+  // email, паспорт и документы; суммы продаж.
+  const payHidden = !!data.payHidden;
+  const personalHidden = !!data.personalHidden;
+  const moneyHidden = !!data.moneyHidden;
   // Права — как раньше: ФИО/email и роли меняет основатель, кадры и оплату — админ.
   const canEditNameEmail = isFounder(meStore);
   const canEditRoles = isFounder(meStore);
+  // Телефон, паспорт, дата приёма: руководство; роль — «Сотрудники — изменение»,
+  // если личные данные ей видны (иначе в форме была бы маска вместо номера).
+  const canEditHR = isAdmin || (viewerRole && !own && !personalHidden && roleCan(meStore, 'users:update'));
   const isFounderTarget = user.role === 'FOUNDER' || (user.roles || []).includes('FOUNDER' as any);
   const onEditSaved = () => {
     setEditing(null);
@@ -182,7 +190,12 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
     if (cr?.name && cr.isActive !== false) return base ? `${cr.name} (${base})` : cr.name;
     return base || '—';
   })();
-  const canManageDocs = isAdmin || isSelf;
+  // Документы: свои — всегда (через /me/documents); чужие — руководство или
+  // роль с «Документы сотрудников», когда личные данные ей видны.
+  const canManageDocs = own || isAdmin || (viewerRole && !personalHidden && roleCan(meStore, 'users:documents'));
+  const selfDocsApi = own && !isAdmin;
+  // «Доступ к чужим профилям»: руководство; роль — её галочка.
+  const canGrantAccess = isAdmin || (viewerRole && !own && roleCan(meStore, 'users:access'));
   // Учитель академии: продажи, KPI, табель и ежедневные отчёты его не касаются.
   const teacherProfile = isTeacherOnly(user as any);
 
@@ -196,7 +209,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         </span>
         <div className="profile-hero-main">
           <span className="crm-section-eyebrow profile-hero-eyebrow">
-            {isAdmin ? `${t('eyebrow.team')} · ${displayRoleLabel(user as any).toUpperCase()}` : t('eyebrow.profile')}
+            {isAdmin || !own ? `${t('eyebrow.team')} · ${displayRoleLabel(user as any).toUpperCase()}` : t('eyebrow.profile')}
           </span>
           <h2 className="crm-section-title profile-hero-name">
             {user.fullName}
@@ -212,8 +225,18 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
             <span className="profile-hero-chip is-role">{roleText}</span>
           </div>
           <div className="profile-hero-contacts">
-            <a className="profile-hero-contact" href={`mailto:${user.email}`}><Icon name="mail" size={16} />{user.email}</a>
-            {user.phone && <a className="profile-hero-contact" href={`tel:${user.phone.replace(/[^\d+]/g, '')}`}><Icon name="call" size={16} />{user.phone}</a>}
+            {/* Без «Личных данных сотрудников» — маска «a••••@gmail.com»,
+                «+992 •• ••• •• 45»: ссылкой её не сделать. */}
+            {personalHidden ? (
+              <span className="profile-hero-contact" data-testid="profile-email-masked"><Icon name="mail" size={16} />{user.email}</span>
+            ) : (
+              <a className="profile-hero-contact" href={`mailto:${user.email}`}><Icon name="mail" size={16} />{user.email}</a>
+            )}
+            {user.phone && (personalHidden ? (
+              <span className="profile-hero-contact" data-testid="profile-phone-masked"><Icon name="call" size={16} />{user.phone}</span>
+            ) : (
+              <a className="profile-hero-contact" href={`tel:${user.phone.replace(/[^\d+]/g, '')}`}><Icon name="call" size={16} />{user.phone}</a>
+            ))}
             {user.hiredAt && (
               <span className="profile-hero-contact">
                 <Icon name="work" size={16} />{t('profile.hero.since').replace('{d}', new Date(user.hiredAt).toLocaleDateString('ru-RU'))}
@@ -222,7 +245,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           </div>
         </div>
         <div className="profile-hero-actions">
-          {!own && (
+          {!own && roleCan(meStore, 'chat:direct') && (
             <button
               type="button"
               className="btn btn-secondary"
@@ -243,7 +266,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
               <Icon name="chat" size={18} /> {t('profile.hero.write')}
             </button>
           )}
-          {(canEditNameEmail || isAdmin) && (
+          {(canEditNameEmail || canEditHR) && (
             <button type="button" className="btn btn-primary" data-testid="profile-hero-edit" onClick={() => toggleEdit('personal')}>
               <Icon name="edit" size={18} /> {t('profile.edit')}
             </button>
@@ -259,7 +282,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <div className="profile-group" data-testid="group-personal">
             <div className="profile-group-head">
               <h3 className="profile-h">{t('userDetail.section.personal')}</h3>
-              {(canEditNameEmail || isAdmin) && (
+              {(canEditNameEmail || canEditHR) && (
                 <EditButton active={editing === 'personal'} testId="edit-personal" onClick={() => toggleEdit('personal')} />
               )}
             </div>
@@ -280,7 +303,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                 ) : undefined}
               />
               <Field label={t('userDetail.field.phone')} value={user.phone || '—'} />
-              <Field label={t('userDetail.field.passport')} value={user.passportNo || '—'} />
+              <Field label={t('userDetail.field.passport')} value={personalHidden ? '••••' : user.passportNo || '—'} />
               <Field label={t('userDetail.field.hiredAt')} value={user.hiredAt ? new Date(user.hiredAt).toLocaleDateString('ru-RU') : '—'} />
               <Field label={t('profile.field.createdAt')} value={new Date(user.createdAt).toLocaleDateString('ru-RU')} />
             </div>
@@ -351,7 +374,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         {editing && (
           <div className="profile-edit" data-testid={`edit-form-${editing}`}>
             {editing === 'personal' && (
-              <PersonalEditor user={user} userId={realId} canNameEmail={canEditNameEmail} canHR={isAdmin} onSaved={onEditSaved} onClose={closeEdit} />
+              <PersonalEditor user={user} userId={realId} canNameEmail={canEditNameEmail} canHR={canEditHR} onSaved={onEditSaved} onClose={closeEdit} />
             )}
             {editing === 'pay' && <PayEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
             {editing === 'roles' && <RolesEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
@@ -372,11 +395,12 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         <div className="profile-stats">
           <Stat {...tileProps('hours')} icon="schedule" tone="blue" label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
           <Stat {...tileProps('late')} icon="alarm" tone={attendance.lateMinutes > 0 ? 'red' : 'green'} label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
-          <Stat {...tileProps('sales')} icon="payments" tone="green" label={t('profile.month.sales')} value={fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}${(sales.monthOtherIncome ?? 0) > 0 ? ` · ${t('sales.otherIncome').toLowerCase()} ${fmtMoney(sales.monthOtherIncome!)}` : ''}${otherCurrencies(sales.monthOther)}`} />
+          <Stat {...tileProps('sales')} icon="payments" tone="green" label={t('profile.month.sales')} value={sales.monthAmount == null ? hiddenAmount('TJS') : fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}${(sales.monthOtherIncome ?? 0) > 0 ? ` · ${t('sales.otherIncome').toLowerCase()} ${fmtMoney(sales.monthOtherIncome!)}` : ''}${otherCurrencies(sales.monthOther)}`} />
           <Stat {...tileProps('leads')} icon="group_add" tone="purple" label={t('profile.month.leadsTotal')} value={String(kpi.totalLeadsMonth)} sub={`${kpi.ownClientsMonth} ${t('profile.month.myOwn')}`} />
           <Stat {...tileProps('enrolled')} icon="how_to_reg" tone={kpi.onTrack ? 'green' : 'red'} label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />
           <Stat {...tileProps('kpi')} icon="trending_up" tone={kpi.onTrack ? 'green' : 'red'} label={t('profile.month.kpiPct')} value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.target')} ${kpi.targetPct}%`} />
-          <Stat {...tileProps('penalties')} icon="gavel" tone="red" label={t('profile.month.penalties')} value={fmtMoney(penalties.pendingTotal)} accent="red" />
+          {/* Без «Зарплат и окладов» штрафы коллеги скрыты — плитка без окна. */}
+          <Stat {...(payHidden ? {} : tileProps('penalties'))} icon="gavel" tone="red" label={t('profile.month.penalties')} value={penalties.pendingTotal == null ? hiddenAmount('TJS') : fmtMoney(penalties.pendingTotal)} accent="red" />
         </div>
         <ProfileMonthDetails
           tile={monthTile}
@@ -434,7 +458,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       </>
       )}
 
-      {/* Штрафы */}
+      {/* Штрафы (скрыты вместе с окладом — «Зарплаты и оклады» роли) */}
+      {!payHidden && (
       <section className={`card profile-section${penalties.list.length === 0 ? ' is-empty' : ''}`}>
         <h3 className="profile-h">{t('profile.month.penalties')}</h3>
         {penalties.list.length === 0 ? (
@@ -466,17 +491,21 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         )}
       </section>
 
+      )}
+
       {/* Оферта — только в self-view (сотрудник подписывает свою). */}
-      {!isAdmin && <OfferSection />}
+      {own && !isAdmin && <OfferSection />}
 
       {/* Документы */}
-      {/* Документы: без права загрузки и без файлов — одной строкой. */}
+      {/* Документы: без права загрузки и без файлов — одной строкой.
+          Без «Личных данных сотрудников» чужие документы не показываем. */}
+      {!personalHidden && (
       <section className={`card profile-section${documents.length === 0 && !canManageDocs ? ' is-empty' : ''}`}>
         <h3 className="profile-h">{t('userDetail.section.documents')}</h3>
         {canManageDocs && (
           <DocUploader
             userId={realId}
-            useSelfApi={!isAdmin}
+            useSelfApi={selfDocsApi}
             onUploaded={() => qc.invalidateQueries({ queryKey })}
           />
         )}
@@ -501,7 +530,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                 {canManageDocs && (
                   <DocEditButton
                     doc={d}
-                    useSelfApi={!isAdmin}
+                    useSelfApi={selfDocsApi}
                     userId={realId}
                     onSaved={() => qc.invalidateQueries({ queryKey })}
                   />
@@ -518,10 +547,10 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                       });
                       if (!ok) return;
                       try {
-                        if (isAdmin) {
-                          await deleteUserDocument(realId, d.id);
-                        } else {
+                        if (selfDocsApi) {
                           await deleteMyDocument(d.id);
+                        } else {
+                          await deleteUserDocument(realId, d.id);
                         }
                         qc.invalidateQueries({ queryKey });
                         toast(t('toast.deleted'), 'success');
@@ -537,8 +566,10 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
         )}
       </section>
 
-      {/* Доступ к данным — только для админа */}
-      {isAdmin && <AccessSection userId={realId} userName={user.fullName} />}
+      )}
+
+      {/* Доступ к данным — руководство; роль — «Доступ к чужим профилям» */}
+      {canGrantAccess && <AccessSection userId={realId} userName={user.fullName} />}
 
       {/* Ежедневные отчёты текущего месяца */}
       {!teacherProfile && (
@@ -562,7 +593,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                     <td data-label={reportsSort.label('calls')}>{r.callsCount ?? 0}</td>
                     <td data-label={reportsSort.label('meetings')}>{r.meetingsCount ?? 0}</td>
                     <td data-label={reportsSort.label('deals')}>{r.salesCount ?? 0}</td>
-                    <td data-label={reportsSort.label('amount')}>{r.salesAmount ? fmtMoney(r.salesAmount) : '—'}</td>
+                    <td data-label={reportsSort.label('amount')}>{moneyHidden ? hiddenAmount('TJS') : r.salesAmount ? fmtMoney(r.salesAmount) : '—'}</td>
                   </tr>
                 ))}
               </tbody>

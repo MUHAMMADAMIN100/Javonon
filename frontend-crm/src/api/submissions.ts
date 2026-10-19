@@ -7,6 +7,8 @@ export type SubmissionPaymentStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type SubmissionPaymentMethod = 'TRANSFER' | 'CASH' | 'OTHER';
 
 export interface SubmissionPayment {
+  /** Роль без «Деньги клиентов»: суммы и чеки пришли пустыми. */
+  moneyHidden?: boolean;
   id: string;
   submissionId: string;
   amount: number;
@@ -35,6 +37,8 @@ export interface SubmissionPayment {
 }
 
 export interface SaleSubmission {
+  /** Роль без «Деньги клиентов»: суммы и чеки пришли пустыми. */
+  moneyHidden?: boolean;
   id: string;
   studentId: string | null;
   newStudentName: string | null;

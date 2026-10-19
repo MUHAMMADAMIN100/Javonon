@@ -8,6 +8,7 @@ import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { TelephonyService } from './telephony.service';
 import { TwilioSignatureGuard } from './twilio-signature.guard';
+import { Permissions } from '../../auth/permissions.decorator';
 
 @Controller('integrations/telephony')
 export class TelephonyController {
@@ -17,6 +18,7 @@ export class TelephonyController {
   @Get('token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  @Permissions('calls:dial')
   token(@CurrentUser() me: any) {
     return this.tel.issueAccessToken(me.id);
   }

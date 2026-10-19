@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listStudents } from '../api/students';
 import { listUsers } from '../api/users';
 import { listAssignableManagers } from '../api/applications';
-import { canSeeAllClients } from '../lib/permissions';
+import { canSeeAllClients, roleCan } from '../lib/permissions';
 import type { Direction } from '../api/types';
 import { APPLICATION_STATUSES, DIRECTION_LABEL, STATUS_BADGE, STATUS_LABEL, STUDENT_STATUS_BADGE, STUDENT_STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
@@ -337,7 +337,7 @@ export default function Students() {
             <Icon name="description" size={16} style={{ marginRight: 4 }} />
             {t('students.reportWord')}
           </motion.button>
-          {!founder && (
+          {!founder && roleCan(me, 'students:create') && (
             <motion.button
               className="btn btn-primary"
               onClick={() => navigate('/students/new')}

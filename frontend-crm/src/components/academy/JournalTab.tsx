@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { roleCan } from '../../lib/permissions';
+import { useAuth } from '../../store/auth';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence } from 'framer-motion';
@@ -110,6 +112,9 @@ export default function JournalTab({
   const { t } = useT();
   const { toast } = useUI();
   const qc = useQueryClient();
+  // Подменному учителю с ролью свои уроки отмечать — с «Ведением».
+  const me = useAuth((s) => s.user);
+  const substituteMarks = roleCan(me, 'groups:write');
   const jKey = keys.academy.journal(groupId);
   const narrow = useMediaQuery('(max-width: 760px)');
   const [params, setParams] = useSearchParams();
@@ -179,7 +184,7 @@ export default function JournalTab({
     setParams(p, { replace: true });
   };
 
-  const canEditLesson = (l: JournalLesson) => j.canEditAll || (!!meId && l.teacherId === meId);
+  const canEditLesson = (l: JournalLesson) => j.canEditAll || (substituteMarks && !!meId && l.teacherId === meId);
   const editable = canEditLesson(lesson) && lesson.markable;
 
   const mark = (l: JournalLesson, items: EntryPatch[]) => {

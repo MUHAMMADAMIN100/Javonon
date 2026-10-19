@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { roleCan } from '../lib/permissions';
 import CrmSelect from '../components/CrmSelect';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -41,7 +42,11 @@ export default function MassMail() {
   });
   const campaigns = query.data ?? [];
 
-  if (!isElevated(me)) {
+  // Права роли «Рассылки — …»; должность — руководство, как раньше.
+  const base = isElevated(me);
+  const canCreate = roleCan(me, 'massmail:create', base);
+  const canSend = roleCan(me, 'massmail:send', base);
+  if (!roleCan(me, 'massmail:read', base)) {
     return <div className="card" style={{ padding: 28 }}>{t('common.accessDenied')}</div>;
   }
 
@@ -88,7 +93,7 @@ export default function MassMail() {
           <p style={{ color: 'var(--text-soft)', fontSize: 13, margin: 0, maxWidth: 640 }}>
             {t('massmail.subtitle')}
           </p>
-          {!creating && (
+          {!creating && canCreate && (
             <button className="btn btn-primary" data-testid="massmail-new" onClick={() => setCreating(true)}>
               <Icon name="add" size={16} /> {t('massmail.new')}
             </button>
@@ -150,13 +155,13 @@ export default function MassMail() {
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 110 }}>
-                {(c.status === 'DRAFT' || c.status === 'SCHEDULED') && (
-                  <button className="btn btn-sm btn-primary" onClick={() => onSendNow(c)}>
+                {canSend && (c.status === 'DRAFT' || c.status === 'SCHEDULED') && (
+                  <button className="btn btn-sm btn-primary" onClick={() => onSendNow(c)} data-testid="massmail-send">
                     <Icon name="send" size={14} /> {t('massmail.action.send')}
                   </button>
                 )}
-                {(c.status === 'DRAFT' || c.status === 'SCHEDULED' || c.status === 'SENDING') && (
-                  <button className="btn btn-sm btn-danger" onClick={() => onCancel(c)}>
+                {canSend && (c.status === 'DRAFT' || c.status === 'SCHEDULED' || c.status === 'SENDING') && (
+                  <button className="btn btn-sm btn-danger" onClick={() => onCancel(c)} data-testid="massmail-cancel">
                     {t('common.cancel')}
                   </button>
                 )}

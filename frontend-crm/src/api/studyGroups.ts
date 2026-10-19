@@ -117,7 +117,19 @@ export interface StudyGroupDetail extends StudyGroup {
    * руководство); addStudents — добавлять учеников (учитель своей идущей
    * группы, руководство); complete — «Завершить курс».
    */
-  access: { manage: boolean; run: boolean; addStudents: boolean; complete: boolean };
+  /** Что можно в этой группе (study-groups.service getGroup). */
+  access: {
+    /** Вкладка «Настройки»: edit или remove. */
+    manage: boolean;
+    edit: boolean;
+    remove: boolean;
+    /** Ведение: журнал, уроки, ДЗ, материалы, расписание, флаги. */
+    run: boolean;
+    addStudents: boolean;
+    createStudents: boolean;
+    removeMembers: boolean;
+    complete: boolean;
+  };
 }
 
 export interface CreateStudyGroupDto {

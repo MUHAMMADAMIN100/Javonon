@@ -14,6 +14,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { SalesService } from './sales.service';
+import { Permissions } from '../auth/permissions.decorator';
 
 @Controller('sales')
 @UseGuards(JwtAuthGuard)
@@ -26,6 +27,7 @@ export class SalesController {
   @Post('applications/:id/assign')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  @Permissions('leads:assign', 'applications:assign')
   reassign(
     @Param('id') id: string,
     @Body() body: { managerId: string | null },
@@ -40,6 +42,7 @@ export class SalesController {
   @Post('applications/:id/move-stage')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  @Permissions('pipelines:move')
   moveStage(
     @Param('id') id: string,
     @Body() body: { pipelineStageId: string | null },
@@ -57,6 +60,7 @@ export class SalesController {
   @Post('pipelines')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('pipelines:create')
   createPipeline(@Body() body: any) {
     return this.svc.createPipeline(body);
   }
@@ -64,6 +68,7 @@ export class SalesController {
   @Patch('pipelines/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('pipelines:update')
   updatePipeline(@Param('id') id: string, @Body() body: any) {
     return this.svc.updatePipeline(id, body);
   }
@@ -71,6 +76,7 @@ export class SalesController {
   @Delete('pipelines/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('pipelines:delete')
   deletePipeline(@Param('id') id: string) {
     return this.svc.deletePipeline(id);
   }
@@ -78,6 +84,7 @@ export class SalesController {
   @Post('pipelines/:id/stages')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('pipelines:create')
   addStage(@Param('id') id: string, @Body() body: any) {
     return this.svc.addStage(id, body);
   }
@@ -85,6 +92,7 @@ export class SalesController {
   @Patch('stages/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('pipelines:update')
   updateStage(@Param('id') id: string, @Body() body: any) {
     return this.svc.updateStage(id, body);
   }
@@ -92,6 +100,7 @@ export class SalesController {
   @Delete('stages/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('pipelines:delete')
   deleteStage(@Param('id') id: string) {
     return this.svc.deleteStage(id);
   }

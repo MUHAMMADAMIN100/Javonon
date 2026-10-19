@@ -25,6 +25,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { normalizeDocumentType } from '../common/documents';
 import { parseDate } from '../common/query-date';
+import { Permissions } from '../auth/permissions.decorator';
+import { ClientMoneyInterceptor } from '../common/client-money.interceptor';
 
 const uploadStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
@@ -61,6 +63,7 @@ const docFileFilter = (
 export class StudentsController {
   constructor(private students: StudentsService) {}
 
+  @Permissions('students:read')
   @Get()
   list(
     @CurrentUser() user: any,
@@ -140,6 +143,7 @@ export class StudentsController {
     });
   }
 
+  @Permissions('students:read')
   @Get(':id')
   async one(@Param('id') id: string, @CurrentUser() user: any) {
     await this.students.assertCanView(id, user);
@@ -148,22 +152,27 @@ export class StudentsController {
     return this.students.findOne(id, user);
   }
 
+  @Permissions('students:read')
+  @UseInterceptors(ClientMoneyInterceptor)
   @Get(':id/payments')
   async payments(@Param('id') id: string, @CurrentUser() user: any) {
     await this.students.assertCanView(id, user);
     return this.students.paymentsHistory(id);
   }
 
+  @Permissions('students:create')
   @Post()
   create(@Body() dto: CreateStudentDto, @CurrentUser() user: any) {
     return this.students.create(dto, user);
   }
 
+  @Permissions('students:update')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateStudentDto, @CurrentUser() user: any) {
     return this.students.update(id, dto, user);
   }
 
+  @Permissions('students:assign')
   @Patch(':id/manager')
   assignManager(
     @Param('id') id: string,
@@ -173,16 +182,19 @@ export class StudentsController {
     return this.students.assignManager(id, body, user);
   }
 
+  @Permissions('students:delete')
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.students.remove(id, user);
   }
 
+  @Permissions('students:password')
   @Post(':id/regenerate-password')
   regeneratePassword(@Param('id') id: string, @CurrentUser() user: any) {
     return this.students.regeneratePassword(id, user);
   }
 
+  @Permissions('students:update')
   @Post(':id/photo')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -206,6 +218,7 @@ export class StudentsController {
     return this.students.update(id, { photoUrl: url }, user);
   }
 
+  @Permissions('students:documents')
   @Post(':id/documents')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -237,16 +250,19 @@ export class StudentsController {
     );
   }
 
+  @Permissions('students:documents')
   @Delete('documents/:docId')
   removeDocument(@Param('docId') docId: string, @CurrentUser() user: any) {
     return this.students.removeDocument(docId, user);
   }
 
+  @Permissions('applications:create')
   @Post(':id/ensure-application')
   ensureApplication(@Param('id') id: string, @CurrentUser() user: any) {
     return this.students.ensureApplication(id, user);
   }
 
+  @Permissions('students:update')
   @Patch(':id/form')
   updateForm(@Param('id') id: string, @Body() form: any, @CurrentUser() user: any) {
     return this.students.updateForm(id, form, user);

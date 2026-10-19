@@ -8,6 +8,7 @@ import {
   STAFF_DEFAULT_SOURCE,
 } from './dto/create-staff-application.dto';
 import {
+  applicationTrashWhere,
   applicationVisibilityWhere,
   canAccessApplication,
   canCreateApplication,
@@ -15,13 +16,14 @@ import {
   canSeeAllApplications,
   canTouchApplicationManager,
   clientRoomForStatus,
+  roleAllowsApplication,
 } from './application-access';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { MailService } from '../mail/mail.service';
 import { SmsService } from '../sms/sms.service';
 import { ActivityService } from '../activity/activity.service';
-import { canSeePartnerAttribution, UserWithRoles } from '../auth/role-utils';
+import { canSeePartnerAttribution, hasPermission, isFounder, UserWithRoles } from '../auth/role-utils';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
@@ -633,7 +635,12 @@ export class ApplicationsService {
    * в списке бы не появилась.
    */
   async listAssignableManagers(user: CurrentUser) {
-    if (!canTouchApplicationManager(user as any)) {
+    // Кроме назначающих — сотрудник с ролью «Все, не только свои»: ему список
+    // нужен для фильтра «Менеджер» (только id, имя и роль).
+    const forFilter =
+      !!(user as any)?.hasCustomRole && !isFounder(user as any) &&
+      hasPermission(user as any, 'leads:all', 'applications:all', 'students:all');
+    if (!canTouchApplicationManager(user as any) && !forFilter) {
       throw new ForbiddenException('Недостаточно прав');
     }
     return this.prisma.user.findMany({
@@ -737,9 +744,9 @@ export class ApplicationsService {
         OR: [{ managerId: filters.currentUserId }, { chinaManagerId: filters.currentUserId }],
       };
       const scope = filters.mine
-        ? own
+        ? { AND: [own, applicationVisibilityWhere(viewer) ?? {}] }
         : filters.deleted
-          ? (canSeeAllApplications(viewer) ? null : own)
+          ? applicationTrashWhere(viewer)
           : applicationVisibilityWhere(viewer);
       if (scope) and.push(scope);
     }
@@ -906,17 +913,25 @@ export class ApplicationsService {
    * чужих не дают — у удаления своё правило.
    */
   private ensureCanDelete(
-    app: { managerId: string | null; chinaManagerId?: string | null },
+    app: { managerId: string | null; chinaManagerId?: string | null; status: ApplicationStatus },
     user: CurrentUser,
   ) {
-    if (canSeeAllApplications(user as any)) return;
+    // Роли нужно право удаления своего вида: «Лиды — удаление» или «Заявки — удаление».
+    if (!roleAllowsApplication(user as any, app.status, 'delete')) {
+      throw new ForbiddenException('Нет права удалять и возвращать такие записи');
+    }
     if (app.managerId === user.id || app.chinaManagerId === user.id) return;
+    // Чужие — у роли по назначению менеджера её вида, у должности — как раньше.
+    if ((user as any).hasCustomRole ? canReassignApplicationManager(user as any, app.status) : canSeeAllApplications(user as any)) return;
     throw new ForbiddenException('Удалять и возвращать чужие заявки может только руководство');
   }
 
   async update(id: string, dto: UpdateApplicationDto, user: CurrentUser) {
     const existing = await this.findOne(id);
     this.ensureCanEdit(existing, user);
+    if (!roleAllowsApplication(user as any, existing.status, 'update')) {
+      throw new ForbiddenException('Нет права изменять такие записи');
+    }
 
     // Номер меняют на номер другой открытой заявки — это дубль, не даём.
     if (dto.phone != null) {
@@ -1225,6 +1240,9 @@ export class ApplicationsService {
       throw new ForbiddenException('Недостаточно прав для назначения менеджера');
     }
     const existing = await this.findOne(id);
+    if (!roleAllowsApplication(user as any, existing.status, 'assign')) {
+      throw new ForbiddenException('Недостаточно прав для назначения менеджера');
+    }
     // По ТЗ §7: переназначение между сотрудниками — ТОЛЬКО ADMIN/FOUNDER.
     // Не-elevated (SALES_MANAGER/CLIENT_MANAGER) могут:
     //   • взять неназначенный лид себе (managerId/chinaManagerId === null)
@@ -1236,7 +1254,7 @@ export class ApplicationsService {
     // технической подложкой SALES_MANAGER, попадал в ветку «не-elevated» и
     // мог взять лид только на себя — то есть не мог распределить ни одного,
     // а сам пермишен не значил ничего (см. application-access.ts).
-    if (!canReassignApplicationManager(user as any)) {
+    if (!canReassignApplicationManager(user as any, existing.status)) {
       const slot: 'managerId' | 'chinaManagerId' | null =
         patch.managerId !== undefined ? 'managerId' :
         patch.chinaManagerId !== undefined ? 'chinaManagerId' : null;
@@ -1459,8 +1477,12 @@ export class ApplicationsService {
         }
 
         // Рубеж 2 — по КАЖДОМУ лиду, тем же правилом, что и одиночный путь.
-        if (!canReassign) {
-          for (const app of existing) {
+        // У роли назначение лидам и заявкам — разные права.
+        for (const app of existing) {
+          if (!roleAllowsApplication(user as any, app.status, 'assign')) {
+            throw new ForbiddenException('Недостаточно прав для назначения менеджера');
+          }
+          if (!canReassign || !canReassignApplicationManager(user as any, app.status)) {
             this.assertOwnSlotChangeOnly(user, app.managerId, managerId);
           }
         }

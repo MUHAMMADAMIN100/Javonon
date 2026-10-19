@@ -17,8 +17,11 @@ import { secureRandomString } from '../common/random';
 import { parseCalendarDateUtc, tjLocalDay, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 import { utf8Name } from '../common/upload-name';
 import {
-  assertAcademyManager,
-  assertCanRunGroup,
+  academyCan,
+  academyGroupCan,
+  assertAcademyCan,
+  assertRoleHas,
+  roleHas,
   canMarkSession,
   canRunGroup,
   isAcademyManager,
@@ -500,7 +503,7 @@ export class AcademyService {
   }
 
   async createLevel(user: AcademyViewer, dto: AcademyLevelDto) {
-    assertAcademyManager(user);
+    assertAcademyCan(user, 'academy:levels');
     const name = this.normalizeLevelName(dto.name);
     await this.assertLevelNameFree(name);
     const last = await this.prisma.academyLevel.aggregate({ _max: { sortOrder: true } });
@@ -509,7 +512,7 @@ export class AcademyService {
   }
 
   async renameLevel(user: AcademyViewer, id: string, dto: AcademyLevelDto) {
-    assertAcademyManager(user);
+    assertAcademyCan(user, 'academy:levels');
     const level = await this.prisma.academyLevel.findUnique({ where: { id }, select: { id: true } });
     if (!level) throw new NotFoundException('Уровень не найден');
     const name = this.normalizeLevelName(dto.name);
@@ -520,7 +523,7 @@ export class AcademyService {
 
   /** Удалить можно только уровень, которого нет ни у одного ученика. */
   async deleteLevel(user: AcademyViewer, id: string) {
-    assertAcademyManager(user);
+    assertAcademyCan(user, 'academy:levels');
     const level = await this.prisma.academyLevel.findUnique({
       where: { id },
       select: { id: true, name: true, _count: { select: { students: true } } },
@@ -537,7 +540,7 @@ export class AcademyService {
 
   /** Новый порядок — полный список id уровней сверху вниз. */
   async reorderLevels(user: AcademyViewer, dto: ReorderLevelsDto) {
-    assertAcademyManager(user);
+    assertAcademyCan(user, 'academy:levels');
     const all = await this.prisma.academyLevel.findMany({ select: { id: true } });
     const ids = Array.from(new Set(dto.ids));
     if (ids.length !== all.length || !all.every((l) => ids.includes(l.id))) {
@@ -551,7 +554,7 @@ export class AcademyService {
 
   /** «Заполнить стандартными» — только пока список пуст. */
   async seedDefaultLevels(user: AcademyViewer) {
-    assertAcademyManager(user);
+    assertAcademyCan(user, 'academy:levels');
     const count = await this.prisma.academyLevel.count();
     if (count > 0) throw new BadRequestException('Список уровней уже заполнен');
     await this.prisma.academyLevel.createMany({
@@ -1011,10 +1014,14 @@ export class AcademyService {
         group: c.session.group,
       })),
       canManage: manager,
-      canEdit: s.academyOnly && (manager || mine),
-      canEditLevel: manager || mine,
-      canResetPassword: s.academyOnly && (manager || mine),
-      canFlag: !s.academyExpelledAt && myActiveGroups.length > 0,
+      // Кнопки карточки — те же проверки, что у действий (сотруднику с ролью
+      // нужна ещё галочка: «Ученики академии — …», «Ведение», «Флаги — …»).
+      canEdit: s.academyOnly && (manager || mine) && roleHas(user, 'academy:students-update'),
+      canEditLevel: (manager || mine) && roleHas(user, 'academy:students-update'),
+      canResetPassword: s.academyOnly && (manager || mine) && roleHas(user, 'academy:students-password'),
+      canFlag: !s.academyExpelledAt && myActiveGroups.length > 0 && roleHas(user, 'groups:write'),
+      canRemoveFlags: academyCan(user, 'academy:flags-remove'),
+      canDecide: academyCan(user, 'academy:decide'),
       flagGroups: myActiveGroups.map((g) => ({ id: g.id, name: g.name })),
     };
   }
@@ -1165,6 +1172,7 @@ export class AcademyService {
    */
   async createStudent(user: AcademyViewer, dto: CreateAcademyStudentDto) {
     if (!user) throw new ForbiddenException('Недостаточно прав');
+    assertRoleHas(user, 'academy:students-create', 'Нет права заводить учеников');
     const manager = isAcademyManager(user);
     if (!manager) {
       if (!dto.groupId) throw new BadRequestException('Выберите свою группу');
@@ -1218,6 +1226,7 @@ export class AcademyService {
     if (!user) throw new ForbiddenException('Недостаточно прав');
     const s = await this.loadAcademyStudent(id);
     if (!s || !this.isAcademyStudent(s)) throw new NotFoundException('Ученик не найден');
+    assertRoleHas(user, 'academy:students-update', 'Нет права изменять учеников');
     if (!isAcademyManager(user) && !this.teachesStudentNow(user, s)) {
       throw new ForbiddenException('Это не ваш ученик');
     }
@@ -1279,6 +1288,7 @@ export class AcademyService {
     if (!user) throw new ForbiddenException('Недостаточно прав');
     const s = await this.loadAcademyStudent(id);
     if (!s) throw new NotFoundException('Ученик не найден');
+    assertRoleHas(user, 'academy:students-password', 'Нет права менять пароль ученика');
     if (!isAcademyManager(user) && !this.teachesStudentNow(user, s)) {
       throw new ForbiddenException('Это не ваш ученик');
     }
@@ -1318,7 +1328,10 @@ export class AcademyService {
       },
     });
     if (!g) throw new NotFoundException('Группа не найдена');
-    assertCanRunGroup(user, g);
+    // Завершить курс: должность — кто ведёт группу; роль — «Завершение курса».
+    if (!academyGroupCan(user, g, 'academy:complete', () => canRunGroup(user, g))) {
+      throw new ForbiddenException('Это не ваша группа');
+    }
     return g;
   }
 
@@ -1427,6 +1440,8 @@ export class AcademyService {
     const s = await this.loadAcademyStudent(studentId);
     if (!s || !this.isAcademyStudent(s)) throw new NotFoundException('Ученик академии не найден');
     if (s.academyExpelledAt) throw new BadRequestException('Ученик уже отчислен');
+    // Флаг ставит тот, кто ведёт группу: роли нужно «Ведение».
+    assertRoleHas(user, 'groups:write', 'Нет права ставить флаги');
     const manager = isAcademyManager(user);
     const reason = dto.reason.trim().replace(/\s+/g, ' ');
     if (reason.length < 3) throw new BadRequestException('Напишите причину флага');
@@ -1469,7 +1484,7 @@ export class AcademyService {
 
   /** Снять ошибочный флаг — только руководство; в истории флаг остаётся. */
   async removeFlag(user: AcademyViewer, flagId: string, dto: RemoveFlagDto) {
-    assertAcademyManager(user);
+    assertAcademyCan(user, 'academy:flags-remove');
     const flag = await this.prisma.redFlag.findUnique({ where: { id: flagId }, select: { id: true, removedAt: true } });
     if (!flag) throw new NotFoundException('Флаг не найден');
     if (flag.removedAt) throw new BadRequestException('Флаг уже снят');
@@ -1486,7 +1501,7 @@ export class AcademyService {
    * оставить: флаги до этого момента считаются рассмотренными.
    */
   async decide(user: AcademyViewer, studentId: string, dto: AcademyDecisionDto) {
-    assertAcademyManager(user);
+    assertAcademyCan(user, 'academy:decide');
     const s = await this.loadAcademyStudent(studentId);
     if (!s || !this.isAcademyStudent(s)) throw new NotFoundException('Ученик академии не найден');
     if (s.academyExpelledAt) throw new BadRequestException('Ученик уже отчислен');
@@ -1532,7 +1547,7 @@ export class AcademyService {
 
   /** Вернуть отчисленного; по желанию — сразу в группу. */
   async reinstate(user: AcademyViewer, studentId: string, dto: ReinstateDto) {
-    assertAcademyManager(user);
+    assertAcademyCan(user, 'academy:decide');
     const s = await this.prisma.student.findUnique({ where: { id: studentId }, select: { id: true, academyExpelledAt: true } });
     if (!s) throw new NotFoundException('Ученик не найден');
     if (!s.academyExpelledAt) throw new BadRequestException('Ученик не отчислен');

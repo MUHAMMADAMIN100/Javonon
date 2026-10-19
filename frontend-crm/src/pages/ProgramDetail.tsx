@@ -1,4 +1,5 @@
 import { absFileUrl, useFileToken } from '../lib/fileUrl';
+import { roleCan } from '../lib/permissions';
 import { useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -229,7 +230,8 @@ function ProgramDocumentsSection({ programId }: { programId: string }) {
     queryFn: () => listProgramDocuments(programId),
   });
   const items = query.data ?? [];
-  const canEdit = isElevated(me as any);
+  // Документы программы — «Программы — документы»; должность — руководство.
+  const canEdit = roleCan(me as any, 'programs:documents', isElevated(me as any));
 
   const upload = async (file: File) => {
     setUploading(true);
@@ -307,6 +309,8 @@ function ProgramDocumentsSection({ programId }: { programId: string }) {
 
 function ProgramCommentsSection({ programId }: { programId: string }) {
   const me = useAuth((s) => s.user);
+  // Внутренние комментарии — «Программы — внутренние комментарии».
+  const canComment = roleCan(me as any, 'programs:comments');
   const qc = useQueryClient();
   const { toast, confirm } = useUI();
   const { t } = useT();
@@ -340,7 +344,7 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
   return (
     <div className="card" style={{ padding: 20, marginTop: 16 }}>
       <h3 style={{ marginBottom: 12 }}>{t('programs.section.comments')} ({items.length})</h3>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'flex-start' }}>
+      {canComment && <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'flex-start' }}>
         <textarea
           className="crm-textarea"
           value={draft}
@@ -360,7 +364,7 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
         >
           {sending ? t('common.sending') : t('common.send')}
         </button>
-      </div>
+      </div>}
       {items.length === 0 ? (
         <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('programs.comments.empty')}</div>
       ) : (
@@ -376,7 +380,7 @@ function ProgramCommentsSection({ programId }: { programId: string }) {
                   <span style={{ color: 'var(--text-soft)', fontSize: 11 }}>
                     {new Date(c.createdAt).toLocaleString('ru-RU')}
                   </span>
-                  {(c.authorId === me?.id || isElevated(me as any)) && (
+                  {canComment && (c.authorId === me?.id || isElevated(me as any)) && (
                     <button className="btn btn-sm btn-danger" onClick={() => remove(c)}>×</button>
                   )}
                 </div>

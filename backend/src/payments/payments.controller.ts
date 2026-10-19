@@ -6,11 +6,13 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { StudentJwtGuard } from '../student-auth/student-jwt.guard';
 import { PaymentsService } from './payments.service';
 import { PaymentMethod, PaymentStatus } from '@prisma/client';
+import { Permissions } from '../auth/permissions.decorator';
 
 // Staff side
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'ACCOUNTANT')
+@Permissions('finance:read', 'finance:payments')
 export class PaymentsController {
   constructor(private svc: PaymentsService) {}
 
@@ -19,6 +21,7 @@ export class PaymentsController {
     return this.svc.listAll({ status });
   }
 
+  @Permissions('finance:payments')
   @Post(':id/confirm')
   confirm(
     @Param('id') id: string,
@@ -28,6 +31,7 @@ export class PaymentsController {
     return this.svc.confirmByAccountant(id, me.id, body);
   }
 
+  @Permissions('finance:payments')
   @Post(':id/reject')
   reject(
     @Param('id') id: string,

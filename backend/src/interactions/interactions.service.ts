@@ -1,4 +1,4 @@
-import { isElevated } from '../auth/role-utils';
+import { isElevated, isFounder } from '../auth/role-utils';
 import { canSeeAllStudents } from '../auth/client-access';
 import { BadRequestException, ForbiddenException, NotFoundException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,10 +25,12 @@ export class InteractionsService {
     }
   }
 
-  async assertCanModify(id: string, user: { id: string; role?: string; roles?: string[] }) {
+  async assertCanModify(id: string, user: { id: string; role?: string; roles?: string[]; hasCustomRole?: boolean }) {
     const it = await this.prisma.interaction.findUnique({ where: { id }, select: { authorId: true } });
     if (!it) throw new NotFoundException('Запись не найдена');
-    if (it.authorId !== user.id && !isElevated(user as any)) {
+    // Чужие записи — руководство по должности; сотрудник с ролью — только свои.
+    const anyRecord = isFounder(user as any) || (!user.hasCustomRole && isElevated(user as any));
+    if (it.authorId !== user.id && !anyRecord) {
       throw new ForbiddenException('Править и удалять запись может только её автор или руководство');
     }
   }

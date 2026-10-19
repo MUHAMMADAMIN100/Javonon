@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { roleCan } from '../../lib/permissions';
+import { useAuth } from '../../store/auth';
 import { AnimatePresence } from 'framer-motion';
 import Icon from '../../Icon';
 import { useT } from '../../lib/i18n';
@@ -35,6 +37,7 @@ export default function LessonsTab({
 }) {
   const { t } = useT();
   useFileToken();
+  const me = useAuth((s) => s.user);
   const [modal, setModal] = useState<{ session?: ClassSession | null } | null>(null);
   const [template, setTemplate] = useState(false);
   const [diaryFor, setDiaryFor] = useState<string | null>(null);
@@ -53,7 +56,8 @@ export default function LessonsTab({
   const canRun = group.access.run;
   const active = group.status === 'ACTIVE';
   // Подменный учитель открывает свои уроки (тема, ДЗ, материалы).
-  const canOpen = (s: ClassSession) => canRun || (!!meId && s.teacherId === meId);
+  // (Сотруднику с ролью — с «Ведением».)
+  const canOpen = (s: ClassSession) => canRun || (roleCan(me, 'groups:write') && !!meId && s.teacherId === meId);
 
   return (
     <div className="acad-lessons" data-testid="lessons">

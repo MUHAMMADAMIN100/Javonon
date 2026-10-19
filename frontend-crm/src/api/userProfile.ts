@@ -96,19 +96,25 @@ export interface FullProfile {
       comment?: string | null;
       applied: boolean;
     }>;
-    pendingTotal: number;
+    /** null — оклады и штрафы роли не видны (payHidden). */
+    pendingTotal: number | null;
   };
   sales: {
-    monthAmount: number;
+    /** null — суммы роли не видны (moneyHidden); число сделок есть всегда. */
+    monthAmount: number | null;
     monthCount: number;
     /** Продажи в других валютах (не входят в monthAmount, он в TJS). */
     monthOther?: Record<string, number>;
     /** «Прочие приходы» — ручные доходы по менеджеру, в продажи не входят. */
-    monthOtherIncome?: number;
+    monthOtherIncome?: number | null;
     monthOtherIncomeCount?: number;
-    yearAmount: number;
+    yearAmount: number | null;
     yearCount: number;
   };
+  /** Что сервер скрыл по «Видимости данных» роли (чужой профиль). */
+  payHidden?: boolean;
+  personalHidden?: boolean;
+  moneyHidden?: boolean;
   attendance: {
     workedMinutes: number;
     lateMinutes: number;
@@ -154,13 +160,16 @@ export interface MonthDetails {
   /** DEAL — оплата по сделке (входит в «Продажи»), OTHER — прочий приход. */
   sales: Array<{
     kind: 'DEAL' | 'OTHER';
-    id: string; date: string; amount: number; currency: string; category: string;
+    /** null — суммы роли не видны (moneyHidden). */
+    id: string; date: string; amount: number | null; currency: string; category: string;
     payerName: string | null; comment: string | null; student: { id: string; fullName: string } | null;
     submissionId?: string | null;
   }>;
   ownApplications: MonthApplication[];
   enrolled: MonthApplication[];
   pendingPenalties: Array<{ id: string; date: string; reason: string; amount: number; details: string; applied: boolean }>;
+  moneyHidden?: boolean;
+  payHidden?: boolean;
 }
 export interface MonthApplication {
   id: string; fullName: string; phone: string; status: string; country: string | null;

@@ -16,6 +16,51 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { PresenceService } from '../realtime/presence.service';
 import { isElevated, isFounder, isTeacherOnly } from '../auth/role-utils';
+import { maskEmail, maskPhone } from '../common/redact';
+
+/** Что из чужого профиля видно (UsersService.profileAccess). */
+export type ProfileView = { pay: boolean; personal: boolean; money: boolean };
+
+/**
+ * Профиль с учётом видимости: без pay — оклад, ставки, история зарплат и
+ * штрафы не отдаются; без personal — телефон и email с маской, паспорт и
+ * документы не отдаются; без money — суммы продаж.
+ */
+export function redactProfile(profile: any, view: ProfileView) {
+  if (!view.pay) {
+    profile.salary = null;
+    profile.penalties = { list: [], pendingTotal: null, hidden: true };
+    if (profile.user) {
+      profile.user = { ...profile.user, baseSalary: null, hourlyRate: null, bonusPercent: null };
+    }
+    profile.payHidden = true;
+  }
+  if (!view.personal) {
+    if (profile.user) {
+      profile.user = {
+        ...profile.user,
+        phone: maskPhone(profile.user.phone),
+        email: maskEmail(profile.user.email),
+        passportNo: null,
+      };
+    }
+    profile.documents = [];
+    profile.personalHidden = true;
+  }
+  if (!view.money) {
+    // Суммы — null, число сделок остаётся (это не деньги).
+    if (profile.sales) {
+      profile.sales = {
+        ...profile.sales,
+        monthAmount: null, monthOther: {}, monthOtherIncome: null,
+        yearAmount: null, yearOther: {}, yearOtherIncome: null,
+      };
+    }
+    profile.dailyReports = (profile.dailyReports || []).map((r: any) => ({ ...r, salesAmount: null }));
+    profile.moneyHidden = true;
+  }
+  return profile;
+}
 import { tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
 import { SettingsService } from '../settings/settings.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
@@ -192,35 +237,54 @@ export class UsersService {
    * (и сам сотрудник — через /me/full).
    */
   async fullProfileFor(id: string, actor: { id: string; role?: string; roles?: string[]; hasCustomRole?: boolean; permissions?: string[] }) {
-    const access = await this.profileAccess(actor, id);
-    if (!access) throw new ForbiddenException('Нет доступа к данным этого сотрудника');
+    const view = await this.profileAccess(actor, id);
+    if (!view) throw new ForbiddenException('Нет доступа к данным этого сотрудника');
     const profile: any = await this.fullProfile(id);
-    if (access === 'noPay') profile.salary = null;
-    return profile;
+    return redactProfile(profile, view);
+  }
+
+  /** Плитки «Текущий месяц» чужого профиля — с той же видимостью, что сам профиль. */
+  async monthDetailsFor(id: string, view: ProfileView) {
+    const d: any = await this.monthDetails(id);
+    if (!view.money) {
+      d.sales = (d.sales || []).map((s: any) => ({ ...s, amount: null, amountTjs: null, originalAmount: null, moneyHidden: true }));
+      d.moneyHidden = true;
+    }
+    if (!view.pay) {
+      d.pendingPenalties = [];
+      d.payHidden = true;
+    }
+    return d;
   }
 
   /**
    * Кто и как видит чужой профиль (одно правило для /users/:id/full и
-   * /me/profile/:id):
-   *  - 'full'  — сам сотрудник, основатель, админ/бухгалтер по базовой роли,
-   *              и тот, кому основатель выдал доступ (DataAccessGrant);
-   *  - 'noPay' — кастомная роль с правами «Сотрудники — …»: карточка без
-   *              блока «Оплата»;
-   *  - null    — нет доступа.
+   * /me/profile/:id). null — нет доступа; иначе — что из профиля видно:
+   *  - всё — сам сотрудник, основатель, админ/бухгалтер по должности и тот,
+   *    кому основатель выдал доступ к этому профилю (DataAccessGrant);
+   *  - сотрудник с ролью — с «Сотрудники — просмотр», а оклад, бонус и
+   *    штрафы (pay), телефон, email, паспорт и документы (personal), суммы
+   *    продаж (money) — по пунктам «Видимость данных».
    */
   async profileAccess(
     actor: { id: string; role?: string; roles?: string[]; hasCustomRole?: boolean; permissions?: string[] },
     targetId: string,
-  ): Promise<'full' | 'noPay' | null> {
-    if (actor.id === targetId) return 'full';
+  ): Promise<ProfileView | null> {
+    const all: ProfileView = { pay: true, personal: true, money: true };
+    if (actor.id === targetId) return all;
     const level = UsersService.actorLevel(actor);
-    if (level !== 'custom') return 'full';
+    if (level !== 'custom') return all;
     const grant = await this.prisma.dataAccessGrant.findUnique({
       where: { grantedToId_targetUserId: { grantedToId: actor.id, targetUserId: targetId } },
     });
-    if (grant) return 'full';
-    if ((actor.permissions || []).some((p) => p.startsWith('users:'))) return 'noPay';
-    return null;
+    if (grant) return all;
+    const perms = actor.permissions || [];
+    if (!actor.hasCustomRole || !perms.includes('users:read')) return null;
+    return {
+      pay: perms.includes('visibility:staff-pay'),
+      personal: perms.includes('visibility:staff-personal'),
+      money: perms.includes('visibility:company-money'),
+    };
   }
 
   async fullProfile(id: string) {
@@ -614,6 +678,17 @@ export class UsersService {
         }
         if (dto.password && !isSelf) {
           throw new ForbiddenException('Пароль сотрудника меняют основатель, админ или бухгалтер');
+        }
+        // Телефон и паспорт коллеги — тому, кому они видны («Личные данные
+        // сотрудников»): иначе в форму пришла бы маска «+992 •• ••• •• 45»
+        // и легла бы в базу вместо номера.
+        const perms: string[] = (requester as any).permissions || [];
+        if (
+          !isSelf &&
+          !perms.includes('visibility:staff-personal') &&
+          (dto.phone !== undefined || dto.passportNo !== undefined)
+        ) {
+          throw new ForbiddenException('Телефон и паспорт меняет тот, кому видны личные данные сотрудников');
         }
       }
     }

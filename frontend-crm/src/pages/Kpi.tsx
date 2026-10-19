@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { canSeeData, hasActiveRole, hiddenAmount, roleCan } from '../lib/permissions';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { KpiRow, leaderboard } from '../api/kpi';
@@ -12,7 +13,9 @@ import FitNumber from '../components/FitNumber';
 import BonusProgress from '../components/BonusProgress';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
-function fmtMoney(n: number, c = 'TJS') {
+/** Сумма коллеги без «Деньги компании» приходит null — «•••• TJS». */
+function fmtMoney(n: number | null | undefined, c = 'TJS') {
+  if (n == null) return hiddenAmount(c);
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 
@@ -45,7 +48,10 @@ export default function Kpi() {
   const [detailsId, setDetailsId] = useState<string | null>(null);
   // Подробности: руководство открывает любого, сотрудник — только себя.
   // Это UX-слой; настоящая проверка — на сервере (KpiService.details).
-  const canOpenAll = isElevated(me);
+  // Чужие подробности: руководство; роль — «KPI других подробно».
+  const canOpenAll = roleCan(me, 'kpi:details', isElevated(me));
+  // Карточка лучшего по продажам — суммы компании: руководство; роль — «Деньги компании».
+  const showTop = hasActiveRole(me) ? canSeeData(me, 'visibility:company-money') : isElevated(me);
 
   const range = RANGE_KEYS[rangeIdx];
   // Границы — календарные дни Asia/Dushanbe (YYYY-MM-DD), как их ждёт
@@ -159,7 +165,7 @@ export default function Kpi() {
       )}
 
       {/* Top performer banner for ADMIN */}
-      {isElevated(me) && top && (
+      {showTop && top && (
         <motion.div
           className="card kpi-top-card"
           data-testid="kpi-top"

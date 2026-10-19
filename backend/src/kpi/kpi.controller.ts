@@ -5,6 +5,8 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { KpiService } from './kpi.service';
 import { parseDate } from '../common/query-date';
+import { Permissions } from '../auth/permissions.decorator';
+import { canSeeData } from '../common/redact';
 
 @Controller('kpi')
 @UseGuards(JwtAuthGuard)
@@ -23,11 +25,24 @@ export class KpiController {
    *
    * Без from/to оба значения undefined → KpiService считает за всё время.
    */
+  @Permissions('kpi:read')
   @Get('leaderboard')
-  leaderboard(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.svc.leaderboard({
+  async leaderboard(@CurrentUser() me: any, @Query('from') from?: string, @Query('to') to?: string) {
+    const rows = await this.svc.leaderboard({
       from: parseDate(from, 'from'),
       to: parseDate(to, 'to', true),
+    });
+    // Чужие суммы продаж — «Деньги компании», чужие ставки и бонусы —
+    // «Зарплаты и оклады»; свою строку сотрудник видит целиком.
+    const money = canSeeData(me, 'visibility:company-money');
+    const pay = canSeeData(me, 'visibility:staff-pay');
+    if (money && pay) return rows;
+    return rows.map((r: any) => {
+      if (r.id === me?.id) return r;
+      const out = { ...r };
+      if (!money) Object.assign(out, { salesAmount: null, otherIncome: null, nonTjsSales: {}, moneyHidden: true });
+      if (!pay) Object.assign(out, { bonusPercent: null, bonusProgress: undefined, payHidden: true });
+      return out;
     });
   }
 
@@ -43,19 +58,34 @@ export class KpiController {
    * сервис: правило зависит от того, КОГО открывают, а не только от роли.
    */
   @Get(':userId/details')
-  details(
+  async details(
     @Param('userId') userId: string,
     @CurrentUser() me: any,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.svc.details(userId, { from: parseDate(from, 'from'), to: parseDate(to, 'to', true) }, me);
+    const d: any = await this.svc.details(userId, { from: parseDate(from, 'from'), to: parseDate(to, 'to', true) }, me);
+    if (userId === me?.id) return d;
+    // Чужие подробности: суммы продаж — «Деньги компании», оплаты студентов — «Деньги клиентов».
+    const out = { ...d };
+    if (!canSeeData(me, 'visibility:company-money')) {
+      out.sales = (d.sales || []).map((s: any) => ({ ...s, amount: null, originalAmount: null }));
+      out.otherCurrencySales = (d.otherCurrencySales || []).map((s: any) => ({ ...s, amount: null, originalAmount: null }));
+      out.totals = { ...d.totals, salesAmount: null, otherIncome: null };
+      out.moneyHidden = true;
+    }
+    if (!canSeeData(me, 'visibility:client-money')) {
+      out.students = (d.students || []).map((s: any) => ({ ...s, paidTotal: null }));
+      out.clientMoneyHidden = true;
+    }
+    return out;
   }
 
   /** KPI любого сотрудника — только админ. */
   @Get(':userId')
   @UseGuards(RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('kpi:details')
   byUser(@Param('userId') userId: string) {
     return this.svc.forUser(userId);
   }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { roleCan } from '../lib/permissions';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -192,12 +193,12 @@ export default function AcademyStudentDetail() {
               <Icon name="key" size={16} /> {t('academy.student.newPassword')}
             </button>
           )}
-          {!s.academyOnly && !teacherOnly && (
+          {!s.academyOnly && roleCan(me, 'students:read', !teacherOnly) && (
             <Link className="btn btn-secondary" to={`/students/${s.id}`}>
               <Icon name="open_in_new" size={16} /> {t('academy.student.crmCard')}
             </Link>
           )}
-          {s.canManage && s.status !== 'EXPELLED' && (
+          {s.canDecide && s.status !== 'EXPELLED' && (
             <button className="btn btn-danger" onClick={() => setDecision('EXPEL')} data-testid="astudent-expel">
               <Icon name="person_remove" size={16} /> {t('academy.decision.expel')}
             </button>
@@ -211,9 +212,9 @@ export default function AcademyStudentDetail() {
           <Icon name="flag" size={24} />
           <div className="acad-decision-text">
             <b>{t('academy.pending.title').replace('{n}', String(s.flagsActive))}</b>
-            <span>{s.canManage ? t('academy.pending.hintManager') : t('academy.pending.hintTeacher')}</span>
+            <span>{s.canDecide ? t('academy.pending.hintManager') : t('academy.pending.hintTeacher')}</span>
           </div>
-          {s.canManage && (
+          {s.canDecide && (
             <div className="acad-decision-actions">
               <button className="btn btn-secondary" onClick={() => setDecision('KEEP')} data-testid="astudent-keep">
                 <Icon name="verified_user" size={16} /> {t('academy.decision.keep')}
@@ -236,7 +237,7 @@ export default function AcademyStudentDetail() {
               {s.expelled.by ? ` · ${s.expelled.by.fullName}` : ''}
             </span>
           </div>
-          {s.canManage && (
+          {s.canDecide && (
             <button className="btn btn-primary" onClick={() => setReinstating(true)} data-testid="astudent-reinstate">
               <Icon name="undo" size={16} /> {t('academy.expelled.reinstate')}
             </button>
@@ -316,7 +317,7 @@ export default function AcademyStudentDetail() {
                       ` · ${t('academy.flags.removedAt').replace('{date}', tjFormatDate(f.removedAt))}${f.removedBy ? ` (${f.removedBy.fullName})` : ''}${f.removeReason ? `: ${f.removeReason}` : ''}`}
                   </div>
                 </div>
-                {s.canManage && !f.removedAt && (
+                {s.canRemoveFlags && !f.removedAt && (
                   <button className="btn btn-sm btn-secondary" onClick={() => onRemoveFlag(f)} disabled={removeFlagMut.isPending} data-testid={`flag-remove-${f.id}`}>
                     {t('academy.flags.remove')}
                   </button>

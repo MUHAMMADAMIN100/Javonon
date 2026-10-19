@@ -7,6 +7,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { InstagramService } from './instagram.service';
 import { InstagramSignatureGuard } from '../../common/meta-signature.guard';
+import { Permissions } from '../../auth/permissions.decorator';
 
 @Controller('integrations/instagram')
 export class InstagramController {
@@ -34,6 +35,7 @@ export class InstagramController {
   @Post('send')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  @Permissions('inbox:instagram')
   send(@Body() body: { igUserId: string; message: string; applicationId?: string; studentId?: string }) {
     return this.ig.sendDM(body.igUserId, body.message, {
       applicationId: body.applicationId, studentId: body.studentId,

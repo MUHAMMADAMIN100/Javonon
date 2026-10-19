@@ -6,7 +6,7 @@ import { CreateProgramDto } from './dto/create-program.dto';
 import { UpdateProgramDto } from './dto/update-program.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { TelegramService } from '../telegram/telegram.service';
-import { isElevated } from '../auth/role-utils';
+import { isElevated, isFounder, roleAllows } from '../auth/role-utils';
 
 type CurrentUser = { id: string; role: Role; roles?: Role[] };
 
@@ -90,7 +90,7 @@ export class ProgramsService {
     deadline?: string;
     link?: string;
   }) {
-    if (!isElevated(user as any)) {
+    if (!roleAllows(user as any, 'programs:scholarships', () => isElevated(user as any))) {
       throw new ForbiddenException('Только администратор может добавлять стипендии');
     }
     if (!dto.name?.trim()) {
@@ -119,7 +119,7 @@ export class ProgramsService {
     deadline?: string;
     link?: string;
   }) {
-    if (!isElevated(user as any)) {
+    if (!roleAllows(user as any, 'programs:scholarships', () => isElevated(user as any))) {
       throw new ForbiddenException('Только администратор может править стипендии');
     }
     return this.prisma.programScholarship.update({
@@ -137,7 +137,7 @@ export class ProgramsService {
   }
 
   async removeScholarship(id: string, user: CurrentUser) {
-    if (!isElevated(user as any)) {
+    if (!roleAllows(user as any, 'programs:scholarships', () => isElevated(user as any))) {
       throw new ForbiddenException('Только администратор может удалять стипендии');
     }
     await this.prisma.programScholarship.delete({ where: { id } });
@@ -154,7 +154,7 @@ export class ProgramsService {
   }
 
   async addDocument(programId: string, user: CurrentUser, data: { name: string; url: string; size?: number }) {
-    if (!isElevated(user as any)) throw new ForbiddenException('Только администратор');
+    if (!roleAllows(user as any, 'programs:documents', () => isElevated(user as any))) throw new ForbiddenException('Только администратор');
     if (!data.name?.trim()) throw new BadRequestException('Укажите название документа');
     if (!data.url?.trim()) throw new BadRequestException('Не указан URL документа');
     return this.prisma.programDocument.create({
@@ -169,7 +169,7 @@ export class ProgramsService {
   }
 
   async removeDocument(id: string, user: CurrentUser) {
-    if (!isElevated(user as any)) throw new ForbiddenException('Только администратор');
+    if (!roleAllows(user as any, 'programs:documents', () => isElevated(user as any))) throw new ForbiddenException('Только администратор');
     await this.prisma.programDocument.delete({ where: { id } });
     return { ok: true };
   }
@@ -202,8 +202,9 @@ export class ProgramsService {
   async removeComment(id: string, user: CurrentUser) {
     const c = await this.prisma.programComment.findUnique({ where: { id } });
     if (!c) throw new NotFoundException('Комментарий не найден');
-    // Удалять может автор ИЛИ FOUNDER/ADMIN.
-    if (c.authorId !== user.id && !isElevated(user as any)) {
+    // Удалять может автор ИЛИ FOUNDER/ADMIN; сотрудник с ролью — только свои.
+    const anyComment = isFounder(user as any) || (!(user as any).hasCustomRole && isElevated(user as any));
+    if (c.authorId !== user.id && !anyComment) {
       throw new ForbiddenException('Можно удалить только свой комментарий');
     }
     await this.prisma.programComment.delete({ where: { id } });
@@ -211,7 +212,7 @@ export class ProgramsService {
   }
 
   async create(dto: CreateProgramDto, user: CurrentUser) {
-    if (!isElevated(user as any)) {
+    if (!roleAllows(user as any, 'programs:create', () => isElevated(user as any))) {
       throw new ForbiddenException('Только администратор может создавать программы');
     }
     const program = await this.prisma.program.create({
@@ -256,7 +257,7 @@ export class ProgramsService {
   }
 
   async update(id: string, dto: UpdateProgramDto, user: CurrentUser) {
-    if (!isElevated(user as any)) {
+    if (!roleAllows(user as any, 'programs:update', () => isElevated(user as any))) {
       throw new ForbiddenException('Только администратор может редактировать программы');
     }
     const existing = await this.findOne(id);
@@ -291,7 +292,7 @@ export class ProgramsService {
   }
 
   async remove(id: string, user: CurrentUser) {
-    if (!isElevated(user as any)) {
+    if (!roleAllows(user as any, 'programs:delete', () => isElevated(user as any))) {
       throw new ForbiddenException('Только администратор может удалять программы');
     }
     const existing = await this.findOne(id);

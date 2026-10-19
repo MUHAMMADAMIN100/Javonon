@@ -12,7 +12,7 @@ import ActiveFilterChips from '../components/ActiveFilterChips';
 import { useAuth } from '../store/auth';
 import { useT } from '../lib/i18n';
 import { keys } from '../lib/queryKeys';
-import { isAcademyManager } from '../lib/permissions';
+import { isAcademyManager, roleCan } from '../lib/permissions';
 import { isTeacherOnly } from '../lib/roles';
 import { enumParam, pageParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { listAcademyStudents, listLevels, type AcademyStatus } from '../api/academy';
@@ -38,7 +38,8 @@ export default function AcademyStudents() {
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
   const manager = isAcademyManager(me as any);
-  const canCreate = manager || isTeacherOnly(me as any);
+  // Роль — «Ученики академии — создание»; должность — руководство и учитель.
+  const canCreate = roleCan(me, 'academy:students-create', manager || isTeacherOnly(me as any));
   const [creating, setCreating] = useState(false);
 
   const { values, setValue, reset } = useUrlListState(

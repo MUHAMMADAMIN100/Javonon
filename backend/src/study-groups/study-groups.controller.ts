@@ -24,6 +24,7 @@ import {
   UpdateClassSessionDto,
   UpdateStudyGroupDto,
 } from './dto/study-groups.dto';
+import { Permissions } from '../auth/permissions.decorator';
 
 /**
  * CRM: группы и календарь занятий.
@@ -54,6 +55,7 @@ export class StudyGroupsController {
   // иначе Nest разберёт 'sessions' как id группы.
 
   /** Лента занятий для календаря. Границы — `YYYY-MM-DD`, сутки душанбинские. */
+  @Permissions('groups:read', 'academy:all')
   @Get('sessions')
   listSessions(
     @CurrentUser() me: any,
@@ -65,6 +67,7 @@ export class StudyGroupsController {
     return this.svc.listSessions(me, { from, to, groupId, teacherId });
   }
 
+  @Permissions('groups:write')
   @Patch('sessions/:sessionId')
   updateSession(
     @CurrentUser() me: any,
@@ -74,11 +77,13 @@ export class StudyGroupsController {
     return this.svc.updateSession(me, sessionId, body);
   }
 
+  @Permissions('groups:write')
   @Delete('sessions/:sessionId')
   removeSession(@CurrentUser() me: any, @Param('sessionId') sessionId: string) {
     return this.svc.removeSession(me, sessionId);
   }
 
+  @Permissions('groups:read', 'academy:all')
   @Get()
   list(
     @CurrentUser() me: any,
@@ -98,32 +103,38 @@ export class StudyGroupsController {
     });
   }
 
+  @Permissions('academy:groups-create')
   @Post()
   create(@CurrentUser() me: any, @Body() body: CreateStudyGroupDto) {
     return this.svc.createGroup(me, body);
   }
 
+  @Permissions('groups:read', 'academy:all')
   @Get(':id')
   one(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.getGroup(me, id);
   }
 
+  @Permissions('academy:groups-update')
   @Patch(':id')
   update(@CurrentUser() me: any, @Param('id') id: string, @Body() body: UpdateStudyGroupDto) {
     return this.svc.updateGroup(me, id, body);
   }
 
   /** Что будет при удалении: занятия, материалы, ученики; можно ли удалять. */
+  @Permissions('academy:groups-delete')
   @Get(':id/removal')
   removal(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.removalPreview(me, id);
   }
 
+  @Permissions('academy:groups-delete')
   @Delete(':id')
   remove(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.removeGroup(me, id);
   }
 
+  @Permissions('academy:members-add')
   @Post(':id/members')
   addMembers(
     @CurrentUser() me: any,
@@ -133,6 +144,7 @@ export class StudyGroupsController {
     return this.svc.addMembers(me, id, body);
   }
 
+  @Permissions('academy:members-remove')
   @Delete(':id/members/:studentId')
   removeMember(
     @CurrentUser() me: any,
@@ -142,6 +154,7 @@ export class StudyGroupsController {
     return this.svc.removeMember(me, id, studentId);
   }
 
+  @Permissions('groups:write')
   @Post(':id/sessions')
   createSession(
     @CurrentUser() me: any,
@@ -152,6 +165,7 @@ export class StudyGroupsController {
   }
 
   /** Занятия по шаблону (дни недели + время + «с … по …»); dryRun — только посчитать. */
+  @Permissions('groups:write')
   @Post(':id/sessions/bulk')
   bulkSessions(
     @CurrentUser() me: any,

@@ -8,6 +8,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { WhatsappService } from './whatsapp.service';
 import { WhatsappSignatureGuard } from '../../common/meta-signature.guard';
+import { Permissions } from '../../auth/permissions.decorator';
 
 @Controller('integrations/whatsapp')
 export class WhatsappController {
@@ -39,6 +40,7 @@ export class WhatsappController {
   @Post('send')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+  @Permissions('inbox:whatsapp')
   send(
     @Body() body: { to: string; message: string; applicationId?: string; studentId?: string },
   ) {

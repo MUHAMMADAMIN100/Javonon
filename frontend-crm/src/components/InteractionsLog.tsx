@@ -1,6 +1,7 @@
 import { fmtDateText, TJ_TZ } from '../lib/tjTime';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
+import { roleCan } from '../lib/permissions';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -44,6 +45,10 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
   const { t } = useT();
   const me = useAuth((st) => st.user);
   const elevated = isElevated(me);
+  // Роль: добавлять — «История контактов — добавление», удалять — только свои
+  // записи с «… — удаление» (сервер то же: interactions.service).
+  const canAdd = canEdit && roleCan(me, 'interactions:create');
+  const canRemove = canEdit && roleCan(me, 'interactions:delete');
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   // По ТЗ §8 «вся связанная информация» — переключатель показывает либо
@@ -159,7 +164,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
       {showFullTimeline ? '◉ ' : '○ '}{t('interactions.fullTimeline')}
     </button>
   );
-  const addButton = canEdit && !showForm && (
+  const addButton = canAdd && !showForm && (
     <button className="btn btn-sm btn-primary" onClick={() => setShowForm(true)} data-testid="interaction-add">
       <Icon name="add" size={14} /> {t('common.add')}
     </button>
@@ -194,7 +199,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
       </div>
 
       <AnimatePresence>
-        {showForm && canEdit && (
+        {showForm && canAdd && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -287,7 +292,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
               )}
             </div>
             {/* Удалять — автору или руководству (так же проверяет сервер). */}
-            {canEdit && isInteraction && (elevated || (it as any).authorId === me?.id || it.author?.id === me?.id) && (
+            {canRemove && isInteraction && (elevated || (it as any).authorId === me?.id || it.author?.id === me?.id) && (
               <button className="btn btn-sm btn-danger" data-testid="interaction-delete" onClick={() => onDelete(it)} style={{ alignSelf: 'flex-start' }}>
                 <Icon name="delete" size={14} />
               </button>

@@ -10,12 +10,16 @@ import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
+import { useAuth } from '../store/auth';
+import { roleCan } from '../lib/permissions';
 
 function fmtDate(iso: string) {
   return fmtDateText(iso, { day: '2-digit', month: 'short', weekday: 'short', timeZone: TJ_TZ });
 }
 
 export default function Reports() {
+  // Свой отчёт за день: роль — «Ежедневные отчёты — свой отчёт за день».
+  const canWrite = roleCan(useAuth((s) => s.user), 'reports:create');
   const { toast } = useUI();
   const { t } = useT();
   const [formOpen, setFormOpen] = useState(false);
@@ -107,10 +111,12 @@ export default function Reports() {
           занимает верх экрана постоянно. Подпись кнопки говорит, отчёт за
           сегодня уже сдан или ещё нет. */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <button className="btn btn-primary" data-testid="report-new" onClick={() => setFormOpen(true)}>
-          <Icon name={today ? 'edit' : 'add'} size={16} />
-          {today ? t('reports.editToday') : t('reports.new')}
-        </button>
+        {canWrite && (
+          <button className="btn btn-primary" data-testid="report-new" onClick={() => setFormOpen(true)}>
+            <Icon name={today ? 'edit' : 'add'} size={16} />
+            {today ? t('reports.editToday') : t('reports.new')}
+          </button>
+        )}
       </div>
 
       <FormModal

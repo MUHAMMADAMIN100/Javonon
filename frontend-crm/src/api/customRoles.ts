@@ -1,9 +1,20 @@
 import { api } from './client';
 
+/** Место пункта в таблице редактора (backend auth/permissions.ts). */
+export type PermissionKind = 'read' | 'create' | 'update' | 'delete' | 'extra';
+
 export interface PermissionDef {
   key: string;
+  /** Полная подпись по-русски: «Лиды — удаление и возврат из корзины». */
   label: string;
+  /** Группа редактора: CRM, Связь, …, Данные (видимость данных). */
   group: string;
+  /** Раздел — строка таблицы. */
+  section: string;
+  sectionLabel: string;
+  kind: PermissionKind;
+  /** Подпись особого действия или уточнение столбца. */
+  short?: string;
 }
 
 /** Должности, к которым можно привязать роль (backend auth/position-role.ts). */

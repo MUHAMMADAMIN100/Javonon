@@ -4,10 +4,12 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { SalaryService } from './salary.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { Permissions } from '../auth/permissions.decorator';
 
 @Controller('salary')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'ACCOUNTANT')
+@Permissions('salary:read')
 export class SalaryController {
   constructor(private svc: SalaryService) {}
 
@@ -29,12 +31,8 @@ export class SalaryController {
     @Query('periodEnd') periodEnd: string,
     @Query('kpiBonus') kpiBonus?: string,
   ) {
-    return this.svc.preview(
-      userId,
-      tjParseLocalDate(periodStart),
-      tjParseLocalDateEnd(periodEnd),
-      kpiBonus ? parseFloat(kpiBonus) : 0,
-    );
+    const [from, to] = parsePeriod(periodStart, periodEnd);
+    return this.svc.preview(userId, from, to, kpiBonus ? parseFloat(kpiBonus) : 0);
   }
 
   /** Таблица зарплат: все работающие сотрудники за период. */
@@ -43,14 +41,18 @@ export class SalaryController {
     @Query('periodStart') periodStart: string,
     @Query('periodEnd') periodEnd: string,
   ) {
-    return this.svc.previewAll(tjParseLocalDate(periodStart), tjParseLocalDateEnd(periodEnd));
+    // Без периода раньше падало 500 (Invalid Date) — теперь 400.
+    const [from, to] = parsePeriod(periodStart, periodEnd);
+    return this.svc.previewAll(from, to);
   }
 
+  @Permissions('salary:calculate')
   @Post()
   create(@Body() dto: { userId: string; periodStart: string; periodEnd: string; kpiBonus?: number; comment?: string }) {
     return this.svc.create(dto);
   }
 
+  @Permissions('salary:pay')
   @Post(':id/pay')
   markPaid(@Param('id') id: string) {
     return this.svc.markPaid(id);
@@ -64,6 +66,7 @@ export class SalaryController {
   }
 
   /** Пересчитать все невыплаченные записи периода по текущим данным. */
+  @Permissions('salary:recalculate')
   @Post('recalculate-all')
   recalculateAll(@Body() body: { periodStart: string; periodEnd: string }) {
     const [from, to] = parsePeriod(body?.periodStart, body?.periodEnd);
@@ -75,11 +78,13 @@ export class SalaryController {
     return this.svc.recalculatePreview(id);
   }
 
+  @Permissions('salary:recalculate')
   @Post(':id/recalculate')
   recalculate(@Param('id') id: string) {
     return this.svc.recalculate(id);
   }
 
+  @Permissions('salary:delete')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.svc.remove(id);

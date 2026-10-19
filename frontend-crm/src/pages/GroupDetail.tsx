@@ -193,7 +193,7 @@ export default function GroupDetail() {
         <div className="card acad-card-pad">
           {/* Статус меняют и снаружи («В архив» из окна удаления, «Завершить
               курс») — форма начинается заново с тем, что на сервере. */}
-          <GroupSettings key={g.status} group={g} onSaved={invalidate} />
+          <GroupSettings key={g.status} group={g} canEdit={g.access.edit} canRemove={g.access.remove} onSaved={invalidate} />
         </div>
       )}
 
@@ -218,7 +218,14 @@ export default function GroupDetail() {
  * Правка группы — название, программа, учитель, статус, описание; удаление
  * тем же окном, что в списке групп (useGroupRemoval).
  */
-function GroupSettings({ group, onSaved }: { group: StudyGroupDetail; onSaved: () => void }) {
+function GroupSettings({ group, canEdit, canRemove, onSaved }: {
+  group: StudyGroupDetail;
+  /** «Группы академии — изменение»: форма с «Сохранить». */
+  canEdit: boolean;
+  /** «Группы академии — удаление»: блок удаления. */
+  canRemove: boolean;
+  onSaved: () => void;
+}) {
   const { t } = useT();
   const { toast } = useUI();
   const navigate = useNavigate();
@@ -241,6 +248,8 @@ function GroupSettings({ group, onSaved }: { group: StudyGroupDetail; onSaved: (
 
   return (
     <div data-testid="group-settings">
+      {canEdit && (
+      <>
       <GroupFields value={value} onChange={setValue} testIdPrefix="gs" />
       <div className="form-actions" style={{ marginTop: 8 }}>
         <button
@@ -252,7 +261,10 @@ function GroupSettings({ group, onSaved }: { group: StudyGroupDetail; onSaved: (
           {mut.isPending ? t('common.saving') : t('common.save')}
         </button>
       </div>
+      </>
+      )}
 
+      {canRemove && (
       <div className="acad-danger-zone">
         <div>
           <b>{t('groups.deleteGroup')}</b>
@@ -267,6 +279,7 @@ function GroupSettings({ group, onSaved }: { group: StudyGroupDetail; onSaved: (
           <Icon name="delete" size={15} /> {t('groups.deleteGroup')}
         </button>
       </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
+import { roleCan } from '../lib/permissions';
+import RolePermissionMatrix from '../components/RolePermissionMatrix';
 import { useUI } from '../ui/Dialogs';
 import {
   type PenaltyRule,
@@ -45,9 +47,23 @@ type Tab = 'schedule' | 'penalties' | 'location' | 'roles' | 'salary' | 'revenue
 export default function Settings() {
   const me = useAuth((s) => s.user);
   const { t } = useT();
-  const [tab, setTab] = useState<Tab>('schedule');
+  // Основатель — все вкладки; сотрудник с ролью — те, что отмечены в роли
+  // («Настройки — …»). «Роли и доступы» и «Зарплата» (оклады) — только
+  // основатель: иначе сотрудник выдал бы себе всё.
+  const founder = isFounder(me);
+  const tabs: Array<{ key: Tab; label: string; allowed: boolean }> = [
+    { key: 'schedule', label: t('settings.tab.schedule'), allowed: roleCan(me, 'settings:schedule', founder) },
+    { key: 'penalties', label: t('settings.tab.penalties'), allowed: roleCan(me, 'settings:penalty-rules', founder) },
+    { key: 'location', label: t('settings.tab.location'), allowed: roleCan(me, 'settings:locations', founder) },
+    { key: 'roles', label: t('settings.tab.roles'), allowed: founder },
+    { key: 'salary', label: t('settings.tab.salary'), allowed: founder },
+    { key: 'revenueScheme', label: t('settings.tabs.revenueScheme'), allowed: roleCan(me, 'settings:revenue', founder) },
+  ];
+  const allowedTabs = tabs.filter((x) => x.allowed);
+  const [picked, setTab] = useState<Tab>('schedule');
+  const tab: Tab | undefined = allowedTabs.some((x) => x.key === picked) ? picked : allowedTabs[0]?.key;
 
-  if (!isFounder(me)) {
+  if (!tab) {
     return (
       <div className="card" style={{ padding: 28 }}>
         {t('settings.foundersOnly')}
@@ -67,12 +83,9 @@ export default function Settings() {
             padding: '8px 8px 0',
           }}
         >
-          <TabButton active={tab === 'schedule'} onClick={() => setTab('schedule')} label={t('settings.tab.schedule')} />
-          <TabButton active={tab === 'penalties'} onClick={() => setTab('penalties')} label={t('settings.tab.penalties')} />
-          <TabButton active={tab === 'location'} onClick={() => setTab('location')} label={t('settings.tab.location')} />
-          <TabButton active={tab === 'roles'} onClick={() => setTab('roles')} label={t('settings.tab.roles')} />
-          <TabButton active={tab === 'salary'} onClick={() => setTab('salary')} label={t('settings.tab.salary')} />
-          <TabButton active={tab === 'revenueScheme'} onClick={() => setTab('revenueScheme')} label={t('settings.tabs.revenueScheme')} />
+          {allowedTabs.map((x) => (
+            <TabButton key={x.key} active={tab === x.key} onClick={() => setTab(x.key)} label={x.label} testId={`settings-tab-${x.key}`} />
+          ))}
         </div>
         {/* На телефоне отступ 14 px, как у .card-body на остальных страницах (index.css, .settings-body). */}
         <div className="settings-body" style={{ padding: 24 }}>
@@ -88,10 +101,11 @@ export default function Settings() {
   );
 }
 
-function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function TabButton({ active, onClick, label, testId }: { active: boolean; onClick: () => void; label: string; testId?: string }) {
   return (
     <button
       onClick={onClick}
+      data-testid={testId}
       style={{
         padding: '10px 18px',
         background: active ? 'var(--bg-soft)' : 'transparent',
@@ -302,25 +316,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ===== Roles & Permissions (кастомные роли) =====
 
-/**
- * Порядок отображения групп в редакторе кастомных ролей (Task 4).
- * Порядок групп зафиксирован здесь на фронте, чтобы UI не «дёргался»,
- * если в backend PERMISSION_CATALOG кто-то поменяет местами записи.
- * Ключи должны совпадать с `PermissionDef.group` из бэкенда
- * (backend/src/auth/permissions.ts). «Система» = раздел «Настройки».
- */
-const PERMISSION_GROUP_ORDER: string[] = [
-  'CRM',
-  'Связь',
-  'Продажи',
-  'Финансы',
-  'Аналитика',
-  'HR',
-  'Обучение',
-  'Партнёры',
-  'Система',
-];
-
 function RolesTab() {
   const { toast, confirm } = useUI();
   const { t } = useT();
@@ -336,6 +331,10 @@ function RolesTab() {
   });
   const catalog = catalogQuery.data ?? [];
   const roles = rolesQuery.data ?? [];
+  // Пункты роли, которые есть в каталоге (старые ключи сервер не учитывает).
+  const catalogKeys = useMemo(() => new Set(catalog.map((p) => p.key)), [catalog]);
+  const validCount = (r: CustomRole) =>
+    catalogKeys.size ? r.permissions.filter((k) => catalogKeys.has(k)).length : r.permissions.length;
 
   const [editing, setEditing] = useState<CustomRole | null>(null);
   const [creating, setCreating] = useState(false);
@@ -420,7 +419,7 @@ function RolesTab() {
           }}
         />
       ) : (
-        <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)} style={{ marginBottom: 16 }}>
+        <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)} style={{ marginBottom: 16 }} data-testid="role-new">
           {t('settings.roles.new')}
         </button>
       )}
@@ -447,8 +446,10 @@ function RolesTab() {
                 {r.description && (
                   <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 2 }}>{r.description}</div>
                 )}
-                <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
-                  {r.permissions.length} · {r._count?.users ?? 0}
+                <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }} data-testid="role-count">
+                  {t('settings.roles.count')
+                    .replace('{p}', String(validCount(r)))
+                    .replace('{u}', String(r._count?.users ?? 0))}
                 </div>
                 {r.baseRole && (
                   <div className="role-position-note" data-testid="role-position-note">
@@ -462,7 +463,7 @@ function RolesTab() {
                 <button className="btn btn-sm btn-secondary" onClick={() => onToggle(r)}>
                   {r.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
                 </button>
-                <button className="btn btn-sm btn-secondary" onClick={() => setEditing(r)}>
+                <button className="btn btn-sm btn-secondary" onClick={() => setEditing(r)} data-testid="role-edit">
                   {t('common.edit')}
                 </button>
                 <button className="btn btn-sm btn-danger" onClick={() => onDelete(r)}>
@@ -490,53 +491,24 @@ function RoleForm({
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [perms, setPerms] = useState<Set<string>>(new Set(initial?.permissions ?? []));
+  // Сохраняем только пункты каталога: устаревшие ключи сервер всё равно отбросит.
+  const ready = catalog.length > 0;
+  const catalogKeys = useMemo(() => new Set(catalog.map((p) => p.key)), [catalog]);
   // Должность, на всех сотрудников которой роль действует сама ('' — ни на какую).
   const [baseRole, setBaseRole] = useState<PositionRole | ''>(initial?.baseRole ?? '');
   const [saving, setSaving] = useState(false);
 
-  /**
-   * Группируем permissions по секции сайдбара + сортируем группы по
-   * PERMISSION_GROUP_ORDER — чтобы порядок групп в UI («CRM → Связь →
-   * Финансы → Аналитика → HR → Обучение → Партнёры → Настройки»)
-   * не зависел от порядка записей в backend PERMISSION_CATALOG.
-   * Внутри группы сохраняем порядок, полученный от бэка (там уже
-   * логически: read → create → update → delete → доп. actions).
-   */
-  const grouped = useMemo(() => {
-    const map = new Map<string, PermissionDef[]>();
-    for (const p of catalog) {
-      if (!map.has(p.group)) map.set(p.group, []);
-      map.get(p.group)!.push(p);
-    }
-    const entries = Array.from(map.entries());
-    entries.sort(([a], [b]) => {
-      const ia = PERMISSION_GROUP_ORDER.indexOf(a);
-      const ib = PERMISSION_GROUP_ORDER.indexOf(b);
-      // Неизвестные группы (если backend добавит новую раньше фронта)
-      // уводим в конец, но сохраняем стабильный алфавитный порядок.
-      if (ia === -1 && ib === -1) return a.localeCompare(b);
-      if (ia === -1) return 1;
-      if (ib === -1) return -1;
-      return ia - ib;
-    });
-    return entries;
-  }, [catalog]);
-
-  const toggle = (key: string) => {
-    const next = new Set(perms);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    setPerms(next);
-  };
-
   const save = async () => {
     if (!name.trim()) return toast(t('toast.error'), 'error');
+    if (!ready) return;
+    const permissions = Array.from(perms).filter((k) => catalogKeys.has(k));
     setSaving(true);
     try {
       if (initial) {
         await updateCustomRole(initial.id, {
           name: name.trim(),
           description: description.trim() || undefined,
-          permissions: Array.from(perms),
+          permissions,
           baseRole: baseRole || null,
         });
         toast(t('toast.updated'), 'success');
@@ -544,7 +516,7 @@ function RoleForm({
         await createCustomRole({
           name: name.trim(),
           description: description.trim() || undefined,
-          permissions: Array.from(perms),
+          permissions,
           baseRole: baseRole || null,
         });
         toast(t('toast.created'), 'success');
@@ -567,7 +539,7 @@ function RoleForm({
     }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
         <Field label={t('settings.roles.name')}>
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} />
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} data-testid="role-name" />
         </Field>
         <Field label={t('settings.roles.description')}>
           <input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
@@ -595,44 +567,17 @@ function RoleForm({
       )}
 
       <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600 }}>
-        {t('settings.roles.permissions')} ({perms.size})
+        {t('settings.roles.permissions')}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-        {grouped.map(([group, items]) => (
-          <div key={group} style={{
-            border: '1px solid var(--border)', borderRadius: 10,
-            padding: '10px 12px', background: 'var(--bg)',
-          }}>
-            <div style={{
-              fontSize: 11,
-              fontFamily: 'var(--font-mono)',
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              color: 'var(--text-soft)',
-              marginBottom: 8,
-            }}>{t(`perm.group.${group}`) !== `perm.group.${group}` ? t(`perm.group.${group}`) : group}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {items.map((p) => (
-                <label key={p.key} style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  fontSize: 13, cursor: 'pointer',
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={perms.has(p.key)}
-                    onChange={() => toggle(p.key)}
-                  />
-                  <span>{t(`perm.${p.key}`) !== `perm.${p.key}` ? t(`perm.${p.key}`) : p.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      {ready ? (
+        <RolePermissionMatrix catalog={catalog} value={perms} onChange={setPerms} />
+      ) : (
+        <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('common.loading')}</div>
+      )}
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+      <div className="role-form-actions">
         <button className="btn btn-sm btn-secondary" onClick={onCancel} disabled={saving}>{t('common.cancel')}</button>
-        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
+        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving || !ready} data-testid="role-save">
           {saving ? t('common.saving') : (initial ? t('common.save') : t('common.create'))}
         </button>
       </div>

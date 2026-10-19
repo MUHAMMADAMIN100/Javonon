@@ -4,10 +4,12 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { InboxService } from './inbox.service';
+import { Permissions } from '../../auth/permissions.decorator';
 
 @Controller('integrations/inbox')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+@Permissions('inbox:read')
 export class InboxController {
   constructor(private svc: InboxService) {}
 

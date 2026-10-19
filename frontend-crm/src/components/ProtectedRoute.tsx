@@ -1,30 +1,31 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../store/auth';
-import { hasRole, isTeacherOnly } from '../lib/roles';
-import { hasPermission } from '../lib/permissions';
-import type { Role } from '../api/types';
+import { isTeacherOnly } from '../lib/roles';
+import { buildNavCtx, NAV_GROUPS, type NavCtx } from './navGroups';
 
-// Карта роут → разрешённые роли + опциональные permissions. FOUNDER неявно
-// имеет доступ ко всему. Если route есть в карте и у юзера нет ни роли,
-// ни permission (OR) — редиректим на /dashboard. Backend всё равно
-// перепроверяет, это UX-слой.
-const ROUTE_ROLES: Array<{ prefix: string; roles: Role[]; perms?: string[] }> = [
-  { prefix: '/finance',     roles: ['ADMIN', 'ACCOUNTANT'], perms: ['finance:read', 'finance:write'] },
-  { prefix: '/salary',      roles: ['ADMIN', 'ACCOUNTANT'], perms: ['salary:read', 'salary:write'] },
-  { prefix: '/users',       roles: ['ADMIN', 'ACCOUNTANT'], perms: ['users:read', 'users:write'] },
-  // Журнал действий — только основатель (сервер тоже).
-  { prefix: '/activity',    roles: ['FOUNDER'] },
-  { prefix: '/lms',         roles: ['ADMIN', 'ACCOUNTANT'], perms: ['lms:read', 'lms:write'] },
-  { prefix: '/partners',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['partners:read'] },
-  { prefix: '/settings',    roles: ['FOUNDER'] },
-  { prefix: '/pipelines',   roles: ['ADMIN', 'ACCOUNTANT'], perms: ['pipelines:write'] },
-  // Оба ключа рассылок: канонический massmail:write и legacy mass-mail:write
-  // — hasPermission вариадичен и ORит их (см. PERMISSION_CATALOG на бэке).
-  { prefix: '/massmail',    roles: ['ADMIN', 'ACCOUNTANT'], perms: ['massmail:write', 'mass-mail:write'] },
-  { prefix: '/offers',      roles: ['ADMIN', 'ACCOUNTANT'] },
-  { prefix: '/excuses',     roles: ['FOUNDER'] },
-  { prefix: '/attendance',  roles: ['FOUNDER'] },
+/**
+ * Раздел открывается по прямой ссылке ровно тем, кому его показывает меню
+ * (navGroups: роль — галочками, должность — как раньше). Раньше здесь была
+ * своя карта «роут → должности», и сотрудник с ролью проходил по должности
+ * в разделы, которых у него в меню нет. Backend всё равно перепроверяет —
+ * это слой интерфейса.
+ *
+ * Исключения — карточки, которые открываются не только из своего раздела:
+ *  - /applications/:id — и лид, и заявка: хватит «Лиды — просмотр»;
+ *  - /profile/:id — профиль коллеги (доступ решает сервер);
+ *  - /time, /attendance, /excuses — старые адреса вкладок «Рабочего дня».
+ */
+const DETAIL_RULES: Array<{ prefix: string; visible: (c: NavCtx) => boolean }> = [
+  { prefix: '/applications/', visible: (c) => c.show(['applications:read', 'leads:read'], c.isWorkforce) },
+  { prefix: '/students/new', visible: (c) => c.show('students:create', c.isWorkforce) },
+  { prefix: '/submissions/new', visible: (c) => !c.isTeacherOnly && c.show('submissions:create', true) },
+  { prefix: '/profile', visible: () => true },
+  { prefix: '/time', visible: (c) => !c.isTeacherOnly },
+  { prefix: '/attendance', visible: (c) => c.isFounder || (c.hasCustomRole && c.can('attendance:read')) },
+  { prefix: '/excuses', visible: (c) => c.isFounder || (c.hasCustomRole && c.can('excuses:read', 'excuses:approve')) },
 ];
+
+const NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items).sort((a, b) => b.to.length - a.to.length);
 
 /**
  * Учителю академии (isTeacherOnly) открыты только эти разделы — тот же
@@ -33,6 +34,9 @@ const ROUTE_ROLES: Array<{ prefix: string; roles: Role[]; perms?: string[] }> = 
  */
 const TEACHER_PREFIXES = ['/groups', '/academy', '/schedule', '/me'];
 export const TEACHER_HOME = '/groups';
+
+const under = (pathname: string, prefix: string) =>
+  prefix.endsWith('/') ? pathname.startsWith(prefix) : pathname === prefix || pathname.startsWith(prefix + '/');
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const user = useAuth((s) => s.user);
@@ -44,14 +48,12 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     return allowed ? <>{children}</> : <Navigate to={TEACHER_HOME} replace />;
   }
 
-  const match = ROUTE_ROLES.find((r) => location.pathname.startsWith(r.prefix));
-  if (!match) return <>{children}</>;
+  const path = location.pathname;
+  const ctx = buildNavCtx(user);
+  const detail = DETAIL_RULES.find((r) => under(path, r.prefix));
+  if (detail) return detail.visible(ctx) ? <>{children}</> : <Navigate to="/dashboard" replace />;
 
-  // FOUNDER пропускаем неявно — повторим тут (на случай если в match.roles
-  // его забыли).
-  if (hasRole(user, 'FOUNDER', ...match.roles)) return <>{children}</>;
-  // Custom-role-юзер: достаточно одного permission из match.perms.
-  if (match.perms && hasPermission(user as any, ...match.perms)) return <>{children}</>;
-
-  return <Navigate to="/dashboard" replace />;
+  const item = NAV_ITEMS.find((i) => under(path, i.to));
+  if (!item || item.to === '/dashboard') return <>{children}</>;
+  return item.visible(ctx) ? <>{children}</> : <Navigate to="/dashboard" replace />;
 }

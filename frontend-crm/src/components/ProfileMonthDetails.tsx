@@ -6,6 +6,7 @@ import { tr, useT } from '../lib/i18n';
 import { tjFormatDate, tjFormatTime } from '../lib/tjTime';
 import { useApplicationStatusLabel, useCountryLabel } from '../lib/labels';
 import DetailsModal, { groupBy, type DetailsColumn } from './DetailsModal';
+import { hiddenAmount } from '../lib/permissions';
 
 /**
  * Окна «подробнее» у плиток «Текущий месяц» в профиле сотрудника (и в «Моём
@@ -29,7 +30,9 @@ function titleCase(s: string) {
   const low = s.toLowerCase().replace(/\bkpi\b/g, 'KPI');
   return low.charAt(0).toUpperCase() + low.slice(1);
 }
-function fmtMoney(n: number, c = 'TJS') {
+/** Без «Деньги компании» суммы коллеги приходят null — «•••• TJS». */
+function fmtMoney(n: number | null | undefined, c = 'TJS') {
+  if (n == null) return hiddenAmount(c);
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 
@@ -125,6 +128,7 @@ export default function ProfileMonthDetails({
       }
       case 'sales': {
         const rows = d?.sales;
+        const hidden = !!d?.moneyHidden;
         const catLabel = (c: string) => {
           const k = `finance.cat.${c}`;
           return t(k) !== k ? t(k) : (TRANSACTION_CATEGORY_LABEL as any)[c] ?? c;
@@ -134,16 +138,21 @@ export default function ProfileMonthDetails({
             {...common}
             testId="month-sales"
             title={titleCase(t('profile.month.sales'))}
-            groups={rows ? [{ title: t('details.byCategory'), items: groupBy(rows.filter((x) => x.currency === 'TJS'), (x) => (x.kind === 'DEAL' ? t('sales.kind.DEAL') : catLabel(x.category)), { sum: (x) => Number(x.amount), format: (n) => fmtMoney(n) }) }] : undefined}
+            groups={rows ? [{
+              title: t('details.byCategory'),
+              items: hidden
+                ? groupBy(rows.filter((x) => x.currency === 'TJS'), (x) => (x.kind === 'DEAL' ? t('sales.kind.DEAL') : catLabel(x.category)))
+                : groupBy(rows.filter((x) => x.currency === 'TJS'), (x) => (x.kind === 'DEAL' ? t('sales.kind.DEAL') : catLabel(x.category)), { sum: (x) => Number(x.amount), format: (n) => fmtMoney(n) }),
+            }] : undefined}
             rows={rows}
             summary={rows ? [
-              { label: t('profile.month.sales'), value: fmtMoney(rows.filter((x) => x.kind === 'DEAL' && x.currency === 'TJS').reduce((sum, x) => sum + Number(x.amount), 0)) },
-              ...(rows.some((x) => x.kind === 'OTHER') ? [{ label: t('sales.otherIncome'), value: fmtMoney(rows.filter((x) => x.kind === 'OTHER' && x.currency === 'TJS').reduce((sum, x) => sum + Number(x.amount), 0)) }] : []),
+              { label: t('profile.month.sales'), value: hidden ? hiddenAmount('TJS') : fmtMoney(rows.filter((x) => x.kind === 'DEAL' && x.currency === 'TJS').reduce((sum, x) => sum + Number(x.amount), 0)) },
+              ...(rows.some((x) => x.kind === 'OTHER') ? [{ label: t('sales.otherIncome'), value: hidden ? hiddenAmount('TJS') : fmtMoney(rows.filter((x) => x.kind === 'OTHER' && x.currency === 'TJS').reduce((sum, x) => sum + Number(x.amount), 0)) }] : []),
             ] : undefined}
             columns={[
               { key: 'date', label: t('finance.col.date'), type: 'date', value: (x) => x.date, render: (x) => tjFormatDate(x.date) },
               { key: 'kind', label: t('sales.kind'), value: (x) => t(`sales.kind.${x.kind}`) },
-              { key: 'amount', label: t('finance.col.amount'), type: 'number', align: 'right', value: (x) => Number(x.amount), render: (x) => fmtMoney(Number(x.amount), x.currency) },
+              { key: 'amount', label: t('finance.col.amount'), type: 'number', align: 'right', value: (x) => Number(x.amount ?? 0), render: (x) => fmtMoney(x.amount == null ? null : Number(x.amount), x.currency) },
               { key: 'category', label: t('finance.col.category'), value: (x) => catLabel(x.category) },
               { key: 'who', label: t('finance.col.student'), value: (x) => x.student?.fullName || x.payerName },
               { key: 'comment', label: t('finance.col.comment'), value: (x) => x.comment },

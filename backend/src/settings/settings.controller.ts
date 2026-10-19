@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Body,
   Controller,
   Delete,
@@ -17,7 +18,8 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { SettingsService } from './settings.service';
-import { isFounder } from '../auth/role-utils';
+import { isFounder, roleAllows } from '../auth/role-utils';
+import { Permissions } from '../auth/permissions.decorator';
 
 /**
  * Все настраиваемые параметры компании. Чтение — авторизованный
@@ -39,8 +41,9 @@ export class SettingsController {
   @Get('schedule')
   getSchedule(@Query('userId') userId: string | undefined, @CurrentUser() me: any) {
     let target = userId || null;
-    if (target && target !== me.id && !isFounder(me)) {
-      throw new BadRequestException('Доступ только к своему графику');
+    // Чужой график: основатель; роль — «График работы».
+    if (target && target !== me.id && !roleAllows(me, 'settings:schedule', () => isFounder(me))) {
+      throw new ForbiddenException('Доступ только к своему графику');
     }
     return this.svc.getSchedule(target);
   }
@@ -48,6 +51,7 @@ export class SettingsController {
   @Put('schedule')
   @UseGuards(RolesGuard)
   @Roles(Role.FOUNDER)
+  @Permissions('settings:schedule')
   upsertSchedule(@Body() body: { userId?: string | null; days: any[] }) {
     return this.svc.upsertSchedule(body.userId ?? null, body.days);
   }
@@ -60,6 +64,7 @@ export class SettingsController {
   @Delete('schedule')
   @UseGuards(RolesGuard)
   @Roles(Role.FOUNDER)
+  @Permissions('settings:schedule')
   deleteSchedule(@Query('userId') userId: string | undefined) {
     return this.svc.deleteSchedule(userId || null);
   }
@@ -74,6 +79,7 @@ export class SettingsController {
   @Post('penalty-rules')
   @UseGuards(RolesGuard)
   @Roles(Role.FOUNDER)
+  @Permissions('settings:penalty-rules')
   createPenaltyRule(@Body() body: any) {
     return this.svc.createPenaltyRule(body);
   }
@@ -81,6 +87,7 @@ export class SettingsController {
   @Patch('penalty-rules/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.FOUNDER)
+  @Permissions('settings:penalty-rules')
   updatePenaltyRule(@Param('id') id: string, @Body() body: any) {
     return this.svc.updatePenaltyRule(id, body);
   }
@@ -88,6 +95,7 @@ export class SettingsController {
   @Delete('penalty-rules/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.FOUNDER)
+  @Permissions('settings:penalty-rules')
   deletePenaltyRule(@Param('id') id: string) {
     return this.svc.deletePenaltyRule(id);
   }
@@ -102,6 +110,7 @@ export class SettingsController {
   @Get('work-locations')
   @UseGuards(RolesGuard)
   @Roles(Role.FOUNDER)
+  @Permissions('settings:locations')
   listLocations() {
     return this.svc.listLocations();
   }
@@ -109,6 +118,7 @@ export class SettingsController {
   @Post('work-locations')
   @UseGuards(RolesGuard)
   @Roles(Role.FOUNDER)
+  @Permissions('settings:locations')
   createLocation(@Body() body: any) {
     return this.svc.createLocation(body);
   }
@@ -116,6 +126,7 @@ export class SettingsController {
   @Patch('work-locations/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.FOUNDER)
+  @Permissions('settings:locations')
   updateLocation(@Param('id') id: string, @Body() body: any) {
     return this.svc.updateLocation(id, body);
   }
@@ -123,6 +134,7 @@ export class SettingsController {
   @Delete('work-locations/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.FOUNDER)
+  @Permissions('settings:locations')
   deleteLocation(@Param('id') id: string) {
     return this.svc.deleteLocation(id);
   }

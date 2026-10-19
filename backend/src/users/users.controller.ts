@@ -27,6 +27,9 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { isFounder } from '../auth/role-utils';
+import { Permissions } from '../auth/permissions.decorator';
+import { PEOPLE_PICKER_PERMISSIONS } from '../auth/permissions';
+import { canSeeData, maskEmail } from '../common/redact';
 
 // Документы сотрудника (паспорт, фото, контракт, диплом). Whitelist
 // типов: иначе можно было загрузить .html/.exe/.svg и получить stored-XSS
@@ -76,10 +79,11 @@ export class MeController {
   /** То же для чужого профиля — тот же доступ, что у самого профиля. */
   @Get('profile/:id/month-details')
   async profileMonthDetails(@Param('id') id: string, @CurrentUser() me: any) {
-    if (!(await this.users.profileAccess(me, id))) {
+    const view = await this.users.profileAccess(me, id);
+    if (!view) {
       throw new ForbiddenException('Нет доступа к данным этого сотрудника');
     }
-    return this.users.monthDetails(id);
+    return this.users.monthDetailsFor(id, view);
   }
 
   /** Профиль другого сотрудника — доступ через UsersService.profileAccess. */
@@ -139,14 +143,27 @@ export class MeController {
 export class UsersController {
   constructor(private users: UsersService) {}
 
+  /**
+   * Справочник сотрудников. Сотруднику с ролью — если ему нужно выбирать
+   * людей (PEOPLE_PICKER_PERMISSIONS); без «Личных данных сотрудников» email
+   * с маской.
+   */
+  @Permissions(...PEOPLE_PICKER_PERMISSIONS)
   @Get()
-  list(@Query('search') search?: string, @Query('includeInactive') includeInactive?: string) {
+  async list(
+    @CurrentUser() me: any,
+    @Query('search') search?: string,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
     if (search && search.length > 200) {
       throw new BadRequestException('Поисковая строка слишком длинная');
     }
-    return this.users.findAll({ search, includeInactive: includeInactive === '1' || includeInactive === 'true' });
+    const users = await this.users.findAll({ search, includeInactive: includeInactive === '1' || includeInactive === 'true' });
+    if (canSeeData(me, 'visibility:staff-personal')) return users;
+    return users.map((u) => (u.id === me.id ? u : { ...u, email: maskEmail(u.email) as string }));
   }
 
+  @Permissions('users:create')
   @Post()
   create(@Body() dto: CreateUserDto, @CurrentUser() me: any) {
     return this.users.create(dto, me);
@@ -165,11 +182,13 @@ export class UsersController {
   }
 
   /** Полный профиль сотрудника (HR + зарплата + KPI + посещаемость + штрафы). */
+  @Permissions('users:read')
   @Get(':id/full')
   fullProfile(@Param('id') id: string, @CurrentUser() me: any) {
     return this.users.fullProfileFor(id, me);
   }
 
+  @Permissions('users:update')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateUserDto, @CurrentUser() me: any) {
     // QA-fix #44 (часть 2): админ не может понизить себя — иначе после понижения
@@ -181,6 +200,7 @@ export class UsersController {
   }
 
   /** «Уволить» (история сохраняется). DELETE оставлен для совместимости. */
+  @Permissions('users:dismiss')
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() me: any) {
     if (id === me.id) {
@@ -190,6 +210,7 @@ export class UsersController {
   }
 
   /** Body: { mode: 'USER' | 'AUTO', toUserId? } — кому передать дела. */
+  @Permissions('users:dismiss')
   @Post(':id/dismiss')
   dismiss(@Param('id') id: string, @CurrentUser() me: any, @Body() body: any) {
     if (id === me.id) {
@@ -199,23 +220,27 @@ export class UsersController {
   }
 
   /** Что числится за сотрудником и кому можно передать (окно «Уволить»). */
+  @Permissions('users:dismiss')
   @Get(':id/handover')
   handoverInfo(@Param('id') id: string) {
     return this.users.handoverInfo(id);
   }
 
   /** Передать дела уже уволенного сотрудника. Body как у dismiss. */
+  @Permissions('users:dismiss')
   @Post(':id/handover')
   handover(@Param('id') id: string, @CurrentUser() me: any, @Body() body: any) {
     return this.users.handoverDismissed(id, me, body);
   }
 
+  @Permissions('users:dismiss')
   @Post(':id/restore')
   restore(@Param('id') id: string) {
     return this.users.restore(id);
   }
 
   /** Загрузить документ сотрудника (паспорт/контракт/диплом). */
+  @Permissions('users:documents')
   @Post(':id/documents')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -239,12 +264,14 @@ export class UsersController {
     });
   }
 
+  @Permissions('users:documents')
   @Delete(':id/documents/:docId')
   deleteDocument(@Param('id') id: string, @Param('docId') docId: string) {
     return this.users.deleteDocument(id, docId);
   }
 
   /** Изменить тип/комментарий документа сотрудника (admin/accountant). */
+  @Permissions('users:documents')
   @Patch(':id/documents/:docId')
   updateDocument(
     @Param('id') id: string,
@@ -255,6 +282,7 @@ export class UsersController {
   }
 
   /** Список тех, кому выдан доступ к данным этого сотрудника. */
+  @Permissions('users:access')
   @Get(':id/access')
   listAccess(@Param('id') id: string) {
     return this.users.listGrantsForTarget(id);
@@ -263,6 +291,7 @@ export class UsersController {
   /** Выдать доступ к данным сотрудника :id пользователю grantedToId. */
   @Post(':id/access')
   @Roles(Role.FOUNDER, Role.ADMIN)
+  @Permissions('users:access')
   grantAccess(
     @Param('id') id: string,
     @Body() body: { grantedToId: string },
@@ -274,6 +303,7 @@ export class UsersController {
 
   @Delete(':id/access/:granteeId')
   @Roles(Role.FOUNDER, Role.ADMIN)
+  @Permissions('users:access')
   revokeAccess(@Param('id') id: string, @Param('granteeId') granteeId: string) {
     return this.users.revokeAccess(granteeId, id);
   }

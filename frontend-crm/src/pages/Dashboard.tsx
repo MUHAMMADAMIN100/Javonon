@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { canSeeData, hasActiveRole, roleCan } from '../lib/permissions';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -38,7 +39,20 @@ export default function Dashboard() {
   // hasRole учитывает мульти-роли (ТЗ §2). Раньше было `me?.role === 'ACCOUNTANT'`
   // — ловило только primary, юзер с roles=[ACCOUNTANT] проваливался.
   const isAccountant = hasRole(me, 'ACCOUNTANT');
-  const showFinance = isAdmin || isAccountant;
+  // Сотрудник с ролью: деньги компании — по пункту «Видимость данных →
+  // Деньги компании», рейтинг — ещё и по «KPI — рейтинг сотрудников».
+  const withRole = hasActiveRole(me);
+  const showFinance = withRole ? canSeeData(me, 'visibility:company-money') : isAdmin || isAccountant;
+  const showTop = withRole ? roleCan(me, 'kpi:read') && canSeeData(me, 'visibility:company-money') : isAdmin;
+  // Окна «подробнее» и ссылки разрезов ведут туда, куда роль пускает; без
+  // пункта карточка — просто цифра (должность — как раньше).
+  const mayOpen = (kind: DashboardDetailKind) =>
+    kind === 'active' ? roleCan(me, 'students:read')
+      : kind === 'profit' || kind === 'income' || kind === 'expense' ? roleCan(me, 'finance:read')
+        : kind === 'debt' ? true
+          : roleCan(me, ['leads:read', 'applications:read']);
+  const canOpenApps = roleCan(me, 'applications:read');
+  const canOpenStudents = roleCan(me, 'students:read');
 
   // Период дашборда (URL-состояние + границы). Одни и те же from/to уходят
   // во ВСЕ запросы этого экрана и лежат в каждом queryKey: без этого
@@ -50,7 +64,7 @@ export default function Dashboard() {
   /** Какая карточка открыта в окне «подробнее». */
   const [detail, setDetail] = useState<DashboardDetailKind | null>(null);
   /** Карточка-кнопка: клик, Enter и пробел открывают окно подробностей. */
-  const openable = (kind: DashboardDetailKind) => ({
+  const openable = (kind: DashboardDetailKind) => (!mayOpen(kind) ? undefined : {
     role: 'button' as const,
     tabIndex: 0,
     title: t('details.clickHint'),
@@ -120,7 +134,7 @@ export default function Dashboard() {
   const leaderQuery = useQuery<KpiRow[]>({
     queryKey: ['kpi', 'leaderboard', 'top3', range],
     queryFn: () => leaderboard(range),
-    enabled: isAdmin && !invalid,
+    enabled: showTop && !invalid,
     placeholderData: keepPrev,
   });
   const topPerformers = (leaderQuery.data ?? []).slice(0, 3);
@@ -215,6 +229,7 @@ export default function Dashboard() {
    * показывает выбранный период, а список показывал всё).
    */
   const listLink = (params: Record<string, string | undefined>, path = '/applications') => {
+    if ((path === '/applications' && !canOpenApps) || (path === '/students' && !canOpenStudents)) return undefined;
     const q = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v) q.set(k, v); });
     if (range.from) q.set('from', range.from);
@@ -259,8 +274,8 @@ export default function Dashboard() {
         {kpis.map((k, i) => (
           <motion.div
             key={k.label}
-            className={`bento-card is-clickable${k.accent ? ' ' + k.accent : ''} ${k.span}${k.row ? ' ' + k.row : ''}`}
-            {...openable(k.detail)}
+            className={`bento-card${mayOpen(k.detail) ? ' is-clickable' : ''}${k.accent ? ' ' + k.accent : ''} ${k.span}${k.row ? ' ' + k.row : ''}`}
+            {...(openable(k.detail) ?? {})}
             variants={fadeUp}
             custom={i}
             initial="hidden"
@@ -321,8 +336,8 @@ export default function Dashboard() {
           </div>
           <div className="bento" style={{ marginBottom: 32, ...staleStyle }}>
             <motion.div
-              className="bento-card feature span-3 row-2 is-clickable"
-              {...openable('profit')}
+              className={`bento-card feature span-3 row-2${mayOpen('profit') ? ' is-clickable' : ''}`}
+              {...(openable('profit') ?? {})}
               whileHover={{ y: -3 }}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -372,7 +387,7 @@ export default function Dashboard() {
       )}
 
       {/* Top 3 performers — only ADMIN */}
-      {isAdmin && topPerformers.length > 0 && (
+      {showTop && topPerformers.length > 0 && (
         <>
           <div className="crm-section-head" style={{ marginTop: 8 }}>
             <span className="crm-section-eyebrow">{t('eyebrow.topTeamLeader')}</span>

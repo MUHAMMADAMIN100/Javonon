@@ -68,8 +68,8 @@ export interface LatenessItem {
   reason: string | null;
   url: string | null;
   reviewedAt: string | null;
-  /** Штрафы за этот день и вид опоздания, TJS; 0 — штрафа нет. */
-  penalty: number;
+  /** Штрафы за этот день и вид опоздания, TJS; 0 — штрафа нет; null — роли не видны. */
+  penalty: number | null;
 }
 
 /** Итоги «Истории» — по всем найденным опозданиям, а не по странице. */
@@ -82,7 +82,8 @@ export interface LatenessTotals {
   notApprovedMinutes: number;
   pendingMinutes: number;
   minorMinutes: number;
-  penalties: number;
+  /** null — штрафы коллег роли не видны («Зарплаты и оклады»). */
+  penalties: number | null;
 }
 
 export const listLateness = (params: {

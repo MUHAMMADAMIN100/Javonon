@@ -27,6 +27,9 @@ import { SubmissionsService } from './submissions.service';
 import { InstallmentsService } from '../installments/installments.service';
 import { UpdatePaymentStageDto } from '../installments/dto/installments.dto';
 import { Role, SubmissionStatus, SubmissionPaymentStatus } from '@prisma/client';
+import { Permissions } from '../auth/permissions.decorator';
+import { ClientMoneyInterceptor } from '../common/client-money.interceptor';
+import { hasPermission, isFounder, roleAllows } from '../auth/role-utils';
 
 // Те же типы файлов что и в time-tracking (паспорт/контракт/чек).
 const SUBMISSION_FILE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf']);
@@ -64,6 +67,7 @@ export class SubmissionsController {
 
   /** Менеджер создаёт новую сделку. */
   @Post()
+  @Permissions('submissions:create')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   create(@CurrentUser() me: any, @Body() body: any) {
     return this.svc.create(me.id, body);
@@ -71,13 +75,17 @@ export class SubmissionsController {
 
   /** Менеджер добавляет новый платёж в существующую сделку. */
   @Post(':id/payments')
+  @Permissions('submissions:payment-add')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   addPayment(@CurrentUser() me: any, @Param('id') id: string, @Body() body: any) {
-    return this.svc.addPayment(me.id, id, body);
+    // Роль с «Сделки — все» добавляет платёж и в чужую сделку.
+    return this.svc.addPayment(me.id, id, body, { anyDeal: !!me.hasCustomRole && hasPermission(me, 'submissions:all') });
   }
 
   /** Менеджер — список своих сделок. */
   @Get('mine')
+  @UseInterceptors(ClientMoneyInterceptor)
+  @Permissions('submissions:read')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   listMine(
     @CurrentUser() me: any,
@@ -101,6 +109,8 @@ export class SubmissionsController {
 
   /** Все сделки — только для FOUNDER/ADMIN (PII сделок: контракты, паспорта, e-mail студентов). */
   @Get()
+  @UseInterceptors(ClientMoneyInterceptor)
+  @Permissions('submissions:all')
   @Roles(Role.FOUNDER, Role.ADMIN)
   list(
     @CurrentUser() me: any,
@@ -137,6 +147,8 @@ export class SubmissionsController {
 
   /** FOUNDER/ADMIN — pending платежи на одобрение. */
   @Get('pending-payments')
+  @UseInterceptors(ClientMoneyInterceptor)
+  @Permissions('submissions:approve')
   @Roles(Role.FOUNDER, Role.ADMIN)
   pending(
     @CurrentUser() me: any,
@@ -203,6 +215,7 @@ export class SubmissionsController {
    * касается.
    */
   @Get('partner-preview')
+  @Permissions('submissions:create')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   partnerPreview(
@@ -233,6 +246,7 @@ export class SubmissionsController {
    * одобрение платежа (см. InstallmentsService.settleStagesTx).
    */
   @Patch('stages/:stageId')
+  @Permissions('submissions:stages')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   updateStage(
     @CurrentUser() me: any,
@@ -244,6 +258,8 @@ export class SubmissionsController {
 
   /** Этапы рассрочки сделки + итоги (оплачено / остаток / просрочено). */
   @Get(':id/stages')
+  @UseInterceptors(ClientMoneyInterceptor)
+  @Permissions('submissions:read')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   listStages(@CurrentUser() me: any, @Param('id') id: string) {
     return this.installments.listForSubmission(me, id);
@@ -255,6 +271,8 @@ export class SubmissionsController {
    * ACCOUNTANT убран намеренно — содержит PII студента (паспорт, e-mail).
    */
   @Get(':id')
+  @UseInterceptors(ClientMoneyInterceptor)
+  @Permissions('submissions:read')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   getOne(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.getOne(me, id);
@@ -263,16 +281,18 @@ export class SubmissionsController {
   /** FOUNDER одобряет платёж — атомарно создаёт Student/Application/Transaction. */
   @Post('payments/:id/approve')
   @Roles(Role.FOUNDER)
+  @Permissions('submissions:approve')
   approve(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { amountTjs?: number | string }) {
     // amountTjs — сумма в сомони; обязательна только для сделки не в TJS.
-    return this.svc.approvePayment(id, me.id, { amountTjs: body?.amountTjs });
+    return this.svc.approvePayment(id, me.id, { amountTjs: body?.amountTjs, allowed: roleAllows(me, 'submissions:approve', () => isFounder(me)) });
   }
 
   /** FOUNDER отклоняет платёж с причиной. */
   @Post('payments/:id/reject')
   @Roles(Role.FOUNDER)
+  @Permissions('submissions:approve')
   reject(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { reason: string }) {
-    return this.svc.rejectPayment(id, me.id, body?.reason || '');
+    return this.svc.rejectPayment(id, me.id, body?.reason || '', roleAllows(me, 'submissions:approve', () => isFounder(me)));
   }
 
   /** Редактирование платежа.
@@ -280,6 +300,7 @@ export class SubmissionsController {
    *  - Менеджер (SALES_MANAGER / CLIENT_MANAGER / ADMIN) — только PENDING
    *    платежи своих сделок (ownership + status check в service). */
   @Patch('payments/:id')
+  @Permissions('submissions:payment-edit')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   updatePayment(@CurrentUser() me: any, @Param('id') id: string, @Body() body: any) {
     return this.svc.updatePayment(me, id, body);
@@ -288,6 +309,7 @@ export class SubmissionsController {
   /** FOUNDER удаляет платёж (с реверсом Transaction при APPROVED). */
   @Delete('payments/:id')
   @Roles(Role.FOUNDER)
+  @Permissions('submissions:payment-delete')
   deletePayment(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.deletePayment(me, id);
   }
@@ -296,6 +318,7 @@ export class SubmissionsController {
    *  FOUNDER может закрывать ЛЮБУЮ сделку (включая orphan когда
    *  менеджер уволен и managerId стал null). */
   @Post(':id/status')
+  @Permissions('submissions:status')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   changeStatus(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { status: SubmissionStatus }) {
     return this.svc.changeStatus(me, id, body.status);
@@ -307,6 +330,7 @@ export class SubmissionsController {
    *    (ownership check в service). После первого APPROVE менеджер уже не
    *    может менять studentId, newStudent-snapshot или programId (заморожено). */
   @Patch(':id')
+  @Permissions('submissions:update')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   updateSubmission(@CurrentUser() me: any, @Param('id') id: string, @Body() body: any) {
     return this.svc.updateSubmission(me, id, body);
@@ -317,8 +341,9 @@ export class SubmissionsController {
    *  Нужен для удаления тестовых/ошибочных сделок. */
   @Delete(':id')
   @Roles(Role.FOUNDER)
-  remove(@Param('id') id: string) {
-    return this.svc.remove(id);
+  @Permissions('submissions:delete')
+  remove(@Param('id') id: string, @CurrentUser() me: any) {
+    return this.svc.remove(id, me);
   }
 
   /**
@@ -328,6 +353,7 @@ export class SubmissionsController {
    * 50MB лимит). FOUNDER/ADMIN оставлены: могут редактировать чужие сделки.
    */
   @Post('upload')
+  @Permissions('submissions:create', 'submissions:update', 'submissions:payment-add', 'submissions:payment-edit')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
   @UseInterceptors(
     FileInterceptor('file', {

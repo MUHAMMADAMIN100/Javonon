@@ -20,7 +20,7 @@ import type { Application, ApplicationStatus, Country } from '../api/types';
 import { COUNTRIES } from '../api/types';
 import { useAuth } from '../store/auth';
 import { buildNavCtx } from '../components/navGroups';
-import { canSeeAllApplicationsByRole } from '../lib/permissions';
+import { canSeeAllApplicationsByRole, roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useCountryLabel } from '../lib/labels';
 import { keys } from '../lib/queryKeys';
@@ -109,10 +109,14 @@ export default function Leads() {
    * это UX-слой.
    */
   const nav = useMemo(() => buildNavCtx(me), [me]);
-  const canCreate = nav.show('applications:create', nav.isWorkforce);
-  const canAssign = nav.show('applications:assign', nav.isWorkforce);
-  /** Удалять и возвращать чужие лиды — только по роли (как сервер). */
-  const canDeleteAny = canSeeAllApplicationsByRole(me);
+  // Права «Лиды — …» (Настройки → Роли); у сотрудника без роли — должность.
+  const canView = nav.show('leads:read', nav.isWorkforce);
+  const canCreate = nav.show('leads:create', nav.isWorkforce);
+  const canEdit = roleCan(me, 'leads:update');
+  const canDelete = roleCan(me, 'leads:delete');
+  const canAssign = nav.show('leads:assign', nav.isWorkforce);
+  /** Удалять и возвращать чужие лиды — у роли с назначением лидов, у должности — руководство (как сервер). */
+  const canDeleteAny = roleCan(me, 'leads:assign', canSeeAllApplicationsByRole(me));
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -761,7 +765,7 @@ export default function Leads() {
     bulkMut.mutate({ ids: picked.map((a) => a.id), managerId: bulkManagerId, confirmReassign });
   };
 
-  if (!canCreate) {
+  if (!canView) {
     return (
       <div className="card">
         <div className="card-body">
@@ -972,23 +976,27 @@ export default function Leads() {
             filtered={narrowed}
             testId="leads-total"
           />
-          <button type="button" className="btn btn-primary" data-testid="lead-new" onClick={openForm}>
-            <Icon name="add" size={18} />
-            {t('leads.form.title')}
-          </button>
+          {canCreate && (
+            <button type="button" className="btn btn-primary" data-testid="lead-new" onClick={openForm}>
+              <Icon name="add" size={18} />
+              {t('leads.form.title')}
+            </button>
+          )}
         </div>
         <div className="card-body">
           <div className="filters">
-            <CrmSelect
-              className="crm-select"
-              value={trash ? 'deleted' : ''}
-              onChange={(e) => setPeriod('view', (e.target.value || '') as 'deleted' | '')}
-              title={t('leads.view.deleted')}
-              data-testid="leads-filter-view"
-            >
-              <option value="">{t('leads.view.active')}</option>
-              <option value="deleted">{t('leads.view.deleted')}</option>
-            </CrmSelect>
+            {(canDelete || trash) && (
+              <CrmSelect
+                className="crm-select"
+                value={trash ? 'deleted' : ''}
+                onChange={(e) => setPeriod('view', (e.target.value || '') as 'deleted' | '')}
+                title={t('leads.view.deleted')}
+                data-testid="leads-filter-view"
+              >
+                <option value="">{t('leads.view.active')}</option>
+                <option value="deleted">{t('leads.view.deleted')}</option>
+              </CrmSelect>
+            )}
             <CrmSelect
               className="crm-select"
               value={manager}
@@ -1298,29 +1306,33 @@ export default function Leads() {
                         <td data-label={t('reports.col.date')} className="cl-top cl-date">{tjFormatDate(a.createdAt)}</td>
                         <td className="lead-actions cl-actions" data-label={t('common.actions')}>
                           {trash ? (
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-secondary"
-                              data-testid="lead-restore"
-                              onClick={() => restoreMut.mutate(a.id)}
-                            >
-                              <Icon name="restore_from_trash" size={16} /> {t('leads.restore')}
-                            </button>
-                          ) : (
-                            <>
+                            canDelete && (
                               <button
                                 type="button"
-                                className="icon-btn"
-                                data-testid="lead-edit"
-                                title={t('common.edit')}
-                                aria-label={`${t('common.edit')}: ${a.fullName}`}
-                                onClick={() => openEdit(a)}
+                                className="btn btn-sm btn-secondary"
+                                data-testid="lead-restore"
+                                onClick={() => restoreMut.mutate(a.id)}
                               >
-                                <Icon name="edit" size={16} />
+                                <Icon name="restore_from_trash" size={16} /> {t('leads.restore')}
                               </button>
+                            )
+                          ) : (
+                            <>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  className="icon-btn"
+                                  data-testid="lead-edit"
+                                  title={t('common.edit')}
+                                  aria-label={`${t('common.edit')}: ${a.fullName}`}
+                                  onClick={() => openEdit(a)}
+                                >
+                                  <Icon name="edit" size={16} />
+                                </button>
+                              )}
                               {/* Удалить — свой лид или руководство: доступ «все лиды»
                                   удаление чужих не даёт (сервер — ensureCanDelete). */}
-                              {(canDeleteAny || a.managerId === me?.id || a.chinaManagerId === me?.id) && (
+                              {canDelete && (canDeleteAny || a.managerId === me?.id || a.chinaManagerId === me?.id) && (
                                 <button
                                   type="button"
                                   className="icon-btn danger"

@@ -6,6 +6,7 @@ import { useRealtime, useRealtimeConnState } from '../realtime';
 import { useAuth } from '../store/auth';
 import { playChatSound } from './chatSound';
 import { isTeacherOnly } from './roles';
+import { roleCan } from './permissions';
 
 /**
  * Непрочитанные сообщения чата — одно место на всё приложение.
@@ -36,7 +37,8 @@ function isViewing(roomId: string) {
 
 /** Учителю академии чат закрыт (сервер отвечает 403) — счётчик и звук ему не нужны. */
 function chatAllowed(me: unknown): boolean {
-  return !!me && !isTeacherOnly(me as any);
+  // Учителю чата нет; роли — только с «Чат — просмотр».
+  return !!me && !isTeacherOnly(me as any) && roleCan(me as any, 'chat:read');
 }
 
 function useUnreadQuery() {

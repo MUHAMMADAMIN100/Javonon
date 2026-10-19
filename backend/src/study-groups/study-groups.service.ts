@@ -11,7 +11,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserWithRoles } from '../auth/role-utils';
 import { parseCalendarDateUtc, tjLocalDay, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
-import { canMarkSession, canRunGroup, isAcademyManager, teachesGroup } from '../academy/academy-access';
+import {
+  academyCan,
+  academyGroupCan,
+  assertAcademyCan,
+  assertRoleHas,
+  canMarkSession,
+  canRunGroup,
+  isAcademyManager,
+  teachesGroup,
+} from '../academy/academy-access';
 import { addDaysToKey, daysBetweenKeys, weeklyPattern } from '../academy/journal-math';
 import { materialFilePath } from '../academy/academy.service';
 import {
@@ -193,21 +202,31 @@ export class StudyGroupsService {
     await this.assertCanSeeGroup(user, group.id, group.teacherId);
     const run = canRunGroup(user, group);
     const active = group.status === StudyGroupStatus.ACTIVE;
+    const edit = academyCan(user, 'academy:groups-update');
+    const remove = academyCan(user, 'academy:groups-delete');
     return {
       ...group,
       access: {
-        manage: this.isElevatedViewer(user),
+        // Вкладка «Настройки»: правка или удаление группы.
+        manage: edit || remove,
+        edit,
+        remove,
         run,
-        // Учитель группы добавляет учеников сам (новых и из базы без группы).
-        addStudents: run && active,
+        // Учитель группы добавляет учеников сам (из базы без группы); роль —
+        // «Добавление учеников в группу».
+        addStudents: active && academyGroupCan(user, group, 'academy:members-add', () => run),
+        // Новый ученик прямо в группу; роль — «Ученики академии — создание».
+        createStudents: active && academyGroupCan(user, group, 'academy:students-create', () => run),
+        // Исключить из группы: руководство; роль — «Исключение из группы».
+        removeMembers: academyGroupCan(user, group, 'academy:members-remove', () => isAcademyManager(user)),
         // «Завершить курс»: учитель группы и руководство, пока группа идёт.
-        complete: run && active && !group.completedAt,
+        complete: active && !group.completedAt && academyGroupCan(user, group, 'academy:complete', () => run),
       },
     };
   }
 
   async createGroup(user: Viewer, dto: CreateStudyGroupDto) {
-    this.assertCanAdminGroups(user);
+    assertAcademyCan(user, 'academy:groups-create');
     const name = dto.name.trim();
     if (name.length < 2) throw new BadRequestException('Название группы слишком короткое');
 
@@ -234,7 +253,7 @@ export class StudyGroupsService {
   }
 
   async updateGroup(user: Viewer, id: string, dto: UpdateStudyGroupDto) {
-    this.assertCanAdminGroups(user);
+    assertAcademyCan(user, 'academy:groups-update');
     const group = await this.prisma.studyGroup.findUnique({
       where: { id },
       select: { id: true },
@@ -290,7 +309,7 @@ export class StudyGroupsService {
    * проверяет removeGroup, — окно и сервер не разойдутся.
    */
   async removalPreview(user: Viewer, id: string) {
-    this.assertCanAdminGroups(user);
+    assertAcademyCan(user, 'academy:groups-delete');
     const group = await this.prisma.studyGroup.findUnique({
       where: { id },
       select: { id: true, name: true, status: true },
@@ -305,7 +324,7 @@ export class StudyGroupsService {
    * сюда, а `status: ARCHIVED`: история занятий остаётся.
    */
   async removeGroup(user: Viewer, id: string) {
-    this.assertCanAdminGroups(user);
+    assertAcademyCan(user, 'academy:groups-delete');
     const group = await this.prisma.studyGroup.findUnique({
       where: { id },
       select: { id: true },
@@ -369,6 +388,7 @@ export class StudyGroupsService {
       select: { id: true, teacherId: true, status: true },
     });
     if (!group) throw new NotFoundException('Группа не найдена');
+    assertRoleHas(user, 'academy:members-add', 'Нет права добавлять учеников в группу');
     const manager = this.isElevatedViewer(user);
     if (!manager) {
       if (!user || !teachesGroup(user, group)) {
@@ -419,7 +439,11 @@ export class StudyGroupsService {
   }
 
   async removeMember(user: Viewer, groupId: string, studentId: string) {
-    this.assertCanAdminGroups(user);
+    const group = await this.prisma.studyGroup.findUnique({ where: { id: groupId }, select: { teacherId: true } });
+    if (!group) throw new NotFoundException('Группа не найдена');
+    if (!academyGroupCan(user, group, 'academy:members-remove', () => this.isElevatedViewer(user))) {
+      throw new ForbiddenException('Управлять группами может только руководство');
+    }
     // Строку не удаляем, а закрываем (leftAt): журнал группы продолжает
     // показывать ученика за недели, когда он учился. updateMany — чтобы
     // повторное нажатие не было 500-й. Занятия группы ученик перестаёт
@@ -908,13 +932,6 @@ export class StudyGroupsService {
     const substitute = await this.prisma.classSession.count({ where: { groupId, teacherId: user.id } });
     if (substitute > 0) return;
     throw new ForbiddenException('Это не ваша группа');
-  }
-
-  /** Состав, преподаватель, создание и удаление групп — только руководство. */
-  private assertCanAdminGroups(user: Viewer) {
-    if (!this.isElevatedViewer(user)) {
-      throw new ForbiddenException('Управлять группами может только руководство');
-    }
   }
 
   /** Расписание своей группы ведёт и её учитель. */

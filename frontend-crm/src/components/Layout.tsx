@@ -1,4 +1,5 @@
 import { useChatUnreadSync, useChatUnreadTotal } from '../lib/chatUnread';
+import { roleCan } from '../lib/permissions';
 import { useFileToken } from '../lib/fileUrl';
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
@@ -161,7 +162,8 @@ export default function Layout() {
   return (
     <div className={`app-layout${mobileNavOpen ? ' nav-open' : ''}`}>
       <RealtimeStatusBanner />
-      {!isTeacherOnly(me as any) && <Dialpad />}
+      {/* Звонок из CRM — роли с «Звонки — звонок из CRM». */}
+      {!isTeacherOnly(me as any) && roleCan(me as any, 'calls:dial') && <Dialpad />}
       <Sidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <AnimatePresence>
         {mobileNavOpen && (

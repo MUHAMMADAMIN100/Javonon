@@ -4,8 +4,24 @@ import { Role } from '@prisma/client';
 import { ROLES_KEY } from './roles.decorator';
 import { PERMISSIONS_KEY } from './permissions.decorator';
 import { hasRole, hasPermission, isFounder } from './role-utils';
-import { permissionsForRequest } from './permissions';
 
+/**
+ * Кто проходит на адрес.
+ *
+ *  • Основатель — всегда.
+ *  • Сотрудник с ролью (своей или ролью должности, user.hasCustomRole) —
+ *    ТОЛЬКО по правам роли: должность в БД для него лишь «подложка» и
+ *    через @Roles ничего не открывает. На адресе должны быть названы права
+ *    (@Permissions); нет их — адрес для роли закрыт. Раньше роль проходила
+ *    ещё «неявно»: любое право раздела по префиксу адреса, и «Заявки —
+ *    создание» пускало на удаление. С 19.10.2026 так нельзя.
+ *  • Сотрудник без роли — по должности (@Roles), как раньше. Адрес, где
+ *    названы только права, без @Roles, — открыт любой должности: права
+ *    ограничивают лишь сотрудников с ролью.
+ *
+ * Те же @Permissions проверяет JwtAuthGuard — на контроллерах, где этого
+ * гарда нет.
+ */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
@@ -27,46 +43,15 @@ export class RolesGuard implements CanActivate {
     const user = req.user;
     if (!user) throw new ForbiddenException('Недостаточно прав');
 
-    // FOUNDER — неявный супер-доступ.
     if (isFounder(user)) return true;
 
-    // Адрес «только основатель» (@Roles(FOUNDER) и больше никаких ролей).
-    // Неявные пермиссии по префиксу URL сюда НЕ пускают: иначе право
-    // «Сотрудники — редактирование» (префикс /users) открывало смену ролей
-    // и окладов, а «Сделки — оформление» (префикс /submissions) — одобрение
-    // платежей. Кастомная роль проходит, только если нужное право ЯВНО
-    // указано на этом адресе через @Permissions(...).
-    const founderOnly = requiredRoles.length > 0 && requiredRoles.every((r) => r === 'FOUNDER');
-    if (founderOnly) {
+    if (user.hasCustomRole) {
       if (requiredPerms.length > 0 && hasPermission(user, ...requiredPerms)) return true;
       throw new ForbiddenException('Недостаточно прав');
     }
 
-    // ТЗ-доработка: если у юзера активная кастомная роль (например «Таргетолог»),
-    // base role в БД — техническая «подложка» и НЕ должна давать доступа
-    // через @Roles(). Кастомная роль ЗАМЕНЯЕТ базу для целей авторизации:
-    // доступ — только по permissions из CustomRole + неявные permission
-    // checks по URL ниже. Без этого «Таргетолог» с base SALES_MANAGER
-    // получал бы все endpoints @Roles('SALES_MANAGER').
-    const skipBaseRole = !!user.hasCustomRole;
-
-    // OR: явная роль из @Roles(...) — только если нет активной custom-роли.
-    if (!skipBaseRole && requiredRoles.length > 0 && hasRole(user, ...requiredRoles)) return true;
-    // OR: явный permission из @Permissions(...)
-    if (requiredPerms.length > 0 && hasPermission(user, ...requiredPerms)) return true;
-    // OR: implicit permission — если URL+method покрывается каким-либо
-    // permission'ом из PERMISSION_CATALOG, и у юзера он есть. Это путь
-    // для custom-роли, чтобы старые эндпоинты с @Roles(...) сразу
-    // отвечали на permission-проверку без массового переписывания
-    // декораторов на 60+ контроллерах.
-    const userPerms = (user.permissions || []) as string[];
-    if (userPerms.length > 0) {
-      const url = (req.originalUrl || req.url || '').split('?')[0];
-      const method = (req.method || 'GET').toUpperCase();
-      const implicit = permissionsForRequest(method, url);
-      if (implicit.some((p) => userPerms.includes(p))) return true;
-    }
-
+    if (requiredRoles.length === 0) return true;
+    if (hasRole(user, ...requiredRoles)) return true;
     throw new ForbiddenException('Недостаточно прав');
   }
 }

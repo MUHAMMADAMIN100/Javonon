@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
+import { roleCan } from '../lib/permissions';
+import { useAuth } from '../store/auth';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -109,6 +111,12 @@ export default function Salary() {
   const { t } = useT();
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
+  // Права роли «Зарплата — …» (Настройки → Роли); должность — как раньше.
+  const me = useAuth((s) => s.user);
+  const canCalc = roleCan(me, 'salary:calculate');
+  const canRecalc = roleCan(me, 'salary:recalculate');
+  const canPay = roleCan(me, 'salary:pay');
+  const canRemove = roleCan(me, 'salary:delete');
   // Период — в адресе страницы (?from=&to=): ссылка и обновление его сохраняют.
   const [params, setParams] = useSearchParams();
   const month = defaultMonthRange();
@@ -451,7 +459,7 @@ export default function Salary() {
             }}>{t('salary.calc.title')}</h3>
           </div>
           <div className="salary-head-actions">
-            <button
+            {canRecalc && <button
               className="btn btn-secondary"
               data-testid="salary-recalc-all"
               onClick={onRecalcAll}
@@ -462,8 +470,8 @@ export default function Salary() {
               {recalcBusy === 'all'
                 ? t('salary.saving')
                 : `${t('salary.recalcAll.button')}${recalcable ? ` · ${recalcable}` : ''}`}
-            </button>
-            <button
+            </button>}
+            {canCalc && <button
               className="btn btn-primary"
               data-testid="salary-accrue-all"
               onClick={onAccrueAll}
@@ -474,7 +482,7 @@ export default function Salary() {
               {accruing
                 ? t('salary.saving')
                 : `${t('salary.accrueAll.button')}${pending.length ? ` · ${pending.length}` : ''}`}
-            </button>
+            </button>}
           </div>
         </div>
 
@@ -578,6 +586,7 @@ export default function Salary() {
                                   comment={commentByUser[r.userId] ?? ''}
                                   onComment={(v) => setCommentByUser((cur) => ({ ...cur, [r.userId]: v }))}
                                   onCreate={() => onCreate(r.userId)}
+                                  canCreate={canCalc}
                                   saving={createMut.isPending || accruing}
                                 />
                               </td>
@@ -701,7 +710,7 @@ export default function Salary() {
                               <Icon name={expanded ? 'expand_less' : 'expand_more'} size={14} />
                             </button>
                           )}
-                          {r.status === 'DRAFT' && (
+                          {canRecalc && r.status === 'DRAFT' && (
                             <button
                               className="btn btn-sm btn-secondary"
                               data-testid="salary-recalc"
@@ -711,8 +720,8 @@ export default function Salary() {
                               <Icon name="refresh" size={14} /> {recalcBusy === r.id ? t('salary.saving') : t('salary.recalc.button')}
                             </button>
                           )}
-                          {r.status === 'DRAFT' && (
-                            <button className="btn btn-sm btn-secondary" onClick={() => onPay(r)}>
+                          {canPay && r.status === 'DRAFT' && (
+                            <button className="btn btn-sm btn-secondary" onClick={() => onPay(r)} data-testid="salary-pay">
                               <Icon name="paid" size={14} /> {t('salary.pay')}
                             </button>
                           )}
@@ -720,8 +729,8 @@ export default function Salary() {
                               вернуло бы месячную комиссию в «к начислению»
                               (bonusAlreadyPaid) и оставило бы расходную транзакцию
                               сиротой — бэк такой DELETE тоже отклоняет. */}
-                          {r.status === 'DRAFT' && (
-                            <button className="btn btn-sm btn-danger" onClick={() => onDelete(r)}>
+                          {canRemove && r.status === 'DRAFT' && (
+                            <button className="btn btn-sm btn-danger" onClick={() => onDelete(r)} data-testid="salary-delete">
                               <Icon name="delete" size={14} />
                             </button>
                           )}
@@ -769,7 +778,9 @@ export default function Salary() {
  * то же, что раньше показывал калькулятор. Считается тем же запросом
  * /salary/preview, поэтому числа сходятся со строкой таблицы.
  */
-function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onComment, onCreate, saving }: {
+function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onComment, onCreate, canCreate = true, saving }: {
+  /** Роль без «Зарплата — расчёт»: кнопки «Начислить» нет. */
+  canCreate?: boolean;
   row: SalaryRosterRow;
   /** Сохранённая запись, если за период уже начислено. */
   record: SalaryRecord | null;
@@ -975,7 +986,7 @@ function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onCommen
               // забирает само (flex-grow).
               style={{ flex: '1 1 160px', minWidth: 0 }}
             />
-          <button
+          {canCreate && <button
             className="btn btn-primary"
             onClick={onCreate}
             disabled={saving}
@@ -983,7 +994,7 @@ function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onCommen
             style={{ flex: '0 1 auto', minWidth: 0 }}
           >
             <Icon name="bookmark_add" size={18} /> {saving ? t('salary.saving') : t('salary.new')}
-          </button>
+          </button>}
         </div>
       </div>
     </div>

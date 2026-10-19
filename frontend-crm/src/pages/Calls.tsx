@@ -1,4 +1,5 @@
 import { fmtDateText, TJ_TZ } from '../lib/tjTime';
+import { roleCan } from '../lib/permissions';
 import { useMemo, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { motion } from 'framer-motion';
@@ -44,7 +45,10 @@ export default function Calls() {
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
-  const isAdmin = isElevated(me);
+  // Звонки всех и статистика — руководство; роль — «Звонки всех и статистика».
+  const isAdmin = roleCan(me, 'calls:all', isElevated(me));
+  const canAdd = roleCan(me, 'calls:create');
+  const canRemove = roleCan(me, 'calls:delete');
 
   const listKey = keys.calls.list({ mine: !isAdmin });
   const listQuery = useQuery<CallLog[]>({
@@ -166,11 +170,13 @@ export default function Calls() {
       {/* Кнопка открытия формы: сама форма живёт в окне по центру, как и
           остальные формы создания в CRM. Раньше она занимала верх экрана
           всегда, хотя нужна в момент, когда звонок только что закончился. */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <button className="btn btn-primary" data-testid="call-new" onClick={() => setFormOpen(true)}>
-          <Icon name="call" size={16} /> {t('calls.new')}
-        </button>
-      </div>
+      {canAdd && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <button className="btn btn-primary" data-testid="call-new" onClick={() => setFormOpen(true)}>
+            <Icon name="call" size={16} /> {t('calls.new')}
+          </button>
+        </div>
+      )}
 
       <FormModal
         open={formOpen}
@@ -345,14 +351,17 @@ export default function Calls() {
                   )}
                 </td>
                 <td>
-                  <button
-                    className="icon-btn"
-                    title={t('common.delete')}
-                    onClick={() => onDelete(c)}
-                    disabled={deleteMut.isPending}
-                  >
-                    <Icon name="delete" size={16} />
-                  </button>
+                  {canRemove && (
+                    <button
+                      className="icon-btn"
+                      title={t('common.delete')}
+                      onClick={() => onDelete(c)}
+                      disabled={deleteMut.isPending}
+                      data-testid="call-delete"
+                    >
+                      <Icon name="delete" size={16} />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

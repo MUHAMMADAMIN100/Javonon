@@ -35,7 +35,13 @@ import {
   type ClientContact,
 } from '../components/ClientCard';
 import { isElevated } from '../lib/roles';
-import { canSeeAllApplicationsByRole, canSeeAllClients, canSeeAllOfApplication } from '../lib/permissions';
+import {
+  applicationRight,
+  canSeeAllApplicationsByRole,
+  canSeeAllClients,
+  canSeeAllOfApplication,
+  roleCan,
+} from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useChannelLabel, useCountryLabel, useDirectionLabel, useStudentStatusLabel } from '../lib/labels';
 import { tjFormatFull } from '../lib/tjTime';
@@ -208,8 +214,14 @@ export default function ApplicationDetail() {
   // Админ и назначенный менеджер (TJ/CN) могут вести заявку на любом этапе;
   // с доступом «все лиды» / «все заявки» — и чужую этого вида.
   const canAct = isAdmin || isMine || canSeeAllOfApplication(me, app.status);
-  // Удалить — как раньше: свою или руководство (сервер — ensureCanDelete).
-  const canDelete = canSeeAllApplicationsByRole(me) || app.managerId === me?.id || app.chinaManagerId === me?.id;
+  // Права роли: у лида — «Лиды — …», у заявки — «Заявки — …» (Настройки → Роли).
+  const canUpdate = canAct && applicationRight(me, app.status, 'update');
+  const canAssign = applicationRight(me, app.status, 'assign');
+  // Удалить — свою или руководство (сервер — ensureCanDelete); роли нужно
+  // удаление своего вида, чужие — с назначением менеджера этого вида.
+  const canDeleteAny = roleCan(me, isNew ? 'leads:assign' : 'applications:assign', canSeeAllApplicationsByRole(me));
+  const canDelete = applicationRight(me, app.status, 'delete')
+    && (canDeleteAny || app.managerId === me?.id || app.chinaManagerId === me?.id);
   // Документы, анкета и история общения — данные студента заявки: чужого
   // студента ведёт тот, кому выданы «все студенты».
   const canActStudent = canAct && (isAdmin || isMine || canSeeAllClients(me, 'students'));
@@ -218,7 +230,7 @@ export default function ApplicationDetail() {
   // видны поля заявки, а правка ждёт загрузки.
   const showsLead = isNew || !studentId;
   const withStudent = !showsLead && !!student;
-  const canEditData = canAct && (showsLead || withStudent);
+  const canEditData = showsLead ? canUpdate : withStudent && canActStudent && roleCan(me, 'students:update');
 
   // Контакты и поля — без повторов: у новой заявки из самой заявки, у заявки
   // со студентом — из студента, плюс ответы клиента с сайта (страна, WhatsApp).
@@ -250,19 +262,19 @@ export default function ApplicationDetail() {
         avatarId={app.studentId || app.id}
         photoUrl={withStudent ? student!.photoUrl : null}
         enrolled={isEnrolled}
-        onPhotoPick={withStudent && canActStudent ? (file) => photoMut.mutate(file) : undefined}
+        onPhotoPick={withStudent && canActStudent && roleCan(me, 'students:update') ? (file) => photoMut.mutate(file) : undefined}
         photoBusy={photoMut.isPending}
         controls={
           <>
-            <StatusPill status={app.status} canEdit={canAct} busy={statusMut.isPending} onChange={(s) => statusMut.mutate(s)} />
+            <StatusPill status={app.status} canEdit={canUpdate} busy={statusMut.isPending} onChange={(s) => statusMut.mutate(s)} />
             <StagePill
               applicationId={app.id}
               pipelineId={app.pipelineId}
               stageId={app.pipelineStageId}
-              canEdit={canAct}
+              canEdit={canAct && roleCan(me, 'pipelines:move')}
               onChanged={reload}
             />
-            <DebtPill pending={!!app.paymentPending} canEdit={canAct} busy={debtMut.isPending} onChange={(v) => debtMut.mutate(v)} />
+            <DebtPill pending={!!app.paymentPending} canEdit={canUpdate} busy={debtMut.isPending} onChange={(v) => debtMut.mutate(v)} />
             <SmsNote status={app.status} />
           </>
         }
@@ -280,7 +292,7 @@ export default function ApplicationDetail() {
             {/* Только своя заявка (или руководство): сделка засчитывается тому,
                 кто её оформил, — по чужому клиенту это была бы чужая продажа.
                 Доступ «все заявки / лиды» сделок не открывает. */}
-            {(isAdmin || isMine) && !isEnrolled && (
+            {(isAdmin || isMine) && !isEnrolled && roleCan(me, 'submissions:create') && (
               <button
                 type="button"
                 className="btn btn-secondary client-deal-btn"
@@ -370,7 +382,7 @@ export default function ApplicationDetail() {
               <div className="profile-group-head">
                 <h3 className="profile-h">{t('client.section.people')}</h3>
               </div>
-              {!isNew && <ManagerBar manager={app.manager} chinaManager={app.chinaManager} onReassign={onReassign} />}
+              {!isNew && <ManagerBar manager={app.manager} chinaManager={app.chinaManager} onReassign={onReassign} canAssign={roleCan(me, isNew ? 'leads:assign' : 'applications:assign', isAdmin)} />}
               {/* Партнёр — только руководству и только у партнёрских клиентов:
                   решает бэкенд, у менеджера по продажам ключа в JSON нет. */}
               <PartnerAttributionCard attribution={app.partnerAttribution} variant="field" />
@@ -404,7 +416,7 @@ export default function ApplicationDetail() {
               documents={student!.documents || []}
               applicationForm={student!.applicationForm}
               onChange={reload}
-              editable={canActStudent}
+              editable={canActStudent && roleCan(me, 'students:documents')}
             />
           </section>
 
@@ -415,7 +427,7 @@ export default function ApplicationDetail() {
           <ApplicationFormSection
             studentId={student!.id}
             initialForm={student!.applicationForm}
-            canEdit={canActStudent}
+            canEdit={canActStudent && roleCan(me, 'students:update')}
             onSaved={reload}
           />
         </>

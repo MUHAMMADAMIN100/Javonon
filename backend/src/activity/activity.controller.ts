@@ -7,13 +7,15 @@ import { Role } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { canSeePartnerAttribution } from '../auth/role-utils';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { Permissions } from '../auth/permissions.decorator';
 
-// Журнал действий видит только основатель (решение заказчика): там суммы,
-// удаления и чужие действия. RolesGuard: @Roles(FOUNDER) без @Permissions —
-// кастомная роль сюда не проходит (см. «только основатель» в RolesGuard).
+// Журнал действий видит основатель (решение заказчика): там суммы, удаления
+// и чужие действия. С 19.10.2026 основатель может открыть его и роли —
+// пунктом «Журнал активности» (Настройки → Роли); должности — по-прежнему нет.
 @Controller('activity')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.FOUNDER)
+@Permissions('activity:read')
 export class ActivityController {
   constructor(private activity: ActivityService) {}
 

@@ -7,7 +7,7 @@ import { useAuth } from '../store/auth';
 import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import { keys } from '../lib/queryKeys';
-import { isAcademyManager } from '../lib/permissions';
+import { academyCan } from '../lib/permissions';
 import {
   createLevel,
   deleteLevel,
@@ -30,7 +30,8 @@ export default function AcademyLevels() {
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
-  const manager = isAcademyManager(me as any);
+  // Справочник уровней: руководство академии; роль — «Уровни академии».
+  const manager = academyCan(me as any, 'academy:levels');
   const [name, setName] = useState('');
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
 

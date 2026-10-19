@@ -34,6 +34,24 @@ export function hasPermission(user: UserWithRoles | undefined | null, ...require
   return required.some((p) => list.includes(p));
 }
 
+/**
+ * Можно ли действие. Основатель — всегда; сотрудник с ролью (своей или
+ * ролью должности) — только по праву роли `key` (любому из списка);
+ * сотрудник без роли — по правилу его должности `base`, как было до
+ * подробных прав (19.10.2026). Должность «под» ролью ничего не даёт —
+ * то же правило, что в RolesGuard.
+ */
+export function roleAllows(
+  user: UserWithRoles | undefined | null,
+  key: string | string[],
+  base: boolean | (() => boolean) = true,
+): boolean {
+  if (!user) return false;
+  if (isFounder(user)) return true;
+  if (user.hasCustomRole) return hasPermission(user, ...(Array.isArray(key) ? key : [key]));
+  return typeof base === 'function' ? base() : base;
+}
+
 /** Есть ли у пользователя любая из перечисленных ролей. */
 export function hasRole(user: UserWithRoles | undefined | null, ...required: Role[]): boolean {
   if (!user) return false;

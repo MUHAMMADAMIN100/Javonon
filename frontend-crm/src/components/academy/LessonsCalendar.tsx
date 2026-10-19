@@ -9,7 +9,7 @@ import { useAuth } from '../../store/auth';
 import { useT } from '../../lib/i18n';
 import { keys } from '../../lib/queryKeys';
 import { absFileUrl, useFileToken } from '../../lib/fileUrl';
-import { isAcademyManager } from '../../lib/permissions';
+import { isAcademyManager, roleCan } from '../../lib/permissions';
 import { tjDateInput, tjFormatDate, tjFormatTime, tjMonthRange, tjToday } from '../../lib/tjTime';
 import { listSessions, type ClassSession } from '../../api/studyGroups';
 import { CHART_PALETTE } from './ScoreChart';
@@ -100,7 +100,9 @@ export default function LessonsCalendar({
 
   const daySessions = byDay.get(selected) ?? [];
   const live = sessions.filter((s) => s.status !== 'CANCELLED').length;
-  const canEdit = (s: ClassSession) => isAcademyManager(me as any) || s.group?.teacherId === me?.id || s.teacherId === me?.id;
+  // Править — руководство, учитель группы, подменный учитель; роли — ещё «Ведение».
+  const canEdit = (s: ClassSession) =>
+    roleCan(me, 'groups:write') && (isAcademyManager(me as any) || s.group?.teacherId === me?.id || s.teacherId === me?.id);
   const legend = multi ? Array.from(new Map(sessions.map((s) => [s.groupId, s.group?.name ?? '—'])).entries()) : [];
 
   return (

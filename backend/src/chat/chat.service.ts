@@ -719,10 +719,13 @@ export class ChatService implements OnModuleInit {
    *    у обоих. Чат вернётся в список с новым сообщением. В базе всё остаётся.
    *  - Команда: удаляет только админ (у всех); остальные могут только выйти.
    */
-  async deleteRoom(roomId: string, userId: string, forAll: boolean) {
+  async deleteRoom(roomId: string, userId: string, forAll: boolean, mayDelete = true) {
     const room = await this.requireAccess(roomId, userId);
     if (room.type === 'GENERAL') throw new BadRequestException('Общий чат удалить нельзя');
     const now = new Date();
+    if (!mayDelete && (room.type !== 'DIRECT' || forAll)) {
+      throw new ForbiddenException('Нет права удалять чаты');
+    }
     if (room.type === 'DIRECT') {
       const ids = forAll ? await this.memberIds(roomId) : [userId];
       await this.prisma.chatMember.updateMany({

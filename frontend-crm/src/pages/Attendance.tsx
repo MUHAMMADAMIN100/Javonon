@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isFounder, isTeacherOnly } from '../lib/roles';
+import { hasActiveRole, hasPermission } from '../lib/permissions';
 import { useRealtimeEvent } from '../realtime';
 import { listAttendance } from '../api/attendance';
 import { listUsers } from '../api/users';
@@ -37,7 +38,8 @@ const ATTENDANCE_PAGE_SIZE = 10;
 export default function Attendance() {
   const { t } = useT();
   const me = useAuth((s) => s.user);
-  if (!isFounder(me)) {
+  // Основатель; сотрудник с ролью — с «Посещаемость».
+  if (!isFounder(me) && !(hasActiveRole(me) && hasPermission(me, 'attendance:read'))) {
     return <div className="card" style={{ padding: 28 }}>{t('common.founderOnly')}</div>;
   }
 

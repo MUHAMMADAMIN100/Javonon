@@ -8,7 +8,16 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { hasRole, isElevated, isFounder } from '../auth/role-utils';
+import { hasPermission, hasRole, isElevated, isFounder, roleAllows } from '../auth/role-utils';
+
+/**
+ * «Руководство» для операций (свой менеджер в операции, даты задним числом,
+ * снятие блокировки бонуса): у должности — как раньше isElevated; у
+ * сотрудника с ролью — у кого есть «Финансы — изменение операций».
+ */
+export function financeElevated(me: any): boolean {
+  return roleAllows(me, 'finance:update', () => isElevated(me));
+}
 import { FinanceService, CreateTransactionDto } from './finance.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -27,6 +36,7 @@ import {
 // applications/stats и students/stats тоже стали принимать from/to —
 // парсер границ периода в проекте должен быть ровно один.
 import { parseDate } from '../common/query-date';
+import { Permissions } from '../auth/permissions.decorator';
 
 // Receipts: только изображения и PDF. Whitelist расширений и MIME —
 // раньше можно было загрузить .exe/.html/.php (потенциальный XSS если
@@ -195,6 +205,7 @@ const INCOME_SPAM_THRESHOLD = parseInt(
 @Controller('finance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'ACCOUNTANT')
+@Permissions('finance:read')
 export class FinanceController {
   private readonly logger = new Logger(FinanceController.name);
 
@@ -261,8 +272,10 @@ export class FinanceController {
   @Post('transactions')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles('ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER')
+  @Permissions('finance:create')
   async create(@Body() dto: CreateTransactionDto, @CurrentUser() me: any) {
-    if (dto?.type === 'EXPENSE' && !hasRole(me, 'FOUNDER', 'ADMIN', 'ACCOUNTANT')) {
+    // Роль с «Финансы — внесение» вносит и расходы; должности — как раньше.
+    if (dto?.type === 'EXPENSE' && !roleAllows(me, 'finance:create', () => hasRole(me, 'FOUNDER', 'ADMIN', 'ACCOUNTANT'))) {
       throw new ForbiddenException('Только ADMIN / ACCOUNTANT / FOUNDER могут вносить расходы');
     }
     // Audit-fix: передаём actor с реальным флагом isElevated, чтобы сервис
@@ -273,7 +286,7 @@ export class FinanceController {
     const tx = await this.svc.create(dto, me.id, {
       id: me.id,
       role: me?.role,
-      isElevated: isElevated(me),
+      isElevated: financeElevated(me),
     });
     // Спам-детектор для INCOME. fire-and-forget: даже если ветка алерта
     // упадёт, ответ клиенту не должен ломаться. Ошибки логируем — иначе
@@ -325,6 +338,7 @@ export class FinanceController {
   // обеспечивает UserThrottlerGuard в AppModule; см. коммент на POST).
   @Patch('transactions/:id')
   @Roles('FOUNDER')
+  @Permissions('finance:update')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   update(
     @Param('id') id: string,
@@ -337,7 +351,7 @@ export class FinanceController {
     // «Финансы» прошёл бы мимо декоратора. Правка задним числом меняет уже
     // посчитанные выручку, бонусы и распределение прибыли — право на неё
     // только у основателя.
-    if (!isFounder(me)) {
+    if (!roleAllows(me, 'finance:update', () => isFounder(me))) {
       throw new ForbiddenException('Править транзакции может только основатель');
     }
     // Передаём actor, чтобы service мог enforce'ить date-bounds
@@ -351,11 +365,12 @@ export class FinanceController {
     return this.svc.update(id, patch, {
       id: me.id,
       role: me?.role,
-      isElevated: isElevated(me),
+      isElevated: financeElevated(me),
     });
   }
 
   @Delete('transactions/:id')
+  @Permissions('finance:delete')
   remove(
     @Param('id') id: string,
     @CurrentUser() me: any,
@@ -391,7 +406,7 @@ export class FinanceController {
         'Физическое удаление (hardDelete=true) доступно только FOUNDER. Используйте обычный DELETE (soft-delete) — исходная запись сохранится, добавится зеркальная корректирующая.',
       );
     }
-    if (overrideBonusApplied && !isElevated(me)) {
+    if (overrideBonusApplied && !financeElevated(me)) {
       throw new ForbiddenException(
         'Флаг overrideBonusApplied доступен только FOUNDER/ADMIN/ACCOUNTANT',
       );
@@ -405,7 +420,7 @@ export class FinanceController {
       {
         id: me.id,
         role: me?.role,
-        isElevated: isElevated(me),
+        isElevated: financeElevated(me),
       },
       { hardDelete, overrideBonusApplied },
     );
@@ -420,6 +435,8 @@ export class FinanceController {
     });
   }
 
+  // Карточки «Финансы» на главной — и тем, кому открыты деньги компании.
+  @Permissions('finance:read', 'visibility:company-money')
   @Get('summary')
   summary(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.summary({
@@ -436,6 +453,7 @@ export class FinanceController {
     });
   }
 
+  @Permissions('finance:read', 'visibility:company-money')
   @Get('pending-payments')
   pendingPayments() {
     return this.svc.pendingPayments();
@@ -523,6 +541,7 @@ export class FinanceController {
    * INCOME строкам (маскирует фиктивные записи как «с чеком»).
    */
   @Post('receipts')
+  @Permissions('finance:create', 'finance:update')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @UseInterceptors(
     FileInterceptor('file', {

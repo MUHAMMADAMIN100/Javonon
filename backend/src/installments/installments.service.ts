@@ -13,7 +13,8 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { hasRole, isElevated, isFounder, UserWithRoles } from '../auth/role-utils';
+import { hasRole, isElevated, isFounder, roleAllows, UserWithRoles } from '../auth/role-utils';
+import { seesAllDeals } from '../submissions/deal-access';
 import { tjParseLocalDate, tjStartOfDay, tjStartOfDayPlusDays } from '../common/tj-time';
 import {
   InstallmentTemplateStageDto,
@@ -241,7 +242,7 @@ export class InstallmentsService {
   ) {
     // Шаблон — часть карточки программы, поэтому гейт тот же, что у стипендий
     // и документов программы (ProgramsService.addScholarship): руководство.
-    if (!isElevated(user)) {
+    if (!roleAllows(user, 'programs:installments', () => isElevated(user))) {
       throw new ForbiddenException('Только администратор может менять рассрочку программы');
     }
     const program = await this.prisma.program.findUnique({
@@ -1353,7 +1354,7 @@ export class InstallmentsService {
     managerId: string | null,
   ) {
     if (!user) throw new ForbiddenException('Недостаточно прав');
-    if (isFounder(user) || hasRole(user, 'ADMIN')) return;
+    if (seesAllDeals(user, () => hasRole(user, 'ADMIN'))) return;
     if (managerId && managerId === user.id) return;
     throw new ForbiddenException('Это не ваша сделка');
   }

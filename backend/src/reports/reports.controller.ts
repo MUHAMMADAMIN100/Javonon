@@ -5,17 +5,20 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { ReportsService } from './reports.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { Permissions } from '../auth/permissions.decorator';
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard)
 export class ReportsController {
   constructor(private svc: ReportsService) {}
 
+  @Permissions('reports:read', 'reports:create')
   @Get('today')
   today(@CurrentUser() me: any) {
     return this.svc.todayForUser(me.id);
   }
 
+  @Permissions('reports:read')
   @Get('me')
   myList(
     @CurrentUser() me: any,
@@ -46,6 +49,7 @@ export class ReportsController {
     });
   }
 
+  @Permissions('reports:create')
   @Post()
   upsert(
     @CurrentUser() me: any,

@@ -366,6 +366,10 @@ export interface AcademyStudentCard {
   canEditLevel: boolean;
   canResetPassword: boolean;
   canFlag: boolean;
+  /** Снять флаг: руководство; роль — «Снятие флагов». */
+  canRemoveFlags?: boolean;
+  /** Оставить / отчислить / вернуть: руководство; роль — «Решения по ученикам». */
+  canDecide?: boolean;
   flagGroups: Array<{ id: string; name: string }>;
 }
 

@@ -45,7 +45,7 @@ import { useT } from '../lib/i18n';
 import { useRealtime } from '../realtime';
 import { useAuth } from '../store/auth';
 import { hasRole, isElevated, isTeacherOnly } from '../lib/roles';
-import { hasPermission } from '../lib/permissions';
+import { hasPermission, roleCan } from '../lib/permissions';
 import DismissedMark from '../components/DismissedMark';
 
 function fmtMoney(n: number, currency = 'TJS'): string {
@@ -185,21 +185,18 @@ export default function Finance() {
   const managerBaseRole = hasRole(me, 'SALES_MANAGER', 'CLIENT_MANAGER');
   // POST /finance/transactions: @Roles('ADMIN','ACCOUNTANT','SALES_MANAGER',
   // 'CLIENT_MANAGER'). custom-role пропускает по явному permission.
-  const canCreateTx =
-    elevated ||
-    (!hasCustomRole && managerBaseRole) ||
-    hasPermission(me, 'finance:create', 'finance:write');
+  // С 19.10.2026 у роли решают только её галочки «Финансы — …» (roleCan),
+  // у должности — как раньше.
+  const canCreateTx = roleCan(me, 'finance:create', elevated || (!hasCustomRole && managerBaseRole));
   // DELETE /finance/transactions/:id — @Roles('ADMIN','ACCOUNTANT') на
-  // контроллере (finance.controller.ts:223+374). custom-role может открыть
-  // явным `finance:delete`/`finance:write`.
-  const canDeleteTx =
-    elevated || hasPermission(me, 'finance:delete', 'finance:write');
+  // контроллере (finance.controller.ts:223+374); роли — «… — удаление».
+  const canDeleteTx = roleCan(me, 'finance:delete', elevated);
   // POST /payments/:id/confirm|reject — @Roles('ADMIN','ACCOUNTANT') на
   // контроллере (payments.controller.ts:13). Бухгалтерская мутация уровня
   // FOUNDER, custom-role сюда сознательно не пускаем без явного расширения
   // backend — иначе SALES_MANAGER с `finance:read` увидит клиентские
   // «поступления в кассу» и сможет подтвердить чужие деньги.
-  const canReviewPayments = elevated;
+  const canReviewPayments = roleCan(me, 'finance:payments', elevated);
   // AI-add — раньше был доступен всем ролям и мог создать EXPENSE (модель
   // сама решает тип по фразе). Non-elevated тогда молча ловил 403 после
   // распознавания. Раз EXPENSE запрещён, оставляем AI-quick-entry только
@@ -214,7 +211,7 @@ export default function Finance() {
   // чистый вариант, менеджер даже не видит EXPENSE, поэтому не может
   // случайно потянуть файл на диск. Backend-проверка остаётся источником
   // истины (см. finance.controller.ts).
-  const canExpense = hasRole(me, 'FOUNDER', 'ADMIN', 'ACCOUNTANT');
+  const canExpense = roleCan(me, 'finance:create', hasRole(me, 'FOUNDER', 'ADMIN', 'ACCOUNTANT'));
   const [filterType, setFilterType] = useState<TransactionType | ''>('');
   const [filterIncomeSource, setFilterIncomeSource] = useState<IncomeSource | ''>('');
   const [filterProductEnum, setFilterProductEnum] = useState<ProductCategoryEnum | ''>('');
@@ -896,7 +893,7 @@ export default function Finance() {
           <TransactionDetailModal
             key={detailId}
             tx={transactions.find((x) => x.id === detailId)!}
-            canEdit={hasRole(me, 'FOUNDER')}
+            canEdit={roleCan(me, 'finance:update', hasRole(me, 'FOUNDER'))}
             onClose={() => setDetailId(null)}
             onEdit={(tx) => { setDetailId(null); setEditing(tx); }}
             // Карточку закрываем ДО вопроса: иначе подтверждение висит
@@ -1235,7 +1232,9 @@ function TransactionForm({
   // Ивана, а строчка в леджере на моём имени». Теперь блокируем выбор на
   // клиенте, чтобы UI совпадал с фактическим поведением backend'а.
   const me = useAuth((s) => s.user);
-  const elevated = isElevated(me);
+  // Свой менеджер в операции и даты задним числом: должность — руководство;
+  // роль — «Финансы — изменение операций» (как financeElevated на сервере).
+  const elevated = roleCan(me, 'finance:update', isElevated(me));
   const [type, setType] = useState<TransactionType>(editTx?.type ?? 'INCOME');
   const [category, setCategory] = useState<TransactionCategory>(editTx?.category ?? 'TUITION_PAYMENT');
   const [amount, setAmount] = useState<string>(

@@ -16,6 +16,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { OffersService } from './offers.service';
+import { Permissions } from '../auth/permissions.decorator';
 
 @Controller('offers')
 @UseGuards(JwtAuthGuard)
@@ -43,6 +44,7 @@ export class OffersController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('offers:read')
   list() {
     return this.offers.list();
   }
@@ -51,6 +53,7 @@ export class OffersController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('offers:create')
   create(@Body() body: { title?: string; content: string; role?: Role | null }) {
     return this.offers.createNew(body);
   }
@@ -59,6 +62,7 @@ export class OffersController {
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('offers:update')
   patch(@Param('id') id: string, @Body() body: { title?: string; content?: string }) {
     return this.offers.patch(id, body);
   }
@@ -67,6 +71,7 @@ export class OffersController {
   @Get(':id/signatures')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('offers:read')
   signatures(@Param('id') id: string) {
     return this.offers.signatures(id);
   }
@@ -79,6 +84,7 @@ export class OffersController {
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('offers:delete')
   remove(@Param('id') id: string) {
     return this.offers.remove(id);
   }

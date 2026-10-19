@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { roleCan } from '../lib/permissions';
 import CrmSelect from '../components/CrmSelect';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -124,6 +125,11 @@ export default function Programs() {
   const qc = useQueryClient();
   const { t } = useT();
   const isAdmin = isElevated(me);
+  // Права роли «Программы — …»; должность — руководство, как раньше.
+  const canCreate = roleCan(me, 'programs:create', isAdmin);
+  const canUpdate = roleCan(me, 'programs:update', isAdmin);
+  const canRemove = roleCan(me, 'programs:delete', isAdmin);
+  const canScholarships = roleCan(me, 'programs:scholarships', isAdmin);
   const [city, setCity] = useState('');
   const [major, setMajor] = useState('');
   const [direction, setDirection] = useState<Direction | ''>('');
@@ -323,7 +329,7 @@ export default function Programs() {
   return (
     <motion.div className="card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
       <div className="card-header is-titleless">
-        {isAdmin && (
+        {canCreate && (
           <motion.button
             className="btn btn-primary"
             onClick={openCreate}
@@ -417,14 +423,18 @@ export default function Programs() {
                       <div className="program-card-name">{p.name}</div>
                       <div className="program-card-uni">{p.university}</div>
                     </div>
-                    {isAdmin && (
+                    {(canUpdate || canRemove) && (
                       <div className="program-card-actions" onClick={(e) => e.stopPropagation()}>
-                        <button className="btn btn-sm btn-secondary" onClick={() => setEditing({ ...p })}>
-                          <Icon name="edit" size={14} />
-                        </button>
-                        <button className="btn btn-sm btn-danger" onClick={() => onDelete(p)}>
-                          <Icon name="delete" size={14} />
-                        </button>
+                        {canUpdate && (
+                          <button className="btn btn-sm btn-secondary" onClick={() => setEditing({ ...p })} data-testid="program-edit">
+                            <Icon name="edit" size={14} />
+                          </button>
+                        )}
+                        {canRemove && (
+                          <button className="btn btn-sm btn-danger" onClick={() => onDelete(p)} data-testid="program-delete">
+                            <Icon name="delete" size={14} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -799,14 +809,14 @@ export default function Programs() {
               {/* Стипендии — таблица (ТЗ-доработка п.10).
                   Существующая программа → CRUD на сервер.
                   Новая программа → копим локально, flush после save. */}
-              {editing.id ? (
+              {canScholarships && (editing.id ? (
                 <ScholarshipsEditor programId={editing.id} />
               ) : (
                 <ScholarshipsPending
                   items={pendingScholarships}
                   onChange={setPendingScholarships}
                 />
-              )}
+              ))}
 
               <div className="form-group">
                 <label className="crm-checkbox-label">

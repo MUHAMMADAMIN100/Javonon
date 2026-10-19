@@ -22,8 +22,10 @@ import {
   canSeePartnerAttribution,
   hasRole,
   isFounder,
+  roleAllows,
   UserWithRoles,
 } from '../auth/role-utils';
+import { roleDealInScope, seesAllDeals } from './deal-access';
 import {
   maskPhoneForLog,
   parsePhoneIdentity,
@@ -1208,7 +1210,7 @@ export class SubmissionsService {
   }
 
   /** Добавить новый платёж к существующей сделке (продолжение оплаты). */
-  async addPayment(userId: string, submissionId: string, dto: CreatePaymentDto) {
+  async addPayment(userId: string, submissionId: string, dto: CreatePaymentDto, opts: { anyDeal?: boolean } = {}) {
     const submission = await this.prisma.saleSubmission.findUnique({
       where: { id: submissionId },
       include: { payments: true },
@@ -1216,7 +1218,7 @@ export class SubmissionsService {
     if (!submission) throw new NotFoundException('Сделка не найдена');
     // managerId может быть null, если исходный менеджер удалён (SetNull) —
     // такая сделка считается «осиротевшей» и редактировать её нельзя.
-    if (submission.managerId === null || submission.managerId !== userId) {
+    if (!opts.anyDeal && (submission.managerId === null || submission.managerId !== userId)) {
       throw new ForbiddenException('Это не ваша сделка');
     }
     if (submission.status !== SubmissionStatus.ACTIVE) {
@@ -1555,7 +1557,7 @@ export class SubmissionsService {
     // но дополнительно фильтруем здесь как defense-in-depth на случай если
     // кто-то вызовет getOne() из другого сервиса.
     if (!user) throw new ForbiddenException('Недостаточно прав');
-    const elevated = isFounder(user) || hasRole(user, 'ADMIN');
+    const elevated = seesAllDeals(user, () => hasRole(user, 'ADMIN'));
     if (!elevated && s.managerId !== user.id) {
       throw new ForbiddenException('Это не ваша сделка');
     }
@@ -1607,12 +1609,17 @@ export class SubmissionsService {
    *     optimistic CAS гарантирует, что Student/Application создаст ровно
    *     один winner из параллельных approve'ов.
    */
-  async approvePayment(paymentId: string, reviewerId: string, opts: { amountTjs?: unknown } = {}) {
+  async approvePayment(
+    paymentId: string,
+    reviewerId: string,
+    opts: { amountTjs?: unknown; allowed?: boolean } = {},
+  ) {
     const reviewer = await this.prisma.user.findUnique({
       where: { id: reviewerId },
       select: { id: true, role: true, roles: true },
     });
-    if (!reviewer || !isFounder(reviewer as any)) {
+    // allowed — от контроллера: роль с «Одобрение и отклонение платежей».
+    if (!reviewer || !(opts.allowed ?? isFounder(reviewer as any))) {
       throw new ForbiddenException('Только основатель может одобрять');
     }
 
@@ -2515,12 +2522,12 @@ export class SubmissionsService {
   }
 
   /** FOUNDER отклоняет платёж с обязательной причиной. */
-  async rejectPayment(paymentId: string, reviewerId: string, reason: string) {
+  async rejectPayment(paymentId: string, reviewerId: string, reason: string, allowed?: boolean) {
     const reviewer = await this.prisma.user.findUnique({
       where: { id: reviewerId },
       select: { id: true, role: true, roles: true },
     });
-    if (!reviewer || !isFounder(reviewer as any)) {
+    if (!reviewer || !(allowed ?? isFounder(reviewer as any))) {
       throw new ForbiddenException('Только основатель может отклонять');
     }
 
@@ -2621,7 +2628,7 @@ export class SubmissionsService {
     // FOUNDER может закрывать любые сделки (включая orphan-сделки
     // уволенных менеджеров где managerId стал null). Остальным —
     // только свои собственные.
-    const isFounderUser = isFounder(user as UserWithRoles);
+    const isFounderUser = seesAllDeals(user as UserWithRoles, () => false);
     if (!isFounderUser) {
       if (submission.managerId === null || submission.managerId !== user.id) {
         throw new ForbiddenException('Это не ваша сделка');
@@ -3007,14 +3014,17 @@ export class SubmissionsService {
    * флаг). ПОСЛЕ delete посчитать уже нельзя, поэтому пересчёт — первый шаг
    * той же транзакции: упадёт удаление — снятый флаг откатится вместе с ним.
    */
-  async remove(submissionId: string) {
+  async remove(submissionId: string, user?: (UserWithRoles & { id: string }) | null) {
     const submission = await this.prisma.saleSubmission.findUnique({
       where: { id: submissionId },
       // applicationId — чтобы снять признак должника до каскадного удаления
       // этапов рассрочки (см. док-комментарий выше).
-      select: { id: true, applicationId: true },
+      select: { id: true, applicationId: true, managerId: true },
     });
     if (!submission) throw new NotFoundException('Сделка не найдена');
+    if (user && !roleDealInScope(user, submission.managerId)) {
+      throw new ForbiddenException('Это не ваша сделка');
+    }
     await this.prisma.$transaction(async (tx) => {
       // settled: true — удалённая сделка долга не порождает: плана больше не
       // существует, платить не по чему. Заявку сделки БЕЗ этапов вызов не
@@ -3092,8 +3102,8 @@ export class SubmissionsService {
     });
     if (!submission) throw new NotFoundException('Сделка не найдена');
 
-    // Ownership: FOUNDER может любую, менеджер — только свою.
-    const founderUser = isFounder(user);
+    // Ownership: FOUNDER может любую, менеджер — только свою; роль — с «Сделки — все».
+    const founderUser = seesAllDeals(user, () => false);
     if (!founderUser && submission.managerId !== user.id) {
       throw new ForbiddenException('Это не ваша сделка');
     }
@@ -3106,8 +3116,10 @@ export class SubmissionsService {
     // EditSubmissionModal безусловно шлёт programId для незамороженной
     // сделки, поэтому даже «notes-only» правка от менеджера ловила 403.
     // Ownership и так проверена выше; просто вычищаем эти поля из dto,
-    // чтобы блоки присвоения в data ниже их не подхватили.
-    if (!founderUser) {
+    // чтобы блоки присвоения в data ниже их не подхватили. Сумма, валюта и
+    // программа — только основатель: «Сделки — все» открывают чужие сделки,
+    // но не правку бонусной базы.
+    if (!isFounder(user)) {
       delete dto.totalAmount;
       delete dto.currency;
       delete dto.programId;
@@ -3351,7 +3363,7 @@ export class SubmissionsService {
     if (!user) throw new ForbiddenException('Не авторизован');
     // Task 2: FOUNDER-only. Owner-PENDING ветка удалена — менеджеры больше
     // не могут править суммы/даты/файлы платежей ни при каком статусе.
-    if (!isFounder(user)) {
+    if (!roleAllows(user, 'submissions:payment-edit', () => isFounder(user))) {
       throw new ForbiddenException(
         'Платежи может редактировать только основатель',
       );
@@ -3373,6 +3385,9 @@ export class SubmissionsService {
       },
     });
     if (!payment) throw new NotFoundException('Платёж не найден');
+    if (!roleDealInScope(user, payment.submission.managerId)) {
+      throw new ForbiddenException('Это не ваша сделка');
+    }
     if (payment.status === SubmissionPaymentStatus.REJECTED) {
       throw new BadRequestException('Отклонённый платёж нельзя редактировать');
     }
@@ -3578,7 +3593,7 @@ export class SubmissionsService {
     user: (UserWithRoles & { id: string }) | null | undefined,
     paymentId: string,
   ) {
-    if (!user || !isFounder(user)) {
+    if (!user || !roleAllows(user, 'submissions:payment-delete', () => isFounder(user))) {
       throw new ForbiddenException('Только основатель может удалять платёж');
     }
     const payment = await this.prisma.submissionPayment.findUnique({
@@ -3590,12 +3605,16 @@ export class SubmissionsService {
             // Нужен для пересчёта этапов рассрочки после удаления платежа —
             // через него снимается/поднимается Application.paymentPending.
             applicationId: true,
+            managerId: true,
             _count: { select: { payments: true } },
           },
         },
       },
     });
     if (!payment) throw new NotFoundException('Платёж не найден');
+    if (!roleDealInScope(user, payment.submission.managerId)) {
+      throw new ForbiddenException('Это не ваша сделка');
+    }
     if (payment.submission._count.payments <= 1) {
       throw new BadRequestException(
         'Это единственный платёж сделки — удаляйте всю сделку через DELETE /submissions/:id',

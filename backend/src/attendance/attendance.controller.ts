@@ -4,6 +4,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Permissions } from '../auth/permissions.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { maskStaffEmails } from '../common/redact';
 import { AttendanceService } from './attendance.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 
@@ -16,7 +18,8 @@ export class AttendanceController {
   constructor(private svc: AttendanceService) {}
 
   @Get()
-  list(
+  async list(
+    @CurrentUser() me: any,
     @Query('userId') userId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
@@ -36,11 +39,12 @@ export class AttendanceController {
       if (Number.isNaN(d.getTime())) throw new BadRequestException(`Некорректная дата: ${s}`);
       return d;
     };
-    return this.svc.list({
+    const rows = await this.svc.list({
       userId: userId || undefined,
       from: parseStart(from),
       to: parseEnd(to),
       take: take ? parseInt(take, 10) : undefined,
     });
+    return maskStaffEmails(me, rows as any[]);
   }
 }

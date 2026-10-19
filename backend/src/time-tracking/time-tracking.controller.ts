@@ -137,6 +137,7 @@ export class TimeTrackingController {
     return this.svc.submitLunchLateExcuse(me.id, id, body);
   }
 
+  /** Кто сейчас на работе — админ и бухгалтер (в CRM экрана нет, роли закрыто). */
   @Get('team')
   @UseGuards(RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')

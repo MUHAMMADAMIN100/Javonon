@@ -15,6 +15,8 @@ type Props = {
   manager: ManagerInfo | null | undefined;
   chinaManager: ManagerInfo | null | undefined;
   onReassign: (patch: { managerId?: string | null; chinaManagerId?: string | null }) => Promise<void>;
+  /** Право менять менеджера (роль — своя галочка); по умолчанию — должность. */
+  canAssign?: boolean;
 };
 
 function Slot({
@@ -121,14 +123,16 @@ function Slot({
   );
 }
 
-export default function ManagerBar({ manager, chinaManager, onReassign }: Props) {
+export default function ManagerBar({ manager, chinaManager, onReassign, canAssign }: Props) {
   const me = useAuth((s) => s.user);
   const { toast } = useUI();
   const { t } = useT();
   const [users, setUsers] = useState<User[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const isAdmin = isElevated(me);
+  // Менять менеджера: страница знает своё право роли (назначение менеджера
+  // заявке, лиду или студенту); по умолчанию — руководство по должности.
+  const isAdmin = canAssign ?? isElevated(me);
 
   useEffect(() => {
     // Учитель академии не ведёт клиентов — в выборе менеджера его нет.

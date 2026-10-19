@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { hiddenAmount } from '../lib/permissions';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useT } from '../lib/i18n';
@@ -52,7 +53,9 @@ const OVERDUE_FILL = '#ef4444';
 /** Тот же danger-текст, что и в .badge-danger: читается и на белом, и на подсветке строки. */
 const DANGER_TEXT = '#b91c1c';
 
-const money = (v: number, currency: string) => `${v.toLocaleString('ru-RU')} ${currency}`;
+/** Без «Деньги клиентов» суммы приходят null — «•••• TJS». */
+const money = (v: number | null | undefined, currency: string) =>
+  v == null ? hiddenAmount(currency) : `${v.toLocaleString('ru-RU')} ${currency}`;
 
 export default function PaymentStagesSection({
   submissionId,
@@ -87,6 +90,8 @@ export default function PaymentStagesSection({
   if (query.isLoading || !data) return null;
 
   const { stages, totals, currency, totalAmount } = data;
+  // Сумм не видно — и править этапы (суммы, сроки) роли нечем.
+  const editable = canEdit && !(data as { moneyHidden?: boolean }).moneyHidden;
   // Сведение считает БЭК — своим эпсилоном (0.01, тот же, что у кассы). Фронт
   // границу «сходится/нет» не пересчитывает, чтобы она была одна на систему.
   // На выкатке бандл может опередить рестарт API, и ответ придёт без этих
@@ -172,7 +177,7 @@ export default function PaymentStagesSection({
                   <SortTh sort={sort} col="due" />
                   <SortTh sort={sort} col="amount" style={{ textAlign: 'right' }} />
                   <SortTh sort={sort} col="status" />
-                  {canEdit && <th style={{ width: 40 }} />}
+                  {editable && <th style={{ width: 40 }} />}
                 </tr>
               </thead>
               <tbody>
@@ -205,7 +210,7 @@ export default function PaymentStagesSection({
                         </span>
                       )}
                     </td>
-                    {canEdit && (
+                    {editable && (
                       <td>
                         <button
                           className="btn btn-sm btn-secondary"

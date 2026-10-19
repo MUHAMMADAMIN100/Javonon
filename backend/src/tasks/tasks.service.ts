@@ -6,7 +6,17 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { hasRole, isElevated } from '../auth/role-utils';
+import { hasPermission, hasRole, isElevated, isFounder, roleAllows } from '../auth/role-utils';
+
+/**
+ * Видит и ведёт все задачи, а не только свои: руководство по должности;
+ * сотрудник с ролью — с «Задачи — все, не только свои».
+ */
+function seesAllTasks(user: any): boolean {
+  if (isFounder(user)) return true;
+  if (user?.hasCustomRole) return hasPermission(user, 'tasks:all');
+  return isElevated(user);
+}
 
 type CurrentUser = { id: string; role: Role; roles?: Role[] };
 
@@ -77,7 +87,9 @@ export class TasksService {
   async create(dto: CreateTaskDto, user: CurrentUser) {
     // Elevated (FOUNDER/ADMIN/ACCOUNTANT, мульти-роли). Раньше primary
     // ADMIN-only блокировало FOUNDER и любого secondary-ADMIN'а (ТЗ §2).
-    if (!isElevated(user as any)) {
+    // Исполнителя и контролёра новой задачи выбирают при создании — это
+    // часть «Задачи — создание»; «Исполнитель и контролёр» — их смена потом.
+    if (!roleAllows(user as any, 'tasks:create', () => isElevated(user as any))) {
       throw new ForbiddenException('Создавать задачи может только администрация');
     }
     const assigneeIds = Array.isArray(dto.assigneeIds) ? dto.assigneeIds : [];
@@ -130,6 +142,8 @@ export class TasksService {
     currentUserId: string;
     role: Role;
     roles?: Role[];
+    permissions?: string[];
+    hasCustomRole?: boolean;
     search?: string;
     status?: TaskStatus;
     assigneeId?: string;
@@ -138,7 +152,12 @@ export class TasksService {
     // «Все задачи» вместо только своих доступен elevated (FOUNDER/ADMIN/
     // ACCOUNTANT). Принимаем filters.role + extra hint filters.roles чтобы
     // мульти-роли работали (раньше strict role === 'ADMIN').
-    const elevated = isElevated({ role: filters.role, roles: filters.roles } as any);
+    const elevated = seesAllTasks({
+      role: filters.role,
+      roles: filters.roles,
+      permissions: filters.permissions,
+      hasCustomRole: filters.hasCustomRole,
+    });
 
     // «Мои задачи» — юзер исполнитель (M2M assignees) ИЛИ контролёр.
     // Legacy assignedToId включаем как fallback: старые задачи, ещё
@@ -194,22 +213,47 @@ export class TasksService {
     return task;
   }
 
+  /** Карточка задачи: сотруднику с ролью — своя (исполнитель, контролёр) или все с «Задачи — все». */
+  async findOneFor(id: string, user: CurrentUser) {
+    const task = await this.findOne(id);
+    if ((user as any)?.hasCustomRole && !seesAllTasks(user) && !this.isMine(task, user.id)) {
+      throw new ForbiddenException('Это не ваша задача');
+    }
+    return task;
+  }
+
+  private isMine(task: any, userId: string): boolean {
+    const assigneeIds = task.assignees?.map((a: any) => a.id) ?? [];
+    return task.assignedToId === userId || assigneeIds.includes(userId) || task.controllerId === userId;
+  }
+
   async update(id: string, dto: UpdateTaskDto, user: CurrentUser) {
     const task = await this.findOne(id);
     const currentAssigneeIds = (task as any).assignees?.map((a: any) => a.id) ?? [];
     const isOwner =
       task.assignedToId === user.id || currentAssigneeIds.includes(user.id);
     const isController = task.controllerId === user.id;
-    const elevated = isElevated(user as any);
+    const custom = !!(user as any).hasCustomRole && !isFounder(user as any);
+    const elevated = seesAllTasks(user);
     if (!elevated && !isOwner && !isController) {
       throw new ForbiddenException('Вы не можете редактировать эту задачу');
     }
-    // Переназначать задачу/менять контролёра — только elevated (ТЗ §2 мульти-роли).
-    if (!elevated && dto.assigneeIds !== undefined) {
-      throw new ForbiddenException('Переназначать задачу может только администрация');
-    }
-    if (!elevated && dto.controllerId !== undefined) {
-      throw new ForbiddenException('Менять контролёра может только администрация');
+    if (custom) {
+      // Роль меняет только статус: текст, срок и исполнителей после
+      // создания в CRM не правят, и пункта роли для этого нет.
+      const otherChange = dto.title !== undefined || dto.description !== undefined || dto.deadline !== undefined
+        || dto.assigneeIds !== undefined || dto.controllerId !== undefined;
+      if (otherChange) {
+        throw new ForbiddenException('Изменить можно только статус задачи');
+      }
+    } else {
+      // Переназначать задачу/менять контролёра — только elevated (ТЗ §2 мульти-роли).
+      if (!elevated && dto.assigneeIds !== undefined) {
+        throw new ForbiddenException('Переназначать задачу может только администрация');
+      }
+      if (!elevated && dto.controllerId !== undefined) {
+        throw new ForbiddenException('Менять контролёра может только администрация');
+      }
     }
 
     // Валидация assigneeIds / controllerId: юзеры существуют.
@@ -276,10 +320,13 @@ export class TasksService {
   async remove(id: string, user: CurrentUser) {
     // Основатель и администратор (в т.ч. вторичной ролью). Раньше было
     // `role === 'ADMIN'` — основатель видел кнопку, но получал 403.
-    if (!hasRole(user as any, 'FOUNDER', 'ADMIN')) {
+    if (!roleAllows(user as any, 'tasks:delete', () => hasRole(user as any, 'FOUNDER', 'ADMIN'))) {
       throw new ForbiddenException('Только основатель или администратор может удалять задачи');
     }
-    await this.findOne(id);
+    const task = await this.findOne(id);
+    if ((user as any).hasCustomRole && !seesAllTasks(user) && !this.isMine(task, user.id)) {
+      throw new ForbiddenException('Это не ваша задача');
+    }
     await this.prisma.task.delete({ where: { id } });
     this.realtime.emitStaff('task:deleted', { id });
     return { ok: true };
@@ -289,7 +336,7 @@ export class TasksService {
     // Elevated видит статистику по всем; остальные — только по своим
     // (исполнитель по M2M / legacy / контролёр).
     // Раньше `user.role === 'ADMIN'` исключало FOUNDER и secondary-ADMIN.
-    const where = isElevated(user as any)
+    const where = seesAllTasks(user)
       ? {}
       : {
           OR: [

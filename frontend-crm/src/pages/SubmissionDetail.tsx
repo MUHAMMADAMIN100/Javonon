@@ -5,6 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
+import { hasActiveRole, hiddenAmount, roleCan } from '../lib/permissions';
 import { useRealtime } from '../realtime';
 import { useUI } from '../ui/Dialogs';
 import {
@@ -188,9 +189,24 @@ export default function SubmissionDetail() {
   }
 
   const studentName = s.student?.fullName || s.newStudentName || '—';
-  const totalPaid = s.payments.filter((p) => p.status === 'APPROVED').reduce((sum, p) => sum + p.amount, 0);
-  const remaining = Math.max(0, s.totalAmount - totalPaid);
+  const totalPaid = s.payments.filter((p) => p.status === 'APPROVED').reduce((sum, p) => sum + (p.amount ?? 0), 0);
+  const remaining = Math.max(0, (s.totalAmount ?? 0) - totalPaid);
   const isOwnSubmission = s.managerId === me?.id;
+  // Сумма без «Деньги клиентов» не приходит — «•••• TJS».
+  const money = (n: number) => (s.moneyHidden ? hiddenAmount(s.currency) : `${n.toLocaleString('ru-RU')} ${s.currency}`);
+  // Права роли «Сделки — …» (Настройки → Роли). Сделка в зоне роли — своя или
+  // «все сделки»; основатель и должности — как раньше.
+  const custom = hasActiveRole(me) && !founder;
+  const inScope = !custom || isOwnSubmission || roleCan(me, 'submissions:all');
+  const may = (key: string) => inScope && roleCan(me, key);
+  const canAddPayment = s.status === 'ACTIVE' && (custom ? may('submissions:payment-add') : isOwnSubmission);
+  const canChangeStatus = s.status === 'ACTIVE' && (custom ? may('submissions:status') : isOwnSubmission);
+  const canEditDeal = custom ? may('submissions:update') : founder || isOwnSubmission;
+  const canDeleteDeal = custom ? may('submissions:delete') : founder;
+  const canEditStages = custom ? may('submissions:stages') : founder || isOwnSubmission;
+  const canApprove = custom ? roleCan(me, 'submissions:approve') : founder;
+  const canEditPayment = custom ? may('submissions:payment-edit') : founder;
+  const canDeletePayment = custom ? may('submissions:payment-delete') : founder;
 
   const onReject = (paymentId: string) => {
     setRejectPaymentId(paymentId);
@@ -226,8 +242,8 @@ export default function SubmissionDetail() {
     const ok = await confirm({
       title: t('deal.payDelete.title'),
       message: p.status === 'APPROVED'
-        ? t('deal.payDelete.approved').replace('{amount}', `${p.amount.toLocaleString('ru-RU')} ${s?.currency ?? ''}`)
-        : t('deal.payDelete.pending').replace('{amount}', `${p.amount.toLocaleString('ru-RU')} ${s?.currency ?? ''}`).replace('{date}', new Date(p.paidAt).toLocaleDateString('ru-RU')),
+        ? t('deal.payDelete.approved').replace('{amount}', money(p.amount ?? 0))
+        : t('deal.payDelete.pending').replace('{amount}', money(p.amount ?? 0)).replace('{date}', new Date(p.paidAt).toLocaleDateString('ru-RU')),
       confirmText: t('common.delete'),
       danger: true,
     });
@@ -281,9 +297,9 @@ export default function SubmissionDetail() {
         <PartnerAttributionCard attribution={s.partnerAttribution} />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
-          <Stat label={t('deal.contract')} value={`${s.totalAmount.toLocaleString('ru-RU')} ${s.currency}`} />
-          <Stat label={t('deal.stat.paid')} value={`${totalPaid.toLocaleString('ru-RU')} ${s.currency}`} highlight />
-          <Stat label={t('deal.stat.remaining')} value={`${remaining.toLocaleString('ru-RU')} ${s.currency}`} />
+          <Stat label={t('deal.contract')} value={money(s.totalAmount ?? 0)} />
+          <Stat label={t('deal.stat.paid')} value={money(totalPaid)} highlight />
+          <Stat label={t('deal.stat.remaining')} value={money(remaining)} />
           <Stat label={t('deal.stat.payments')} value={String(s.payments.length)} />
         </div>
 
@@ -320,17 +336,23 @@ export default function SubmissionDetail() {
         )}
 
         {/* Кнопки менеджера */}
-        {isOwnSubmission && s.status === 'ACTIVE' && (
+        {(canAddPayment || canChangeStatus) && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid var(--border-soft)', paddingTop: 12 }}>
-            <button className="btn btn-sm btn-primary" onClick={() => setShowAddPayment(true)}>
-              <Icon name="add" size={14} /> {t('deal.addPayment')}
-            </button>
-            <button className="btn btn-sm btn-secondary" onClick={onComplete}>
-              <Icon name="check" size={14} /> {t('deal.closeDeal')}
-            </button>
-            <button className="btn btn-sm btn-danger" onClick={onCancel}>
-              <Icon name="close" size={14} /> {t('deal.cancelDeal')}
-            </button>
+            {canAddPayment && (
+              <button className="btn btn-sm btn-primary" onClick={() => setShowAddPayment(true)} data-testid="deal-add-payment">
+                <Icon name="add" size={14} /> {t('deal.addPayment')}
+              </button>
+            )}
+            {canChangeStatus && (
+              <>
+                <button className="btn btn-sm btn-secondary" onClick={onComplete} data-testid="deal-complete">
+                  <Icon name="check" size={14} /> {t('deal.closeDeal')}
+                </button>
+                <button className="btn btn-sm btn-danger" onClick={onCancel} data-testid="deal-cancel">
+                  <Icon name="close" size={14} /> {t('deal.cancelDeal')}
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -339,7 +361,7 @@ export default function SubmissionDetail() {
               для своей сделки (в service заморожены studentId/newStudent/programId
               после первого APPROVE)
             - «Удалить сделку»: только FOUNDER (destructive; менеджер идёт к нему) */}
-        {(founder || isOwnSubmission) && (
+        {(canEditDeal || canDeleteDeal) && (
           <div
             style={{
               display: 'flex',
@@ -347,21 +369,25 @@ export default function SubmissionDetail() {
               flexWrap: 'wrap',
               borderTop: '1px solid var(--border-soft)',
               paddingTop: 12,
-              marginTop: isOwnSubmission && s.status === 'ACTIVE' ? 12 : 0,
+              marginTop: canAddPayment || canChangeStatus ? 12 : 0,
             }}
           >
-            <button
-              className="btn btn-sm btn-secondary"
-              onClick={() => setShowEditSubmission(true)}
-              disabled={deleteSubmissionMut.isPending}
-            >
-              <Icon name="edit" size={14} /> {t('deal.edit')}
-            </button>
-            {founder && (
+            {canEditDeal && (
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => setShowEditSubmission(true)}
+                disabled={deleteSubmissionMut.isPending}
+                data-testid="deal-edit"
+              >
+                <Icon name="edit" size={14} /> {t('deal.edit')}
+              </button>
+            )}
+            {canDeleteDeal && (
               <button
                 className="btn btn-sm btn-danger"
                 onClick={onDeleteSubmission}
                 disabled={deleteSubmissionMut.isPending}
+                data-testid="deal-delete"
               >
                 <Icon name="delete" size={14} /> {deleteSubmissionMut.isPending ? t('deal.deleting') : t('deal.delete')}
               </button>
@@ -375,7 +401,7 @@ export default function SubmissionDetail() {
           пустой шаблон = платят разом). Правит этапы тот же, кто правит
           сделку: FOUNDER/ADMIN либо менеджер-владелец. Пометить этап
           оплаченным отсюда НЕЛЬЗЯ — это делает только одобрение платежа. */}
-      <PaymentStagesSection submissionId={s.id} canEdit={founder || isOwnSubmission} />
+      <PaymentStagesSection submissionId={s.id} canEdit={canEditStages} />
 
       {/* Платежи */}
       <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 12 }}>{t('deal.payments')} ({s.payments.length})</h3>
@@ -400,7 +426,7 @@ export default function SubmissionDetail() {
             currency={s.currency}
             // Завершённая сделка — тоже: зависшие с прошлого неодобренные платежи
             // основатель разбирает как обычно (закрыть с такими теперь нельзя).
-            canReview={founder && p.status === 'PENDING' && (s.status === 'ACTIVE' || s.status === 'COMPLETED') && !isOwnSubmission}
+            canReview={canApprove && p.status === 'PENDING' && (s.status === 'ACTIVE' || s.status === 'COMPLETED') && !isOwnSubmission}
             onApprove={() => (s.currency === 'TJS' ? approveMut.mutate({ paymentId: p.id }) : setApproveTarget(p))}
             onReject={() => onReject(p.id)}
             busy={approveMut.isPending || rejectMut.isPending}
@@ -408,10 +434,11 @@ export default function SubmissionDetail() {
                Менеджер добавляет платежи, но менять/удалять уже отправленные
                (даже свои PENDING) не может: одобрение/отклонение — прерогатива
                FOUNDER, а APPROVED затрагивают доход. */
-            canManage={founder}
+            canManage={canEditPayment}
             /* Удаление только FOUNDER — реверс Transaction для APPROVED —
-               бухгалтерская операция */
-            canDelete={founder}
+               бухгалтерская операция; роли — «Платёж: удаление». */
+            canDelete={canDeletePayment}
+            moneyHidden={!!s.moneyHidden}
             onEdit={() => setEditPaymentId(p.id)}
             onDelete={() => onDeletePayment(p)}
             manageBusy={deletePaymentMut.isPending}
@@ -522,7 +549,7 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
 
 function PaymentRow({
   p, currency, canReview, onApprove, onReject, busy,
-  canManage, canDelete, onEdit, onDelete, manageBusy,
+  canManage, canDelete, onEdit, onDelete, manageBusy, moneyHidden,
 }: {
   p: SubmissionPayment;
   currency: string;
@@ -532,6 +559,8 @@ function PaymentRow({
   busy: boolean;
   canManage: boolean;
   canDelete: boolean;
+  /** Роль без «Деньги клиентов»: сумма и чеки скрыты. */
+  moneyHidden?: boolean;
   onEdit: () => void;
   onDelete: () => void;
   manageBusy: boolean;
@@ -541,8 +570,8 @@ function PaymentRow({
   return (
     <tr data-testid={`payment-row-${p.id}`} className="pay-row">
       <td className="pay-amount" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, whiteSpace: 'nowrap' }}>
-        {p.amount.toLocaleString('ru-RU')} {currency}
-        {currency !== 'TJS' && p.amountTjs != null && (
+        {moneyHidden ? hiddenAmount(currency) : `${p.amount.toLocaleString('ru-RU')} ${currency}`}
+        {!moneyHidden && currency !== 'TJS' && p.amountTjs != null && (
           <div className="pay-amount-tjs" data-testid="pay-amount-tjs">
             {t('deal.inBonus')}: {p.amountTjs.toLocaleString('ru-RU')} TJS
           </div>

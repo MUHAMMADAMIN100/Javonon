@@ -7602,3 +7602,140 @@ html:has(.exc-bar) { scrollbar-gutter: stable; }
   .acad-add-option small { display: none; }
   .acad-danger-zone .btn { width: 100%; justify-content: center; }
 }
+
+/* ===================== Права роли таблицей (components/RolePermissionMatrix) =====================
+   Строка — раздел, столбцы «Просмотр / Создание / Изменение / Удаление»,
+   особые действия — плашками. До 900 px строка становится карточкой. */
+.perm-matrix { display: flex; flex-direction: column; gap: 12px; }
+.perm-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.perm-search { position: relative; flex: 1 1 280px; max-width: 440px; display: flex; align-items: center; }
+.perm-search > .material-symbols-rounded { position: absolute; left: 12px; color: var(--text-light); pointer-events: none; }
+/* !important: на ≤1024 px .crm-input получает padding 8px 12px !important — значок лупы налезал на текст. */
+.perm-search input.crm-input { width: 100%; padding-left: 38px !important; padding-right: 36px !important; }
+.perm-search-clear {
+  position: absolute; right: 8px; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--text-soft);
+}
+.perm-search-clear:hover { background: var(--bg-soft); color: var(--text); }
+.perm-total {
+  font-size: 13px; font-weight: 600; color: var(--primary-dark); background: var(--bg-card);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  padding: 6px 12px; border-radius: 999px; white-space: nowrap;
+}
+.perm-hint { font-size: 12.5px; line-height: 1.45; color: var(--text-soft); margin: 0; max-width: 860px; }
+.perm-empty {
+  display: flex; align-items: center; justify-content: center; gap: 8px; padding: 24px;
+  color: var(--text-soft); border: 1px dashed var(--border); border-radius: 12px; background: var(--bg-card);
+}
+
+.perm-group { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); overflow: hidden; }
+.perm-group.is-data { border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
+.perm-group-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px 8px 6px; background: var(--bg-soft); border-bottom: 1px solid var(--border);
+}
+.perm-group-toggle {
+  display: flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 8px 4px 4px;
+  border-radius: 8px; color: var(--text); text-align: left;
+}
+.perm-group-toggle:hover { background: color-mix(in srgb, var(--primary) 7%, transparent); }
+.perm-group-title { font-family: var(--font-display); font-weight: 600; font-size: 15px; }
+.perm-group-count {
+  font-size: 12px; font-weight: 600; color: var(--text-soft); background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; white-space: nowrap;
+}
+.perm-group-count.is-on { color: var(--primary-dark); border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
+.perm-group-all { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0; }
+.perm-group-note { margin: 0; padding: 10px 14px 2px; font-size: 12.5px; line-height: 1.45; color: var(--text-soft); }
+
+.perm-grid { display: flex; flex-direction: column; }
+.perm-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) repeat(4, minmax(100px, 0.8fr)) minmax(260px, 2.4fr);
+  align-items: start;
+  border-top: 1px solid var(--border-soft);
+}
+.perm-row:first-child { border-top: none; }
+.perm-row > * { padding: 10px 12px; min-width: 0; }
+.perm-row-head {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-soft);
+  border-bottom: 1px solid var(--border);
+}
+.perm-row-head > * { padding-top: 8px; padding-bottom: 8px; }
+.perm-row-head + .perm-row { border-top: none; }
+.perm-row.has-on { background: color-mix(in srgb, var(--primary) 3%, transparent); }
+.perm-section { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.perm-section-name { font-weight: 600; font-size: 14px; line-height: 1.3; }
+.perm-section-all {
+  font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--input-border); color: var(--text-soft); background: var(--bg-card);
+}
+.perm-section-all:hover { border-color: var(--primary); color: var(--primary); }
+.perm-section-all.is-on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.perm-cell.is-empty { color: var(--text-light); padding-left: 16px; }
+.perm-check { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; line-height: 1.35; color: var(--text-soft); }
+.perm-check-text { display: flex; flex-direction: column; min-width: 0; padding-top: 1px; }
+.perm-cell-label { display: none; font-size: 13px; font-weight: 600; color: var(--text); }
+.perm-cell-note { overflow-wrap: anywhere; }
+.perm-check.is-on .perm-cell-note { color: var(--text); }
+.perm-extras { display: flex; flex-wrap: wrap; gap: 6px; }
+.perm-chip {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 100%;
+  padding: 5px 11px 5px 7px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12.5px; line-height: 1.3; cursor: pointer; background: var(--bg-card); color: var(--text);
+}
+.perm-chip:hover { border-color: var(--input-border-hover); }
+.perm-chip.is-on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-darker); font-weight: 500; }
+.perm-chip > span { overflow-wrap: anywhere; }
+
+.perm-data-list { display: flex; flex-direction: column; }
+.perm-data-row {
+  display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
+  border-top: 1px solid var(--border-soft); cursor: pointer;
+}
+.perm-data-row.is-on { background: color-mix(in srgb, var(--primary) 4%, transparent); }
+.perm-data-text { display: flex; flex-direction: column; gap: 2px; font-size: 14px; min-width: 0; }
+.perm-data-note { font-size: 12.5px; color: var(--text-soft); overflow-wrap: anywhere; }
+
+/* «Сохранить» роли всегда под рукой — список прав длинный. */
+.role-form-actions {
+  position: sticky; bottom: 0; z-index: 2;
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin: 16px -16px -16px; padding: 12px 16px;
+  background: var(--bg-soft); border-top: 1px solid var(--border);
+  border-radius: 0 0 12px 12px;
+}
+
+@media (max-width: 900px) {
+  .perm-row-head { display: none; }
+  .perm-row { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px 4px; }
+  .perm-row > * { padding: 6px 8px; }
+  .perm-section { grid-column: 1 / -1; justify-content: space-between; }
+  .perm-extras { grid-column: 1 / -1; }
+  .perm-extras.is-empty, .perm-cell.is-empty { display: none; }
+  .perm-cell-label { display: block; }
+}
+@media (max-width: 480px) {
+  .perm-group-head { flex-wrap: wrap; }
+  .perm-group-all { margin-left: auto; }
+  .perm-total { width: 100%; text-align: center; }
+}
+
+/* Чат и «Входящие» без права отправки — строка вместо поля ввода. */
+.chat-composer.chat-readonly {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 20px !important; border-top: 1px solid var(--border);
+  background: var(--bg-soft); color: var(--text-soft); font-size: 13px;
+}
+.inbox-readonly {
+  display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+  border-top: 1px solid var(--border); background: var(--bg-soft); color: var(--text-soft); font-size: 13px;
+}
+
+/* Телефон: в карточке заявки, лида, студента имя менеджера и метка «Уволен»
+   переносятся, а не вылезают за карточку (по-таджикски метка длинная —
+   «Озод шудааст»). */
+@media (max-width: 900px) {
+  .client-list tr.client-row .cl-mgr .mgr-row { max-width: 100%; }
+  .client-list tr.client-row .cl-mgr .mgr-row > span:not(.mgr-tag) { white-space: normal; overflow-wrap: anywhere; }
+}

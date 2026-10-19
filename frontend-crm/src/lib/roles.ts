@@ -34,9 +34,18 @@ export function isFounder(user: UserWithRoles | undefined | null): boolean {
   return hasRole(user, 'FOUNDER');
 }
 
-/** FOUNDER / ADMIN / ACCOUNTANT — равный полный доступ к админ-зоне (по ТЗ). */
-export function isElevated(user: UserWithRoles | undefined | null): boolean {
-  return hasRole(user, 'FOUNDER', 'ADMIN', 'ACCOUNTANT');
+/**
+ * FOUNDER / ADMIN / ACCOUNTANT — равный полный доступ к админ-зоне (по ТЗ).
+ * Сотрудник с активной ролью (своей или ролью должности) руководством по
+ * должности не считается: у него всё решают галочки роли (roleCan в
+ * lib/permissions.ts) — ровно как на сервере (RolesGuard, roleAllows).
+ */
+export function isElevated(
+  user: (UserWithRoles & { customRole?: { isActive?: boolean } | null }) | undefined | null,
+): boolean {
+  if (hasRole(user, 'FOUNDER')) return true;
+  if (user?.customRole && user.customRole.isActive !== false) return false;
+  return hasRole(user, 'ADMIN', 'ACCOUNTANT');
 }
 
 export function isManager(user: UserWithRoles | undefined | null): boolean {

@@ -9,8 +9,8 @@ import { UpdateStudentDto } from './dto/update-student.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { canSeePartnerAttribution, isElevated, UserWithRoles } from '../auth/role-utils';
-import { canSeeAllStudents } from '../auth/client-access';
+import { canSeePartnerAttribution, isElevated, isFounder, roleAllows, UserWithRoles } from '../auth/role-utils';
+import { canReadStudents, canSeeAllStudents } from '../auth/client-access';
 import { ReferralsService } from '../partners/referrals.service';
 import { CABINET_BY_DIRECTION } from '../common/cabinets';
 import { parseCalendarDateUtc } from '../common/tj-time';
@@ -67,6 +67,7 @@ export class StudentsService {
    * угодно (правка — любого студента без менеджера).
    */
   canAccess(student: { managerId: string | null; chinaManagerId?: string | null }, user: CurrentUser) {
+    if (!canReadStudents(user as any)) return false;
     if (canSeeAllStudents(user as any)) return true;
     return student.managerId === user.id || student.chinaManagerId === user.id;
   }
@@ -121,8 +122,11 @@ export class StudentsService {
         status: dto.status ?? StudentStatus.ACTIVE,
         comment: dto.comment || null,
         // Создал менеджер — он и ведёт студента (иначе своего же студента
-        // он не видел бы в списке и не мог бы править).
-        ...(_user && !isElevated(_user as any) ? { managerId: _user.id } : {}),
+        // он не видел бы в списке и не мог бы править). Сотрудник с ролью —
+        // тоже: должность под ролью руководством его не делает.
+        ...(_user && !isFounder(_user as any) && ((_user as any).hasCustomRole || !isElevated(_user as any))
+          ? { managerId: _user.id }
+          : {}),
       },
       include: STUDENT_INCLUDE,
     });
@@ -198,11 +202,13 @@ export class StudentsService {
   }
 
   async regeneratePassword(id: string, user: CurrentUser) {
-    // Elevated, не primary-ADMIN-only (ТЗ §2 multi-role).
-    if (!isElevated(user as any)) {
+    // Elevated, не primary-ADMIN-only (ТЗ §2 multi-role); роль — «Студенты —
+    // новый пароль кабинета» и только тем, кого она видит.
+    if (!roleAllows(user as any, 'students:password', () => isElevated(user as any))) {
       throw new ForbiddenException('Сбрасывать пароль студента может только администрация');
     }
     const existing = await this.findOne(id);
+    this.ensureCanEdit(existing, user);
     if (!existing.email) {
       throw new BadRequestException('У студента нет email — невозможно создать доступ');
     }
@@ -394,10 +400,11 @@ export class StudentsService {
     // должен менять этап онбординга — это зона клиентского менеджера.
     if (dto.onboardingStage !== undefined) {
       const userAny = user as any;
-      const canEditOnboarding =
+      // Сотруднику с ролью этап меняет «Студенты — изменение» (уже проверено на адресе).
+      const canEditOnboarding = roleAllows(userAny, 'students:update', () =>
         isElevated(userAny) ||
         userAny?.role === 'CLIENT_MANAGER' ||
-        (userAny?.roles || []).includes('CLIENT_MANAGER');
+        (userAny?.roles || []).includes('CLIENT_MANAGER'));
       if (!canEditOnboarding) {
         throw new ForbiddenException('Онбординг ведёт клиентский менеджер');
       }
@@ -529,10 +536,10 @@ export class StudentsService {
     // Переназначение менеджеров — elevated (FOUNDER/ADMIN/ACCOUNTANT,
     // мульти-роли). Раньше primary `!== 'ADMIN'` блокировал FOUNDER
     // и secondary-ADMIN'а из ТЗ §2.
-    if (!isElevated(user as any)) {
+    if (!roleAllows(user as any, 'students:assign', () => isElevated(user as any))) {
       throw new ForbiddenException('Переназначать менеджеров может только администрация');
     }
-    await this.findOne(id);
+    this.ensureCanEdit(await this.findOne(id), user);
 
     const data: any = {};
     if (patch.managerId !== undefined) {
@@ -573,10 +580,11 @@ export class StudentsService {
     //   2) Игнорировало мульти-роли по ТЗ §2 (юзер с ADMIN в roles[]
     //      и другой primary не мог удалять, хотя должен).
     // isElevated() корректно учитывает оба случая.
-    if (!isElevated(user as any)) {
+    if (!roleAllows(user as any, 'students:delete', () => isElevated(user as any))) {
       throw new ForbiddenException('Удалять студентов может только администрация');
     }
-    await this.findOne(id); // проверяем существование (бросит NotFoundException если нет)
+    // проверяем существование (бросит NotFoundException если нет) и что роль его видит
+    this.ensureCanEdit(await this.findOne(id), user);
     // Заявки сохраняем как историю — Prisma автоматически делает SetNull для
     // optional FK Application.studentId. Document/Enrollment/LessonProgress/
     // Interaction/Payment каскадятся через onDelete: Cascade в схеме.
@@ -665,9 +673,11 @@ export class StudentsService {
     // Видимость — та же, что у списка: своих, или всех — руководству и тем,
     // чья роль даёт «все студенты».
     const scope: Prisma.StudentWhereInput | undefined =
-      user && !canSeeAllStudents(user)
-        ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
-        : undefined;
+      user && !canReadStudents(user)
+        ? { id: '__none__' }
+        : user && !canSeeAllStudents(user)
+          ? { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] }
+          : undefined;
     // Период накладывается ПОВЕРХ скоупа, не заменяя его.
     const createdAt = dateRangeFilter(range);
     // Счётчики считают ТОЛЬКО оплативших — то же правило, что у списка

@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
+import { hasActiveRole, hiddenAmount, roleCan } from '../lib/permissions';
 import { useRealtime } from '../realtime';
 import { useT } from '../lib/i18n';
 import { adminListPartners, fmtCommissionRate, fmtMoneyCents } from '../api/partners';
@@ -52,21 +53,34 @@ export default function Submissions() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const founder = isFounder(me);
+  // Вкладки: основатель — очередь, одобренные и все; сотрудник с ролью — по
+  // галочкам «Сделки — …» (свои, одобрение платежей, все); должность — свои.
+  const custom = hasActiveRole(me) && !founder;
+  const tabs: Tab[] = founder
+    ? ['pending', 'approved', 'all']
+    : custom
+      ? [
+          ...(roleCan(me, 'submissions:read') ? (['mine'] as Tab[]) : []),
+          ...(roleCan(me, 'submissions:approve') ? (['pending'] as Tab[]) : []),
+          ...(roleCan(me, 'submissions:all') ? (['approved', 'all'] as Tab[]) : []),
+        ]
+      : ['mine'];
+  // Фильтры по сотруднику и партнёру — тем, кто видит чужие сделки.
+  const seesAll = founder || (custom && roleCan(me, 'submissions:all'));
+  const seesPartners = seesAll && roleCan(me, 'partners:read', founder);
 
   // Вкладка и фильтры — в ссылке: из карточки сделки возвращаются кнопкой
   // «назад», и открыться должна та же вкладка с той же выборкой. Фильтры
   // ОБЩИЕ на все вкладки: переключая «На рассмотрении» → «Все», человек
   // ждёт, что партнёр, сотрудник, период и поиск останутся.
   const { values, setValue, reset } = useUrlListState({
-    tab: founder
-      ? enumParam<Tab, Tab>(['pending', 'approved', 'all'], 'pending')
-      : enumParam<Tab, Tab>(['mine'], 'mine'),
+    tab: enumParam<Tab, Tab>(tabs.length ? tabs : ['mine'], tabs[0] ?? 'mine'),
     // id партнёра белым списком не проверить (список грузится асинхронно) —
     // ограничиваем длину, как в остальных списках.
-    partner: founder ? stringParam('', 64) : ignoredParam(''),
-    // Сотрудник — менеджер сделки. Тоже только основателю: у менеджера на
-    // этой странице и так одни его сделки.
-    manager: founder ? stringParam('', 64) : ignoredParam(''),
+    partner: seesPartners ? stringParam('', 64) : ignoredParam(''),
+    // Сотрудник — менеджер сделки. Тоже только тем, кто видит чужие: у
+    // менеджера на этой странице и так одни его сделки.
+    manager: seesAll ? stringParam('', 64) : ignoredParam(''),
     from: dateParam(),
     to: dateParam(),
     search: stringParam('', 200),
@@ -89,7 +103,7 @@ export default function Submissions() {
   const partnersQuery = useQuery({
     queryKey: ['admin', 'partners'],
     queryFn: () => adminListPartners(),
-    enabled: founder,
+    enabled: seesPartners,
   });
   const partners = partnersQuery.data ?? [];
 
@@ -98,7 +112,7 @@ export default function Submissions() {
   const employeesQuery = useQuery({
     queryKey: ['users', 'withDismissed'],
     queryFn: () => listUsers(undefined, true),
-    enabled: founder,
+    enabled: seesAll,
   });
   const employees = [...(employeesQuery.data ?? [])].sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru'));
 
@@ -129,19 +143,17 @@ export default function Submissions() {
           строкой ниже (index.css, .deals-head). У менеджера вкладка одна —
           там она на телефоне не показывается. */}
       <div className="deals-head">
-        <div className={`deals-tabs${founder ? '' : ' is-single'}`}>
-          {!founder && tabBtn('mine', t('deals.tab.mine'))}
-          {founder && (
-            <>
-              {tabBtn('pending', t('deals.tab.pending'))}
-              {tabBtn('approved', t('deals.tab.approved'))}
-              {tabBtn('all', t('deals.tab.all'))}
-            </>
-          )}
+        <div className={`deals-tabs${tabs.length > 1 ? '' : ' is-single'}`}>
+          {tabs.includes('mine') && tabBtn('mine', t('deals.tab.mine'))}
+          {tabs.includes('pending') && tabBtn('pending', t('deals.tab.pending'))}
+          {tabs.includes('approved') && tabBtn('approved', t('deals.tab.approved'))}
+          {tabs.includes('all') && tabBtn('all', t('deals.tab.all'))}
         </div>
-        <button className="btn btn-primary deals-new" onClick={() => navigate('/submissions/new')} data-testid="deals-new">
-          <Icon name="add" size={16} /> {t('dealForm.title')}
-        </button>
+        {roleCan(me, 'submissions:create') && (
+          <button className="btn btn-primary deals-new" onClick={() => navigate('/submissions/new')} data-testid="deals-new">
+            <Icon name="add" size={16} /> {t('dealForm.title')}
+          </button>
+        )}
       </div>
 
       {/* Одна строка фильтров на все вкладки. На «На рассмотрении» период —
@@ -149,7 +161,7 @@ export default function Submissions() {
           по дате создания сделки. По умолчанию период пуст, и очередь на
           одобрение видна целиком. */}
       <div className="filters deals-filters">
-        {founder && partners.length > 0 && (
+        {seesPartners && partners.length > 0 && (
           <CrmSelect
             className="crm-select"
             value={f.partner}
@@ -166,7 +178,7 @@ export default function Submissions() {
             ))}
           </CrmSelect>
         )}
-        {founder && employees.length > 0 && (
+        {seesAll && employees.length > 0 && (
           <CrmSelect
             className="crm-select"
             value={f.manager}
@@ -244,10 +256,13 @@ export default function Submissions() {
         ]}
       />
 
-      {tab === 'mine' && <MySubmissions f={f} narrowed={narrowed} />}
-      {tab === 'pending' && <PendingPayments f={f} narrowed={narrowed} />}
-      {tab === 'approved' && <ApprovedSubmissions f={f} narrowed={narrowed} />}
-      {tab === 'all' && <AllSubmissions f={f} narrowed={narrowed} />}
+      {tabs.length === 0 && (
+        <div className="card" style={{ padding: 28 }} data-testid="deals-no-access">{t('common.accessDenied')}</div>
+      )}
+      {tab === 'mine' && tabs.includes('mine') && <MySubmissions f={f} narrowed={narrowed} />}
+      {tab === 'pending' && tabs.includes('pending') && <PendingPayments f={f} narrowed={narrowed} />}
+      {tab === 'approved' && tabs.includes('approved') && <ApprovedSubmissions f={f} narrowed={narrowed} />}
+      {tab === 'all' && tabs.includes('all') && <AllSubmissions f={f} narrowed={narrowed} />}
     </>
   );
 }
@@ -419,8 +434,10 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
   const { t } = useT();
   const studentName = s.student?.fullName || s.newStudentName || '—';
   const program = s.program?.name || '—';
-  const totalPaid = s.payments.filter((p) => p.status === 'APPROVED').reduce((sum, p) => sum + p.amount, 0);
-  const pendingSum = s.payments.filter((p) => p.status === 'PENDING').reduce((sum, p) => sum + p.amount, 0);
+  const totalPaid = s.payments.filter((p) => p.status === 'APPROVED').reduce((sum, p) => sum + (p.amount ?? 0), 0);
+  const pendingSum = s.payments.filter((p) => p.status === 'PENDING').reduce((sum, p) => sum + (p.amount ?? 0), 0);
+  const hidden = !!s.moneyHidden;
+  const pendingCount = s.payments.filter((p) => p.status === 'PENDING').length;
   return (
     <Link
       to={`/submissions/${s.id}`}
@@ -466,19 +483,21 @@ function SubmissionCard({ s, showManager }: { s: SaleSubmission; showManager?: b
         <div className="deal-card-stats">
           <div>
             <div className="deal-stat-label">{t('deal.contract')}</div>
-            <div className="deal-stat-value">{s.totalAmount.toLocaleString('ru-RU')} {s.currency}</div>
+            <div className="deal-stat-value" data-testid="deal-card-contract">
+              {hidden ? hiddenAmount(s.currency) : `${s.totalAmount.toLocaleString('ru-RU')} ${s.currency}`}
+            </div>
           </div>
           <div>
             <div className="deal-stat-label">{t('deal.stat.paid')}</div>
             <div className="deal-stat-value" style={{ color: 'var(--primary-dark)' }}>
-              {totalPaid.toLocaleString('ru-RU')} {s.currency}
+              {hidden ? hiddenAmount(s.currency) : `${totalPaid.toLocaleString('ru-RU')} ${s.currency}`}
             </div>
           </div>
-          {pendingSum > 0 && (
+          {(hidden ? pendingCount > 0 : pendingSum > 0) && (
             <div>
               <div className="deal-stat-label">{t('deals.awaiting')}</div>
               <div className="deal-stat-value" style={{ color: '#b45309' }}>
-                {pendingSum.toLocaleString('ru-RU')} {s.currency}
+                {hidden ? hiddenAmount(s.currency) : `${pendingSum.toLocaleString('ru-RU')} ${s.currency}`}
               </div>
             </div>
           )}
@@ -565,7 +584,9 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
           <div>
             <div className="deal-stat-label">{t('deals.payAmount')}</div>
             <div className="deal-stat-value is-amount">
-              {p.amount.toLocaleString('ru-RU')} {p.submission.currency}
+              {p.moneyHidden || p.amount == null
+                ? hiddenAmount(p.submission.currency)
+                : `${p.amount.toLocaleString('ru-RU')} ${p.submission.currency}`}
             </div>
           </div>
           <div>

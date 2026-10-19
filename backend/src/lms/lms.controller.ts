@@ -5,6 +5,7 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { StudentJwtGuard } from '../student-auth/student-jwt.guard';
 import { LmsService } from './lms.service';
+import { Permissions } from '../auth/permissions.decorator';
 
 // Admin/staff side
 @Controller('lms')
@@ -13,12 +14,14 @@ export class LmsController {
 
   @Get('courses')
   @UseGuards(JwtAuthGuard)
+  @Permissions('lms:read')
   list() {
     return this.svc.listCourses();
   }
 
   @Get('courses/:id')
   @UseGuards(JwtAuthGuard)
+  @Permissions('lms:read')
   one(@Param('id') id: string) {
     return this.svc.getCourse(id);
   }
@@ -26,6 +29,7 @@ export class LmsController {
   @Post('courses')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('lms:create')
   create(@CurrentUser() me: any, @Body() body: any) {
     return this.svc.createCourse(me.id, body);
   }
@@ -33,6 +37,7 @@ export class LmsController {
   @Patch('courses/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('lms:update')
   update(@Param('id') id: string, @Body() body: any) {
     return this.svc.updateCourse(id, body);
   }
@@ -40,6 +45,7 @@ export class LmsController {
   @Delete('courses/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('lms:delete')
   remove(@Param('id') id: string) {
     return this.svc.deleteCourse(id);
   }
@@ -47,6 +53,7 @@ export class LmsController {
   @Post('courses/:id/lessons')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('lms:update')
   addLesson(@Param('id') courseId: string, @Body() body: any) {
     return this.svc.createLesson(courseId, body);
   }
@@ -54,6 +61,7 @@ export class LmsController {
   @Patch('lessons/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('lms:update')
   updateLesson(@Param('id') id: string, @Body() body: any) {
     return this.svc.updateLesson(id, body);
   }
@@ -61,6 +69,7 @@ export class LmsController {
   @Delete('lessons/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('lms:update')
   removeLesson(@Param('id') id: string) {
     return this.svc.deleteLesson(id);
   }
@@ -68,6 +77,7 @@ export class LmsController {
   @Post('courses/:id/enroll')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('lms:update')
   enrollStudent(@Param('id') courseId: string, @Body() body: { studentId: string }) {
     return this.svc.enroll(body.studentId, courseId, true);
   }

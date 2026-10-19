@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { roleCan } from '../lib/permissions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
@@ -55,14 +56,18 @@ export default function Offers() {
     'customRole:deleted': () => qc.invalidateQueries({ queryKey: ['custom-roles'] }),
   });
 
-  if (!isElevated(me)) {
-    return <div className="card" style={{ padding: 28 }}>{t('common.accessDenied')}</div>;
-  }
-
+  // Права роли «Оферты — …»; должность — руководство, как раньше.
+  const base = isElevated(me);
+  const canView = roleCan(me, 'offers:read', base);
+  const canCreate = roleCan(me, 'offers:create', base);
   const query = useQuery({
     queryKey: ['offers', 'all'],
     queryFn: offerList,
+    enabled: canView,
   });
+  if (!canView) {
+    return <div className="card" style={{ padding: 28 }}>{t('common.accessDenied')}</div>;
+  }
   const allOffers = query.data ?? [];
   const offers = allOffers.filter((o) => (o.role ?? null) === tab);
 
@@ -119,7 +124,7 @@ export default function Offers() {
           <p style={{ color: 'var(--text-soft)', fontSize: 13, margin: 0, maxWidth: 640 }}>
             {tab === null ? t('offers.role.all') : roleLabel(tab)}
           </p>
-          {!creating && (
+          {!creating && canCreate && (
             <button className="btn btn-primary" data-testid="offer-new" onClick={() => setCreating(true)}>
               <Icon name="add" size={16} /> {t('offers.new')}
             </button>
@@ -241,8 +246,10 @@ function OfferCard({
   const [content, setContent] = useState(offer.content);
   const [busy, setBusy] = useState(false);
   const signCount = offer._count?.signatures ?? 0;
-  const canEdit = signCount === 0 && offer.isActive;
-  const canDelete = signCount === 0;
+  const me = useAuth((s) => s.user);
+  const base = isElevated(me);
+  const canEdit = signCount === 0 && offer.isActive && roleCan(me, 'offers:update', base);
+  const canDelete = signCount === 0 && roleCan(me, 'offers:delete', base);
 
   const save = async () => {
     setBusy(true);

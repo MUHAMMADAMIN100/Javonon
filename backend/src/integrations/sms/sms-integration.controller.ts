@@ -6,6 +6,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { SmsService } from '../../sms/sms.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Permissions } from '../../auth/permissions.decorator';
 
 // E.164-совместимая проверка телефона. Раньше отсутствовала — staff
 // мог отправить SMS на любую строку (провайдер биллит за попытку).
@@ -22,6 +23,7 @@ const MAX_SMS_LENGTH = 1600;
 @Controller('integrations/sms')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
+@Permissions('inbox:sms')
 export class SmsIntegrationController {
   constructor(private sms: SmsService, private prisma: PrismaService) {}
 

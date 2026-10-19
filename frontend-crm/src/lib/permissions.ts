@@ -52,136 +52,54 @@ export function hasAnyPermission(user: UserWithPerms | undefined | null, list: s
   return hasPermission(user, ...list);
 }
 
-/** Все ключи permissions, известные UI. Должны совпадать с backend
- *  PERMISSION_CATALOG (см. backend/src/auth/permissions.ts).
- *  Task 4: расширено до полного CRUD по всем разделам сайдбара. */
+/** Действует ли у сотрудника роль — своя или роль должности (user.customRole из /auth/me). */
+export function hasActiveRole(user: UserWithPerms | undefined | null): boolean {
+  return !!user?.customRole && user.customRole.isActive !== false;
+}
+
+/**
+ * Можно ли действие — зеркало backend roleAllows (auth/role-utils.ts):
+ * основатель — всегда; сотрудник с ролью — только по галочке роли (любой
+ * из перечисленных); без роли — по правилу его должности `base`, как было.
+ * Каталог галочек — backend/src/auth/permissions.ts.
+ */
+export function roleCan(user: UserWithPerms | undefined | null, key: string | string[], base = true): boolean {
+  if (!user) return false;
+  if (isFounder(user as any)) return true;
+  if (hasActiveRole(user)) return hasPermission(user, ...(Array.isArray(key) ? key : [key]));
+  return base;
+}
+
+export type VisibilityKey =
+  | 'visibility:client-money'
+  | 'visibility:company-money'
+  | 'visibility:staff-pay'
+  | 'visibility:staff-personal';
+
+/**
+ * «Видимость данных» роли: без пункта сервер присылает данные скрытыми
+ * (суммы null, телефоны с маской), здесь — чтобы не рисовать лишнего.
+ * Сотрудник без роли видит всё, как раньше.
+ */
+export function canSeeData(user: UserWithPerms | undefined | null, key: VisibilityKey): boolean {
+  if (!user) return false;
+  if (isFounder(user as any) || !hasActiveRole(user)) return true;
+  return hasPermission(user, key);
+}
+
+/** «••••» вместо скрытой суммы (сервер прислал null и moneyHidden). */
+export const HIDDEN_MONEY = '•••• TJS';
+
+/** Скрытая сумма в своей валюте: «•••• USD». */
+export function hiddenAmount(currency?: string | null): string {
+  return `•••• ${currency || 'TJS'}`;
+}
+
+/** Ключи «все, не только свои» — зеркало backend/src/auth/client-access.ts. */
 export const PERMISSION_KEYS = {
-  // Applications (CRUD + assign)
-  applicationsRead: 'applications:read',
-  applicationsCreate: 'applications:create',
-  applicationsUpdate: 'applications:update',
-  applicationsDelete: 'applications:delete',
-  applicationsAssign: 'applications:assign',
-  /** @deprecated используйте детальные applications:{create,update,delete}. */
-  applicationsWrite: 'applications:write',
-
-  // Students (CRUD)
-  studentsRead: 'students:read',
-  studentsCreate: 'students:create',
-  studentsUpdate: 'students:update',
-  studentsDelete: 'students:delete',
-  /** @deprecated */ studentsWrite: 'students:write',
-
-  // «Все, не только свои» — см. canSeeAllClients ниже.
   studentsAll: 'students:all',
   applicationsAll: 'applications:all',
   leadsAll: 'leads:all',
-
-  // Programs (CRUD)
-  programsRead: 'programs:read',
-  programsCreate: 'programs:create',
-  programsUpdate: 'programs:update',
-  programsDelete: 'programs:delete',
-  /** @deprecated */ programsWrite: 'programs:write',
-
-  // Tasks (CRUD)
-  tasksRead: 'tasks:read',
-  tasksCreate: 'tasks:create',
-  tasksUpdate: 'tasks:update',
-  tasksDelete: 'tasks:delete',
-  /** @deprecated */ tasksWrite: 'tasks:write',
-
-  // Pipelines (read + write)
-  pipelinesRead: 'pipelines:read',
-  pipelinesWrite: 'pipelines:write',
-
-  // Chat (read + write)
-  chatRead: 'chat:read',
-  chatWrite: 'chat:write',
-
-  // Inbox (read + reply)
-  inboxRead: 'inbox:read',
-  inboxReply: 'inbox:reply',
-
-  // Workday (clock in/out + view team history)
-  workdayRead: 'workday:read',
-  workdayHistory: 'workday:history',
-
-  // Reports (read + create)
-  reportsRead: 'reports:read',
-  reportsCreate: 'reports:create',
-
-  // Calls (read + create)
-  callsRead: 'calls:read',
-  callsCreate: 'calls:create',
-  /** @deprecated */ callsWrite: 'calls:write',
-
-  // KPI (read only)
-  kpiRead: 'kpi:read',
-
-  // Finance (CRUD)
-  financeRead: 'finance:read',
-  financeCreate: 'finance:create',
-  financeUpdate: 'finance:update',
-  financeDelete: 'finance:delete',
-  /** @deprecated */ financeWrite: 'finance:write',
-
-  // Salary (read + calculate + pay)
-  salaryRead: 'salary:read',
-  salaryCalculate: 'salary:calculate',
-  salaryPay: 'salary:pay',
-  /** @deprecated */ salaryWrite: 'salary:write',
-
-  // Submissions (CRUD + approve)
-  submissionsRead: 'submissions:read',
-  submissionsCreate: 'submissions:create',
-  submissionsUpdate: 'submissions:update',
-  submissionsDelete: 'submissions:delete',
-  submissionsApprove: 'submissions:approve',
-
-  // Mass-mail (read + write + send)
-  massMailRead: 'massmail:read',
-  massMailWrite: 'massmail:write',
-  massMailSend: 'massmail:send',
-  /** @deprecated legacy hyphenated key. */
-  massMailWriteLegacy: 'mass-mail:write',
-
-  // Offers (read + write + sign)
-  offersRead: 'offers:read',
-  offersWrite: 'offers:write',
-  offersSign: 'offers:sign',
-
-  // Activity (read only)
-  activityRead: 'activity:read',
-
-  // Users (CRUD)
-  usersRead: 'users:read',
-  usersCreate: 'users:create',
-  usersUpdate: 'users:update',
-  usersDelete: 'users:delete',
-  /** @deprecated */ usersWrite: 'users:write',
-
-  // Settings (read + write) — де-факто FOUNDER-only.
-  settingsRead: 'settings:read',
-  settingsWrite: 'settings:write',
-
-  // LMS (read + write)
-  lmsRead: 'lms:read',
-  lmsWrite: 'lms:write',
-
-  // Partners (read + write)
-  partnersRead: 'partners:read',
-  partnersWrite: 'partners:write',
-
-  // Study groups + расписание занятий (read + write) — пара, а не полный
-  // CRUD, ровно как в backend PERMISSION_CATALOG (секция 'groups').
-  groupsRead: 'groups:read',
-  groupsWrite: 'groups:write',
-
-  // HR (kept for backwards compat — used inside /workday sub-tabs).
-  penaltiesWrite: 'penalties:write',
-  attendanceRead: 'attendance:read',
-  excusesWrite: 'excuses:write',
 } as const;
 
 /**
@@ -221,15 +139,33 @@ export function hasSeeAllGrant(user: AccessUser | null | undefined, scope: Clien
 export function canSeeAllApplicationsByRole(user: AccessUser | null | undefined): boolean {
   if (!user) return false;
   if (isFounder(user as any)) return true;
-  if (customRoleActive(user)) return hasPermission(user, PERMISSION_KEYS.applicationsAssign);
+  if (customRoleActive(user)) return hasPermission(user, 'applications:assign');
   return isElevated(user as any);
 }
 
-/** Видит и ведёт всех: студентов / заявки (кроме лидов) / лиды. */
+/**
+ * Видит и ведёт всех: студентов / заявки (кроме лидов) / лиды. Лиды —
+ * ещё и с «Лиды — назначение менеджера»: раздать лиды, видя только свои,
+ * нельзя (backend canSeeAllLeads).
+ */
 export function canSeeAllClients(user: AccessUser | null | undefined, scope: ClientScope): boolean {
   if (!user) return false;
   if (scope === 'students') return isElevated(user as any) || hasSeeAllGrant(user, 'students');
+  if (scope === 'leads' && customRoleActive(user) && hasPermission(user, 'leads:assign')) return true;
   return canSeeAllApplicationsByRole(user) || hasSeeAllGrant(user, scope);
+}
+
+/**
+ * Право роли на действие с записью: пока она лид — «Лиды — …», дальше —
+ * «Заявки — …» (backend applicationRightKey). Основатель и сотрудники без
+ * роли — true: их ведут прежние правила.
+ */
+export function applicationRight(
+  user: AccessUser | null | undefined,
+  status: string | null | undefined,
+  action: 'read' | 'update' | 'delete' | 'assign',
+): boolean {
+  return roleCan(user, `${isLeadStatus(status) ? 'leads' : 'applications'}:${action}`);
 }
 
 /** Лид — заявка в статусе «Новый лид» (NEW_LEAD; NEW — старое значение). */
@@ -244,13 +180,21 @@ export function canSeeAllOfApplication(user: AccessUser | null | undefined, stat
 
 
 /**
- * Руководство академии — зеркало backend/src/academy/academy-access.ts:
- * основатель; под своей ролью — с «Академия — управление»; иначе админ.
- * Создаёт группы и учеников, меняет состав, решает по красным флагам.
+ * Видит все группы и учеников академии — зеркало backend academy-access.ts
+ * isAcademyManager: основатель, админ по должности; роль — «Все группы и
+ * ученики, не только свои».
  */
 export function isAcademyManager(user: AccessUser | null | undefined): boolean {
   if (!user) return false;
   if (isFounder(user as any)) return true;
-  if (customRoleActive(user)) return hasPermission(user, 'academy:manage');
+  if (customRoleActive(user)) return hasPermission(user, 'academy:all');
+  return hasRole(user as any, 'ADMIN');
+}
+
+/** Действие руководства академии: основатель, админ по должности; роль — её галочка. */
+export function academyCan(user: AccessUser | null | undefined, key: string): boolean {
+  if (!user) return false;
+  if (isFounder(user as any)) return true;
+  if (customRoleActive(user)) return hasPermission(user, key);
   return hasRole(user as any, 'ADMIN');
 }

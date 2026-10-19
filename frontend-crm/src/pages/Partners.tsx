@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react';
+import { roleCan } from '../lib/permissions';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -244,6 +245,12 @@ function PartnersList({ search }: { search: SearchCtl }) {
   const navigate = useNavigate();
   const { toast, confirm } = useUI();
   const { t } = useT();
+  // Права роли «Партнёры — …»; должность — как раньше (создавать и удалять —
+  // основатель и админ, менять — и бухгалтер).
+  const me = useAuth((s) => s.user);
+  const canCreate = roleCan(me, 'partners:create', hasRole(me, 'FOUNDER', 'ADMIN'));
+  const canUpdate = roleCan(me, 'partners:update');
+  const canRemove = roleCan(me, 'partners:delete', hasRole(me, 'FOUNDER', 'ADMIN'));
   const { data: partners = [], isLoading } = useQuery({
     queryKey: ['admin', 'partners'],
     queryFn: () => adminListPartners(),
@@ -361,9 +368,11 @@ function PartnersList({ search }: { search: SearchCtl }) {
       search={search}
       placeholder={t('partners.search.placeholder')}
       action={
-        <button className="btn btn-primary btn-sm" data-testid="partner-add" onClick={() => setAddOpen(true)}>
-          <Icon name="add" size={14} /> {t('partners.add')}
-        </button>
+        canCreate ? (
+          <button className="btn btn-primary btn-sm" data-testid="partner-add" onClick={() => setAddOpen(true)}>
+            <Icon name="add" size={14} /> {t('partners.add')}
+          </button>
+        ) : undefined
       }
       loading={isLoading}
       emptyText={t('partners.empty')}
@@ -442,6 +451,7 @@ function PartnersList({ search }: { search: SearchCtl }) {
                         <Icon name="link" size={14} />
                         <span className="pt-btn-label">{t('partners.act.link')}</span>
                       </button>
+                      {canUpdate && (
                       <button
                         className="btn btn-sm btn-secondary"
                         onClick={stop(() => updateAmount(p.id, p.commissionAmountCents))}
@@ -452,7 +462,8 @@ function PartnersList({ search }: { search: SearchCtl }) {
                         <span className="pt-btn-tjs">TJS</span>
                         <span className="pt-btn-label">{t('partners.act.commission')}</span>
                       </button>
-                      {p.status === 'ACTIVE' ? (
+                      )}
+                      {!canUpdate ? null : p.status === 'ACTIVE' ? (
                         <button
                           className="btn btn-sm btn-secondary"
                           onClick={stop(() => updateStatus(p.id, 'SUSPENDED'))}
@@ -475,16 +486,18 @@ function PartnersList({ search }: { search: SearchCtl }) {
                           <span className="pt-btn-label">{t('partners.act.resume')}</span>
                         </button>
                       )}
-                      <button
-                        className="btn btn-sm btn-danger pt-btn-delete"
-                        onClick={stop(() => removePartner(p))}
-                        title={t('common.delete')}
-                        aria-label={t('common.delete')}
-                        data-testid="partner-delete"
-                      >
-                        <Icon name="delete" size={14} />
-                        <span className="pt-btn-label">{t('common.delete')}</span>
-                      </button>
+                      {canRemove && (
+                        <button
+                          className="btn btn-sm btn-danger pt-btn-delete"
+                          onClick={stop(() => removePartner(p))}
+                          title={t('common.delete')}
+                          aria-label={t('common.delete')}
+                          data-testid="partner-delete"
+                        >
+                          <Icon name="delete" size={14} />
+                          <span className="pt-btn-label">{t('common.delete')}</span>
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -862,7 +875,8 @@ function CommissionsList({
   // executes payouts but does not authorise them. Mirror that here so the
   // button is not offered to someone who would only get a 403.
   const me = useAuth((s) => s.user);
-  const canApprove = hasRole(me, 'FOUNDER', 'ADMIN');
+  const canApprove = roleCan(me, 'partners:commission-approve', hasRole(me, 'FOUNDER', 'ADMIN'));
+  const canPay = roleCan(me, 'partners:commission-pay');
 
   const { data: commissions = [], isLoading } = useQuery({
     queryKey: ['admin', 'commissions', statusFilter],
@@ -993,8 +1007,8 @@ function CommissionsList({
                         {t('partners.commission.approve')}
                       </button>
                     )}
-                    {c.status !== 'PAID' && c.status !== 'REVERSED' && (
-                      <button className="btn btn-sm btn-primary" onClick={() => markPaid(c.id)}>
+                    {canPay && c.status !== 'PAID' && c.status !== 'REVERSED' && (
+                      <button className="btn btn-sm btn-primary" onClick={() => markPaid(c.id)} data-testid="commission-pay">
                         {t('partners.commission.status.PAID')}
                       </button>
                     )}
@@ -1012,6 +1026,8 @@ function PayoutsList({ search }: { search: SearchCtl }) {
   const qc = useQueryClient();
   const { toast, confirm } = useUI();
   const { t } = useT();
+  const me = useAuth((s) => s.user);
+  const canHandle = roleCan(me, 'partners:payouts');
   const { data: payouts = [], isLoading } = useQuery({
     queryKey: ['admin', 'payouts'],
     queryFn: () => adminListPayouts(),
@@ -1092,7 +1108,7 @@ function PayoutsList({ search }: { search: SearchCtl }) {
                 <td data-label={sort.label('details')} className="td-stack" style={{ wordBreak: 'break-all' }}>{p.details || '—'}</td>
                 <td data-label={sort.label('status')}>{t(`partners.payout.status.${p.status}`)}</td>
                 <td>
-                  {p.status === 'REQUESTED' && (
+                  {canHandle && p.status === 'REQUESTED' && (
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="btn btn-sm btn-primary" onClick={() => pay(p.id)}>{t('partners.payout.status.PAID')}</button>
                       <button className="btn btn-sm btn-danger" onClick={() => reject(p.id)}>{t('partners.payout.status.REJECTED')}</button>

@@ -37,6 +37,7 @@ import {
   SaveJournalEntriesDto,
   UpdateAcademyStudentDto,
 } from './dto/academy.dto';
+import { Permissions } from '../auth/permissions.decorator';
 
 /**
  * Академия: журнал, материалы уроков, ученики, красные флаги.
@@ -79,66 +80,78 @@ export class AcademyController {
   constructor(private svc: AcademyService) {}
 
   // ─── Журнал ───
+  @Permissions('groups:read', 'academy:all')
   @Get('groups/:id/journal')
   journal(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.getJournal(me, id);
   }
 
+  @Permissions('groups:write')
   @Put('journal/entries')
   saveEntries(@CurrentUser() me: any, @Body() body: SaveJournalEntriesDto) {
     return this.svc.saveEntries(me, body);
   }
 
   // ─── Завершение курса ───
+  @Permissions('academy:complete', 'groups:write')
   @Get('groups/:id/complete')
   coursePreview(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.coursePreview(me, id);
   }
 
+  @Permissions('academy:complete', 'groups:write')
   @Post('groups/:id/complete')
   completeCourse(@CurrentUser() me: any, @Param('id') id: string, @Body() body: CompleteCourseDto) {
     return this.svc.completeCourse(me, id, body);
   }
 
   // ─── Дневник ДЗ урока ───
+  @Permissions('groups:read', 'academy:all')
   @Get('sessions/:id/diary')
   diary(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.sessionDiary(me, id);
   }
 
   // ─── Уровни ───
+  @Permissions('groups:read', 'academy:all', 'academy:students-create', 'academy:students-update', 'academy:levels')
   @Get('levels')
   levels(@CurrentUser() me: any) {
     return this.svc.listLevels(me);
   }
 
+  @Permissions('academy:levels')
   @Post('levels')
   createLevel(@CurrentUser() me: any, @Body() body: AcademyLevelDto) {
     return this.svc.createLevel(me, body);
   }
 
   // Литеральные маршруты — выше параметрических levels/:id.
+  @Permissions('academy:levels')
   @Post('levels/defaults')
   seedLevels(@CurrentUser() me: any) {
     return this.svc.seedDefaultLevels(me);
   }
 
+  @Permissions('academy:levels')
   @Post('levels/reorder')
   reorderLevels(@CurrentUser() me: any, @Body() body: ReorderLevelsDto) {
     return this.svc.reorderLevels(me, body);
   }
 
+  @Permissions('academy:levels')
   @Patch('levels/:id')
   renameLevel(@CurrentUser() me: any, @Param('id') id: string, @Body() body: AcademyLevelDto) {
     return this.svc.renameLevel(me, id, body);
   }
 
+  @Permissions('academy:levels')
   @Delete('levels/:id')
   deleteLevel(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.deleteLevel(me, id);
   }
 
   // ─── Материалы урока ───
+  @Permissions('groups:write')
   @Post('sessions/:id/materials')
   @UseInterceptors(
     FilesInterceptor('files', 10, {
@@ -159,17 +172,20 @@ export class AcademyController {
     return this.svc.addFiles(me, id, files);
   }
 
+  @Permissions('groups:write')
   @Post('sessions/:id/links')
   addLink(@CurrentUser() me: any, @Param('id') id: string, @Body() body: AddMaterialLinkDto) {
     return this.svc.addLink(me, id, body);
   }
 
+  @Permissions('groups:write')
   @Delete('materials/:id')
   removeMaterial(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.removeMaterial(me, id);
   }
 
   // ─── Ученики ───
+  @Permissions('groups:read', 'academy:all')
   @Get('students')
   students(
     @CurrentUser() me: any,
@@ -191,47 +207,56 @@ export class AcademyController {
   }
 
   // Литеральный маршрут — выше параметрического students/:id.
+  @Permissions('academy:members-add')
   @Get('students/pick')
   pick(@CurrentUser() me: any, @Query('search') search?: string, @Query('groupId') groupId?: string) {
     return this.svc.pickStudents(me, (search || '').slice(0, 100), groupId || undefined);
   }
 
+  @Permissions('academy:students-create')
   @Post('students')
   createStudent(@CurrentUser() me: any, @Body() body: CreateAcademyStudentDto) {
     return this.svc.createStudent(me, body);
   }
 
+  @Permissions('groups:read', 'academy:all')
   @Get('students/:id')
   student(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.getStudent(me, id);
   }
 
+  @Permissions('academy:students-update')
   @Patch('students/:id')
   updateStudent(@CurrentUser() me: any, @Param('id') id: string, @Body() body: UpdateAcademyStudentDto) {
     return this.svc.updateStudent(me, id, body);
   }
 
+  @Permissions('academy:students-password')
   @Post('students/:id/password')
   resetPassword(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.resetPassword(me, id);
   }
 
   // ─── Красные флаги и решения ───
+  @Permissions('groups:write')
   @Post('students/:id/flags')
   giveFlag(@CurrentUser() me: any, @Param('id') id: string, @Body() body: GiveFlagDto) {
     return this.svc.giveFlag(me, id, body);
   }
 
+  @Permissions('academy:flags-remove')
   @Post('flags/:id/remove')
   removeFlag(@CurrentUser() me: any, @Param('id') id: string, @Body() body: RemoveFlagDto) {
     return this.svc.removeFlag(me, id, body);
   }
 
+  @Permissions('academy:decide')
   @Post('students/:id/decision')
   decide(@CurrentUser() me: any, @Param('id') id: string, @Body() body: AcademyDecisionDto) {
     return this.svc.decide(me, id, body);
   }
 
+  @Permissions('academy:decide')
   @Post('students/:id/reinstate')
   reinstate(@CurrentUser() me: any, @Param('id') id: string, @Body() body: ReinstateDto) {
     return this.svc.reinstate(me, id, body);
@@ -249,6 +274,7 @@ export class AcademyController {
 export class StudentAcademySummaryController {
   constructor(private svc: AcademyService) {}
 
+  @Permissions('students:read', 'groups:read', 'academy:all')
   @Get(':id/academy')
   summary(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.crmSummary(me, id);

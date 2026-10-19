@@ -20,6 +20,7 @@ import { CreateBucketDto } from './dto/create-bucket.dto';
 import { UpdateBucketDto } from './dto/update-bucket.dto';
 import { CreateItemDto } from './dto/create-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
+import { Permissions } from '../auth/permissions.decorator';
 
 /**
  * Управление FOUNDER-editable схемой распределения выручки.
@@ -48,11 +49,13 @@ export class RevenueSchemeController {
 
   @Get()
   @Roles(Role.FOUNDER, Role.ADMIN)
+  @Permissions('settings:revenue')
   getActive() {
     return this.svc.getActive();
   }
 
   @Post('buckets')
+  @Permissions('settings:revenue')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles(Role.FOUNDER)
   createBucket(@Body() dto: CreateBucketDto, @CurrentUser() me: any) {
@@ -60,6 +63,7 @@ export class RevenueSchemeController {
   }
 
   @Patch('buckets/:id')
+  @Permissions('settings:revenue')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles(Role.FOUNDER)
   updateBucket(
@@ -71,6 +75,7 @@ export class RevenueSchemeController {
   }
 
   @Delete('buckets/:id')
+  @Permissions('settings:revenue')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles(Role.FOUNDER)
   deleteBucket(
@@ -81,6 +86,7 @@ export class RevenueSchemeController {
   }
 
   @Post('buckets/:bucketId/items')
+  @Permissions('settings:revenue')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles(Role.FOUNDER)
   createItem(
@@ -92,6 +98,7 @@ export class RevenueSchemeController {
   }
 
   @Patch('items/:id')
+  @Permissions('settings:revenue')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles(Role.FOUNDER)
   updateItem(
@@ -103,6 +110,7 @@ export class RevenueSchemeController {
   }
 
   @Delete('items/:id')
+  @Permissions('settings:revenue')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Roles(Role.FOUNDER)
   deleteItem(
@@ -120,6 +128,7 @@ export class RevenueSchemeController {
   // FOUNDER-токеном, который иначе держал бы connection pool в занятом
   // состоянии и валил бы остальные запросы по timeout.
   @Post('reset')
+  @Permissions('settings:revenue')
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Roles(Role.FOUNDER)
   reset(@CurrentUser() me: any) {

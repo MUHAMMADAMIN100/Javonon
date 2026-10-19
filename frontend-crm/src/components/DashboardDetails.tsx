@@ -10,6 +10,8 @@ import { tjFormatDate } from '../lib/tjTime';
 import { useApplicationStatusLabel, useCountryLabel, useDirectionLabel } from '../lib/labels';
 import DetailsModal, { groupBy, type DetailsColumn } from './DetailsModal';
 import { withDismissed } from './DismissedMark';
+import { useAuth } from '../store/auth';
+import { roleCan } from '../lib/permissions';
 
 /**
  * Окна «подробнее» у карточек дашборда. Каждое берёт записи за ТОТ ЖЕ
@@ -82,6 +84,9 @@ function ApplicationsDetails({
   const { t } = useT();
   const statusLabel = useApplicationStatusLabel();
   const countryLabel = useCountryLabel();
+  // «Открыть список» — на «Заявки», если роль туда пускает.
+  const me = useAuth((s) => s.user);
+  const canOpenList = roleCan(me, 'applications:read');
   const filters = { from: range.from || undefined, to: range.to || undefined };
   const query = useQuery({
     queryKey: keys.applications.list(filters),
@@ -126,7 +131,7 @@ function ApplicationsDetails({
       rowHref={(a) => `/applications/${a.id}`}
       searchOf={(a) => [a.fullName, a.manager?.fullName]}
       phonesOf={(a) => [a.phone, a.whatsappPhone]}
-      listHref={withRange('/applications', listParams, range)}
+      listHref={canOpenList ? withRange('/applications', listParams, range) : undefined}
       emptyText={t('common.empty')}
       onClose={onClose}
     />

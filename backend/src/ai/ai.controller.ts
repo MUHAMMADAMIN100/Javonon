@@ -6,6 +6,8 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AiService } from './ai.service';
 import { FinanceService } from '../finance/finance.service';
+import { Permissions } from '../auth/permissions.decorator';
+import { financeElevated } from '../finance/finance.controller';
 
 // Максимум 500 символов на запрос к Claude. Реальные транзакционные
 // фразы укладываются в ~150 ("добавь расход 200$ аренда офиса август"),
@@ -30,6 +32,7 @@ function validateAiText(text: unknown): string {
 @Controller('ai')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'ACCOUNTANT')
+@Permissions('finance:create')
 // 10 AI запросов в минуту на IP. Каждый запрос — потенциальный hit на
 // Claude API. Глобал 60/min даёт >> $$$/день при злоупотреблении.
 @Throttle({ default: { limit: 10, ttl: 60_000 } })
@@ -59,6 +62,7 @@ export class AiController {
         comment: parsed.comment,
       },
       me.id,
+      { id: me.id, role: me?.role, isElevated: financeElevated(me) },
     );
     return { ok: true, parsed, transaction };
   }

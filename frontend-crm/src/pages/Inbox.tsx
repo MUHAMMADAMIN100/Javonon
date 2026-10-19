@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { roleCan } from '../lib/permissions';
+import { useAuth } from '../store/auth';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useUI } from '../ui/Dialogs';
@@ -164,9 +166,19 @@ function ChannelTab({ active, onClick, label, color }: { active: boolean; onClic
   );
 }
 
+/** Ответ клиенту — своё право на каждый канал (Настройки → Роли → «Входящие»). */
+const REPLY_RIGHT: Partial<Record<InboxChannel, string>> = {
+  WHATSAPP: 'inbox:whatsapp',
+  INSTAGRAM: 'inbox:instagram',
+  SMS: 'inbox:sms',
+};
+
 function ThreadView({ channel, handle, onClose }: { channel: InboxChannel; handle: string; onClose: () => void }) {
   const { toast } = useUI();
   const { t } = useT();
+  const me = useAuth((s) => s.user);
+  const right = REPLY_RIGHT[channel];
+  const canReply = !right || roleCan(me, right);
   const qc = useQueryClient();
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
@@ -239,6 +251,11 @@ function ThreadView({ channel, handle, onClose }: { channel: InboxChannel; handl
           </div>
         )}
       </div>
+      {!canReply ? (
+        <div className="inbox-readonly" data-testid="inbox-readonly">
+          <Icon name="lock" size={14} /> {t('inbox.noReply')}
+        </div>
+      ) : (
       <div style={{
         padding: 12,
         borderTop: '1px solid var(--border)',
@@ -254,10 +271,11 @@ function ThreadView({ channel, handle, onClose }: { channel: InboxChannel; handl
           style={{ flex: 1 }}
           disabled={sending}
         />
-        <button className="btn btn-primary" onClick={send} disabled={!reply.trim() || sending}>
+        <button className="btn btn-primary" onClick={send} disabled={!reply.trim() || sending} data-testid="inbox-send">
           <Icon name="send" size={14} />
         </button>
       </div>
+      )}
     </>
   );
 }

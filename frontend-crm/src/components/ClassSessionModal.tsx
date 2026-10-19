@@ -7,7 +7,7 @@ import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import { keys } from '../lib/queryKeys';
 import { tjDateInput, tjDateTimeInput } from '../lib/tjTime';
-import { isAcademyManager } from '../lib/permissions';
+import { isAcademyManager, roleCan } from '../lib/permissions';
 import { absFileUrl, useFileToken } from '../lib/fileUrl';
 import { useAuth } from '../store/auth';
 import CrmDatePicker from './CrmDatePicker';
@@ -70,8 +70,8 @@ export default function ClassSessionModal({
   useFileToken();
   const manager = isAcademyManager(me as any);
   const teacherOfGroup = (session?.group?.teacherId ?? groupTeacherId ?? null) === me?.id;
-  // Время, статус и удаление — учитель группы и руководство.
-  const canRun = manager || teacherOfGroup;
+  // Время, статус и удаление — учитель группы и руководство (роли — с «Ведением»).
+  const canRun = roleCan(me, 'groups:write') && (manager || teacherOfGroup);
   const canPickTeacher = manager;
 
   const editing = !!session;

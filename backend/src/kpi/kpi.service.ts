@@ -2,7 +2,7 @@ import { managerSales } from '../common/manager-sales';
 import { managerBonusProgress, managerBonusVolumes } from '../common/manager-bonus-volume';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { isElevated, UserWithRoles } from '../auth/role-utils';
+import { isElevated, roleAllows, UserWithRoles } from '../auth/role-utils';
 import { PAID_STUDENT_WHERE } from '../common/paid-student';
 import { PrismaService } from '../prisma/prisma.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
@@ -256,7 +256,8 @@ export class KpiService {
    * некликабельная строка в интерфейсе защитой не является.
    */
   async details(userId: string, filters: { from?: Date; to?: Date }, viewer: UserWithRoles & { id: string }) {
-    if (!isElevated(viewer) && viewer.id !== userId) {
+    // Чужие подробности: руководство по должности; роль — «KPI других подробно».
+    if (!roleAllows(viewer, 'kpi:details', () => isElevated(viewer)) && viewer.id !== userId) {
       throw new ForbiddenException('Подробности по другому сотруднику доступны только руководству');
     }
     const user = await this.prisma.user.findUnique({

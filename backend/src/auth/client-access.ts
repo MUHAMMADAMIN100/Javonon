@@ -1,4 +1,4 @@
-import { isElevated, UserWithRoles } from './role-utils';
+import { hasPermission, isElevated, isFounder, UserWithRoles } from './role-utils';
 
 /**
  * «Все, не только свои» — студенты, заявки, лиды.
@@ -31,9 +31,21 @@ export function hasSeeAllGrant(user: UserWithRoles | null | undefined, scope: Cl
   return !!user.hasCustomRole && (user.permissions || []).includes(SEE_ALL_PERMISSION[scope]);
 }
 
-/** Видит и ведёт всех студентов, а не только своих. Руководство — как раньше (isElevated). */
+/**
+ * Видит и ведёт всех студентов, а не только своих. Руководство — как раньше
+ * (isElevated); у сотрудника с ролью должность под ролью ничего не даёт —
+ * только «Студенты — все, не только свои».
+ */
 export function canSeeAllStudents(user: UserWithRoles | null | undefined): boolean {
   if (!user) return false;
-  if (isElevated(user)) return true;
-  return hasSeeAllGrant(user, 'students');
+  if (isFounder(user)) return true;
+  if (user.hasCustomRole) return hasSeeAllGrant(user, 'students');
+  return isElevated(user);
+}
+
+/** Роль без «Студенты — просмотр» студентов не видит вовсе (списки, счётчики). */
+export function canReadStudents(user: UserWithRoles | null | undefined): boolean {
+  if (!user) return false;
+  if (!user.hasCustomRole || isFounder(user)) return true;
+  return hasPermission(user, 'students:read');
 }

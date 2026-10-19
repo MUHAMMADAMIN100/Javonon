@@ -8,6 +8,7 @@ import { type Role, type User } from '../api/types';
 import { listCustomRoles } from '../api/customRoles';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
+import { hasActiveRole, roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
 import { useUI } from '../ui/Dialogs';
@@ -89,6 +90,12 @@ export default function Users() {
 
   // «Кто в сети» — только основателю (сервер остальным отвечает 403).
   const founder = isFounder(me);
+  // Права роли «Сотрудники — …»; должность — как раньше (всё).
+  const viewerRole = hasActiveRole(me) && !founder;
+  const canCreate = roleCan(me, 'users:create');
+  const canDismiss = roleCan(me, 'users:dismiss');
+  // Пароль коллеги меняют только основатель, админ и бухгалтер (сервер).
+  const canSetPassword = !viewerRole;
   const presence = usePresence(founder);
   const presenceOf = (u: User) => presence.byId.get(u.id);
   const presenceStates: PresenceState[] = ['ONLINE', 'AWAY', 'OFFLINE'];
@@ -234,7 +241,7 @@ export default function Users() {
             </span>
           )}
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ {t('common.add')}</button>
+        {canCreate && <button className="btn btn-primary" data-testid="user-new" onClick={openCreate}>+ {t('common.add')}</button>}
       </div>
       <div className="card-body">
         <div className="filters">
@@ -420,6 +427,7 @@ export default function Users() {
                   <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {u.isActive === false ? (
+                        canDismiss && (
                         <>
                           <button className="btn btn-sm btn-secondary" data-testid="user-restore" onClick={() => restoreMut.mutate(u.id)}>
                             {t('users.restore')}
@@ -428,18 +436,24 @@ export default function Users() {
                             {t('users.handover')}
                           </button>
                         </>
+                        )
                       ) : (
                         <>
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            onClick={() => setPwdTarget(u)}
-                            title={t('login.password')}
-                          >
-                            {t('login.password')}
-                          </button>
-                          <button className="btn btn-sm btn-danger" data-testid="user-dismiss" onClick={() => onDismiss(u)} disabled={u.id === me?.id}>
-                            {t('users.dismiss')}
-                          </button>
+                          {canSetPassword && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              data-testid="user-password"
+                              onClick={() => setPwdTarget(u)}
+                              title={t('login.password')}
+                            >
+                              {t('login.password')}
+                            </button>
+                          )}
+                          {canDismiss && (
+                            <button className="btn btn-sm btn-danger" data-testid="user-dismiss" onClick={() => onDismiss(u)} disabled={u.id === me?.id}>
+                              {t('users.dismiss')}
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
@@ -563,12 +577,13 @@ export default function Users() {
                     }
                   }}
                 >
+                  {/* Сотрудник с ролью создаёт только менеджеров (так же проверяет сервер). */}
                   <optgroup label={t('userDetail.field.role')}>
-                    <option value="base:ADMIN">{roleLabel('ADMIN' as any)}</option>
-                    <option value="base:ACCOUNTANT">{roleLabel('ACCOUNTANT' as any)}</option>
+                    {!viewerRole && <option value="base:ADMIN">{roleLabel('ADMIN' as any)}</option>}
+                    {!viewerRole && <option value="base:ACCOUNTANT">{roleLabel('ACCOUNTANT' as any)}</option>}
                     <option value="base:SALES_MANAGER">{roleLabel('SALES_MANAGER' as any)}</option>
                     <option value="base:CLIENT_MANAGER">{roleLabel('CLIENT_MANAGER' as any)}</option>
-                    <option value="base:TEACHER">{roleLabel('TEACHER' as any)}</option>
+                    {!viewerRole && <option value="base:TEACHER">{roleLabel('TEACHER' as any)}</option>}
                   </optgroup>
                   {/* Кастомную роль назначает только основатель (так же проверяет сервер). */}
                   {founder && customRoles.length > 0 && (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { roleCan } from '../lib/permissions';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
@@ -44,7 +45,8 @@ export default function InstallmentTemplateSection({
   const { toast } = useUI();
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
-  const canEdit = isElevated(me);
+  // Шаблон рассрочки — «Программы — шаблон рассрочки»; должность — руководство.
+  const canEdit = roleCan(me, 'programs:installments', isElevated(me));
 
   const query = useQuery({
     queryKey: keys.installments.template(programId),

@@ -5,6 +5,7 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { DailyReportsService, DailyReportInput } from './daily-reports.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { Permissions } from '../auth/permissions.decorator';
 
 @Controller('daily-reports')
 @UseGuards(JwtAuthGuard)
@@ -12,12 +13,14 @@ export class DailyReportsController {
   constructor(private svc: DailyReportsService) {}
 
   /** Сегодняшний отчёт (для UI «Дневной отчёт» в кабинете сотрудника). */
+  @Permissions('reports:read', 'reports:create')
   @Get('today')
   today(@CurrentUser() me: any) {
     return this.svc.getToday(me.id);
   }
 
   /** Моя история отчётов. */
+  @Permissions('reports:read')
   @Get('mine')
   mine(
     @CurrentUser() me: any,
@@ -33,12 +36,14 @@ export class DailyReportsController {
   }
 
   /** Создать/обновить (upsert) отчёт. */
+  @Permissions('reports:create')
   @Post()
   upsert(@CurrentUser() me: any, @Body() body: DailyReportInput) {
     return this.svc.upsert(me.id, body);
   }
 
   /** Удалить — свой; ADMIN может любой. */
+  @Permissions('reports:create')
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.remove(id, me.id, me.role);

@@ -58,13 +58,14 @@ export class ApplicationsController {
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
-  @Permissions('applications:create')
+  @Permissions('leads:create')
   @Post('staff')
   createByStaff(@Body() dto: CreateStaffApplicationDto, @CurrentUser() user: any) {
     return this.apps.createByStaff(dto, user);
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('leads:read', 'applications:read')
   @Get()
   list(
     @CurrentUser() user: any,
@@ -160,14 +161,14 @@ export class ApplicationsController {
    * Справочник сотрудников для инлайнового <select> «Менеджер» в строке
    * списка /leads. Объявлен ДО @Get(':id'), иначе 'managers' уедет в :id.
    *
-   * Права те же, что у самого назначения (applications:assign): показывать
-   * список тех, кому нельзя назначить, смысла нет. GET /users для этого не
-   * годится — он @Roles(ADMIN, ACCOUNTANT) и отдаёт кадровую карточку
-   * целиком; здесь — только id, имя и роль.
+   * Права — как у назначения (…:assign); сотруднику с ролью ещё и с «Все,
+   * не только свои» — для фильтра «Менеджер» в списках. GET /users для
+   * этого не годится — он отдаёт кадровую карточку целиком; здесь — только
+   * id, имя и роль.
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
-  @Permissions('applications:assign')
+  @Permissions('leads:assign', 'applications:assign', 'leads:all', 'applications:all', 'students:all')
   @Get('managers')
   listAssignableManagers(@CurrentUser() user: any) {
     return this.apps.listAssignableManagers(user);
@@ -188,7 +189,7 @@ export class ApplicationsController {
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
-  @Permissions('applications:assign')
+  @Permissions('leads:assign', 'applications:assign')
   @Patch('bulk/manager')
   bulkAssignManager(
     @Body() body: { ids?: string[]; managerId?: string; confirmReassign?: boolean },
@@ -198,6 +199,7 @@ export class ApplicationsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('leads:read', 'applications:read')
   @Get(':id')
   async one(@Param('id') id: string, @CurrentUser() user: any) {
     await this.apps.assertCanView(id, user);
@@ -207,6 +209,7 @@ export class ApplicationsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('leads:update', 'applications:update')
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -231,7 +234,7 @@ export class ApplicationsController {
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.ACCOUNTANT, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
-  @Permissions('applications:assign')
+  @Permissions('leads:assign', 'applications:assign')
   @Patch(':id/manager')
   assignManager(
     @Param('id') id: string,
@@ -242,6 +245,7 @@ export class ApplicationsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('leads:delete', 'applications:delete')
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.apps.remove(id, user);
@@ -249,6 +253,7 @@ export class ApplicationsController {
 
   /** Вернуть заявку из корзины. */
   @UseGuards(JwtAuthGuard)
+  @Permissions('leads:delete', 'applications:delete')
   @Post(':id/restore')
   restore(@Param('id') id: string, @CurrentUser() user: any) {
     return this.apps.restore(id, user);

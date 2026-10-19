@@ -62,11 +62,13 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-/** Канонический ключ рассылок + legacy-алиас с дефисом (см. PERMISSION_CATALOG). */
-const MASSMAIL_WRITE = ['massmail:write', 'mass-mail:write'];
+/** Раздел групп академии: свои группы или все (Настройки → Роли → «Группы академии»). */
+const ACADEMY_PERMS = ['groups:read', 'academy:all'];
 
-/** Ключи прав академии — любой из них открывает раздел своей роли. */
-const ACADEMY_PERMS = ['groups:read', 'groups:write', 'academy:manage'];
+/** Пункты «Настроек компании», которые основатель может открыть роли. */
+export const SETTINGS_PERMS = [
+  'settings:schedule', 'settings:penalty-rules', 'settings:locations', 'settings:revenue',
+];
 
 /** Группы меню; «Академия» добавлена 17.10.2026 вслед за «Продажами». */
 export const NAV_GROUPS: NavGroup[] = [
@@ -86,17 +88,15 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.sales',
     items: [
       { to: '/applications', icon: 'assignment', labelKey: 'sidebar.applications', visible: (c) => c.show('applications:read', c.isWorkforce) },
-      // «Лиды» — ручной ввод заявки с голоса и раздача менеджерам.
-      // Ключ намеренно СУЩЕСТВУЮЩИЙ (applications:create), а не новый:
-      // роль «Квалификатор лидов» основатель уже собрал на текущем
-      // каталоге, и свежий ключ был бы у всех снят по умолчанию — пункт
-      // не появился бы ни у кого. Стиль предиката — как у соседей:
-      // кастомная роль решает пермишеном, базовая — ролью.
-      { to: '/leads', icon: 'person_add', labelKey: 'sidebar.leads', visible: (c) => c.show('applications:create', c.isWorkforce) },
+      // «Лиды» — ручной ввод заявки с голоса и раздача менеджерам. С
+      // 19.10.2026 у раздела свои права («Лиды — …»); роли, где раньше
+      // экран открывала «Заявки — создание», получили «Лиды — просмотр»
+      // при переносе (custom-roles.service).
+      { to: '/leads', icon: 'person_add', labelKey: 'sidebar.leads', visible: (c) => c.show('leads:read', c.isWorkforce) },
       { to: '/students', icon: 'school', labelKey: 'sidebar.students', visible: (c) => c.show('students:read', c.isWorkforce) },
       // «Сделки» — менеджеры оформляют закрытых студентов; FOUNDER одобряет.
-      { to: '/submissions', icon: 'handshake', labelKey: 'sidebar.submissions', visible: (c) => !c.isTeacherOnly },
-      { to: '/pipelines', icon: 'route', labelKey: 'sidebar.pipelines', visible: (c) => c.show('pipelines:write', c.elevated) },
+      { to: '/submissions', icon: 'handshake', labelKey: 'sidebar.submissions', visible: (c) => !c.isTeacherOnly && c.show(['submissions:read', 'submissions:all', 'submissions:approve'], true) },
+      { to: '/pipelines', icon: 'route', labelKey: 'sidebar.pipelines', visible: (c) => c.show('pipelines:read', c.elevated) },
       { to: '/partners', icon: 'diversity_3', labelKey: 'sidebar.partners', visible: (c) => c.show('partners:read', c.elevated) },
     ],
   },
@@ -111,9 +111,9 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.academy',
     items: [
       { to: '/groups', icon: 'diversity_2', labelKey: 'sidebar.groups', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
-      { to: '/academy/students', icon: 'person_book', labelKey: 'sidebar.academyStudents', visible: (c) => c.isTeacherOnly || c.academyManager || c.can('groups:read', 'groups:write') },
+      { to: '/academy/students', icon: 'person_book', labelKey: 'sidebar.academyStudents', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.academyManager) },
       // Уровни (Beginner, Elementary…) ведёт руководство академии.
-      { to: '/academy/levels', icon: 'stairs', labelKey: 'sidebar.academyLevels', visible: (c) => c.academyManager },
+      { to: '/academy/levels', icon: 'stairs', labelKey: 'sidebar.academyLevels', visible: (c) => c.show('academy:levels', c.academyManager) },
       { to: '/schedule', icon: 'calendar_month', labelKey: 'sidebar.schedule', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
       { to: '/lms', icon: 'auto_stories', labelKey: 'sidebar.lms', visible: (c) => c.show('lms:read', c.elevated) },
     ],
@@ -128,12 +128,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/chat', icon: 'forum', labelKey: 'sidebar.chat', visible: (c) => !c.isTeacherOnly && c.show('chat:read', true) },
       { to: '/inbox', icon: 'inbox', labelKey: 'sidebar.inbox', visible: (c) => c.show('inbox:read', c.isWorkforce) },
       { to: '/calls', icon: 'call', labelKey: 'sidebar.calls', visible: (c) => c.show('calls:read', c.isWorkforce) },
-      // В PERMISSION_CATALOG живут ОБА ключа: канонический massmail:write
-      // ('Рассылки — редактирование', его и тикают в конструкторе ролей) и
-      // legacy mass-mail:write ('Рассылки (устар.)') — оставлен ради старых
-      // записей в БД. Backend авторизует и тот и другой, поэтому сайдбар
-      // тоже обязан принимать оба, иначе страница недостижима.
-      { to: '/massmail', icon: 'campaign', labelKey: 'sidebar.massmail', visible: (c) => c.show(MASSMAIL_WRITE, c.elevated) },
+      { to: '/massmail', icon: 'campaign', labelKey: 'sidebar.massmail', visible: (c) => c.show('massmail:read', c.elevated) },
     ],
   },
   {
@@ -156,8 +151,8 @@ export const NAV_GROUPS: NavGroup[] = [
       // «Время / Посещаемость / Причины» схлопнуты в /workday со вкладками,
       // но старые роуты живы в App.tsx и рендерят тот же Workday.
       { to: '/workday', icon: 'schedule', labelKey: 'sidebar.workday', aliases: ['/time', '/attendance', '/excuses'], visible: (c) => !c.isTeacherOnly },
-      // Аудит-лог — единолично у FOUNDER (Activity.tsx блокирует остальных).
-      { to: '/activity', icon: 'history', labelKey: 'sidebar.activity', visible: (c) => c.isFounder },
+      // Аудит-лог — основатель; роли — пункт «Журнал активности».
+      { to: '/activity', icon: 'history', labelKey: 'sidebar.activity', visible: (c) => c.isFounder || (c.hasCustomRole && c.can('activity:read')) },
     ],
   },
   {
@@ -166,10 +161,9 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.settings',
     items: [
       { to: '/programs', icon: 'menu_book', labelKey: 'sidebar.programs', visible: (c) => c.show('programs:read', c.isWorkforce) },
-      // Осознанно НЕ через show(): custom-роль не открывает оферты никаким
-      // permission'ом — так было и в старом сайдбаре.
-      { to: '/offers', icon: 'description', labelKey: 'sidebar.offers', visible: (c) => !c.hasCustomRole && c.elevated },
-      { to: '/settings', icon: 'settings', labelKey: 'sidebar.settings', visible: (c) => c.isFounder },
+      { to: '/offers', icon: 'description', labelKey: 'sidebar.offers', visible: (c) => c.show('offers:read', c.elevated) },
+      // Настройки — основатель; роли — если открыт хоть один их пункт.
+      { to: '/settings', icon: 'settings', labelKey: 'sidebar.settings', visible: (c) => c.isFounder || (c.hasCustomRole && c.can(...SETTINGS_PERMS)) },
     ],
   },
 ];

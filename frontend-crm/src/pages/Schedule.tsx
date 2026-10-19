@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
-import { hasRole } from '../lib/roles';
+import { isAcademyManager, roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { keys } from '../lib/queryKeys';
 import { tjDateInput, tjFormatTime, tjMonthRange, tjToday } from '../lib/tjTime';
@@ -45,7 +45,13 @@ export default function Schedule() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const elevated = hasRole(me, 'FOUNDER', 'ADMIN');
+  // Фильтр по учителю — тому, кто видит все группы (руководство, роль с
+  // «Все группы и ученики»).
+  const elevated = isAcademyManager(me as any);
+  // Заводить и править занятия — с «Ведением» (роль); без него занятие
+  // открывает свою группу.
+  const mayWrite = roleCan(me, 'groups:write');
+  const openSession = (s: ClassSession) => (mayWrite ? setModal({ session: s }) : navigate(`/groups/${s.groupId}`));
 
   const [monthOffset, setMonthOffset] = useState(0);
   const [groupId, setGroupId] = useState('');
@@ -179,7 +185,7 @@ export default function Schedule() {
             </button>
           </div>
 
-          {groups.length > 0 && (
+          {groups.length > 0 && mayWrite && (
             <button className="btn btn-sm btn-primary sched-new" data-testid="sched-new" onClick={() => setModal({ day: selectedDay })}>
               <Icon name="add" size={14} /> {t('classes.newSession')}
             </button>
@@ -226,7 +232,7 @@ export default function Schedule() {
                         data-testid="sched-day-session"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setModal({ session: s });
+                          openSession(s);
                         }}
                       >
                         <span className="sched-day-time">{tjFormatTime(s.startsAt)}—{tjFormatTime(s.endsAt)}</span>
@@ -282,7 +288,7 @@ export default function Schedule() {
                         key={s.id}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setModal({ session: s });
+                          openSession(s);
                         }}
                         style={{
                           fontSize: 11,
@@ -318,7 +324,7 @@ export default function Schedule() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {sessions.map((s) => (
-                <AgendaRow key={s.id} s={s} onOpen={() => setModal({ session: s })} onGroup={() => navigate(`/groups/${s.groupId}`)} />
+                <AgendaRow key={s.id} s={s} onOpen={() => openSession(s)} onGroup={() => navigate(`/groups/${s.groupId}`)} />
               ))}
             </div>
           )}
@@ -335,7 +341,7 @@ export default function Schedule() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {daySessions.map((s) => (
-                <AgendaRow key={s.id} s={s} onOpen={() => setModal({ session: s })} onGroup={() => navigate(`/groups/${s.groupId}`)} />
+                <AgendaRow key={s.id} s={s} onOpen={() => openSession(s)} onGroup={() => navigate(`/groups/${s.groupId}`)} />
               ))}
             </div>
           )}

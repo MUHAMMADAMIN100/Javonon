@@ -1,5 +1,5 @@
 import { ApplicationStatus, Prisma } from '@prisma/client';
-import { hasPermission, isElevated, isFounder, isStaff, UserWithRoles } from '../auth/role-utils';
+import { hasPermission, isElevated, isFounder, isStaff, roleAllows, UserWithRoles } from '../auth/role-utils';
 import { hasSeeAllGrant } from '../auth/client-access';
 import { NEW_LEAD_APPLICATION_STATUSES } from '../common/application-status';
 
@@ -45,7 +45,9 @@ import { NEW_LEAD_APPLICATION_STATUSES } from '../common/application-status';
 export function canCreateApplication(user: UserWithRoles | undefined | null): boolean {
   if (!user) return false;
   if (isFounder(user)) return true;
-  if (user.hasCustomRole) return hasPermission(user, 'applications:create');
+  // Ручной ввод создаёт ЛИД (статус «Новый лид») — с 19.10.2026 это своё
+  // право «Лиды — создание»; «Заявки — создание» — заявка студенту.
+  if (user.hasCustomRole) return hasPermission(user, 'leads:create');
   return isStaff(user);
 }
 
@@ -60,7 +62,9 @@ export function canCreateApplication(user: UserWithRoles | undefined | null): bo
 export function canTouchApplicationManager(user: UserWithRoles | undefined | null): boolean {
   if (!user) return false;
   if (isFounder(user)) return true;
-  if (user.hasCustomRole) return hasPermission(user, 'applications:assign');
+  // Лидам и заявкам менеджера назначают разные права; какое нужно этой
+  // записи — проверяет roleAllowsApplication(…, 'assign') в сервисе.
+  if (user.hasCustomRole) return hasPermission(user, 'leads:assign', 'applications:assign');
   return isStaff(user);
 }
 
@@ -79,10 +83,17 @@ export function canTouchApplicationManager(user: UserWithRoles | undefined | nul
  * роли — по-прежнему по isElevated (ТЗ §7: переназначение между
  * сотрудниками — только ADMIN/ACCOUNTANT/FOUNDER).
  */
-export function canReassignApplicationManager(user: UserWithRoles | undefined | null): boolean {
+export function canReassignApplicationManager(
+  user: UserWithRoles | undefined | null,
+  status?: ApplicationStatus | string | null,
+): boolean {
   if (!user) return false;
   if (isFounder(user)) return true;
-  if (user.hasCustomRole) return hasPermission(user, 'applications:assign');
+  if (user.hasCustomRole) {
+    return status
+      ? hasPermission(user, applicationRightKey(status, 'assign'))
+      : hasPermission(user, 'leads:assign', 'applications:assign');
+  }
   return isElevated(user);
 }
 
@@ -130,9 +141,14 @@ export function clientRoomForStatus(status: ApplicationStatus | string | null | 
   return isLeadStatus(status) ? 'leads-all' : 'applications-all';
 }
 
-/** Видит и ведёт все лиды, а не только свои. */
+/**
+ * Видит и ведёт все лиды, а не только свои. «Лиды — назначение менеджера»
+ * тоже открывает все: раздать лиды, видя только свои, невозможно (ручной
+ * лид создаётся без менеджера).
+ */
 export function canSeeAllLeads(user: UserWithRoles | undefined | null): boolean {
-  return canSeeAllApplications(user) || hasSeeAllGrant(user, 'leads');
+  return canSeeAllApplications(user) || hasSeeAllGrant(user, 'leads')
+    || (!!user?.hasCustomRole && hasPermission(user, 'leads:assign'));
 }
 
 /** Видит и ведёт все заявки (кроме лидов), а не только свои. */
@@ -140,14 +156,71 @@ export function canSeeAllNonLeadApplications(user: UserWithRoles | undefined | n
   return canSeeAllApplications(user) || hasSeeAllGrant(user, 'applications');
 }
 
-/** Открыть и вести эту заявку: своя (менеджер TJ или CN) или «все» её вида. */
+/**
+ * Открыть и вести эту заявку: своя (менеджер TJ или CN) или «все» её вида.
+ * Сотруднику с ролью ещё нужен просмотр её вида: лид — «Лиды — просмотр»,
+ * заявка — «Заявки — просмотр».
+ */
 export function canAccessApplication(
   user: (UserWithRoles & { id: string }) | undefined | null,
   app: { managerId: string | null; chinaManagerId?: string | null; status: ApplicationStatus | string },
 ): boolean {
   if (!user) return false;
+  if (!roleAllowsApplication(user, app.status, 'read')) return false;
   if (app.managerId === user.id || app.chinaManagerId === user.id) return true;
   return isLeadStatus(app.status) ? canSeeAllLeads(user) : canSeeAllNonLeadApplications(user);
+}
+
+export type ApplicationAction = 'read' | 'update' | 'delete' | 'assign';
+
+/**
+ * Корзина: что можно вернуть. Сотрудник без роли — как раньше (руководство
+ * — все, остальные — свои). Роли — свои и чужие того вида, где у неё есть
+ * назначение менеджера, и только вида, который она может удалять.
+ */
+export function applicationTrashWhere(user: UserWithRoles & { id: string }): Prisma.ApplicationWhereInput | null {
+  const own: Prisma.ApplicationWhereInput = { OR: [{ managerId: user.id }, { chinaManagerId: user.id }] };
+  if (!user.hasCustomRole || isFounder(user)) return canSeeAllApplications(user) ? null : own;
+  const kinds: Prisma.ApplicationWhereInput[] = [];
+  for (const lead of [true, false]) {
+    const status = lead ? { in: NEW_LEAD_APPLICATION_STATUSES } : { notIn: NEW_LEAD_APPLICATION_STATUSES };
+    const prefix = lead ? 'leads' : 'applications';
+    if (!hasPermission(user, `${prefix}:delete`)) continue;
+    kinds.push(hasPermission(user, `${prefix}:assign`) ? { status } : { AND: [{ status }, own] });
+  }
+  return kinds.length ? { OR: kinds } : { id: '__none__' };
+}
+
+/** Право роли на действие с записью: пока она лид — «Лиды — …», дальше — «Заявки — …». */
+export function applicationRightKey(
+  status: ApplicationStatus | string | null | undefined,
+  action: ApplicationAction,
+): string {
+  return `${isLeadStatus(status) ? 'leads' : 'applications'}:${action}`;
+}
+
+/** Есть ли у роли право на действие с записью этого статуса (основателя и должности не касается). */
+export function roleAllowsApplication(
+  user: UserWithRoles | undefined | null,
+  status: ApplicationStatus | string | null | undefined,
+  action: ApplicationAction,
+): boolean {
+  return roleAllows(user, applicationRightKey(status, action));
+}
+
+/**
+ * Какие записи вообще открыты роли: только лиды («Лиды — просмотр»), только
+ * заявки («Заявки — просмотр») или всё. null — без ограничения (основатель,
+ * сотрудник без роли, роль с обоими правами).
+ */
+export function applicationKindWhere(user: UserWithRoles | undefined | null): Prisma.ApplicationWhereInput | null {
+  if (!user?.hasCustomRole || isFounder(user)) return null;
+  const leads = hasPermission(user, 'leads:read');
+  const apps = hasPermission(user, 'applications:read');
+  if (leads && apps) return null;
+  if (leads) return { status: { in: NEW_LEAD_APPLICATION_STATUSES } };
+  if (apps) return { status: { notIn: NEW_LEAD_APPLICATION_STATUSES } };
+  return { id: '__none__' };
 }
 
 /**
@@ -158,11 +231,12 @@ export function canAccessApplication(
 export function applicationVisibilityWhere(
   user: UserWithRoles & { id: string },
 ): Prisma.ApplicationWhereInput | null {
+  const kind = applicationKindWhere(user);
   const leads = canSeeAllLeads(user);
   const apps = canSeeAllNonLeadApplications(user);
-  if (leads && apps) return null;
+  if (leads && apps) return kind;
   const or: Prisma.ApplicationWhereInput[] = [{ managerId: user.id }, { chinaManagerId: user.id }];
   if (leads) or.push({ status: { in: NEW_LEAD_APPLICATION_STATUSES } });
   if (apps) or.push({ status: { notIn: NEW_LEAD_APPLICATION_STATUSES } });
-  return { OR: or };
+  return kind ? { AND: [{ OR: or }, kind] } : { OR: or };
 }

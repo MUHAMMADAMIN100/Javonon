@@ -24,9 +24,10 @@ import { CreateProgramDto } from './dto/create-program.dto';
 import { UpdateProgramDto } from './dto/update-program.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { isElevated } from '../auth/role-utils';
+import { isElevated, roleAllows } from '../auth/role-utils';
 import { InstallmentsService } from '../installments/installments.service';
 import { SaveInstallmentTemplateDto } from '../installments/dto/installments.dto';
+import { Permissions } from '../auth/permissions.decorator';
 
 // Изображения программ — только картинки. Whitelist расширения + MIME,
 // иначе можно было загрузить .html/.js и получить XSS при отдаче статики.
@@ -109,12 +110,14 @@ export class ProgramsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:read')
   @Get(':id')
   one(@Param('id') id: string) {
     return this.programs.findOne(id);
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:create')
   @Post()
   @UseInterceptors(
     FileInterceptor('file', {
@@ -206,18 +209,21 @@ export class ProgramsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:update')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateProgramDto, @CurrentUser() user: any) {
     return this.programs.update(id, dto, user);
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:delete')
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.programs.remove(id, user);
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:update')
   @Post(':id/image')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -231,9 +237,8 @@ export class ProgramsController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: any,
   ) {
-    // Elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли). Раньше primary
-    // ADMIN-only check блокировал FOUNDER и secondary-роли по ТЗ §2.
-    if (!isElevated(user)) {
+    // Elevated (FOUNDER/ADMIN/ACCOUNTANT с мульти-роли); роль — «Программы — изменение».
+    if (!roleAllows(user, 'programs:update', () => isElevated(user))) {
       throw new ForbiddenException('Только администрация');
     }
     if (!file) throw new BadRequestException('Файл не передан');
@@ -244,6 +249,7 @@ export class ProgramsController {
   // ===== Дополнительные фото галереи (ТЗ-доработка п.4) =====
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:update')
   @Post(':id/gallery')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -257,7 +263,7 @@ export class ProgramsController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: any,
   ) {
-    if (!isElevated(user)) throw new ForbiddenException('Только администрация');
+    if (!roleAllows(user, 'programs:update', () => isElevated(user))) throw new ForbiddenException('Только администрация');
     if (!file) throw new BadRequestException('Файл не передан');
     const existing = await this.programs.findOne(id);
     const current = (existing as any).imageUrls || [];
@@ -270,13 +276,14 @@ export class ProgramsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:update')
   @Delete(':id/gallery')
   async removeGalleryImage(
     @Param('id') id: string,
     @Body() body: { url: string },
     @CurrentUser() user: any,
   ) {
-    if (!isElevated(user)) throw new ForbiddenException('Только администрация');
+    if (!roleAllows(user, 'programs:update', () => isElevated(user))) throw new ForbiddenException('Только администрация');
     if (!body?.url) throw new BadRequestException('Не указан URL фото');
     const existing = await this.programs.findOne(id);
     const next = ((existing as any).imageUrls || []).filter((u: string) => u !== body.url);
@@ -291,12 +298,14 @@ export class ProgramsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:read')
   @Get(':id/scholarships')
   listScholarships(@Param('id') id: string) {
     return this.programs.listScholarships(id);
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:scholarships')
   @Post(':id/scholarships')
   addScholarship(
     @Param('id') id: string,
@@ -307,6 +316,7 @@ export class ProgramsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:scholarships')
   @Patch('scholarships/:scholarshipId')
   updateScholarship(
     @Param('scholarshipId') sid: string,
@@ -317,6 +327,7 @@ export class ProgramsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:scholarships')
   @Delete('scholarships/:scholarshipId')
   removeScholarship(
     @Param('scholarshipId') sid: string,
@@ -328,12 +339,14 @@ export class ProgramsController {
   // ===== Документы программы (ТЗ-доработка п.7) =====
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:read')
   @Get(':id/documents')
   listDocuments(@Param('id') id: string) {
     return this.programs.listDocuments(id);
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:documents')
   @Post(':id/documents')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -369,6 +382,7 @@ export class ProgramsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:documents')
   @Delete('documents/:documentId')
   removeDocument(@Param('documentId') did: string, @CurrentUser() user: any) {
     return this.programs.removeDocument(did, user);
@@ -377,12 +391,14 @@ export class ProgramsController {
   // ===== Комментарии программы (ТЗ-доработка п.7) =====
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:read')
   @Get(':id/comments')
   listComments(@Param('id') id: string) {
     return this.programs.listComments(id);
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:comments')
   @Post(':id/comments')
   addComment(
     @Param('id') id: string,
@@ -393,6 +409,7 @@ export class ProgramsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:comments')
   @Delete('comments/:commentId')
   removeComment(@Param('commentId') cid: string, @CurrentUser() user: any) {
     return this.programs.removeComment(cid, user);
@@ -409,6 +426,7 @@ export class ProgramsController {
   // переговоров, а не витрина лендинга.
 
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:read')
   @Get(':id/installment-template')
   installmentTemplate(@Param('id') id: string) {
     return this.installments.getTemplate(id);
@@ -416,6 +434,7 @@ export class ProgramsController {
 
   /** PUT-семантика: что прислали, то и лежит. Пустой массив = рассрочки нет. */
   @UseGuards(JwtAuthGuard)
+  @Permissions('programs:installments')
   @Put(':id/installment-template')
   saveInstallmentTemplate(
     @Param('id') id: string,

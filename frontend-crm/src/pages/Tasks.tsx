@@ -21,6 +21,7 @@ import SearchField from '../components/SearchField';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import CrmDatePicker from '../components/CrmDatePicker';
 import { hasRole, isElevated, displayRoleLabel, isTeacherOnly } from '../lib/roles';
+import { roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 
 type Scope = 'all' | 'mine';
@@ -33,9 +34,13 @@ export default function Tasks() {
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
   const isAdmin = isElevated(me);
+  // Роль (Настройки → Роли → «Задачи»): все задачи, создание, удаление;
+  // должность — как на сервере (tasks.service).
+  const seesAll = roleCan(me, 'tasks:all', isAdmin);
+  const canCreate = roleCan(me, 'tasks:create', isAdmin);
   // Удалять — как на сервере (tasks.service remove): основатель и администратор.
-  const canDelete = hasRole(me, 'FOUNDER', 'ADMIN');
-  const [scope, setScope] = useState<Scope>(isAdmin ? 'all' : 'mine');
+  const canDelete = roleCan(me, 'tasks:delete', hasRole(me, 'FOUNDER', 'ADMIN'));
+  const [scope, setScope] = useState<Scope>(seesAll ? 'all' : 'mine');
   // Фильтры — в адресе страницы (?status=&assignee=): переживают обновление и ссылку.
   const [params, setParams] = useSearchParams();
   const statusFilter = (params.get('status') || '') as TaskStatus | '';
@@ -96,7 +101,7 @@ export default function Tasks() {
   const [openId, setOpenId] = useState<string | null>(null);
   const openTask = items.find((x) => x.id === openId) ?? null;
   const canChangeTask = (task: Task) =>
-    isAdmin ||
+    seesAll ||
     (!!me &&
       // Исполнители приходят списком assignees (assigneeIds API не отдаёт);
       // assignedToId — старое поле одного исполнителя.
@@ -117,7 +122,7 @@ export default function Tasks() {
   const usersQuery = useQuery({
     queryKey: keys.users.list(),
     queryFn: () => listUsers(),
-    enabled: isAdmin,
+    enabled: seesAll || canCreate,
   });
   // Учителю академии раздел задач закрыт — в исполнители и контролёры его не предлагаем.
   const users = (usersQuery.data ?? []).filter((u) => !isTeacherOnly(u as any));
@@ -241,7 +246,7 @@ export default function Tasks() {
           testId="tasks-total"
         />
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {isAdmin && (
+          {seesAll && (
             <div className="scope-switch">
               <button
                 className={`scope-btn${scope === 'mine' ? ' active' : ''}`}
@@ -259,7 +264,7 @@ export default function Tasks() {
               </button>
             </div>
           )}
-          {isAdmin && !creating && (
+          {canCreate && !creating && (
             <motion.button
               className="btn btn-primary"
               data-testid="task-new"
@@ -331,7 +336,7 @@ export default function Tasks() {
           )}
         </div>
         <AnimatePresence>
-          {creating && isAdmin && (
+          {creating && canCreate && (
             <FormModal
               open
               title={t('tasks.new')}

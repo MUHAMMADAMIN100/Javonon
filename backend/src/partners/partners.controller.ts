@@ -16,6 +16,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { PartnerJwtGuard } from './partner-jwt.guard';
 import { PartnersService } from './partners.service';
 import { AdminPartnerCreateDto } from './dto/admin-partner.dto';
+import { Permissions } from '../auth/permissions.decorator';
 
 @Controller('partner')
 @UseGuards(PartnerJwtGuard)
@@ -53,6 +54,7 @@ export class PartnersController {
 @Controller('admin/partners')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'ACCOUNTANT')
+@Permissions('partners:read')
 export class AdminPartnersController {
   constructor(private svc: PartnersService) {}
 
@@ -67,6 +69,7 @@ export class AdminPartnersController {
    */
   @Post()
   @Roles('FOUNDER', 'ADMIN')
+  @Permissions('partners:create')
   adminCreate(@Body() body: AdminPartnerCreateDto) {
     return this.svc.adminCreate(body);
   }
@@ -77,11 +80,13 @@ export class AdminPartnersController {
    */
   @Delete(':id')
   @Roles('FOUNDER', 'ADMIN')
+  @Permissions('partners:delete')
   adminDelete(@Param('id') id: string) {
     return this.svc.adminDelete(id);
   }
 
   @Patch(':id')
+  @Permissions('partners:update')
   update(
     @Param('id') id: string,
     @Body() patch: {
@@ -114,11 +119,13 @@ export class AdminPartnersController {
    */
   @Post('commissions/:id/approve')
   @Roles('FOUNDER', 'ADMIN')
+  @Permissions('partners:commission-approve')
   approveCommission(@Param('id') id: string) {
     return this.svc.adminApproveCommission(id);
   }
 
   @Post('commissions/:id/pay')
+  @Permissions('partners:commission-pay')
   markCommissionPaid(@Param('id') id: string) {
     return this.svc.adminMarkCommissionPaid(id);
   }
@@ -129,11 +136,13 @@ export class AdminPartnersController {
   }
 
   @Post('payouts/:id/pay')
+  @Permissions('partners:payouts')
   payoutPay(@Param('id') id: string) {
     return this.svc.adminMarkPayout(id, 'paid');
   }
 
   @Post('payouts/:id/reject')
+  @Permissions('partners:payouts')
   payoutReject(@Param('id') id: string) {
     return this.svc.adminMarkPayout(id, 'rejected');
   }

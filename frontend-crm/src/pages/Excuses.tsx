@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
+import { hasActiveRole, hasPermission, hiddenAmount, roleCan } from '../lib/permissions';
 import { useUI } from '../ui/Dialogs';
 import { useRealtimeEvent } from '../realtime';
 import Icon from '../Icon';
@@ -59,7 +60,8 @@ export default function Excuses() {
   const { t } = useT();
   const [params, setParams] = useSearchParams();
   useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
-  if (!isFounder(me)) {
+  // Основатель; сотрудник с ролью — с «Причины опозданий» (просмотр или одобрение).
+  if (!isFounder(me) && !(hasActiveRole(me) && hasPermission(me, 'excuses:read', 'excuses:approve'))) {
     return <div className="card" style={{ padding: 28 }}>{t('common.founderOnly')}</div>;
   }
 
@@ -163,8 +165,8 @@ interface CardView {
   reason: string | null;
   url: string | null;
   reviewedAt: string | null;
-  /** Штраф за день — только в «Истории»; undefined — строки нет. */
-  penalty?: number;
+  /** Штраф за день — только в «Истории»; undefined — строки нет, null — скрыт. */
+  penalty?: number | null;
 }
 
 function fromPending(entry: ExcuseEntry): CardView {
@@ -186,6 +188,9 @@ function PendingTab({ tabs }: { tabs: React.ReactNode }) {
   const { toast } = useUI();
   const { t } = useT();
   const qc = useQueryClient();
+  // «Одобрить / Отклонить» — роль с «Одобрение и отказ».
+  const me = useAuth((s) => s.user);
+  const canDecide = roleCan(me, 'excuses:approve');
   const query = useQuery({ queryKey: ['excuses', 'pending'], queryFn: listPendingExcuses });
 
   // По ТЗ — когда сотрудник присылает причину, у основателя список
@@ -235,8 +240,8 @@ function PendingTab({ tabs }: { tabs: React.ReactNode }) {
             <ExcuseCard
               key={`${e.id}-${e.kind}`}
               view={fromPending(e)}
-              onApprove={() => approveMut.mutate({ id: e.id, kind: e.kind })}
-              onReject={() => rejectMut.mutate({ id: e.id, kind: e.kind })}
+              onApprove={canDecide ? () => approveMut.mutate({ id: e.id, kind: e.kind }) : undefined}
+              onReject={canDecide ? () => rejectMut.mutate({ id: e.id, kind: e.kind }) : undefined}
               busy={approveMut.isPending || rejectMut.isPending}
             />
           ))}
@@ -415,7 +420,8 @@ function LatenessTotalsCard({ totals }: { totals: LatenessTotals }) {
     { id: 'approved', label: t('excuses.totals.approved'), value: min(totals.approvedMinutes), tone: STATUS_COLOR.APPROVED },
     { id: 'not-approved', label: t('excuses.totals.notApproved'), value: min(totals.notApprovedMinutes), tone: STATUS_COLOR.REJECTED },
     { id: 'pending', label: t('excuses.totals.pending'), value: min(totals.pendingMinutes) },
-    { id: 'penalties', label: t('excuses.totals.penalties'), value: fmtTjs(totals.penalties), tone: totals.penalties > 0 ? STATUS_COLOR.REJECTED : undefined },
+    // Без «Зарплат и окладов» штрафы коллег приходят null — «•••• TJS».
+    { id: 'penalties', label: t('excuses.totals.penalties'), value: totals.penalties == null ? hiddenAmount('TJS') : fmtTjs(totals.penalties), tone: (totals.penalties ?? 0) > 0 ? STATUS_COLOR.REJECTED : undefined },
   ];
   return (
     <div className="card lateness-totals-card" data-testid="lateness-totals">
@@ -492,7 +498,7 @@ function ExcuseCard({
               {t('excuses.late')}: {view.minutes} {t('common.minutes')}
             </span>
           </div>
-          {view.penalty !== undefined && view.penalty > 0 && (
+          {view.penalty != null && view.penalty > 0 && (
             <div style={{ fontSize: 12, marginTop: 4, color: 'var(--danger)', fontWeight: 600 }} data-testid="lateness-penalty">
               {t('excuses.penalty')}: {fmtTjs(view.penalty)}
               {isPending && <span style={{ color: 'var(--text-soft)', fontWeight: 400 }}> · {t('excuses.penaltyOnHold')}</span>}

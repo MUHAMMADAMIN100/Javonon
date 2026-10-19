@@ -2043,6 +2043,10 @@ model CustomRole {
   // ограничение `prisma db push` в start:prod без --accept-data-loss не
   // применяет и роняет запуск — в схему идут только добавочные изменения.
   baseRole    Role?
+  // Версия каталога прав (auth/permissions.ts PERMISSIONS_VERSION). Роль со
+  // старой версией один раз переносится на новый каталог при запуске
+  // сервера (custom-roles.service). 0 — роль из старого каталога.
+  permVersion Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

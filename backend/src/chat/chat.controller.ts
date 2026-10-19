@@ -21,6 +21,8 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ChatService } from './chat.service';
+import { roleAllows } from '../auth/role-utils';
+import { Permissions } from '../auth/permissions.decorator';
 
 // Storage и MIME-фильтр для chat-attachments. Принимаем шире чем documents:
 // картинки, видео, аудио, PDF/Word/Excel/ZIP. Лимит — 200MB по умолчанию.
@@ -57,52 +59,65 @@ export class ChatController {
     return this.svc.dedupeDirectRooms();
   }
 
+  @Permissions('chat:read')
   @Get('rooms')
   rooms(@CurrentUser() me: any) {
     return this.svc.listRooms(me.id);
   }
 
+  @Permissions('chat:read')
   @Get('unread')
   unread(@CurrentUser() me: any) {
     return this.svc.unreadCounts(me.id);
   }
 
   /** Переписка: последние сообщения; ?before=ISO — более старые (прокрутка вверх). */
+  @Permissions('chat:read')
   @Get('rooms/:id')
   room(@Param('id') id: string, @CurrentUser() me: any, @Query('before') before?: string) {
     return this.svc.getRoom(id, me.id, before || undefined);
   }
 
   /** Участники чата и кто в сети. */
+  @Permissions('chat:read')
   @Get('rooms/:id/members')
   members(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.roomMembers(id, me.id);
   }
 
   /** Поиск по переписке. */
+  @Permissions('chat:read')
   @Get('rooms/:id/search')
   search(@Param('id') id: string, @CurrentUser() me: any, @Query('q') q?: string) {
     return this.svc.searchMessages(id, me.id, q || '');
   }
 
-  /** Удалить чат: личный — ?for=all у обоих, иначе у себя; команду — только админ. */
+  /**
+   * Удалить чат: личный — ?for=all у обоих, иначе у себя; команду — только
+   * админ. Убрать личный чат у себя может каждый; команду и личный у обоих
+   * — сотруднику с ролью нужно «Чат — удаление».
+   */
+  @Permissions('chat:read')
   @Delete('rooms/:id')
   removeRoom(@Param('id') id: string, @CurrentUser() me: any, @Query('for') forWho?: string) {
-    return this.svc.deleteRoom(id, me.id, forWho === 'all');
+    return this.svc.deleteRoom(id, me.id, forWho === 'all', roleAllows(me, 'chat:delete'));
   }
 
   /** Выйти из команды. */
+  @Permissions('chat:read')
   @Post('rooms/:id/leave')
   leave(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.leaveRoom(id, me.id);
   }
 
+  @Permissions('chat:read')
   @Get('rooms/:id/pinned')
   pinned(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.listPinned(id, me.id);
   }
 
   /** Telegram-style: можно прикрепить файлы (multipart) и/или текст. */
+  @Permissions('chat:write')
   @Post('rooms/:id/messages')
   @UseInterceptors(
     FilesInterceptor('files', 10, {
@@ -140,6 +155,7 @@ export class ChatController {
     });
   }
 
+  @Permissions('chat:write')
   @Post('messages/:id/react')
   react(
     @Param('id') id: string,
@@ -149,12 +165,14 @@ export class ChatController {
     return this.svc.toggleReaction(id, me.id, body.emoji);
   }
 
+  @Permissions('chat:write')
   @Delete('messages/:id')
   remove(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.deleteMessage(id, me.id);
   }
 
   /** Удалить несколько выбранных сообщений разом. */
+  @Permissions('chat:write')
   @Post('messages/delete')
   removeMany(@CurrentUser() me: any, @Body() body: { ids?: string[] }) {
     if (!Array.isArray(body?.ids)) throw new BadRequestException('ids обязателен');
@@ -162,22 +180,26 @@ export class ChatController {
   }
 
   /** Кто прочитал моё сообщение и когда (только автору). */
+  @Permissions('chat:read')
   @Get('messages/:id/reads')
   reads(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.messageReads(id, me.id);
   }
 
   /** Изменить своё сообщение. */
+  @Permissions('chat:write')
   @Patch('messages/:id')
   edit(@Param('id') id: string, @CurrentUser() me: any, @Body() body: { text?: string }) {
     return this.svc.editMessage(id, me.id, typeof body?.text === 'string' ? body.text : '');
   }
 
+  @Permissions('chat:pin')
   @Patch('messages/:id/pin')
   pin(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.togglePin(id, me.id);
   }
 
+  @Permissions('chat:forward')
   @Post('messages/:id/forward')
   forward(
     @Param('id') id: string,
@@ -189,6 +211,7 @@ export class ChatController {
   }
 
   /** Telegram-style: typing indicator (ephemeral, broadcast only). */
+  @Permissions('chat:write')
   @Post('rooms/:id/typing')
   typing(
     @Param('id') id: string,
@@ -199,6 +222,7 @@ export class ChatController {
   }
 
   /** Telegram-style: read receipt — пометить комнату прочитанной. */
+  @Permissions('chat:read')
   @Post('rooms/:id/read')
   read(@Param('id') id: string, @CurrentUser() me: any) {
     return this.svc.markRoomRead(id, me.id);
@@ -207,6 +231,7 @@ export class ChatController {
   @Post('rooms/team')
   @UseGuards(RolesGuard)
   @Roles('FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER')
+  @Permissions('chat:groups')
   createTeam(
     @CurrentUser() me: any,
     @Body() body: { title: string; memberIds: string[] },
@@ -217,6 +242,7 @@ export class ChatController {
   @Post('rooms/direct')
   @UseGuards(RolesGuard)
   @Roles('FOUNDER', 'ADMIN', 'ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_MANAGER')
+  @Permissions('chat:direct')
   createDirect(
     @CurrentUser() me: any,
     @Body() body: { userId: string },

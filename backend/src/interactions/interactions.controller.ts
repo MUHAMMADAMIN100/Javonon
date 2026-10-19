@@ -4,6 +4,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { StudentJwtGuard } from '../student-auth/student-jwt.guard';
 import { InteractionsService } from './interactions.service';
 import { InteractionType } from '@prisma/client';
+import { Permissions } from '../auth/permissions.decorator';
 
 // Staff-side: список и CRUD
 @Controller('interactions')
@@ -11,6 +12,7 @@ import { InteractionType } from '@prisma/client';
 export class InteractionsController {
   constructor(private svc: InteractionsService) {}
 
+  @Permissions('students:read', 'applications:read', 'leads:read')
   @Get()
   async list(@Query('studentId') studentId: string, @CurrentUser() me: any) {
     await this.svc.assertCanSeeStudent(studentId, me);
@@ -18,12 +20,14 @@ export class InteractionsController {
   }
 
   /** Полная история взаимодействий (Interaction + CallLog + ExternalMessage). */
+  @Permissions('students:read', 'applications:read', 'leads:read')
   @Get('timeline')
   async timeline(@Query('studentId') studentId: string, @CurrentUser() me: any) {
     await this.svc.assertCanSeeStudent(studentId, me);
     return this.svc.fullTimeline(studentId);
   }
 
+  @Permissions('interactions:create')
   @Post()
   async create(
     @CurrentUser() me: any,
@@ -40,12 +44,14 @@ export class InteractionsController {
     return this.svc.create(me.id, body);
   }
 
+  @Permissions('interactions:update')
   @Patch(':id')
   async update(@Param('id') id: string, @Body() body: any, @CurrentUser() me: any) {
     await this.svc.assertCanModify(id, me);
     return this.svc.update(id, body);
   }
 
+  @Permissions('interactions:delete')
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() me: any) {
     await this.svc.assertCanModify(id, me);

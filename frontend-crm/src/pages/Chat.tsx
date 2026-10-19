@@ -40,6 +40,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation, tempId } from '../lib/optimistic';
 import { isFounder, displayRoleLabel, isTeacherOnly } from '../lib/roles';
+import { roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
 import { ROLE_LABEL, type Role } from '../api/types';
@@ -665,12 +666,19 @@ export default function Chat() {
   /** Админ этого чата: основатель — везде, в команде — ещё её создатель. */
   const isChatAdmin = (room?: ChatRoom | null) =>
     !!room && (isFounder(me) || (room.type === 'TEAM' && !!room.createdById && room.createdById === me?.id));
+  // Права роли «Чат — …» (Настройки → Роли); без роли — всё, как раньше.
+  const mayWrite = roleCan(me, 'chat:write');
+  const mayGroups = roleCan(me, 'chat:groups');
+  const mayDirect = roleCan(me, 'chat:direct');
+  const mayDeleteChats = roleCan(me, 'chat:delete');
+  const mayPin = roleCan(me, 'chat:pin');
+  const mayForward = roleCan(me, 'chat:forward');
   /** Своё — удаляет каждый, чужое — только админ чата. */
   const canDelete = (m: Draft, room?: ChatRoom | null) =>
-    !m.deletedAt && !isDraft(m) && (m.authorId === me?.id || isChatAdmin(room));
+    mayWrite && !m.deletedAt && !isDraft(m) && (m.authorId === me?.id || isChatAdmin(room));
   const canEdit = (m: Draft) =>
-    !m.deletedAt && !isDraft(m) && m.authorId === me?.id && !m.mentionsIds?.includes('__BOT__');
-  const canPin = (room?: ChatRoom | null) => !!room && (room.type === 'DIRECT' || isChatAdmin(room));
+    mayWrite && !m.deletedAt && !isDraft(m) && m.authorId === me?.id && !m.mentionsIds?.includes('__BOT__');
+  const canPin = (room?: ChatRoom | null) => mayPin && !!room && (room.type === 'DIRECT' || isChatAdmin(room));
 
   const askDelete = async (ids: string[]) => {
     if (!ids.length) return;
@@ -1155,20 +1163,26 @@ export default function Chat() {
               textTransform: 'uppercase',
             }}>{t('chat.title')}</div>
             <div style={{ display: 'flex', gap: 4 }}>
-              <button
-                className="btn btn-sm btn-secondary"
-                onClick={() => { setShowNewTeam(false); setShowNewDirect((v) => !v); }}
-                title={t('chat.newDirect')}
-              >
-                <Icon name="person_add" size={14} />
-              </button>
-              <button
-                className="btn btn-sm btn-secondary"
-                onClick={() => { setShowNewDirect(false); setShowNewTeam((v) => !v); }}
-                title={t('chat.newTeam')}
-              >
-                <Icon name="groups" size={14} />
-              </button>
+              {mayDirect && (
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => { setShowNewTeam(false); setShowNewDirect((v) => !v); }}
+                  title={t('chat.newDirect')}
+                  data-testid="chat-new-direct"
+                >
+                  <Icon name="person_add" size={14} />
+                </button>
+              )}
+              {mayGroups && (
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => { setShowNewDirect(false); setShowNewTeam((v) => !v); }}
+                  title={t('chat.newTeam')}
+                  data-testid="chat-new-team"
+                >
+                  <Icon name="groups" size={14} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -1384,15 +1398,17 @@ export default function Chat() {
                   <div className="chat-select-count" data-testid="chat-select-count">
                     {t('chat.select.count').replace('{n}', String(selected.length))}
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-secondary"
-                    disabled={!forwardable.length}
-                    onClick={() => setForwardSource(forwardable)}
-                    data-testid="chat-select-forward"
-                  >
-                    <Icon name="forward" size={16} /> {t('chat.menu.forward')}
-                  </button>
+                  {mayForward && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      disabled={!forwardable.length}
+                      onClick={() => setForwardSource(forwardable)}
+                      data-testid="chat-select-forward"
+                    >
+                      <Icon name="forward" size={16} /> {t('chat.menu.forward')}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-sm btn-danger"
@@ -1754,6 +1770,12 @@ export default function Chat() {
           </div>{/* end chat-thread-wrap */}
 
           {/* chat-composer: справа место под круглую кнопку звонков (она поверх угла экрана). */}
+          {/* Без «Чат — отправка сообщений» вместо поля ввода — объяснение. */}
+          {!mayWrite ? (
+            <div className="chat-composer chat-readonly" data-testid="chat-readonly">
+              <Icon name="lock" size={16} /> {t('chat.readOnly')}
+            </div>
+          ) : (
           <form onSubmit={send} className="chat-composer" style={{
             padding: '12px 20px 16px',
             borderTop: '1px solid var(--border-soft)',
@@ -1939,6 +1961,7 @@ export default function Chat() {
             </button>
             </div>{/* end input row */}
           </form>
+          )}
         </div>
       </div>
 
@@ -1981,7 +2004,7 @@ export default function Chat() {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Quick reactions row */}
-            {!contextMenu.msg.deletedAt && !isDraft(contextMenu.msg) && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '4px 6px 8px', borderBottom: '1px solid var(--border-soft)' }}>
+            {mayWrite && !contextMenu.msg.deletedAt && !isDraft(contextMenu.msg) && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '4px 6px 8px', borderBottom: '1px solid var(--border-soft)' }}>
               {QUICK_REACTIONS.map((emoji) => (
                 <button
                   key={emoji}
@@ -2013,12 +2036,12 @@ export default function Chat() {
               const live = !cm.deletedAt && !isDraft(cm);
               return [
                 { id: 'retry', icon: 'refresh', label: t('chat.retry'), show: !!cm.failed, onClick: () => retrySend(cm) },
-                { id: 'reply', icon: 'reply', label: t('chat.menu.reply'), show: live, onClick: () => { setEditing(null); setReplyTo(cm); inputRef.current?.focus(); } },
+                { id: 'reply', icon: 'reply', label: t('chat.menu.reply'), show: live && mayWrite, onClick: () => { setEditing(null); setReplyTo(cm); inputRef.current?.focus(); } },
                 { id: 'edit', icon: 'edit', label: t('chat.menu.edit'), show: canEdit(cm), onClick: () => startEdit(cm) },
                 { id: 'pin', icon: 'push_pin', label: cm.isPinned ? t('chat.menu.unpin') : t('chat.menu.pin'), show: live && canPin(activeRoom), onClick: () => pinMut.mutate({ messageId: cm.id }) },
                 { id: 'copy', icon: 'content_copy', label: t('chat.menu.copy'), show: !!cm.text && !cm.deletedAt, onClick: () => copyText(cm.text) },
-                { id: 'forward', icon: 'forward', label: t('chat.menu.forward'), show: live, onClick: () => setForwardSource([cm]) },
-                { id: 'select', icon: 'check_circle', label: t('chat.menu.select'), show: !isDraft(cm), onClick: () => setSelected([cm.id]) },
+                { id: 'forward', icon: 'forward', label: t('chat.menu.forward'), show: live && mayForward, onClick: () => setForwardSource([cm]) },
+                { id: 'select', icon: 'check_circle', label: t('chat.menu.select'), show: !isDraft(cm) && (mayForward || mayWrite), onClick: () => setSelected([cm.id]) },
                 { id: 'delete', icon: 'delete', label: t('common.delete'), show: canDelete(cm, activeRoom), onClick: () => askDelete([cm.id]), danger: true },
                 { id: 'drop', icon: 'delete', label: t('common.delete'), show: !!cm.failed, onClick: () => dropDraft(cm), danger: true },
               ];
@@ -2055,7 +2078,7 @@ export default function Chat() {
           const items = [
             { id: 'read', icon: 'mark_chat_read', label: t('chat.room.markRead'), show: unread > 0, onClick: () => { markRoomRead(r.id).catch(() => undefined); } },
             { id: 'delete', icon: 'delete', label: t('chat.room.delete'), show: r.type === 'DIRECT', danger: true, onClick: () => setDeleteDirect(r) },
-            { id: 'delete-team', icon: 'delete', label: t('chat.room.deleteTeam'), show: r.type === 'TEAM' && admin, danger: true, onClick: () => askDeleteTeam(r) },
+            { id: 'delete-team', icon: 'delete', label: t('chat.room.deleteTeam'), show: r.type === 'TEAM' && admin && mayDeleteChats, danger: true, onClick: () => askDeleteTeam(r) },
             { id: 'leave', icon: 'logout', label: t('chat.room.leave'), show: r.type === 'TEAM' && !admin, danger: true, onClick: () => askLeaveTeam(r) },
           ].filter((a) => a.show);
           return (
@@ -2096,6 +2119,7 @@ export default function Chat() {
       <AnimatePresence>
         {deleteDirect && (
           <DeleteDirectDialog
+            allowBoth={mayDeleteChats}
             peerName={deleteDirect.members.find((m) => m.userId !== me?.id)?.user.fullName || deleteDirect.title || ''}
             onCancel={() => setDeleteDirect(null)}
             onConfirm={(forAll) => {
@@ -2145,10 +2169,10 @@ export default function Chat() {
                     className="chat-member-row"
                     data-testid="chat-member"
                     data-online={u.online ? '1' : '0'}
-                    disabled={u.id === me?.id}
-                    title={u.id === me?.id ? undefined : t('chat.members.write')}
+                    disabled={u.id === me?.id || !mayDirect}
+                    title={u.id === me?.id || !mayDirect ? undefined : t('chat.members.write')}
                     onClick={() => {
-                      if (u.id === me?.id) return;
+                      if (u.id === me?.id || !mayDirect) return;
                       setShowMembers(false);
                       startDirect(u.id);
                       setMobileShowList(false);
@@ -2475,7 +2499,9 @@ function MessageReadsInfo({ messageId, direct }: { messageId: string; direct: bo
 }
 
 /** «Удалить чат» с собеседником: у себя или (галочка) у обоих. */
-function DeleteDirectDialog({ peerName, onCancel, onConfirm }: {
+function DeleteDirectDialog({ peerName, onCancel, onConfirm, allowBoth = true }: {
+  /** «Удалить и у собеседника» — роли нужно «Чат — удаление». */
+  allowBoth?: boolean;
   peerName: string;
   onCancel: () => void;
   onConfirm: (forAll: boolean) => void;
@@ -2500,10 +2526,12 @@ function DeleteDirectDialog({ peerName, onCancel, onConfirm }: {
         <div className="dialog-icon danger"><Icon name="delete" size={28} /></div>
         <div className="dialog-title">{t('chat.room.deleteTitle')}</div>
         <div className="dialog-message">{t('chat.room.deleteText').replace('{name}', peerName)}</div>
-        <label className="chat-delete-both">
-          <input type="checkbox" checked={forAll} onChange={(e) => setForAll(e.target.checked)} data-testid="chat-delete-both" />
-          <span>{t('chat.room.deleteBoth').replace('{name}', peerName)}</span>
-        </label>
+        {allowBoth && (
+          <label className="chat-delete-both">
+            <input type="checkbox" checked={forAll} onChange={(e) => setForAll(e.target.checked)} data-testid="chat-delete-both" />
+            <span>{t('chat.room.deleteBoth').replace('{name}', peerName)}</span>
+          </label>
+        )}
         <div className="dialog-actions">
           <button type="button" className="btn btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
           <button type="button" className="btn btn-danger" onClick={() => onConfirm(forAll)} data-testid="chat-delete-confirm">

@@ -1,4 +1,5 @@
 import { fmtDateText } from '../lib/tjTime';
+import { hasActiveRole, hasPermission } from '../lib/permissions';
 import { useEffect, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { motion } from 'framer-motion';
@@ -63,12 +64,18 @@ function groupByDay(items: ActivityEntry[]) {
 export default function Activity() {
   const { t } = useT();
   const me = useAuth((s) => s.user);
-  // Журнал действий — только для FOUNDER (единолично контролирует аудит-лог
-  // по ТЗ §3.4). ADMIN/ACCOUNTANT видят пункт в сайдбаре скрытым, а прямой
-  // переход по /activity здесь блокируется явной карточкой-отказом.
-  if (!isFounder(me)) {
+  // Журнал действий — основатель (единолично контролирует аудит-лог по ТЗ
+  // §3.4); с 19.10.2026 — ещё сотрудник с ролью, где отмечен «Журнал
+  // активности». ADMIN/ACCOUNTANT по должности его не видят.
+  const allowed = isFounder(me) || (hasActiveRole(me) && hasPermission(me, 'activity:read'));
+  if (!allowed) {
     return <div className="card" style={{ padding: 28 }}>{t('common.founderOnly')}</div>;
   }
+  return <ActivityLog />;
+}
+
+function ActivityLog() {
+  const { t } = useT();
   const qc = useQueryClient();
   const [action, setAction] = useState<ActivityAction | ''>('');
   const [from, setFrom] = useState('');

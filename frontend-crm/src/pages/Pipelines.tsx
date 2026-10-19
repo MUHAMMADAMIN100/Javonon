@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { roleCan } from '../lib/permissions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
@@ -30,7 +31,14 @@ export default function Pipelines() {
   const pipelines = query.data ?? [];
   const [creatingNew, setCreatingNew] = useState(false);
 
-  if (!isElevated(me)) {
+  // Права роли «Воронки — …»; должность — руководство, как раньше.
+  const base = isElevated(me);
+  const perms: PipelinePerms = {
+    create: roleCan(me, 'pipelines:create', base),
+    update: roleCan(me, 'pipelines:update', base),
+    remove: roleCan(me, 'pipelines:delete', base),
+  };
+  if (!roleCan(me, 'pipelines:read', base)) {
     return <div className="card" style={{ padding: 28 }}>{t('common.accessDenied')}</div>;
   }
 
@@ -88,7 +96,7 @@ export default function Pipelines() {
           <p style={{ color: 'var(--text-soft)', fontSize: 13, margin: 0, maxWidth: 600 }}>
             {t('pipelines.intro')}
           </p>
-          {!creatingNew && (
+          {!creatingNew && perms.create && (
             <button className="btn btn-primary" data-testid="pipeline-new" onClick={() => setCreatingNew(true)}>
               <Icon name="add" size={16} /> {t('pipelines.new')}
             </button>
@@ -115,6 +123,7 @@ export default function Pipelines() {
           <PipelineCard
             key={p.id}
             pipeline={p}
+            perms={perms}
             onToggleDefault={() => onTogglePipelineDefault(p)}
             onToggleActive={() => onTogglePipelineActive(p)}
             onDelete={() => onDeletePipeline(p)}
@@ -176,14 +185,18 @@ function CreateForm({
   );
 }
 
+type PipelinePerms = { create: boolean; update: boolean; remove: boolean };
+
 function PipelineCard({
   pipeline,
+  perms,
   onToggleDefault,
   onToggleActive,
   onDelete,
   onChanged,
 }: {
   pipeline: Pipeline;
+  perms: PipelinePerms;
   onToggleDefault: () => void;
   onToggleActive: () => void;
   onDelete: () => void;
@@ -258,13 +271,19 @@ function PipelineCard({
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button className="btn btn-sm btn-secondary" onClick={onToggleDefault}>
-            {pipeline.isDefault ? t('pipelines.unsetDefault') : t('pipelines.setDefault')}
-          </button>
-          <button className="btn btn-sm btn-secondary" onClick={onToggleActive}>
-            {pipeline.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
-          </button>
-          <button className="btn btn-sm btn-danger" onClick={onDelete}>{t('common.delete')}</button>
+          {perms.update && (
+            <>
+              <button className="btn btn-sm btn-secondary" onClick={onToggleDefault} data-testid="pipeline-default">
+                {pipeline.isDefault ? t('pipelines.unsetDefault') : t('pipelines.setDefault')}
+              </button>
+              <button className="btn btn-sm btn-secondary" onClick={onToggleActive} data-testid="pipeline-active">
+                {pipeline.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
+              </button>
+            </>
+          )}
+          {perms.remove && (
+            <button className="btn btn-sm btn-danger" onClick={onDelete} data-testid="pipeline-delete">{t('common.delete')}</button>
+          )}
         </div>
       </div>
 
@@ -274,6 +293,7 @@ function PipelineCard({
           <StageChip
             key={s.id}
             stage={s}
+            perms={perms}
             canMoveUp={i > 0}
             canMoveDown={i < pipeline.stages.length - 1}
             onMoveUp={() => moveStage(i, -1)}
@@ -284,7 +304,7 @@ function PipelineCard({
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {perms.create && <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input
           className="crm-input"
           value={newStageName}
@@ -296,13 +316,14 @@ function PipelineCard({
         <button className="btn btn-sm btn-secondary" onClick={onAddStage} disabled={!newStageName.trim()}>
           {t('pipelines.stage.add')}
         </button>
-      </div>
+      </div>}
     </motion.div>
   );
 }
 
 function StageChip({
   stage,
+  perms,
   canMoveUp,
   canMoveDown,
   onMoveUp,
@@ -311,6 +332,7 @@ function StageChip({
   onChange,
 }: {
   stage: PipelineStage;
+  perms: PipelinePerms;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMoveUp: () => void;
@@ -361,10 +383,14 @@ function StageChip({
       }} />
       <span>{stage.name}</span>
       {stage.isClosingStage && <span title={tr('pipelines.finalStage')}>✓</span>}
-      <button title={tr('pipelines.up')} onClick={onMoveUp} disabled={!canMoveUp} style={btnIcon}>‹</button>
-      <button title={tr('pipelines.down')} onClick={onMoveDown} disabled={!canMoveDown} style={btnIcon}>›</button>
-      <button title={tr('common.edit')} onClick={() => setEditing(true)} style={btnIcon}>✎</button>
-      <button title="✕" onClick={onDelete} style={{ ...btnIcon, color: 'var(--danger)' }}>×</button>
+      {perms.update && (
+        <>
+          <button title={tr('pipelines.up')} onClick={onMoveUp} disabled={!canMoveUp} style={btnIcon}>‹</button>
+          <button title={tr('pipelines.down')} onClick={onMoveDown} disabled={!canMoveDown} style={btnIcon}>›</button>
+          <button title={tr('common.edit')} onClick={() => setEditing(true)} style={btnIcon}>✎</button>
+        </>
+      )}
+      {perms.remove && <button title="✕" onClick={onDelete} style={{ ...btnIcon, color: 'var(--danger)' }}>×</button>}
     </div>
   );
 }

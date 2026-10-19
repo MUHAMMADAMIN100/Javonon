@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { hiddenAmount } from '../lib/permissions';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -31,7 +32,9 @@ import { SortSelect, SortTh, sortRows, useTableSort } from './TableSort';
 
 type Tab = 'students' | 'sales' | 'applications';
 
-function fmtMoney(n: number, c = 'TJS') {
+/** Без «Деньги компании» / «Деньги клиентов» суммы приходят null — «•••• TJS». */
+function fmtMoney(n: number | null | undefined, c = 'TJS') {
+  if (n == null) return hiddenAmount(c);
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 

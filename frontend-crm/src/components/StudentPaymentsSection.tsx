@@ -1,4 +1,5 @@
 import { fmtDateText, TJ_TZ } from '../lib/tjTime';
+import { hiddenAmount } from '../lib/permissions';
 import { useRealtime } from '../realtime';
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -58,7 +59,9 @@ const STATUS_COLOR: Record<string, string> = {
   CANCELLED: 'var(--text-light)',
 };
 
-function fmt(n: number, c: string) {
+/** Без «Деньги клиентов» сервер присылает суммы null — «•••• TJS». */
+function fmt(n: number | null | undefined, c: string) {
+  if (n == null) return hiddenAmount(c);
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 

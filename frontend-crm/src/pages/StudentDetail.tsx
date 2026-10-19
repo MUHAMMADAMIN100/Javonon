@@ -35,7 +35,7 @@ import {
   type ClientContact,
 } from '../components/ClientCard';
 import { isElevated } from '../lib/roles';
-import { canSeeAllClients, canSeeAllOfApplication } from '../lib/permissions';
+import { applicationRight, canSeeAllClients, canSeeAllOfApplication, roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useOnboardingLabel, useChannelLabel, useCountryLabel } from '../lib/labels';
 import { tjFormatFull } from '../lib/tjTime';
@@ -251,11 +251,18 @@ export default function StudentDetail() {
   // Вести карточку — свою, а с доступом «все студенты» и чужую. Удалить —
   // как раньше (своего или руководство; сервер удаление пускает только
   // руководству) — «все» удаления не дают.
-  const canEdit = isAdmin || isMine || canSeeAllClients(me, 'students');
-  const canDelete = isAdmin || isMine;
+  const canAccess = isAdmin || isMine || canSeeAllClients(me, 'students');
+  // Права роли (Настройки → Роли → «Студенты»); у должности — как раньше.
+  const canEdit = canAccess && roleCan(me, 'students:update');
+  const canDocs = canAccess && roleCan(me, 'students:documents');
+  const canDelete = roleCan(me, 'students:delete', isAdmin || isMine) && canAccess;
+  const canPassword = roleCan(me, 'students:password', isAdmin) && canAccess;
+  const canAssign = roleCan(me, 'students:assign', isAdmin);
   // Статус, этап и долг принадлежат заявке студента: чужую заявку ведёт тот,
-  // кому выданы «все» её вида (лиды / заявки).
-  const canEditApp = !!app0 && (isAdmin || isMine || canSeeAllOfApplication(me, app0.status));
+  // кому выданы «все» её вида (лиды / заявки); роли — «… — изменение».
+  const canEditApp = !!app0 && (isAdmin || isMine || canSeeAllOfApplication(me, app0.status))
+    && applicationRight(me, app0.status, 'update');
+  const canMoveStage = !!app0 && (isAdmin || isMine || canSeeAllOfApplication(me, app0.status)) && roleCan(me, 'pipelines:move');
 
   // «Успех» — новое SUCCESSFUL_LEAD ИЛИ старые ENROLLED/COMPLETED: пока
   // миграция строк не отработала, API отдаёт и то и другое.
@@ -290,13 +297,13 @@ export default function StudentDetail() {
                 applicationId={app0.id}
                 pipelineId={app0.pipelineId}
                 stageId={app0.pipelineStageId}
-                canEdit={canEditApp}
+                canEdit={canMoveStage}
                 onChanged={reload}
               />
               <DebtPill pending={!!app0.paymentPending} canEdit={canEditApp} busy={debtMut.isPending} onChange={(v) => debtMut.mutate(v)} />
               <SmsNote status={app0.status} />
             </>
-          ) : canEdit ? (
+          ) : canAccess && roleCan(me, 'applications:create') ? (
             // Заявки нет (студент заведён вручную) — статус вести негде: создаём её.
             <>
               <span className="client-muted">{t('studentDetail.stepper.empty')}</span>
@@ -308,11 +315,13 @@ export default function StudentDetail() {
         }
         contacts={contacts}
         actions={
-          canEdit ? (
+          canEdit || canDelete ? (
             <>
-              <button type="button" className="btn btn-primary" onClick={() => setEditing((v) => !v)} data-testid="client-edit">
-                <Icon name="edit" size={18} /> {t('profile.edit')}
-              </button>
+              {canEdit && (
+                <button type="button" className="btn btn-primary" onClick={() => setEditing((v) => !v)} data-testid="client-edit">
+                  <Icon name="edit" size={18} /> {t('profile.edit')}
+                </button>
+              )}
               {canDelete && (
                 <button
                   type="button"
@@ -381,8 +390,8 @@ export default function StudentDetail() {
               {student.preferredChannel && (
                 <Field label={t('app.field.preferredChannel')} testId="field-channel" value={channelLabel(student.preferredChannel)} />
               )}
-              {/* Вход в кабинет студента — только руководству, как и раньше. */}
-              {isAdmin && (
+              {/* Вход в кабинет студента — руководству; роли — «Новый пароль кабинета». */}
+              {canPassword && (
                 <Field
                   label={t('studentDetail.access.title')}
                   testId="field-access"
@@ -404,7 +413,7 @@ export default function StudentDetail() {
             <div className="profile-group-head">
               <h3 className="profile-h">{t('client.section.people')}</h3>
             </div>
-            <ManagerBar manager={student.manager} chinaManager={student.chinaManager} onReassign={onReassign} />
+            <ManagerBar manager={student.manager} chinaManager={student.chinaManager} onReassign={onReassign} canAssign={canAssign} />
             {/* Партнёр — только руководству и только у партнёрских клиентов:
                 решает бэкенд, у менеджера по продажам ключа в JSON нет. */}
             <PartnerAttributionCard attribution={student.partnerAttribution} variant="field" />
@@ -434,13 +443,13 @@ export default function StudentDetail() {
           documents={student.documents || []}
           applicationForm={student.applicationForm}
           onChange={reload}
-          editable={canEdit}
+          editable={canDocs}
         />
       </section>
 
       <StudentPaymentsSection studentId={student.id} />
 
-      <InteractionsLog studentId={student.id} canEdit={canEdit} />
+      <InteractionsLog studentId={student.id} canEdit={canAccess} />
 
       <ApplicationFormSection
         studentId={student.id}

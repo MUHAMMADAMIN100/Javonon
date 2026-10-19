@@ -106,6 +106,10 @@ export class OffersService {
    * Версия инкрементируется автоматически.
    */
   async createNew(data: { title?: string; content: string; role?: Role | null }) {
+    // Без текста раньше падало 500 (content.trim()) — теперь 400.
+    if (typeof data?.content !== 'string' || !data.content.trim()) {
+      throw new BadRequestException('Текст оферты не может быть пустым');
+    }
     this.validateOfferFields(data);
     // Validate role explicitly: null = «общая» оферта, иначе должен быть
     // один из 5 ТЗ-ролей.
@@ -147,6 +151,10 @@ export class OffersService {
    * логи / Telegram-уведомления с html_mode).
    */
   private validateOfferFields(data: { title?: string; content?: string }) {
+    if ((data.title !== undefined && typeof data.title !== 'string') ||
+        (data.content !== undefined && typeof data.content !== 'string')) {
+      throw new BadRequestException('Заголовок и текст оферты — строки');
+    }
     if (data.title !== undefined) {
       const t = data.title.trim();
       if (t.length > 200) {

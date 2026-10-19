@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { isAcademyManager } from '../../lib/permissions';
+import { useAuth } from '../../store/auth';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence } from 'framer-motion';
@@ -27,7 +29,11 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
   const navigate = useNavigate();
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
-  const canManage = group.access.manage;
+  // Поиск по всем студентам — тому, кто видит всех (руководство, роль с
+  // «Все группы и ученики»); иначе — «Из базы» (ученики академии без группы).
+  const me = useAuth((s) => s.user);
+  const searchAll = isAcademyManager(me as any);
+  const canRemoveMembers = group.access.removeMembers;
   const canRun = group.access.run;
   const [flagFor, setFlagFor] = useState<JournalStudent | null>(null);
   const [creating, setCreating] = useState(false);
@@ -76,10 +82,12 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
 
   return (
     <div className="acad-group-students" data-testid="group-students">
-      {group.access.addStudents && (
+      {(group.access.addStudents || group.access.createStudents) && (
         <AddStudentsBox
           groupId={group.id}
-          manager={canManage}
+          manager={searchAll}
+          canAdd={group.access.addStudents}
+          canCreate={group.access.createStudents}
           onAdded={invalidate}
           onCreate={() => setCreating(true)}
         />
@@ -137,7 +145,7 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
                           <Icon name="flag" size={15} />
                         </button>
                       )}
-                      {canManage && (
+                      {canRemoveMembers && (
                         <button
                           className="btn btn-sm btn-secondary"
                           title={t('groups.removeMember')}
@@ -211,11 +219,17 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
 function AddStudentsBox({
   groupId,
   manager,
+  canAdd = true,
+  canCreate = true,
   onAdded,
   onCreate,
 }: {
   groupId: string;
   manager: boolean;
+  /** Добавить существующих (поиск / «Из базы»). */
+  canAdd?: boolean;
+  /** «Новый ученик» прямо в группу. */
+  canCreate?: boolean;
   onAdded: () => void;
   onCreate: () => void;
 }) {
@@ -231,7 +245,7 @@ function AddStudentsBox({
     return () => clearTimeout(timer);
   }, [search]);
 
-  const listOpen = manager ? debounced.length >= 2 : fromBase;
+  const listOpen = canAdd && (manager ? debounced.length >= 2 : fromBase);
   const results = useQuery({
     queryKey: keys.academy.pick(debounced, groupId),
     queryFn: () => pickStudents(debounced, groupId),
@@ -255,7 +269,7 @@ function AddStudentsBox({
   return (
     <div className="acad-add-box" data-testid="add-students-box">
       <div className="acad-add-head">
-        {manager ? (
+        {manager && canAdd ? (
           <div className="acad-add-search">
             <Icon name="search" size={18} />
             <input
@@ -273,7 +287,7 @@ function AddStudentsBox({
           </div>
         )}
         <div className="acad-add-actions">
-          {!manager && (
+          {!manager && canAdd && (
             <button
               type="button"
               className={`btn ${fromBase ? 'btn-primary' : 'btn-secondary'}`}
@@ -284,13 +298,15 @@ function AddStudentsBox({
               <Icon name="person_search" size={16} /> {t('academy.students.fromBase')}
             </button>
           )}
-          <button className="btn btn-secondary" onClick={onCreate} data-testid="new-academy-student">
-            <Icon name="person_add" size={16} /> {t('academy.newStudent.title')}
-          </button>
+          {canCreate && (
+            <button className="btn btn-secondary" onClick={onCreate} data-testid="new-academy-student">
+              <Icon name="person_add" size={16} /> {t('academy.newStudent.title')}
+            </button>
+          )}
         </div>
       </div>
 
-      {!manager && fromBase && (
+      {!manager && canAdd && fromBase && (
         <div className="acad-add-base">
           <div className="acad-hint">{t('academy.students.fromBaseHint')}</div>
           <div className="acad-add-search">
