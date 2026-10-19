@@ -9,6 +9,10 @@ type ConfirmOptions = {
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  /** Только объяснение — одна кнопка (confirmText), без «Отмены». */
+  hideCancel?: boolean;
+  /** Своя иконка (Material Symbols) вместо «внимание» / «вопрос». */
+  icon?: string;
 };
 
 type ToastKind = 'success' | 'error' | 'info';
@@ -75,19 +79,21 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
               onClick={(e) => e.stopPropagation()}
             >
               <div className={`dialog-icon${dialog.danger ? ' danger' : ''}`}>
-                <Icon name={dialog.danger ? 'warning' : 'help'} size={28} />
+                <Icon name={dialog.icon || (dialog.danger ? 'warning' : 'help')} size={28} />
               </div>
               {dialog.title && <div className="dialog-title">{dialog.title}</div>}
               <div className="dialog-message">{dialog.message}</div>
               <div className="dialog-actions">
-                <motion.button
-                  className="btn btn-secondary"
-                  onClick={() => closeDialog(false)}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                >
-                  {dialog.cancelText || t('confirm.cancel')}
-                </motion.button>
+                {!dialog.hideCancel && (
+                  <motion.button
+                    className="btn btn-secondary"
+                    onClick={() => closeDialog(false)}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    {dialog.cancelText || t('confirm.cancel')}
+                  </motion.button>
+                )}
                 <motion.button
                   className={`btn ${dialog.danger ? 'btn-danger' : 'btn-primary'}`}
                   onClick={() => closeDialog(true)}

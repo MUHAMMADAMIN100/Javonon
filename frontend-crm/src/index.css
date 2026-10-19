@@ -7342,6 +7342,8 @@ html:has(.exc-bar) { scrollbar-gutter: stable; }
 @media (hover: hover) { .table tr.acad-row:hover td { background: var(--bg-soft); } }
 .acad-row-actions { white-space: nowrap; text-align: right; }
 .acad-row-actions .btn + .btn { margin-left: 6px; }
+.acad-groups-table td.acad-row-actions { width: 1%; }
+.acad-groups-table .icon-btn:disabled { opacity: .6; cursor: progress; }
 .acad-flag-btn:hover { color: #b91c1c; border-color: #fca5a5; }
 .acad-left-list { margin-top: 16px; border-top: 1px solid var(--border-soft); padding-top: 12px; }
 .acad-left-list summary { cursor: pointer; font-weight: 600; font-size: 13.5px; color: var(--text-soft); }
@@ -7555,6 +7557,8 @@ html:has(.exc-bar) { scrollbar-gutter: stable; }
   .table tr.acad-row td.acad-name-cell { padding-bottom: 8px; }
   .table tr.acad-row td.acad-row-actions { text-align: right; padding-top: 8px; }
   .table tr.acad-row td.acad-row-actions::before { display: none; }
+  /* Список групп: ✎ и 🗑 — справа внизу карточки, рядом друг с другом. */
+  .acad-groups-table td.acad-row-actions { width: auto; justify-content: flex-end; padding-top: 8px; }
 }
 @media (max-width: 600px) {
   .acad-card-pad { padding: 14px; }

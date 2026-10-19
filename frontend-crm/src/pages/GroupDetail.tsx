@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import CrmSelect from '../components/CrmSelect';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -17,18 +16,11 @@ import LessonsTab from '../components/academy/LessonsTab';
 import GroupStudentsTab from '../components/academy/GroupStudentsTab';
 import LessonsCalendar from '../components/academy/LessonsCalendar';
 import CompleteCourseModal from '../components/academy/CompleteCourseModal';
+import GroupFields, { groupFormDirty, groupFormPayload, groupFormValue } from '../components/academy/GroupFields';
+import { useGroupRemoval } from '../components/academy/useGroupRemoval';
 import { usePatternText, weekdayKey, tjWeekdayOf } from '../components/academy/academyUi';
 import { weeklyPatternOf } from '../components/academy/pattern';
-import { useRoleLabel } from '../lib/labels';
-import {
-  getGroup,
-  updateGroup,
-  deleteGroup,
-  type StudyGroupDetail,
-  type StudyGroupStatus,
-} from '../api/studyGroups';
-import { listPrograms } from '../api/programs';
-import { listUsers } from '../api/users';
+import { getGroup, updateGroup, type StudyGroupDetail } from '../api/studyGroups';
 
 type Tab = 'journal' | 'lessons' | 'students' | 'calendar' | 'settings';
 const TABS: Tab[] = ['journal', 'lessons', 'students', 'calendar', 'settings'];
@@ -199,7 +191,9 @@ export default function GroupDetail() {
       )}
       {tab === 'settings' && g.access.manage && (
         <div className="card acad-card-pad">
-          <GroupSettings group={g} onSaved={invalidate} />
+          {/* Статус меняют и снаружи («В архив» из окна удаления, «Завершить
+              курс») — форма начинается заново с тем, что на сервере. */}
+          <GroupSettings key={g.status} group={g} onSaved={invalidate} />
         </div>
       )}
 
@@ -220,32 +214,22 @@ export default function GroupDetail() {
   );
 }
 
-/** Правка группы — название, программа, учитель, статус, описание; удаление. */
+/**
+ * Правка группы — название, программа, учитель, статус, описание; удаление
+ * тем же окном, что в списке групп (useGroupRemoval).
+ */
 function GroupSettings({ group, onSaved }: { group: StudyGroupDetail; onSaved: () => void }) {
   const { t } = useT();
-  const { toast, confirm } = useUI();
+  const { toast } = useUI();
   const navigate = useNavigate();
-  const qc = useQueryClient();
-  const roleLabel = useRoleLabel();
-  const [name, setName] = useState(group.name);
-  const [programId, setProgramId] = useState(group.programId || '');
-  const [teacherId, setTeacherId] = useState(group.teacherId || '');
-  const [status, setStatus] = useState<StudyGroupStatus>(group.status);
-  const [description, setDescription] = useState(group.description || '');
-
-  const programs = useQuery({ queryKey: keys.programs.list(), queryFn: () => listPrograms() });
-  const users = useQuery({ queryKey: keys.users.list(), queryFn: () => listUsers() });
-  // Учителя академии — первыми: обычно группу ведёт именно учитель.
-  const teacherOptions = useMemo(() => {
-    const list = [...(users.data ?? [])];
-    const isTeacher = (u: any) => u.role === 'TEACHER' || (u.roles || []).includes('TEACHER');
-    return list.sort((a, b) => Number(isTeacher(b)) - Number(isTeacher(a)) || a.fullName.localeCompare(b.fullName, 'ru'));
-  }, [users.data]);
+  const [value, setValue] = useState(() => groupFormValue(group));
+  const removal = useGroupRemoval({
+    onDeleted: () => navigate('/groups'),
+    onArchived: onSaved,
+  });
 
   const mut = useMutation({
-    // Пустая строка в programId/teacherId — осознанное «отвязать»: бэк
-    // трактует её как disconnect, а undefined как «не трогать».
-    mutationFn: () => updateGroup(group.id, { name: name.trim(), programId, teacherId, status, description }),
+    mutationFn: () => updateGroup(group.id, groupFormPayload(value)),
     onSuccess: () => {
       toast(t('toast.saved'), 'success');
       onSaved();
@@ -253,74 +237,15 @@ function GroupSettings({ group, onSaved }: { group: StudyGroupDetail; onSaved: (
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
-  const deleteMut = useMutation({
-    mutationFn: () => deleteGroup(group.id),
-    onSuccess: () => {
-      toast(t('toast.deleted'), 'success');
-      qc.invalidateQueries({ queryKey: keys.groups.all });
-      navigate('/groups');
-    },
-    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
-  });
-
-  const dirty =
-    name.trim() !== group.name ||
-    programId !== (group.programId || '') ||
-    teacherId !== (group.teacherId || '') ||
-    status !== group.status ||
-    description !== (group.description || '');
-
-  const onDelete = async () => {
-    const ok = await confirm({
-      title: t('groups.confirm.delete'),
-      message: `«${group.name}» — ${t('groups.hint.archive')}`,
-      danger: true,
-      confirmText: t('common.delete'),
-    });
-    if (ok) deleteMut.mutate();
-  };
+  const dirty = groupFormDirty(group, value);
 
   return (
     <div data-testid="group-settings">
-      <div className="form-grid-2 acad-form-grid">
-        <div className="form-group">
-          <label>{t('groups.field.name')} *</label>
-          <input className="crm-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} data-testid="gs-name" />
-        </div>
-        <div className="form-group">
-          <label>{t('groups.field.teacher')}</label>
-          <CrmSelect className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)} data-testid="gs-teacher">
-            <option value="">{t('groups.noTeacher')}</option>
-            {teacherOptions.map((u) => (
-              <option key={u.id} value={u.id}>{u.fullName} · {roleLabel(u.role as string)}</option>
-            ))}
-          </CrmSelect>
-        </div>
-        <div className="form-group">
-          <label>{t('groups.field.program')}</label>
-          <CrmSelect className="crm-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
-            <option value="">{t('groups.noProgram')}</option>
-            {(programs.data ?? []).map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </CrmSelect>
-        </div>
-        <div className="form-group">
-          <label>{t('groups.field.status')}</label>
-          <CrmSelect className="crm-select" value={status} onChange={(e) => setStatus(e.target.value as StudyGroupStatus)} data-testid="gs-status">
-            <option value="ACTIVE">{t('groups.status.ACTIVE')}</option>
-            <option value="ARCHIVED">{t('groups.status.ARCHIVED')}</option>
-          </CrmSelect>
-        </div>
-      </div>
-      <div className="form-group">
-        <label>{t('groups.field.description')}</label>
-        <textarea className="crm-textarea" rows={2} value={description} maxLength={1000} onChange={(e) => setDescription(e.target.value)} />
-      </div>
+      <GroupFields value={value} onChange={setValue} testIdPrefix="gs" />
       <div className="form-actions" style={{ marginTop: 8 }}>
         <button
           className="btn btn-primary"
-          disabled={!dirty || name.trim().length < 2 || mut.isPending}
+          disabled={!dirty || value.name.trim().length < 2 || mut.isPending}
           onClick={() => mut.mutate()}
           data-testid="gs-save"
         >
@@ -333,7 +258,12 @@ function GroupSettings({ group, onSaved }: { group: StudyGroupDetail; onSaved: (
           <b>{t('groups.deleteGroup')}</b>
           <div className="acad-hint">{t('academy.group.deleteHint')}</div>
         </div>
-        <button className="btn btn-danger btn-sm" onClick={onDelete} disabled={deleteMut.isPending} data-testid="gs-delete">
+        <button
+          className="btn btn-danger btn-sm"
+          onClick={() => removal.remove(group.id)}
+          disabled={removal.busyId === group.id}
+          data-testid="gs-delete"
+        >
           <Icon name="delete" size={15} /> {t('groups.deleteGroup')}
         </button>
       </div>

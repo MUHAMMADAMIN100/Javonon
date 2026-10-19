@@ -113,6 +113,12 @@ export class StudyGroupsController {
     return this.svc.updateGroup(me, id, body);
   }
 
+  /** Что будет при удалении: занятия, материалы, ученики; можно ли удалять. */
+  @Get(':id/removal')
+  removal(@CurrentUser() me: any, @Param('id') id: string) {
+    return this.svc.removalPreview(me, id);
+  }
+
   @Delete(':id')
   remove(@CurrentUser() me: any, @Param('id') id: string) {
     return this.svc.removeGroup(me, id);

@@ -64,6 +64,18 @@ export function uploadsRoot(): string {
   return resolve(process.cwd(), process.env.UPLOADS_DIR || './uploads');
 }
 
+/**
+ * Путь файла урока на диске по url вида /uploads/academy/<имя>; null — не
+ * наш файл. Им же чистит диск удаление группы и занятия (StudyGroupsService).
+ */
+export function materialFilePath(url: string): string | null {
+  const prefix = `/uploads/${ACADEMY_UPLOAD_SUBDIR}/`;
+  if (!url.startsWith(prefix)) return null;
+  const name = basename(url.slice(prefix.length));
+  if (!name || name !== url.slice(prefix.length)) return null;
+  return join(uploadsRoot(), ACADEMY_UPLOAD_SUBDIR, name);
+}
+
 const USER_REF = { select: { id: true, fullName: true, isActive: true } } as const;
 const LEVEL_REF = { select: { id: true, name: true } } as const;
 
@@ -450,19 +462,10 @@ export class AcademyService {
     await this.sessionForMaterials(user, m.sessionId);
     await this.prisma.classMaterial.delete({ where: { id: m.id } });
     if (m.kind === ClassMaterialKind.FILE) {
-      const path = this.materialPath(m.url);
+      const path = materialFilePath(m.url);
       if (path) await fsp.unlink(path).catch(() => undefined);
     }
     return { ok: true };
-  }
-
-  /** Путь файла на диске по url вида /uploads/academy/<имя>; null — не наш файл. */
-  materialPath(url: string): string | null {
-    const prefix = `/uploads/${ACADEMY_UPLOAD_SUBDIR}/`;
-    if (!url.startsWith(prefix)) return null;
-    const name = basename(url.slice(prefix.length));
-    if (!name || name !== url.slice(prefix.length)) return null;
-    return join(uploadsRoot(), ACADEMY_UPLOAD_SUBDIR, name);
   }
 
   // ──────────────────────────────── УРОВНИ ─────────────────────────────────
@@ -2083,7 +2086,7 @@ export class AcademyService {
       select: { leftAt: true },
     });
     if (!member || member.leftAt) throw new ForbiddenException('Нет доступа к этому файлу');
-    const path = this.materialPath(m.url);
+    const path = materialFilePath(m.url);
     if (!path) throw new NotFoundException('Файл не найден');
     return { path, title: m.title, mimeType: m.mimeType };
   }

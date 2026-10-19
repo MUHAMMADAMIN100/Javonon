@@ -5,13 +5,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ClassSessionStatus, Prisma, StudyGroupStatus } from '@prisma/client';
+import { ClassMaterialKind, ClassSessionStatus, Prisma, StudyGroupStatus } from '@prisma/client';
+import { promises as fsp } from 'fs';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserWithRoles } from '../auth/role-utils';
 import { parseCalendarDateUtc, tjLocalDay, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 import { canMarkSession, canRunGroup, isAcademyManager, teachesGroup } from '../academy/academy-access';
 import { addDaysToKey, daysBetweenKeys, weeklyPattern } from '../academy/journal-math';
+import { materialFilePath } from '../academy/academy.service';
 import {
   AddGroupMembersDto,
   BulkClassSessionsDto,
@@ -282,9 +284,25 @@ export class StudyGroupsService {
   }
 
   /**
-   * Удаление группы. Каскадом уносит членство и ЗАНЯТИЯ (см. onDelete в
-   * схеме) — поэтому для отучившихся групп правильный путь не сюда, а
-   * `status: ARCHIVED`: история занятий остаётся.
+   * Что будет при удалении группы — окно «Удалить группу» в CRM показывает
+   * это ДО удаления: сколько занятий и материалов уйдёт, сколько учеников
+   * останется без группы и можно ли удалять вообще. Счёт тот же, что
+   * проверяет removeGroup, — окно и сервер не разойдутся.
+   */
+  async removalPreview(user: Viewer, id: string) {
+    this.assertCanAdminGroups(user);
+    const group = await this.prisma.studyGroup.findUnique({
+      where: { id },
+      select: { id: true, name: true, status: true },
+    });
+    if (!group) throw new NotFoundException('Группа не найдена');
+    return { ...group, ...(await this.removalCounts(id)) };
+  }
+
+  /**
+   * Удаление группы. Каскадом уносит членство и ЗАНЯТИЯ с материалами (см.
+   * onDelete в схеме) — поэтому для отучившихся групп правильный путь не
+   * сюда, а `status: ARCHIVED`: история занятий остаётся.
    */
   async removeGroup(user: Viewer, id: string) {
     this.assertCanAdminGroups(user);
@@ -293,19 +311,48 @@ export class StudyGroupsService {
       select: { id: true },
     });
     if (!group) throw new NotFoundException('Группа не найдена');
+    const counts = await this.removalCounts(id);
     // Оценки и итоги недель удалились бы каскадом — такую группу только в архив.
-    const graded =
-      (await this.prisma.journalEntry.count({ where: { session: { groupId: id }, ...MARKED_ENTRY } })) +
-      (await this.prisma.journalWeek.count({ where: { groupId: id } }));
-    if (graded > 0) {
+    if (counts.marks > 0) {
       throw new BadRequestException('В группе есть оценки — удалить нельзя, переведите её в архив');
     }
-    const diary = await this.prisma.homeworkLog.count({ where: { session: { groupId: id } } });
-    if (diary > 0) {
+    if (counts.diary > 0) {
       throw new BadRequestException('Ученики вели дневник ДЗ — удалить нельзя, переведите группу в архив');
     }
+    const files = await this.materialFiles({ session: { groupId: id } });
     await this.prisma.studyGroup.delete({ where: { id } });
+    await this.unlinkFiles(files);
     return { ok: true };
+  }
+
+  /**
+   * marks — отметки журнала и итоги недель старого журнала; members — кто
+   * в группе сейчас (как «Учеников» в списке групп).
+   */
+  private async removalCounts(groupId: string) {
+    const [sessions, members, materials, entries, weeks, diary] = await Promise.all([
+      this.prisma.classSession.count({ where: { groupId } }),
+      this.prisma.groupMember.count({ where: { groupId, ...ACTIVE_MEMBER } }),
+      this.prisma.classMaterial.count({ where: { session: { groupId } } }),
+      this.prisma.journalEntry.count({ where: { session: { groupId }, ...MARKED_ENTRY } }),
+      this.prisma.journalWeek.count({ where: { groupId } }),
+      this.prisma.homeworkLog.count({ where: { session: { groupId } } }),
+    ]);
+    const marks = entries + weeks;
+    return { sessions, members, materials, marks, diary, canDelete: marks === 0 && diary === 0 };
+  }
+
+  /** Файлы уроков на диске: строки уходят каскадом, файлы — вручную, после удаления. */
+  private async materialFiles(where: Prisma.ClassMaterialWhereInput) {
+    const rows = await this.prisma.classMaterial.findMany({
+      where: { ...where, kind: ClassMaterialKind.FILE },
+      select: { url: true },
+    });
+    return rows.map((r) => materialFilePath(r.url)).filter((p): p is string => !!p);
+  }
+
+  private async unlinkFiles(paths: string[]) {
+    await Promise.all(paths.map((p) => fsp.unlink(p).catch(() => undefined)));
   }
 
   // ───────────────────────────── СОСТАВ ГРУППЫ ────────────────────────────
@@ -604,7 +651,9 @@ export class StudyGroupsService {
     if (diary > 0) {
       throw new BadRequestException('По занятию ученики ведут дневник ДЗ — его можно только отменить');
     }
+    const files = await this.materialFiles({ sessionId });
     await this.prisma.classSession.delete({ where: { id: sessionId } });
+    await this.unlinkFiles(files);
     return { ok: true };
   }
 

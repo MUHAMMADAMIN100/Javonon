@@ -201,6 +201,27 @@ export async function deleteGroup(id: string) {
   return data;
 }
 
+/**
+ * Что будет при удалении группы. canDelete = нет оценок (marks) и записей
+ * дневника ДЗ (diary); members — кто в группе сейчас.
+ */
+export interface GroupRemoval {
+  id: string;
+  name: string;
+  status: StudyGroupStatus;
+  sessions: number;
+  members: number;
+  materials: number;
+  marks: number;
+  diary: number;
+  canDelete: boolean;
+}
+
+export async function getGroupRemoval(id: string) {
+  const { data } = await api.get<GroupRemoval>(`/study-groups/${id}/removal`);
+  return data;
+}
+
 export async function addGroupMembers(id: string, studentIds: string[]) {
   const { data } = await api.post<StudyGroupDetail>(`/study-groups/${id}/members`, { studentIds });
   return data;

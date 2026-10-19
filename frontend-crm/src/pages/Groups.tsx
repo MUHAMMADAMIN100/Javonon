@@ -15,11 +15,13 @@ import Icon from '../Icon';
 import FormModal from '../components/FormModal';
 import Loading from '../components/Loading';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
-import { listGroups, createGroup, listSessions, type StudyGroupStatus } from '../api/studyGroups';
+import { listGroups, createGroup, listSessions, type StudyGroup, type StudyGroupStatus } from '../api/studyGroups';
 import { listPrograms } from '../api/programs';
 import { listUsers } from '../api/users';
 import DismissedMark from '../components/DismissedMark';
 import LessonsCalendar from '../components/academy/LessonsCalendar';
+import GroupEditModal from '../components/academy/GroupEditModal';
+import { useGroupRemoval } from '../components/academy/useGroupRemoval';
 import { useRoleLabel } from '../lib/labels';
 
 /**
@@ -35,6 +37,9 @@ import { useRoleLabel } from '../lib/labels';
  * Сверху — занятия на сегодня: учитель сразу открывает журнал урока.
  * «Список / Календарь»: календарь — занятия всех видимых групп по дням,
  * у каждой группы свой цвет (?view=calendar — вид переживает обновление).
+ * В конце строки у руководства — «Редактировать» (окно прямо в списке) и
+ * «Удалить» (сначала окно скажет, что будет с группой; с оценками или
+ * дневником ДЗ — только в архив).
  */
 export default function Groups() {
   const { t } = useT();
@@ -56,6 +61,8 @@ export default function Groups() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StudyGroupStatus | ''>('ACTIVE');
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<StudyGroup | null>(null);
+  const removal = useGroupRemoval();
   const [params, setParams] = useSearchParams();
   const view: 'list' | 'calendar' = params.get('view') === 'calendar' ? 'calendar' : 'list';
   const setView = (next: 'list' | 'calendar') => {
@@ -115,6 +122,8 @@ export default function Groups() {
             </button>
           )}
         </div>
+
+        {editing && <GroupEditModal group={editing} onClose={() => setEditing(null)} />}
 
         {creating && (
           <FormModal
@@ -214,7 +223,7 @@ export default function Groups() {
         <>
         <SortSelect sort={sort} />
         <div className="card table-wrap" style={{ padding: 0, overflowX: 'auto' }}>
-          <table className="table" style={{ width: '100%' }}>
+          <table className="table acad-groups-table" style={{ width: '100%' }}>
             <thead>
               <tr>
                 <SortTh sort={sort} col="name" />
@@ -224,6 +233,7 @@ export default function Groups() {
                 <SortTh sort={sort} col="pattern" />
                 <SortTh sort={sort} col="next" />
                 <SortTh sort={sort} col="status" />
+                {canAdmin && <th aria-label={t('common.actions')} />}
               </tr>
             </thead>
             <tbody>
@@ -253,6 +263,31 @@ export default function Groups() {
                       {t(`groups.status.${g.status}`)}
                     </span>
                   </td>
+                  {canAdmin && (
+                    <td className="acad-row-actions" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title={t('common.edit')}
+                        aria-label={`${t('common.edit')}: ${g.name}`}
+                        onClick={() => setEditing(g)}
+                        data-testid={`group-edit-${g.id}`}
+                      >
+                        <Icon name="edit" size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn danger"
+                        title={t('common.delete')}
+                        aria-label={`${t('common.delete')}: ${g.name}`}
+                        disabled={removal.busyId === g.id}
+                        onClick={() => removal.remove(g.id)}
+                        data-testid={`group-delete-${g.id}`}
+                      >
+                        <Icon name={removal.busyId === g.id ? 'hourglass_empty' : 'delete'} size={16} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
