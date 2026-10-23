@@ -57,17 +57,17 @@ export class SalesService {
     requester: { id: string; role?: string; roles?: string[] },
   ) {
     const app = await this.prisma.application.findUnique({ where: { id: applicationId } });
-    if (!app) throw new NotFoundException('Заявка не найдена');
+    if (!app) throw new NotFoundException('Лид не найден');
     // «Все лиды» / «все заявки» (auth/client-access.ts) — работать с чужими
     // этого вида, в том числе двигать по этапам.
     const seeAll = hasSeeAllGrant(requester as any, isLeadStatus(app.status) ? 'leads' : 'applications');
     if ((requester as any).hasCustomRole && !isFounder(requester as any)) {
       // Роль: «Перемещение по этапам» (на адресе) и заявка, которую она видит.
       if (!canAccessApplication(requester as any, app)) {
-        throw new ForbiddenException('Можно двигать только свои заявки');
+        throw new ForbiddenException('Можно двигать только свои лиды');
       }
     } else if (!isElevated(requester) && app.managerId !== requester.id && !seeAll) {
-      throw new ForbiddenException('Можно двигать только свои заявки');
+      throw new ForbiddenException('Можно двигать только свои лиды');
     }
     if (!pipelineStageId) {
       return this.prisma.application.update({
@@ -156,7 +156,7 @@ export class SalesService {
     requester: { id: string; role?: string; roles?: string[] },
   ) {
     const app = await this.prisma.application.findUnique({ where: { id: applicationId } });
-    if (!app) throw new NotFoundException('Заявка не найдена');
+    if (!app) throw new NotFoundException('Лид не найден');
 
     // Без elevated можно переназначать ТОЛЬКО заявки, где ты сейчас менеджер.
     // Это закрывает дыру: до этого SALES_MANAGER мог через /sales endpoint
@@ -167,10 +167,10 @@ export class SalesService {
         throw new ForbiddenException('Недостаточно прав для назначения менеджера');
       }
       if (app.managerId !== requester.id && !canReassignApplicationManager(requester as any, app.status)) {
-        throw new ForbiddenException('Переназначать можно только свои заявки');
+        throw new ForbiddenException('Переназначать можно только свои лиды');
       }
     } else if (!isElevated(requester) && app.managerId !== requester.id) {
-      throw new ForbiddenException('Переназначать можно только свои заявки');
+      throw new ForbiddenException('Переназначать можно только свои лиды');
     }
     // Чужую (у неё уже есть другой менеджер) — только основатель и «Передача
     // чужих» (23.10.2026): «Назначение менеджера» её больше не отдаёт.

@@ -599,7 +599,7 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = localized('app.st
   LOW_QUALITY_LEAD: 'Некачественные лиды',
   SUCCESSFUL_LEAD: 'Успешные лиды',
   // legacy
-  NEW: 'Новая заявка',
+  NEW: 'Новый лид',
   DOCS_REVIEW: 'Документы на проверке',
   DOCS_SUBMITTED: 'Подача документов',
   PRE_ADMISSION: 'Предварительное зачисление',

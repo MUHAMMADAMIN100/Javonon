@@ -87,12 +87,18 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: 'sell',
     labelKey: 'nav.group.sales',
     items: [
-      { to: '/applications', icon: 'assignment', labelKey: 'sidebar.applications', visible: (c) => c.show('applications:read', c.isWorkforce) },
-      // «Лиды» — ручной ввод заявки с голоса и раздача менеджерам. С
-      // 19.10.2026 у раздела свои права («Лиды — …»); роли, где раньше
-      // экран открывала «Заявки — создание», получили «Лиды — просмотр»
-      // при переносе (custom-roles.service).
-      { to: '/leads', icon: 'person_add', labelKey: 'sidebar.leads', visible: (c) => c.show('leads:read', c.isWorkforce) },
+      // «Лиды» — все клиенты отдела продаж во всех статусах: ввод, раздача
+      // менеджерам и ведение. С 23.10.2026 сюда влиты «Заявки» (решение
+      // основателя): пункт один, старый адрес /applications ведёт сюда, а
+      // карточка /applications/:id подсвечивает этот пункт (алиас). Видят
+      // его с правом хотя бы одного вида: «Новые лиды» или «Лиды в работе».
+      {
+        to: '/leads',
+        icon: 'person_add',
+        labelKey: 'sidebar.leads',
+        aliases: ['/applications'],
+        visible: (c) => c.show(['leads:read', 'applications:read'], c.isWorkforce),
+      },
       { to: '/students', icon: 'school', labelKey: 'sidebar.students', visible: (c) => c.show('students:read', c.isWorkforce) },
       // «Сделки» — менеджеры оформляют закрытых студентов; FOUNDER одобряет.
       { to: '/submissions', icon: 'handshake', labelKey: 'sidebar.submissions', visible: (c) => !c.isTeacherOnly && c.show(['submissions:read', 'submissions:all', 'submissions:approve'], true) },

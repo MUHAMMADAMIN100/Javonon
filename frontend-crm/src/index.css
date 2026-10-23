@@ -5042,6 +5042,27 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 /* Лид коллеги в строке: имя менеджера с замком вместо выбора. */
 .lead-manager-locked { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
 .lead-manager-locked > :last-child { color: var(--text-light); }
+/* «Лиды» (с 23.10.2026 там и бывшие «Заявки»): строка открывает карточку лида
+   (указатель и подсветка строки — общие для таблиц, см. .table tbody tr). */
+.lead-name-link { color: inherit; text-decoration: none; }
+.lead-name-link:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+.lead-name-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+/* Выбор менеджера TJ в строке — рядом с меткой «TJ», во всю ширину ячейки. */
+.client-list .mgr-row > .crm-select-trigger { flex: 1 1 auto; }
+/* Колонок у «Лидов» больше, чем было у каждого из прежних экранов: поля
+   ячеек поуже, чтобы таблица помещалась на ноутбуке (1280–1366 px). */
+.leads-table th, .leads-table td { padding-left: 10px; padding-right: 10px; }
+.leads-table th:first-child, .leads-table td:first-child { padding-left: 16px; }
+/* Страна · направление · источник — метками в одной ячейке. */
+.lead-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lead-dir {
+  padding: 3px 10px; border-radius: 999px; background: var(--bg-soft);
+  color: var(--text-soft); font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap;
+}
+@media (max-width: 900px) {
+  /* В карточке на телефоне метки — строкой во всю ширину. */
+  .client-list tr.client-row > td.lead-details { flex: 1 1 100%; }
+}
 
 @media (max-width: 720px) {
   /* На телефоне окно — почти во весь экран, прижато к низу. */

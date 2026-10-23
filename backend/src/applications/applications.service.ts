@@ -284,7 +284,7 @@ export class ApplicationsService {
     LOW_QUALITY_LEAD: 'Некачественные лиды',
     SUCCESSFUL_LEAD: 'Успешные лиды',
     // Легаси — только для чтения старых строк, в UI не предлагаются.
-    NEW: 'Новая заявка',
+    NEW: 'Новый лид',
     IN_PROGRESS: 'В работе',
     COMPLETED: 'Завершена',
     DOCS_REVIEW: 'Документы на проверке',
@@ -520,13 +520,13 @@ export class ApplicationsService {
     // назначенным менеджерам; раньше — каждому сотруднику.
     await this.notifications.notifyAudience('applications', [app.managerId, app.chinaManagerId], {
       type: 'APPLICATION_NEW',
-      title: 'Новая заявка',
+      title: 'Новый лид',
       message: `${app.fullName} — ${headline}, ${app.phone}`,
       payload: { applicationId: app.id },
     });
 
     const tgText =
-      `🆕 *Новая заявка Javonon*\n` +
+      `🆕 *Новый лид Javonon*\n` +
       `*ФИО:* ${app.fullName}\n` +
       `*Телефон:* ${app.phone}\n` +
       (app.whatsappPhone ? `*WhatsApp:* ${app.whatsappPhone}\n` : '') +
@@ -538,8 +538,8 @@ export class ApplicationsService {
 
     this.mail
       .sendToAdmin(
-        `Новая заявка: ${app.fullName}`,
-        `<h2>Новая заявка с лендинга</h2>
+        `Новый лид: ${app.fullName}`,
+        `<h2>Новый лид с сайта</h2>
          <p><b>ФИО:</b> ${app.fullName}</p>
          <p><b>Телефон:</b> ${app.phone}</p>
          ${app.whatsappPhone ? `<p><b>WhatsApp:</b> ${app.whatsappPhone}</p>` : ''}
@@ -611,7 +611,7 @@ export class ApplicationsService {
    */
   async createByStaff(dto: CreateStaffApplicationDto, user: CurrentUser) {
     if (!canCreateApplication(user as any)) {
-      throw new ForbiddenException('Недостаточно прав для создания заявки');
+      throw new ForbiddenException('Недостаточно прав для создания лида');
     }
     // Кому лид: выбран в форме — ему, не выбран — автору. Отдать другому
     // может тот, кто раздаёт лиды («Лиды — назначение менеджера», без роли —
@@ -620,7 +620,7 @@ export class ApplicationsService {
     let manager: { id: string; fullName: string } | null = null;
     if (managerId !== user.id) {
       if (!canReassignApplicationManager(user as any, ApplicationStatus.NEW_LEAD)) {
-        throw new ForbiddenException('Отдать лид другому может только сотрудник с правом «Лиды — назначение менеджера»');
+        throw new ForbiddenException('Отдать лид другому может только сотрудник с правом «Новые лиды — назначение менеджера»');
       }
       const target = await this.prisma.user.findUnique({
         where: { id: managerId },
@@ -947,7 +947,7 @@ export class ApplicationsService {
       where: { id },
       include: MANAGER_INCLUDE,
     });
-    if (!app || app.deletedAt) throw new NotFoundException('Заявка не найдена');
+    if (!app || app.deletedAt) throw new NotFoundException('Лид не найден');
     if (!canSeePartnerAttribution(viewer)) return app;
     const partnerAttribution = this.referrals
       ? await this.referrals.getPartnerAttributionView({
@@ -974,8 +974,8 @@ export class ApplicationsService {
 
   async assertCanView(id: string, user: CurrentUser) {
     const a = await this.prisma.application.findUnique({ where: { id }, select: { managerId: true, chinaManagerId: true, status: true } });
-    if (!a) throw new NotFoundException('Заявка не найдена');
-    if (!this.canAccess(a, user)) throw new ForbiddenException('Нет доступа к этой заявке');
+    if (!a) throw new NotFoundException('Лид не найден');
+    if (!this.canAccess(a, user)) throw new ForbiddenException('Нет доступа к этому лиду');
   }
 
   private ensureCanEdit(
@@ -984,7 +984,7 @@ export class ApplicationsService {
   ) {
     if (this.canAccess(app, user)) return;
     throw new ForbiddenException(
-      'Только назначенные менеджеры или администратор могут редактировать эту заявку',
+      'Только назначенные менеджеры или администратор могут редактировать этот лид',
     );
   }
 
@@ -1004,7 +1004,7 @@ export class ApplicationsService {
     if (app.managerId === user.id || app.chinaManagerId === user.id) return;
     // Чужие — у роли по назначению менеджера её вида, у должности — как раньше.
     if ((user as any).hasCustomRole ? canReassignApplicationManager(user as any, app.status) : canSeeAllApplications(user as any)) return;
-    throw new ForbiddenException('Удалять и возвращать чужие заявки может только руководство');
+    throw new ForbiddenException('Удалять и возвращать чужие лиды может только руководство');
   }
 
   async update(
@@ -1029,7 +1029,7 @@ export class ApplicationsService {
       if (key && key !== phoneKey(existing.phone)) {
         const other = await this.prisma.$transaction((tx) => this.findOpenByPhone(tx, key));
         if (other && other.id !== id) {
-          throw new ConflictException('С этим номером уже есть открытая заявка');
+          throw new ConflictException('С этим номером уже есть открытый лид');
         }
       }
     }
@@ -1159,7 +1159,7 @@ export class ApplicationsService {
             : null;
           if (!again) {
             throw new BadRequestException(
-              'Не удалось создать ученика из заявки — статус не изменён. Попробуйте ещё раз.',
+              'Не удалось создать ученика из лида — статус не изменён. Попробуйте ещё раз.',
             );
           }
           studentId = again.id;
@@ -1709,7 +1709,7 @@ export class ApplicationsService {
   /** Вернуть заявку из корзины. Право — как на удаление. */
   async restore(id: string, user: CurrentUser) {
     const app = await this.prisma.application.findFirst({ where: { id, deletedAt: { not: null } } });
-    if (!app) throw new NotFoundException('Заявка не найдена в удалённых');
+    if (!app) throw new NotFoundException('Лид не найден в удалённых');
     this.ensureCanDelete(app, user);
     // Пока лид лежал в корзине, по этому номеру могла прийти новая заявка —
     // вторую открытую с тем же номером не заводим.
@@ -1717,7 +1717,7 @@ export class ApplicationsService {
     if (key) {
       const open = await this.prisma.$transaction((tx) => this.findOpenByPhone(tx, key));
       if (open && open.id !== id) {
-        throw new ConflictException('С этим номером уже есть открытая заявка — восстановить нельзя');
+        throw new ConflictException('С этим номером уже есть открытый лид — восстановить нельзя');
       }
     }
     const restored = await this.prisma.application.update({

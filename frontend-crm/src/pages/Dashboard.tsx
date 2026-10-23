@@ -51,7 +51,8 @@ export default function Dashboard() {
       : kind === 'profit' || kind === 'income' || kind === 'expense' ? roleCan(me, 'finance:read')
         : kind === 'debt' ? true
           : roleCan(me, ['leads:read', 'applications:read']);
-  const canOpenApps = roleCan(me, 'applications:read');
+  // Список — «Лиды» (с 23.10.2026 там и бывшие «Заявки»): открыт с правом любого вида.
+  const canOpenApps = roleCan(me, ['leads:read', 'applications:read']);
   const canOpenStudents = roleCan(me, 'students:read');
 
   // Период дашборда (URL-состояние + границы). Одни и те же from/to уходят
@@ -228,8 +229,8 @@ export default function Dashboard() {
    * под цифрой «2» и считал, что дашборд врёт (он не врал: карточка
    * показывает выбранный период, а список показывал всё).
    */
-  const listLink = (params: Record<string, string | undefined>, path = '/applications') => {
-    if ((path === '/applications' && !canOpenApps) || (path === '/students' && !canOpenStudents)) return undefined;
+  const listLink = (params: Record<string, string | undefined>, path = '/leads') => {
+    if ((path === '/leads' && !canOpenApps) || (path === '/students' && !canOpenStudents)) return undefined;
     const q = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v) q.set(k, v); });
     if (range.from) q.set('from', range.from);

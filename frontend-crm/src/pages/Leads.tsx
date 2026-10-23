@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import CrmSelect from '../components/CrmSelect';
 import { AnimatePresence, motion } from 'framer-motion';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,21 +19,33 @@ import {
   type CreateStaffApplicationInput,
   type CreateStaffApplicationResult,
 } from '../api/applications';
-import type { Application, ApplicationStatus, Country } from '../api/types';
-import { APPLICATION_STATUSES, COUNTRIES, STATUS_BADGE, isLegacyApplicationStatus } from '../api/types';
+import type { Application, ApplicationSource, ApplicationStatus, Country, Direction } from '../api/types';
+import {
+  APPLICATION_SOURCES,
+  APPLICATION_STATUSES,
+  COUNTRIES,
+  DIRECTION_LABEL,
+  SOURCE_BADGE,
+  SOURCE_LABEL,
+  STATUS_BADGE,
+  isLegacyApplicationStatus,
+} from '../api/types';
 import { useAuth } from '../store/auth';
 import { buildNavCtx } from '../components/navGroups';
 import {
   applicationRight,
   canAssignToAnyone,
   canSeeAllApplicationsByRole,
+  canSeeAllClients,
   canTransferOthers,
   isLeadStatus,
   roleCan,
   transferScopeOf,
 } from '../lib/permissions';
+import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
-import { useApplicationStatusLabel, useCountryLabel } from '../lib/labels';
+import { useApplicationStatusLabel, useCountryLabel, useDirectionLabel } from '../lib/labels';
+import DirectionOptions from '../components/DirectionOptions';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { tjFormatDate } from '../lib/tjTime';
@@ -50,31 +62,37 @@ import ActiveFilterChips, { fmtDay } from '../components/ActiveFilterChips';
 import { labelRanks, SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import SearchField, { useUrlSearch } from '../components/SearchField';
 import ListTotal from '../components/ListTotal';
-import { dateParam, enumParam, stringParam, useUrlListState } from '../lib/useUrlListState';
+import {
+  boolParam,
+  dateParam,
+  enumParam,
+  ignoredParam,
+  pageParam,
+  stringParam,
+  useUrlListState,
+} from '../lib/useUrlListState';
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds } from '../utils/validators';
 import DismissedMark from '../components/DismissedMark';
 
 /**
- * Экран «Лиды» — ручной ввод заявок сотрудником (роль «Квалификатор
- * лидов») и раздача их менеджерам.
+ * Экран «Лиды» — все клиенты отдела продаж: ручной ввод, раздача
+ * менеджерам и ведение.
  *
  * ЛИД — ЭТО ЗАЯВКА (Application), а не отдельная сущность: первый статус
- * заявки так и называется «Новые лиды» (NEW_LEAD). Никакой параллельной
- * таблицы лидов нет и быть не должно — иначе каждый отчёт пришлось бы
- * склеивать из двух источников.
- *
- * Почему отдельный экран, а не кнопка «+» на /applications: человек за
- * этим экраном набирает лиды десятками подряд, со слуха, по телефону. Ему
- * нужна форма, которая после сохранения очищается и возвращает фокус в
- * первое поле, и список, где менеджер назначается прямо в строке — без
- * открытия карточки. Тяжёлый фильтр-стек и широкая таблица /applications
- * этой работе только мешают.
+ * так и называется «Новые лиды» (NEW_LEAD). Никакой параллельной таблицы
+ * лидов нет и быть не должно — иначе каждый отчёт пришлось бы склеивать из
+ * двух источников.
  *
  * С 23.10.2026 (решения основателя):
+ *  • «Заявки» влиты сюда: пункт меню один — «Лиды», в CRM везде «лид».
+ *    Отсюда фильтры бывших «Заявок» (направление, источник, «Мои / Все»,
+ *    строки дашборда), колонки направления, источника и менеджера CN и
+ *    переход в карточку по нажатию на строку; /applications ведёт сюда с
+ *    теми же параметрами (App.tsx), карточка осталась /applications/:id;
  *  • в окне лида — «Менеджер» (кому лид; не выбрали — лид автора) и
  *    «Статус» (сразу перевести дальше «Новый лид»);
- *  • список показывает лиды ВСЕХ статусов, с фильтром «Статус», и грузится
- *    постранично с сервера, как «Заявки»: записей — тысячи;
+ *  • список — все статусы, постранично с сервера; страница — в ссылке,
+ *    чтобы «назад» из карточки возвращал туда же;
  *  • лид, закреплённый за другим менеджером, меняют только основатель и
  *    роли с «… — передача чужих» (lib/permissions canTransferOthers).
  *
@@ -94,8 +112,16 @@ const PAGE_SIZE = 25;
 /** То же значение, что понимает бэкенд: заявки вообще без менеджера. */
 const UNASSIGNED_MANAGER = 'none';
 
-/** Все значения статуса, включая старые, — для порядка сортировки по подписи. */
+/**
+ * Все значения статуса, включая старые: и для порядка сортировки по подписи,
+ * и для разбора ?status= — ссылка вида ?status=ENROLLED (бывшие «Заявки»)
+ * обязана работать, пока в базе есть строки со старым статусом.
+ */
 const STATUS_SORT_VALUES = Object.keys(STATUS_BADGE) as ApplicationStatus[];
+const DIRECTION_VALUES = Object.keys(DIRECTION_LABEL) as Direction[];
+
+/** «Мои / Все» — режим просмотра у тех, кто видит чужих лидов (как было в «Заявках»). */
+type Scope = 'all' | 'mine';
 
 /** Коды стран по длине убыв. — «+992» должен выигрывать у «+9…». */
 const PHONE_CODES = [...PHONE_COUNTRIES].sort((a, b) => b.code.length - a.code.length);
@@ -123,6 +149,8 @@ export default function Leads() {
   const qc = useQueryClient();
   const countryLabel = useCountryLabel();
   const statusLabel = useApplicationStatusLabel();
+  const directionLabel = useDirectionLabel();
+  const navigate = useNavigate();
   const me = useAuth((s) => s.user);
 
   /**
@@ -134,9 +162,17 @@ export default function Leads() {
    * это UX-слой.
    */
   const nav = useMemo(() => buildNavCtx(me), [me]);
-  // Права «Лиды — …» (Настройки → Роли); у сотрудника без роли — должность.
-  const canView = nav.show('leads:read', nav.isWorkforce);
+  // Права «Новые лиды — …» и «Лиды в работе — …» (Настройки → Роли); у
+  // сотрудника без роли — должность. Экран открыт с просмотром любого вида:
+  // какие записи видны, решает сервер.
+  const canView = nav.show(['leads:read', 'applications:read'], nav.isWorkforce);
   const canCreate = nav.show('leads:create', nav.isWorkforce);
+  /**
+   * Видит чужих лидов — руководство и те, кому выданы «все» или назначение
+   * менеджера: им переключатель «Мои / Все» и фильтр по менеджеру (как было
+   * в «Заявках»). Остальным сервер и так отдаёт только своих.
+   */
+  const wide = isElevated(me) || canSeeAllClients(me, 'applications') || canSeeAllClients(me, 'leads');
   // Список — лиды всех статусов: дальше «Нового лида» запись — заявка, и
   // права у неё «Заявки — …». Назначать — хоть по одному из видов.
   const canAssignAny = nav.show('leads:assign', nav.isWorkforce) || roleCan(me, 'applications:assign', false);
@@ -532,48 +568,79 @@ export default function Leads() {
 
   /* ============================ список ============================ */
 
-  const [page, setPage] = useState(1);
-
-  // Период — в ссылке: экран лидов открывают из уведомления и с дашборда,
-  // и выборка обязана переживать переход в карточку и «назад».
-  const { values: periodValues, setValue: setPeriod, reset: resetPeriod } = useUrlListState({
-    from: dateParam(),
-    to: dateParam(),
-    // id менеджера белым списком не проверить (сотрудники грузятся
-    // асинхронно) — ограничиваем длину, как в списке заявок.
-    manager: stringParam('', 64),
-    country: enumParam(COUNTRIES),
-    // Список — лиды всех статусов; фильтр сужает до одного.
-    status: enumParam(APPLICATION_STATUSES),
-    // Потолок — как у бэкенда (200 символов, иначе 400).
-    search: stringParam('', 200),
-    // «Удалённые» — корзина лидов.
-    view: enumParam(['deleted'] as const),
-  });
+  // Всё состояние списка — в ссылке: экран открывают из уведомлений и с
+  // дашборда, а нажатие на строку уводит в карточку — «назад» обязан вернуть
+  // те же фильтры и ту же страницу. Любой фильтр сбрасывает страницу сам
+  // (pageKey). Набор параметров — тот же, что был у «Заявок»: их старые
+  // ссылки ведут сюда (App.tsx).
+  const { values: periodValues, setValue: setPeriod, reset: resetPeriod } = useUrlListState(
+    {
+      from: dateParam(),
+      to: dateParam(),
+      // id менеджера белым списком не проверить (сотрудники грузятся
+      // асинхронно) — ограничиваем длину. Тому, кто видит только своих,
+      // фильтр не нужен.
+      manager: wide ? stringParam('', 64) : ignoredParam(''),
+      country: enumParam(COUNTRIES),
+      // Список — лиды всех статусов; фильтр сужает до одного.
+      status: enumParam(STATUS_SORT_VALUES),
+      direction: enumParam(DIRECTION_VALUES),
+      source: enumParam(APPLICATION_SOURCES),
+      // «Мои / Все» — режим просмотра, а не фильтр; дефолт зависит от прав
+      // и в ссылку не пишется.
+      scope: enumParam<Scope, Scope>(
+        wide ? (['all', 'mine'] as const) : (['mine'] as const),
+        wide ? 'all' : 'mine',
+      ),
+      // Строки дашборда «Без направления» / «Страна не указана».
+      directionPending: boolParam(),
+      countryPending: boolParam(),
+      // Потолок — как у бэкенда (200 символов, иначе 400).
+      search: stringParam('', 200),
+      // «Удалённые» — корзина лидов.
+      view: enumParam(['deleted'] as const),
+      page: pageParam(),
+    },
+    { pageKey: 'page' },
+  );
   const trash = periodValues.view === 'deleted';
   // В корзине — только «Восстановить»: без галочек и назначения менеджера.
   const bulkOn = canAssignAny && !trash;
-  const { from, to, manager } = periodValues;
+  const { from, to, manager, scope, page, directionPending, countryPending } = periodValues;
   // `country` в этом компоненте уже занято полем формы нового лида,
   // поэтому фильтр списка зовём filterCountry.
   const filterCountry = periodValues.country;
   const filterStatus = periodValues.status;
+  const filterDirection = periodValues.direction;
+  const filterSource = periodValues.source;
   const urlSearch = periodValues.search;
+  const setPage = (next: number) => setPeriod('page', next);
 
   const setUrlSearch = useCallback((v: string) => setPeriod('search', v), [setPeriod]);
   const { input: searchInput, setInput: setSearchInput, clear: clearSearch } = useUrlSearch(urlSearch, setUrlSearch);
 
   const leadFilters = {
     status: filterStatus || undefined,
+    direction: filterDirection || undefined,
+    source: filterSource || undefined,
     deleted: trash || undefined,
     from: from || undefined,
     to: to || undefined,
     manager: manager || undefined,
     country: filterCountry || undefined,
     search: urlSearch || undefined,
+    // «Мои» — только у тех, кто видит чужих: остальным сервер и так отдаёт
+    // своих, а лишний ключ сломал бы общий кеш первой страницы (Sidebar).
+    mine: wide && scope === 'mine' ? true : undefined,
+    // Явное направление / страна сильнее «не указано» (как в бывших «Заявках»).
+    directionPending: directionPending && !filterDirection ? true : undefined,
+    countryPending: countryPending && !filterCountry ? true : undefined,
   };
-  /** Список сужен фильтром (корзина — режим просмотра, а не фильтр). */
-  const narrowed = !!(filterStatus || from || to || manager || filterCountry || urlSearch);
+  /** Список сужен фильтром («Мои / Все» и корзина — режимы просмотра, а не фильтры). */
+  const narrowed = !!(
+    filterStatus || filterDirection || filterSource || from || to || manager || filterCountry || urlSearch ||
+    directionPending || countryPending
+  );
 
   // Страница, порядок и счётчик — на сервере (как «Заявки»): лидов всех
   // статусов — тысячи. Порядок берём из ссылки (?sort=), где его хранит
@@ -585,6 +652,8 @@ export default function Leads() {
   const ranks =
     sortKey === 'status' ? labelRanks(STATUS_SORT_VALUES, statusLabel)
     : sortKey === 'country' ? labelRanks(COUNTRIES, countryLabel)
+    : sortKey === 'direction' ? labelRanks(DIRECTION_VALUES, directionLabel)
+    : sortKey === 'source' ? labelRanks(APPLICATION_SOURCES, (s) => SOURCE_LABEL[s as ApplicationSource])
     : undefined;
   const pageQuery = { ...leadFilters, page, pageSize: PAGE_SIZE, sort: sortParam, ranks };
   const leadsKey = keys.applications.list(pageQuery);
@@ -600,26 +669,21 @@ export default function Leads() {
   const leads = leadsQuery.data?.items ?? [];
   const found = leadsQuery.data?.total ?? 0;
 
-  // Для счётчика «Найдено: 12 из 93» — сколько всего без фильтров.
-  const totalFilters = { deleted: trash || undefined, page: 1, pageSize: 1 };
+  // Для счётчика «Найдено: 12 из 93» — сколько всего без фильтров (в том же
+  // режиме: корзина, «Мои / Все»).
+  const totalFilters = { deleted: trash || undefined, mine: leadFilters.mine, page: 1, pageSize: 1 };
   const totalQuery = useQuery({
     queryKey: keys.applications.list(totalFilters),
     queryFn: () => listApplicationsPage(totalFilters),
     enabled: narrowed,
   });
 
-  // Другой фильтр — другая выборка: смотреть её надо с первой страницы.
-  // При открытии экрана страница и так первая — лишний вызов безвреден.
-  const filtersSig = [filterStatus, from, to, manager, filterCountry, urlSearch, trash].join('|');
-  useEffect(() => {
-    setPage(1);
-  }, [filtersSig]);
-
   const managersQuery = useQuery({
     queryKey: ['applications', 'assignable-managers'] as const,
     queryFn: listAssignableManagers,
-    // Без applications:assign эндпоинт ответит 403 — не дёргаем вовсе.
-    enabled: canAssignAny,
+    // Нужен тем, кто назначает (выбор в строке и в окне), и тем, кто видит
+    // чужих (фильтр «Менеджер»); остальным эндпоинт ответит 403.
+    enabled: canAssignAny || wide,
     staleTime: 5 * 60_000,
   });
   const managers = managersQuery.data ?? [];
@@ -653,12 +717,14 @@ export default function Leads() {
   });
 
   // Выборка сжалась (лид удалили, сменили фильтр) — не оставляем
-  // пользователя на пустой странице.
+  // пользователя на пустой странице. Ждём успешной загрузки: пока данных нет,
+  // found = 0, и кламп сбросил бы восстановленную из ссылки ?page=3 в единицу.
+  // replace — техническая коррекция, а не переход: в истории ей не место.
   useEffect(() => {
-    if (!leadsQuery.isSuccess) return;
+    if (!leadsQuery.isSuccess || leadsQuery.isPlaceholderData) return;
     const totalPages = Math.max(1, Math.ceil(found / PAGE_SIZE));
-    if (page > totalPages) setPage(totalPages);
-  }, [leadsQuery.isSuccess, found, page]);
+    if (page > totalPages) setPeriod('page', totalPages, { replace: true });
+  }, [leadsQuery.isSuccess, leadsQuery.isPlaceholderData, found, page, setPeriod]);
 
   const sort = useTableSort<Application>(
     leads,
@@ -666,11 +732,19 @@ export default function Leads() {
       { key: 'fullName', label: t('app.field.fullName'), value: (a) => a.fullName },
       { key: 'phone', label: t('app.field.phone'), value: (a) => a.phone },
       { key: 'country', label: t('app.field.country'), value: (a) => (a.country ? countryLabel(a.country) : null) },
+      {
+        key: 'direction',
+        label: t('app.field.direction'),
+        // Неподтверждённое направление в таблице — прочерк, в сортировке тоже пусто.
+        value: (a) => (a.directionConfirmed === false ? null : directionLabel(a.direction)),
+      },
+      { key: 'source', label: t('app.field.source'), value: (a) => SOURCE_LABEL[a.source ?? 'OTHER'] },
       { key: 'status', label: t('common.status'), value: (a) => statusLabel(a.status) },
       { key: 'manager', label: t('app.field.manager'), value: (a) => a.manager?.fullName || null },
       { key: 'createdAt', label: t('reports.col.date'), type: 'date', value: (a) => a.createdAt },
     ],
-    { onChange: () => setPage(1) },
+    // Новый порядок смотрят с первой страницы.
+    { pageParam: 'page' },
   );
   // Строки уже отсортированы и нарезаны сервером; заголовки только меняют ?sort=.
   const pageItems = leads;
@@ -921,6 +995,22 @@ export default function Leads() {
     }
 
     bulkMut.mutate({ ids: picked.map((a) => a.id), managerId: bulkManagerId, confirmReassign });
+  };
+
+  /**
+   * Нажатие на строку открывает карточку лида (как было в «Заявках»).
+   * Галочка, выбор менеджера, кнопки и ссылки в строке — свои действия:
+   * клик по ним (и по выпадающему списку, который рисуется порталом, но
+   * всплывает по дереву React) карточку не открывает. Выделение текста
+   * (скопировать номер) — тоже не клик. В корзине карточки нет: удалённый
+   * лид только восстанавливают.
+   */
+  const openRow = (e: React.MouseEvent<HTMLTableRowElement>, a: Application) => {
+    if (trash) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('input, button, a, select, label, [role="combobox"], [role="option"], [role="listbox"], .crm-select-popover')) return;
+    if (window.getSelection()?.toString()) return;
+    navigate(`/applications/${a.id}`);
   };
 
   if (!canView) {
@@ -1223,6 +1313,28 @@ export default function Leads() {
             filtered={narrowed}
             testId="leads-total"
           />
+          {wide && (
+            <div className="scope-switch" data-testid="leads-scope">
+              <button
+                type="button"
+                className={`scope-btn${scope === 'mine' ? ' active' : ''}`}
+                data-testid="leads-scope-mine"
+                onClick={() => setPeriod('scope', 'mine')}
+              >
+                <Icon name="person" size={16} />
+                {t('scope.mine')}
+              </button>
+              <button
+                type="button"
+                className={`scope-btn${scope === 'all' ? ' active' : ''}`}
+                data-testid="leads-scope-all"
+                onClick={() => setPeriod('scope', 'all')}
+              >
+                <Icon name="groups" size={16} />
+                {t('common.all')}
+              </button>
+            </div>
+          )}
           {canCreate && (
             <button type="button" className="btn btn-primary" data-testid="lead-new" onClick={openForm}>
               <Icon name="add" size={18} />
@@ -1258,17 +1370,41 @@ export default function Leads() {
                 ))}
               </CrmSelect>
             )}
+            {wide && (
+              <CrmSelect
+                className="crm-select"
+                value={manager}
+                onChange={(e) => setPeriod('manager', e.target.value)}
+                title={t('app.filter.manager')}
+                data-testid="leads-filter-manager"
+              >
+                <option value="">{t('app.filter.manager')}</option>
+                <option value={UNASSIGNED_MANAGER}>{t('leads.manager.none')}</option>
+                {pickable(true).map((u) => (
+                  <option key={u.id} value={u.id}>{optionLabel(u)}</option>
+                ))}
+              </CrmSelect>
+            )}
             <CrmSelect
               className="crm-select"
-              value={manager}
-              onChange={(e) => setPeriod('manager', e.target.value)}
-              title={t('app.filter.manager')}
-              data-testid="leads-filter-manager"
+              value={filterDirection}
+              onChange={(e) => setPeriod('direction', e.target.value as Direction | '')}
+              title={t('app.field.direction')}
+              data-testid="leads-filter-direction"
             >
-              <option value="">{t('app.filter.manager')}</option>
-              <option value={UNASSIGNED_MANAGER}>{t('leads.manager.none')}</option>
-              {pickable(true).map((u) => (
-                <option key={u.id} value={u.id}>{optionLabel(u)}</option>
+              <option value="">{t('app.filter.direction')}</option>
+              <DirectionOptions />
+            </CrmSelect>
+            <CrmSelect
+              className="crm-select"
+              value={filterSource}
+              onChange={(e) => setPeriod('source', e.target.value as ApplicationSource | '')}
+              title={t('app.field.source')}
+              data-testid="leads-filter-source"
+            >
+              <option value="">{t('app.filter.source')}</option>
+              {APPLICATION_SOURCES.map((s) => (
+                <option key={s} value={s}>{SOURCE_LABEL[s]}</option>
               ))}
             </CrmSelect>
             <CrmSelect
@@ -1299,15 +1435,20 @@ export default function Leads() {
               placeholder={t('leads.search.placeholder')}
               testId="leads-search"
             />
-            {(filterStatus || from || to || manager || filterCountry || searchInput) && (
+            {(narrowed || searchInput) && (
               <button
                 type="button"
                 className="btn btn-ghost"
+                data-testid="leads-reset"
                 onClick={() => {
                   // Поле гасим сразу: недобежавший дебаунс иначе вернул бы
-                  // текст обратно в ссылку.
+                  // текст обратно в ссылку. «Мои / Все» и корзина — режимы
+                  // просмотра, их «Сбросить» не трогает.
                   setSearchInput('');
-                  resetPeriod(['status', 'from', 'to', 'manager', 'country', 'search']);
+                  resetPeriod([
+                    'status', 'direction', 'source', 'from', 'to', 'manager', 'country', 'search',
+                    'directionPending', 'countryPending',
+                  ]);
                 }}
               >
                 <Icon name="close" size={14} /> {t('common.reset')}
@@ -1326,6 +1467,26 @@ export default function Leads() {
                 : []),
               ...(filterStatus
                 ? [{ key: 'status', label: statusLabel(filterStatus), onClear: () => resetPeriod(['status']) }]
+                : []),
+              ...(filterDirection
+                ? [{ key: 'direction', label: directionLabel(filterDirection), onClear: () => resetPeriod(['direction']) }]
+                : []),
+              ...(filterSource
+                ? [{ key: 'source', label: SOURCE_LABEL[filterSource as ApplicationSource], onClear: () => resetPeriod(['source']) }]
+                : []),
+              ...(directionPending && !filterDirection
+                ? [{
+                    key: 'directionPending',
+                    label: t('dashboard.breakdown.directionsPending'),
+                    onClear: () => resetPeriod(['directionPending']),
+                  }]
+                : []),
+              ...(countryPending && !filterCountry
+                ? [{
+                    key: 'countryPending',
+                    label: t('dashboard.breakdown.countryPending'),
+                    onClear: () => resetPeriod(['countryPending']),
+                  }]
                 : []),
               ...(from || to
                 ? [{
@@ -1464,7 +1625,7 @@ export default function Leads() {
 
                 <SortSelect sort={sort} />
                 <div className="table-wrap">
-                <table className="table client-list">
+                <table className="table client-list leads-table">
                   <thead>
                     <tr>
                       <SortTh
@@ -1484,7 +1645,11 @@ export default function Leads() {
                         }
                       />
                       <SortTh sort={sort} col="phone" />
-                      <SortTh sort={sort} col="country" />
+                      {/* Страна, направление и источник — метками в одной колонке,
+                          как в карточке на телефоне: девять колонок двух прежних
+                          экранов не помещались на ноутбуке. Заголовок сортирует по
+                          стране; по направлению и источнику — список «Порядок». */}
+                      <SortTh sort={sort} col="country">{t('leads.col.details')}</SortTh>
                       <SortTh sort={sort} col="status" />
                       <SortTh sort={sort} col="manager" />
                       <SortTh sort={sort} col="createdAt" />
@@ -1498,7 +1663,12 @@ export default function Leads() {
                       const rowLocked = !trash && !!a.managerId && applicationRight(me, a.status, 'assign') && !rowAssign;
                       const rowOptions = pickable(canAssignToAnyone(me, a.status));
                       return (
-                      <tr key={a.id} className={`client-row${selected.has(a.id) ? ' is-selected' : ''}`} data-testid={`lead-row-${a.id}`}>
+                      <tr
+                        key={a.id}
+                        className={`client-row${selected.has(a.id) ? ' is-selected' : ''}${trash ? '' : ' is-clickable'}`}
+                        data-testid={`lead-row-${a.id}`}
+                        onClick={(e) => openRow(e, a)}
+                      >
                         {/* Галочка живёт ВНУТРИ первой ячейки, а не отдельной
                             колонкой: на телефоне td:first-child — это заголовок
                             карточки, и колонка из одних галочек заняла бы его
@@ -1523,27 +1693,48 @@ export default function Leads() {
                                 }
                               />
                             )}
-                            <strong>{a.fullName}</strong>
+                            {trash ? (
+                              <strong>{a.fullName}</strong>
+                            ) : (
+                              // Ссылка — для клавиатуры и «открыть в новой вкладке»;
+                              // мышью карточку открывает и вся строка.
+                              <Link to={`/applications/${a.id}`} className="lead-name-link" data-testid="lead-open">
+                                <strong>{a.fullName}</strong>
+                              </Link>
+                            )}
                           </div>
                         </td>
                         <td data-label={t('app.field.phone')} className="cl-phone">{a.phone || '—'}</td>
-                        <td data-label={t('app.field.country')} className={`cl-chip${a.country ? '' : ' is-empty'}`}>
-                          {a.country ? (
-                            <span className="badge badge-gray">{countryLabel(a.country)}</span>
-                          ) : (
-                            <span style={{ color: 'var(--text-light)' }}>—</span>
-                          )}
+                        <td data-label={t('leads.col.details')} className="cl-chip lead-details">
+                          <div className="lead-chips">
+                            {a.country && (
+                              <span className="badge badge-gray" data-testid="lead-country">{countryLabel(a.country)}</span>
+                            )}
+                            {/* directionConfirmed === false → в direction лежит
+                                плейсхолдер бэкенда, а не выбор клиента: форма
+                                сайта направление не спрашивает. Не показываем,
+                                иначе у всех лидов с сайта стоял бы «Бакалавриат». */}
+                            {a.directionConfirmed !== false && (
+                              <span className="lead-dir" data-testid="lead-direction">{directionLabel(a.direction)}</span>
+                            )}
+                            <span className={`badge ${SOURCE_BADGE[a.source ?? 'OTHER']}`} data-testid="lead-source">
+                              {SOURCE_LABEL[a.source ?? 'OTHER']}
+                            </span>
+                          </div>
                         </td>
                         <td data-label={t('common.status')} className="cl-top">
                           <span className={`badge ${STATUS_BADGE[a.status] ?? 'badge-gray'}`} data-testid="lead-status-badge">
                             {statusLabel(a.status)}
                           </span>
                         </td>
-                        <td data-label={t('app.field.manager')} className="td-stack cl-mgr cl-with-label">
+                        <td data-label={t('app.field.manager')} className="td-stack cl-mgr">
+                          <div className="mgr-cell">
+                          <div className="mgr-row">
+                          <span className="mgr-tag tj">TJ</span>
                           {bulkOn && rowAssign ? (
                             <CrmSelect
                               className="crm-select"
-                              style={{ minWidth: 170 }}
+                              style={{ minWidth: 140 }}
                               value={a.managerId ?? ''}
                               data-testid="lead-row-manager"
                               onChange={(e) =>
@@ -1573,7 +1764,7 @@ export default function Leads() {
                             </CrmSelect>
                           ) : a.manager ? (
                             <span
-                              className={rowLocked ? 'lead-manager-locked' : undefined}
+                              className={`${a.manager.id === me?.id ? 'mgr-mine' : 'mgr-other'}${rowLocked ? ' lead-manager-locked' : ''}`}
                               title={rowLocked ? t('managerBar.locked') : undefined}
                               data-testid={rowLocked ? 'lead-manager-locked' : 'lead-manager-name'}
                             >
@@ -1582,10 +1773,22 @@ export default function Leads() {
                               {rowLocked && <Icon name="lock" size={14} />}
                             </span>
                           ) : (
-                            <span style={{ color: 'var(--text-light)' }}>
-                              {t('leads.manager.unassigned')}
-                            </span>
+                            <span className="mgr-none">{t('leads.manager.unassigned')}</span>
                           )}
+                          </div>
+                          {/* Менеджер китайской стороны — только показываем, как
+                              было в «Заявках»: его меняют в карточке лида. */}
+                          <div className="mgr-row">
+                            <span className="mgr-tag cn">CN</span>
+                            {a.chinaManager ? (
+                              <span className={a.chinaManager.id === me?.id ? 'mgr-mine' : 'mgr-other'}>
+                                {a.chinaManager.fullName}
+                              </span>
+                            ) : (
+                              <span className="mgr-none">—</span>
+                            )}
+                          </div>
+                          </div>
                         </td>
                         <td data-label={t('reports.col.date')} className="cl-right">{tjFormatDate(a.createdAt)}</td>
                         <td className="lead-actions cl-actions" data-label={t('common.actions')}>

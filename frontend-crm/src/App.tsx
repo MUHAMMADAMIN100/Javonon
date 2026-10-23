@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './store/auth';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
-import Applications from './pages/Applications';
 import ApplicationDetail from './pages/ApplicationDetail';
 import Leads from './pages/Leads';
 import Students from './pages/Students';
@@ -65,13 +64,15 @@ export default function App() {
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/applications" element={<Applications />} />
+        {/* «Заявки» влиты в «Лиды» (23.10.2026): старые ссылки и закладки
+            на список открывают «Лиды» с теми же фильтрами. Карточка лида
+            осталась по прежнему адресу — на неё ведут уведомления. */}
+        <Route path="/applications" element={<ApplicationsRedirect />} />
         <Route path="/applications/:id" element={<ApplicationDetail />} />
-        {/* Ручной ввод лидов. Лид — это та же Application (первый статус
-            «Новые лиды»), отдельной сущности нет; экран отличается только
-            задачей: набрать заявку с голоса и сразу отдать менеджеру.
-            Доступ проверяет сама страница тем же предикатом, что и пункт
-            меню (applications:create), а по-настоящему — сервер. */}
+        {/* Все клиенты отдела продаж: ввод, раздача и ведение. Лид — это
+            Application, отдельной сущности нет. Доступ проверяет сама
+            страница тем же предикатом, что и пункт меню, а по-настоящему —
+            сервер. */}
         <Route path="/leads" element={<Leads />} />
         <Route path="/students" element={<Students />} />
         <Route path="/students/new" element={<StudentNew />} />
@@ -121,4 +122,14 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
+}
+
+/**
+ * Старый список «Заявки» → «Лиды» с теми же параметрами: «Лиды» понимают
+ * все фильтры бывших «Заявок» (статус, направление, источник, страна,
+ * менеджер, «Мои / Все», период, строки дашборда, поиск, страница).
+ */
+function ApplicationsRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/leads', search: loc.search }} replace />;
 }

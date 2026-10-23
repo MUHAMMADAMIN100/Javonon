@@ -35,7 +35,8 @@ import { isTeacherOnly } from '../lib/roles';
  */
 const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; titleKey: string }> = [
   { path: '/dashboard',    eyebrowKey: 'eyebrow.overview',       num: '01', titleKey: 'dashboard.title' },
-  { path: '/applications', eyebrowKey: 'eyebrow.inbound',        num: '02', titleKey: 'app.title' },
+  // Карточка лида (/applications/:id) — раздел «Лиды»: «Заявки» влиты в него 23.10.2026.
+  { path: '/applications', eyebrowKey: 'eyebrow.sales',          num: '02', titleKey: 'leads.title' },
   { path: '/students',     eyebrowKey: 'eyebrow.pipeline',       num: '03', titleKey: 'students.title' },
   { path: '/programs',     eyebrowKey: 'eyebrow.catalog',        num: '04', titleKey: 'programs.title' },
   { path: '/tasks',        eyebrowKey: 'eyebrow.work',           num: '05', titleKey: 'tasks.title' },
@@ -50,7 +51,7 @@ const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; title
   { path: '/lms',          eyebrowKey: 'eyebrow.lms',            num: '14', titleKey: 'lms.title' },
   { path: '/partners',     eyebrowKey: 'eyebrow.partners',       num: '15', titleKey: 'partners.title' },
   { path: '/me',           eyebrowKey: 'eyebrow.profile',        num: '16', titleKey: 'profile.title' },
-  { path: '/leads',        eyebrowKey: 'eyebrow.inbound',        num: '17', titleKey: 'leads.title' },
+  { path: '/leads',        eyebrowKey: 'eyebrow.sales',          num: '02', titleKey: 'leads.title' },
   { path: '/submissions',  eyebrowKey: 'eyebrow.sales',          num: '18', titleKey: 'submissions.title' },
   { path: '/pipelines',    eyebrowKey: 'eyebrow.salesPipelines', num: '19', titleKey: 'pipelines.title' },
   { path: '/massmail',     eyebrowKey: 'eyebrow.campaigns',      num: '20', titleKey: 'massmail.title' },

@@ -28,11 +28,11 @@ function notificationHref(n: Notification): string | null {
   // Сводное уведомление о массовом назначении («Назначено 12 лидов → …»):
   // заявок много, вести на одну некуда — открываем список. Менеджер увидит в
   // нём свои (в том числе только что назначенные), руководство — все.
-  if (n.type === 'MANAGER_CHANGE' && p.bulk) return '/applications';
+  if (n.type === 'MANAGER_CHANGE' && p.bulk) return '/leads';
   // Задача — сразу её окно (?task=…): там дневник и отсчёт до конца рабочего дня.
   if (p.taskId) return `/tasks?task=${encodeURIComponent(p.taskId)}`;
   if (n.type === 'TASK_ASSIGNED') return '/tasks';
-  if (n.type === 'APPLICATION_NEW') return '/applications';
+  if (n.type === 'APPLICATION_NEW') return '/leads';
   return null;
 }
 

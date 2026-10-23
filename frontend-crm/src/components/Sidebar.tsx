@@ -35,9 +35,10 @@ const PREFETCH_MAP: Record<string, () => Promise<void> | void> = {
     queryClient.prefetchQuery({ queryKey: keys.chat.rooms(), queryFn: () => listChatRooms() });
     queryClient.prefetchQuery({ queryKey: keys.chat.unread(), queryFn: () => chatUnread() });
   },
-  '/applications': () => {
-    // Первая страница «Всех» без фильтров — ровно тот ключ, с которым открывается экран.
-    const first = { mine: false, page: 1, pageSize: 20 };
+  '/leads': () => {
+    // Первая страница «Всех» без фильтров — ровно тот ключ, с которым «Лиды»
+    // открываются у руководства (pages/Leads.tsx: pageQuery, LEADS_PAGE_SIZE).
+    const first = { page: 1, pageSize: 25 };
     queryClient.prefetchQuery({ queryKey: keys.applications.list(first), queryFn: () => listApplicationsPage(first) });
   },
   '/students': () => {
@@ -665,6 +666,9 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
           <NavLink
             to={it.to}
             onClick={() => onClose?.()}
+            // Пункт подсвечен и на своих алиасах: карточка лида живёт по
+            // адресу /applications/:id, а пункт — «Лиды» (/leads).
+            className={({ isActive }) => (isActive || hit?.to === it.to ? 'active' : undefined)}
             {...prefetchProps(it.to)}
           >
             <span className="sidebar-nav-icon">

@@ -329,7 +329,7 @@ export class SubmissionsService {
         where: { id: sourceApplicationIdRaw },
         select: { id: true },
       });
-      if (!sourceApp) throw new NotFoundException('Заявка-источник не найдена');
+      if (!sourceApp) throw new NotFoundException('Лид-источник не найден');
       sourceApplicationId = sourceApp.id;
       sourceApplicationHasAttribution = await this.applicationCarriesAttribution(
         sourceApp.id,

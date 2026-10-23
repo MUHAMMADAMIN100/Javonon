@@ -61,8 +61,10 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   // ─── CRM ───────────────────────────────────────────────────────────────
   // Лид — заявка в статусе «Новый лид» (applications/application-access.ts):
   // права лида действуют, пока заявка в этом статусе, дальше — права заявки.
-  ...section('CRM', 'leads', 'Лиды', [
-    ['leads:read', 'read', 'просмотр раздела и карточек'],
+  // С 23.10.2026 в CRM один раздел «Лиды», а разделы прав называются «Новые
+  // лиды» (leads:*) и «Лиды в работе» (applications:*); ключи прежние.
+  ...section('CRM', 'leads', 'Новые лиды', [
+    ['leads:read', 'read', 'просмотр в списке и карточке'],
     ['leads:create', 'create'],
     ['leads:update', 'update', 'изменение и перевод в работу'],
     ['leads:delete', 'delete', 'удаление и возврат из корзины'],
@@ -73,9 +75,9 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
     ['leads:reassign', 'extra', 'Передача чужих'],
     ['leads:all', 'extra', 'Все, не только свои'],
   ]),
-  ...section('CRM', 'applications', 'Заявки', [
-    ['applications:read', 'read'],
-    ['applications:create', 'create', 'создание заявки студенту'],
+  ...section('CRM', 'applications', 'Лиды в работе', [
+    ['applications:read', 'read', 'просмотр в списке и карточке'],
+    ['applications:create', 'create', 'создание лида студенту'],
     ['applications:update', 'update', 'изменение и смена статуса'],
     ['applications:delete', 'delete', 'удаление и возврат из корзины'],
     ['applications:assign', 'extra', 'Назначение менеджера'],
@@ -122,7 +124,7 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
     ['pipelines:create', 'create', 'создание воронок и этапов'],
     ['pipelines:update', 'update', 'изменение воронок и этапов'],
     ['pipelines:delete', 'delete', 'удаление воронок и этапов'],
-    ['pipelines:move', 'extra', 'Перемещение заявок по этапам'],
+    ['pipelines:move', 'extra', 'Перемещение лидов по этапам'],
   ]),
 
   // ─── Связь ─────────────────────────────────────────────────────────────

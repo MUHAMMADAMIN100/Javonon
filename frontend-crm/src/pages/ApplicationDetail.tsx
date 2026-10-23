@@ -161,7 +161,7 @@ export default function ApplicationDetail() {
     invalidate: [keys.applications.all, keys.students.all],
     onSuccess: () => {
       toast(t('toast.deleted'), 'success');
-      navigate('/applications');
+      navigate('/leads');
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
@@ -256,7 +256,7 @@ export default function ApplicationDetail() {
 
   return (
     <div className="client-page">
-      <BackButton fallback="/applications" />
+      <BackButton fallback="/leads" />
 
       <ClientHero
         eyebrow={t('client.eyebrow.lead')}

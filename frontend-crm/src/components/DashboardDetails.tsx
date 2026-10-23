@@ -86,7 +86,7 @@ function ApplicationsDetails({
   const countryLabel = useCountryLabel();
   // «Открыть список» — на «Заявки», если роль туда пускает.
   const me = useAuth((s) => s.user);
-  const canOpenList = roleCan(me, 'applications:read');
+  const canOpenList = roleCan(me, ['leads:read', 'applications:read']);
   const filters = { from: range.from || undefined, to: range.to || undefined };
   const query = useQuery({
     queryKey: keys.applications.list(filters),
@@ -131,7 +131,7 @@ function ApplicationsDetails({
       rowHref={(a) => `/applications/${a.id}`}
       searchOf={(a) => [a.fullName, a.manager?.fullName]}
       phonesOf={(a) => [a.phone, a.whatsappPhone]}
-      listHref={canOpenList ? withRange('/applications', listParams, range) : undefined}
+      listHref={canOpenList ? withRange('/leads', listParams, range) : undefined}
       emptyText={t('common.empty')}
       onClose={onClose}
     />

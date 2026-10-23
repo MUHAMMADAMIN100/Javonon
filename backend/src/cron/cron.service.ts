@@ -472,7 +472,7 @@ export class CronService implements OnApplicationBootstrap {
         if (!app.managerId) continue;
         await this.notifications.notifyUser(app.managerId, {
           type: 'APPLICATION_STALE',
-          title: '📥 Заявка без движения 7+ дней',
+          title: '📥 Лид без движения 7+ дней',
           message: `${app.fullName} — обнови статус или свяжись с клиентом.`,
           payload: { applicationId: app.id },
         });
