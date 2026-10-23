@@ -35,7 +35,7 @@ import {
   type ClientContact,
 } from '../components/ClientCard';
 import { isElevated } from '../lib/roles';
-import { applicationRight, canSeeAllClients, canSeeAllOfApplication, roleCan } from '../lib/permissions';
+import { applicationRight, canSeeAllClients, canSeeAllOfApplication, canTransferOthers, roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useOnboardingLabel, useChannelLabel, useCountryLabel } from '../lib/labels';
 import { tjFormatFull } from '../lib/tjTime';
@@ -258,6 +258,8 @@ export default function StudentDetail() {
   const canDelete = roleCan(me, 'students:delete', isAdmin || isMine) && canAccess;
   const canPassword = roleCan(me, 'students:password', isAdmin) && canAccess;
   const canAssign = roleCan(me, 'students:assign', isAdmin);
+  // Студента, закреплённого за коллегой, — только с «Студенты — передача чужих».
+  const canTransfer = canTransferOthers(me, 'students');
   // Статус, этап и долг принадлежат заявке студента: чужую заявку ведёт тот,
   // кому выданы «все» её вида (лиды / заявки); роли — «… — изменение».
   const canEditApp = !!app0 && (isAdmin || isMine || canSeeAllOfApplication(me, app0.status))
@@ -413,7 +415,7 @@ export default function StudentDetail() {
             <div className="profile-group-head">
               <h3 className="profile-h">{t('client.section.people')}</h3>
             </div>
-            <ManagerBar manager={student.manager} chinaManager={student.chinaManager} onReassign={onReassign} canAssign={canAssign} />
+            <ManagerBar manager={student.manager} chinaManager={student.chinaManager} onReassign={onReassign} canAssign={canAssign} canTransfer={canTransfer} />
             {/* Партнёр — только руководству и только у партнёрских клиентов:
                 решает бэкенд, у менеджера по продажам ключа в JSON нет. */}
             <PartnerAttributionCard attribution={student.partnerAttribution} variant="field" />

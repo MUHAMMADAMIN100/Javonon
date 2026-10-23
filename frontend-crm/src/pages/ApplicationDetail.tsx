@@ -40,7 +40,9 @@ import {
   canSeeAllApplicationsByRole,
   canSeeAllClients,
   canSeeAllOfApplication,
+  canTransferOthers,
   roleCan,
+  transferScopeOf,
 } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useChannelLabel, useCountryLabel, useDirectionLabel, useStudentStatusLabel } from '../lib/labels';
@@ -382,7 +384,15 @@ export default function ApplicationDetail() {
               <div className="profile-group-head">
                 <h3 className="profile-h">{t('client.section.people')}</h3>
               </div>
-              {!isNew && <ManagerBar manager={app.manager} chinaManager={app.chinaManager} onReassign={onReassign} canAssign={roleCan(me, isNew ? 'leads:assign' : 'applications:assign', isAdmin)} />}
+              {!isNew && (
+                <ManagerBar
+                  manager={app.manager}
+                  chinaManager={app.chinaManager}
+                  onReassign={onReassign}
+                  canAssign={roleCan(me, isNew ? 'leads:assign' : 'applications:assign', isAdmin)}
+                  canTransfer={canTransferOthers(me, transferScopeOf(app.status))}
+                />
+              )}
               {/* Партнёр — только руководству и только у партнёрских клиентов:
                   решает бэкенд, у менеджера по продажам ключа в JSON нет. */}
               <PartnerAttributionCard attribution={app.partnerAttribution} variant="field" />

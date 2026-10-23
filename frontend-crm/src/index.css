@@ -4039,6 +4039,10 @@ input[type="checkbox"].crm-checkbox:checked {
 .crm-checkbox:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
+/* Недоступная галочка (например, лид коллеги без «Передачи чужих») — бледная:
+   иначе её не отличить от обычной, а клик по ней молча ничего не делает. */
+input[type="checkbox"].crm-checkbox:disabled { cursor: not-allowed; opacity: 0.55; }
+input[type="checkbox"].crm-checkbox:disabled:not(:checked) { background: var(--bg-soft); }
 .crm-checkbox-label {
   display: inline-flex;
   align-items: center;
@@ -5023,6 +5027,21 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 }
 .lead-modal-close:hover { background: var(--bg-soft); color: var(--text); }
 .lead-modal-card .form-actions { margin-top: 18px; }
+/* Подсказка под полем окна (лид коллеги: менеджер не меняется). */
+.lead-modal-card .form-hint-text { margin-top: 6px; font-size: 12px; line-height: 1.45; color: var(--text-soft); }
+/* Правка лида, который уже стал студентом: контакты — в карточке. */
+.lead-student-note {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 12px;
+  background: var(--bg-soft); color: var(--text-soft);
+  font-size: 13px; line-height: 1.5;
+}
+.lead-student-note strong { color: var(--text); font-weight: 600; }
+.lead-student-note a { color: var(--primary); font-weight: 600; white-space: nowrap; }
+.lead-student-note > :first-child { flex-shrink: 0; margin-top: 1px; color: var(--primary); }
+/* Лид коллеги в строке: имя менеджера с замком вместо выбора. */
+.lead-manager-locked { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
+.lead-manager-locked > :last-child { color: var(--text-light); }
 
 @media (max-width: 720px) {
   /* На телефоне окно — почти во весь экран, прижато к низу. */
@@ -6419,6 +6438,12 @@ a.profile-hero-contact:hover { color: var(--primary); }
 .client-person.is-empty .profile-field-value { color: var(--text-light); font-weight: 500; }
 .client-person-main { flex: 1; min-width: 0; }
 .client-person-actions { position: relative; flex-shrink: 0; }
+/* Слот коллеги без «Передачи чужих»: замок вместо ✎ (подсказка — по наведению). */
+.client-person-lock {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-light); cursor: help;
+}
 .client-person .manager-bar-you { margin-left: 8px; vertical-align: middle; }
 /* Сотрудников десятки — список прокручивается, а не тянется на весь экран вниз. */
 .client-person .manager-dropdown-list { max-height: min(360px, 55vh); overflow-y: auto; }

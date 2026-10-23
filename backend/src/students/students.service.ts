@@ -11,6 +11,7 @@ import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { canSeePartnerAttribution, isElevated, isFounder, roleAllows, UserWithRoles } from '../auth/role-utils';
 import { canReadStudents, canSeeAllStudents } from '../auth/client-access';
+import { canTransferOthers, transferDeniedMessage } from '../applications/application-access';
 import { ReferralsService } from '../partners/referrals.service';
 import { CABINET_BY_DIRECTION } from '../common/cabinets';
 import { parseCalendarDateUtc } from '../common/tj-time';
@@ -539,7 +540,27 @@ export class StudentsService {
     if (!roleAllows(user as any, 'students:assign', () => isElevated(user as any))) {
       throw new ForbiddenException('Переназначать менеджеров может только администрация');
     }
-    this.ensureCanEdit(await this.findOne(id), user);
+    const student = await this.findOne(id);
+    this.ensureCanEdit(student, user);
+    // Чужого клиента (за другим менеджером) — только основатель и «Студенты —
+    // передача чужих» (23.10.2026). Смотрим и на заявки студента: менеджер
+    // ниже переписывается и на них, и «свободный» студент с чужой заявкой —
+    // всё равно чужой клиент.
+    const transferAllowed = canTransferOthers(user as any, 'students');
+    if (!transferAllowed) {
+      const linked = await this.prisma.application.findMany({
+        where: { studentId: id },
+        select: { managerId: true, chinaManagerId: true },
+      });
+      for (const slot of ['managerId', 'chinaManagerId'] as const) {
+        if (patch[slot] === undefined) continue;
+        const requested = patch[slot] ?? null;
+        const owners = [student[slot], ...linked.map((a) => a[slot])].filter((o): o is string => !!o);
+        if (owners.some((o) => o !== user.id && o !== requested)) {
+          throw new ForbiddenException(transferDeniedMessage('students'));
+        }
+      }
+    }
 
     const data: any = {};
     if (patch.managerId !== undefined) {

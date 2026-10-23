@@ -117,7 +117,22 @@ export interface CreateStaffApplicationInput {
   birthday?: string;
   country?: Country;
   comment?: string;
+  /** Кому лид (23.10.2026). Не передан — тому, кто создаёт. */
+  managerId?: string;
+  /** Статус сразу в форме; не передан — «Новый лид». */
+  status?: ApplicationStatus;
 }
+
+/**
+ * Ответ POST /applications/staff. duplicate — номер уже был у открытой
+ * заявки: новой нет, в прежнюю добавлено «повторное обращение», её менеджер
+ * и статус не менялись (в ответе — только они). statusError — лид создан,
+ * но статус из формы поставить не удалось.
+ */
+export type CreateStaffApplicationResult = Application & {
+  duplicate?: boolean;
+  statusError?: string;
+};
 
 /**
  * Создать заявку («лид») из CRM. Публичный POST /applications/public — это
@@ -128,7 +143,7 @@ export interface CreateStaffApplicationInput {
  * Права на бэке: applications:create (RolesGuard + canCreateApplication).
  */
 export async function createStaffApplication(payload: CreateStaffApplicationInput) {
-  const { data } = await api.post<Application>('/applications/staff', payload);
+  const { data } = await api.post<CreateStaffApplicationResult>('/applications/staff', payload);
   return data;
 }
 

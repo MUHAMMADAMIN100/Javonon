@@ -17,6 +17,12 @@ type Props = {
   onReassign: (patch: { managerId?: string | null; chinaManagerId?: string | null }) => Promise<void>;
   /** Право менять менеджера (роль — своя галочка); по умолчанию — должность. */
   canAssign?: boolean;
+  /**
+   * Право отдать клиента, у которого уже есть ДРУГОЙ менеджер («… — передача
+   * чужих», lib/permissions canTransferOthers). Без него слот, занятый
+   * коллегой, не меняется: свободный и свой — как прежде, по canAssign.
+   */
+  canTransfer?: boolean;
 };
 
 function Slot({
@@ -25,6 +31,7 @@ function Slot({
   icon,
   manager,
   isAdmin,
+  canTransfer,
   meId,
   users,
   onPick,
@@ -35,6 +42,7 @@ function Slot({
   icon: string;
   manager: ManagerInfo | null | undefined;
   isAdmin: boolean;
+  canTransfer: boolean;
   meId?: string;
   users: User[];
   onPick: (kind: Slot, userId: string | null) => void;
@@ -43,6 +51,8 @@ function Slot({
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const isMine = manager?.id === meId;
+  // Слот, занятый коллегой, без «Передачи чужих» не трогаем (сервер — так же).
+  const locked = !!manager && !isMine && !canTransfer;
 
   useEffect(() => {
     if (!open) return;
@@ -61,7 +71,17 @@ function Slot({
           {isMine && <span className="manager-bar-you">{t('common.youLower')}</span>}
         </div>
       </div>
-      {isAdmin && (
+      {isAdmin && locked && (
+        <span
+          className="client-person-lock"
+          title={t('managerBar.locked')}
+          aria-label={t('managerBar.locked')}
+          data-testid={`manager-${kind}-locked`}
+        >
+          <Icon name="lock" size={15} />
+        </span>
+      )}
+      {isAdmin && !locked && (
         <div className="client-person-actions">
           <motion.button
             type="button"
@@ -123,7 +143,7 @@ function Slot({
   );
 }
 
-export default function ManagerBar({ manager, chinaManager, onReassign, canAssign }: Props) {
+export default function ManagerBar({ manager, chinaManager, onReassign, canAssign, canTransfer }: Props) {
   const me = useAuth((s) => s.user);
   const { toast } = useUI();
   const { t } = useT();
@@ -133,6 +153,7 @@ export default function ManagerBar({ manager, chinaManager, onReassign, canAssig
   // Менять менеджера: страница знает своё право роли (назначение менеджера
   // заявке, лиду или студенту); по умолчанию — руководство по должности.
   const isAdmin = canAssign ?? isElevated(me);
+  const transfer = canTransfer ?? isElevated(me);
 
   useEffect(() => {
     // Учитель академии не ведёт клиентов — в выборе менеджера его нет.
@@ -160,6 +181,7 @@ export default function ManagerBar({ manager, chinaManager, onReassign, canAssig
         icon="apartment"
         manager={manager}
         isAdmin={isAdmin}
+        canTransfer={transfer}
         meId={me?.id}
         users={users}
         onPick={pick}
@@ -171,6 +193,7 @@ export default function ManagerBar({ manager, chinaManager, onReassign, canAssig
         icon="flag"
         manager={chinaManager}
         isAdmin={isAdmin}
+        canTransfer={transfer}
         meId={me?.id}
         users={users}
         onPick={pick}

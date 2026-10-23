@@ -67,6 +67,10 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
     ['leads:update', 'update', 'изменение и перевод в работу'],
     ['leads:delete', 'delete', 'удаление и возврат из корзины'],
     ['leads:assign', 'extra', 'Назначение менеджера'],
+    // «Передача чужих» (23.10.2026): отдать лид, у которого уже есть ДРУГОЙ
+    // менеджер, — себе или третьему. «Назначение» раздаёт только свободных и
+    // своих (applications/application-access.ts, canTransferOthers).
+    ['leads:reassign', 'extra', 'Передача чужих'],
     ['leads:all', 'extra', 'Все, не только свои'],
   ]),
   ...section('CRM', 'applications', 'Заявки', [
@@ -75,6 +79,7 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
     ['applications:update', 'update', 'изменение и смена статуса'],
     ['applications:delete', 'delete', 'удаление и возврат из корзины'],
     ['applications:assign', 'extra', 'Назначение менеджера'],
+    ['applications:reassign', 'extra', 'Передача чужих'],
     ['applications:all', 'extra', 'Все, не только свои'],
   ]),
   ...section('CRM', 'students', 'Студенты', [
@@ -84,6 +89,7 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
     ['students:delete', 'delete'],
     ['students:documents', 'extra', 'Документы: загрузка и удаление'],
     ['students:assign', 'extra', 'Назначение менеджера'],
+    ['students:reassign', 'extra', 'Передача чужих'],
     ['students:password', 'extra', 'Новый пароль кабинета'],
     ['students:all', 'extra', 'Все, не только свои'],
   ]),

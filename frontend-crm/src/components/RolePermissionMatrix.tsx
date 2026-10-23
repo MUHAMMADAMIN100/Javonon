@@ -29,6 +29,17 @@ const SECTION_NEEDS: Record<string, string> = {
   academyStudents: 'groups:read',
   academyFlags: 'groups:read',
 };
+/**
+ * Пункты, которые без других не работают. «Передача чужих» — то же
+ * назначение менеджера, только клиента коллеги; чужого студента ещё надо
+ * видеть (лиды и заявки с «Назначением» и так видны все). Отмеченный пункт
+ * отмечает нужные, снятый нужный снимает зависящие.
+ */
+const REQUIRES: Record<string, string[]> = {
+  'leads:reassign': ['leads:assign'],
+  'applications:reassign': ['applications:assign'],
+  'students:reassign': ['students:assign', 'students:all'],
+};
 
 interface Section {
   key: string;
@@ -109,12 +120,16 @@ export default function RolePermissionMatrix({
       const s = sectionByKey.get(p.section);
       const read = p.kind === 'read' || !s ? undefined : readKeyOf(s);
       if (read) next.add(read);
+      for (const need of REQUIRES[p.key] ?? []) next.add(need);
     }
   };
   /** Снять пункты; снятый «Просмотр» снимает свой раздел и разделы, что без него не открыть. */
   const removeWithDependents = (next: Set<string>, keys: string[]) => {
     for (const key of keys) {
       next.delete(key);
+      for (const [dependent, needs] of Object.entries(REQUIRES)) {
+        if (needs.includes(key)) next.delete(dependent);
+      }
       for (const s of sectionByKey.values()) {
         const ownRead = s.items.find((p) => p.kind === 'read')?.key;
         if (key === ownRead || SECTION_NEEDS[s.key] === key) {
@@ -174,6 +189,7 @@ export default function RolePermissionMatrix({
       </div>
       <p className="perm-hint">{t('settings.roles.autoRead')}</p>
       <p className="perm-hint">{t('settings.roles.founderNote')}</p>
+      <p className="perm-hint" data-testid="perm-transfer-note">{t('settings.roles.transferNote')}</p>
 
       {visible.length === 0 && (
         <div className="perm-empty" data-testid="perm-empty">

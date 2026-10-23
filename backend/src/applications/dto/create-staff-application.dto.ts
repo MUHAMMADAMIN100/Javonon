@@ -9,8 +9,9 @@ import {
   MinLength,
   MaxLength,
 } from 'class-validator';
-import { ApplicationSource, ContactChannel, Country } from '@prisma/client';
+import { ApplicationSource, ApplicationStatus, ContactChannel, Country } from '@prisma/client';
 import { NO_HTML_RE, PHONE_RE } from './create-application.dto';
+import { ACTIVE_APPLICATION_STATUSES } from '../../common/application-status';
 
 /**
  * DTO ручного ввода лида сотрудником (экран /leads, роль «Квалификатор
@@ -131,4 +132,19 @@ export class CreateStaffApplicationDto {
     message: 'Недопустимый источник для лида, введённого вручную',
   })
   source?: StaffApplicationSource;
+
+  // Кому лид (23.10.2026). Пусто — тому, кто создаёт. Другому — только с
+  // правом раздавать лиды (проверяет ApplicationsService.createByStaff).
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  managerId?: string;
+
+  // Статус сразу в форме; по умолчанию «Новый лид». Только актуальные
+  // значения — как у смены статуса в карточке (UpdateApplicationDto).
+  @IsOptional()
+  @IsIn(ACTIVE_APPLICATION_STATUSES, {
+    message: 'status: допустимы только актуальные статусы — обновите страницу CRM',
+  })
+  status?: ApplicationStatus;
 }

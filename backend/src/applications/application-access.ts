@@ -97,6 +97,68 @@ export function canReassignApplicationManager(
   return isElevated(user);
 }
 
+/** Вид клиента для «Передачи чужих»: лид / заявка (по статусу) или студент. */
+export type TransferScope = 'leads' | 'applications' | 'students';
+
+/**
+ * Отдать клиента, у которого уже есть ДРУГОЙ менеджер, — себе или третьему
+ * (23.10.2026, решение основателя: менеджеры не забирают лиды друг у друга).
+ * Основатель — всегда; роль — только по «… — передача чужих» своего вида;
+ * сотрудник без роли — руководство, как и раньше (ТЗ §7).
+ *
+ * «Назначение менеджера» чужого не отдаёт: им раздают свободных и передают
+ * своих. Раньше одна эта галочка позволяла переписать на себя любой лид.
+ */
+export function canTransferOthers(user: UserWithRoles | undefined | null, scope: TransferScope): boolean {
+  if (!user) return false;
+  if (isFounder(user)) return true;
+  if (user.hasCustomRole) return hasPermission(user, `${scope}:reassign`);
+  return isElevated(user);
+}
+
+/** Вид заявки этого статуса: пока она лид — «Лиды», дальше — «Заявки». */
+export function transferScopeOf(status: ApplicationStatus | string | null | undefined): TransferScope {
+  return isLeadStatus(status) ? 'leads' : 'applications';
+}
+
+const TRANSFER_DENIED: Record<TransferScope, string> = {
+  leads: 'Лид закреплён за другим менеджером. Передать его может основатель или сотрудник с правом «Лиды — передача чужих».',
+  applications: 'Заявка закреплена за другим менеджером. Передать её может основатель или сотрудник с правом «Заявки — передача чужих».',
+  students: 'Студент закреплён за другим менеджером. Передать его может основатель или сотрудник с правом «Студенты — передача чужих».',
+};
+
+/** Текст отказа «клиент закреплён за другим менеджером». */
+export function transferDeniedMessage(scope: TransferScope): string {
+  return TRANSFER_DENIED[scope];
+}
+
+/**
+ * Что мешает поставить в слот менеджера заявки (TJ или CN) значение
+ * `requested`, если сейчас там `current`; null — можно. Одно правило для
+ * всех путей: строка списка, карточка, массовое назначение, воронка.
+ *  • значение не меняется — можно;
+ *  • слот занят ДРУГИМ — только canTransferOthers;
+ *  • слот свободный или мой — с правом раздавать (canReassignApplicationManager)
+ *    кому угодно, без него — взять свободный себе или снять себя.
+ */
+export function managerSlotChangeError(
+  user: UserWithRoles & { id: string },
+  status: ApplicationStatus | string | null | undefined,
+  current: string | null | undefined,
+  requested: string | null | undefined,
+): string | null {
+  const cur = current ?? null;
+  const next = requested ?? null;
+  if (cur === next) return null;
+  if (cur && cur !== user.id) {
+    const scope = transferScopeOf(status);
+    return canTransferOthers(user, scope) ? null : transferDeniedMessage(scope);
+  }
+  if (canReassignApplicationManager(user, status)) return null;
+  if (!cur) return next === user.id ? null : 'Можно взять лид только на себя';
+  return next === null ? null : 'Передать лид другому сотруднику может только админ';
+}
+
 /**
  * Видит ли пользователь ВЕСЬ раздел заявок, а не только назначенные на него.
  *

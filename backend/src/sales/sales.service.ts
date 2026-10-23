@@ -2,7 +2,14 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isElevated, isFounder } from '../auth/role-utils';
-import { canAccessApplication, canReassignApplicationManager, roleAllowsApplication } from '../applications/application-access';
+import {
+  canAccessApplication,
+  canReassignApplicationManager,
+  canTransferOthers,
+  roleAllowsApplication,
+  transferDeniedMessage,
+  transferScopeOf,
+} from '../applications/application-access';
 import { hasSeeAllGrant } from '../auth/client-access';
 import { isLeadStatus } from '../applications/application-access';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
@@ -164,6 +171,14 @@ export class SalesService {
       }
     } else if (!isElevated(requester) && app.managerId !== requester.id) {
       throw new ForbiddenException('Переназначать можно только свои заявки');
+    }
+    // Чужую (у неё уже есть другой менеджер) — только основатель и «Передача
+    // чужих» (23.10.2026): «Назначение менеджера» её больше не отдаёт.
+    if (
+      app.managerId && app.managerId !== requester.id && app.managerId !== newManagerId &&
+      !canTransferOthers(requester as any, transferScopeOf(app.status))
+    ) {
+      throw new ForbiddenException(transferDeniedMessage(transferScopeOf(app.status)));
     }
 
     if (newManagerId) {

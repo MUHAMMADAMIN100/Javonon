@@ -173,6 +173,39 @@ export function isLeadStatus(status?: string | null): boolean {
   return status === 'NEW_LEAD' || status === 'NEW';
 }
 
+/**
+ * Раздавать лиды / заявки ЛЮБОМУ сотруднику, а не только брать себе —
+ * зеркало backend canReassignApplicationManager: основатель; роль — её
+ * «Назначение менеджера» этого вида; без роли — руководство по должности.
+ */
+export function canAssignToAnyone(user: AccessUser | null | undefined, status: string | null | undefined): boolean {
+  if (!user) return false;
+  if (isFounder(user as any)) return true;
+  if (customRoleActive(user)) return hasPermission(user, `${isLeadStatus(status) ? 'leads' : 'applications'}:assign`);
+  return isElevated(user as any);
+}
+
+/** Вид клиента для «Передачи чужих». */
+export type TransferScope = 'leads' | 'applications' | 'students';
+
+/** Вид заявки этого статуса: пока она лид — «Лиды», дальше — «Заявки». */
+export function transferScopeOf(status: string | null | undefined): 'leads' | 'applications' {
+  return isLeadStatus(status) ? 'leads' : 'applications';
+}
+
+/**
+ * Отдать клиента, у которого уже есть ДРУГОЙ менеджер (себе или третьему) —
+ * зеркало backend canTransferOthers (23.10.2026): основатель; роль — «… —
+ * передача чужих»; без роли — руководство. «Назначение менеджера» чужого не
+ * отдаёт — только свободных и своих.
+ */
+export function canTransferOthers(user: AccessUser | null | undefined, scope: TransferScope): boolean {
+  if (!user) return false;
+  if (isFounder(user as any)) return true;
+  if (customRoleActive(user)) return hasPermission(user, `${scope}:reassign`);
+  return isElevated(user as any);
+}
+
 /** «Все» того вида, к которому относится заявка с этим статусом. */
 export function canSeeAllOfApplication(user: AccessUser | null | undefined, status?: string | null): boolean {
   return canSeeAllClients(user, isLeadStatus(status) ? 'leads' : 'applications');

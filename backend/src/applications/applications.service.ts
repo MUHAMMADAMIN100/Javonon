@@ -15,8 +15,11 @@ import {
   canReassignApplicationManager,
   canSeeAllApplications,
   canTouchApplicationManager,
+  canTransferOthers,
   clientRoomForStatus,
+  managerSlotChangeError,
   roleAllowsApplication,
+  transferScopeOf,
 } from './application-access';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TelegramService } from '../telegram/telegram.service';
@@ -347,14 +350,14 @@ export class ApplicationsService {
    *
    * opts.autoAssignManager — round-robin по SALES_MANAGER. Для лендинга
    * true: лид приходит ночью и обязан кому-то достаться сразу. Для ручного
-   * ввода false: менеджера выбирает квалификатор прямо в строке списка, а
-   * авто-назначение перебило бы его выбор ещё до того, как он его сделает,
-   * и не-elevated сотрудник потом не смог бы переназначить занятый слот
-   * (см. assignManager).
+   * ввода false: менеджера выбирают в самой форме (opts.managerId), а
+   * авто-назначение перебило бы этот выбор.
+   *
+   * opts.managerId — менеджер ручного лида (выбран в форме или сам автор).
    */
   private async persistNewLead(
     dto: CreateApplicationDto | CreateStaffApplicationDto,
-    opts: { source: ApplicationSource; autoAssignManager: boolean },
+    opts: { source: ApplicationSource; autoAssignManager: boolean; managerId?: string | null },
   ): Promise<{ app: Prisma.ApplicationGetPayload<{}>; duplicate: boolean }> {
     // Валидируем дату рождения ДО любых side-effect'ов (создание заявки,
     // назначение менеджера, реферальная атрибуция) — иначе при 400 в БД
@@ -410,7 +413,7 @@ export class ApplicationsService {
   private async insertLead(
     db: Prisma.TransactionClient | PrismaService,
     dto: CreateApplicationDto | CreateStaffApplicationDto,
-    opts: { source: ApplicationSource; autoAssignManager: boolean },
+    opts: { source: ApplicationSource; autoAssignManager: boolean; managerId?: string | null },
     birthday: Date | null,
   ) {
 
@@ -467,7 +470,7 @@ export class ApplicationsService {
         comment: dto.comment?.trim() || null,
         programId: (dto as any).programId || null,
         source: opts.source,
-        managerId: assignedManagerId,
+        managerId: opts.managerId ?? assignedManagerId,
         pipelineId,
         pipelineStageId,
       },
@@ -596,8 +599,10 @@ export class ApplicationsService {
    *    набранный вручную лид — тот же спам, только в БД.
    *  • ЕСТЬ realtime-эмит: список /leads и доска заявок должны показать
    *    новую строку немедленно, в том числе у остальных сотрудников.
-   *  • НЕТ авто-назначения менеджера: его выбирает квалификатор в строке
-   *    списка (см. persistNewLead, opts.autoAssignManager).
+   *  • НЕТ авто-назначения менеджера. С 23.10.2026 менеджера выбирают
+   *    прямо в форме; не выбрали — лид того, кто его создал.
+   *  • Статус можно поставить сразу в форме — это та же смена статуса, что
+   *    в карточке (update), только без SMS клиенту.
    *
    * Права проверяются в контроллере (RolesGuard + canCreateApplication),
    * здесь — вторым рубежом, потому что RolesGuard на этом контроллере
@@ -608,16 +613,92 @@ export class ApplicationsService {
     if (!canCreateApplication(user as any)) {
       throw new ForbiddenException('Недостаточно прав для создания заявки');
     }
+    // Кому лид: выбран в форме — ему, не выбран — автору. Отдать другому
+    // может тот, кто раздаёт лиды («Лиды — назначение менеджера», без роли —
+    // руководство); остальные создают лид только на себя.
+    const managerId = dto.managerId?.trim() || user.id;
+    let manager: { id: string; fullName: string } | null = null;
+    if (managerId !== user.id) {
+      if (!canReassignApplicationManager(user as any, ApplicationStatus.NEW_LEAD)) {
+        throw new ForbiddenException('Отдать лид другому может только сотрудник с правом «Лиды — назначение менеджера»');
+      }
+      const target = await this.prisma.user.findUnique({
+        where: { id: managerId },
+        select: { id: true, fullName: true, isActive: true },
+      });
+      if (!target) throw new NotFoundException('Менеджер не найден');
+      if (target.isActive === false) throw new BadRequestException('Менеджер уволен');
+      manager = { id: target.id, fullName: target.fullName };
+    }
+    // Статус не «Новый лид» — это перевод лида дальше: «Лиды — изменение и
+    // перевод в работу», как в карточке.
+    const status = dto.status ?? ApplicationStatus.NEW_LEAD;
+    const moves = !NEW_LEAD_APPLICATION_STATUSES.includes(status);
+    if (moves && !roleAllowsApplication(user as any, ApplicationStatus.NEW_LEAD, 'update')) {
+      throw new ForbiddenException('Нет права переводить лид в работу');
+    }
+
     const { app, duplicate } = await this.persistNewLead(dto, {
       source: dto.source || STAFF_DEFAULT_SOURCE,
       autoAssignManager: false,
+      managerId,
     });
     if (duplicate) {
+      // С этим номером уже есть открытая заявка: новой нет, в прежнюю —
+      // «повторное обращение». Её менеджера и статус форма НЕ трогает, иначе
+      // чужого клиента можно было бы забрать, набрав его номер заново. В
+      // ответе — только то, что нужно подсказке: чужую заявку целиком автор
+      // может и не видеть.
       await this.notifyRepeat(app);
-      return { ...app, duplicate: true };
+      const owner = app.managerId
+        ? await this.prisma.user.findUnique({ where: { id: app.managerId }, select: { id: true, fullName: true } })
+        : null;
+      return {
+        id: app.id,
+        fullName: app.fullName,
+        status: app.status,
+        managerId: app.managerId,
+        manager: owner,
+        duplicate: true,
+      };
     }
     this.realtime.emitApplication('application:new', app, { application: app });
-    return app;
+
+    if (manager) {
+      // Кто кому отдал лид — в журнал, как при назначении из списка; новому
+      // менеджеру — уведомление (ведёт в карточку лида).
+      this.activity
+        .log({
+          actorId: user.id,
+          actorRole: user.role,
+          action: 'MANAGER_CHANGE',
+          studentId: null,
+          studentName: app.fullName,
+          details: `${managerChangeDetails('🇹🇯', '—', manager.fullName)} (новый лид)`,
+        })
+        .catch(() => undefined);
+      this.notifications
+        .notifyUser(manager.id, {
+          type: 'MANAGER_CHANGE',
+          title: 'Вам передан лид',
+          message: `${app.fullName}, ${app.phone}`,
+          payload: { applicationId: app.id },
+        })
+        .catch(() => undefined);
+    }
+
+    if (moves) {
+      try {
+        // Тот же путь, что смена статуса в карточке (ученик для «В обработке»,
+        // журнал, живое обновление), только без SMS: сотрудник и так на линии.
+        return await this.update(app.id, { status } as UpdateApplicationDto, user, { trusted: true, silent: true });
+      } catch (e: any) {
+        // Лид уже сохранён — не теряем его из-за статуса, а говорим, что не так.
+        const msg = e?.response?.message ?? e?.message;
+        return { ...(await this.findOne(app.id)), statusError: String(msg || 'Статус не изменён') };
+      }
+    }
+    return this.findOne(app.id);
   }
 
   /**
@@ -926,11 +1007,20 @@ export class ApplicationsService {
     throw new ForbiddenException('Удалять и возвращать чужие заявки может только руководство');
   }
 
-  async update(id: string, dto: UpdateApplicationDto, user: CurrentUser) {
+  async update(
+    id: string,
+    dto: UpdateApplicationDto,
+    user: CurrentUser,
+    // Только для вызова из createByStaff: права уже проверены там (лид только
+    // что создан этим же человеком), а SMS клиенту при создании не шлём.
+    opts: { trusted?: boolean; silent?: boolean } = {},
+  ) {
     const existing = await this.findOne(id);
-    this.ensureCanEdit(existing, user);
-    if (!roleAllowsApplication(user as any, existing.status, 'update')) {
-      throw new ForbiddenException('Нет права изменять такие записи');
+    if (!opts.trusted) {
+      this.ensureCanEdit(existing, user);
+      if (!roleAllowsApplication(user as any, existing.status, 'update')) {
+        throw new ForbiddenException('Нет права изменять такие записи');
+      }
     }
 
     // Номер меняют на номер другой открытой заявки — это дубль, не даём.
@@ -1109,7 +1199,7 @@ export class ApplicationsService {
       // проверку держим общей — правило «шлём, только если есть что сказать»
       // одно на оба места вызова.
       const text = this.smsTextForStatus(existing.status, ApplicationStatus.IN_PROCESSING);
-      if (text) {
+      if (text && !opts.silent) {
         this.resolvePhone(updated).then((phone) => {
           if (phone) this.sms.send(phone, text).catch(() => undefined);
         }).catch(() => undefined);
@@ -1172,7 +1262,7 @@ export class ApplicationsService {
     // строку и пишется в ActivityLog ниже, но клиента не касается: SMS про
     // него не уходит (smsTextForStatus вернёт null). ActivityLog при этом
     // ведём по-прежнему на КАЖДУЮ смену — это внутренняя история заявки.
-    if (dto.status && dto.status !== existing.status) {
+    if (dto.status && dto.status !== existing.status && !opts.silent) {
       const text = this.smsTextForStatus(existing.status, dto.status);
       if (text) {
         this.resolvePhone(updated).then((phone) => {
@@ -1243,29 +1333,20 @@ export class ApplicationsService {
     if (!roleAllowsApplication(user as any, existing.status, 'assign')) {
       throw new ForbiddenException('Недостаточно прав для назначения менеджера');
     }
-    // По ТЗ §7: переназначение между сотрудниками — ТОЛЬКО ADMIN/FOUNDER.
-    // Не-elevated (SALES_MANAGER/CLIENT_MANAGER) могут:
-    //   • взять неназначенный лид себе (managerId/chinaManagerId === null)
-    //   • снять себя с лида (присвоить null)
-    // Но НЕ могут передать чужой лид кому-то другому. Это закрывает дыру
-    // когда SM мог отнять чужого клиента, и аудит-замечание из код-ревью.
-    // Рубеж 2 — ОБЪЁМ прав. Раньше здесь стоял голый isElevated(), слепой к
-    // hasCustomRole: квалификатор лидов с applications:assign, но с
-    // технической подложкой SALES_MANAGER, попадал в ветку «не-elevated» и
-    // мог взять лид только на себя — то есть не мог распределить ни одного,
-    // а сам пермишен не значил ничего (см. application-access.ts).
-    if (!canReassignApplicationManager(user as any, existing.status)) {
-      const slot: 'managerId' | 'chinaManagerId' | null =
-        patch.managerId !== undefined ? 'managerId' :
-        patch.chinaManagerId !== undefined ? 'chinaManagerId' : null;
-      if (!slot) {
-        throw new ForbiddenException('Нет изменений');
-      }
-      this.assertOwnSlotChangeOnly(
-        user,
-        (existing as any)[slot] as string | null,
-        patch[slot] as string | null | undefined,
-      );
+    // Рубеж 2 — ОБЪЁМ прав, по каждому слоту (managerSlotChangeError в
+    // application-access.ts):
+    //   • свободный — взять себе; с правом раздавать — отдать кому угодно;
+    //   • свой — снять себя; с правом раздавать — отдать другому;
+    //   • занятый ДРУГИМ — только основатель и «… — передача чужих»
+    //     (23.10.2026: менеджеры не забирают лиды друг у друга; раньше это
+    //     открывало одно «Назначение менеджера»). Без роли — руководство (ТЗ §7).
+    const slots = (['managerId', 'chinaManagerId'] as const).filter((s) => patch[s] !== undefined);
+    if (slots.length === 0) {
+      throw new ForbiddenException('Нет изменений');
+    }
+    for (const slot of slots) {
+      const error = managerSlotChangeError(user as any, existing.status, existing[slot], patch[slot]);
+      if (error) throw new ForbiddenException(error);
     }
 
     const data: any = {};
@@ -1344,40 +1425,6 @@ export class ApplicationsService {
   }
 
   /**
-   * ОБЪЁМ прав сотрудника БЕЗ права раздавать лиды (см.
-   * canReassignApplicationManager): взять свободный лид себе или снять
-   * себя — и только. Чужой лид не трогает вообще, свой передать другому не
-   * может (ТЗ §7: переназначение между сотрудниками — только руководство).
-   *
-   * Вынесено из assignManager в отдельный метод, потому что то же правило
-   * обязано стоять и перед массовым назначением: вторая копия условия
-   * разошлась бы с первой при первой же правке, а массовая ручка — это
-   * способ нарушить правило сразу на двадцати пяти лидах.
-   */
-  private assertOwnSlotChangeOnly(
-    user: CurrentUser,
-    currentOwner: string | null,
-    requested: string | null | undefined,
-  ) {
-    // 1) Слот пустой → можно присвоить только себе.
-    if (!currentOwner) {
-      if (requested !== null && requested !== user.id) {
-        throw new ForbiddenException('Можно взять лид только на себя');
-      }
-      return;
-    }
-    // 2) Слот занят:
-    //    a) текущий владелец — я → могу снять (null), но НЕ могу передать другому
-    //    b) текущий владелец — не я → не могу трогать вообще
-    if (currentOwner !== user.id) {
-      throw new ForbiddenException('Лид назначен другому сотруднику — обратись к админу');
-    }
-    if (requested !== null && requested !== user.id) {
-      throw new ForbiddenException('Передать лид другому сотруднику может только админ');
-    }
-  }
-
-  /**
    * МАССОВОЕ НАЗНАЧЕНИЕ МЕНЕДЖЕРА (экран /leads: отметил галочками пачку
    * лидов → выбрал менеджера → «Назначить»).
    *
@@ -1452,8 +1499,6 @@ export class ApplicationsService {
       throw new BadRequestException('Сотрудник деактивирован — назначить на него лиды нельзя');
     }
 
-    const canReassign = canReassignApplicationManager(user as any);
-
     const { changed, unchangedCount, reassignedCount } = await this.prisma.$transaction(
       async (tx) => {
         // Блокируем строки ДО чтения: решение «кого переназначаем» и сама
@@ -1482,9 +1527,22 @@ export class ApplicationsService {
           if (!roleAllowsApplication(user as any, app.status, 'assign')) {
             throw new ForbiddenException('Недостаточно прав для назначения менеджера');
           }
-          if (!canReassign || !canReassignApplicationManager(user as any, app.status)) {
-            this.assertOwnSlotChangeOnly(user, app.managerId, managerId);
-          }
+        }
+        // Чужие (за другим менеджером) без «Передачи чужих» — отказ всей
+        // пачке с их числом: пачка атомарна, «назначить, что можно» не делаем.
+        const foreign = existing.filter(
+          (a) => a.managerId && a.managerId !== user.id && a.managerId !== managerId
+            && !canTransferOthers(user as any, transferScopeOf(a.status)),
+        );
+        if (foreign.length > 0) {
+          throw new ForbiddenException(
+            `Среди выбранных есть чужие лиды (${foreign.length}) — они закреплены за другими менеджерами. ` +
+              'Передать их может основатель или сотрудник с правом «Передача чужих». Снимите с них галочки.',
+          );
+        }
+        for (const app of existing) {
+          const error = managerSlotChangeError(user as any, app.status, app.managerId, managerId);
+          if (error) throw new ForbiddenException(error);
         }
 
         const toChange = existing.filter((a) => a.managerId !== managerId);
