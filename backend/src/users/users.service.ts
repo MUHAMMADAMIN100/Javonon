@@ -29,7 +29,7 @@ export type ProfileView = { pay: boolean; personal: boolean; money: boolean };
 export function redactProfile(profile: any, view: ProfileView) {
   if (!view.pay) {
     profile.salary = null;
-    profile.penalties = { list: [], pendingTotal: null, hidden: true };
+    profile.penalties = { list: [], monthTotal: null, hidden: true };
     if (profile.user) {
       profile.user = { ...profile.user, baseSalary: null, hourlyRate: null, bonusPercent: null };
     }
@@ -61,7 +61,7 @@ export function redactProfile(profile: any, view: ProfileView) {
   }
   return profile;
 }
-import { tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
+import { tjCalendarDay, tjStartOfMonth, tjEndOfMonth, tjYMD } from '../common/tj-time';
 import { SettingsService } from '../settings/settings.service';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 import {
@@ -77,6 +77,26 @@ import {
   performHandover,
   validateHandoverTarget,
 } from './handover';
+
+/**
+ * Табель за месяц профиля — по времени прихода (clockIn), как в расчёте
+ * зарплаты (TimeTrackingService.summaryForUser). Не по TimeEntry.date: это
+ * DATE, а граница месяца по Душанбе (00:00 1-го = 19:00 UTC накануне)
+ * усекалась до вчерашнего числа, и в «текущий месяц» попадал последний день
+ * прошлого месяца.
+ */
+function monthTimeWhere(userId: string, from: Date, to: Date) {
+  return { userId, clockIn: { gte: from, lte: to } };
+}
+
+/**
+ * Штрафы месяца профиля — все с датой в месяце, и уже удержанные из
+ * зарплаты, и ещё нет. Penalty.date — DATE, поэтому границы — календарные
+ * дни (tjCalendarDay), как в PenaltiesService.
+ */
+function monthPenaltyWhere(userId: string, from: Date, to: Date) {
+  return { userId, date: { gte: tjCalendarDay(from), lte: tjCalendarDay(to) } };
+}
 
 @Injectable()
 export class UsersService {
@@ -196,10 +216,10 @@ export class UsersService {
       id: true, fullName: true, phone: true, status: true, country: true,
       createdAt: true, updatedAt: true,
     } as const;
-    const [time, sales, ownApplications, enrolled, pendingPenalties] = await Promise.all([
+    const [time, sales, ownApplications, enrolled, penalties] = await Promise.all([
       this.prisma.timeEntry.findMany({
-        where: { userId: id, date: { gte: monthStart, lte: monthEnd } },
-        orderBy: { date: 'desc' },
+        where: monthTimeWhere(id, monthStart, monthEnd),
+        orderBy: { clockIn: 'desc' },
         select: {
           id: true, date: true, clockIn: true, lunchOut: true, lunchIn: true, clockOut: true,
           status: true, totalMinutes: true, totalLunchMinutes: true, lateMinutes: true,
@@ -224,11 +244,11 @@ export class UsersService {
         select: appSelect,
       }),
       this.prisma.penalty.findMany({
-        where: { userId: id, applied: false },
-        orderBy: { date: 'desc' },
+        where: monthPenaltyWhere(id, monthStart, monthEnd),
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       }),
     ]);
-    return { periodStart: monthStart, periodEnd: monthEnd, time, sales, ownApplications, enrolled, pendingPenalties };
+    return { periodStart: monthStart, periodEnd: monthEnd, time, sales, ownApplications, enrolled, penalties };
   }
 
   /**
@@ -251,7 +271,7 @@ export class UsersService {
       d.moneyHidden = true;
     }
     if (!view.pay) {
-      d.pendingPenalties = [];
+      d.penalties = [];
       d.payHidden = true;
     }
     return d;
@@ -324,7 +344,7 @@ export class UsersService {
       documents,
       salaryRecords,
       penalties,
-      pendingPenaltiesAmount,
+      monthPenaltiesAmount,
       salesMonthMap,
       salesYearMap,
       timeMonth,
@@ -349,16 +369,13 @@ export class UsersService {
         take: 50,
       }),
       this.prisma.penalty.aggregate({
-        where: { userId: id, applied: false },
+        where: monthPenaltyWhere(id, monthStart, monthEnd),
         _sum: { amount: true },
       }),
       managerSales(this.prisma, [id], { from: monthStart, to: monthEnd }),
       managerSales(this.prisma, [id], { from: yearStart }),
       this.prisma.timeEntry.aggregate({
-        where: {
-          userId: id,
-          date: { gte: monthStart, lte: monthEnd },
-        },
+        where: monthTimeWhere(id, monthStart, monthEnd),
         // overtimeMinutes не суммируем — переработка убрана из системы.
         _sum: { totalMinutes: true, lateMinutes: true },
         _count: true,
@@ -436,8 +453,10 @@ export class UsersService {
         bonusProgress: managerBonusProgress(bonusVolume),
       },
       penalties: {
+        /** История — последние 50 за всё время (таблица внизу профиля). */
         list: penalties,
-        pendingTotal: pendingPenaltiesAmount._sum.amount || 0,
+        /** Плитка «Штрафы»: сумма за текущий месяц, удержанные и нет. */
+        monthTotal: monthPenaltiesAmount._sum.amount || 0,
       },
       // «Продажи» — по правилу зарплаты (common/manager-sales.ts);
       // ручные приходы — отдельно (monthOtherIncome), валюты — monthOther.

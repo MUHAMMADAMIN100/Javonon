@@ -200,7 +200,7 @@ export default function ProfileMonthDetails({
         );
       }
       case 'penalties': {
-        const rows = d?.pendingPenalties;
+        const rows = d?.penalties;
         const reasonLabel = (r: string) => {
           const k = `penalty.reason.${r}`;
           return t(k) !== k ? t(k) : r;
@@ -218,6 +218,7 @@ export default function ProfileMonthDetails({
               { key: 'reason', label: t('profile.penaltyCol.reason'), value: (p) => reasonLabel(p.reason) },
               { key: 'amount', label: t('profile.penaltyCol.amount'), type: 'number', align: 'right', value: (p) => Number(p.amount), render: (p) => fmtMoney(Number(p.amount)) },
               { key: 'details', label: t('app.field.comment'), value: (p) => p.details },
+              { key: 'applied', label: t('profile.penaltyCol.applied'), type: 'number', value: (p) => (p.applied ? 1 : 0), render: (p) => (p.applied ? '✓' : '—') },
             ]}
             rowKey={(p) => p.id}
           />

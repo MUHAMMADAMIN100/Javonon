@@ -96,8 +96,9 @@ export interface FullProfile {
       comment?: string | null;
       applied: boolean;
     }>;
-    /** null — оклады и штрафы роли не видны (payHidden). */
-    pendingTotal: number | null;
+    /** Плитка «Штрафы»: сумма за текущий месяц, удержанные и нет.
+     *  null — оклады и штрафы роли не видны (payHidden). */
+    monthTotal: number | null;
   };
   sales: {
     /** null — суммы роли не видны (moneyHidden); число сделок есть всегда. */
@@ -167,7 +168,8 @@ export interface MonthDetails {
   }>;
   ownApplications: MonthApplication[];
   enrolled: MonthApplication[];
-  pendingPenalties: Array<{ id: string; date: string; reason: string; amount: number; details: string; applied: boolean }>;
+  /** Штрафы с датой в текущем месяце, и удержанные из зарплаты (applied), и нет. */
+  penalties: Array<{ id: string; date: string; reason: string; amount: number; details: string; applied: boolean }>;
   moneyHidden?: boolean;
   payHidden?: boolean;
 }

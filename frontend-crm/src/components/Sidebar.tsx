@@ -127,10 +127,8 @@ const MOBILE_MQ = '(max-width: 900px)';
  * момент, когда пользователь тыкал пальцем в экран. А один тап там
  * разворачивается в pointerenter(touch) → touchstart → mouseover →
  * mouseenter → click, то есть ОДИН палец запускал и hover-обработчик, и
- * клик: повторный тап снимал пин, но тем же движением возвращал hover —
- * панель не закрывалась, точка «.pinned» при этом гасла, и картинка
- * противоречила сама себе. mouseleave палец не шлёт никогда, так что
- * отложенное закрытие тоже не срабатывало.
+ * клик, а mouseleave палец не шлёт никогда: открытое «наведением» пальца
+ * отложенным закрытием не снималось.
  *
  * Отсюда правило: «мышь ли это» — свойство КОНКРЕТНОГО взаимодействия
  * (PointerEvent.pointerType), а не устройства.
@@ -185,23 +183,15 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
 
   // ===== Десктоп: hover-панель =====
   //
-  // Два независимых источника «какая группа раскрыта»:
-  //   hoverGroupKey  — временный: наведение/фокус, снимается уходом курсора;
-  //   pinnedGroupKey — липкий: клик по иконке, живёт до клика по другой
-  //                    иконке (или повторного по той же) и переживает
-  //                    навигацию.
-  // Видимая группа = hover ?? pinned: ЖИВОЕ НАВЕДЕНИЕ СИЛЬНЕЕ ПИНА. Обратный
-  // приоритет превращал закреплённый rail в мёртвый: при пине на «Продажах»
-  // наведение на «Финансы» не меняло ни заголовок панели, ни её пункты, и
-  // сама иконка не получала даже класса .preview — нулевая обратная связь.
-  // Пин при этом не теряется: он остаётся фолбэком, к которому панель
-  // возвращается по уходу курсора, а какая группа закреплена — видно по
-  // точке .rail-btn.pinned, которая по-прежнему висит на pinnedGroupKey.
+  // Раскрытая группа одна — hoverGroupKey. Её открывают наведение мышью,
+  // фокус с клавиатуры и нажатие на иконку (тап пальцем), а закрывают уход
+  // курсора с меню, Escape, тап мимо меню и выбор пункта. Закрепления нет
+  // (решение заказчика 31.10.2026): раньше клик «пинил» панель, и она
+  // висела поверх страницы и после ухода мыши, и после перехода.
   // Панель — ОВЕРЛЕЙ (position: absolute поверх контента), в потоке всегда
   // только 64px rail'а: канбан и широкие таблицы не должны перекладываться
   // на каждое движение мыши.
   const [hoverGroupKey, setHoverGroupKey] = useState<string | null>(null);
-  const [pinnedGroupKey, setPinnedGroupKey] = useState<string | null>(null);
 
   // ===== Roving tabindex по rail'у (паттерн WAI-ARIA toolbar) =====
   //
@@ -250,7 +240,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   /** Фокус на первый пункт раскрытой панели.
    *
    *  requestAnimationFrame: панель (или её новое содержимое) монтируется тем
-   *  же коммитом React, который планируют setHoverGroupKey/togglePin, — на
+   *  же коммитом React, который планирует setHoverGroupKey, — на
    *  момент обработчика узла в DOM ещё нет. preventScroll: первый пункт
    *  всегда наверху свежесмонтированного nav'а, скроллить нечего, а панель
    *  в этот момент ещё едет по x и могла бы спровоцировать сдвиг. */
@@ -277,12 +267,11 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   // снимаем сразу после (обработчик focus'а успевает отработать внутри).
   const suppressFocusOpen = useRef(false);
 
-  // Тип указателя последнего pointerdown по иконке rail'а.
-  //
-  // У click'а pointerType читать нельзя: в WebKit click приходит обычным
-  // MouseEvent, где такого поля нет вовсе, и настоящая мышь определилась бы
-  // как палец. pointerdown же — всегда PointerEvent и всегда предшествует
-  // click'у (при тапе он приходит ещё до эмулированных mouse-событий).
+  // Тип указателя последнего pointerdown/pointermove над меню. Chrome сразу
+  // после тапа пальцем шлёт совместимые mouseout/mouseleave (замерено:
+  // pointerdown(touch) → … → click → mouseleave через ~2 мс), и без этой
+  // сверки открытая тапом панель закрывалась бы через PANEL_CLOSE_DELAY_MS.
+  // Уход курсора закрывает панель, только если меню трогали мышью.
   const lastPointerType = useRef<string>('mouse');
 
   // Группы — только разрешённые, уже отфильтрованные по правам.
@@ -298,30 +287,22 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   const hit = resolveRoute(loc.pathname);
   const activeGroupKey = hit && groups.some((g) => g.key === hit.groupKey) ? hit.groupKey : null;
 
-  // hoverGroupKey/pinnedGroupKey — это СТРОКИ-ключи, а не ссылки на группы,
-  // и набор групп пересобирается на каждое обновление `user`: ответ
-  // /auth/me, смена custom-роли, вход под другим пользователем. visibleGroups
-  // выкидывает группу, у которой не осталось разрешённых пунктов, поэтому
-  // закреплённая группа может из набора ИСЧЕЗНУТЬ.
-  //
-  // Стухший ключ нельзя пускать в `??` напрямую: он не null, значит второй
-  // операнд не консультируется вообще, а find по мёртвому ключу даёт
-  // undefined — панель просто переставала открываться. Сверяем ОБА ключа с
-  // текущим набором прямо в рендере: это срабатывает в том же кадре, до
-  // эффектов. Порядок операндов роли не играет — дырявым может оказаться
-  // любой из двух.
+  // hoverGroupKey — это СТРОКА-ключ, а не ссылка на группу, и набор групп
+  // пересобирается на каждое обновление `user`: ответ /auth/me, смена
+  // custom-роли, вход под другим пользователем. visibleGroups выкидывает
+  // группу, у которой не осталось разрешённых пунктов, поэтому раскрытая
+  // группа может из набора ИСЧЕЗНУТЬ. Сверяем ключ с текущим набором прямо в
+  // рендере: это срабатывает в том же кадре, до эффектов.
   const isKnownGroup = (key: string | null) => !!key && groups.some((g) => g.key === key);
-  const pinnedValid = isKnownGroup(pinnedGroupKey) ? pinnedGroupKey : null;
-  const hoverValid = isKnownGroup(hoverGroupKey) ? hoverGroupKey : null;
 
   // Раскрытая группа. null ⇒ панели в DOM нет, виден только rail —
   // прежнего фолбэка «|| groups[0]» здесь быть не должно, иначе панель
   // никогда не схлопнется.
-  const visibleGroupKey = hoverValid ?? pinnedValid;
+  const visibleGroupKey = isKnownGroup(hoverGroupKey) ? hoverGroupKey : null;
 
   // Единственная иконка rail'а с tabIndex=0. Порядок фолбэков: последняя
   // сфокусированная → активная по роуту → первая доступная. Сверка с groups
-  // обязательна по той же причине, что и pinnedValid/hoverValid: группа могла
+  // обязательна по той же причине, что и у visibleGroupKey: группа могла
   // исчезнуть из меню после смены прав, и rail остался бы вообще без
   // остановки Tab — сайдбар выпал бы из клавиатурного обхода целиком.
   const railTabKey =
@@ -355,7 +336,6 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       cancelClose();
       setHoverGroupKey(null);
-      setPinnedGroupKey(null);
 
       // Фокус возвращаем на иконку ТОЛЬКО если он и был внутри сайдбара,
       // т.е. панель открыли с клавиатуры (Tab → onFocus). При открытии
@@ -385,30 +365,48 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     return () => document.removeEventListener('keydown', onKey);
   }, [visibleGroupKey, cancelClose]);
 
+  // Тап (или клик) мимо меню закрывает панель. Мышь сюда почти не доходит —
+  // её панель закрывается уходом курсора, — это для пальца: mouseleave палец
+  // не шлёт, и открытая тапом панель иначе висела бы поверх страницы.
+  // Фаза перехвата: stopPropagation в контенте страницы не должен её глушить.
+  useEffect(() => {
+    if (!visibleGroupKey) return;
+    const onDown = (e: PointerEvent) => {
+      const region = regionRef.current;
+      if (region && e.target instanceof Node && region.contains(e.target)) return;
+      cancelClose();
+      setHoverGroupKey(null);
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [visibleGroupKey, cancelClose]);
+
+  // Переход на другую страницу закрывает панель, как бы он ни случился
+  // (пункт меню, Enter, «назад» в браузере): поверх новой страницы панель не
+  // висит. Только pathname — фильтры списков меняют ?query постоянно.
+  useEffect(() => {
+    cancelClose();
+    setHoverGroupKey(null);
+  }, [loc.pathname, cancelClose]);
+
   // Переключение на мобильный брейкпоинт размонтирует rail вместе с
-  // панелью — состояние hover/pin осталось бы висеть и при возврате на
+  // панелью — раскрытая группа осталась бы висеть и при возврате на
   // десктоп панель открылась бы сама.
   useEffect(() => {
     if (!isMobile) return;
     cancelClose();
     setHoverGroupKey(null);
-    setPinnedGroupKey(null);
   }, [isMobile, cancelClose]);
 
   // Тот же случай, но для смены НАБОРА ГРУПП (обновление прав), а не
-  // брейкпоинта: рендер уже защищён pinnedValid/hoverValid, здесь чистим сам
-  // state, чтобы мёртвый ключ не жил в нём бесконечно. Без этого повторный
-  // клик по вернувшейся группе попал бы в ветку `prev === g.key` в togglePin
-  // и «распинил» бы её вместо закрепления.
+  // брейкпоинта: рендер уже защищён сверкой visibleGroupKey, здесь чистим сам
+  // state, чтобы мёртвый ключ не жил в нём бесконечно.
   //
   // groups.length === 0 пропускаем намеренно: пустой набор бывает только
-  // пока hydrated=false (например, на разлогине), и это не повод стирать пин.
+  // пока hydrated=false (например, на разлогине).
   useEffect(() => {
     if (groups.length === 0) return;
-    const alive = (prev: string | null) =>
-      prev && !groups.some((g) => g.key === prev) ? null : prev;
-    setPinnedGroupKey(alive);
-    setHoverGroupKey(alive);
+    setHoverGroupKey((prev) => (prev && !groups.some((g) => g.key === prev) ? null : prev));
   }, [groups]);
 
   // После навигации табируемой становится иконка ТЕКУЩЕГО раздела: вернувшись
@@ -539,9 +537,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     switch (e.key) {
       // → — «войти в раскрытый узел», как в дереве. Панель почти всегда уже
       // раскрыта фокусом на этой иконке, но после Escape фокус остаётся на
-      // ней при закрытой панели — тогда сначала раскрываем. hover, а не пин:
-      // пин остаётся жестом мыши, а hover сильнее его и покажет ровно ту
-      // группу, на которой стоит фокус.
+      // ней при закрытой панели — тогда сначала раскрываем.
       case 'ArrowRight':
         e.preventDefault();
         cancelClose();
@@ -561,16 +557,16 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
 
   /** Курсор ушёл со ВСЕГО региона (rail + панель — панель является DOM-
    *  потомком .sidebar-split, поэтому переезд «rail → панель» mouseleave
-   *  не даёт). Закрываем с паузой. Снимается ТОЛЬКО hover: если группа
-   *  закреплена, панель не закрывается, а возвращается к закреплённой —
-   *  превью другой группы живёт ровно столько, сколько курсор на ней. */
+   *  не даёт). Закрываем с паузой — как бы панель ни открыли: наведением
+   *  или нажатием на иконку. */
   const scheduleClose = () => {
-    // Проверки на «устройство без hover» тут нет намеренно: hover теперь
-    // выставляет только мышь (или Tab), поэтому чистить его по mouseleave
-    // безопасно на любом устройстве. С прежним !canHover настоящая мышь на
-    // устройстве с тач-основным указателем открыла бы панель и уже не
-    // закрыла бы её.
-    if (isMobile) return;
+    // Проверки на «устройство без hover» тут нет намеренно: тип указателя
+    // берём у последнего взаимодействия (lastPointerType), а не у устройства.
+    // С прежним !canHover настоящая мышь на устройстве с тач-основным
+    // указателем открыла бы панель и уже не закрыла бы её. mouseleave после
+    // тапа — совместимое событие пальца: панель закроют тап мимо меню или
+    // выбор пункта.
+    if (isMobile || lastPointerType.current !== 'mouse') return;
     cancelClose();
     closeTimer.current = setTimeout(() => {
       closeTimer.current = null;
@@ -578,26 +574,27 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     }, PANEL_CLOSE_DELAY_MS);
   };
 
-  /** Клик по иконке группы = ПИН/РАСПИН этой группы.
+  /** Нажатие на иконку группы только РАСКРЫВАЕТ её панель — как наведение.
+   *  Закрепления нет: панель закроется уходом курсора, Escape, тапом мимо
+   *  меню или выбором пункта. Повторное нажатие её тоже не закрывает.
    *
-   *  Навигации здесь больше нет: раньше клик уводил на groupHome(g), но с
-   *  hover-панелью это конфликтует — мышью иконка всегда уже «наведена»,
-   *  так что каждый клик означал бы переход, и закрепить панель было бы
-   *  нечем. «Домашний» пункт группы никуда не делся: это первый пункт
-   *  раскрытой панели, до него один клик.
-   *
-   *  Тач на широком экране (планшет > 900px): тап пинит, повторный тап
-   *  закрывает — тот же двухшаговый сценарий, что и раньше. */
-  const togglePin = (g: VisibleGroup, keepHover: boolean) => {
+   *  Навигации здесь нет: мышью иконка всегда уже «наведена», и каждый клик
+   *  означал бы переход. «Домашний» пункт группы — первый в панели, до него
+   *  один клик. Пальцу (планшет шире 900px) наведения нет вовсе: тап —
+   *  единственный способ открыть панель. */
+  const openGroup = (g: VisibleGroup) => {
     cancelClose();
     prefetchGroup(g);
-    setPinnedGroupKey((prev) => (prev === g.key ? null : g.key));
-    // Распин мышью: курсор всё ещё над иконкой, панель обязана остаться
-    // раскрытой и закрыться уже по уходу курсора. То же и для клавиатуры —
-    // фокус с кнопки никуда не делся. После тапа пальцем «наведения» не
-    // существует: там распин обязан закрыть панель сразу, иначе закрывающий
-    // тап не делает ничего видимого.
-    setHoverGroupKey(keepHover && !isMobile ? g.key : null);
+    setHoverGroupKey(g.key);
+  };
+
+  /** Выбрали пункт — панель прячется сразу, даже если курсор остался над
+   *  ней: открытая страница не должна лежать под меню. Клик с модификатором
+   *  (новая вкладка) и не левой кнопкой страницу не меняет — панель живёт. */
+  const closeOnPick = (e: React.MouseEvent) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    cancelClose();
+    setHoverGroupKey(null);
   };
 
   /** Клавиатура внутри раскрытой панели.
@@ -632,13 +629,6 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
     links[(next + links.length) % links.length].focus();
   };
 
-  /** Останется ли указатель «над» иконкой после этого клика.
-   *  Мышь/трекпад — да, курсор физически стоит на кнопке. Клавиатура — да:
-   *  Enter/Space дают click с detail === 0, фокус остаётся на кнопке.
-   *  Палец — нет. */
-  const clickKeepsHover = (e: React.MouseEvent) =>
-    e.detail === 0 || lastPointerType.current === 'mouse';
-
   // Обработчика Escape на самом регионе больше нет — он переехал на
   // document (см. эффект выше). Держать оба нельзя: здешний
   // e.stopPropagation() гасил всплытие нативного события на корневом
@@ -665,7 +655,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
         const link = (
           <NavLink
             to={it.to}
-            onClick={() => onClose?.()}
+            onClick={(e) => { onClose?.(); closeOnPick(e); }}
             // Пункт подсвечен и на своих алиасах: карточка лида живёт по
             // адресу /applications/:id, а пункт — «Лиды» (/leads).
             className={({ isActive }) => (isActive || hit?.to === it.to ? 'active' : undefined)}
@@ -803,8 +793,9 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
           className="sidebar-split"
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
-          // Фокус покинул сайдбар — снимаем наведение. Пин переживает:
-          // его снимает только повторный клик или Escape.
+          onPointerDown={(e) => { lastPointerType.current = e.pointerType; }}
+          onPointerMove={(e) => { lastPointerType.current = e.pointerType; }}
+          // Фокус покинул сайдбар — панель закрывается.
           onBlur={(e) => {
             if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
               cancelClose();
@@ -824,12 +815,12 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
                 onKeyDown={(e) => onRailKeyDown(e, g, idx)}
                 className={`rail-btn${g.key === activeGroupKey ? ' active' : ''}${
                   panelGroup?.key === g.key && g.key !== activeGroupKey ? ' preview' : ''
-                }${pinnedValid === g.key ? ' pinned' : ''}`}
+                }`}
                 onClick={(e) => {
-                  togglePin(g, clickKeepsHover(e));
+                  openGroup(g);
                   // detail === 0 ⇒ click синтезирован клавиатурой (Enter или
-                  // Space по кнопке). Мышиный клик фокус из-под курсора не
-                  // угоняет — там пин работает ровно как работал.
+                  // Space по кнопке): сразу в пункты. Мышиный клик фокус
+                  // из-под курсора не угоняет.
                   if (e.detail === 0) focusPanelFirstItem();
                 }}
                 title={t(g.labelKey)}
@@ -843,7 +834,6 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
                 aria-controls="sidebar-panel-nav"
                 whileHover={{ scale: 1.06 }}
                 whileTap={{ scale: 0.94 }}
-                onPointerDown={(e) => { lastPointerType.current = e.pointerType; }}
                 onPointerEnter={(e) => hoverGroupOn(e, g)}
                 onFocus={() => focusGroupOn(g)}
                 onTouchStart={() => prefetchGroup(g)}

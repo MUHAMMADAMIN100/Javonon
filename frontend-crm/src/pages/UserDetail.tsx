@@ -400,7 +400,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <Stat {...tileProps('enrolled')} icon="how_to_reg" tone={kpi.onTrack ? 'green' : 'red'} label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />
           <Stat {...tileProps('kpi')} icon="trending_up" tone={kpi.onTrack ? 'green' : 'red'} label={t('profile.month.kpiPct')} value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.target')} ${kpi.targetPct}%`} />
           {/* Без «Зарплат и окладов» штрафы коллеги скрыты — плитка без окна. */}
-          <Stat {...(payHidden ? {} : tileProps('penalties'))} icon="gavel" tone="red" label={t('profile.month.penalties')} value={penalties.pendingTotal == null ? hiddenAmount('TJS') : fmtMoney(penalties.pendingTotal)} accent="red" />
+          <Stat {...(payHidden ? {} : tileProps('penalties'))} icon="gavel" tone="red" label={t('profile.month.penalties')} value={penalties.monthTotal == null ? hiddenAmount('TJS') : fmtMoney(penalties.monthTotal)} accent="red" />
         </div>
         <ProfileMonthDetails
           tile={monthTile}
@@ -458,10 +458,11 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       </>
       )}
 
-      {/* Штрафы (скрыты вместе с окладом — «Зарплаты и оклады» роли) */}
+      {/* История штрафов за всё время (плитка выше — только текущий месяц).
+          Скрыта вместе с окладом — «Зарплаты и оклады» роли. */}
       {!payHidden && (
       <section className={`card profile-section${penalties.list.length === 0 ? ' is-empty' : ''}`}>
-        <h3 className="profile-h">{t('profile.month.penalties')}</h3>
+        <h3 className="profile-h">{t('profile.penaltiesHistory')}</h3>
         {penalties.list.length === 0 ? (
           <div className="profile-empty">{t('profile.penaltiesEmpty')}</div>
         ) : (

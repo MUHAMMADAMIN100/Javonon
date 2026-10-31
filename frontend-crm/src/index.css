@@ -4775,18 +4775,6 @@ input[type="checkbox"].crm-checkbox:disabled:not(:checked) { background: var(--b
     will-change: transform, opacity;
   }
 
-  /* Закреплённая (кликом) группа: точка под иконкой — второй, нецветовой
-     признак «панель не закроется по уходу мыши». */
-  .rail-btn.pinned::after {
-    content: '';
-    position: absolute;
-    left: 50%; bottom: 3px;
-    width: 4px; height: 4px;
-    margin-left: -2px;
-    border-radius: 50%;
-    background: var(--primary-tint);
-  }
-
   /* --- Скелет нижнего блока, пока грузится профиль (в 64px rail'а) --- */
   .sidebar-2l .rail-user {
     flex-direction: column;
