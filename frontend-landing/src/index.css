@@ -105,6 +105,15 @@ input, textarea, select { font-family: inherit; }
   word-break: keep-all;
 }
 
+/* Пока шрифт значков грузится (iconFont.ts снимает класс), вместо значка
+   браузер рисует его имя словом — «arrow_outward», «location_on», и слово
+   раздвигало строку. До загрузки — пустое место ровно размером со значок. */
+html.icons-loading .material-symbols-rounded {
+  visibility: hidden;
+  width: 1em;
+  overflow: hidden;
+}
+
 .container { max-width: var(--container); margin: 0 auto; padding: 0 var(--gutter); }
 
 /* Display headings */

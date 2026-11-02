@@ -78,6 +78,15 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   vertical-align: middle;
 }
 
+/* Пока шрифт значков грузится (lib/iconFont.ts снимает класс), вместо значка
+   браузер рисует его имя словом — «notifications», «chevron_left», и слово
+   раздвигало строку. До загрузки — пустое место ровно размером со значок. */
+html.icons-loading .material-symbols-rounded {
+  visibility: hidden;
+  width: 1em;
+  overflow: hidden;
+}
+
 /* Layout — editorial dark sidebar + bright workspace */
 .app-layout { display: flex; min-height: 100vh; background: var(--bg); }
 .sidebar {

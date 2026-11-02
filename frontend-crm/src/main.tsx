@@ -7,12 +7,15 @@ import { UIProvider } from './ui/Dialogs';
 import ErrorBoundary from './components/ErrorBoundary';
 import { queryClient } from './lib/queryClient';
 import { installTjLocalePatch } from './lib/tjLocalePatch';
+import { watchIconFont } from './lib/iconFont';
 import { I18nProvider } from './lib/i18n';
 import './index.css';
 
 // Глобально форсируем Asia/Dushanbe для всех toLocaleString* без явной
 // timeZone. По ТЗ — все времена в системе показываются в TJ-зоне.
 installTjLocalePatch();
+// Пока шрифт значков грузится — пустое место вместо слов «notifications» и т. п.
+watchIconFont();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

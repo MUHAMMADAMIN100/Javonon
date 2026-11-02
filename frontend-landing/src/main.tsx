@@ -15,8 +15,11 @@ import { captureReferralFromUrl } from './referral';
 import PartnerRegister from './pages/PartnerRegister';
 import PartnerLogin from './pages/PartnerLogin';
 import PartnerCabinet from './pages/PartnerCabinet';
+import { watchIconFont } from './iconFont';
 import './index.css';
 
+// Пока шрифт значков грузится — пустое место вместо слов «arrow_outward» и т. п.
+watchIconFont();
 initAnalytics();
 // Захватываем ?ref= из URL до того как React его потеряет.
 // Возвращаемый код тут не нужен — App позовёт эту же (идемпотентную)
