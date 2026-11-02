@@ -3,6 +3,7 @@ import { BadRequestException, ForbiddenException, Injectable, InternalServerErro
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { dateRangeFilter } from '../common/query-date';
+import { clampTake } from '../common/paging';
 import { likeLiteral, phoneDigitsPattern } from '../common/search';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ActivityService } from '../activity/activity.service';
@@ -1338,6 +1339,8 @@ export class SubmissionsService {
     paymentStatus?: SubmissionPaymentStatus;
     managerId?: string;
     take?: number;
+    /** Порция списка: CRM догружает его целиком (common/paging.ts). */
+    skip?: number;
     firstApproved?: boolean;
     /** Показать только сделки клиентов, закреплённых за этим партнёром. */
     partnerId?: string;
@@ -1399,8 +1402,10 @@ export class SubmissionsService {
         manager: { select: { id: true, fullName: true, isActive: true, role: true } },
         payments: { orderBy: { paidAt: 'desc' } },
       },
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(opts.take || 200, 500),
+      // id последним — порции стыкуются без дублей (common/paging.ts).
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: clampTake(opts.take, 200),
+      skip: opts.skip,
     });
 
     // Партнёрский блок в строках списка. Гейт тот же, что и в карточке, хотя

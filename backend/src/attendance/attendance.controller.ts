@@ -8,6 +8,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { maskStaffEmails } from '../common/redact';
 import { AttendanceService } from './attendance.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { parseSkip } from '../common/paging';
 
 @Controller('attendance')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,6 +25,8 @@ export class AttendanceController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('take') take?: string,
+    // Порции: CRM догружает список целиком (common/paging.ts).
+    @Query('skip') skip?: string,
   ) {
     // Парсим как Asia/Dushanbe — UI «Сегодня» присылает локальное
     // YYYY-MM-DD; UTC-парс делает фильтр кривым (день съезжает).
@@ -44,6 +47,7 @@ export class AttendanceController {
       from: parseStart(from),
       to: parseEnd(to),
       take: take ? parseInt(take, 10) : undefined,
+      skip: parseSkip(skip),
     });
     return maskStaffEmails(me, rows as any[]);
   }

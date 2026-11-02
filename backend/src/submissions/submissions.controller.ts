@@ -22,6 +22,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { parseDate } from '../common/query-date';
+import { parseSkip } from '../common/paging';
 import { checkSearch } from '../common/search';
 import { SubmissionsService } from './submissions.service';
 import { InstallmentsService } from '../installments/installments.service';
@@ -123,6 +124,8 @@ export class SubmissionsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('search') search?: string,
+    // Порции: CRM догружает список целиком (common/paging.ts).
+    @Query('skip') skip?: string,
   ) {
     // Доступ ограничен @Roles(FOUNDER, ADMIN) на уровне декоратора —
     // ACCOUNTANT/менеджеры до сюда не дойдут. Раньше здесь был fallback на
@@ -135,6 +138,7 @@ export class SubmissionsController {
         ? (paymentStatus as SubmissionPaymentStatus) : undefined,
       managerId: managerId || undefined,
       take: take ? parseInt(take, 10) : undefined,
+      skip: parseSkip(skip),
       firstApproved: firstApproved === 'true' || firstApproved === '1' ? true : undefined,
       partnerId: partnerId || undefined,
       from: parseDate(from, 'from'),

@@ -18,7 +18,7 @@ import {
   CreateTransactionDto,
   PRODUCT_CATEGORIES,
   PRODUCT_CATEGORY_TEXT,
-  listTransactions,
+  loadAllTransactions,
   createTransaction,
   updateTransaction,
   deleteTransaction,
@@ -235,16 +235,20 @@ export default function Finance() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
 
+  // Журнал — ВСЕ операции периода (порциями, loadAllTransactions): счётчик,
+  // фильтры, сортировка и страницы ниже считаются в браузере по этим строкам.
+  // Раньше запрос был `take: 200`, и за большой период журнал молча терял
+  // старые операции. Тот же ключ без типа берут окна у карточек
+  // (FinanceDetails) и префетч меню (Sidebar) — кэш у них общий.
   const txParams = {
     ...(filterType ? { type: filterType } : {}),
     ...(range.from ? { from: range.from } : {}),
     ...(range.to ? { to: range.to } : {}),
-    take: 200,
   };
   const txKey = keys.finance.transactions(txParams);
   const txQuery = useQuery({
     queryKey: txKey,
-    queryFn: () => listTransactions(txParams),
+    queryFn: () => loadAllTransactions(txParams),
     enabled: rangeOk,
   });
   const allTransactions = txQuery.data ?? [];

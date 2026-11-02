@@ -1,4 +1,5 @@
 import { localized } from '../lib/i18n';
+import { loadAllPages } from '../lib/loadAllPages';
 import { api } from './client';
 
 export type TransactionType = 'INCOME' | 'EXPENSE';
@@ -200,15 +201,26 @@ export interface CreateTransactionDto {
   paidViaId?: string | null;
 }
 
-export const listTransactions = (params?: {
+export interface TransactionFilters {
   type?: TransactionType;
   category?: TransactionCategory;
   studentId?: string;
   managerId?: string;
   from?: string;
   to?: string;
-  take?: number;
-}) => api.get<Transaction[]>('/finance/transactions', { params }).then((r) => r.data);
+}
+
+/** Одна порция журнала: сервер отдаёт не больше 1000 строк (по умолчанию 200). */
+export const listTransactions = (params?: TransactionFilters & { take?: number; skip?: number }) =>
+  api.get<Transaction[]>('/finance/transactions', { params }).then((r) => r.data);
+
+/**
+ * ВСЕ операции по фильтру — порциями (lib/loadAllPages). Журнал «Финансов»
+ * и окна у карточек денег считают и показывают строки сами, поэтому
+ * обрезанный список дал бы неверные счётчик и суммы.
+ */
+export const loadAllTransactions = (params: TransactionFilters = {}) =>
+  loadAllPages((page) => listTransactions({ ...params, ...page }));
 
 export const createTransaction = (dto: CreateTransactionDto) =>
   api.post<Transaction>('/finance/transactions', dto).then((r) => r.data);

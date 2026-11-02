@@ -14,9 +14,10 @@ import { listPrograms } from '../api/programs';
 import { listTasks } from '../api/tasks';
 import { listUsers } from '../api/users';
 import { listCourses } from '../api/lms';
-import { financeSummary, listTransactions } from '../api/finance';
+import { financeSummary, loadAllTransactions } from '../api/finance';
 import { listSalaries } from '../api/salary';
 import { displayRoleLabel } from '../lib/roles';
+import { tjMonthRange } from '../lib/tjTime';
 import { resolveLandingBaseUrl } from '../lib/landingUrl';
 import { useT } from '../lib/i18n';
 import UserMenu from './UserMenu';
@@ -59,7 +60,12 @@ const PREFETCH_MAP: Record<string, () => Promise<void> | void> = {
   },
   '/finance': () => {
     queryClient.prefetchQuery({ queryKey: keys.finance.summary({}), queryFn: () => financeSummary() });
-    queryClient.prefetchQuery({ queryKey: keys.finance.transactions({}), queryFn: () => listTransactions() });
+    // Журнал открывается за текущий месяц (PeriodSwitcher, period=month) —
+    // греем ровно его, тем же ключом и той же загрузкой всех строк, что у
+    // страницы. Раньше здесь лежали первые 200 строк за всё время под
+    // ключом `{}` — его же берёт журнал «Весь период», и он показал бы их.
+    const month = tjMonthRange(0);
+    queryClient.prefetchQuery({ queryKey: keys.finance.transactions(month), queryFn: () => loadAllTransactions(month) });
   },
   '/salary': () => {
     queryClient.prefetchQuery({ queryKey: keys.salary.list({}), queryFn: () => listSalaries() });

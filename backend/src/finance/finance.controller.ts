@@ -36,6 +36,7 @@ import {
 // applications/stats и students/stats тоже стали принимать from/to —
 // парсер границ периода в проекте должен быть ровно один.
 import { parseDate } from '../common/query-date';
+import { LIST_TAKE_MAX, parseSkip } from '../common/paging';
 import { Permissions } from '../auth/permissions.decorator';
 
 // Receipts: только изображения и PDF. Whitelist расширений и MIME —
@@ -75,7 +76,7 @@ function parseTake(v: string | undefined): number | undefined {
   const n = parseInt(v, 10);
   if (!Number.isFinite(n)) throw new BadRequestException('take должен быть числом');
   if (n < 1) throw new BadRequestException('take должен быть >= 1');
-  if (n > 1000) throw new BadRequestException('take не может превышать 1000');
+  if (n > LIST_TAKE_MAX) throw new BadRequestException(`take не может превышать ${LIST_TAKE_MAX}`);
   return n;
 }
 
@@ -224,6 +225,8 @@ export class FinanceController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('take') take?: string,
+    // Порции: CRM догружает журнал целиком (common/paging.ts).
+    @Query('skip') skip?: string,
   ) {
     if (type && !VALID_TX_TYPES.includes(type as TransactionType)) {
       throw new BadRequestException('Неизвестный type');
@@ -239,6 +242,7 @@ export class FinanceController {
       from: parseDate(from, 'from'),
       to: parseDate(to, 'to', true),
       take: parseTake(take),
+      skip: parseSkip(skip),
     });
   }
 

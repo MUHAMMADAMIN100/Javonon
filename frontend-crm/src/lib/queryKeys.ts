@@ -36,6 +36,10 @@ export const keys = {
   },
   finance: {
     all: ['finance'] as const,
+    /**
+     * ВСЕ операции по фильтру — только loadAllTransactions, не одна порция:
+     * ключ общий у журнала «Финансов», окон у карточек денег и префетча меню.
+     */
     transactions: (p: Record<string, unknown> = {}) => ['finance', 'transactions', p] as const,
     summary: (p: Record<string, unknown> = {}) => ['finance', 'summary', p] as const,
     overview: (p: Record<string, unknown> = {}) => ['finance', 'overview', p] as const,

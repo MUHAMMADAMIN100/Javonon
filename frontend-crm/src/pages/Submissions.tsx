@@ -12,7 +12,7 @@ import { adminListPartners, fmtCommissionRate, fmtMoneyCents } from '../api/part
 import { listUsers } from '../api/users';
 import {
   listMySubmissions,
-  listAllSubmissions,
+  loadAllSubmissions,
   listPendingPayments,
   type SaleSubmission,
   type PendingPayment,
@@ -355,14 +355,16 @@ function MySubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
 function AllSubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
   const { t } = useT();
   const p = params(f);
+  // ВСЕ сделки (порциями, loadAllSubmissions), как на «Моих» и «На
+  // одобрении»: раньше брали 200, и список со счётчиком молча обрезались.
   const query = useQuery({
     queryKey: ['submissions', 'all', p],
-    queryFn: () => listAllSubmissions({ take: 200, ...p }),
+    queryFn: () => loadAllSubmissions(p),
     placeholderData: keepPreviousData,
   });
   const totalQuery = useQuery({
     queryKey: ['submissions', 'all', {}],
-    queryFn: () => listAllSubmissions({ take: 200 }),
+    queryFn: () => loadAllSubmissions(),
     enabled: narrowed,
   });
   return (
@@ -380,14 +382,15 @@ function AllSubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) 
 function ApprovedSubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
   const { t } = useT();
   const p = params(f);
+  // ВСЕ одобренные (порциями) — см. AllSubmissions.
   const query = useQuery({
     queryKey: ['submissions', 'approved', p],
-    queryFn: () => listAllSubmissions({ firstApproved: true, take: 200, ...p }),
+    queryFn: () => loadAllSubmissions({ firstApproved: true, ...p }),
     placeholderData: keepPreviousData,
   });
   const totalQuery = useQuery({
     queryKey: ['submissions', 'approved', {}],
-    queryFn: () => listAllSubmissions({ firstApproved: true, take: 200 }),
+    queryFn: () => loadAllSubmissions({ firstApproved: true }),
     enabled: narrowed,
   });
   return (

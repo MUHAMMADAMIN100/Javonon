@@ -1,7 +1,7 @@
 import { AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import {
-  listTransactions,
+  loadAllTransactions,
   pendingPayments,
   TRANSACTION_CATEGORY_LABEL,
   type FinanceOverview,
@@ -67,10 +67,13 @@ function MoneyDetails({
   onClose: () => void;
 }) {
   const { t } = useT();
-  const params = { from: range.from || undefined, to: range.to || undefined, take: 1000 };
+  // ВСЕ операции периода (порциями): итог окна считается здесь же, и
+  // обрезанный список (раньше take: 1000) за большой период дал бы сумму
+  // меньше карточки. Ключ общий с журналом страницы — второй раз не грузим.
+  const params = { from: range.from || undefined, to: range.to || undefined };
   const query = useQuery({
-    queryKey: keys.finance.transactions({ ...params, details: true }),
-    queryFn: () => listTransactions(params),
+    queryKey: keys.finance.transactions(params),
+    queryFn: () => loadAllTransactions(params),
   });
   const all = query.data ?? [];
   const isSalary = (tx: Transaction) => tx.type === 'EXPENSE' && tx.category === 'SALARY';

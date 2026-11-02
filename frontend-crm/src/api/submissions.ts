@@ -1,4 +1,5 @@
 import { localized } from '../lib/i18n';
+import { loadAllPages } from '../lib/loadAllPages';
 import { api } from './client';
 import type { PartnerAttributionView } from './types';
 
@@ -216,11 +217,10 @@ export const listMySubmissions = (params?: {
 }) =>
   api.get<SaleSubmission[]>('/submissions/mine', { params }).then((r) => r.data);
 
-export const listAllSubmissions = (params?: {
+export interface SubmissionFilters {
   status?: SubmissionStatus;
   paymentStatus?: SubmissionPaymentStatus;
   managerId?: string;
-  take?: number;
   firstApproved?: boolean;
   /**
    * Только сделки клиентов, закреплённых за этим партнёром. Совпадение ищется
@@ -233,7 +233,15 @@ export const listAllSubmissions = (params?: {
   to?: string;
   /** Поиск: ФИО клиента, телефон (по цифрам), менеджер, программа. */
   search?: string;
-}) => api.get<SaleSubmission[]>('/submissions', { params }).then((r) => r.data);
+}
+
+/** Одна порция сделок: сервер отдаёт не больше 1000 (по умолчанию 200). */
+export const listAllSubmissions = (params?: SubmissionFilters & { take?: number; skip?: number }) =>
+  api.get<SaleSubmission[]>('/submissions', { params }).then((r) => r.data);
+
+/** ВСЕ сделки по фильтру — порциями (lib/loadAllPages): «Все сделки», «Одобренные» и их счётчики. */
+export const loadAllSubmissions = (params: SubmissionFilters = {}) =>
+  loadAllPages((page) => listAllSubmissions({ ...params, ...page }));
 
 export const listPendingPayments = (params?: {
   /**

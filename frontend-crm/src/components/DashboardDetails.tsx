@@ -2,7 +2,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { listApplications } from '../api/applications';
 import { listStudents } from '../api/students';
-import { listTransactions, pendingPayments, TRANSACTION_CATEGORY_LABEL, type Transaction } from '../api/finance';
+import { loadAllTransactions, pendingPayments, TRANSACTION_CATEGORY_LABEL, type Transaction } from '../api/finance';
 import { isFinishedApplicationStatus, isNewLeadApplicationStatus, type Application, type Student } from '../api/types';
 import { keys } from '../lib/queryKeys';
 import { useT } from '../lib/i18n';
@@ -200,10 +200,13 @@ function MoneyDetails({
   onClose: () => void;
 }) {
   const { t } = useT();
-  const params = { from: range.from || undefined, to: range.to || undefined, take: 1000 };
+  // ВСЕ операции периода (порциями): сумма окна считается здесь же, и
+  // обрезанный список (раньше take: 1000) за большой период дал бы сумму
+  // меньше карточки. Ключ общий с журналом «Финансов» (pages/Finance.tsx).
+  const params = { from: range.from || undefined, to: range.to || undefined };
   const query = useQuery({
-    queryKey: keys.finance.transactions({ ...params, details: true }),
-    queryFn: () => listTransactions(params),
+    queryKey: keys.finance.transactions(params),
+    queryFn: () => loadAllTransactions(params),
   });
   const all = query.data ?? [];
   const inKind = (tx: Transaction) =>

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { clampTake } from '../common/paging';
 
 /**
  * Лента посещаемости всех сотрудников (ТЗ §3).
@@ -10,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class AttendanceService {
   constructor(private prisma: PrismaService) {}
 
-  async list(opts: { userId?: string; from?: Date; to?: Date; take?: number } = {}) {
+  async list(opts: { userId?: string; from?: Date; to?: Date; take?: number; skip?: number } = {}) {
     const where: any = {};
     if (opts.userId) where.userId = opts.userId;
     if (opts.from || opts.to) {
@@ -23,8 +24,10 @@ export class AttendanceService {
       include: {
         user: { select: { id: true, fullName: true, isActive: true, role: true, email: true } },
       },
-      orderBy: { clockIn: 'desc' },
-      take: Math.min(opts.take || 100, 500),
+      // id последним — порции стыкуются без дублей (common/paging.ts).
+      orderBy: [{ clockIn: 'desc' }, { id: 'desc' }],
+      take: clampTake(opts.take, 100),
+      skip: opts.skip,
     });
   }
 }

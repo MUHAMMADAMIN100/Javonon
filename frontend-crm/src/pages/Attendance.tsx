@@ -7,7 +7,7 @@ import { useAuth } from '../store/auth';
 import { isFounder, isTeacherOnly } from '../lib/roles';
 import { hasActiveRole, hasPermission } from '../lib/permissions';
 import { useRealtimeEvent } from '../realtime';
-import { listAttendance } from '../api/attendance';
+import { loadAllAttendance } from '../api/attendance';
 import { listUsers } from '../api/users';
 import { tjFormatTime, tjFormatDate, tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
@@ -55,16 +55,18 @@ export default function Attendance() {
   // Учитель академии рабочий день не отмечает — в фильтре табеля его нет.
   const users = (usersQuery.data || []).filter((u) => !isTeacherOnly(u as any));
 
+  // ВСЕ отметки по фильтру (порциями, loadAllAttendance): сортировка и
+  // страницы ниже работают в браузере. Раньше брали 200 — без фильтра по
+  // датам это были последние 2–3 недели, а «из N» под таблицей врал.
   const query = useQuery({
     queryKey: ['attendance', userId, from, to],
-    queryFn: () => listAttendance({
+    queryFn: () => loadAllAttendance({
       userId: userId || undefined,
       from: from || undefined,
       // input type=date даёт «YYYY-MM-DD» → new Date() парсит как 00:00 UTC.
       // Без +T23:59:59 «по: сегодня» отрезало бы все clockIn'ы после
       // полуночи UTC — пустая таблица.
       to: to ? `${to}T23:59:59` : undefined,
-      take: 200,
     }),
   });
   const items = query.data || [];

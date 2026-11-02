@@ -308,6 +308,8 @@ export class FinanceService {
     from?: Date;
     to?: Date;
     take?: number;
+    /** Порция журнала: CRM догружает его целиком (common/paging.ts). */
+    skip?: number;
   }) {
     return this.prisma.transaction.findMany({
       where: {
@@ -325,8 +327,11 @@ export class FinanceService {
           ? { date: { ...(filters.from && { gte: filters.from }), ...(filters.to && { lte: filters.to }) } }
           : {}),
       },
-      orderBy: { date: 'desc' },
+      // Однозначный порядок: у операций одного дня (а их бывает много)
+      // порции иначе стыковались бы с дублями и пропусками.
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       take: filters.take ?? 200,
+      skip: filters.skip,
       include: {
         student: { select: { id: true, fullName: true } },
         manager: { select: { id: true, fullName: true, isActive: true, role: true } },
