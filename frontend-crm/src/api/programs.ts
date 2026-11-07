@@ -196,3 +196,15 @@ export function programImageUrl(imageUrl: string | null | undefined): string | n
   if (imageUrl.startsWith('http')) return imageUrl;
   return `${apiRoot}${imageUrl}`;
 }
+
+/**
+ * Единица цены по длительности (QA №57: у курса на 4 месяца было «/ год»).
+ * Длительность — свободный текст («4 месяца», «2 года», «6 weeks»): если в ней
+ * только месяцы/недели/дни — цена за весь курс, иначе — за год.
+ */
+export function costUnitKey(duration?: string | null): 'programs.year' | 'programs.unit.course' {
+  const d = (duration || '').toLowerCase();
+  const short = /(мес|month|моҳ|нед|week|ҳафта|дн|day|рӯз)/.test(d);
+  const years = /(год|лет|year|сол)/.test(d);
+  return short && !years ? 'programs.unit.course' : 'programs.year';
+}

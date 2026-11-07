@@ -54,5 +54,9 @@ export const createCampaign = (data: {
 export const sendCampaignNow = (id: string) =>
   api.post<MassMailCampaign>(`/integrations/massmail/${id}/send`).then((r) => r.data);
 
+/** Удалить черновик/отменённую рассылку. */
+export const deleteCampaign = (id: string) =>
+  api.delete<{ ok: true }>(`/integrations/massmail/${id}`).then((r) => r.data);
+
 export const cancelCampaign = (id: string) =>
   api.post<MassMailCampaign>(`/integrations/massmail/${id}/cancel`).then((r) => r.data);

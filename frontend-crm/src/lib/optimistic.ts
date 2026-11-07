@@ -84,12 +84,20 @@ export function useInvalidatingMutation<TData, TVars>(
   } & Omit<UseMutationOptions<TData, unknown, TVars, unknown>, 'mutationFn'>,
 ) {
   const qc = useQueryClient();
-  const { mutationFn, invalidate, onSettled, ...rest } = opts;
+  const { mutationFn, invalidate, onSettled, onSuccess, ...rest } = opts;
   return useMutation<TData, unknown, TVars, unknown>({
     ...rest,
     mutationFn,
+    // Сначала дожидаемся свежих данных, потом «готово» и закрытие формы
+    // (QA №26: раньше тост «сохранено» приходил, а на экране 2–5 с висели
+    // старые цифры). Кнопка всё это время в состоянии «Сохранение…».
+    onSuccess: async (...args) => {
+      await Promise.all(invalidate.map((k) => qc.invalidateQueries({ queryKey: k }))).catch(() => undefined);
+      return (onSuccess as any)?.(...args);
+    },
     onSettled: (data, err, vars, ctx, mctx) => {
-      invalidate.forEach((k) => qc.invalidateQueries({ queryKey: k }));
+      // После ошибки тоже перечитываем — состояние могло частично измениться.
+      if (err) invalidate.forEach((k) => qc.invalidateQueries({ queryKey: k }));
       onSettled?.(data, err, vars, ctx, mctx);
     },
   });

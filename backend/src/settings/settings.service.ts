@@ -164,6 +164,7 @@ export class SettingsService {
     comment?: string;
   }) {
     const clean = this.validatePenaltyRuleFields(data);
+    await this.assertNoPenaltyOverlap(clean.min, clean.max);
     return this.prisma.penaltyRule.create({
       data: {
         minLateMinutes: clean.min,
@@ -246,6 +247,7 @@ export class SettingsService {
       comment: patch.comment ?? exists.comment ?? '',
     };
     const clean = this.validatePenaltyRuleFields(merged);
+    await this.assertNoPenaltyOverlap(clean.min, clean.max, id);
     return this.prisma.penaltyRule.update({
       where: { id },
       data: {
@@ -257,6 +259,25 @@ export class SettingsService {
         ...(patch.comment !== undefined && { comment: clean.comment }),
       },
     });
+  }
+
+  /**
+   * Интервалы правил — полуоткрытые [от, до): «10–30» и «30–60» не
+   * пересекаются (30 мин — уже второе правило). Настоящее пересечение
+   * («10–40» и «30–60») не даём сохранить (QA №59).
+   */
+  private async assertNoPenaltyOverlap(min: number, max: number | null, exceptId?: string) {
+    const rules = await this.prisma.penaltyRule.findMany({
+      where: { isActive: true, ...(exceptId ? { id: { not: exceptId } } : {}) },
+      select: { minLateMinutes: true, maxLateMinutes: true },
+    });
+    const hi = max ?? Infinity;
+    const clash = rules.find((r) => min < (r.maxLateMinutes ?? Infinity) && r.minLateMinutes < hi);
+    if (clash) {
+      throw new BadRequestException(
+        `Интервал пересекается с правилом ${clash.minLateMinutes}–${clash.maxLateMinutes ?? '∞'} мин. Конец одного правила может совпадать с началом другого.`,
+      );
+    }
   }
 
   async deletePenaltyRule(id: string) {

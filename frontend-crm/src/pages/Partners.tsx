@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react';
+import FormModal from '../components/FormModal';
 import { roleCan } from '../lib/permissions';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
@@ -298,24 +299,25 @@ function PartnersList({ search }: { search: SearchCtl }) {
     }
   };
 
-  const updateAmount = async (id: string, currentCents: number) => {
-    const currentTjs = Math.round((currentCents ?? 0) / 100);
-    const raw = window.prompt(
-      t('partners.col.commission.prompt') + ' (0–100000):',
-      String(currentTjs),
-    );
-    if (raw == null) return;
-    const amountTjs = parseInt(raw, 10);
-    if (isNaN(amountTjs) || amountTjs < 0 || amountTjs > 100000) {
-      toast(t('toast.error'), 'error');
-      return;
-    }
+  // Комиссия — своё окно с полем и проверкой (QA №37, вместо window.prompt).
+  const [commission, setCommission] = useState<{ id: string; value: string; busy: boolean } | null>(null);
+  const updateAmount = (id: string, currentCents: number) => {
+    setCommission({ id, value: String(Math.round((currentCents ?? 0) / 100)), busy: false });
+  };
+  const commissionErr = commission
+    ? (!/^\d+$/.test(commission.value.trim()) || Number(commission.value) > 100000 ? t('partners.commission.err') : undefined)
+    : undefined;
+  const saveCommission = async () => {
+    if (!commission || commissionErr) return;
+    setCommission({ ...commission, busy: true });
     try {
-      await adminUpdatePartner(id, { commissionAmountTjs: amountTjs });
-      qc.invalidateQueries({ queryKey: ['admin', 'partners'] });
+      await adminUpdatePartner(commission.id, { commissionAmountTjs: Number(commission.value) });
+      await qc.invalidateQueries({ queryKey: ['admin', 'partners'] });
       toast(t('toast.updated'), 'success');
+      setCommission(null);
     } catch (e: any) {
       toast(e?.response?.data?.message || t('toast.error'), 'error');
+      setCommission((c) => (c ? { ...c, busy: false } : c));
     }
   };
 
@@ -413,8 +415,10 @@ function PartnersList({ search }: { search: SearchCtl }) {
                   <td data-label={t('partners.col.email')}>{p.email}</td>
                   <td data-label={t('partners.col.code')}><code>{p.referralCode}</code></td>
                   <td data-label={t('partners.col.commission')}>{fmtCommissionRate(p.commissionAmountCents)}</td>
-                  <td data-label={t('partners.col.referrals')}>
+                  {/* Три числа — с расшифровкой (QA №38): переходы / клиенты / начисления. */}
+                  <td data-label={t('partners.col.referrals')} title={t('partners.col.referralsHint')} data-testid="partner-referrals">
                     {p._count?.clicks ?? 0} / {p._count?.attributions ?? 0} / {p._count?.commissions ?? 0}
+                    <div className="profile-field-hint">{t('partners.col.referralsLegend')}</div>
                   </td>
                   <td data-label={t('partners.col.balance')}>{fmtMoneyCents(p.balanceCents)}</td>
                   <td data-label={t('partners.col.earned')}>{fmtMoneyCents(p.totalEarnedCents)}</td>
@@ -517,6 +521,33 @@ function PartnersList({ search }: { search: SearchCtl }) {
         data={shareData}
         onClose={() => setShareData(null)}
       />
+      <FormModal
+        open={!!commission}
+        title={t('partners.commission.title')}
+        onClose={() => setCommission(null)}
+        busy={commission?.busy}
+        width={420}
+        testId="partner-commission-modal"
+      >
+        <form onSubmit={(e) => { e.preventDefault(); saveCommission(); }}>
+          <div className="form-group">
+            <label>{t('partners.col.commission.prompt')}</label>
+            <input
+              className={`crm-input${commissionErr ? ' input-error' : ''}`}
+              inputMode="numeric"
+              value={commission?.value ?? ''}
+              onChange={(e) => setCommission((c) => (c ? { ...c, value: e.target.value.replace(/[^\d]/g, '') } : c))}
+              autoFocus
+              data-testid="partner-commission-input"
+            />
+            {commissionErr ? <div className="form-error-text">{commissionErr}</div> : <div className="profile-field-hint">{t('partners.commission.hint')}</div>}
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setCommission(null)}>{t('common.cancel')}</button>
+            <button type="submit" className="btn btn-primary" disabled={!!commissionErr || commission?.busy} data-testid="partner-commission-save">{t('common.save')}</button>
+          </div>
+        </form>
+      </FormModal>
     </>
   );
 }
@@ -572,7 +603,13 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
       return;
     }
     const ph = phone.trim();
-    if (ph && (ph.length < 5 || ph.length > 20)) {
+    // Сначала — недопустимые символы (QA №37: «abc-телефон» получал «5–20
+    // символов»), потом длина по цифрам.
+    if (ph && !/^\+?[\d\s\-()]+$/.test(ph)) {
+      setErr(t('partners.add.err.phoneDigits'));
+      return;
+    }
+    if (ph && (ph.replace(/\D/g, '').length < 7 || ph.replace(/\D/g, '').length > 15)) {
       setErr(t('partners.add.err.phone'));
       return;
     }

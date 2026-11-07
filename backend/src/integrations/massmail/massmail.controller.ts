@@ -37,4 +37,10 @@ export class MassmailController {
   cancel(@Param('id') id: string) {
     return this.mm.cancel(id);
   }
+
+  @Permissions('massmail:create')
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.mm.remove(id);
+  }
 }

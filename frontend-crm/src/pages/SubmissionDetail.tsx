@@ -234,12 +234,16 @@ export default function SubmissionDetail() {
     }
   };
 
-  const onDeleteSubmission = () => {
-    // window.confirm намеренно — по ТЗ, чтобы не «переоформлять» родной
-    // диалог подтверждения (deleteSubmission — destructive, важен native modal).
-    if (window.confirm(t('deal.delete.confirm'))) {
-      deleteSubmissionMut.mutate();
-    }
+  // Своё красное окно подтверждения, как во всей CRM (QA №33, решение
+  // заказчика 07.11.2026; раньше — серое окно браузера).
+  const onDeleteSubmission = async () => {
+    const ok = await confirm({
+      title: t('deal.delete.title'),
+      message: t('deal.delete.confirm'),
+      confirmText: t('common.delete'),
+      danger: true,
+    });
+    if (ok) deleteSubmissionMut.mutate();
   };
 
   // Окно подтверждения — своё, как во всей CRM, а не серое браузерное.

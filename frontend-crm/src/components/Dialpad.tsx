@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { phoneRule } from '../utils/validators';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import Icon from '../Icon';
@@ -62,8 +63,15 @@ export default function Dialpad() {
 
   const dial = async () => {
     const cleaned = number.trim();
+    // Понятная ошибка и проверка длины (QA №19): раньше в журнал попадали
+    // «+99212785» и «+9928888888888».
     if (!cleaned || cleaned === '+') {
-      toast(t('common.phone'), 'error');
+      toast(t('dialpad.err.empty'), 'error');
+      return;
+    }
+    const lenErr = phoneRule()(cleaned);
+    if (lenErr) {
+      toast(lenErr, 'error');
       return;
     }
     setCallState('connecting');

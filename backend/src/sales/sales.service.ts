@@ -283,6 +283,16 @@ export class SalesService {
     patch: { name?: string; description?: string; isDefault?: boolean; isActive?: boolean },
   ) {
     const clean = this.validatePipelineFields(patch, true);
+    // Неактивная воронка не может быть «по умолчанию» — в неё попадали бы
+    // новые лиды (QA №36). И выключить воронку по умолчанию — снять отметку.
+    if (patch.isDefault === true || patch.isActive === false) {
+      const cur = await this.prisma.pipeline.findUnique({ where: { id }, select: { isActive: true, isDefault: true } });
+      const willBeActive = patch.isActive ?? cur?.isActive;
+      if (patch.isDefault === true && willBeActive === false) {
+        throw new BadRequestException('Неактивную воронку нельзя сделать основной — сначала включите её');
+      }
+      if (patch.isActive === false && cur?.isDefault) patch = { ...patch, isDefault: false };
+    }
     if (patch.isDefault === true) {
       await this.prisma.pipeline.updateMany({
         where: { isDefault: true, id: { not: id } },
@@ -311,14 +321,25 @@ export class SalesService {
       where: { pipelineId },
       orderBy: { order: 'desc' },
     });
-    return this.prisma.pipelineStage.create({
-      data: {
-        pipelineId,
-        name: clean.name,
-        order: (last?.order ?? -1) + 1,
-        color: clean.color,
-        isClosingStage: clean.isClosingStage,
-      },
+    // Обычный этап встаёт ПЕРЕД финальными («Закрыт ✓»), а не после них (QA №36).
+    const firstClosing = clean.isClosingStage
+      ? null
+      : await this.prisma.pipelineStage.findFirst({ where: { pipelineId, isClosingStage: true }, orderBy: { order: 'asc' } });
+    return this.prisma.$transaction(async (tx) => {
+      let order = (last?.order ?? -1) + 1;
+      if (firstClosing) {
+        await tx.pipelineStage.updateMany({ where: { pipelineId, order: { gte: firstClosing.order } }, data: { order: { increment: 1 } } });
+        order = firstClosing.order;
+      }
+      return tx.pipelineStage.create({
+        data: {
+          pipelineId,
+          name: clean.name,
+          order,
+          color: clean.color,
+          isClosingStage: clean.isClosingStage,
+        },
+      });
     });
   }
 

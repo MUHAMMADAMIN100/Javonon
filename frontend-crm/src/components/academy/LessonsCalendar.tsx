@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { sessionStatusKey } from '../../lib/tjTime';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence } from 'framer-motion';
@@ -215,7 +216,7 @@ export default function LessonsCalendar({
                       {tjFormatTime(s.startsAt)}–{tjFormatTime(s.endsAt)}
                     </b>
                     <span className={`badge ${s.status === 'DONE' ? 'badge-success' : s.status === 'CANCELLED' ? 'badge-gray' : 'badge-info'}`}>
-                      {t(`classes.status.${s.status}`)}
+                      {t(sessionStatusKey(s))}
                     </span>
                   </div>
                   {multi && <div className="acad-cal-lesson-group">{s.group?.name}</div>}

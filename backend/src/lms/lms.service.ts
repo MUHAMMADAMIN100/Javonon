@@ -79,7 +79,27 @@ export class LmsService {
     if (dto.description !== undefined) data.description = validatePlainText(dto.description, 'Описание', 2000);
     if (dto.coverUrl !== undefined) data.coverUrl = validateUrl(dto.coverUrl, 'coverUrl');
     if (dto.published !== undefined) data.published = !!dto.published;
+    // Пустой курс студентам не публикуем (QA №43).
+    if (data.published === true) {
+      const lessons = await this.prisma.lesson.count({ where: { courseId: id } });
+      if (lessons === 0) throw new BadRequestException('Добавьте хотя бы один урок — пустой курс не публикуется');
+    }
     return this.prisma.course.update({ where: { id }, data });
+  }
+
+  /** Студенты курса — для списка в CRM (QA №43: записать студентов было нечем). */
+  async courseStudents(courseId: string) {
+    const rows = await this.prisma.enrollment.findMany({
+      where: { courseId },
+      orderBy: { enrolledAt: 'desc' },
+      select: { enrolledAt: true, student: { select: { id: true, fullName: true } } },
+    });
+    return rows.map((r) => ({ id: r.student.id, fullName: r.student.fullName, enrolledAt: r.enrolledAt }));
+  }
+
+  async unenroll(courseId: string, studentId: string) {
+    await this.prisma.enrollment.deleteMany({ where: { courseId, studentId } });
+    return { ok: true };
   }
 
   async deleteCourse(id: string) {

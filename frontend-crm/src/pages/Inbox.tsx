@@ -136,9 +136,10 @@ export default function Inbox() {
           ) : (
             <div style={{
               flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-soft)', padding: 40, textAlign: 'center',
+              color: 'var(--text-soft)', padding: 40, textAlign: 'center', lineHeight: 1.5,
             }}>
-              ←
+              {/* Вместо одинокой стрелки — подсказка (QA №46). */}
+              {threads.length > 0 ? t('inbox.pickThread') : t('inbox.howToConnect')}
             </div>
           )}
         </motion.div>

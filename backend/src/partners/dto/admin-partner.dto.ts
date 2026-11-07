@@ -43,7 +43,7 @@ export class AdminPartnerCreateDto {
     typeof value === 'string' ? value.trim() : value,
   )
   @IsString()
-  @Matches(PHONE_RE, { message: 'Телефон должен быть 5–20 символов' })
+  @Matches(PHONE_RE, { message: 'Телефон: только цифры, «+», пробелы и дефисы' })
   @MaxLength(20)
   phone?: string;
 

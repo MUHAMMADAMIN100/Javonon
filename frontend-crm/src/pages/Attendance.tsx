@@ -176,7 +176,10 @@ export default function Attendance() {
                   <td data-label={t('attendance.col.in')}>{fmtTime(e.clockIn)}</td>
                   <td data-label={t('attendance.col.lunchOut')}>{fmtTime(e.lunchOut)}</td>
                   <td data-label={t('attendance.col.lunchIn')}>{fmtTime(e.lunchIn)}</td>
-                  <td data-label={t('attendance.col.out')}>{fmtTime(e.clockOut)}</td>
+                  <td data-label={t('attendance.col.out')}>
+                    {fmtTime(e.clockOut)}
+                    {(e as any).autoClosed && <div className="profile-field-hint" data-testid="auto-closed">{t('time.autoClosed')}</div>}
+                  </td>
                   <td data-label={t('attendance.col.late')} style={{ textAlign: 'right', color: e.lateMinutes > 0 ? '#ef4444' : 'var(--text-soft)' }}>
                     {e.lateMinutes > 0 ? `+${e.lateMinutes} ${t('common.minutes')}` : '—'}
                     {e.lateExcuseStatus === 'APPROVED' && (

@@ -886,6 +886,9 @@ model TimeEntry {
   lunchOut                  DateTime?
   lunchIn                   DateTime?
   clockOut                  DateTime?
+  // День закрыт системой (сотрудник забыл «Закончить день») — в конце
+  // рабочего дня по графику (QA №55). В списках — пометка.
+  autoClosed                Boolean         @default(false)
   // Кэш отработанных минут — пересчитывается при clockOut
   totalMinutes              Int             @default(0)
   totalLunchMinutes         Int             @default(0)

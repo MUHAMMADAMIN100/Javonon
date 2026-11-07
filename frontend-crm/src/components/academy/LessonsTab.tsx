@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { sessionStatusKey } from '../../lib/tjTime';
 import { roleCan } from '../../lib/permissions';
 import { useAuth } from '../../store/auth';
 import { AnimatePresence } from 'framer-motion';
@@ -184,7 +185,7 @@ function LessonCard({
       <div className="acad-lesson-body">
         <div className="acad-lesson-top">
           <span className="acad-lesson-topic">{s.topic || t('classes.noTopic')}</span>
-          <span className={STATUS_CLASS[s.status] || 'badge badge-gray'}>{t(`classes.status.${s.status}`)}</span>
+          <span className={STATUS_CLASS[s.status] || 'badge badge-gray'}>{t(sessionStatusKey(s))}</span>
         </div>
         {s.teacher && (
           <div className="acad-lesson-sub">

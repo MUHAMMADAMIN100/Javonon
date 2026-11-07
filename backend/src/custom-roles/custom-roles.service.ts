@@ -49,7 +49,7 @@ export class CustomRolesService implements OnModuleInit {
   async list() {
     const roles = await this.prisma.customRole.findMany({
       orderBy: { createdAt: 'asc' },
-      include: { _count: { select: { users: true } } },
+      include: { _count: { select: { users: { where: { isActive: true } } } } }, // только действующие (QA №58: уволенный считался)
     });
     return Promise.all(
       roles.map(async (r) => ({

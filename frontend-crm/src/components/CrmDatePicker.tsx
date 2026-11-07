@@ -293,7 +293,15 @@ export default function CrmDatePicker({
     if (selectedDate) emitChange(selectedDate, t);
   };
 
+  const todayOutOfRange = (() => {
+    const d = new Date(); d.setHours(12, 0, 0, 0);
+    if (minDate && d.getTime() < new Date(minDate).setHours(0, 0, 0, 0)) return true;
+    if (maxDate && d.getTime() > new Date(maxDate).setHours(23, 59, 59, 999)) return true;
+    return false;
+  })();
+
   const handleToday = () => {
+    if (todayOutOfRange) return;
     const today = new Date();
     emitChange(today, timeValue || (showTime ? format(today, 'HH:mm') : ''));
     if (!showTime) close();
@@ -354,6 +362,8 @@ export default function CrmDatePicker({
           type="button"
           className="btn btn-ghost btn-sm"
           onClick={handleToday}
+          // «Сегодня» вне допустимых дат (например, «по» раньше «с») — недоступна (QA №17).
+          disabled={todayOutOfRange}
         >
           {t('common.today')}
         </button>

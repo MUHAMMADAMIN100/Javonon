@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useRoleLabel } from '../lib/labels';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
@@ -211,7 +212,8 @@ function PenaltiesTab() {
           >
             <div className="settings-row-main">
               <div style={{ fontWeight: 500 }}>
-                {r.minLateMinutes}-{r.maxLateMinutes ?? '∞'} {t('common.minutes')} → <b>{r.amount} {r.currency}</b>
+                {/* «10–29», «30–59», «60+»: граница видна без пересечения (QA №59). */}
+                {r.maxLateMinutes != null ? `${r.minLateMinutes}–${r.maxLateMinutes - 1}` : `${r.minLateMinutes}+`} {t('common.minutes')} → <b>{r.amount} {r.currency}</b>
               </div>
               {r.comment && <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{r.comment}</div>}
             </div>
@@ -677,6 +679,7 @@ function RosterNumberInput({
 function SalaryRosterSection() {
   const { toast } = useUI();
   const { t } = useT();
+  const roleLabel = useRoleLabel();
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: ['salary-settings'],
@@ -772,7 +775,7 @@ function SalaryRosterSection() {
                   <td className="sal-name">
                     <div style={{ fontWeight: 600 }}>{u.fullName}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>
-                      {u.customRole?.name || u.role}
+                      {u.customRole?.name || roleLabel(u.role)}
                     </div>
                   </td>
                   <td data-label={t('settings.salary.field.base')} className="sal-base">

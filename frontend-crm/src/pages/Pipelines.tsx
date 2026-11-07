@@ -260,8 +260,8 @@ function PipelineCard({
             color: 'var(--primary-dark)',
             marginBottom: 4,
           }}>
-            {pipeline.isDefault ? '★ DEFAULT' : 'PIPELINE'}
-            {!pipeline.isActive && ' · INACTIVE'}
+            {pipeline.isDefault ? `★ ${t('pipelines.badge.default')}` : t('pipelines.badge.pipeline')}
+            {!pipeline.isActive && ` · ${t('pipelines.badge.inactive')}`}
           </div>
           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, margin: 0 }}>
             {pipeline.name}
@@ -273,9 +273,12 @@ function PipelineCard({
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {perms.update && (
             <>
-              <button className="btn btn-sm btn-secondary" onClick={onToggleDefault} data-testid="pipeline-default">
-                {pipeline.isDefault ? t('pipelines.unsetDefault') : t('pipelines.setDefault')}
-              </button>
+              {/* Неактивную воронку основной не сделать (QA №36). */}
+              {(pipeline.isActive || pipeline.isDefault) && (
+                <button className="btn btn-sm btn-secondary" onClick={onToggleDefault} data-testid="pipeline-default">
+                  {pipeline.isDefault ? t('pipelines.unsetDefault') : t('pipelines.setDefault')}
+                </button>
+              )}
               <button className="btn btn-sm btn-secondary" onClick={onToggleActive} data-testid="pipeline-active">
                 {pipeline.isActive ? t('settings.penalties.disable') : t('settings.penalties.enable')}
               </button>
@@ -385,8 +388,9 @@ function StageChip({
       {stage.isClosingStage && <span title={tr('pipelines.finalStage')}>✓</span>}
       {perms.update && (
         <>
-          <button title={tr('pipelines.up')} onClick={onMoveUp} disabled={!canMoveUp} style={btnIcon}>‹</button>
-          <button title={tr('pipelines.down')} onClick={onMoveDown} disabled={!canMoveDown} style={btnIcon}>›</button>
+          {/* Стрелку, которой некуда двигать, не показываем (место сохраняем). */}
+          <button title={tr('pipelines.up')} onClick={onMoveUp} disabled={!canMoveUp} style={{ ...btnIcon, visibility: canMoveUp ? 'visible' : 'hidden' }}>‹</button>
+          <button title={tr('pipelines.down')} onClick={onMoveDown} disabled={!canMoveDown} style={{ ...btnIcon, visibility: canMoveDown ? 'visible' : 'hidden' }}>›</button>
           <button title={tr('common.edit')} onClick={() => setEditing(true)} style={btnIcon}>✎</button>
         </>
       )}

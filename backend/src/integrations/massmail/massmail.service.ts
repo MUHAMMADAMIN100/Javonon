@@ -110,6 +110,17 @@ export class MassmailService {
     });
   }
 
+  /** Удалить черновик или отменённую рассылку (QA №45: черновик удалить было нельзя). */
+  async remove(id: string) {
+    const c = await this.prisma.massMailCampaign.findUnique({ where: { id }, select: { status: true } });
+    if (!c) throw new NotFoundException('Рассылка не найдена');
+    if (c.status !== MassMailStatus.DRAFT && c.status !== MassMailStatus.CANCELED) {
+      throw new BadRequestException('Удалить можно только черновик или отменённую рассылку');
+    }
+    await this.prisma.massMailCampaign.delete({ where: { id } });
+    return { ok: true };
+  }
+
   async cancel(id: string) {
     return this.prisma.massMailCampaign.update({
       where: { id }, data: { status: MassMailStatus.CANCELED },

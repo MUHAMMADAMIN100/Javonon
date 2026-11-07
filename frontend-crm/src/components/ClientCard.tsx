@@ -110,6 +110,7 @@ export function ClientHero({
   actions?: ReactNode;
 }) {
   const { t } = useT();
+  const { toast } = useUI();
   const statusLabel = useApplicationStatusLabel();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const photoTitle = photoUrl ? t('client.photo.change') : t('studentDetail.action.uploadPhoto');
@@ -140,14 +141,20 @@ export function ClientHero({
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif"
               hidden
               data-testid="client-photo-input"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 // Сбрасываем, чтобы повторный выбор того же файла снова сработал.
                 e.target.value = '';
-                if (file) onPhotoPick(file);
+                if (!file) return;
+                // PDF/SVG вместо фото — сразу понятное сообщение (QA №35/№2).
+                if (!/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) {
+                  toast(t('photo.err.type'), 'error');
+                  return;
+                }
+                onPhotoPick(file);
               }}
             />
           </>

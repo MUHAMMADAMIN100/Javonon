@@ -161,7 +161,7 @@ export default function AcademyStudentDetail() {
             <div className="acad-student-facts">
               <AcademyStatusBadge status={s.status} testId="astudent-status" />
               <LevelBadge level={s.level} testId="astudent-level" />
-              {s.age !== null && <span>{s.age} {t('academy.years')}</span>}
+              {s.age != null && s.age > 0 && <span>{s.age} {t('academy.years')}</span>}
               {s.phones.map((p, i) => (
                 <a key={`${p}-${i}`} href={`tel:${p.replace(/[^+\d]/g, '')}`} data-testid={i === 0 ? 'astudent-phone' : undefined}>
                   <Icon name="call" size={14} /> {p}

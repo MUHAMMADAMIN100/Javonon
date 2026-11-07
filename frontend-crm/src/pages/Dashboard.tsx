@@ -138,7 +138,9 @@ export default function Dashboard() {
     enabled: showTop && !invalid,
     placeholderData: keepPrev,
   });
-  const topPerformers = (leaderQuery.data ?? []).slice(0, 3);
+  // Места #1–3 — только тем, у кого есть результат (продажи или зачисления):
+  // раньше места раздавались при 0 TJS и 0 зачислений (UX из QA-отчёта).
+  const topPerformers = (leaderQuery.data ?? []).filter((p) => p.salesAmount > 0 || p.applicationsEnrolled > 0).slice(0, 3);
 
   const busy =
     appStatsQuery.isFetching ||
@@ -182,7 +184,8 @@ export default function Dashboard() {
         <PeriodSwitcher state={period} busy={busy} />
 
         <div className="card" style={{ padding: 24, color: 'var(--text-soft)', fontSize: 14 }}>
-          {t('dashboard.period.invalidBody')}
+          {/* Пустая дата — «укажите обе», а не «наоборот» (QA №17). */}
+          {period.invalidHint === t('dashboard.period.incomplete') ? t('dashboard.period.incompleteBody') : t('dashboard.period.invalidBody')}
         </div>
       </>
     );

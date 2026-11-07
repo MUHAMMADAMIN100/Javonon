@@ -258,6 +258,14 @@ export const financeByCategory = (params?: { from?: string; to?: string }) =>
     )
     .then((r) => r.data);
 
+/** Сумма долга: остаток по сделке, иначе цена программы, иначе неизвестна (QA №52). */
+export interface DebtInfo {
+  amount: number | null;
+  currency: string | null;
+  programName: string | null;
+  source: 'deal' | 'program' | null;
+  submissionId: string | null;
+}
 export const pendingPayments = () =>
   api.get<any[]>('/finance/pending-payments').then((r) => r.data);
 

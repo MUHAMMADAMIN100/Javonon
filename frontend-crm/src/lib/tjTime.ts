@@ -230,3 +230,9 @@ export function tjDateTimeInput(input: string | Date | null | undefined): string
   if (!day) return '';
   return `${day}T${tjFormatTime(input)}`;
 }
+
+/** Статус занятия словами: прошедшее и не отмеченное — «Не отмечено» (QA №44). */
+export function sessionStatusKey(s: { status: string; endsAt: string }): string {
+  if (s.status === 'SCHEDULED' && new Date(s.endsAt).getTime() < Date.now()) return 'classes.status.NOT_MARKED';
+  return `classes.status.${s.status}`;
+}

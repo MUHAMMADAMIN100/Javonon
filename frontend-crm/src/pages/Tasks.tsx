@@ -1,4 +1,5 @@
 import { fmtDateText, TJ_TZ } from '../lib/tjTime';
+import { tjToday } from '../lib/tjTime';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import CrmSelect from '../components/CrmSelect';
@@ -241,7 +242,7 @@ export default function Tasks() {
 
   const onDelete = async (task: Task) => {
     const ok = await confirm({
-      title: t('common.delete') + ' ' + t('tasks.title').toLowerCase(),
+      title: t('tasks.delete.title'),
       message: `«${task.title}»`,
       confirmText: t('common.delete'),
       danger: true,
@@ -485,6 +486,12 @@ export default function Tasks() {
                   onChange={(v) => setForm({ ...form, deadline: v })}
                   showTime
                 />
+                {/* Срок в прошлом — предупреждаем (QA №54); без времени — до конца дня. */}
+                {form.deadline && (form.deadline.length <= 10 || form.deadline.endsWith('T00:00')
+                  ? form.deadline.slice(0, 10) < tjToday()
+                  : new Date(`${form.deadline}+05:00`).getTime() < Date.now()) && (
+                  <div className="form-error-text" style={{ color: '#b45309' }} data-testid="task-deadline-past">{t('tasks.deadlinePast')}</div>
+                )}
               </div>
               <div className="form-actions">
                 <button

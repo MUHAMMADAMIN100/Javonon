@@ -479,7 +479,7 @@ html.icons-loading .material-symbols-rounded {
 /* Место в конце страницы под плавающей кнопкой звонка (справа снизу,
    components/Dialpad): долистав до конца, последнюю строку видно над ней —
    раньше кнопка закрывала «Вперёд» у пагинации. Чату на весь экран не нужно. */
-.content:not(:has(.chat-card))::after { content: ''; display: block; height: 64px; }
+.content:not(:has(.chat-card))::after { content: ''; display: block; height: 96px; } /* 96: кнопка звонка 56 + отступ 20 + запас (QA №34) */
 
 /* Buttons — pill style with monoline focus ring */
 .btn {
@@ -5167,6 +5167,10 @@ input[type="checkbox"].crm-checkbox:indeterminate {
 .kpi-details-link { color: var(--primary-dark, var(--primary)); font-weight: 500; text-decoration: none; }
 .kpi-details-link:hover { text-decoration: underline; }
 .kpi-details-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.kpi-chip { border: 1px solid var(--border, #e5e7eb); background: var(--bg-soft, #f3f4f6); color: var(--text); cursor: pointer; font: inherit; font-size: 12px; }
+.kpi-chip:hover { border-color: var(--primary); }
+.kpi-chip.is-active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.kpi-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .kpi-details-sum { margin-top: 12px; text-align: right; font-size: 14px; }
 .kpi-details-note { margin-top: 10px; font-size: 12px; color: var(--text-soft); }
 

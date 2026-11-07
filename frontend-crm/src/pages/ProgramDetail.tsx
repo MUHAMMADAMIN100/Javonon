@@ -5,7 +5,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  getProgram, programImageUrl,
+  getProgram, programImageUrl, costUnitKey,
   listProgramDocuments, uploadProgramDocument, deleteProgramDocument,
   listProgramComments, addProgramComment, deleteProgramComment,
   type ProgramDocument, type ProgramComment,
@@ -129,7 +129,7 @@ export default function ProgramDetail() {
           <h3 style={{ marginBottom: 12 }}>{t('programs.section.main')}</h3>
           <Row label={t('app.field.direction')} value={p.direction ? DIRECTION_LABEL[p.direction] : '—'} />
           <Row label={t('programs.row.major')} value={p.major || '—'} />
-          <Row label={t('programs.row.costYear')} value={p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : t('programs.costUnknown')} />
+          <Row label={t('programs.row.cost')} value={p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency} / ${t(costUnitKey(p.duration))}` : t('programs.costUnknown')} />
           <Row label={t('programs.row.duration')} value={p.duration} />
           <Row label={t('programs.row.language')} value={p.language} />
           <Row label={t('programs.row.english')} value={p.englishLevel} />

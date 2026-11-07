@@ -1809,14 +1809,28 @@ export default function Leads() {
                               style={{ minWidth: 140 }}
                               value={a.managerId ?? ''}
                               data-testid="lead-row-manager"
-                              onChange={(e) =>
+                              onChange={async (e) => {
+                                const next = e.target.value || null;
+                                // Смена менеджера в строке — с подтверждением
+                                // (UX из QA: один клик менял боевые данные).
+                                // Свободный лид берут одним кликом — спрашиваем
+                                // только когда меняется уже назначенный менеджер.
+                                if (a.managerId) {
+                                  const nextName = next ? managers.find((m) => m.id === next)?.fullName || '' : t('leads.manager.unassigned');
+                                  const ok = await confirm({
+                                    title: t('leads.rowManager.title'),
+                                    message: t('leads.rowManager.message').replace('{lead}', a.fullName).replace('{name}', nextName),
+                                    confirmText: t('common.confirm'),
+                                  });
+                                  if (!ok) return;
+                                }
                                 assignMut.mutate({
                                   id: a.id,
                                   // Пустая строка — «снять менеджера»:
                                   // бэкенд ждёт именно null, не ''.
-                                  managerId: e.target.value || null,
-                                })
-                              }
+                                  managerId: next,
+                                });
+                              }}
                             >
                               <option value="">{t('leads.manager.unassigned')}</option>
                               {/* Назначенный менеджер может не входить в

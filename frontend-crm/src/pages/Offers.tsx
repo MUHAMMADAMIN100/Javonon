@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MiniMarkdown } from '../lib/miniMarkdown';
 import { roleCan } from '../lib/permissions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -371,11 +372,11 @@ function OfferCard({
           padding: 14,
           background: 'var(--bg-soft)',
           borderRadius: 10,
-          whiteSpace: 'pre-wrap',
           fontSize: 13,
           lineHeight: 1.55,
         }}>
-          {offer.content}
+          {/* Оферта — оформленным текстом, а не сырым Markdown (QA №59). */}
+          <MiniMarkdown text={offer.content} />
         </div>
       ) : (
         <>

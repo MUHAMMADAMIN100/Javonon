@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { sessionStatusKey } from '../lib/tjTime';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -398,7 +399,7 @@ function AgendaRow({ s, onOpen, onGroup }: { s: ClassSession; onOpen: () => void
           className="badge"
           style={{ color: SESSION_COLOR[s.status], borderColor: `${SESSION_COLOR[s.status]}55` }}
         >
-          {t(`classes.status.${s.status}`)}
+          {t(sessionStatusKey(s))}
         </span>
         <button className="btn btn-sm btn-secondary" onClick={onOpen}>
           <Icon name="edit" size={14} />

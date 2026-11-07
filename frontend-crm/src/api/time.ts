@@ -56,6 +56,8 @@ export const clockIn = (body?: { lat?: number; lon?: number; proofUrl?: string }
 export const lunchOut = () => api.post<TimeEntry>('/time/lunch-out').then((r) => r.data);
 export const lunchIn = () => api.post<LunchInResult>('/time/lunch-in').then((r) => r.data);
 export const clockOut = () => api.post<TimeEntry>('/time/clock-out').then((r) => r.data);
+/** Конец сегодняшнего рабочего дня по графику (null — нет открытой сессии). */
+export const getScheduleEnd = () => api.get<{ endsAt: string | null }>('/time/schedule-end').then((r) => r.data);
 export const teamStatus = () => api.get<TeamMemberStatus[]>('/time/team').then((r) => r.data);
 
 export const uploadTimeProof = (file: File) => {

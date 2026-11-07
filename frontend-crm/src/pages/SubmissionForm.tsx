@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { absFileUrl, useFileToken } from '../lib/fileUrl';
 import CrmSelect from '../components/CrmSelect';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -251,20 +252,39 @@ export default function SubmissionForm() {
     },
   });
 
+  // Ошибки формы — все сразу и у своих полей (QA №32: раньше по одной в тосте,
+  // поля не подсвечивались). Показываются после первой попытки отправить.
+  const [showErr, setShowErr] = useState(false);
+  const taNum = parseFloat(totalAmount);
+  const paNum = parseFloat(payAmount);
+  const fieldErrs = {
+    student: mode === 'existing' && !studentId ? t('dealForm.err.student') : '',
+    name: mode === 'new' && newName.trim().length < 2 ? t('dealForm.err.name') : '',
+    program: !programId ? t('dealForm.err.program') : '',
+    contract: contractUrls.length === 0 ? t('deal.err.contractFile') : '',
+    total: !isFinite(taNum) || taNum <= 0 ? t('deal.err.contractAmount') : '',
+    pay: !isFinite(paNum) || paNum <= 0
+      ? t('dealForm.err.payAmount')
+      : isFinite(taNum) && paNum > taNum + 0.005 ? t('dealForm.err.payOverTotal') : '',
+    receipt: payMethod === 'TRANSFER' && receiptUrls.length === 0 ? t('dealForm.err.receipt') : '',
+    deposit: payMethod === 'CASH' && depositProofUrls.length === 0 ? t('dealForm.err.deposit') : '',
+  };
+  const fe = (k: keyof typeof fieldErrs) => (showErr ? fieldErrs[k] : '');
+
   const onSubmit = () => {
     // Валидация
     if (pendingUploads > 0) return toast(t('dealForm.err.waitUploads'), 'error');
-    if (mode === 'existing' && !studentId) return toast(t('dealForm.err.student'), 'error');
-    if (mode === 'new' && newName.trim().length < 2) return toast(t('dealForm.err.name'), 'error');
-    if (!programId) return toast(t('dealForm.err.program'), 'error');
-    if (contractUrls.length === 0) return toast(t('deal.err.contractFile'), 'error');
-    const ta = parseFloat(totalAmount);
-    if (!isFinite(ta) || ta <= 0) return toast(t('deal.err.contractAmount'), 'error');
-    const pa = parseFloat(payAmount);
-    if (!isFinite(pa) || pa <= 0) return toast(t('dealForm.err.payAmount'), 'error');
-    if (pa > ta + 0.005) return toast(t('dealForm.err.payOverTotal'), 'error');
-    if (payMethod === 'TRANSFER' && receiptUrls.length === 0) return toast(t('dealForm.err.receipt'), 'error');
-    if (payMethod === 'CASH' && depositProofUrls.length === 0) return toast(t('dealForm.err.deposit'), 'error');
+    if (Object.values(fieldErrs).some(Boolean)) {
+      setShowErr(true);
+      toast(t('dealForm.err.fixFields'), 'error');
+      // Прокрутить к первому полю с ошибкой — на телефоне оно может быть далеко.
+      requestAnimationFrame(() => {
+        document.querySelector('[data-field-error]')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      });
+      return;
+    }
+    const ta = taNum;
+    const pa = paNum;
 
     createMut.mutate({
       studentId: mode === 'existing' ? studentId : null,
@@ -421,7 +441,7 @@ export default function SubmissionForm() {
               ) : (
                 <>
                   <input
-                    className="crm-input"
+                    className={`crm-input${fe('student') ? ' input-error' : ''}`}
                     placeholder={t('dealForm.searchPlaceholder')}
                     value={studentSearch}
                     onChange={(e) => setStudentSearch(e.target.value)}
@@ -479,6 +499,7 @@ export default function SubmissionForm() {
                   )}
                 </>
               )}
+              {fe('student') && <div className="form-error-text" data-field-error="1" data-testid="deal-err-student">{fe('student')}</div>}
             </div>
           )}
 
@@ -502,8 +523,8 @@ export default function SubmissionForm() {
 
           {mode === 'new' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-              <Field label={`${t('common.fullName')} *`}>
-                <input className="crm-input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('dealForm.namePlaceholder')} />
+              <Field label={`${t('common.fullName')} *`} error={fe('name')} testid="deal-field-name">
+                <input className={`crm-input${fe('name') ? ' input-error' : ''}`} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('dealForm.namePlaceholder')} />
               </Field>
               <Field label={t('common.phone')}>
                 <input className="crm-input" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="+992..." />
@@ -533,8 +554,8 @@ export default function SubmissionForm() {
         {/* ===== 2. ПРОГРАММА + КОНТРАКТ ===== */}
         <Section title={`2. ${t('dealForm.section.program')}`}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            <Field label={`${t('deal.program')} *`}>
-              <CrmSelect className="crm-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
+            <Field label={`${t('deal.program')} *`} error={fe('program')} testid="deal-field-program">
+              <CrmSelect className={`crm-select${fe('program') ? ' input-error' : ''}`} value={programId} onChange={(e) => setProgramId(e.target.value)}>
                 <option value="">{t('common.choose')}</option>
                 {(programsQuery.data || []).map((p) => (
                   <option key={p.id} value={p.id}>
@@ -543,7 +564,7 @@ export default function SubmissionForm() {
                 ))}
               </CrmSelect>
             </Field>
-            <Field label={`${t('dealForm.contractFiles')} *`}>
+            <Field label={`${t('dealForm.contractFiles')} *`} error={fe('contract')} testid="deal-field-contract">
               <MultiFileUpload
                 values={contractUrls}
                 metas={contractMetas}
@@ -552,8 +573,8 @@ export default function SubmissionForm() {
                 onUploadingChange={onUploadingChange}
               />
             </Field>
-            <Field label={`${t('deal.contractAmount')} *`}>
-              <input className="crm-input" type="number" min={0} step={50} value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="3000" />
+            <Field label={`${t('deal.contractAmount')} *`} error={fe('total')} testid="deal-field-total">
+              <input className={`crm-input${fe('total') ? ' input-error' : ''}`} type="number" min={0} step={50} value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="3000" />
             </Field>
             <Field label={t('common.currency')}>
               {/* Список — общий с бэком (SUBMISSION_CURRENCIES). Значение вне
@@ -572,8 +593,8 @@ export default function SubmissionForm() {
         {/* ===== 3. ПЕРВЫЙ ПЛАТЁЖ ===== */}
         <Section title={`3. ${t('dealForm.section.payment')}`}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            <Field label={`${t('common.amount')} *`}>
-              <input className="crm-input" type="number" min={0} step={50} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="1000" />
+            <Field label={`${t('common.amount')} *`} error={fe('pay')} testid="deal-field-pay">
+              <input className={`crm-input${fe('pay') ? ' input-error' : ''}`} type="number" min={0} step={50} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="1000" />
             </Field>
             <Field label={`${t('deal.field.method')} *`}>
               <CrmSelect className="crm-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value as SubmissionPaymentMethod)}>
@@ -586,7 +607,7 @@ export default function SubmissionForm() {
               <CrmDatePicker value={payDate} onChange={setPayDate} />
             </Field>
             {payMethod === 'TRANSFER' && (
-              <Field label={`${t('dealForm.receipt')} *`}>
+              <Field label={`${t('dealForm.receipt')} *`} error={fe('receipt')} testid="deal-field-receipt">
                 <MultiFileUpload
                   values={receiptUrls}
                   metas={receiptMetas}
@@ -597,7 +618,7 @@ export default function SubmissionForm() {
               </Field>
             )}
             {payMethod === 'CASH' && (
-              <Field label={`${t('dealForm.depositShot')} *`}>
+              <Field label={`${t('dealForm.depositShot')} *`} error={fe('deposit')} testid="deal-field-deposit">
                 <MultiFileUpload
                   values={depositProofUrls}
                   metas={depositProofMetas}
@@ -714,13 +735,14 @@ function Section({ title, children }: { title: string; children: any }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: any }) {
+function Field({ label, children, error, testid }: { label: string; children: any; error?: string; testid?: string }) {
   return (
-    <div>
-      <label style={{ fontSize: 11, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, display: 'block' }}>
+    <div className={error ? 'deal-field has-error' : 'deal-field'} data-testid={testid}>
+      <label style={{ fontSize: 11, color: error ? 'var(--danger)' : 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, display: 'block' }}>
         {label}
       </label>
       {children}
+      {error && <div className="form-error-text" data-field-error="1">{error}</div>}
     </div>
   );
 }
@@ -748,7 +770,9 @@ function MultiFileUpload({
 }) {
   const { t } = useT();
   const { toast } = useUI();
+  useFileToken(); // превью — по адресу бэкенда с файловым токеном (QA №32: картинка была битой)
   const [uploading, setUploading] = useState(false);
+  const [broken, setBroken] = useState<Set<string>>(() => new Set());
   const inputRef = useRef<HTMLInputElement | null>(null);
   const addInputRef = useRef<HTMLInputElement | null>(null);
   // Держит ли компонент активный тик pendingUploads. На unmount возвращаем
@@ -817,9 +841,12 @@ function MultiFileUpload({
     onChange(nextUrls, nextMetas);
   };
 
+  // HEIC браузер показать не умеет — для него значок, как для PDF.
   const isImage = (url: string, mime?: string) => {
+    if (broken.has(url)) return false;
+    if (/heic|heif/i.test(mime || '') || /\.(heic|heif)$/i.test(url)) return false;
     if (mime && mime.startsWith('image/')) return true;
-    return /\.(jpg|jpeg|png|webp|heic|gif|bmp)$/i.test(url);
+    return /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(url);
   };
 
   return (
@@ -843,11 +870,15 @@ function MultiFileUpload({
                 }}
               >
                 {img ? (
-                  <img
-                    src={url}
-                    alt=""
-                    style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
-                  />
+                  <a href={absFileUrl(url)} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', flexShrink: 0 }}>
+                    <img
+                      src={absFileUrl(url)}
+                      alt=""
+                      data-testid="deal-file-thumb"
+                      onError={() => setBroken((b) => new Set(b).add(url))}
+                      style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
+                    />
+                  </a>
                 ) : (
                   <span
                     style={{
@@ -862,7 +893,7 @@ function MultiFileUpload({
                       color: 'var(--primary-dark)',
                     }}
                   >
-                    <Icon name="picture_as_pdf" size={18} />
+                    <Icon name={/pdf/i.test(meta?.mime || '') || /\.pdf$/i.test(url) ? 'picture_as_pdf' : 'description'} size={18} />
                   </span>
                 )}
                 <span

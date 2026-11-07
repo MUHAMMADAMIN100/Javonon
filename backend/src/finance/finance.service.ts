@@ -885,6 +885,17 @@ export class FinanceService {
     // с этой категорией напрямую через prisma, и PATCH таких строк по
     // другим полям (comment/receiptUrl) должен продолжать работать без
     // случайного 400 при "верни как было" из UI.
+    const moneyChanged =
+      (patch.amount !== undefined && patch.amount !== null && Number(patch.amount) !== before.amount) ||
+      (patch.currency !== undefined && patch.currency !== null && patch.currency !== before.currency) ||
+      (patch.type !== undefined && patch.type !== null && patch.type !== before.type) ||
+      (patch.date !== undefined && patch.date !== null && tjLocalDay(new Date(patch.date as any)) !== tjLocalDay(new Date(before.date)));
+    if (moneyChanged) {
+      const linked = await this.prisma.submissionPayment.findFirst({ where: { financeTransactionId: id }, select: { id: true } });
+      if (linked) {
+        throw new BadRequestException('Это платёж по сделке: сумму, валюту и дату меняйте в самой сделке.');
+      }
+    }
     if (patch.category === 'TUITION_PAYMENT' && before.category !== 'TUITION_PAYMENT') {
       throw new BadRequestException(
         'Категория TUITION_PAYMENT зарезервирована для платежей по сделкам (SubmissionPayment). ' +
@@ -1612,7 +1623,7 @@ export class FinanceService {
     // SalaryRecord бухгалтером.
     if (existing.bonusApplied && !overrideBonusApplied) {
       throw new ConflictException(
-        'Транзакция уже учтена в зарплате. Откатите SalaryRecord и повторите с overrideBonusApplied=true, либо используйте reverse-flow.',
+        'Операция уже учтена в начисленной зарплате — удалить её нельзя. Сначала пересчитайте зарплату за этот месяц.',
       );
     }
     // Q5 — reversedAt != null: строка уже soft-deleted (либо через
@@ -1621,11 +1632,7 @@ export class FinanceService {
     // текущем периоде. Hard-delete по reversedAt-строке стирает единственный
     // след самой отмены. В обоих случаях — блок.
     if (existing.reversedAt) {
-      throw new ConflictException(
-        hardDelete
-          ? 'Транзакция уже отменена (reversedAt) — hard-delete разрушит аудит-трейл самой отмены'
-          : 'Транзакция уже отменена (reversedAt) — повторный soft-delete создаст дубль зеркальной записи',
-      );
+      throw new ConflictException('Операция уже отменена — удалять её второй раз не нужно.');
     }
 
     // === Orphan-reference guard (audit CRITICAL). =========================
@@ -1669,26 +1676,17 @@ export class FinanceService {
         }),
       ]);
     if (linkedSubPayment || linkedPayment || linkedCommission) {
-      const refs: string[] = [];
-      if (linkedSubPayment) {
-        refs.push(
-          `SubmissionPayment ${linkedSubPayment.id} (заявка ${linkedSubPayment.submissionId})`,
-        );
-      }
-      if (linkedPayment) {
-        refs.push(
-          `Payment ${linkedPayment.id} (студент ${linkedPayment.studentId})`,
-        );
-      }
-      if (linkedCommission) {
-        refs.push(
-          `Commission ${linkedCommission.id} (партнёр ${linkedCommission.partnerId})`,
-        );
-      }
+      // Тексты — для сотрудника, а не для разработчика (QA №53): что это за
+      // операция и где её отменять. Id связей — в лог сервера.
+      this.logger.warn(
+        `remove ${id} blocked: subPayment=${linkedSubPayment?.id ?? '-'} payment=${linkedPayment?.id ?? '-'} commission=${linkedCommission?.id ?? '-'}`,
+      );
       throw new ConflictException(
-        'Нельзя удалить транзакцию: на неё ссылаются ' +
-          refs.join(', ') +
-          '. Отмените исходную операцию (SaleSubmission CANCEL / возврат платежа), это создаст обратную запись и освободит ссылку.',
+        linkedSubPayment
+          ? 'Это платёж по сделке — удалить его можно только в самой сделке: отклоните платёж или отмените сделку.'
+          : linkedPayment
+            ? 'Это оплата студента — отмените её в карточке студента.'
+            : 'На эту операцию начислена комиссия партнёру — сначала отмените комиссию.',
       );
     }
 
@@ -2165,7 +2163,64 @@ export class FinanceService {
       },
       orderBy: { updatedAt: 'desc' },
     });
-    return apps;
+    // QA №52: у должников было «Программа —» и «Сумма —», а «Долги клиентов» —
+    // 0 TJS, потому что сумма бралась только из цены программы заявки. Теперь
+    // сумма долга — остаток по сделке (контракт минус одобренные платежи):
+    // сделка, открытая из этой заявки, иначе открытые сделки того же студента.
+    // Нет сделки — цена программы заявки; нет и её — сумма не известна (null).
+    const appIds = apps.map((a) => a.id);
+    const studentIds = apps.map((a) => a.studentId).filter((x): x is string => !!x);
+    const subs = appIds.length
+      ? await this.prisma.saleSubmission.findMany({
+          where: {
+            status: { not: 'CANCELLED' },
+            OR: [{ applicationId: { in: appIds } }, ...(studentIds.length ? [{ studentId: { in: studentIds } }] : [])],
+          },
+          select: {
+            id: true,
+            applicationId: true,
+            studentId: true,
+            totalAmount: true,
+            currency: true,
+            program: { select: { name: true } },
+            payments: { where: { status: 'APPROVED' }, select: { amount: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    // Сделку, открытую из ДРУГОЙ заявки-должника, у студента не считаем —
+    // её долг уже покажет та заявка (иначе одна сумма попадёт в итог дважды).
+    const debtorApps = new Set(appIds);
+    return apps.map((a) => {
+      const own = subs.filter((s) => s.applicationId === a.id);
+      const deals = own.length
+        ? own
+        : a.studentId
+          ? subs.filter((s) => s.studentId === a.studentId && (!s.applicationId || !debtorApps.has(s.applicationId)))
+          : [];
+      if (deals.length) {
+        const currency = deals[0].currency;
+        const same = deals.filter((d) => d.currency === currency);
+        const left = same.reduce((sum, d) => sum + Math.max(0, d.totalAmount - d.payments.reduce((p, x) => p + x.amount, 0)), 0);
+        return {
+          ...a,
+          debt: {
+            amount: Math.round(left * 100) / 100,
+            currency,
+            programName: deals[0].program?.name ?? a.program?.name ?? null,
+            source: 'deal' as const,
+            submissionId: deals[0].id,
+          },
+        };
+      }
+      if (a.program) {
+        return {
+          ...a,
+          debt: { amount: Number(a.program.cost), currency: a.program.currency || 'TJS', programName: a.program.name, source: 'program' as const, submissionId: null },
+        };
+      }
+      return { ...a, debt: { amount: null, currency: null, programName: null, source: null, submissionId: null } };
+    });
   }
 }
 

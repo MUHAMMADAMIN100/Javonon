@@ -223,9 +223,9 @@ function DebtsDetails({ onClose }: { onClose: () => void }) {
   // Сумма по валютам программ — одна строка на валюту.
   const byCur = new Map<string, number>();
   for (const a of rows ?? []) {
-    if (!a.program) continue;
-    const c = a.program.currency || REPORTING_CURRENCY;
-    byCur.set(c, (byCur.get(c) ?? 0) + Number(a.program.cost || 0));
+    if (a.debt?.amount == null) continue;
+    const c = a.debt.currency || REPORTING_CURRENCY;
+    byCur.set(c, (byCur.get(c) ?? 0) + Number(a.debt.amount));
   }
   const summary = rows
     ? [
@@ -234,15 +234,15 @@ function DebtsDetails({ onClose }: { onClose: () => void }) {
       ]
     : undefined;
   const columns: DetailsColumn<any>[] = [
-    { key: 'fullName', label: t('finance.col.student'), value: (a) => a.fullName, render: (a) => <strong>{a.fullName}</strong> },
-    { key: 'program', label: t('sidebar.programs'), value: (a) => a.program?.name },
+    { key: 'fullName', label: t('finance.col.debtor'), value: (a) => a.fullName, render: (a) => <strong>{a.fullName}</strong> },
+    { key: 'program', label: t('sidebar.programs'), value: (a) => a.debt?.programName ?? a.program?.name },
     {
       key: 'amount',
-      label: t('common.amount'),
+      label: t('finance.debt.col'),
       type: 'number',
       align: 'right',
-      value: (a) => (a.program ? Number(a.program.cost) : null),
-      render: (a) => (a.program ? fmtMoney(Number(a.program.cost), a.program.currency || REPORTING_CURRENCY) : '—'),
+      value: (a) => a.debt?.amount ?? null,
+      render: (a) => (a.debt?.amount != null ? fmtMoney(Number(a.debt.amount), a.debt.currency || REPORTING_CURRENCY) : t('finance.debt.noAmount')),
     },
     { key: 'manager', label: t('finance.col.manager'), value: (a) => a.manager?.fullName },
   ];
@@ -259,7 +259,7 @@ function DebtsDetails({ onClose }: { onClose: () => void }) {
       columns={columns}
       rowKey={(a) => a.id}
       rowHref={(a) => `/applications/${a.id}`}
-      searchOf={(a) => [a.fullName, a.program?.name, a.manager?.fullName]}
+      searchOf={(a) => [a.fullName, a.debt?.programName ?? a.program?.name, a.manager?.fullName]}
       emptyText={t('finance.outstanding.empty')}
       onClose={onClose}
     />

@@ -32,7 +32,9 @@ function fmtRelative(iso: string) {
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 60) return tr('ago.min').replace('{n}', String(diffMin || 1));
+  // Меньше минуты — «только что», а не «1 мин назад» (QA №35).
+  if (diffMin < 1) return tr('time.justNow');
+  if (diffMin < 60) return tr('ago.min').replace('{n}', String(diffMin));
   const diffH = Math.floor(diffMin / 60);
   if (diffH < 24) return tr('ago.h').replace('{n}', String(diffH));
   const diffD = Math.floor(diffH / 24);

@@ -19,6 +19,7 @@ import {
   createCampaign,
   sendCampaignNow,
   cancelCampaign,
+  deleteCampaign,
 } from '../api/massmail';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -63,6 +64,19 @@ export default function MassMail() {
     try {
       await sendCampaignNow(c.id);
       toast(t('toast.sent'), 'success');
+      invalidate();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
+    }
+  };
+
+  const directionLabel = useDirectionLabel();
+  const onDelete = async (c: MassMailCampaign) => {
+    const ok = await confirm({ title: t('massmail.confirm.delete'), message: `«${c.name}»`, danger: true, confirmText: t('common.delete') });
+    if (!ok) return;
+    try {
+      await deleteCampaign(c.id);
+      toast(t('toast.deleted'), 'success');
       invalidate();
     } catch (e: any) {
       toast(e?.response?.data?.message || t('toast.error'), 'error');
@@ -150,8 +164,10 @@ export default function MassMail() {
                 <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text)', whiteSpace: 'pre-wrap', maxHeight: 96, overflow: 'hidden' }}>
                   {c.body}
                 </div>
-                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-soft)', fontFamily: 'var(--font-mono)' }}>
-                  audience: {JSON.stringify(c.audience)}
+                {/* Аудитория словами, а не сырой JSON (QA №45). */}
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-soft)' }} data-testid="massmail-audience">
+                  {t('massmail.field.audience')}: {t(`massmail.audience.${(c.audience as any)?.type ?? 'all-leads'}`)}
+                  {(c.audience as any)?.value ? ` · ${directionLabel((c.audience as any).value)}` : ''}
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 110 }}>
@@ -160,9 +176,14 @@ export default function MassMail() {
                     <Icon name="send" size={14} /> {t('massmail.action.send')}
                   </button>
                 )}
-                {canSend && (c.status === 'DRAFT' || c.status === 'SCHEDULED' || c.status === 'SENDING') && (
+                {canSend && (c.status === 'SCHEDULED' || c.status === 'SENDING') && (
                   <button className="btn btn-sm btn-danger" onClick={() => onCancel(c)} data-testid="massmail-cancel">
                     {t('common.cancel')}
+                  </button>
+                )}
+                {(c.status === 'DRAFT' || c.status === 'CANCELED') && (
+                  <button className="btn btn-sm btn-danger" onClick={() => onDelete(c)} data-testid="massmail-delete">
+                    <Icon name="delete" size={14} /> {t('common.delete')}
                   </button>
                 )}
               </div>
@@ -187,13 +208,21 @@ function CreateForm({ onClose }: { onClose: () => void }) {
   const [channel, setChannel] = useState<MassMailChannel>('WHATSAPP');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [audienceType, setAudienceType] = useState<'all-leads' | 'paid-students' | 'by-direction'>('all-leads');
+  // Аудиторию выбирают явно: «Все лиды» по умолчанию — это рассылка всем (QA №45).
+  const [audienceType, setAudienceType] = useState<'' | 'all-leads' | 'paid-students' | 'by-direction'>('');
+  const [showErr, setShowErr] = useState(false);
   const [audienceValue, setAudienceValue] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const errs = {
+    name: !name.trim() ? t('massmail.err.name') : '',
+    body: !body.trim() ? t('massmail.err.body') : '',
+    audience: !audienceType ? t('massmail.err.audience') : audienceType === 'by-direction' && !audienceValue ? t('massmail.err.direction') : '',
+  };
   const submit = async () => {
-    if (!name.trim() || !body.trim()) {
-      toast(t('toast.error'), 'error');
+    // Ошибки — у полей, а не одно «Ошибка» (QA №45).
+    if (errs.name || errs.body || errs.audience) {
+      setShowErr(true);
       return;
     }
     setBusy(true);
@@ -203,7 +232,7 @@ function CreateForm({ onClose }: { onClose: () => void }) {
         channel,
         subject: subject.trim() || undefined,
         body: body.trim(),
-        audience: { type: audienceType, ...(audienceType === 'by-direction' && audienceValue ? { value: audienceValue } : {}) },
+        audience: { type: audienceType as Exclude<typeof audienceType, ''>, ...(audienceType === 'by-direction' && audienceValue ? { value: audienceValue } : {}) },
       });
       toast(t('toast.created'), 'success');
       onClose();
@@ -225,7 +254,8 @@ function CreateForm({ onClose }: { onClose: () => void }) {
       <div className="form-grid-2" style={{ gap: 12, marginBottom: 12 }}>
         <div className="form-group">
           <label>{t('massmail.field.name')}</label>
-          <input className="crm-input" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={`crm-input${showErr && errs.name ? ' input-error' : ''}`} value={name} onChange={(e) => setName(e.target.value)} />
+          {showErr && errs.name && <div className="form-error-text">{errs.name}</div>}
         </div>
         <div className="form-group">
           <label>{t('massmail.field.channel')}</label>
@@ -244,11 +274,13 @@ function CreateForm({ onClose }: { onClose: () => void }) {
       <div className="form-grid-2" style={{ gap: 12, marginBottom: 12 }}>
         <div className="form-group">
           <label>{t('massmail.field.audience')}</label>
-          <CrmSelect className="crm-select" value={audienceType} onChange={(e) => setAudienceType(e.target.value as any)}>
+          <CrmSelect className={`crm-select${showErr && errs.audience ? ' input-error' : ''}`} value={audienceType} onChange={(e) => setAudienceType(e.target.value as any)} data-testid="massmail-audience-pick">
+            <option value="">{t('massmail.audience.choose')}</option>
             <option value="all-leads">{t('massmail.audience.all-leads')}</option>
             <option value="paid-students">{t('massmail.audience.paid-students')}</option>
             <option value="by-direction">{t('app.field.direction')}</option>
           </CrmSelect>
+          {showErr && errs.audience && <div className="form-error-text">{errs.audience}</div>}
         </div>
         {audienceType === 'by-direction' && (
           <div className="form-group">
@@ -268,11 +300,12 @@ function CreateForm({ onClose }: { onClose: () => void }) {
       <div className="form-group" style={{ marginBottom: 12 }}>
         <label>{t('massmail.field.body')}</label>
         <textarea
-          className="crm-textarea"
+          className={`crm-textarea${showErr && errs.body ? ' input-error' : ''}`}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={5}
         />
+        {showErr && errs.body && <div className="form-error-text">{errs.body}</div>}
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn btn-sm btn-secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>

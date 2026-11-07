@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  createProgram, deleteProgram, listPrograms, programImageUrl,
+  createProgram, deleteProgram, listPrograms, programImageUrl, costUnitKey,
   updateProgram, uploadProgramImage, uploadProgramGalleryImage,
   removeProgramGalleryImage,
   listProgramScholarships, addProgramScholarship, updateProgramScholarship,
@@ -335,7 +335,7 @@ export default function Programs() {
 
   const onDelete = async (p: Program) => {
     const ok = await confirm({
-      title: t('common.delete') + ' ' + t('programs.title').toLowerCase(),
+      title: t('programs.delete.title'),
       message: t('programs.delete.message').replace('{name}', p.name),
       confirmText: t('common.delete'),
       danger: true,
@@ -479,7 +479,7 @@ export default function Programs() {
                   )}
                   <div className="program-card-cost">
                     {p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency}` : t('programs.costUnknown')}
-                    {p.cost ? <span> / {t('programs.year')}</span> : null}
+                    {p.cost ? <span data-testid="program-cost-unit"> / {t(costUnitKey(p.duration))}</span> : null}
                   </div>
                   {p.universityWebsiteUrl && (
                     <a
@@ -582,6 +582,7 @@ export default function Programs() {
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.cost')}</label>
+                  <div className="form-hint" style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 4 }}>{t('programs.field.costUnit')}</div>
                   <input
                     type="number"
                     min={0}

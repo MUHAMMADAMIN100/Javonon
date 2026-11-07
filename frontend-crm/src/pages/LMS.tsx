@@ -13,7 +13,12 @@ import {
   addLesson,
   updateLesson,
   deleteLesson,
+  enrollStudent,
+  listCourseStudents,
+  unenrollStudent,
 } from '../api/lms';
+import { listStudents } from '../api/students';
+import CrmSelect from '../components/CrmSelect';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
@@ -343,7 +348,7 @@ function CourseEditor({ course, canUpdate, canRemove, onChange, onTogglePublish,
                 color: 'var(--primary-dark)',
                 marginBottom: 8,
                 textTransform: 'uppercase',
-              }}>COURSE · {course.published ? 'PUBLISHED' : 'DRAFT'}</div>
+              }}>{t('lms.badge.course')} · {course.published ? t('lms.badge.published') : t('lms.badge.draft')}</div>
               <h2 className="lms-course-title" style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 36,
@@ -474,6 +479,82 @@ function CourseEditor({ course, canUpdate, canRemove, onChange, onTogglePublish,
           </div>
         ))}
       </div>
+      <CourseStudents courseId={course.id} canUpdate={canUpdate} />
+    </div>
+  );
+}
+
+/**
+ * Студенты курса и «Записать студента» (QA №43: у курсов было «0 студентов»
+ * и записать было нечем — только самозапись в кабинете).
+ */
+function CourseStudents({ courseId, canUpdate }: { courseId: string; canUpdate: boolean }) {
+  const { t } = useT();
+  const { toast, confirm } = useUI();
+  const qc = useQueryClient();
+  const key = ['lms', 'course-students', courseId];
+  const enrolled = useQuery({ queryKey: key, queryFn: () => listCourseStudents(courseId) });
+  const [pick, setPick] = useState('');
+  const students = useQuery({ queryKey: ['students', 'lms-pick'], queryFn: () => listStudents({}), enabled: canUpdate, staleTime: 60_000 });
+  const rows = enrolled.data ?? [];
+  const taken = new Set(rows.map((r) => r.id));
+  const add = async () => {
+    if (!pick) return;
+    try {
+      await enrollStudent(courseId, pick);
+      setPick('');
+      await qc.invalidateQueries({ queryKey: key });
+      toast(t('lms.students.added'), 'success');
+    } catch (e: any) {
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
+    }
+  };
+  const remove = async (id: string, name: string) => {
+    const ok = await confirm({ title: t('lms.students.removeTitle'), message: name, danger: true, confirmText: t('common.delete') });
+    if (!ok) return;
+    try {
+      await unenrollStudent(courseId, id);
+      await qc.invalidateQueries({ queryKey: key });
+    } catch (e: any) {
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
+    }
+  };
+  return (
+    <div className="lms-students" data-testid="lms-course-students">
+      <div className="crm-section-head" style={{ marginTop: 24 }}>
+        <h3 className="crm-section-title" style={{ fontSize: 18 }}>{t('lms.students.title').replace('{n}', String(rows.length))}</h3>
+      </div>
+      {canUpdate && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <div style={{ minWidth: 260, flex: '1 1 260px', maxWidth: 420 }}>
+            <CrmSelect className="crm-select" value={pick} onChange={(e) => setPick(e.target.value)} data-testid="lms-student-pick">
+              <option value="">{t('lms.students.choose')}</option>
+              {(students.data ?? []).filter((s) => !taken.has(s.id)).map((s) => (
+                <option key={s.id} value={s.id}>{s.fullName}</option>
+              ))}
+            </CrmSelect>
+          </div>
+          <button className="btn btn-primary" onClick={add} disabled={!pick} data-testid="lms-student-add">
+            <Icon name="person_add" size={16} /> {t('lms.students.add')}
+          </button>
+        </div>
+      )}
+      {rows.length === 0 ? (
+        <div className="empty" style={{ padding: 12 }}>{t('lms.students.empty')}</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {rows.map((r) => (
+            <div key={r.id} className="lms-student-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--bg-soft)', borderRadius: 10 }}>
+              <span>{r.fullName}</span>
+              {canUpdate && (
+                <button className="btn btn-sm btn-secondary" onClick={() => remove(r.id, r.fullName)} title={t('common.delete')}>
+                  <Icon name="person_remove" size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1527,8 +1527,11 @@ export default function Chat() {
             {activeId && hasMore[activeId] && messages.length > 0 && (
               <div className="chat-history-more">{t('chat.loadingOlder')}</div>
             )}
+            {/* Пока история грузится — «Загрузка…», а не «Сообщений пока нет» (QA №46). */}
             {messages.length === 0 && (
-              <div className="empty" style={{ marginTop: 80 }}>{t('chat.empty')}</div>
+              <div className="empty" style={{ marginTop: 80 }} data-testid="chat-thread-empty">
+                {messagesQuery.isLoading || messagesQuery.isFetching ? t('common.loading') : t('chat.empty')}
+              </div>
             )}
             {messages.map((m, i) => {
               // Bot (__BOT__) — всегда слева; иначе своё — по authorId.

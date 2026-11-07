@@ -245,7 +245,7 @@ export default function AcademyStudents() {
                             <strong>{s.fullName}</strong>
                             {s.academyOnly && <span className="acad-tag">{t('academy.tag.academyOnly')}</span>}
                             <small className="acad-person-sub">
-                              {[s.phone, s.age !== null ? `${s.age} ${t('academy.years')}` : null].filter(Boolean).join(' · ')}
+                              {[s.phone, s.age != null && s.age > 0 ? `${s.age} ${t('academy.years')}` : null].filter(Boolean).join(' · ')}
                             </small>
                           </span>
                         </span>

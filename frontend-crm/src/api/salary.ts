@@ -207,6 +207,8 @@ export interface SalaryRosterRow {
   penalties: number;
   penaltiesPending: number;
   penaltiesExcused: number;
+  /** Вычтенные штрафы по причинам (только у ещё не начисленной строки). */
+  penaltiesByReason?: Record<string, number>;
   netAmount: number;
   currency: string;
   /** Доплата за прошлые месяцы, вошедшая в бонус (уже в bonusAmount). */

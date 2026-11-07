@@ -5,6 +5,7 @@ import {
   TimeEntry,
   clockIn as apiClockIn,
   clockOut as apiClockOut,
+  getScheduleEnd,
   getHistory,
   getToday,
   lunchIn as apiLunchIn,
@@ -56,7 +57,7 @@ function fmtDate(iso: string): string {
 
 export default function TimeTracker() {
   const { t } = useT();
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const qc = useQueryClient();
 
   // Live timer for "сейчас работаю" badge
@@ -205,6 +206,22 @@ export default function TimeTracker() {
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
   const clockOutMut = buildMut(apiClockOut, { status: 'OFF', clockOut: new Date().toISOString() }, t('time.toast.finished'));
+  // «Закончить день» раньше конца по графику — сначала «Уверены?» (QA №55:
+  // случайное нажатие давало «Пришёл 09:17 — Ушёл 09:17»).
+  const onClockOut = async () => {
+    try {
+      const { endsAt } = await getScheduleEnd();
+      if (endsAt && Date.now() < new Date(endsAt).getTime()) {
+        const ok = await confirm({
+          title: t('time.earlyLeave.title'),
+          message: t('time.earlyLeave.message').replace('{time}', fmtTime(endsAt)),
+          confirmText: t('time.earlyLeave.ok'),
+        });
+        if (!ok) return;
+      }
+    } catch { /* график не узнали — не мешаем закончить день */ }
+    clockOutMut.mutate();
+  };
 
   const loading = clockInMut.isPending || lunchOutMut.isPending || lunchInMut.isPending || clockOutMut.isPending;
   void qc; // reserved for future cross-key invalidations
@@ -384,7 +401,7 @@ export default function TimeTracker() {
               </motion.button>
               <motion.button
                 className="btn btn-primary"
-                onClick={() => clockOutMut.mutate()}
+                onClick={onClockOut}
                 disabled={loading}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -409,7 +426,7 @@ export default function TimeTracker() {
               </motion.button>
               <motion.button
                 className="btn btn-secondary"
-                onClick={() => clockOutMut.mutate()}
+                onClick={onClockOut}
                 disabled={loading}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -454,7 +471,10 @@ export default function TimeTracker() {
                   <td style={{ fontWeight: 500 }}>{fmtDate(h.clockIn)}</td>
                   <td data-label={t('workday.col.arrival')} style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtTime(h.clockIn)}</td>
                   <td data-label={t('workday.col.lunch')} style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtMin(h.totalLunchMinutes)}</td>
-                  <td data-label={t('workday.col.leave')} style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtTime(h.clockOut)}</td>
+                  <td data-label={t('workday.col.leave')} style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+                    {fmtTime(h.clockOut)}
+                    {(h as any).autoClosed && <div className="profile-field-hint" data-testid="auto-closed">{t('time.autoClosed')}</div>}
+                  </td>
                   <td data-label={t('workday.col.late')}>
                     {h.lateMinutes > 0 ? (
                       <span className="badge badge-warning">{h.lateMinutes}{t('common.minutes')}</span>

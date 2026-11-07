@@ -337,8 +337,11 @@ function ApplicationsTab({ d }: { d: KpiDetails }) {
   const { t } = useT();
   const statusLabel = useApplicationStatusLabel();
   const countryLabel = useCountryLabel();
+  // Чипы статусов — фильтр списка (QA: выглядели как фильтры, но не нажимались).
+  const [statusPick, setStatusPick] = useState<string | null>(null);
+  const shown = statusPick ? d.applications.filter((a) => a.status === statusPick) : d.applications;
   const sort = useTableSort(
-    d.applications,
+    shown,
     [
       { key: 'fullName', label: t('app.field.fullName'), value: (a) => a.fullName },
       { key: 'phone', label: t('app.field.phone'), value: (a) => a.phone },
@@ -351,11 +354,27 @@ function ApplicationsTab({ d }: { d: KpiDetails }) {
   if (d.applications.length === 0) return <Empty text={t('kpi.details.empty.applications')} />;
   return (
     <>
-      <div className="kpi-details-chips" data-testid="kpi-app-statuses">
+      <div className="kpi-details-chips" data-testid="kpi-app-statuses" role="group" aria-label={t('kpi.details.col.status')}>
+        <button
+          type="button"
+          className={`badge kpi-chip${statusPick === null ? ' is-active' : ''}`}
+          aria-pressed={statusPick === null}
+          onClick={() => setStatusPick(null)}
+          data-testid="kpi-status-all"
+        >
+          {t('common.all')} · <b>{d.applications.length}</b>
+        </button>
         {d.applicationsByStatus.map((g) => (
-          <span key={g.status} className="badge badge-gray">
+          <button
+            type="button"
+            key={g.status}
+            className={`badge kpi-chip${statusPick === g.status ? ' is-active' : ''}`}
+            aria-pressed={statusPick === g.status}
+            onClick={() => setStatusPick((cur) => (cur === g.status ? null : g.status))}
+            data-testid={`kpi-status-${g.status}`}
+          >
             {statusLabel(g.status)} · <b>{g.count}</b>
-          </span>
+          </button>
         ))}
       </div>
       <SortSelect sort={sort} />

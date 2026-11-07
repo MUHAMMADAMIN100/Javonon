@@ -581,6 +581,7 @@ export default function Salary() {
                             </td>
                             <td data-label={t('salary.cell.penalties')} style={{ color: r.penalties > 0 ? 'var(--danger)' : 'var(--text-soft)' }}>
                               {r.penalties > 0 ? `− ${fmtMoney(r.penalties, r.currency)}` : fmtMoney(0, r.currency)}
+                              <PenaltyNote r={r} />
                             </td>
                             <td data-label={t('salary.cell.net')} style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 17 }} data-testid="salary-net">
                               {fmtMoney(netOf(r), r.currency)}
@@ -1450,6 +1451,29 @@ function PreviewCell({ label, value, sub, negative }: { label: string; value: st
         color: negative ? 'var(--danger)' : 'var(--text)',
       }}>{value}</div>
       {sub && <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-light)', marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * Пояснение под суммой штрафа (QA №60): за что штраф (утро / после обеда /
+ * прогул / задача / вручную), сколько ждёт решения по причине и сколько
+ * прощено. Опоздание без штрафа — тоже словами.
+ */
+function PenaltyNote({ r }: { r: { penalties: number; lateMinutes: number; penaltiesPending?: number; penaltiesExcused?: number; penaltiesByReason?: Record<string, number>; currency: string; record?: unknown } }) {
+  const { t } = useT();
+  const parts: string[] = [];
+  const by = r.penaltiesByReason ?? {};
+  for (const [reason, amount] of Object.entries(by)) {
+    if (amount > 0) parts.push(`${t(`penalty.reason.${reason}`)} ${fmtMoney(amount, r.currency)}`);
+  }
+  if ((r.penaltiesPending ?? 0) > 0) parts.push(`${t('salary.penaltyPending')}: ${fmtMoney(r.penaltiesPending ?? 0, r.currency)}`);
+  if ((r.penaltiesExcused ?? 0) > 0) parts.push(`${t('salary.penaltyExcused')}: ${fmtMoney(r.penaltiesExcused ?? 0, r.currency)}`);
+  if (parts.length === 0 && r.penalties === 0 && r.lateMinutes > 0 && !r.record) parts.push(t('salary.lateNoPenalty'));
+  if (parts.length === 0) return null;
+  return (
+    <div className="salary-pct" data-testid="salary-penalty-note" style={{ fontSize: 11, color: 'var(--text-soft)', marginTop: 2 }}>
+      {parts.join(' · ')}
     </div>
   );
 }

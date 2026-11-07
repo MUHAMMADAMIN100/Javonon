@@ -197,6 +197,7 @@ export class SalaryService {
             penalties: p.penalties,
             penaltiesPending: p.penaltiesPending,
             penaltiesExcused: p.penaltiesExcused,
+            penaltiesByReason: p.penaltiesByReason,
             netAmount: p.netAmount,
             currency: p.currency,
             /** Доплата за прошлые месяцы (уже в bonusAmount). */
@@ -583,6 +584,13 @@ export class SalaryService {
       penalties: round(penalties),
       penaltiesPending: round(eff.pending),
       penaltiesExcused: round(eff.excused),
+      /** Вычтенные штрафы по причинам: { LATE_ARRIVAL: 10, CUSTOM: 50 }. */
+      penaltiesByReason: eff.items
+        .filter((i: any) => i.excuseStatus !== 'PENDING' && i.excuseStatus !== 'APPROVED')
+        .reduce((acc: Record<string, number>, i: any) => {
+          acc[i.reason] = round((acc[i.reason] ?? 0) + i.amount);
+          return acc;
+        }, {}),
       netAmount: round(net),
       penaltyExcess: round(Math.max(0, -rawNet)),
       // currency соответствует SALARY_REPORTING_CURRENCY: и baseAmount,

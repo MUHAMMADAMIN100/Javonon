@@ -81,6 +81,22 @@ export class LmsController {
   enrollStudent(@Param('id') courseId: string, @Body() body: { studentId: string }) {
     return this.svc.enroll(body.studentId, courseId, true);
   }
+
+  @Get('courses/:id/students')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('lms:read')
+  courseStudents(@Param('id') courseId: string) {
+    return this.svc.courseStudents(courseId);
+  }
+
+  @Delete('courses/:id/enroll/:studentId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @Permissions('lms:update')
+  unenrollStudent(@Param('id') courseId: string, @Param('studentId') studentId: string) {
+    return this.svc.unenroll(courseId, studentId);
+  }
 }
 
 // Student side — отдельный контроллер с другим guard'ом

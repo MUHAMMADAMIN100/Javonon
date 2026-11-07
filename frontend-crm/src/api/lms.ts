@@ -44,3 +44,8 @@ export const deleteLesson = (id: string) =>
   api.delete(`/lms/lessons/${id}`).then((r) => r.data);
 export const enrollStudent = (courseId: string, studentId: string) =>
   api.post(`/lms/courses/${courseId}/enroll`, { studentId }).then((r) => r.data);
+/** Студенты курса (QA №43). */
+export const listCourseStudents = (courseId: string) =>
+  api.get<{ id: string; fullName: string; enrolledAt: string }[]>(`/lms/courses/${courseId}/students`).then((r) => r.data);
+export const unenrollStudent = (courseId: string, studentId: string) =>
+  api.delete(`/lms/courses/${courseId}/enroll/${studentId}`).then((r) => r.data);

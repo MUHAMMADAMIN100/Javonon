@@ -99,6 +99,12 @@ export class TimeTrackingController {
     return this.svc.clockOut(me.id);
   }
 
+  /** Конец сегодняшнего рабочего дня по графику — CRM спрашивает «Уверены?» при раннем уходе (QA №55). */
+  @Get('schedule-end')
+  scheduleEnd(@CurrentUser() me: any) {
+    return this.svc.myScheduledEnd(me.id);
+  }
+
   /** Сотрудник прикладывает доказательство присутствия (видео/фото). */
   @Post('proofs')
   @UseInterceptors(

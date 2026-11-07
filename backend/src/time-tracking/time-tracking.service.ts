@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeEntryStatus } from '@prisma/client';
 import { SettingsService } from '../settings/settings.service';
@@ -46,6 +47,9 @@ function localDayAndMinutes(date: Date): { weekday: any; minutesFromMidnight: nu
     minutesFromMidnight: hour * 60 + minute,
   };
 }
+
+/** Сколько ждём после конца дня по графику, прежде чем закрыть день сами. */
+const AUTO_CLOSE_GRACE_MS = 3 * 60 * 60 * 1000;
 
 @Injectable()
 export class TimeTrackingService {
@@ -99,18 +103,9 @@ export class TimeTrackingService {
       if (sameDay) {
         throw new BadRequestException('Сначала закройте текущую сессию (Закончить день)');
       }
-      // Стейл-сессия — закрываем её. clockOut = время последнего
-      // зафиксированного действия (lunchIn / lunchOut / clockIn).
-      const lastTouch = active.lunchIn || active.lunchOut || active.clockIn;
-      const wallMin = Math.max(0, Math.round((lastTouch.getTime() - active.clockIn.getTime()) / 60000));
-      await this.prisma.timeEntry.update({
-        where: { id: active.id },
-        data: {
-          status: TimeEntryStatus.OFF,
-          clockOut: lastTouch,
-          totalMinutes: Math.max(0, wallMin - active.totalLunchMinutes),
-        },
-      });
+      // Стейл-сессия — закрываем её концом рабочего дня по графику (QA №55:
+      // раньше уход = последняя отметка, и выходило «Пришёл 09:17 — Ушёл 09:17»).
+      await this.closeAutomatically(active);
       console.warn(
         `clockIn: auto-closed stale session for user=${userId} from ${activeDayStr} (started ${activeWeekday}, today ${nowWeekday})`,
       );
@@ -312,6 +307,71 @@ export class TimeTrackingService {
       ...upd,
       requiresLunchExcuse: lateLunchMinutes >= EXCUSE_THRESHOLD_MIN,
     };
+  }
+
+  /** Конец рабочего дня по графику для сессии (Душанбе); нерабочий день — 23:59. */
+  async scheduledEnd(userId: string, clockIn: Date): Promise<Date> {
+    const { weekday } = localDayAndMinutes(clockIn);
+    const sched = await this.settings.getEffectiveScheduleForUser(userId, weekday);
+    const endMin = sched?.isWorkday ? sched.endMinute : 23 * 60 + 59;
+    const hh = String(Math.floor(endMin / 60)).padStart(2, '0');
+    const mm = String(endMin % 60).padStart(2, '0');
+    return new Date(`${tjLocalDay(clockIn)}T${hh}:${mm}:00+05:00`);
+  }
+
+  /** Конец сегодняшнего дня по графику для открытой сессии — для «Уверены?» в CRM. */
+  async myScheduledEnd(userId: string) {
+    const active = await this.getActive(userId);
+    if (!active) return { endsAt: null };
+    return { endsAt: (await this.scheduledEnd(userId, active.clockIn)).toISOString() };
+  }
+
+  /**
+   * Закрыть забытую сессию: уход = конец рабочего дня по графику (но не
+   * раньше последней отметки), обед, если он не закрыт, — до этого момента.
+   */
+  private async closeAutomatically(active: { id: string; userId: string; clockIn: Date; lunchIn: Date | null; lunchOut: Date | null; status: TimeEntryStatus; totalLunchMinutes: number }) {
+    const lastTouch = active.lunchIn || active.lunchOut || active.clockIn;
+    const end = await this.scheduledEnd(active.userId, active.clockIn);
+    const at = end.getTime() > lastTouch.getTime() ? end : lastTouch;
+    let lunch = active.totalLunchMinutes;
+    if (active.status === TimeEntryStatus.ON_LUNCH && active.lunchOut) {
+      lunch += Math.max(0, Math.round((at.getTime() - active.lunchOut.getTime()) / 60000));
+    }
+    const wallMin = Math.max(0, Math.round((at.getTime() - active.clockIn.getTime()) / 60000));
+    await this.prisma.timeEntry.update({
+      where: { id: active.id },
+      data: {
+        status: TimeEntryStatus.OFF,
+        clockOut: at,
+        totalLunchMinutes: lunch,
+        totalMinutes: Math.max(0, wallMin - lunch),
+        autoClosed: true,
+      },
+    });
+    this.realtime.emitStaff('attendance:updated', { userId: active.userId, entryId: active.id, action: 'autoClose' });
+  }
+
+  /**
+   * Каждые полчаса: дни, которые так и не закрыли, закрываются сами — через
+   * 3 часа после конца рабочего дня по графику (вдруг человек задержался и
+   * ещё нажмёт «Закончить день» сам), временем конца дня (QA №55).
+   */
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async autoCloseForgotten() {
+    try {
+      const open = await this.prisma.timeEntry.findMany({
+        where: { clockOut: null, status: { not: TimeEntryStatus.OFF } },
+        select: { id: true, userId: true, clockIn: true, lunchIn: true, lunchOut: true, status: true, totalLunchMinutes: true },
+      });
+      const now = Date.now();
+      for (const e of open) {
+        const end = await this.scheduledEnd(e.userId, e.clockIn);
+        if (now > end.getTime() + AUTO_CLOSE_GRACE_MS) await this.closeAutomatically(e);
+      }
+    } catch (err) {
+      console.warn(`autoCloseForgotten: ${(err as Error).message}`);
+    }
   }
 
   async clockOut(userId: string) {

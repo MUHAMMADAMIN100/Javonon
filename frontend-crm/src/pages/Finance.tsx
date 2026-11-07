@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import CrmSelect from '../components/CrmSelect';
 import { pageParam, useUrlListState } from '../lib/useUrlListState';
 import Pagination from '../components/Pagination';
@@ -16,8 +17,6 @@ import {
   INCOME_CATEGORIES,
   EXPENSE_CATEGORIES,
   CreateTransactionDto,
-  PRODUCT_CATEGORIES,
-  PRODUCT_CATEGORY_TEXT,
   loadAllTransactions,
   createTransaction,
   updateTransaction,
@@ -364,9 +363,9 @@ export default function Finance() {
   const pendingSort = useTableSort(
     pending,
     [
-      { key: 'student', label: t('finance.col.student'), value: (a) => a.fullName },
-      { key: 'program', label: t('sidebar.programs'), value: (a) => a.program?.name },
-      { key: 'amount', label: t('common.amount'), type: 'number', value: (a) => (a.program ? Number(a.program.cost) : null) },
+      { key: 'student', label: t('finance.col.debtor'), value: (a) => a.fullName },
+      { key: 'program', label: t('sidebar.programs'), value: (a) => a.debt?.programName ?? a.program?.name },
+      { key: 'amount', label: t('finance.debt.col'), type: 'number', value: (a) => a.debt?.amount ?? null },
       { key: 'manager', label: t('finance.col.manager'), value: (a) => a.manager?.fullName },
     ],
     { param: 'sortDebts' },
@@ -642,10 +641,21 @@ export default function Finance() {
               <tbody>
                 {pendingSort.sorted.map((app) => (
                   <tr key={app.id}>
-                    <td style={{ fontWeight: 500 }}>{app.fullName}</td>
-                    <td data-label={pendingSort.label('program')}>{app.program?.name || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
-                    <td data-label={pendingSort.label('amount')} style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 16 }}>
-                      {app.program ? fmtMoney(app.program.cost, app.program.currency || 'TJS') : '—'}
+                    <td style={{ fontWeight: 500 }}>
+                      <Link to={`/applications/${app.id}`} style={{ color: 'inherit' }} data-testid="debt-open">{app.fullName}</Link>
+                    </td>
+                    <td data-label={pendingSort.label('program')}>{app.debt?.programName || app.program?.name || <span style={{ color: 'var(--text-light)' }}>{t('finance.debt.noProgram')}</span>}</td>
+                    <td data-label={pendingSort.label('amount')} data-testid="debt-amount">
+                      {app.debt?.amount != null ? (
+                        <>
+                          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 16 }}>{fmtMoney(app.debt.amount, app.debt.currency || 'TJS')}</span>
+                          <div style={{ fontSize: 11, color: 'var(--text-soft)' }}>
+                            {app.debt.source === 'deal' ? t('finance.debt.fromDeal') : t('finance.debt.fromProgram')}
+                          </div>
+                        </>
+                      ) : (
+                        <span style={{ color: 'var(--text-light)' }} title={t('finance.debt.noAmountHint')}>{t('finance.debt.noAmount')}</span>
+                      )}
                     </td>
                     <td data-label={pendingSort.label('manager')}>{app.manager?.fullName || <span style={{ color: 'var(--text-light)' }}>—</span>}</td>
                     <td>
@@ -672,8 +682,8 @@ export default function Finance() {
                             setPreselectedStudent({
                               studentId: app.studentId,
                               managerId: elevated ? app.managerId : mySelfId,
-                              amount: app.program?.cost,
-                              currency: app.program?.currency,
+                              amount: app.debt?.amount ?? app.program?.cost,
+                              currency: app.debt?.currency ?? app.program?.currency,
                             });
                           }}
                         >
@@ -871,8 +881,15 @@ export default function Finance() {
                 </td>
                 <td data-label={txSort.label('comment')} className="td-stack" style={{ color: 'var(--text-soft)', fontSize: 13 }}>{tx.comment || '—'}</td>
                 <td>
-                  {canDeleteTx && (
-                    <button className="btn btn-sm btn-danger" onClick={() => onDelete(tx)}>
+                  {/* Платёж по сделке удаляют в сделке (QA №48/53) — корзины нет. */}
+                  {canDeleteTx && tx.category !== 'TUITION_PAYMENT' && (
+                    <button
+                      className="btn btn-sm btn-danger"
+                      data-testid="tx-row-delete"
+                      title={t('common.delete')}
+                      onClick={(e) => { e.stopPropagation(); onDelete(tx); }}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
                       <Icon name="delete" size={14} />
                     </button>
                   )}
@@ -1003,17 +1020,24 @@ function TransactionDetailModal({
         ))}
       </dl>
 
+      {tx.category === 'TUITION_PAYMENT' && (
+        <div className="form-hint" data-testid="tx-via-deal" style={{ marginBottom: 12, color: 'var(--text-soft)', fontSize: 13 }}>
+          {t('finance.tx.viaDeal')}
+        </div>
+      )}
       <div className="form-actions">
         {canEdit ? (
           <>
-            <button
-              type="button"
-              className="btn btn-danger"
-              data-testid="tx-delete"
-              onClick={() => onDelete(tx)}
-            >
-              {t('common.delete')}
-            </button>
+            {tx.category !== 'TUITION_PAYMENT' && (
+              <button
+                type="button"
+                className="btn btn-danger"
+                data-testid="tx-delete"
+                onClick={() => onDelete(tx)}
+              >
+                {t('common.delete')}
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-primary"
@@ -1110,9 +1134,11 @@ function OwnerKpis({ overview, loading, range, debts, onOpen }: {
   // в ней долгов нет — в той валюте, где они есть (иначе «0 TJS» прятал бы
   // долг в долларах). Остальные валюты — строкой ниже.
   const debtByCur: Record<string, number> = {};
+  let debtsNoAmount = 0;
   for (const a of debts) {
-    const c = a.program?.currency || cur;
-    debtByCur[c] = (debtByCur[c] || 0) + Number(a.program?.cost || 0);
+    if (a.debt?.amount == null) { debtsNoAmount++; continue; }
+    const c = a.debt.currency || cur;
+    debtByCur[c] = (debtByCur[c] || 0) + Number(a.debt.amount);
   }
   const debtList = Object.entries(debtByCur).filter(([, v]) => v > 0);
   const debtMainEntry = debtList.find(([c]) => c === cur) ?? debtList[0] ?? [cur, 0];
@@ -1185,10 +1211,11 @@ function OwnerKpis({ overview, loading, range, debts, onOpen }: {
         tone="amber"
         title={t('finance.kpi.debts')}
         icon="hourglass_top"
-        value={fmtMoney(Number(debtMainEntry[1]), String(debtMainEntry[0]))}
+        value={debtList.length === 0 && debtsNoAmount > 0 ? t('finance.debt.noAmount') : fmtMoney(Number(debtMainEntry[1]), String(debtMainEntry[0]))}
         sub={<>
           {t('finance.kpi.debtsHint').replace('{n}', String(debts.length))}
           {debtOther.map(([c, v]) => <span key={c}> · + {fmtMoney(v, c)}</span>)}
+          {debtsNoAmount > 0 && debtList.length > 0 && <span> · {t('finance.debt.someNoAmount').replace('{n}', String(debtsNoAmount))}</span>}
         </>}
         onClick={() => onOpen('debts')}
         testId="kpi-debts"
@@ -1271,18 +1298,21 @@ function TransactionForm({
 
   // Расширенные поля для финансового модуля
   const [paymentChannel, setPaymentChannel] = useState<string>((editTx as any)?.paymentChannel || 'CASH');
-  const [paymentKind, setPaymentKind] = useState<string>('FULL');
-  const [productCategory, setProductCategory] = useState<string>('');
+  const [paymentKind, setPaymentKind] = useState<string>((editTx as any)?.paymentKind || 'FULL');
   const [payerName, setPayerName] = useState((editTx as any)?.payerName || '');
   const [receiptKind, setReceiptKind] = useState<string>('RECEIPT');
   const [noReceiptReason, setNoReceiptReason] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   // Google Sheet parity — новые enum-поля
-  const [incomeSource, setIncomeSource] = useState<IncomeSource | ''>('');
-  const [productCategoryEnum, setProductCategoryEnum] = useState<ProductCategoryEnum | ''>('');
-  const [paymentPhase, setPaymentPhase] = useState<PaymentPhaseStatus | ''>('');
-  const [paidViaId, setPaidViaId] = useState<string>('');
+  const [incomeSource, setIncomeSource] = useState<IncomeSource | ''>((editTx as any)?.incomeSource || '');
+  const [productCategoryEnum, setProductCategoryEnum] = useState<ProductCategoryEnum | ''>((editTx as any)?.productCategoryEnum || '');
+  const [paymentPhase, setPaymentPhase] = useState<PaymentPhaseStatus | ''>((editTx as any)?.paymentPhase || '');
+  const [paidViaId, setPaidViaId] = useState<string>((editTx as any)?.paidViaId || '');
+  // Ошибка суммы — у поля и словами (QA №53: на минус было просто «Ошибка»).
+  const [amountErr, setAmountErr] = useState('');
+  // Платёж по сделке: сумма, валюта и дата — из сделки, здесь только смотрим.
+  const lockMoney = editTx?.category === 'TUITION_PAYMENT';
 
   // Зарезервированная «Оплата за обучение» видна только у уже существующей
   // операции этой категории (её открыли на правку) — выбрать её нельзя.
@@ -1321,10 +1351,15 @@ function TransactionForm({
     // вклинится, поэтому окно гонки закрывается до первого микро-таска.
     if (inFlight.current) return;
     const amt = parseFloat(amount);
-    if (!amt || amt <= 0) {
-      toast(t('toast.error'), 'error');
+    if (!amount.trim() || !isFinite(amt)) {
+      setAmountErr(t('finance.err.amountEmpty'));
       return;
     }
+    if (amt <= 0) {
+      setAmountErr(t('finance.err.amountPositive'));
+      return;
+    }
+    setAmountErr('');
     // Role-guard: EXPENSE запрещён backend'ом для не-elevated ролей
     // (finance.controller.ts:291 → 403). Ловим ДО uploadReceipt, чтобы
     // не оставить orphan-файл в /uploads/ при последующем 403 на
@@ -1332,7 +1367,7 @@ function TransactionForm({
     // (см. type-select выше), но double-check страхует от гонки, когда
     // роль пользователя поменялась между открытием формы и submit'ом.
     if (type === 'EXPENSE' && !canExpense) {
-      toast(t('toast.error'), 'error');
+      toast(t('finance.err.noExpenseRight'), 'error');
       return;
     }
     // Чек обязателен только при СОЗДАНИИ расхода. При правке он у записи
@@ -1390,7 +1425,6 @@ function TransactionForm({
           : { managerId: null }),
         paymentChannel: paymentChannel as any,
         ...(type === 'INCOME' && { paymentKind: paymentKind as any }),
-        ...(type === 'INCOME' && productCategory && { productCategory }),
         ...(type === 'INCOME' && payerName.trim() && { payerName: payerName.trim() }),
         // === Google Sheet parity — новые enum-поля ===
         ...(type === 'INCOME' && incomeSource && { incomeSource }),
@@ -1446,7 +1480,6 @@ function TransactionForm({
                 // выбранный до переключения) утечёт в EXPENSE-payload.
                 setStudentId('');
                 setPayerName('');
-                setProductCategory('');
                 setIncomeSource('');
                 setProductCategoryEnum('');
                 setPaymentPhase('');
@@ -1518,11 +1551,22 @@ function TransactionForm({
           </div>
           <div className="form-group">
             <label>{t('common.amount')}</label>
-            <input className="crm-input" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
+            <input
+              className={`crm-input${amountErr ? ' input-error' : ''}`}
+              type="number"
+              step="0.01"
+              value={amount}
+              disabled={lockMoney}
+              title={lockMoney ? t('finance.tx.viaDeal') : undefined}
+              onChange={(e) => { setAmount(e.target.value); if (amountErr) setAmountErr(''); }}
+              placeholder="0.00"
+              data-testid="tx-amount"
+            />
+            {amountErr && <div className="form-error-text" data-testid="tx-amount-err">{amountErr}</div>}
           </div>
           <div className="form-group">
             <label>{t('finance.col.currency')}</label>
-            <CrmSelect className="crm-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            <CrmSelect className="crm-select" value={currency} disabled={lockMoney} onChange={(e) => setCurrency(e.target.value)}>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
               <option value="CNY">CNY</option>
@@ -1532,7 +1576,7 @@ function TransactionForm({
           </div>
           <div className="form-group">
             <label>{t('common.date')}</label>
-            <CrmDatePicker className="crm-input" value={date} onChange={(v) => setDate(v)} />
+            <CrmDatePicker className="crm-input" value={date} disabled={lockMoney} onChange={(v) => setDate(v)} />
           </div>
           {type === 'INCOME' && (
             <div className="form-group">
@@ -1630,17 +1674,6 @@ function TransactionForm({
                 <option value="PREPAYMENT">{t('finance.kind.PREPAYMENT')}</option>
                 <option value="ADDITIONAL">{t('finance.kind.ADDITIONAL')}</option>
                 <option value="OWNER_INVESTMENT">{t('finance.kind.OWNER_INVESTMENT')}</option>
-              </CrmSelect>
-            </div>
-          )}
-          {type === 'INCOME' && (
-            <div className="form-group">
-              <label>{t('finance.product')}</label>
-              <CrmSelect className="crm-select" value={productCategory} onChange={(e) => setProductCategory(e.target.value)}>
-                <option value="">—</option>
-                {PRODUCT_CATEGORIES.map((p) => (
-                  <option key={p} value={p}>{PRODUCT_CATEGORY_TEXT[p] ?? p}</option>
-                ))}
               </CrmSelect>
             </div>
           )}

@@ -147,7 +147,11 @@ export default function NotificationBell() {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (!wrapperRef.current) return;
-      if (!wrapperRef.current.contains(e.target as Node)) {
+      const target = e.target as Element;
+      // Календарь фильтра открыт в body (портал) — клик по нему не «мимо
+      // панели» (QA №18: выбор даты закрывал всю панель).
+      if (target?.closest?.('.crm-datepicker-popover')) return;
+      if (!wrapperRef.current.contains(target as Node)) {
         setOpen(false);
       }
     };
@@ -252,11 +256,13 @@ export default function NotificationBell() {
               <CrmDatePicker
                 value={from}
                 onChange={(v) => setFrom(v)}
+                max={to || undefined}
                 placeholder={t('common.from')}
               />
               <CrmDatePicker
                 value={to}
                 onChange={(v) => setTo(v)}
+                min={from || undefined}
                 placeholder={t('common.until')}
               />
               <label className="notif-only-unread">
