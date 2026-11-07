@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -6,6 +6,7 @@ import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
+import { isImpersonating } from './impersonation';
 
 // Извлекаем реальный IP клиента: за Railway/nginx-прокси он приезжает в
 // X-Forwarded-For (первый элемент до запятой). Без прокси — req.ip.
@@ -52,8 +53,25 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  me(@CurrentUser() user: { sub: string }) {
-    return this.auth.me(user.sub);
+  me(@CurrentUser() user: { sub: string; sid?: string }) {
+    return this.auth.me(user.sub, user.sid);
+  }
+
+  // «Войти как»: вернуться в свой аккаунт. Объявлено ДО «impersonate/:userId»,
+  // иначе «stop» поймался бы как id сотрудника.
+  @UseGuards(JwtAuthGuard)
+  @Post('impersonate/stop')
+  @HttpCode(200)
+  stopImpersonation(@CurrentUser() user: any) {
+    return this.auth.stopImpersonation(user);
+  }
+
+  // «Войти как» сотрудник — только основатель (проверка в сервисе).
+  @UseGuards(JwtAuthGuard)
+  @Post('impersonate/:userId')
+  @HttpCode(200)
+  impersonate(@CurrentUser() user: any, @Param('userId') userId: string, @Req() req: Request) {
+    return this.auth.impersonate(user, userId, { ip: extractIp(req), userAgent: extractUserAgent(req) });
   }
 
   // Выход из текущей сессии: отзываем ту, чей sid лежит в JWT. После этого
@@ -124,9 +142,12 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
   changePassword(
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: { sub: string; impersonatorId?: string | null },
     @Body() dto: ChangePasswordDto,
   ) {
+    if (isImpersonating(user)) {
+      throw new ForbiddenException('В режиме «Войти как» менять пароль сотрудника нельзя');
+    }
     return this.auth.changePassword(user.sub, dto.currentPassword, dto.newPassword);
   }
 }

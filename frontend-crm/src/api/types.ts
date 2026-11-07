@@ -304,6 +304,8 @@ export interface User {
   createdAt?: string;
   /** false — уволен (история сохранена, войти не может). */
   isActive?: boolean;
+  /** «Войти как»: основатель смотрит CRM глазами этого сотрудника (до until). */
+  impersonation?: { by: { id: string; fullName: string }; until: string } | null;
 }
 
 export interface ManagerInfo {

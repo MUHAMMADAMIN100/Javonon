@@ -505,7 +505,12 @@ export class SalaryService {
     );
     const penalties = eff.effective;
 
-    const net = baseAmount + bonusAmount + kpiBonus - penalties;
+    // К выплате не бывает меньше нуля: штрафы, превысившие начисления, не
+    // превращаются в «долг сотрудника» и не переносятся (решение заказчика).
+    // Раньше −950 TJS уходило в «Выплатить» и записывалось расходом с минусом,
+    // то есть ПРИБАВЛЯЛО прибыль. penaltyExcess — на сколько штрафы больше.
+    const rawNet = baseAmount + bonusAmount + kpiBonus - penalties;
+    const net = Math.max(0, rawNet);
 
     return {
       userId,
@@ -579,6 +584,7 @@ export class SalaryService {
       penaltiesPending: round(eff.pending),
       penaltiesExcused: round(eff.excused),
       netAmount: round(net),
+      penaltyExcess: round(Math.max(0, -rawNet)),
       // currency соответствует SALARY_REPORTING_CURRENCY: и baseAmount,
       // и bonusAmount, и penalties сейчас считаются как TJS-суммы
       // (bonusAmount — потому что бонусная база фильтруется по TJS выше,
@@ -826,7 +832,7 @@ export class SalaryService {
             // «своим» bonusAmount, который мог устареть между preview и
             // этой транзакцией.
             const netAmount = round(
-              args.baseAmount + bonusAmount + args.kpiBonus - args.penalties,
+              Math.max(0, args.baseAmount + bonusAmount + args.kpiBonus - args.penalties),
             );
 
             return tx.salaryRecord.create({
@@ -901,6 +907,16 @@ export class SalaryService {
     const rec = await this.prisma.salaryRecord.findUnique({ where: { id } });
     if (!rec) throw new NotFoundException('Запись не найдена');
     if (rec.status === 'PAID') throw new BadRequestException('Зарплата уже выплачена');
+    // Выплата нуля или минуса записала бы в журнал пустой/отрицательный расход
+    // (минус прибавлял прибыль). Старые записи с минусом тоже не выплачиваются.
+    if (!(rec.netAmount > 0)) {
+      const excess = round(Math.max(0, rec.penalties - rec.baseAmount - rec.bonusAmount - rec.kpiBonus));
+      throw new BadRequestException(
+        excess > 0
+          ? `Выплачивать нечего: штрафы больше начислений на ${excess.toLocaleString('ru-RU')} ${rec.currency}`
+          : 'Выплачивать нечего: к выплате 0',
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const claim = await tx.salaryRecord.updateMany({

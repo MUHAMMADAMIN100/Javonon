@@ -12,6 +12,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { NoImpersonationWritesGuard } from '../auth/impersonation';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -47,7 +48,8 @@ function utf8Name(name: string) {
 }
 
 @Controller('chat')
-@UseGuards(JwtAuthGuard)
+// «Войти как»: чат от имени сотрудника — только чтение (auth/impersonation.ts).
+@UseGuards(JwtAuthGuard, NoImpersonationWritesGuard)
 export class ChatController {
   constructor(private svc: ChatService) {}
 

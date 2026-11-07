@@ -1,4 +1,4 @@
-import { fmtDateText, TJ_TZ } from '../lib/tjTime';
+import { fmtDateText, TJ_TZ, tjLastDaysRange } from '../lib/tjTime';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -12,6 +12,14 @@ import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
 import { useAuth } from '../store/auth';
 import { roleCan } from '../lib/permissions';
+
+/** Сумма продаж — в сомони, как везде в CRM. */
+function fmtTjs(n: number) {
+  return `${n.toLocaleString('ru-RU')} TJS`;
+}
+
+/** Длина текста отчёта — как проверяет сервер (daily-reports.service). */
+const MAX_REPORT_TEXT = 2000;
 
 function fmtDate(iso: string) {
   return fmtDateText(iso, { day: '2-digit', month: 'short', weekday: 'short', timeZone: TJ_TZ });
@@ -40,10 +48,14 @@ export default function Reports() {
   });
   const today = todayQuery.data ?? null;
 
-  const historyKey = keys.reports.mine({ take: 30 });
+  // «30 дней» — это последние 30 календарных дней (сегодня и 29 до него),
+  // а не 30 последних отчётов: раньше в «30 дней» попадал отчёт от июня.
+  const last30 = tjLastDaysRange(30);
+  const historyParams = { from: last30.from, to: last30.to, take: 31 };
+  const historyKey = keys.reports.mine(historyParams);
   const historyQuery = useQuery<DailyReport[]>({
     queryKey: historyKey,
-    queryFn: () => reportsMine({ take: 30 }),
+    queryFn: () => reportsMine(historyParams),
   });
   const history = historyQuery.data ?? [];
   const sort = useTableSort(history, [
@@ -143,6 +155,7 @@ export default function Reports() {
             className="crm-textarea"
             value={activity}
             onChange={(e) => setActivity(e.target.value)}
+            maxLength={MAX_REPORT_TEXT}
             rows={3}
           />
         </div>
@@ -152,6 +165,7 @@ export default function Reports() {
             className="crm-textarea"
             value={challenges}
             onChange={(e) => setChallenges(e.target.value)}
+            maxLength={MAX_REPORT_TEXT}
             rows={2}
           />
         </div>
@@ -168,7 +182,7 @@ export default function Reports() {
 
       {/* Сводка за период */}
       <div className="bento" style={{ marginBottom: 24 }}>
-        <SmallStat eyebrow={t('eyebrow.sales30')} value={`$${totalSalesAmount.toLocaleString('ru-RU')}`} label={t('reports.up.totalSales')} span="span-3" accent />
+        <SmallStat eyebrow={t('eyebrow.sales30')} value={fmtTjs(totalSalesAmount)} label={t('reports.up.totalSales')} span="span-3" accent />
         <SmallStat eyebrow={t('eyebrow.deals30')} value={String(totalSalesCount)} label={t('reports.up.dealsClosed')} span="span-3" />
         <SmallStat eyebrow={t('eyebrow.calls')} value={String(totalCalls)} label={t('reports.up.calls')} span="span-2" />
         <SmallStat eyebrow={t('eyebrow.meetings')} value={String(totalMeetings)} label={t('reports.up.meetings')} span="span-2" />
@@ -198,7 +212,7 @@ export default function Reports() {
                 <td data-label={t('reports.field.meetings')} style={{ fontFamily: 'var(--font-mono)' }}>{r.meetingsCount}</td>
                 <td data-label={t('reports.field.applications')} style={{ fontFamily: 'var(--font-mono)' }}>{r.applicationsContacted}</td>
                 <td data-label={t('reports.field.salesCount')} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--primary-dark)' }}>{r.salesCount}</td>
-                <td data-label={t('reports.field.salesAmount')} style={{ fontFamily: 'var(--font-display)', fontWeight: 500, color: 'var(--primary-dark)' }}>${r.salesAmount.toLocaleString('ru-RU')}</td>
+                <td data-label={t('reports.field.salesAmount')} style={{ fontFamily: 'var(--font-display)', fontWeight: 500, color: 'var(--primary-dark)' }}>{fmtTjs(r.salesAmount)}</td>
                 <td data-label={t('reports.field.activity')} className="td-stack" style={{ color: 'var(--text-soft)', fontSize: 13 }}>{r.activitySummary || '—'}</td>
               </tr>
             ))}
@@ -219,6 +233,7 @@ function NumberField({ label, value, onChange, highlight }: {
         type="number"
         min={0}
         step={highlight ? '0.01' : 1}
+        inputMode={highlight ? 'decimal' : 'numeric'}
         value={value}
         onFocus={(e) => {
           // Если в поле стоит "0" — сразу выделяем, чтобы первое нажатие
@@ -227,7 +242,9 @@ function NumberField({ label, value, onChange, highlight }: {
           if (value === '0' || value === '') e.currentTarget.select();
         }}
         onChange={(e) => {
-          let v = e.target.value;
+          // Минус и лишние знаки не вводятся: число в отчёте не бывает < 0,
+          // а в счётчиках (звонки, встречи…) — только целое.
+          let v = e.target.value.replace(highlight ? /[^\d.,]/g : /\D/g, '').replace(',', '.');
           // Убираем leading zeros у целых чисел: "03" → "3", "001" → "1".
           // Десятичные ("0.5") не трогаем. Пустое — оставляем пустым.
           if (v.length > 1 && v.startsWith('0') && !v.startsWith('0.')) {

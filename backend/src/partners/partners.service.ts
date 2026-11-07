@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { queueAuditEvent } from '../common/request-context';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
@@ -440,6 +441,9 @@ export class PartnersService {
         where: { id },
         data: { status: 'BANNED' },
       });
+      // Партнёр с историей не стирается, а блокируется — для журнала это
+      // такое же удаление (create/delete журнал пишет сам, prisma.service).
+      queueAuditEvent('delete', 'Partner', updated);
       return { softDeleted: true, partner: this.toPublicPartner(updated) };
     }
 

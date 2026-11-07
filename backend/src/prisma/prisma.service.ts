@@ -4,6 +4,7 @@ import {
   LEAD_STATUS_MIGRATION_ENV,
   isLeadStatusRowMigrationEnabled,
 } from '../common/application-status';
+import { AUDITED_MODELS, requestContext, staffActorOf } from '../common/request-context';
 
 const SOFT_DELETE_READS = new Set(['findMany', 'findFirst', 'findFirstOrThrow', 'count', 'groupBy', 'aggregate']);
 
@@ -23,6 +24,44 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         if (!('deletedAt' in where)) params.args.where = { ...where, deletedAt: null };
       }
       return next(params);
+    });
+    // Журнал действий: создания и удаления важных записей (лиды, студенты,
+    // сделки, платежи, партнёры, группы, курсы, звонки, задачи, программы,
+    // сотрудники…) — одним правилом здесь, а не вызовом в каждом сервисе.
+    // Событие лишь откладывается в контекст запроса; в журнал оно уйдёт после
+    // ответа и только если запрос успешен (main.ts) — откат не оставит следа.
+    this.$use(async (params, next) => {
+      const ctx = requestContext.getStore();
+      if (!ctx || !params.model || !AUDITED_MODELS.has(params.model) || !staffActorOf(ctx.req)) {
+        return next(params);
+      }
+      const model = params.model;
+      if (params.action === 'create' || params.action === 'delete') {
+        const row = await next(params);
+        if (row && typeof row === 'object') ctx.events.push({ kind: params.action, model, row });
+        return row;
+      }
+      // Мягкие удаления: лид — в корзину (deletedAt), сотрудник — «Уволить»
+      // (isActive). Считаем только настоящую смену состояния.
+      const data = params.action === 'update' ? params.args?.data ?? {} : null;
+      const softKey = model === 'Application' ? 'deletedAt' : model === 'User' ? 'isActive' : null;
+      if (!data || !softKey || !(softKey in data)) return next(params);
+      const raw = data[softKey];
+      const value = raw && typeof raw === 'object' && 'set' in raw ? raw.set : raw;
+      const before: any = await (this as any)[model === 'User' ? 'user' : 'application']
+        .findUnique({ where: params.args.where, select: { [softKey]: true } })
+        .catch(() => null);
+      const row = await next(params);
+      if (before && row && typeof row === 'object') {
+        if (model === 'Application') {
+          const was = !!before.deletedAt;
+          if (!was && value) ctx.events.push({ kind: 'delete', model, row });
+          else if (was && !value) ctx.events.push({ kind: 'restore', model, row });
+        } else if (typeof value === 'boolean' && before.isActive !== value) {
+          ctx.events.push({ kind: value ? 'restore' : 'fire', model, row });
+        }
+      }
+      return row;
     });
     await this.$connect();
     await this.migrateLegacyStatuses();

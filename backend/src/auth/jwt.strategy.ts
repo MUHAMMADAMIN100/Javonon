@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { requireJwtSecret } from './jwt-secret';
 import { PrismaService } from '../prisma/prisma.service';
 import { CUSTOM_ROLE_SELECT, effectiveCustomRole } from './position-role';
+import { IMPERSONATION_TTL_MS } from './impersonation';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -51,6 +52,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     let dbRoles: string[] = [];
     let permissions: string[] = [];
     let hasCustomRole = false;
+    let impersonatorId: string | null = null;
     try {
       const [u, session] = await Promise.all([
         this.prisma.user.findUnique({
@@ -64,7 +66,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }),
         this.prisma.session.findUnique({
           where: { id: payload.sid },
-          select: { userId: true, revokedAt: true },
+          select: { userId: true, revokedAt: true, impersonatorId: true, createdAt: true },
         }),
       ]);
       if (!u) throw new UnauthorizedException('Пользователь не найден');
@@ -76,6 +78,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!session || session.userId !== payload.sub || session.revokedAt) {
         throw new UnauthorizedException('Сессия отозвана — войдите заново');
       }
+      // «Войти как» живёт час — даже если токен почему-то длиннее.
+      if (session.impersonatorId && Date.now() - session.createdAt.getTime() > IMPERSONATION_TTL_MS) {
+        throw new UnauthorizedException('Режим «Войти как» закончился');
+      }
+      impersonatorId = session.impersonatorId ?? null;
       dbRole = u.role;
       dbRoles = u.roles || [];
       // Своя активная роль, иначе роль должности (Настройки → Роли, «Действует
@@ -107,6 +114,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // через @Roles(). Только permissions из custom role + неявные
       // permission-проверки по URL.
       hasCustomRole,
+      // Не null — это основатель в режиме «Войти как» (сессия из БД, не из
+      // токена). Журнал пишет его действия от его имени, а пароль, чат и
+      // «в сети» от имени сотрудника закрыты.
+      impersonatorId,
     };
   }
 }

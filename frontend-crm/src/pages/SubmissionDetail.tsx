@@ -191,6 +191,11 @@ export default function SubmissionDetail() {
   const studentName = s.student?.fullName || s.newStudentName || '—';
   const totalPaid = s.payments.filter((p) => p.status === 'APPROVED').reduce((sum, p) => sum + (p.amount ?? 0), 0);
   const remaining = Math.max(0, (s.totalAmount ?? 0) - totalPaid);
+  // Сколько ещё можно внести: контракт минус все неотклонённые платежи (как
+  // проверяет сервер). Суммы скрыты от роли — проверяет только сервер.
+  const payLimit = s.moneyHidden
+    ? null
+    : Math.round(((s.totalAmount ?? 0) - s.payments.filter((p) => p.status !== 'REJECTED').reduce((sum, p) => sum + (p.amount ?? 0), 0)) * 100) / 100;
   const isOwnSubmission = s.managerId === me?.id;
   // Сумма без «Деньги клиентов» не приходит — «•••• TJS».
   const money = (n: number) => (s.moneyHidden ? hiddenAmount(s.currency) : `${n.toLocaleString('ru-RU')} ${s.currency}`);
@@ -426,7 +431,7 @@ export default function SubmissionDetail() {
             currency={s.currency}
             // Завершённая сделка — тоже: зависшие с прошлого неодобренные платежи
             // основатель разбирает как обычно (закрыть с такими теперь нельзя).
-            canReview={canApprove && p.status === 'PENDING' && (s.status === 'ACTIVE' || s.status === 'COMPLETED') && !isOwnSubmission}
+            canReview={canApprove && p.status === 'PENDING' && (s.status === 'ACTIVE' || s.status === 'COMPLETED') && (founder || !isOwnSubmission)}
             onApprove={() => (s.currency === 'TJS' ? approveMut.mutate({ paymentId: p.id }) : setApproveTarget(p))}
             onReject={() => onReject(p.id)}
             busy={approveMut.isPending || rejectMut.isPending}
@@ -454,6 +459,7 @@ export default function SubmissionDetail() {
         <AddPaymentModal
           submissionId={s.id}
           currency={s.currency}
+          limit={payLimit}
           onClose={() => setShowAddPayment(false)}
           onSuccess={() => {
             setShowAddPayment(false);
@@ -686,10 +692,12 @@ function PaymentRow({
 }
 
 function AddPaymentModal({
-  submissionId, currency, onClose, onSuccess,
+  submissionId, currency, limit, onClose, onSuccess,
 }: {
   submissionId: string;
   currency: string;
+  /** Остаток по контракту; null — суммы скрыты от роли. */
+  limit: number | null;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -722,6 +730,9 @@ function AddPaymentModal({
   const onSubmit = () => {
     const a = parseFloat(amount);
     if (!isFinite(a) || a <= 0) return toast(t('deal.err.amount'), 'error');
+    if (limit !== null && a > limit + 0.005) {
+      return toast(t('deal.err.overpay').replace('{sum}', `${Math.max(0, limit).toLocaleString('ru-RU')} ${currency}`), 'error');
+    }
     if (method === 'TRANSFER' && receiptUrls.length === 0) return toast(t('deal.err.receipt'), 'error');
     if (method === 'CASH' && depositProofUrls.length === 0) return toast(t('deal.err.deposit'), 'error');
     mut.mutate();
@@ -777,7 +788,21 @@ function AddPaymentModal({
         <h3 style={{ fontSize: 18, marginBottom: 12, textAlign: 'center' }}>{t('deal.addPayment')}</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           <Field label={`${t('common.amount')} (${currency}) *`}>
-            <input className="crm-input" type="number" min={0} step={50} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input
+              className={`crm-input${limit !== null && parseFloat(amount) > limit + 0.005 ? ' input-error' : ''}`}
+              type="number"
+              min={0}
+              max={limit ?? undefined}
+              step={50}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              data-testid="pay-amount"
+            />
+            {limit !== null && (
+              <div className="profile-field-hint" data-testid="pay-limit">
+                {t('deal.payLimit').replace('{sum}', `${Math.max(0, limit).toLocaleString('ru-RU')} ${currency}`)}
+              </div>
+            )}
           </Field>
           <Field label={t('deal.field.method')}>
             <CrmSelect className="crm-select" value={method} onChange={(e) => setMethod(e.target.value as any)}>

@@ -30,7 +30,15 @@ export type ActivityAction =
   // данные видит менеджер по продажам. Пишется на каждый запрос, включая
   // отказ по скоупу и промах: серия отказов — признак подбора по списку
   // чужих номеров. Приходит только руководству (PARTNER_SENSITIVE_ACTIONS).
-  | 'PARTNER_PREVIEW_LOOKUP';
+  | 'PARTNER_PREVIEW_LOOKUP'
+  // Создание / удаление / восстановление записей — пишет сервер сам
+  // (лиды, студенты, сделки, платежи, партнёры, группы, курсы, звонки,
+  // задачи, программы, воронки, уровни, сотрудники).
+  | 'RECORD_CREATE'
+  | 'RECORD_DELETE'
+  | 'RECORD_RESTORE'
+  // «Войти как»: вход/выход основателя и его изменения в этом режиме.
+  | 'IMPERSONATION';
 
 export interface ActivityEntry {
   id: string;
@@ -74,4 +82,8 @@ export const ACTIVITY_LABEL: Record<ActivityAction, string> = localized('activit
   PAYMENT_REFUND: 'Возврат платежа',
   PARTNER_COMMISSION_SKIPPED: 'Комиссия партнёру не начислена',
   PARTNER_PREVIEW_LOOKUP: 'Запрос партнёра по клиенту',
+  RECORD_CREATE: 'Создание',
+  RECORD_DELETE: 'Удаление',
+  RECORD_RESTORE: 'Восстановление',
+  IMPERSONATION: '«Войти как»',
 });

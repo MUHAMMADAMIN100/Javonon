@@ -3,19 +3,25 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { ReportsService } from './reports.service';
-import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { DailyReportsService, DailyReportInput } from '../daily-reports/daily-reports.service';
 import { Permissions } from '../auth/permissions.decorator';
+
+/** Строка «take» из адреса → число 1…366 (или undefined). */
+function parseTake(raw?: string): number | undefined {
+  if (!raw) return undefined;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 366) : undefined;
+}
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard)
 export class ReportsController {
-  constructor(private svc: ReportsService) {}
+  constructor(private svc: DailyReportsService) {}
 
   @Permissions('reports:read', 'reports:create')
   @Get('today')
   today(@CurrentUser() me: any) {
-    return this.svc.todayForUser(me.id);
+    return this.svc.getToday(me.id);
   }
 
   @Permissions('reports:read')
@@ -26,11 +32,7 @@ export class ReportsController {
     @Query('to') to?: string,
     @Query('take') take?: string,
   ) {
-    return this.svc.list(me.id, {
-      from: from ? tjParseLocalDate(from) : undefined,
-      to: to ? tjParseLocalDateEnd(to) : undefined,
-      take: take ? parseInt(take, 10) : undefined,
-    });
+    return this.svc.myList(me.id, { from, to, take: parseTake(take) });
   }
 
   @Get('all')
@@ -42,28 +44,12 @@ export class ReportsController {
     @Query('to') to?: string,
     @Query('take') take?: string,
   ) {
-    return this.svc.list(userId, {
-      from: from ? tjParseLocalDate(from) : undefined,
-      to: to ? tjParseLocalDateEnd(to) : undefined,
-      take: take ? parseInt(take, 10) : undefined,
-    });
+    return this.svc.adminList({ userId, from, to, take: parseTake(take) ?? 60 });
   }
 
   @Permissions('reports:create')
   @Post()
-  upsert(
-    @CurrentUser() me: any,
-    @Body() body: {
-      date?: string;
-      callsCount?: number;
-      meetingsCount?: number;
-      applicationsContacted?: number;
-      salesCount?: number;
-      salesAmount?: number;
-      activitySummary?: string;
-      challenges?: string;
-    },
-  ) {
-    return this.svc.upsertDaily(me.id, body.date ? tjParseLocalDate(body.date) : new Date(), body);
+  upsert(@CurrentUser() me: any, @Body() body: DailyReportInput) {
+    return this.svc.upsert(me.id, body);
   }
 }

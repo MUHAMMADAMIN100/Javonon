@@ -55,6 +55,10 @@ const STAGE_FILTER_VALUES = [
 ];
 const DIRECTION_VALUES = Object.keys(DIRECTION_LABEL) as Direction[];
 const CABINET_VALUES = ['1', '2', '3'] as const;
+// «Оплата»: по умолчанию — оплатившие (студент = оплативший, решение
+// учредителя). Созданные вручную без оплаты находятся фильтром «Без оплаты».
+const PAY_VALUES = ['paid', 'unpaid', 'all'] as const;
+type PayFilter = typeof PAY_VALUES[number];
 
 // Согласовано с Applications.tsx — 20 на страницу (демо-значение 5
 // было удобно для скриншотов, но реальный CRM с базой студентов
@@ -91,6 +95,7 @@ export default function Students() {
       // «stage», хотя внутри дропдаун смешивает этап заявки и статус студента.
       status: enumParam(STAGE_FILTER_VALUES),
       cabinet: enumParam(CABINET_VALUES),
+      pay: enumParam<PayFilter, PayFilter>(PAY_VALUES, 'paid'),
       manager: wide ? stringParam('', 64) : ignoredParam(''),
       scope: enumParam<Scope, Scope>(
         wide ? (['all', 'mine'] as const) : (['mine'] as const),
@@ -109,6 +114,7 @@ export default function Students() {
     direction,
     status: stageFilter,
     cabinet,
+    pay,
     manager,
     scope,
     page,
@@ -144,9 +150,10 @@ export default function Students() {
     cabinet: cabinet ? parseInt(cabinet, 10) : undefined,
     mine: scope === 'mine',
     manager: manager || undefined,
-    // Студент = оплативший (решение учредителя): неоплатившие живут в
-    // «Заявках» и сюда не попадают вовсе. Переключателя нет намеренно.
-    paid: true,
+    // Студент = оплативший (решение учредителя) — так по умолчанию. Фильтр
+    // «Оплата» показывает и заведённых вручную без оплаты: иначе их было
+    // не найти нигде, кроме прямой ссылки.
+    paid: pay === 'paid' ? true : pay === 'unpaid' ? false : undefined,
     from: from || undefined,
     to: to || undefined,
   };
@@ -173,13 +180,13 @@ export default function Students() {
       })
     : items;
 
-  // Для счётчика «Найдено: N из M»: сколько всего без фильтров. «Мои/Все» —
-  // режим просмотра, «оплатившие» — само определение студента: это не
-  // фильтры, в общем числе они остаются.
+  // Для счётчика «Найдено: N из M»: сколько всего без фильтров. «Мои/Все» и
+  // «Оплата» — режим просмотра (кого считаем студентами), а не фильтр: общее
+  // число считается в том же режиме.
   const narrowed =
     !!stageFilter ||
     Object.entries(filters).some(([k, v]) => k !== 'mine' && k !== 'paid' && v !== undefined && v !== '');
-  const allFilters = { mine: scope === 'mine', paid: true };
+  const allFilters = { mine: scope === 'mine', paid: filters.paid };
   const totalQuery = useQuery({
     queryKey: keys.students.list(allFilters),
     queryFn: () => listStudents(allFilters),
@@ -376,6 +383,17 @@ export default function Students() {
               <option value="GRADUATED">{studentStatusLabel('GRADUATED' as any)}</option>
               <option value="ARCHIVED">{studentStatusLabel('ARCHIVED' as any)}</option>
             </optgroup>
+          </CrmSelect>
+          <CrmSelect
+            className="crm-select"
+            value={pay}
+            onChange={(e) => setValue('pay', e.target.value as PayFilter)}
+            title={t('students.pay.filter')}
+            data-testid="students-pay-filter"
+          >
+            <option value="paid">{t('students.pay.paid')}</option>
+            <option value="unpaid">{t('students.pay.unpaid')}</option>
+            <option value="all">{t('students.pay.all')}</option>
           </CrmSelect>
           <CrmSelect className="crm-select" value={cabinet} onChange={(e) => setValue('cabinet', e.target.value as typeof CABINET_VALUES[number] | '')}>
             <option value="">{t('app.field.cabinet')}</option>

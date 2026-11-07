@@ -49,6 +49,24 @@ const SALARY_ERROR_KEYS: Record<string, string> = {
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
+
+/**
+ * На сколько штрафы больше начислений. К выплате тогда 0: минус не
+ * переносится и не выплачивается (решение заказчика, сервер считает так же).
+ */
+function penaltyExcessOf(r: { baseAmount: number; bonusAmount: number; kpiBonus: number; penalties: number }) {
+  return Math.max(0, Math.round((r.penalties - r.baseAmount - r.bonusAmount - r.kpiBonus) * 100) / 100);
+}
+
+/** Подпись под нулём «к выплате», когда штрафы съели всё начисленное. */
+function ExcessNote({ excess, currency }: { excess: number; currency: string }) {
+  if (!(excess > 0)) return null;
+  return (
+    <div className="salary-excess-note" data-testid="salary-excess">
+      {tr('salary.excess').replace('{sum}', fmtMoney(excess, currency))}
+    </div>
+  );
+}
 function fmtMin(min: number) {
   if (min <= 0) return `0${tr('time.hShort')}`;
   const h = Math.floor(min / 60);
@@ -153,8 +171,13 @@ export default function Salary() {
   /** KPI: у начисленной строки — из записи, иначе то, что вписали в форме. */
   const kpiOf = (r: SalaryRosterRow) =>
     r.record ? r.kpiBonus : Math.max(0, parseFloat(kpiByUser[r.userId] || '') || 0);
-  /** К выплате: у начисленной строки — как начислено, иначе расчёт + введённый KPI. */
-  const netOf = (r: SalaryRosterRow) => (r.record ? r.netAmount : r.netAmount + kpiOf(r));
+  /**
+   * К выплате: у начисленной строки — как начислено, иначе расчёт + введённый
+   * KPI. Не меньше нуля: штрафы сверх начислений не выплачиваются «минусом».
+   */
+  const netOf = (r: SalaryRosterRow) => (r.record
+    ? Math.max(0, r.netAmount)
+    : Math.max(0, r.baseAmount + r.bonusAmount + kpiOf(r) - r.penalties));
 
   const q = search.trim().toLowerCase();
   const shown = q ? rows.filter((r) => r.user.fullName.toLowerCase().includes(q)) : rows;
@@ -561,6 +584,7 @@ export default function Salary() {
                             </td>
                             <td data-label={t('salary.cell.net')} style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 17 }} data-testid="salary-net">
                               {fmtMoney(netOf(r), r.currency)}
+                              <ExcessNote excess={penaltyExcessOf({ ...r, kpiBonus: kpiOf(r) })} currency={r.currency} />
                             </td>
                             <td data-label={t('common.status')}>
                               {r.record
@@ -691,7 +715,10 @@ export default function Salary() {
                         fontFamily: 'var(--font-display)',
                         fontWeight: 500,
                         fontSize: 17,
-                      }}>{fmtMoney(r.netAmount, r.currency)}</td>
+                      }}>
+                        {fmtMoney(Math.max(0, r.netAmount), r.currency)}
+                        <ExcessNote excess={penaltyExcessOf(r)} currency={r.currency} />
+                      </td>
                       <td data-label={t('common.status')}>
                         {r.status === 'PAID'
                           ? <span className="badge badge-success">{t('salary.status.PAID')}</span>
@@ -721,7 +748,13 @@ export default function Salary() {
                             </button>
                           )}
                           {canPay && r.status === 'DRAFT' && (
-                            <button className="btn btn-sm btn-secondary" onClick={() => onPay(r)} data-testid="salary-pay">
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => onPay(r)}
+                              data-testid="salary-pay"
+                              disabled={!(r.netAmount > 0)}
+                              title={r.netAmount > 0 ? undefined : t('salary.nothingToPay')}
+                            >
                               <Icon name="paid" size={14} /> {t('salary.pay')}
                             </button>
                           )}
@@ -862,14 +895,15 @@ function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onCommen
               letterSpacing: '-0.04em',
               lineHeight: 1,
               color: 'var(--primary-dark)',
-            }} data-testid="salary-detail-net">{fmtMoney(row.netAmount, row.currency)}</div>
+            }} data-testid="salary-detail-net">{fmtMoney(Math.max(0, row.netAmount), row.currency)}</div>
+            <ExcessNote excess={penaltyExcessOf(row)} currency={row.currency} />
             {record?.comment && <div className="salary-roster-role">{record.comment}</div>}
           </div>
           <div className="salary-detail-done" data-testid="salary-detail-done">
             <Icon name="check_circle" size={18} />
             {row.record.status === 'PAID'
-              ? t('salary.roster.alreadyPaid').replace('{sum}', fmtMoney(row.record.netAmount, row.currency))
-              : t('salary.roster.alreadyAccrued').replace('{sum}', fmtMoney(row.record.netAmount, row.currency))}
+              ? t('salary.roster.alreadyPaid').replace('{sum}', fmtMoney(Math.max(0, row.record.netAmount), row.currency))
+              : t('salary.roster.alreadyAccrued').replace('{sum}', fmtMoney(Math.max(0, row.record.netAmount), row.currency))}
           </div>
         </div>
       </div>
@@ -955,6 +989,7 @@ function EmployeeSalary({ row, record, start, end, kpi, onKpi, comment, onCommen
             wordBreak: 'break-word',
             overflowWrap: 'anywhere',
           }} data-testid="salary-detail-net">{fmtMoney(preview.netAmount, preview.currency)}</div>
+          <ExcessNote excess={preview.penaltyExcess ?? 0} currency={preview.currency} />
         </div>
         {/* По низу, а не по центру: у поля KPI сверху подпись, и по центру оно
             оказывалось ниже комментария и кнопки. Высота трёх — index.css. */}

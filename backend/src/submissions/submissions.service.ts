@@ -135,6 +135,14 @@ function parseClientDate(value: string | Date): Date {
 const SUBMISSION_CURRENCIES = ['TJS', 'USD', 'EUR', 'CNY', 'RUB'] as const;
 const DEFAULT_SUBMISSION_CURRENCY = 'USD';
 
+/** Допуск копеечных огрехов Float при сравнении сумм. */
+const MONEY_EPSILON = 0.005;
+
+/** «3 000» / «2 500,5» — сумма в тексте ошибки, как её пишут в CRM. */
+function fmtMoney(n: number): string {
+  return (Math.round(n * 100) / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 }).replace(/[  ]/g, ' ');
+}
+
 /**
  * Приводит присланную валюту к канону или бросает 400.
  * Пустое/отсутствующее значение — это «не указали», а не ошибка: остаётся
@@ -340,6 +348,12 @@ export class SubmissionsService {
     const p = dto.firstPayment;
     if (typeof p.amount !== 'number' || !isFinite(p.amount) || p.amount <= 0) {
       throw new BadRequestException('Сумма платежа должна быть > 0');
+    }
+    // Первый платёж не может быть больше всего контракта (переплата).
+    if (p.amount > dto.totalAmount + MONEY_EPSILON) {
+      throw new BadRequestException(
+        `Первый платёж больше суммы контракта. Сумма контракта: ${fmtMoney(dto.totalAmount)} ${normalizeSubmissionCurrency(dto.currency)}`,
+      );
     }
 
     const paidAt = parseClientDate(p.paidAt as any);
@@ -1251,22 +1265,65 @@ export class SubmissionsService {
       throw new BadRequestException('Загрузите минимум 1 скрин пополнения счёта');
     }
 
-    const payment = await this.prisma.submissionPayment.create({
-      data: {
-        submissionId,
-        amount: dto.amount,
-        paymentMethod: method,
-        paidAt,
-        receiptUrls: addReceiptUrls,
-        depositProofUrls: addDepositProofUrls,
-        nextDueDate,
-        nextDueAmount: dto.nextDueAmount ?? null,
-        notes: dto.notes?.trim() || null,
-        status: SubmissionPaymentStatus.PENDING,
-      },
+    // Замок на сделку: два платежа, отправленные одновременно, иначе оба
+    // увидели бы один и тот же остаток и вместе превысили бы контракт.
+    const payment = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT 1 FROM "SaleSubmission" WHERE id = ${submissionId} FOR UPDATE`;
+      await this.assertWithinContract(tx, submission, dto.amount);
+      return tx.submissionPayment.create({
+        data: {
+          submissionId,
+          amount: dto.amount,
+          paymentMethod: method,
+          paidAt,
+          receiptUrls: addReceiptUrls,
+          depositProofUrls: addDepositProofUrls,
+          nextDueDate,
+          nextDueAmount: dto.nextDueAmount ?? null,
+          notes: dto.notes?.trim() || null,
+          status: SubmissionPaymentStatus.PENDING,
+        },
+      });
     });
     this.realtime.emitStaff('submission:payment-new', { submissionId, paymentId: payment.id });
     return payment;
+  }
+
+  /**
+   * Сколько ещё можно внести по сделке: сумма контракта минус все платежи,
+   * кроме отклонённых (ждущие одобрения тоже занимают место — иначе два
+   * неодобренных платежа вместе превысили бы контракт).
+   */
+  private async remainingOnContract(
+    db: Prisma.TransactionClient | PrismaService,
+    submission: { id: string; totalAmount: number },
+    exceptPaymentId?: string,
+  ): Promise<number> {
+    const agg = await db.submissionPayment.aggregate({
+      where: {
+        submissionId: submission.id,
+        status: { not: SubmissionPaymentStatus.REJECTED },
+        ...(exceptPaymentId ? { id: { not: exceptPaymentId } } : {}),
+      },
+      _sum: { amount: true },
+    });
+    return Math.round((submission.totalAmount - (agg._sum.amount ?? 0)) * 100) / 100;
+  }
+
+  /** 400, если платёж больше остатка по контракту (переплата запрещена). */
+  private async assertWithinContract(
+    db: Prisma.TransactionClient | PrismaService,
+    submission: { id: string; totalAmount: number; currency: string | null },
+    amount: number,
+    exceptPaymentId?: string,
+  ) {
+    const remaining = await this.remainingOnContract(db, submission, exceptPaymentId);
+    if (amount <= remaining + MONEY_EPSILON) return;
+    const cur = submission.currency || DEFAULT_SUBMISSION_CURRENCY;
+    if (remaining <= MONEY_EPSILON) {
+      throw new BadRequestException(`Контракт уже оплачен полностью (${fmtMoney(submission.totalAmount)} ${cur}). Новый платёж больше остатка.`);
+    }
+    throw new BadRequestException(`Платёж больше остатка по контракту. Остаток: ${fmtMoney(remaining)} ${cur}`);
   }
 
   /**
@@ -1661,9 +1718,11 @@ export class SubmissionsService {
     // сама сумма платежа. Сравнение валюты — точное, как в бонусной базе.
     const isForeignDeal = (submission.currency || MANAGER_BONUS_CURRENCY) !== MANAGER_BONUS_CURRENCY;
     const amountTjs = isForeignDeal ? parseAmountTjs(opts.amountTjs) : null;
-    // Конфликт интересов: FOUNDER, который является менеджером сделки,
-    // не может сам себе одобрять платежи (иначе self-approve + бонус себе).
-    if (submission.managerId && submission.managerId === reviewerId) {
+    // Конфликт интересов: сотрудник с правом одобрения не одобряет платежи по
+    // своей же сделке (иначе self-approve + бонус себе). Основателю можно:
+    // над ним одобрять некому, и платёж по его сделке висел бы вечно, а
+    // закрыть сделку с неодобренным платежом нельзя (решение заказчика).
+    if (submission.managerId && submission.managerId === reviewerId && !isFounder(reviewer as any)) {
       throw new ForbiddenException('Нельзя одобрять платежи по своей сделке');
     }
     // Program может быть null если её удалили из каталога (onDelete: SetNull).
@@ -2553,9 +2612,9 @@ export class SubmissionsService {
     if (payment.submission.status !== SubmissionStatus.ACTIVE && payment.submission.status !== SubmissionStatus.COMPLETED) {
       throw new BadRequestException('Нельзя отклонить платёж по неактивной сделке');
     }
-    // Конфликт интересов: FOUNDER-менеджер своей же сделки не должен
-    // самостоятельно разбирать (одобрять/отклонять) свои платежи.
-    if (payment.submission.managerId && payment.submission.managerId === reviewerId) {
+    // Конфликт интересов — как в approvePayment: свои платежи не разбирает
+    // никто, кроме основателя.
+    if (payment.submission.managerId && payment.submission.managerId === reviewerId && !isFounder(reviewer as any)) {
       throw new ForbiddenException('Нельзя разбирать платежи по своей сделке');
     }
 
@@ -3164,6 +3223,15 @@ export class SubmissionsService {
       ) {
         throw new BadRequestException('Сумма контракта должна быть > 0');
       }
+      // Контракт нельзя сделать меньше уже внесённого — это та же переплата.
+      if (dto.totalAmount < submission.totalAmount - MONEY_EPSILON) {
+        const paid = Math.round((submission.totalAmount - (await this.remainingOnContract(this.prisma, submission))) * 100) / 100;
+        if (dto.totalAmount < paid - MONEY_EPSILON) {
+          throw new BadRequestException(
+            `Сумма контракта меньше уже внесённых платежей. Внесено: ${fmtMoney(paid)} ${submission.currency || DEFAULT_SUBMISSION_CURRENCY}`,
+          );
+        }
+      }
       data.totalAmount = dto.totalAmount;
     }
     // ВАЛЮТА. Нормализуем и проверяем по whitelist'у (audit Q7) — и
@@ -3381,6 +3449,8 @@ export class SubmissionsService {
             id: true,
             currency: true,
             managerId: true,
+            // Сумма контракта — правка суммы платежа не может дать переплату.
+            totalAmount: true,
             // Нужен для пересчёта этапов рассрочки после правки суммы —
             // через него settleStagesTx снимает/поднимает
             // Application.paymentPending (см. блок ниже).
@@ -3402,6 +3472,9 @@ export class SubmissionsService {
     if (dto.amount !== undefined) {
       if (typeof dto.amount !== 'number' || !isFinite(dto.amount) || dto.amount <= 0) {
         throw new BadRequestException('Сумма платежа должна быть > 0');
+      }
+      if (dto.amount > payment.amount + MONEY_EPSILON) {
+        await this.assertWithinContract(this.prisma, payment.submission, dto.amount, payment.id);
       }
       data.amount = dto.amount;
     }

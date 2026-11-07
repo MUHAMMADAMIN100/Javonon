@@ -223,6 +223,27 @@ export type NonTjsTotals = Record<string, NonTjsBucket>;
  */
 export const DISMISSED_MANAGERS_KEY = '__dismissed__';
 
+/** Категории операций по-русски — для журнала действий. */
+const TX_CATEGORY_RU: Record<string, string> = {
+  TUITION_PAYMENT: 'Оплата за обучение',
+  ADDITIONAL_FEE: 'Доплата',
+  SALARY: 'Зарплата',
+  RENT: 'Аренда',
+  UTILITIES: 'Коммуналка',
+  MARKETING: 'Маркетинг',
+  OFFICE: 'Офис',
+  MISC_EXPENSE: 'Доп-расходы',
+  TARGETED_ADS: 'Таргет-реклама',
+  OTHER_INCOME: 'Прочий доход',
+  OTHER_EXPENSE: 'Прочий расход',
+};
+
+/** «07.11.2026» по Душанбе — дата в тексте журнала. */
+function fmtTjDay(d: Date): string {
+  const [y, m, day] = tjLocalDay(d).split('-');
+  return `${day}.${m}.${y}`;
+}
+
 @Injectable()
 export class FinanceService {
   private readonly logger = new Logger(FinanceService.name);
@@ -261,13 +282,16 @@ export class FinanceService {
    * открытия payload. Отдельная функция, чтобы create/update/remove
    * форматировали одинаково.
    */
+  /** Строка операции для журнала: «Доход 1 000 TJS · Прочий доход». */
   private formatTxDetails(tx: {
     type: TransactionType;
     amount: number;
     currency: string;
     category: TransactionCategory;
   }): string {
-    return `${tx.type} ${tx.amount} ${tx.currency} (${tx.category})`;
+    const kind = tx.type === 'INCOME' ? 'Доход' : 'Расход';
+    const amount = tx.amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 }).replace(/[\u00a0\u202f]/g, ' ');
+    return `${kind} ${amount} ${tx.currency} · ${TX_CATEGORY_RU[tx.category] ?? tx.category}`;
   }
 
   /**
@@ -1163,7 +1187,7 @@ export class FinanceService {
         parts.push(`сумма ${before.amount} ${before.currency} → ${updated.amount} ${updated.currency}`);
       }
       if (dateChanged) {
-        parts.push(`дата ${before.date.toISOString()} → ${updated.date.toISOString()}`);
+        parts.push(`дата ${fmtTjDay(before.date)} → ${fmtTjDay(updated.date)}`);
       }
       this.activity
         .log({
@@ -1172,7 +1196,7 @@ export class FinanceService {
           action: 'FINANCE_UPDATE',
           studentId: updated.studentId,
           studentName: updated.student?.fullName ?? null,
-          details: `Транзакция ${updated.id.slice(0, 8)}: ${parts.join('; ')}`,
+          details: `${this.formatTxDetails(updated)} — изменено: ${parts.join('; ')}`,
           payload: {
             transactionId: updated.id,
             before: {
@@ -1658,7 +1682,7 @@ export class FinanceService {
           action: 'FINANCE_DELETE',
           studentId: existing.studentId ?? null,
           studentName: existing.student?.fullName ?? null,
-          details: this.formatTxDetails(existing) + ' [HARD DELETE]',
+          details: this.formatTxDetails(existing) + ' — удалена навсегда',
           payload: {
             transactionId: id,
             managerId: existing.managerId ?? null,
@@ -1749,7 +1773,7 @@ export class FinanceService {
         studentName: existing.student?.fullName ?? null,
         details:
           this.formatTxDetails(existing) +
-          ` [SOFT DELETE → mirror ${mirror.id.slice(0, 8)}]`,
+          ' — удалена (в журнале оставлена встречная запись, суммы сходятся)',
         payload: {
           transactionId: id,
           mirrorTransactionId: mirror.id,

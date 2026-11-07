@@ -326,6 +326,7 @@ export class UsersService {
         kpiAutoStepPct: true,
         kpiMaxPct: true,
         createdAt: true,
+        isActive: true,
         customRoleId: true,
         customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
       },
@@ -392,7 +393,8 @@ export class UsersService {
         },
       }),
       this.prisma.dailyReport.findMany({
-        where: { userId: id, date: { gte: monthStart, lte: monthEnd } },
+        // DailyReport.date — DATE (календарный день), границы — дни месяца.
+        where: { userId: id, date: { gte: tjCalendarDay(monthStart), lte: tjCalendarDay(monthEnd) } },
         orderBy: { date: 'desc' },
       }),
       this.prisma.application.count({

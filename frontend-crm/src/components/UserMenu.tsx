@@ -4,6 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import Icon from '../Icon';
 import { useT } from '../lib/i18n';
+import { useAuth } from '../store/auth';
 
 /**
  * Меню пользователя внизу сайдбара: вместо шести значков в узком rail —
@@ -37,6 +38,7 @@ export default function UserMenu({
   onLogout: () => void;
 }) {
   const { t, lang, setLang } = useT();
+  const impersonating = !!useAuth((s) => s.user?.impersonation);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -142,15 +144,19 @@ export default function UserMenu({
                   <button type="button" className={lang === 'tg' ? 'is-on' : ''} onClick={() => setLang('tg')} title="Тоҷикӣ" data-testid="user-menu-lang-tj">TJ</button>
                 </span>
               </div>
-              <button
-                type="button"
-                className="user-menu-item"
-                role="menuitem"
-                onClick={() => { close(); onChangePassword(); }}
-                data-testid="user-menu-password"
-              >
-                <Icon name="lock_reset" size={20} /> {t('auth.changePassword')}
-              </button>
+              {/* «Войти как»: пароль сотрудника основатель не меняет (сервер
+                  тоже не даст) — пункт не показываем. */}
+              {!impersonating && (
+                <button
+                  type="button"
+                  className="user-menu-item"
+                  role="menuitem"
+                  onClick={() => { close(); onChangePassword(); }}
+                  data-testid="user-menu-password"
+                >
+                  <Icon name="lock_reset" size={20} /> {t('auth.changePassword')}
+                </button>
+              )}
               <div className="user-menu-sep" />
               <button
                 type="button"

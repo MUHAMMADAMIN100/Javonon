@@ -319,6 +319,9 @@ model Session {
   revokedAt DateTime?
   userAgent String?
   ip        String?
+  // «Войти как»: сессию открыл основатель (его id) под этим сотрудником.
+  // NULL — обычный вход самого сотрудника.
+  impersonatorId String?
 
   @@index([userId, revokedAt])
   @@index([revokedAt])

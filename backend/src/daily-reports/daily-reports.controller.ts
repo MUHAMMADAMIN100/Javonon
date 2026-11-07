@@ -4,7 +4,6 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { DailyReportsService, DailyReportInput } from './daily-reports.service';
-import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 import { Permissions } from '../auth/permissions.decorator';
 
 @Controller('daily-reports')
@@ -28,11 +27,8 @@ export class DailyReportsController {
     @Query('to') to?: string,
     @Query('take') take?: string,
   ) {
-    return this.svc.myList(me.id, {
-      from: from ? tjParseLocalDate(from) : undefined,
-      to: to ? tjParseLocalDateEnd(to) : undefined,
-      take: take ? parseInt(take, 10) : undefined,
-    });
+    const n = take ? parseInt(take, 10) : NaN;
+    return this.svc.myList(me.id, { from, to, take: Number.isFinite(n) && n > 0 ? Math.min(n, 366) : undefined });
   }
 
   /** Создать/обновить (upsert) отчёт. */
@@ -58,10 +54,6 @@ export class DailyReportsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.svc.adminList({
-      userId,
-      from: from ? tjParseLocalDate(from) : undefined,
-      to: to ? tjParseLocalDateEnd(to) : undefined,
-    });
+    return this.svc.adminList({ userId, from, to });
   }
 }

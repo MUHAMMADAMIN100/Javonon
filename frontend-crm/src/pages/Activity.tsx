@@ -5,6 +5,7 @@ import CrmSelect from '../components/CrmSelect';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listActivity, ACTIVITY_LABEL, type ActivityAction, type ActivityEntry } from '../api/activity';
+import { TRANSACTION_CATEGORY_LABEL, type TransactionCategory } from '../api/finance';
 import { useRealtime } from '../realtime';
 import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
@@ -12,6 +13,7 @@ import Icon from '../Icon';
 import Loading from '../components/Loading';
 import CrmDatePicker from '../components/CrmDatePicker';
 import { tr, useT } from '../lib/i18n';
+import { useRoleLabel } from '../lib/labels';
 
 // Каждое действие — своя иконка + цвет (для визуального timeline'а).
 const ACTION_VISUAL: Record<ActivityAction, { icon: string; color: string; bg: string }> = {
@@ -38,8 +40,39 @@ const ACTION_VISUAL: Record<ActivityAction, { icon: string; color: string; bg: s
   // менеджера при заведении сделки, а не инцидент. Разбирают такие строки не
   // по цвету одной записи, а по их серии от одного человека за минуту.
   PARTNER_PREVIEW_LOOKUP: { icon: 'person_search', color: '#1d4ed8', bg: '#dbeafe' },
+  // Создание / удаление записей — зелёный / красный, как у финансов.
+  RECORD_CREATE: { icon: 'add_circle',     color: '#15803d', bg: '#dcfce7' },
+  RECORD_DELETE: { icon: 'delete_forever', color: '#b91c1c', bg: '#fee2e2' },
+  RECORD_RESTORE: { icon: 'restore',       color: '#0f766e', bg: '#ccfbf1' },
+  // «Войти как» — тёмный, как плашка режима.
+  IMPERSONATION: { icon: 'switch_account', color: '#1f2937', bg: '#e5e7eb' },
 };
 const FALLBACK_VISUAL = { icon: 'bolt', color: '#64748b', bg: '#f1f5f9' };
+
+const LEGACY_TX_RE = /^(INCOME|EXPENSE) ([\d.]+) ([A-Z]{3}) \(([A-Z_]+)\)( \[SOFT DELETE → mirror [0-9a-f]+\]| \[HARD DELETE\])?$/;
+const LEGACY_TX_UPDATE_RE = /^Транзакция [0-9a-f]{8}: (.+)$/;
+const ISO_RE = /(\d{4})-(\d{2})-(\d{2})T[\d:.]+Z/g;
+
+/**
+ * Старые строки журнала (до 07.11.2026) сервер писал служебным текстом:
+ * «INCOME 1 TJS (OTHER_INCOME) [SOFT DELETE → mirror 1a2b3c4d]». Новые он
+ * пишет по-русски сам; старые переводим здесь, базу не трогаем.
+ */
+function readableDetails(details: string): string {
+  const m = LEGACY_TX_RE.exec(details);
+  if (m) {
+    const [, type, amount, cur, cat, tail] = m;
+    const kind = tr(type === 'INCOME' ? 'finance.income' : 'finance.expense');
+    const sum = Number(amount).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+    const suffix = !tail ? '' : tail.includes('HARD') ? ` — ${tr('activity.legacy.hardDelete')}` : ` — ${tr('activity.legacy.softDelete')}`;
+    return `${kind} ${sum} ${cur} · ${TRANSACTION_CATEGORY_LABEL[cat as TransactionCategory] ?? cat}${suffix}`;
+  }
+  const u = LEGACY_TX_UPDATE_RE.exec(details);
+  if (u) {
+    return `${tr('activity.legacy.txChanged')}: ${u[1].replace(ISO_RE, (_, y, mo, d) => `${d}.${mo}.${y}`)}`;
+  }
+  return details;
+}
 
 /** Группирует записи по дням: "Сегодня", "Вчера", или дата. */
 function groupByDay(items: ActivityEntry[]) {
@@ -76,6 +109,9 @@ export default function Activity() {
 
 function ActivityLog() {
   const { t } = useT();
+  // Роль автора — как везде в CRM (основатель — «Основатель», а не
+  // «Сотрудник», как было раньше для всех, кроме админа).
+  const roleLabel = useRoleLabel();
   const qc = useQueryClient();
   const [action, setAction] = useState<ActivityAction | ''>('');
   const [from, setFrom] = useState('');
@@ -236,7 +272,7 @@ function ActivityLog() {
                               </span>
                             </div>
                             <div style={{ fontSize: 14, color: 'var(--text)', marginTop: 4 }}>
-                              {e.details}
+                              {readableDetails(e.details)}
                             </div>
                             <div style={{
                               display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap',
@@ -245,7 +281,7 @@ function ActivityLog() {
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                 <Icon name="person" size={13} /> {e.actorName}
                                 <span style={{ color: 'var(--text-light)' }}>
-                                  ({e.actorRole === 'ADMIN' ? t('role.ADMIN') : t('activity.employee')})
+                                  ({e.actorRole && e.actorRole !== 'SYSTEM' ? roleLabel(e.actorRole) : t('activity.employee')})
                                 </span>
                               </span>
                               {e.studentName && (

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import NotificationBell from './NotificationBell';
 import RealtimeStatusBanner from './RealtimeStatusBanner';
+import ImpersonationBar from './ImpersonationBar';
 import Dialpad from './Dialpad';
 import Icon from '../Icon';
 import { useRealtimeEvent } from '../realtime';
@@ -163,6 +164,7 @@ export default function Layout() {
   return (
     <div className={`app-layout${mobileNavOpen ? ' nav-open' : ''}`}>
       <RealtimeStatusBanner />
+      <ImpersonationBar />
       {/* Звонок из CRM — роли с «Звонки — звонок из CRM». */}
       {!isTeacherOnly(me as any) && roleCan(me as any, 'calls:dial') && <Dialpad />}
       <Sidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />

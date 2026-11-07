@@ -256,6 +256,11 @@ export default function StudentNew() {
               <div className="dialog-message">
                 <b>{credentials.fullName}</b> — {t('studentDetail.password.oneTime')}
               </div>
+              {/* В «Студентах» по умолчанию только оплатившие — подсказываем,
+                  где искать только что заведённого. */}
+              <div className="profile-field-hint" style={{ marginBottom: 12 }} data-testid="student-new-unpaid-hint">
+                {t('studentNew.unpaidHint')}
+              </div>
 
               <div className="creds-box">
                 <CredRow label={t('userDetail.field.email')} value={credentials.email} />

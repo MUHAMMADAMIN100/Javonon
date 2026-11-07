@@ -85,7 +85,10 @@ export interface SalaryPreview {
   penaltiesPending?: number;
   /** Штрафы по одобренным причинам (отменены, не вычитаются). */
   penaltiesExcused?: number;
+  /** К выплате (не меньше 0). */
   netAmount: number;
+  /** На сколько штрафы больше начислений — тогда к выплате 0. */
+  penaltyExcess?: number;
   currency: string;
 
   // ── Расшифровка комиссии (см. backend/src/common/bonus-bands.ts) ──

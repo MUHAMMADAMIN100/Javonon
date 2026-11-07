@@ -1,7 +1,7 @@
 import { tr } from '../lib/i18n';
 import { create } from 'zustand';
 import type { User } from '../api/types';
-import { login as apiLogin, me as apiMe } from '../api/auth';
+import { login as apiLogin, me as apiMe, stopImpersonation as apiStopImpersonation } from '../api/auth';
 import { connectRealtime, disconnectRealtime } from '../realtime';
 import { startFileTokenRefresh, stopFileTokenRefresh } from '../lib/fileUrl';
 import { queryClient } from '../lib/queryClient';
@@ -76,6 +76,52 @@ export function writeToken(token: string): boolean {
   }
   try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* noop — legacy sweep */ }
   return true;
+}
+
+/**
+ * «Войти как» (только основатель): пока открыт режим, токен основателя лежит
+ * здесь, а основным стоит токен сотрудника. «Вернуться», «Выйти» и конец часа
+ * подставляют токен основателя обратно — его собственная сессия не трогается.
+ */
+const IMPERSONATOR_TOKEN_KEY = 'javonon_impersonator_token';
+const IMPERSONATOR_BACK_KEY = 'javonon_impersonator_back';
+
+export function hasImpersonator(): boolean {
+  try { return !!localStorage.getItem(IMPERSONATOR_TOKEN_KEY); } catch { return false; }
+}
+
+/** Режим «Войти как» начат: свой токен — в сторону, токен сотрудника — основным. */
+export function beginImpersonation(staffToken: string, backPath: string): boolean {
+  const own = readToken();
+  if (!own) return false;
+  try {
+    localStorage.setItem(IMPERSONATOR_TOKEN_KEY, own);
+    localStorage.setItem(IMPERSONATOR_BACK_KEY, backPath);
+  } catch {
+    return false;
+  }
+  if (!writeToken(staffToken)) return false;
+  try { localStorage.removeItem(ME_CACHE_KEY); } catch { /* noop */ }
+  return true;
+}
+
+/**
+ * Вернуть основателя в свой аккаунт и перезагрузить CRM (сбрасывает кеш
+ * данных и сокет сотрудника). Вызывающий сам гасит сессию режима на сервере.
+ */
+export function restoreImpersonator(): void {
+  let own: string | null = null;
+  let back = '/';
+  try {
+    own = localStorage.getItem(IMPERSONATOR_TOKEN_KEY);
+    back = localStorage.getItem(IMPERSONATOR_BACK_KEY) || '/';
+    localStorage.removeItem(IMPERSONATOR_TOKEN_KEY);
+    localStorage.removeItem(IMPERSONATOR_BACK_KEY);
+    localStorage.removeItem(ME_CACHE_KEY);
+  } catch { /* noop */ }
+  if (own) writeToken(own);
+  else clearToken();
+  location.href = `/admin${back.startsWith('/') ? back : `/${back}`}`;
 }
 
 /** Remove the token from BOTH storages (defensive — legacy zombies). */
@@ -239,6 +285,12 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   logout() {
+    // «Выйти» в режиме «Войти как» — это возврат основателя к себе, а не
+    // выход из CRM: сессию режима гасим, свой токен подставляем обратно.
+    if (hasImpersonator()) {
+      apiStopImpersonation().catch(() => undefined).finally(() => restoreImpersonator());
+      return;
+    }
     clearToken();
     // Also nuke the /auth/me cache — otherwise a same-browser logout→login
     // as a different user would seed the login screen (or the next

@@ -1,6 +1,6 @@
 import { tr } from '../lib/i18n';
 import axios from 'axios';
-import { readToken, clearToken, useAuth } from '../store/auth';
+import { readToken, clearToken, useAuth, hasImpersonator, restoreImpersonator } from '../store/auth';
 
 const baseURL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -28,7 +28,11 @@ api.interceptors.response.use(
       // full-page-navs to /login (loop-adjacent).
       const url: string = err.config?.url || '';
       const isLoginRequest = url.includes('/auth/login');
-      if (!isLoginRequest) {
+      if (!isLoginRequest && hasImpersonator()) {
+        // Час режима «Войти как» истёк (или сессию погасили) — основатель
+        // просто возвращается к себе, а не на экран входа.
+        restoreImpersonator();
+      } else if (!isLoginRequest) {
         // Nuke token from both storages + wipe in-memory auth store.
         clearToken();
         try { useAuth.setState({ user: null }); } catch { /* store not ready */ }

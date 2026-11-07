@@ -45,6 +45,8 @@ export interface FullProfile {
     kpiAutoStepPct?: number | null;
     kpiMaxPct?: number | null;
     createdAt: string;
+    /** false — уволен. */
+    isActive?: boolean;
   };
   documents: UserDocument[];
   salary: {

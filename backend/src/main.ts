@@ -9,6 +9,8 @@ import helmet from 'helmet';
 import { json, urlencoded, static as expressStatic } from 'express';
 import { resolve } from 'path';
 import { UploadsAuthMiddleware } from './common/uploads-auth.middleware';
+import { RequestContext, requestContext } from './common/request-context';
+import { ActivityService } from './activity/activity.service';
 
 // Последний рубеж: НИ ОДИН незакрытый промис не имеет права уронить процесс.
 //
@@ -27,6 +29,9 @@ import { UploadsAuthMiddleware } from './common/uploads-auth.middleware';
 //
 // Ошибку только логируем и живём дальше: процесс, обслуживающий CRM, полезнее
 // живым с одной потерянной фоновой операцией, чем мёртвым.
+/** Файлы, которые браузер может исполнить как страницу (см. /uploads ниже). */
+const ACTIVE_CONTENT_EXT_RE = /\.(svgz?|html?|xhtml|xht|xml|xsl|js|mjs)$/i;
+
 process.on('unhandledRejection', (reason) => {
   const err = reason instanceof Error ? reason : new Error(String(reason));
   new Logger('UnhandledRejection').error(err.message, err.stack);
@@ -44,6 +49,22 @@ async function bootstrap() {
   // на больших телах.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
+
+  // Контекст запроса (common/request-context.ts) — до всего остального, чтобы
+  // слой базы знал, кто сотрудник. После ответа: созданное/удалённое за
+  // успешный запрос — в журнал действий, а при «Войти как» — ещё и строка о
+  // самом действии (метод, адрес, итог).
+  const activity = app.get(ActivityService);
+  app.use((req: any, res: any, next: any) => {
+    const ctx: RequestContext = { req, events: [] };
+    res.on('finish', () => {
+      if (res.statusCode < 400 && ctx.events.length) {
+        activity.flushRequestEvents(ctx).catch(() => undefined);
+      }
+      activity.logImpersonatedRequest(ctx, res.statusCode).catch(() => undefined);
+    });
+    requestContext.run(ctx, () => next());
+  });
 
   // Trust proxy — КРИТИЧНО для rate-limiting за reverse proxy (Railway/Vercel/
   // любой L7 балансер). Без этого Express считает req.ip = IP ближайшего hop'а
@@ -133,8 +154,17 @@ async function bootstrap() {
     // CRM и API на разных адресах (vercel ↔ railway). helmet ставит
     // Cross-Origin-Resource-Policy: same-origin, и браузер не показывал ни
     // одной картинки/файла из CRM. Доступ к файлу и так только по токену.
-    (_req: any, res: any, next: any) => {
+    (req: any, res: any, next: any) => {
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      // Файл, который браузер способен выполнить как страницу (SVG со
+      // скриптом, HTML), открытый по ссылке, запустил бы код на адресе API и
+      // увидел бы файловый токен в адресе. Такие файлы только скачиваются и
+      // скриптов не исполняют. В <img> SVG по-прежнему показывается — там
+      // скрипты браузер не запускает никогда.
+      if (ACTIVE_CONTENT_EXT_RE.test(String(req.path || ''))) {
+        res.setHeader('Content-Disposition', 'attachment');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      }
       next();
     },
     (req: any, res: any, next: any) => {

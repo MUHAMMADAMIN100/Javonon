@@ -18,3 +18,15 @@ export async function changePassword(currentPassword: string, newPassword: strin
   });
   return data;
 }
+
+/** «Войти как» сотрудник (только основатель): токен его сессии на 1 час. */
+export async function impersonate(userId: string) {
+  const { data } = await api.post<{ token: string; user: User }>(`/auth/impersonate/${userId}`);
+  return data;
+}
+
+/** Закончить режим «Войти как» (гасит сессию режима на сервере). */
+export async function stopImpersonation() {
+  const { data } = await api.post<{ ok: true }>('/auth/impersonate/stop');
+  return data;
+}

@@ -26,7 +26,8 @@ import { updateUser } from '../api/users';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
 import { useUI } from '../ui/Dialogs';
-import { useAuth } from '../store/auth';
+import { useAuth, beginImpersonation } from '../store/auth';
+import { impersonate } from '../api/auth';
 import { isElevated, isFounder, displayRoleLabel, isTeacherOnly } from '../lib/roles';
 import { hasActiveRole, hiddenAmount, roleCan } from '../lib/permissions';
 import { bandRangeLabel } from '../lib/bonusBands';
@@ -85,6 +86,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   const roleLabel = useRoleLabel();
   const navigate = useNavigate();
   const [openingChat, setOpeningChat] = useState(false);
+  const [impersonating, setImpersonating] = useState(false);
 
   /** Какая плитка «Текущий месяц» открыта в окне «подробнее». */
   const [monthTile, setMonthTile] = useState<MonthTile | null>(null);
@@ -264,6 +266,36 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
               }}
             >
               <Icon name="chat" size={18} /> {t('profile.hero.write')}
+            </button>
+          )}
+          {/* «Войти как» — только основатель, только действующий сотрудник
+              (не основатель, не он сам). CRM откроется глазами сотрудника на
+              час; вернуться — плашкой внизу или «Выйти». */}
+          {isFounder(meStore) && !own && !isFounderTarget && user.isActive !== false && !meStore?.impersonation && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              data-testid="profile-impersonate"
+              disabled={impersonating}
+              onClick={async () => {
+                const ok = await confirm({
+                  title: t('impersonate.confirm.title').replace('{name}', user.fullName),
+                  message: t('impersonate.confirm.message'),
+                  confirmText: t('impersonate.button'),
+                });
+                if (!ok) return;
+                setImpersonating(true);
+                try {
+                  const res = await impersonate(realId);
+                  if (!beginImpersonation(res.token, `/users/${realId}`)) throw new Error(t('auth.storageError'));
+                  location.href = '/admin/';
+                } catch (e: any) {
+                  toast(e?.response?.data?.message || e?.message || t('toast.error'), 'error');
+                  setImpersonating(false);
+                }
+              }}
+            >
+              <Icon name="switch_account" size={18} /> {t('impersonate.button')}
             </button>
           )}
           {(canEditNameEmail || canEditHR) && (

@@ -27,6 +27,8 @@ type JwtPayload = {
   roles?: string[];
   /** Standard JWT expiry (seconds since epoch). Present when token was signed with expiresIn. */
   exp?: number;
+  /** «Войти как»: id основателя, открывшего режим (auth/impersonation.ts). */
+  imp?: string;
 };
 
 /** Shape мы кладём в client.data. Держим здесь, чтобы не тянуть `any` по всему файлу. */
@@ -37,6 +39,8 @@ type SocketData = {
   expiresAt?: number;
   /** Таймер, который дисконнектит сокет ровно на exp. */
   expiryTimer?: ReturnType<typeof setTimeout>;
+  /** Сокет режима «Войти как» — не влияет на «в сети». */
+  impersonated?: boolean;
 };
 
 // TEACHER — учитель академии: попадает в 'staff' (там только id и
@@ -228,8 +232,15 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         const who = toUserWithRoles(u as any, needsPositionRole ? await loadPositionRoles(this.prisma) : undefined);
         client.join('staff');
         client.join(`user:${id}`);
+        // «Войти как»: основатель видит события сотрудника, но писать в чат,
+        // «печатает…» и «прочитано» от его имени нельзя.
+        const impersonated = !!payload.imp;
         for (const [event, handler] of this.clientHandlers) {
           client.on(event, async (payload: any, ack?: (res: any) => void) => {
+            if (impersonated) {
+              if (typeof ack === 'function') ack({ ok: false, error: 'В режиме «Войти как» писать в чат от имени сотрудника нельзя' });
+              return;
+            }
             try {
               const res = await handler(id, payload);
               if (typeof ack === 'function') ack({ ok: true, ...(res ?? {}) });
@@ -253,7 +264,10 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         if (u.role === 'FOUNDER' || (u.roles || []).includes('FOUNDER')) {
           client.join('founders');
         }
-        this.presence.connected(id, client.id);
+        // Сотрудник не становится «в сети» оттого, что основатель смотрит
+        // CRM его глазами.
+        if (!impersonated) this.presence.connected(id, client.id);
+        else (client.data as SocketData).impersonated = true;
       } else if (role === 'STUDENT') {
         client.join(`student:${id}`);
         client.join('students');
@@ -276,7 +290,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       clearTimeout(data.expiryTimer);
       data.expiryTimer = undefined;
     }
-    if (data.userId && data.role && STAFF_ROLES.has(data.role)) {
+    if (data.userId && data.role && STAFF_ROLES.has(data.role) && !data.impersonated) {
       this.presence.disconnected(data.userId, client.id);
     }
     this.logger.log(`Disconnected: ${data.role} ${data.userId}`);
@@ -286,7 +300,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   @SubscribeMessage('presence:activity')
   onPresenceActivity(@ConnectedSocket() client: Socket) {
     const data = (client.data as SocketData) || {};
-    if (data.userId && data.role && STAFF_ROLES.has(data.role)) this.presence.activity(data.userId);
+    if (data.userId && data.role && STAFF_ROLES.has(data.role) && !data.impersonated) this.presence.activity(data.userId);
   }
 
   /**

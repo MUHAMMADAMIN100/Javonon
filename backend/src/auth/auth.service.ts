@@ -5,13 +5,88 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CUSTOM_ROLE_SELECT, effectiveCustomRole } from './position-role';
+import { isFounder } from './role-utils';
+import { IMPERSONATION_TTL, IMPERSONATION_TTL_MS, isImpersonating } from './impersonation';
+import { ActivityService } from '../activity/activity.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    private activity: ActivityService,
   ) {}
+
+  /**
+   * «Войти как» (только основатель): отдельная сессия сотрудника на час с
+   * пометкой, кто её открыл. Свою сессию основатель не теряет — CRM хранит его
+   * токен и по «Вернуться» подставляет обратно.
+   */
+  async impersonate(
+    actor: { id: string; role?: string; roles?: string[]; impersonatorId?: string | null },
+    targetId: string,
+    ctx?: { ip?: string | null; userAgent?: string | null },
+  ) {
+    if (isImpersonating(actor)) {
+      throw new BadRequestException('Сначала вернитесь в свой аккаунт');
+    }
+    if (!isFounder(actor as any)) {
+      throw new ForbiddenException('«Войти как» доступно только основателю');
+    }
+    if (targetId === actor.id) throw new BadRequestException('Это ваш аккаунт');
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, email: true, fullName: true, role: true, roles: true, isActive: true },
+    });
+    if (!target) throw new NotFoundException('Сотрудник не найден');
+    if (target.isActive === false) throw new BadRequestException('Сотрудник уволен — войти от его имени нельзя');
+    if (isFounder(target as any)) throw new ForbiddenException('Войти как основатель нельзя');
+
+    const session = await this.prisma.session.create({
+      data: {
+        userId: target.id,
+        impersonatorId: actor.id,
+        ip: ctx?.ip ?? null,
+        userAgent: ctx?.userAgent ?? null,
+      },
+      select: { id: true, createdAt: true },
+    });
+    const token = await this.jwt.signAsync(
+      { sub: target.id, sid: session.id, email: target.email, role: target.role, roles: target.roles || [], imp: actor.id },
+      { expiresIn: IMPERSONATION_TTL },
+    );
+    await this.activity
+      .log({
+        actorId: actor.id,
+        actorRole: 'FOUNDER',
+        action: 'IMPERSONATION',
+        details: `Вход от имени: ${target.fullName} (на 1 час)`,
+        payload: { targetId: target.id, sessionId: session.id, kind: 'start' },
+      }, null)
+      .catch(() => undefined);
+    const user = await this.me(target.id, session.id);
+    return { token, user };
+  }
+
+  /** «Вернуться в свой аккаунт»: гасим сессию режима «Войти как». */
+  async stopImpersonation(user: { id: string; sid?: string; impersonatorId?: string | null }) {
+    if (!isImpersonating(user)) return { ok: true };
+    await this.prisma.session.updateMany({
+      where: { id: user.sid || '', revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    const target = await this.prisma.user.findUnique({ where: { id: user.id }, select: { fullName: true } });
+    await this.activity
+      .log({
+        actorId: user.impersonatorId!,
+        actorRole: 'FOUNDER',
+        action: 'IMPERSONATION',
+        details: `Выход из режима «Войти как»: ${target?.fullName || 'сотрудник'}`,
+        payload: { targetId: user.id, sessionId: user.sid, kind: 'stop' },
+      }, null)
+      .catch(() => undefined);
+    return { ok: true };
+  }
 
   /**
    * Файловый токен для ссылок на /uploads (см. UploadsAuthMiddleware): 10
@@ -100,7 +175,14 @@ export class AuthService {
     };
   }
 
-  async me(userId: string) {
+  async me(userId: string, sessionId?: string) {
+    // «Войти как»: кто открыл режим и до какого времени — для плашки в CRM.
+    const session = sessionId
+      ? await this.prisma.session.findUnique({ where: { id: sessionId }, select: { impersonatorId: true, createdAt: true } })
+      : null;
+    const impersonator = session?.impersonatorId
+      ? await this.prisma.user.findUnique({ where: { id: session.impersonatorId }, select: { id: true, fullName: true } })
+      : null;
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -122,6 +204,9 @@ export class AuthService {
       // назначенная лично: меню CRM обязано совпадать с правами на сервере.
       customRole: custom,
       permissions: custom?.permissions || [],
+      impersonation: impersonator && session
+        ? { by: impersonator, until: new Date(session.createdAt.getTime() + IMPERSONATION_TTL_MS).toISOString() }
+        : null,
     };
   }
 

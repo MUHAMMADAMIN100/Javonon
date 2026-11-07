@@ -45,7 +45,7 @@ const programImageStorage = diskStorage({
 const programImageFilter: any = (_req: any, file: any, cb: any) => {
   const ext = (extname(file.originalname || '') || '').toLowerCase();
   if (!PROGRAM_IMAGE_EXT.has(ext) || !PROGRAM_IMAGE_MIME.has(file.mimetype)) {
-    return cb(new Error(`Тип файла не разрешён: ${file.mimetype}`), false);
+    return cb(new BadRequestException('Недопустимый тип файла. Можно: JPG, PNG, WEBP, HEIC.'), false);
   }
   cb(null, true);
 };

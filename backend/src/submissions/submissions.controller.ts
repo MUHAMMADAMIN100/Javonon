@@ -49,7 +49,7 @@ const submissionFileStorage = diskStorage({
 const submissionFileFilter: any = (_req: any, file: any, cb: any) => {
   const ext = (extname(file.originalname || '') || '').toLowerCase();
   if (!SUBMISSION_FILE_EXT.has(ext) || !SUBMISSION_FILE_MIME.has(file.mimetype)) {
-    return cb(new Error(`Тип файла не разрешён: ${file.mimetype}. Допустимы JPG/PNG/WEBP/HEIC/PDF.`), false);
+    return cb(new BadRequestException('Недопустимый тип файла. Можно: JPG, PNG, WEBP, HEIC, PDF.'), false);
   }
   cb(null, true);
 };

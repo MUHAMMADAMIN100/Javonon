@@ -1,6 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { AuditEvent, RequestContext, StaffActor, currentStaffActor, staffActorOf } from '../common/request-context';
+
+/** «3 000» / «2 500,5» — сумма в тексте журнала. */
+function fmtSum(n: unknown): string {
+  const v = typeof n === 'number' && Number.isFinite(n) ? n : 0;
+  return v.toLocaleString('ru-RU', { maximumFractionDigits: 2 }).replace(/[\u00a0\u202f]/g, ' ');
+}
+
+const join = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(', ');
 
 export type ActivityAction =
   | 'STATUS_CHANGE'
@@ -70,7 +79,16 @@ export type ActivityAction =
   // явный признак перебора, и терять её нельзя. Ответ клиенту при этом
   // одинаков во всех трёх исходах (null), так что журнал знает больше, чем
   // узнал вызывающий.
-  | 'PARTNER_PREVIEW_LOOKUP';
+  | 'PARTNER_PREVIEW_LOOKUP'
+  // Создание / удаление / восстановление записей (лиды, студенты, сделки,
+  // платежи, партнёры, группы, курсы, звонки, задачи, программы, воронки,
+  // уровни, сотрудники). Пишутся автоматически — см. prisma.service.ts.
+  | 'RECORD_CREATE'
+  | 'RECORD_DELETE'
+  | 'RECORD_RESTORE'
+  // «Войти как»: вход/выход основателя под сотрудником и каждое изменение,
+  // сделанное в этом режиме.
+  | 'IMPERSONATION';
 
 /**
  * Action'ы, чьи details/payload содержат ПАРТНЁРСКИЕ данные (имя партнёра,
@@ -95,7 +113,126 @@ export const PARTNER_SENSITIVE_ACTIONS: ActivityAction[] = [
 
 @Injectable()
 export class ActivityService {
+  private readonly logger = new Logger(ActivityService.name);
+
   constructor(private prisma: PrismaService, private realtime: RealtimeGateway) {}
+
+  /**
+   * Создания и удаления, накопленные за запрос (prisma.service.ts), — в
+   * журнал. Вызывается после ответа и только для успешного запроса.
+   */
+  async flushRequestEvents(ctx: RequestContext) {
+    const actor = staffActorOf(ctx.req);
+    if (!actor || ctx.events.length === 0) return;
+    for (const e of ctx.events) {
+      try {
+        const d = await this.describe(e);
+        if (!d) continue;
+        await this.log({
+          actorId: actor.id,
+          actorRole: actor.role,
+          action: e.kind === 'create' ? 'RECORD_CREATE' : e.kind === 'restore' ? 'RECORD_RESTORE' : 'RECORD_DELETE',
+          studentId: d.studentId ?? null,
+          studentName: d.studentName ?? null,
+          details: d.details,
+          payload: { entity: e.model, id: e.row.id ?? null, kind: e.kind },
+        }, actor);
+      } catch (err) {
+        this.logger.warn(`Журнал: ${e.model} ${e.kind} не записан: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  /**
+   * «Войти как»: каждое изменение, сделанное основателем под сотрудником, —
+   * отдельной строкой (метод, адрес, итог). Чтение не пишем — это шум.
+   */
+  async logImpersonatedRequest(ctx: RequestContext, status: number) {
+    const actor = staffActorOf(ctx.req);
+    const method = String(ctx.req?.method || '').toUpperCase();
+    if (!actor?.impersonatorId || ['GET', 'HEAD', 'OPTIONS'].includes(method)) return;
+    const path = String(ctx.req?.originalUrl || ctx.req?.url || '').split('?')[0];
+    const outcome = status < 400 ? 'выполнено' : `отказ (${status})`;
+    await this.log({
+      actorId: actor.id,
+      actorRole: actor.role,
+      action: 'IMPERSONATION',
+      details: `${method} ${path} — ${outcome}`,
+      payload: { method, path, status },
+    }, actor);
+  }
+
+  /** Строка журнала для созданной/удалённой записи. */
+  private async describe(e: AuditEvent): Promise<{ details: string; studentId?: string | null; studentName?: string | null } | null> {
+    const r = e.row;
+    const tail = e.kind === 'fire' ? ' (уволен)' : e.kind === 'restore' && e.model === 'User' ? ' (восстановлен)' : '';
+    switch (e.model) {
+      case 'Application':
+        return { details: `Лид: ${join(r.fullName, r.phone)}`, studentId: r.studentId ?? null, studentName: r.fullName ?? null };
+      case 'Student':
+        return {
+          details: `${r.academyOnly ? 'Ученик академии' : 'Студент'}: ${join(r.fullName, Array.isArray(r.phones) ? r.phones[0] : null)}`,
+          studentId: e.kind === 'delete' ? null : r.id,
+          studentName: r.fullName ?? null,
+        };
+      case 'SaleSubmission': {
+        const client = await this.dealClient(r);
+        return {
+          details: `Сделка: ${client.name} · ${fmtSum(r.totalAmount)} ${r.currency || ''}`.trim(),
+          studentId: client.studentId,
+          studentName: client.name,
+        };
+      }
+      case 'SubmissionPayment': {
+        const deal = r.submissionId
+          ? await this.prisma.saleSubmission.findUnique({
+              where: { id: r.submissionId },
+              select: { currency: true, newStudentName: true, studentId: true, student: { select: { fullName: true } } },
+            })
+          : null;
+        const client = deal ? deal.student?.fullName || deal.newStudentName || '—' : '—';
+        return {
+          details: `Платёж ${fmtSum(r.amount)} ${deal?.currency || ''} по сделке: ${client}`.replace(/\s+/g, ' '),
+          studentId: deal?.studentId ?? null,
+          studentName: client,
+        };
+      }
+      case 'Partner':
+        return { details: `Партнёр: ${join(r.fullName, r.phone)}${e.kind === 'delete' && r.status === 'BANNED' ? ' (заблокирован: есть история начислений)' : ''}` };
+      case 'StudyGroup':
+        return { details: `Группа: ${r.name}` };
+      case 'Course':
+        return { details: `Курс: ${r.title}` };
+      case 'Lesson':
+        return { details: `Урок курса: ${r.title}` };
+      case 'CallLog':
+        return { details: `Звонок: ${join(r.clientName, r.clientPhone)}`, studentId: r.studentId ?? null, studentName: r.clientName ?? null };
+      case 'Task':
+        return { details: `Задача: ${r.title}` };
+      case 'Program':
+        return { details: `Программа: ${join(r.name, r.university)}` };
+      case 'Pipeline':
+        return { details: `Воронка: ${r.name}` };
+      case 'PipelineStage':
+        return { details: `Этап воронки: ${r.name}` };
+      case 'AcademyLevel':
+        return { details: `Уровень академии: ${r.name}` };
+      case 'User':
+        return { details: `Сотрудник: ${join(r.fullName, r.email)}${tail}` };
+      default:
+        return null;
+    }
+  }
+
+  /** Клиент сделки: студент или «новый клиент» из самой сделки. */
+  private async dealClient(r: Record<string, any>): Promise<{ name: string; studentId: string | null }> {
+    if (r.newStudentName) return { name: r.newStudentName, studentId: r.studentId ?? null };
+    if (r.studentId) {
+      const st = await this.prisma.student.findUnique({ where: { id: r.studentId }, select: { fullName: true } });
+      return { name: st?.fullName || '—', studentId: r.studentId };
+    }
+    return { name: '—', studentId: null };
+  }
 
   async log(data: {
     actorId: string | null;
@@ -106,7 +243,21 @@ export class ActivityService {
     studentName?: string | null;
     details: string;
     payload?: any;
-  }) {
+  }, actorHint?: StaffActor | null) {
+    // «Войти как»: действие сотрудника, которое на самом деле сделал
+    // основатель. В журнал — основатель, с пометкой «от имени …».
+    const actor = actorHint ?? currentStaffActor();
+    if (actor?.impersonatorId && data.actorId === actor.id) {
+      const target = await this.prisma.user.findUnique({ where: { id: actor.id }, select: { fullName: true } });
+      data = {
+        ...data,
+        actorId: actor.impersonatorId,
+        actorName: undefined,
+        actorRole: 'FOUNDER',
+        details: `${data.details} — от имени: ${target?.fullName || 'сотрудник'}`,
+        payload: { ...(data.payload && typeof data.payload === 'object' ? data.payload : {}), onBehalfOf: actor.id },
+      };
+    }
     let actorName = data.actorName || '';
     if (!actorName && data.actorId) {
       const u = await this.prisma.user.findUnique({

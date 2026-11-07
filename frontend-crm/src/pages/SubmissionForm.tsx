@@ -262,6 +262,7 @@ export default function SubmissionForm() {
     if (!isFinite(ta) || ta <= 0) return toast(t('deal.err.contractAmount'), 'error');
     const pa = parseFloat(payAmount);
     if (!isFinite(pa) || pa <= 0) return toast(t('dealForm.err.payAmount'), 'error');
+    if (pa > ta + 0.005) return toast(t('dealForm.err.payOverTotal'), 'error');
     if (payMethod === 'TRANSFER' && receiptUrls.length === 0) return toast(t('dealForm.err.receipt'), 'error');
     if (payMethod === 'CASH' && depositProofUrls.length === 0) return toast(t('dealForm.err.deposit'), 'error');
 

@@ -1240,7 +1240,9 @@ function TransactionForm({
   // роль — «Финансы — изменение операций» (как financeElevated на сервере).
   const elevated = roleCan(me, 'finance:update', isElevated(me));
   const [type, setType] = useState<TransactionType>(editTx?.type ?? 'INCOME');
-  const [category, setCategory] = useState<TransactionCategory>(editTx?.category ?? 'TUITION_PAYMENT');
+  // «Оплата за обучение» пишет только одобрение платежа по сделке — вручную её
+  // не выбрать (сервер отвечает 400), поэтому по умолчанию «Прочий доход».
+  const [category, setCategory] = useState<TransactionCategory>(editTx?.category ?? 'OTHER_INCOME');
   const [amount, setAmount] = useState<string>(
     editTx ? String(editTx.amount) : preselect?.amount ? String(preselect.amount) : '',
   );
@@ -1282,7 +1284,10 @@ function TransactionForm({
   const [paymentPhase, setPaymentPhase] = useState<PaymentPhaseStatus | ''>('');
   const [paidViaId, setPaidViaId] = useState<string>('');
 
-  const cats = type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  // Зарезервированная «Оплата за обучение» видна только у уже существующей
+  // операции этой категории (её открыли на правку) — выбрать её нельзя.
+  const incomeCats = INCOME_CATEGORIES.filter((c) => c !== 'TUITION_PAYMENT' || editTx?.category === 'TUITION_PAYMENT');
+  const cats = type === 'INCOME' ? incomeCats : EXPENSE_CATEGORIES;
 
   // managerId имеет двойную семантику: (INCOME → менеджер-получатель клиента)
   // и (EXPENSE + SALARY → сотрудник-получатель зарплаты). Поле разделяет
@@ -1424,7 +1429,7 @@ function TransactionForm({
               // как-то нажата (своя сборка, devtools) — молча остаёмся на
               // доходе, чтобы вниз не ушёл ни один расходный путь.
               const tt: TransactionType = raw === 'EXPENSE' && !canExpense ? 'INCOME' : raw;
-              const nextCategory: TransactionCategory = tt === 'INCOME' ? 'TUITION_PAYMENT' : 'SALARY';
+              const nextCategory: TransactionCategory = tt === 'INCOME' ? 'OTHER_INCOME' : 'SALARY';
               setType(tt);
               setCategory(nextCategory);
               // managerId держит одно значение для двух совершенно разных

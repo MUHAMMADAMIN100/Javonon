@@ -40,7 +40,7 @@ const timeProofStorage = diskStorage({
 const timeProofFilter: any = (_req: any, file: any, cb: any) => {
   const ext = (extname(file.originalname || '') || '').toLowerCase();
   if (!TIME_PROOF_EXT.has(ext) || !TIME_PROOF_MIME.has(file.mimetype)) {
-    return cb(new Error(`Тип файла не разрешён: ${file.mimetype}. Допустимы JPG/PNG/WEBP/HEIC/PDF.`), false);
+    return cb(new BadRequestException('Недопустимый тип файла. Можно: JPG, PNG, WEBP, HEIC, PDF.'), false);
   }
   cb(null, true);
 };
