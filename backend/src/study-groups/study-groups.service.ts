@@ -4,13 +4,20 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import { ClassMaterialKind, ClassSessionStatus, Prisma, StudyGroupStatus } from '@prisma/client';
 import { promises as fsp } from 'fs';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserWithRoles } from '../auth/role-utils';
-import { parseCalendarDateUtc, tjLocalDay, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { parseCalendarDateUtc, tjLocalDay, tjLocalHHMM, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+
+/** «16:30» по Душанбе. */
+function tjLocalHHMMString(d: Date): string {
+  const { h, m } = tjLocalHHMM(d);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
 import {
   academyCan,
   academyGroupCan,
@@ -731,8 +738,34 @@ export class StudyGroupsService {
     const taken = new Set(existing.map((e) => e.startsAt.getTime()));
     const fresh = slots.filter((s) => !taken.has(s.startsAt.getTime()));
     const skipped = slots.length - fresh.length;
-    if (dto.dryRun) return { count: fresh.length, skipped };
+
+    // Пересечения с занятиями группы, которые уже есть (QA №40: «Пн 16:00–17:00»
+    // и «Пн 16:30–17:30» создавались оба молча). Предупреждаем; создать можно
+    // только явно (allowOverlap).
+    const busy = fresh.length
+      ? await this.prisma.classSession.findMany({
+          where: {
+            groupId,
+            status: { not: ClassSessionStatus.CANCELLED },
+            startsAt: { lt: fresh[fresh.length - 1].endsAt },
+            endsAt: { gt: fresh[0].startsAt },
+          },
+          select: { startsAt: true, endsAt: true },
+        })
+      : [];
+    const clashing = fresh.filter((s) => busy.some((b) => s.startsAt < b.endsAt && s.endsAt > b.startsAt));
+    const hhmm = (d: Date) => tjLocalHHMMString(d);
+    const overlapSample = clashing.slice(0, 3).map((s) => {
+      const [, m, d] = tjLocalDay(s.startsAt).split('-');
+      return `${d}.${m} ${hhmm(s.startsAt)}–${hhmm(s.endsAt)}`;
+    });
+    if (dto.dryRun) return { count: fresh.length, skipped, overlaps: clashing.length, overlapSample };
     if (!fresh.length) return { created: 0, skipped };
+    if (clashing.length && !dto.allowOverlap) {
+      throw new ConflictException(
+        `${clashing.length} занятий пересекаются с уже существующими (${overlapSample.join(', ')}${clashing.length > 3 ? '…' : ''}). Отметьте «Всё равно создать».`,
+      );
+    }
 
     const topic = dto.topic?.trim().slice(0, 200) || null;
     const res = await this.prisma.classSession.createMany({
@@ -953,6 +986,11 @@ export class StudyGroupsService {
     if (isNaN(endsAt.getTime())) throw new BadRequestException('Некорректный конец занятия');
     if (endsAt <= startsAt) {
       throw new BadRequestException('Конец занятия должен быть позже начала');
+    }
+    // Занятие — в пределах одного дня (QA №39: «09.11 00:00 – 30.11 00:00»
+    // создавало занятие на три недели и ломало расписание группы).
+    if (tjLocalDay(startsAt) !== tjLocalDay(endsAt)) {
+      throw new BadRequestException('Занятие должно начинаться и заканчиваться в один день');
     }
     return { startsAt, endsAt };
   }

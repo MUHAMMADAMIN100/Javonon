@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds, email as emailRule, phoneRule, tjPhoneError } from '../utils/validators';
+import CrmDatePicker from '../components/CrmDatePicker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignApplicationManager, deleteApplication, getApplication, updateApplication } from '../api/applications';
 import { getStudent, updateStudent, uploadPhoto } from '../api/students';
-import type { Application, ApplicationStatus, Direction, Student } from '../api/types';
+import type { Application, ApplicationStatus, Country, Direction, Student } from '../api/types';
+import { COUNTRIES } from '../api/types';
 import { isFinishedApplicationStatus, isNewLeadApplicationStatus } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
@@ -341,6 +344,19 @@ export default function ApplicationDetail() {
                   phones.length === 0 ? '—' : phones.map((p, i) => (
                     <div key={i}>
                       {p}
+                      {/* Номер с ошибкой и повторы — видно сразу (QA №21). */}
+                      {tjPhoneError(p) && <div className="client-field-warn" data-testid="phone-warn">{tjPhoneError(p)}</div>}
+                      {i === 0 && !withStudent && (app.phoneTwins?.length ?? 0) > 0 && (
+                        <div className="client-field-warn" data-testid="phone-twins">
+                          {t('app.phoneTwins')}{' '}
+                          {app.phoneTwins!.map((tw, k) => (
+                            <span key={tw.id}>
+                              {k > 0 && ', '}
+                              {tw.canOpen ? <a className="client-link" href={`/admin/applications/${tw.id}`} onClick={(e) => { e.preventDefault(); navigate(`/applications/${tw.id}`); }}>{tw.fullName}</a> : t('app.phoneTwinsHidden')}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {withStudent
                         ? student!.phoneLabels?.[i] && <span className="client-field-sub"> · {student!.phoneLabels[i]}</span>
                         : i === 1 && app.secondaryContactLabel && <span className="client-field-sub"> · {app.secondaryContactLabel}</span>}
@@ -447,40 +463,91 @@ export default function ApplicationDetail() {
 }
 
 /**
- * Правка полей самой заявки — пока по ней не создан студент: телефоны,
- * канал связи, email, направление, комментарий (поля Application из ТЗ §8b).
+ * Правка полей самой заявки — пока по ней не создан студент: ФИО, дата
+ * рождения, страна, телефоны, канал связи, email, направление, комментарий.
+ *
+ * QA №25: ошибки — у полей и по-русски (раньше склеенный английский текст
+ * сервера в тосте), ФИО/страну/дату рождения теперь можно поменять.
+ * QA №23: на сервер уходят только изменённые поля, поэтому старое значение с
+ * ошибкой (номер +992 не той длины, «< >» в комментарии) не мешает правке
+ * остального; новое значение проверяется по тем же правилам, что «Новый лид».
  */
 function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; onSaved: () => void; onCancel: () => void }) {
   const { toast } = useUI();
   const { t } = useT();
   const channelLabel = useChannelLabel();
-  const [phone, setPhone] = useState(app.phone || '');
-  const [secondaryPhone, setSecondaryPhone] = useState(app.secondaryPhone || '');
-  const [secondaryContactLabel, setSecondaryContactLabel] = useState(app.secondaryContactLabel || '');
-  const [preferredChannel, setPreferredChannel] = useState<string>(app.preferredChannel || '');
-  const [email, setEmail] = useState(app.email || '');
-  // Неподтверждённое направление показываем как пустой выбор, а не как
-  // «Бакалавриат»: в БД там плейсхолдер, и предзаполненный селект заставил бы
-  // менеджера подтвердить чужую догадку одним нажатием «Сохранить».
-  const [direction, setDirection] = useState<Direction | ''>(app.directionConfirmed === false ? '' : app.direction);
-  const [comment, setComment] = useState(app.comment || '');
+  const countryLabel = useCountryLabel();
+  const dobBounds = birthdayBounds();
+  const initial = {
+    fullName: app.fullName || '',
+    birthday: app.birthday ? String(app.birthday).slice(0, 10) : '',
+    country: (app.country || '') as Country | '',
+    phone: app.phone || '',
+    secondaryPhone: app.secondaryPhone || '',
+    secondaryContactLabel: app.secondaryContactLabel || '',
+    preferredChannel: (app.preferredChannel || '') as string,
+    email: app.email || '',
+    // Неподтверждённое направление показываем как пустой выбор, а не как
+    // «Бакалавриат»: в БД там плейсхолдер, и предзаполненный селект заставил бы
+    // менеджера подтвердить чужую догадку одним нажатием «Сохранить».
+    direction: (app.directionConfirmed === false ? '' : app.direction) as Direction | '',
+    comment: app.comment || '',
+  };
+  const [form, setForm] = useState(initial);
+  const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
+  const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
+  const changed = (k: keyof typeof form) => form[k].trim() !== initial[k].trim();
+
+  // Ошибки только у изменённых полей — старые данные правку не блокируют.
+  const errors: Partial<Record<keyof typeof form, string>> = {};
+  if (changed('fullName')) {
+    const n = form.fullName.trim();
+    if (n.length < 2) errors.fullName = t('leads.err.nameRequired');
+    else if (/[<>]/.test(n)) errors.fullName = t('leads.err.commentChars');
+  }
+  if (changed('birthday') && form.birthday) {
+    const age = ageFromBirthday(form.birthday);
+    if (age === undefined) errors.birthday = t('leads.err.birthdayInvalid');
+    else if (age < MIN_AGE || age > MAX_AGE) errors.birthday = t('leads.err.birthdayAge');
+  }
+  if (changed('phone')) {
+    errors.phone = !form.phone.trim() ? t('leads.err.phoneRequired') : phoneRule()(form.phone);
+  }
+  if (changed('secondaryPhone') && form.secondaryPhone.trim()) errors.secondaryPhone = phoneRule()(form.secondaryPhone);
+  if (changed('email') && form.email.trim()) errors.email = emailRule()(form.email.trim());
+  if (changed('comment')) {
+    if (form.comment.length > 2000) errors.comment = t('leads.err.commentLong');
+    else if (/[<>]/.test(form.comment)) errors.comment = t('leads.err.commentChars');
+  }
+  (Object.keys(errors) as (keyof typeof form)[]).forEach((k) => { if (!errors[k]) delete errors[k]; });
+  const err = (k: keyof typeof form) => (showErrors ? errors[k] : undefined);
 
   const save = async () => {
+    if (Object.keys(errors).length > 0) {
+      setShowErrors(true);
+      return;
+    }
+    const patch: Record<string, unknown> = {};
+    if (changed('fullName')) patch.fullName = form.fullName.trim();
+    if (changed('birthday')) patch.birthday = form.birthday || '';
+    if (changed('country')) patch.country = form.country || null;
+    if (changed('phone')) patch.phone = form.phone.trim();
+    if (changed('secondaryPhone')) patch.secondaryPhone = form.secondaryPhone.trim();
+    if (changed('secondaryContactLabel')) patch.secondaryContactLabel = form.secondaryContactLabel.trim();
+    if (changed('preferredChannel') && form.preferredChannel) patch.preferredChannel = form.preferredChannel;
+    if (changed('email')) patch.email = form.email.trim();
+    // Направление шлём, только когда менеджер его выбрал: бэкенд трактует
+    // пришедший direction как подтверждение (directionConfirmed=true).
+    if (changed('direction') && form.direction) patch.direction = form.direction;
+    if (changed('comment')) patch.comment = form.comment.trim();
+    if (Object.keys(patch).length === 0) {
+      onCancel();
+      return;
+    }
     setSaving(true);
     try {
-      await updateApplication(app.id, {
-        phone: phone.trim() || undefined,
-        secondaryPhone: secondaryPhone.trim() || undefined,
-        secondaryContactLabel: secondaryContactLabel.trim() || undefined,
-        preferredChannel: (preferredChannel || undefined) as any,
-        email: email.trim() || undefined,
-        // Отправляем направление, только когда менеджер его выбрал. Пустое
-        // значение не шлём: бэкенд трактует пришедший direction как
-        // подтверждение (directionConfirmed=true) и снял бы пометку зря.
-        direction: (direction || undefined) as any,
-        comment: comment.trim() || undefined,
-      } as any);
+      await updateApplication(app.id, patch as any);
       toast(t('toast.saved'), 'success');
       onSaved();
     } catch (e: any) {
@@ -498,34 +565,53 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
       onCancel={onCancel}
       testId="client-edit-form"
       footer={
-        <EditField label={t('app.field.comment')} wide>
+        <EditField label={t('app.field.comment')} wide error={err('comment')}>
           <textarea
-            className="crm-textarea"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
+            className={`crm-textarea${err('comment') ? ' input-error' : ''}`}
+            value={form.comment}
+            onChange={(e) => set({ comment: e.target.value })}
             rows={3}
+            maxLength={2000}
             style={{ resize: 'none' }}
             data-testid="edit-comment"
           />
         </EditField>
       }
     >
-      <EditField label={t('app.field.mainPhone')}>
-        <input className="crm-input" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="edit-phone" />
+      <EditField label={t('app.field.fullName')} error={err('fullName')}>
+        <input className={`crm-input${err('fullName') ? ' input-error' : ''}`} value={form.fullName} onChange={(e) => set({ fullName: e.target.value })} maxLength={120} data-testid="edit-fullname" />
       </EditField>
-      <EditField label={t('app.field.secondaryPhoneHint')}>
-        <input className="crm-input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="+992 ..." />
+      <EditField label={t('app.field.birthday')} error={err('birthday')}>
+        <CrmDatePicker
+          className={`crm-input${err('birthday') ? ' input-error' : ''}`}
+          value={form.birthday}
+          onChange={(v) => set({ birthday: v })}
+          min={dobBounds.min}
+          max={dobBounds.max}
+        />
+      </EditField>
+      <EditField label={t('app.field.country')}>
+        <CrmSelect className="crm-select" value={form.country} onChange={(e) => set({ country: e.target.value as Country | '' })} data-testid="edit-country">
+          <option value="">—</option>
+          {COUNTRIES.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+        </CrmSelect>
+      </EditField>
+      <EditField label={t('app.field.mainPhone')} error={err('phone')}>
+        <input className={`crm-input${err('phone') ? ' input-error' : ''}`} value={form.phone} onChange={(e) => set({ phone: e.target.value })} data-testid="edit-phone" />
+      </EditField>
+      <EditField label={t('app.field.secondaryPhoneHint')} error={err('secondaryPhone')}>
+        <input className={`crm-input${err('secondaryPhone') ? ' input-error' : ''}`} value={form.secondaryPhone} onChange={(e) => set({ secondaryPhone: e.target.value })} placeholder="+992 ..." />
       </EditField>
       <EditField label={t('app.field.secondaryLabel')}>
         <input
           className="crm-input"
-          value={secondaryContactLabel}
-          onChange={(e) => setSecondaryContactLabel(e.target.value)}
+          value={form.secondaryContactLabel}
+          onChange={(e) => set({ secondaryContactLabel: e.target.value })}
           placeholder={t('app.field.secondaryLabelPh')}
         />
       </EditField>
       <EditField label={t('app.field.preferredChannel')}>
-        <CrmSelect className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
+        <CrmSelect className="crm-select" value={form.preferredChannel} onChange={(e) => set({ preferredChannel: e.target.value })}>
           <option value="">—</option>
           <option value="WHATSAPP">{channelLabel('WHATSAPP')}</option>
           <option value="PHONE">{channelLabel('PHONE')}</option>
@@ -534,15 +620,15 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
           <option value="EMAIL">{channelLabel('EMAIL')}</option>
         </CrmSelect>
       </EditField>
-      <EditField label={t('userDetail.field.email')}>
-        <input className="crm-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="edit-email" />
+      <EditField label={t('userDetail.field.email')} error={err('email')}>
+        <input className={`crm-input${err('email') ? ' input-error' : ''}`} type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} data-testid="edit-email" />
       </EditField>
       {/* Единственное место, где направление лида с лендинга вообще можно
           проставить. Без него заявка навсегда оставалась бы
           directionConfirmed=false и не попадала бы ни в срез дашборда
           «по направлениям», ни в фильтр списка. */}
       <EditField label={t('app.field.direction')}>
-        <CrmSelect className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as Direction | '')}>
+        <CrmSelect className="crm-select" value={form.direction} onChange={(e) => set({ direction: e.target.value as Direction | '' })}>
           <option value="">{t('app.direction.notChosen')}</option>
           <DirectionOptions />
         </CrmSelect>

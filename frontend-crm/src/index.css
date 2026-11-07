@@ -7915,3 +7915,32 @@ html:has(.exc-bar) { scrollbar-gutter: stable; }
 /* Список задач: моя запись за сегодня под сроком */
 .tdiary-rowmark { margin-top: 6px; }
 .tdiary-written-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--success); }
+
+/* KPI: «Почему сумма по сотрудникам не равна дашборду» (QA №14). */
+.kpi-outside { margin-top: 16px; padding: 0; }
+.kpi-outside-summary {
+  display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none;
+  padding: 14px 18px; font-size: 14px; font-weight: 500; color: var(--text-soft);
+}
+.kpi-outside-summary::-webkit-details-marker { display: none; }
+.kpi-outside[open] .kpi-outside-summary { color: var(--text); border-bottom: 1px solid var(--border); }
+.kpi-outside-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 32px; padding: 14px 18px 18px; }
+.kpi-outside-head { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-soft); margin-bottom: 6px; }
+.kpi-outside-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 14px; border-bottom: 1px dashed var(--border); }
+.kpi-outside-row b { font-weight: 600; white-space: nowrap; }
+.kpi-outside-row.is-total b { color: var(--primary-dark); }
+.kpi-outside-note { margin-top: 8px; font-size: 12px; color: var(--text-soft); line-height: 1.4; }
+
+/* Пометка под номером в карточке: «номер неполный», «есть другой лид с этим номером» (QA №21). */
+.client-field-warn { margin-top: 3px; font-size: 12px; line-height: 1.4; color: #b45309; font-weight: 400; }
+
+/* История общения: запись, которую видит студент в кабинете (QA №30). */
+.interaction-visible-mark { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase; color: var(--primary-dark); }
+
+/* Шаблон расписания: пересечения с уже существующими занятиями (QA №40). */
+.acad-template-overlap { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #fff7ed; color: #9a3412; font-size: 13px; line-height: 1.45; }
+.acad-template-overlap-ok { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--text); cursor: pointer; }
+
+/* Анкета: итог сохранения — «не сохранено: N ошибок» / «черновик, не заполнено N» (QA №29). */
+.af-save-note { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4; background: #fff7ed; color: #9a3412; }
+.af-save-note.is-bad { background: #fef2f2; color: #b91c1c; }

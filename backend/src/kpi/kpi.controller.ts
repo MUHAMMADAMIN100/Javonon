@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -7,6 +7,7 @@ import { KpiService } from './kpi.service';
 import { parseDate } from '../common/query-date';
 import { Permissions } from '../auth/permissions.decorator';
 import { canSeeData } from '../common/redact';
+import { isElevated } from '../auth/role-utils';
 
 @Controller('kpi')
 @UseGuards(JwtAuthGuard)
@@ -25,6 +26,16 @@ export class KpiController {
    *
    * Без from/to оба значения undefined → KpiService считает за всё время.
    */
+  /** Что не вошло в рейтинг (сверка с дашбордом) — только тем, кто видит деньги компании. */
+  @Permissions('kpi:read')
+  @Get('leaderboard/outside')
+  outside(@CurrentUser() me: any, @Query('from') from?: string, @Query('to') to?: string) {
+    // Как блок на странице KPI: у роли — пункт «Деньги компании», у должности — руководство.
+    const allowed = me?.hasCustomRole ? canSeeData(me, 'visibility:company-money') : isElevated(me);
+    if (!allowed) throw new ForbiddenException('Нет доступа к деньгам компании');
+    return this.svc.outsideRating({ from: parseDate(from, 'from'), to: parseDate(to, 'to', true) });
+  }
+
   @Permissions('kpi:read')
   @Get('leaderboard')
   async leaderboard(@CurrentUser() me: any, @Query('from') from?: string, @Query('to') to?: string) {

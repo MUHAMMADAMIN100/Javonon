@@ -51,6 +51,10 @@ export default function KpiDetailsModal({
 }) {
   const { t } = useT();
   const roleLabel = useRoleLabel();
+  // Своя роль (SMM, Lead Qualifier…) — как в списке сотрудников; без неё —
+  // должность (QA №13: раньше всем показывалась базовая должность).
+  const roleText = (r: { role: string; customRole?: { name: string; isActive?: boolean } | null }) =>
+    r.customRole?.name && r.customRole.isActive !== false ? r.customRole.name : roleLabel(r.role);
   const [tab, setTab] = useState<Tab>('students');
 
   const query = useQuery<KpiDetails>({
@@ -100,7 +104,7 @@ export default function KpiDetailsModal({
           <div style={{ minWidth: 0 }}>
             <div className="kpi-details-name">{row.fullName}</div>
             <div className="kpi-details-sub">
-              {roleLabel(row.role)} · {rangeLabel}
+              {roleText(row)} · {rangeLabel}
             </div>
           </div>
           <button

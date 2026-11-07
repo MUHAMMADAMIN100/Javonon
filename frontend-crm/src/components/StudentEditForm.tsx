@@ -5,7 +5,7 @@ import DirectionOptions from './DirectionOptions';
 import { EditField, EditForm } from './ProfileParts';
 import type { updateStudent } from '../api/students';
 import type { Direction, OnboardingStage, Student, StudentStatus } from '../api/types';
-import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, validateAll } from '../utils/validators';
+import { compose, email as emailRule, hasErrors, maxLen, minLen, numberRule, required, tjPhoneError, validateAll } from '../utils/validators';
 import { useUI } from '../ui/Dialogs';
 import { useT } from '../lib/i18n';
 import { useChannelLabel, useOnboardingLabel, useStudentStatusLabel } from '../lib/labels';
@@ -64,6 +64,11 @@ export default function StudentEditForm({ student, withOnboarding, saving, onSav
           const digits = p.replace(/\D/g, '');
           if (digits.length < 7) return t('app.err.phoneShort').replace('{p}', p);
           if (digits.length > 15) return t('app.err.phoneLong').replace('{p}', p);
+          // Новый номер +992 — ровно 9 цифр; уже сохранённые не мешают правке.
+          if (!(student.phones || []).includes(p)) {
+            const tj = tjPhoneError(p);
+            if (tj) return `${tj}: ${p}`;
+          }
         }
         return undefined;
       },

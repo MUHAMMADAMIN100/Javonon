@@ -315,6 +315,8 @@ export interface FinanceDistribution {
   scheme: DistributionScheme | null;
   totalPercentageAllocated: number;
   totalFixedAllocated: number;
+  /** Сколько месяцев в периоде: фиксированные (месячные) суммы умножены на него. */
+  fixedMonths?: number;
   netAfterDistribution: number;
   /** Валюта, в которой посчитано распределение (обычно `TJS`). */
   currency: string;

@@ -24,7 +24,7 @@ export class CallsService {
 
   async create(userId: string, dto: CreateCallDto) {
     const clientName = (dto.clientName || '').trim();
-    if (!clientName) throw new BadRequestException('Укажи имя клиента');
+    if (!clientName) throw new BadRequestException('Укажите имя клиента');
     if (clientName.length > 120) throw new BadRequestException('Имя слишком длинное');
 
     if (dto.direction && !VALID_DIRECTIONS.includes(dto.direction)) {

@@ -21,6 +21,12 @@ export interface StudentFilters {
   limit?: number;
 }
 
+/** Номера кабинетов, которые есть у студентов (фильтр «Кабинет»). */
+export async function listCabinets() {
+  const { data } = await api.get<number[]>('/students/cabinets');
+  return data;
+}
+
 export async function listStudents(filters: StudentFilters = {}) {
   const { data } = await api.get<Student[]>('/students', { params: filters });
   return data;

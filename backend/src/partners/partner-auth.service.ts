@@ -84,7 +84,7 @@ export class PartnerAuthService {
     }
     const fullName = (input.fullName || '').trim();
     if (!fullName || fullName.length < 2) {
-      throw new BadRequestException('Укажи имя');
+      throw new BadRequestException('Укажите имя');
     }
     if (fullName.length > 120) {
       throw new BadRequestException('Имя слишком длинное');

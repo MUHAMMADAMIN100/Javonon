@@ -361,6 +361,8 @@ export interface Application {
   id: string;
   fullName: string;
   phone: string;
+  /** Карточка: другие лиды с тем же номером (имя — только если их видно). */
+  phoneTwins?: { id: string; fullName: string | null; canOpen: boolean }[];
   secondaryPhone?: string | null;
   secondaryContactLabel?: string | null;
   preferredChannel?: ContactChannel | null;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import CrmSelect from './CrmSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -8,6 +8,7 @@ import {
   presentLabel,
   PRESENT_VALUE,
   validateField,
+  collectFormErrors,
   type FieldDef,
   type SectionDef,
 } from '../formSchema';
@@ -19,6 +20,10 @@ import { useT } from '../lib/i18n';
 
 
 const CURRENT_YEAR = new Date().getFullYear();
+
+
+/** После попытки сохранить — ошибки видны у всех полей, не только у тронутых (QA №29). */
+const ShowAllErrors = createContext(false);
 
 function Field({
   def,
@@ -35,7 +40,8 @@ function Field({
 }) {
   const { t } = useT();
   const [touched, setTouched] = useState(false);
-  const error = touched ? validateField(def, value, rowContext) : undefined;
+  const showAll = useContext(ShowAllErrors);
+  const error = touched || showAll ? validateField(def, value, rowContext) : undefined;
   const sanitizeText = (raw: string): string => {
     if (def.kind === 'tel') return raw;
     if (def.lettersOnly) {
@@ -205,8 +211,8 @@ function Field({
       <input
         type={def.kind || 'text'}
         {...common}
-        min={def.kind === 'number' ? def.min : undefined}
-        max={def.kind === 'number' ? def.max : undefined}
+        min={def.kind === 'number' ? def.min : def.kind === 'date' ? '1900-01-01' : undefined}
+        max={def.kind === 'number' ? def.max : def.kind === 'date' ? '2100-12-31' : undefined}
         step={def.kind === 'number' && def.max !== undefined && def.max <= 9 ? 0.5 : undefined}
         className={error ? 'af-input-error' : ''}
       />
@@ -414,6 +420,8 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
   const [form, setForm] = useState<any>(initialForm || emptyForm());
   const [manualSaving, setManualSaving] = useState(false);
   const [manualSaved, setManualSaved] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [saveNote, setSaveNote] = useState<{ text: string; bad: boolean } | null>(null);
   // Локальные изменения, ещё не отправленные на сервер. Авто-сохранения
   // нет — изменения уходят в БД только по нажатию «Сохранить анкету».
   const [dirty, setDirty] = useState(false);
@@ -448,6 +456,13 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
 
   const onManualSave = async () => {
     if (!form || manualSaving || !dirty) return;
+    // Черновик сохранить можно, а поля с ошибкой формата — нет (QA №29).
+    const check = collectFormErrors(form, sections);
+    if (check.invalid > 0) {
+      setShowAll(true);
+      setSaveNote({ text: t('appForm.err.fixInvalid').replace('{n}', String(check.invalid)), bad: true });
+      return;
+    }
     setManualSaving(true);
     setManualSaved(false);
     try {
@@ -456,9 +471,16 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
       setDirty(false);
       setExternalConflict(false);
       onSaved?.();
+      if (check.missing > 0) {
+        setShowAll(true);
+        setSaveNote({ text: t('appForm.savedDraft').replace('{n}', String(check.missing)), bad: false });
+      } else {
+        setSaveNote(null);
+      }
       setTimeout(() => setManualSaved(false), 2500);
-    } catch {
-      // silent — пользователь увидит, что dirty не сбросился, и попробует ещё раз
+    } catch (e: any) {
+      // Ошибку сервера показываем — раньше она терялась молча.
+      setSaveNote({ text: e?.response?.data?.message || t('toast.error'), bad: true });
     } finally {
       setManualSaving(false);
     }
@@ -471,6 +493,7 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
     setOpenSections((p) => ({ ...p, [key]: !p[key] }));
 
   return (
+    <ShowAllErrors.Provider value={showAll}>
     <section className="stu-card af-card">
       <div className="af-header">
         <div>
@@ -581,6 +604,10 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
         })}
 
         {canEdit && (
+          <>
+          {saveNote && (
+            <div className={`af-save-note${saveNote.bad ? ' is-bad' : ''}`} data-testid="af-save-note">{saveNote.text}</div>
+          )}
           <div className="af-save-bar af-save-bar-bottom">
             <button
               type="button"
@@ -598,9 +625,11 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
                 : t('appForm.allSaved')}
             </div>
           </div>
+          </>
         )}
       </div>
       {unsavedChangesModal}
     </section>
+    </ShowAllErrors.Provider>
   );
 }

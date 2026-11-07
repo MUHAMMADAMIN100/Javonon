@@ -1,5 +1,6 @@
 import { tr } from '../lib/i18n';
 import axios from 'axios';
+import { serverMessage } from '../lib/serverMessage';
 import { readToken, clearToken, useAuth, hasImpersonator, restoreImpersonator } from '../store/auth';
 
 const baseURL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
@@ -21,6 +22,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   (err) => {
+    // Текст ошибки сервера — сразу готовый к показу (lib/serverMessage.ts):
+    // массив не склеивается без пробела, английские фразы — по-русски.
+    const data = err.response?.data;
+    if (data && typeof data === 'object' && 'message' in data) {
+      const text = serverMessage((data as any).message);
+      if (text) (data as any).message = text;
+    }
     if (err.response?.status === 401) {
       // Login endpoint itself returns 401 on wrong password — that's the form's
       // job to display, not a global "wipe session, redirect" trigger. Without

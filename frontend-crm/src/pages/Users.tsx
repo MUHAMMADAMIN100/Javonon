@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useRoleOptionLabel } from '../lib/useRolePermCount';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -166,6 +167,7 @@ export default function Users() {
     retry: false,
   });
   const customRoles = (customRolesQuery.data || []).filter((r) => r.isActive);
+  const roleOptionLabel = useRoleOptionLabel();
 
   const createMut = useInvalidatingMutation({
     mutationFn: createUser,
@@ -494,7 +496,7 @@ export default function Users() {
               </div>
               <div className="dialog-title">{t('users.new')}</div>
               <div className="dialog-message" style={{ marginBottom: 16 }}>
-                {t('studentNew.subtitle')}
+                {t('users.new.subtitle')}
               </div>
 
               {error && (
@@ -590,7 +592,7 @@ export default function Users() {
                     <optgroup label={t('userDetail.field.customRole')}>
                       {customRoles.map((r) => (
                         <option key={r.id} value={`custom:${r.id}`}>
-                          {r.name} ({r.permissions.length})
+                          {roleOptionLabel(r)}
                         </option>
                       ))}
                     </optgroup>

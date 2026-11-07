@@ -12,7 +12,8 @@ export type Country = {
 };
 
 export const COUNTRIES: Country[] = [
-  { cc: 'tj', code: '+992', label: 'Таджикистан', minDigits: 7, maxDigits: 15 },
+  // +992 — всегда ровно 9 цифр (QA №20).
+  { cc: 'tj', code: '+992', label: 'Таджикистан', minDigits: 9, maxDigits: 9 },
   { cc: 'ru', code: '+7',   label: 'Россия',      minDigits: 7, maxDigits: 15 },
   { cc: 'kz', code: '+7',   label: 'Казахстан',   minDigits: 7, maxDigits: 15 },
   { cc: 'uz', code: '+998', label: 'Узбекистан',  minDigits: 7, maxDigits: 15 },
@@ -326,12 +327,17 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
         autoComplete="tel-national"
         value={local}
         disabled={disabled}
-        maxLength={country.maxDigits}
         placeholder={placeholder || '9'.repeat(country.minDigits)}
         style={inputStyle}
         onChange={(e) => {
-          const digits = e.target.value.replace(/\D/g, '').slice(0, country.maxDigits);
-          update(countryIdx, digits);
+          // Номер вставили целиком («+992 90 123 45 67» / «992901234567»): код
+          // страны уже выбран слева, лишнее «992» в начале срезаем — иначе в
+          // базе появлялись «+992992…» (QA №20). maxLength у поля нет, чтобы
+          // браузер не обрезал вставку раньше этой чистки.
+          let digits = e.target.value.replace(/\D/g, '');
+          const cc = country.code.slice(1);
+          if (digits.length > country.maxDigits && digits.startsWith(cc)) digits = digits.slice(cc.length);
+          update(countryIdx, digits.slice(0, country.maxDigits));
         }}
       />
 

@@ -3,7 +3,7 @@ import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { listStudents } from '../api/students';
+import { listCabinets, listStudents } from '../api/students';
 import { listUsers } from '../api/users';
 import { listAssignableManagers } from '../api/applications';
 import { canSeeAllClients, roleCan } from '../lib/permissions';
@@ -54,7 +54,6 @@ const STAGE_FILTER_VALUES = [
   ...SPECIAL_STUDENT_STATUSES,
 ];
 const DIRECTION_VALUES = Object.keys(DIRECTION_LABEL) as Direction[];
-const CABINET_VALUES = ['1', '2', '3'] as const;
 // «Оплата»: по умолчанию — оплатившие (студент = оплативший, решение
 // учредителя). Созданные вручную без оплаты находятся фильтром «Без оплаты».
 const PAY_VALUES = ['paid', 'unpaid', 'all'] as const;
@@ -94,7 +93,8 @@ export default function Students() {
       // В URL — просто `status`: для читающего ссылку это статус, а не
       // «stage», хотя внутри дропдаун смешивает этап заявки и статус студента.
       status: enumParam(STAGE_FILTER_VALUES),
-      cabinet: enumParam(CABINET_VALUES),
+      // Номер кабинета — любой (список берётся из базы, QA №27).
+      cabinet: stringParam('', 3),
       pay: enumParam<PayFilter, PayFilter>(PAY_VALUES, 'paid'),
       manager: wide ? stringParam('', 64) : ignoredParam(''),
       scope: enumParam<Scope, Scope>(
@@ -147,7 +147,7 @@ export default function Students() {
   const filters = {
     search: urlSearch || undefined,
     direction: direction || undefined,
-    cabinet: cabinet ? parseInt(cabinet, 10) : undefined,
+    cabinet: /^\d+$/.test(cabinet) ? parseInt(cabinet, 10) : undefined,
     mine: scope === 'mine',
     manager: manager || undefined,
     // Студент = оплативший (решение учредителя) — так по умолчанию. Фильтр
@@ -157,6 +157,13 @@ export default function Students() {
     from: from || undefined,
     to: to || undefined,
   };
+
+  // Кабинеты — из базы; выбранный из ссылки тоже в списке, даже если пуст.
+  const cabinetsQuery = useQuery({ queryKey: ['students', 'cabinets'], queryFn: listCabinets, staleTime: 5 * 60_000 });
+  const cabinetOptions = Array.from(new Set([
+    ...(cabinetsQuery.data ?? []),
+    ...(/^\d+$/.test(cabinet) ? [parseInt(cabinet, 10)] : []),
+  ])).sort((a, b) => a - b);
 
   const studentsQuery = useQuery({
     queryKey: keys.students.list(filters),
@@ -395,11 +402,11 @@ export default function Students() {
             <option value="unpaid">{t('students.pay.unpaid')}</option>
             <option value="all">{t('students.pay.all')}</option>
           </CrmSelect>
-          <CrmSelect className="crm-select" value={cabinet} onChange={(e) => setValue('cabinet', e.target.value as typeof CABINET_VALUES[number] | '')}>
+          <CrmSelect className="crm-select" value={cabinet} onChange={(e) => setValue('cabinet', e.target.value)} data-testid="students-cabinet-filter">
             <option value="">{t('app.field.cabinet')}</option>
-            <option value="1">{t('app.field.cabinet')} 1</option>
-            <option value="2">{t('app.field.cabinet')} 2</option>
-            <option value="3">{t('app.field.cabinet')} 3</option>
+            {cabinetOptions.map((c) => (
+              <option key={c} value={String(c)}>{t('app.field.cabinet')} {c}</option>
+            ))}
           </CrmSelect>
           {wide && users.length > 0 && (
             <CrmSelect

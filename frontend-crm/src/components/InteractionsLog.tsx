@@ -262,6 +262,12 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
                     letterSpacing: '0.10em',
                   }}>· {t('interactions.internal')}</span>
                 )}
+                {/* Что видит студент — видно сразу в списке (QA №30). */}
+                {isInteraction && visibleToStudent && (
+                  <span className="interaction-visible-mark" data-testid="interaction-visible" title={t('interactions.visibleToStudent')}>
+                    <Icon name="visibility" size={12} /> {t('interactions.visibleMark')}
+                  </span>
+                )}
                 {(it as TimelineItem).durationSeconds !== undefined && (
                   <span style={{ fontSize: 11, color: 'var(--text-soft)', fontFamily: 'var(--font-mono)' }}>
                     · {Math.floor((it as TimelineItem).durationSeconds! / 60)}{tr('time.m')} {(it as TimelineItem).durationSeconds! % 60}{tr('time.sec')}
@@ -316,7 +322,9 @@ function NewInteractionForm({
   const [type, setType] = useState<InteractionType>('CALL');
   const [summary, setSummary] = useState('');
   const [details, setDetails] = useState('');
-  const [visibleToStudent, setVisibleToStudent] = useState(true);
+  // По умолчанию запись ВНУТРЕННЯЯ: студенту её показывают осознанно
+  // (QA №30 — раньше даже «Заметка» сразу уходила в кабинет студента).
+  const [visibleToStudent, setVisibleToStudent] = useState(false);
 
   return (
     <form

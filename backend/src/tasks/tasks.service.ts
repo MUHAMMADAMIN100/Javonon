@@ -8,6 +8,25 @@ import { MailService } from '../mail/mail.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { hasRole, isElevated, isFounder, roleAllows } from '../auth/role-utils';
 import { canSeeTask, seesAllTasks, TaskDiaryService } from './task-diary.service';
+import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+
+/**
+ * Срок задачи из формы (QA №49). Только дата («2026-11-02») — это конец того
+ * дня по Душанбе (просрочка с полуночи, а не с 05:00 утра, как было при
+ * new Date(), читавшем дату как UTC-полночь). Дата со временем без пояса —
+ * время Душанбе. Полная ISO-строка с поясом — как есть.
+ */
+const DATE_ONLY_RE = /^(\d{4}-\d{2}-\d{2})(?:T00:00(?::00(?:\.0+)?)?)?$/;
+
+function parseTaskDeadline(raw?: string | null): Date | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  // «Без времени» — дата или ровно полночь из выбора даты без часов.
+  const dateOnly = DATE_ONLY_RE.exec(v);
+  const d = dateOnly ? tjParseLocalDateEnd(dateOnly[1]) : tjParseLocalDate(v);
+  if (Number.isNaN(d.getTime())) throw new BadRequestException('Некорректный срок задачи');
+  return d;
+}
 
 type CurrentUser = { id: string; role: Role; roles?: Role[] };
 
@@ -114,7 +133,7 @@ export class TasksService {
         assignees: { connect: assigneeIds.map((id) => ({ id })) },
         controllerId,
         createdById: user.id,
-        deadline: dto.deadline ? new Date(dto.deadline) : null,
+        deadline: parseTaskDeadline(dto.deadline),
         // Дневник задачи начинается с постановки (или со следующего рабочего дня).
         diaryFrom: dto.deadline ? await this.diary.diaryFromNow() : null,
       },
@@ -289,7 +308,7 @@ export class TasksService {
       ...(dto.deadline && !(task as any).diaryFrom ? { diaryFrom: await this.diary.diaryFromNow() } : {}),
       ...(dto.deadline !== undefined
         ? {
-            deadline: dto.deadline ? new Date(dto.deadline) : null,
+            deadline: parseTaskDeadline(dto.deadline),
             // Сбрасываем флаги напоминаний — будут отправлены заново при новом дедлайне
             deadlineReminderSent: false,
             overdueNotified: false,

@@ -91,6 +91,69 @@ export class KpiService {
    * common/tj-time): календарный день Asia/Dushanbe, `to` включительно до
    * 23:59:59.999 TJT. Арифметики над Date здесь нет и быть не должно.
    */
+  /**
+   * Что НЕ вошло в рейтинг KPI — чтобы сумма по сотрудникам сходилась с
+   * дашбордом (QA №14). Дашборд считает весь доход (TJS) и все зачисленные
+   * лиды; рейтинг — только действующих менеджеров (админ, по продажам,
+   * клиентские) и только продажи по сделкам. Разница раскладывается здесь.
+   */
+  async outsideRating(filters: { from?: Date; to?: Date }) {
+    const KPI_ROLES = ['ADMIN', 'SALES_MANAGER', 'CLIENT_MANAGER'];
+    const users = await this.prisma.user.findMany({ select: { id: true, role: true, roles: true, isActive: true } });
+    const has = (u: { role: string; roles: string[] }, r: string[]) => r.includes(u.role) || (u.roles || []).some((x) => r.includes(x));
+    const group = new Map<string, 'rated' | 'founder' | 'fired' | 'other'>();
+    for (const u of users) {
+      group.set(u.id, has(u, ['FOUNDER']) ? 'founder' : u.isActive === false ? 'fired' : has(u, KPI_ROLES) ? 'rated' : 'other');
+    }
+    const ids = users.map((u) => u.id);
+    const date = filters.from || filters.to
+      ? { ...(filters.from && { gte: filters.from }), ...(filters.to && { lte: filters.to }) }
+      : undefined;
+    const createdAt = dateRangeFilter(filters);
+    const finished = { status: { in: FINISHED_APPLICATION_STATUSES }, ...(createdAt && { createdAt }) };
+    const [sales, income, appGroups] = await Promise.all([
+      managerSales(this.prisma, ids, filters),
+      this.prisma.transaction.aggregate({
+        where: { type: 'INCOME', currency: 'TJS', reversedAt: null, ...(date && { date }) },
+        _sum: { amount: true },
+      }),
+      this.prisma.application.groupBy({ by: ['managerId', 'chinaManagerId'], where: finished, _count: { _all: true } }),
+    ]);
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const sum = { rated: 0, founder: 0, fired: 0, other: 0 };
+    let otherIncome = 0;
+    for (const [id, s] of sales) {
+      sum[group.get(id) ?? 'other'] += s.deals;
+      otherIncome += s.other;
+    }
+    const incomeTotal = r2(income._sum.amount ?? 0);
+    const known = sum.rated + sum.founder + sum.fired + sum.other + otherIncome;
+    const enrolled = { total: 0, rated: 0, founder: 0, fired: 0, other: 0, noManager: 0, twoManagers: 0 };
+    for (const g of appGroups) {
+      const n = g._count._all;
+      enrolled.total += n;
+      const gs = [g.managerId, g.chinaManagerId].filter((x): x is string => !!x).map((x) => group.get(x) ?? 'other');
+      if (gs.length === 0) { enrolled.noManager += n; continue; }
+      if (g.managerId && g.chinaManagerId && g.managerId !== g.chinaManagerId && gs.every((x) => x === 'rated')) enrolled.twoManagers += n;
+      if (gs.includes('rated')) enrolled.rated += n;
+      else enrolled[gs[0]] += n;
+    }
+    return {
+      incomeTotal,
+      sales: {
+        rated: r2(sum.rated),
+        founder: r2(sum.founder),
+        fired: r2(sum.fired),
+        otherRoles: r2(sum.other),
+        // Ручные приходы (не сделки) — в продажи сотрудников не входят никогда.
+        otherIncome: r2(otherIncome),
+        // Сделки без менеджера и прочие доходы без привязки — остаток.
+        unassigned: r2(Math.max(0, incomeTotal - known)),
+      },
+      enrolled,
+    };
+  }
+
   async leaderboard(filters: { from?: Date; to?: Date }) {
     const dateFilter = dateRangeFilter(filters);
 
@@ -107,7 +170,9 @@ export class KpiService {
           { roles: { hasSome: KPI_ROLES as any } },
         ],
       },
-      select: { id: true, fullName: true, role: true, email: true, bonusPercent: true },
+      // customRole — подпись роли как в списке сотрудников (SMM, Lead
+      // Qualifier…), а не базовая должность-«подложка» (QA №13).
+      select: { id: true, fullName: true, role: true, email: true, bonusPercent: true, customRole: { select: { name: true, isActive: true } } },
     });
 
     // «Продажи» — по правилу зарплаты (common/manager-sales.ts): одобренные

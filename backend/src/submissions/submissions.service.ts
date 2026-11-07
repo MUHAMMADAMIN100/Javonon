@@ -3083,11 +3083,24 @@ export class SubmissionsService {
       where: { id: submissionId },
       // applicationId — чтобы снять признак должника до каскадного удаления
       // этапов рассрочки (см. док-комментарий выше).
-      select: { id: true, applicationId: true, managerId: true },
+      select: { id: true, applicationId: true, managerId: true, status: true },
     });
     if (!submission) throw new NotFoundException('Сделка не найдена');
     if (user && !roleDealInScope(user, submission.managerId)) {
       throw new ForbiddenException('Это не ваша сделка');
+    }
+    // Одобренный платёж уже стал доходом в «Финансах». Удаление сделки
+    // оставляло этот доход без хозяина — и его можно было стереть из журнала
+    // «мимо сделки» (QA №48). Такую сделку только отменяют: отмена сторнирует
+    // доход встречной записью, и суммы сходятся.
+    const approved = await this.prisma.submissionPayment.count({
+      where: { submissionId, status: SubmissionPaymentStatus.APPROVED },
+    });
+    // Отменённую — можно: её доход уже сторнирован.
+    if (approved > 0 && submission.status !== SubmissionStatus.CANCELLED) {
+      throw new BadRequestException(
+        'По сделке есть одобренные платежи — удалить её нельзя. Отмените сделку (статус «Отменена»): доход будет сторнирован в «Финансах».',
+      );
     }
     await this.prisma.$transaction(async (tx) => {
       // settled: true — удалённая сделка долга не порождает: плана больше не

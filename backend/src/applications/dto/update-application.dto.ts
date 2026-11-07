@@ -1,6 +1,7 @@
 import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { ApplicationStatus, ContactChannel, Country, Direction } from '@prisma/client';
 import { ACTIVE_APPLICATION_STATUSES } from '../../common/application-status';
+import { NO_HTML_RE } from './create-application.dto';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 
@@ -30,6 +31,7 @@ export class UpdateApplicationDto {
   @IsString()
   @MinLength(2)
   @MaxLength(120)
+  @Matches(NO_HTML_RE, { message: 'ФИО содержит недопустимые символы' })
   fullName?: string;
 
   @IsOptional()
@@ -73,9 +75,12 @@ export class UpdateApplicationDto {
   @IsEnum(Country)
   country?: Country;
 
+  // Те же правила, что у «Нового лида» (QA №23): раньше карточка сохраняла
+  // «<script>», а окно «Изменить лид» потом не давало сохранить ничего.
   @IsOptional()
   @IsString()
   @MaxLength(2000)
+  @Matches(NO_HTML_RE, { message: 'Комментарий содержит недопустимые символы' })
   comment?: string;
 
   // «За заявкой числится долг» — то, что раньше выражалось статусом

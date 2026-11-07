@@ -193,7 +193,7 @@ export class TimeTrackingService {
       throw new BadRequestException('Штраф уже начислен, оправдание поздно');
     }
     if (!body.excuseUrl && (!body.excuseReason || body.excuseReason.trim().length < 5)) {
-      throw new BadRequestException('Укажи причину (мин. 5 символов) или приложи фото/видео');
+      throw new BadRequestException('Укажите причину (мин. 5 символов) или приложите фото/видео');
     }
     const updated = await this.prisma.timeEntry.update({
       where: { id: entryId },
@@ -235,7 +235,7 @@ export class TimeTrackingService {
       throw new BadRequestException('Штраф уже начислен, оправдание поздно');
     }
     if (!body.excuseUrl && (!body.excuseReason || body.excuseReason.trim().length < 5)) {
-      throw new BadRequestException('Укажи причину (мин. 5 символов) или приложи фото/видео');
+      throw new BadRequestException('Укажите причину (мин. 5 символов) или приложите фото/видео');
     }
     const updated = await this.prisma.timeEntry.update({
       where: { id: entryId },

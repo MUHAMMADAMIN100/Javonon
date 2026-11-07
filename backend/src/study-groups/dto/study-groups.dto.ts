@@ -181,4 +181,9 @@ export class BulkClassSessionsDto {
   @IsOptional()
   @IsBoolean()
   dryRun?: boolean;
+
+  /** Создать, даже если занятия пересекаются с уже существующими (QA №40). */
+  @IsOptional()
+  @IsBoolean()
+  allowOverlap?: boolean;
 }

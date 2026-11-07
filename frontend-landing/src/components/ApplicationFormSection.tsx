@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FORM_SECTIONS,
@@ -7,6 +7,7 @@ import {
   PRESENT_LABEL,
   PRESENT_VALUE,
   validateField,
+  collectFormErrors,
   type FieldDef,
   type SectionDef,
 } from '../formSchema';
@@ -16,6 +17,10 @@ import PhoneInput from './PhoneInput';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 
 const CURRENT_YEAR = new Date().getFullYear();
+
+
+/** После попытки сохранить — ошибки видны у всех полей, не только у тронутых (QA №29). */
+const ShowAllErrors = createContext(false);
 
 function Field({
   def,
@@ -29,7 +34,8 @@ function Field({
   rowContext?: any;
 }) {
   const [touched, setTouched] = useState(false);
-  const error = touched ? validateField(def, value, rowContext) : undefined;
+  const showAll = useContext(ShowAllErrors);
+  const error = touched || showAll ? validateField(def, value, rowContext) : undefined;
   const sanitizeText = (raw: string): string => {
     if (def.kind === 'tel') return raw;
     if (def.lettersOnly) {
@@ -381,6 +387,8 @@ export default function ApplicationFormSection() {
   const [loading, setLoading] = useState(true);
   const [manualSaving, setManualSaving] = useState(false);
   const [manualSaved, setManualSaved] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [saveNote, setSaveNote] = useState<{ text: string; bad: boolean } | null>(null);
   // Локальные изменения, ещё не отправленные на сервер. Авто-сохранения
   // нет — изменения уходят в БД только по нажатию «Сохранить анкету».
   const [dirty, setDirty] = useState(false);
@@ -395,15 +403,29 @@ export default function ApplicationFormSection() {
 
   const onManualSave = async () => {
     if (!form || manualSaving || !dirty) return;
+    // Черновик сохранить можно, а поля с ошибкой формата — нет (QA №29).
+    const check = collectFormErrors(form);
+    if (check.invalid > 0) {
+      setShowAll(true);
+      setSaveNote({ text: `Анкета захира нашуд — майдонҳои хаторо ислоҳ кунед (бо ранги сурх). Майдонҳои хато: ${check.invalid}`, bad: true });
+      return;
+    }
     setManualSaving(true);
     setManualSaved(false);
     try {
       await saveStudentForm(form);
       setManualSaved(true);
       setDirty(false);
+      if (check.missing > 0) {
+        setShowAll(true);
+        setSaveNote({ text: `Захира шуд. Майдонҳои ҳатмии пурнашуда: ${check.missing}`, bad: false });
+      } else {
+        setSaveNote(null);
+      }
       setTimeout(() => setManualSaved(false), 2500);
-    } catch {
-      // silent — пользователь увидит, что dirty не сбросился, и попробует ещё раз
+    } catch (e: any) {
+      // Ошибку сервера показываем — раньше она терялась молча.
+      setSaveNote({ text: e?.response?.data?.message || 'Хатогӣ. Боз кӯшиш кунед', bad: true });
     } finally {
       setManualSaving(false);
     }
@@ -449,6 +471,7 @@ export default function ApplicationFormSection() {
     setOpenSections((p) => ({ ...p, [key]: !p[key] }));
 
   return (
+    <ShowAllErrors.Provider value={showAll}>
     <section className="stu-card af-card">
       <div className="af-header">
         <div>
@@ -547,6 +570,9 @@ export default function ApplicationFormSection() {
           );
         })}
 
+        {saveNote && (
+          <div className={`af-save-note${saveNote.bad ? ' is-bad' : ''}`} data-testid="af-save-note">{saveNote.text}</div>
+        )}
         <div className="af-save-bar af-save-bar-bottom">
           <button
             type="button"
@@ -566,5 +592,6 @@ export default function ApplicationFormSection() {
       </div>
       {unsavedChangesModal}
     </section>
+    </ShowAllErrors.Provider>
   );
 }

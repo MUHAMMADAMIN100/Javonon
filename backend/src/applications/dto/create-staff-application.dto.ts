@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -139,6 +140,13 @@ export class CreateStaffApplicationDto {
   @IsString()
   @MaxLength(64)
   managerId?: string;
+
+  // Номер уже есть у открытого лида: без флага лид НЕ создаётся и НЕ
+  // сливается — CRM сначала спрашивает сотрудника (QA №24). true — «добавить
+  // повторное обращение» в найденный лид, как решил заказчик.
+  @IsOptional()
+  @IsBoolean()
+  confirmDuplicate?: boolean;
 
   // Статус сразу в форме; по умолчанию «Новый лид». Только актуальные
   // значения — как у смены статуса в карточке (UpdateApplicationDto).

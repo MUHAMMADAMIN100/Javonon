@@ -225,7 +225,9 @@ export class ProgramsService {
         major: dto.major?.trim() || '',
         direction: dto.direction || 'BACHELOR',
         cost: dto.cost ?? 0,
-        currency: dto.currency || 'CNY',
+        // Валюту выбирают в форме явно (QA №50); старые клиенты без неё — USD,
+        // самая частая валюта программ на сайте.
+        currency: dto.currency || 'USD',
         duration: dto.duration || null,
         language: dto.language || null,
         description: dto.description || null,

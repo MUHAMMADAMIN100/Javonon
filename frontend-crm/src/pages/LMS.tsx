@@ -269,19 +269,29 @@ function CourseEditor({ course, canUpdate, canRemove, onChange, onTogglePublish,
     setDescription(course.description || '');
   }, [course.id, course.title, course.description]);
 
-  const saveMeta = async () => {
+  // Ошибка сервера (400 на HTML/«javascript:» в уроке и т.п.) — сообщением,
+  // окно остаётся открытым с введённым (QA №41: раньше ответ терялся, окно висело).
+  const guarded = async (fn: () => Promise<void>) => {
+    try {
+      await fn();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
+    }
+  };
+
+  const saveMeta = () => guarded(async () => {
     await updateCourse(course.id, { title, description });
     toast(t('toast.saved'), 'success');
     setEditingMeta(false);
     onChange();
-  };
+  });
 
-  const onAddLesson = async (data: { title: string; content?: string; videoUrl?: string }) => {
+  const onAddLesson = (data: { title: string; content?: string; videoUrl?: string }) => guarded(async () => {
     await addLesson(course.id, data);
     toast(t('lms.toast.lessonAdded'), 'success');
     setShowLessonForm(false);
     onChange();
-  };
+  });
 
   const onDeleteLesson = async (l: Lesson) => {
     const ok = await confirm({
@@ -291,17 +301,19 @@ function CourseEditor({ course, canUpdate, canRemove, onChange, onTogglePublish,
       confirmText: t('common.delete'),
     });
     if (!ok) return;
-    await deleteLesson(l.id);
-    toast(t('lms.toast.lessonDeleted'), 'success');
-    onChange();
+    await guarded(async () => {
+      await deleteLesson(l.id);
+      toast(t('lms.toast.lessonDeleted'), 'success');
+      onChange();
+    });
   };
 
-  const onSaveLesson = async (l: Lesson) => {
+  const onSaveLesson = (l: Lesson) => guarded(async () => {
     await updateLesson(l.id, { title: l.title, content: l.content || '', videoUrl: l.videoUrl || '' });
     toast(t('toast.saved'), 'success');
     setEditingLesson(null);
     onChange();
-  };
+  });
 
   return (
     <div className="card lms-course-card" style={{ padding: 32 }}>

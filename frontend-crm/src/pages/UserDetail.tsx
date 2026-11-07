@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { useRoleOptionLabel } from '../lib/useRolePermCount';
 import CrmSelect from '../components/CrmSelect';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -1155,6 +1156,7 @@ function CustomRoleEditor({
 }) {
   const { toast } = useUI();
   const { t } = useT();
+  const roleOptionLabel = useRoleOptionLabel();
   const [selected, setSelected] = useState<string>((user as any).customRoleId || '');
   const [saving, setSaving] = useState(false);
   const rolesQuery = useQuery({
@@ -1186,7 +1188,7 @@ function CustomRoleEditor({
         <CrmSelect className="crm-select" value={selected} onChange={(e) => setSelected(e.target.value)} disabled={rolesQuery.isLoading}>
           <option value="">— {t('managerBar.notAssigned')} —</option>
           {roles.filter((r: CustomRole) => r.isActive).map((r: CustomRole) => (
-            <option key={r.id} value={r.id}>{r.name} ({r.permissions.length})</option>
+            <option key={r.id} value={r.id}>{roleOptionLabel(r)}</option>
           ))}
         </CrmSelect>
       </div>

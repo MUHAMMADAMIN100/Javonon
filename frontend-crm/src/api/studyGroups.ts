@@ -179,6 +179,8 @@ export interface BulkSessionsDto {
   to: string;
   topic?: string;
   dryRun?: boolean;
+  /** Создать, даже если пересекаются с существующими занятиями (QA №40). */
+  allowOverlap?: boolean;
 }
 
 export interface GroupFilters {
@@ -276,7 +278,7 @@ export async function deleteSession(sessionId: string) {
 
 /** Шаблон расписания. dryRun → { count, skipped }, иначе → { created, skipped }. */
 export async function bulkSessions(groupId: string, payload: BulkSessionsDto) {
-  const { data } = await api.post<{ count?: number; created?: number; skipped: number }>(
+  const { data } = await api.post<{ count?: number; created?: number; skipped: number; overlaps?: number; overlapSample?: string[] }>(
     `/study-groups/${groupId}/sessions/bulk`,
     payload,
   );

@@ -221,24 +221,31 @@ export default function Calls() {
             </CrmSelect>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>{t('calls.field.duration')} ({t('common.time')})</label>
+            <label>{t('calls.field.minutes')}</label>
             <input
               className="crm-input"
               type="number"
+              inputMode="numeric"
               min={0}
+              max={600}
               value={minutes}
-              onChange={(e) => setMinutes(e.target.value)}
+              // Минус и дроби не вводятся (QA №42: «−5 мин 999 сек» сохранялось как 11м 39с).
+              onChange={(e) => setMinutes(String(Math.min(600, parseInt(e.target.value.replace(/\D/g, '') || '0', 10))))}
+              data-testid="call-minutes"
             />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label>sec</label>
+            <label>{t('calls.field.seconds')}</label>
             <input
               className="crm-input"
               type="number"
+              inputMode="numeric"
               min={0}
               max={59}
               value={seconds}
-              onChange={(e) => setSeconds(e.target.value)}
+              // Секунды — 0…59: больше — это уже минуты.
+              onChange={(e) => setSeconds(String(Math.min(59, parseInt(e.target.value.replace(/\D/g, '') || '0', 10))))}
+              data-testid="call-seconds"
             />
           </div>
         </div>

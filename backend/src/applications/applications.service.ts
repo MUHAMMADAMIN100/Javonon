@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Optional } from '@nestjs/common';
+import { tjPhoneError } from '../common/phone';
 import { ApplicationSource, ApplicationStatus, Country, Direction, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -363,6 +364,11 @@ export class ApplicationsService {
     // назначение менеджера, реферальная атрибуция) — иначе при 400 в БД
     // осталась бы половинчатая заявка.
     const birthday = this.parseBirthday(dto.birthday);
+    // +992 — ровно 9 цифр (QA №20): и с сайта, и из CRM.
+    for (const ph of [dto.phone, dto.whatsappPhone]) {
+      const err = tjPhoneError(ph);
+      if (err) throw new BadRequestException(err);
+    }
 
     // Повторное обращение. Номер сравниваем по последним 9 цифрам
     // («+992 90 123-45-67» и «901234567» — один человек). Замок на номер
@@ -638,6 +644,35 @@ export class ApplicationsService {
       throw new ForbiddenException('Нет права переводить лид в работу');
     }
 
+    // Номер уже у открытого лида — сначала спрашиваем сотрудника (QA №24):
+    // раньше форма молча сливала лид со старым, и введённые ФИО, статус и дата
+    // терялись. Ничего не пишем; повторное обращение — с confirmDuplicate.
+    if (!dto.confirmDuplicate) {
+      const key = phoneKey(dto.phone);
+      const open = key ? await this.findOpenByPhone(this.prisma as unknown as Prisma.TransactionClient, key) : null;
+      if (open) {
+        const existing = await this.prisma.application.findUnique({
+          where: { id: open.id },
+          select: { id: true, fullName: true, status: true, managerId: true, chinaManagerId: true, manager: { select: { id: true, fullName: true } } },
+        });
+        if (existing) {
+          const canOpen = this.canAccess(existing, user);
+          return {
+            duplicate: true,
+            merged: false,
+            existing: {
+              id: existing.id,
+              // Имя и статус чужого лида — только тем, кто его видит.
+              fullName: canOpen ? existing.fullName : null,
+              status: canOpen ? existing.status : null,
+              manager: existing.manager,
+              canOpen,
+            },
+          };
+        }
+      }
+    }
+
     const { app, duplicate } = await this.persistNewLead(dto, {
       source: dto.source || STAFF_DEFAULT_SOURCE,
       autoAssignManager: false,
@@ -660,6 +695,7 @@ export class ApplicationsService {
         managerId: app.managerId,
         manager: owner,
         duplicate: true,
+        merged: true,
       };
     }
     this.realtime.emitApplication('application:new', app, { application: app });
@@ -738,6 +774,8 @@ export class ApplicationsService {
   }
 
   async findAll(filters: {
+    /** Облегчённые строки (окно дашборда): без студента и программы. */
+    brief?: boolean;
     status?: ApplicationStatus;
     direction?: Direction;
     // Фильтр CRM по стране (тулбар «Страна»), зеркалит фильтр по источнику.
@@ -871,6 +909,20 @@ export class ApplicationsService {
     }
     if (and.length) where.AND = and;
     if (!filters.page) {
+      // brief — только поля для окна «подробнее» дашборда (QA №22): там нужен
+      // весь период целиком (разбивки по менеджерам/статусам/странам), но не
+      // студент с программой у каждой строки — ответ меньше в разы.
+      if (filters.brief) {
+        return this.prisma.application.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true, fullName: true, phone: true, whatsappPhone: true, country: true,
+            status: true, createdAt: true, managerId: true,
+            manager: { select: { id: true, fullName: true, isActive: true } },
+          },
+        });
+      }
       return this.prisma.application.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -959,6 +1011,26 @@ export class ApplicationsService {
   }
 
   /**
+   * Другие лиды с тем же номером (последние 9 цифр) — для пометки в карточке
+   * «есть другой лид с этим номером» (QA №21: дубли не склеиваем, но видно).
+   * Имя чужого лида, который смотрящему не виден, не отдаём.
+   */
+  async phoneTwins(app: { id: string; phone: string }, user: CurrentUser) {
+    const key = phoneKey(app.phone);
+    if (!key) return [];
+    const rows = await this.prisma.$queryRaw<{ id: string; fullName: string; managerId: string | null; chinaManagerId: string | null; status: ApplicationStatus }[]>`
+      SELECT id, "fullName", "managerId", "chinaManagerId", status FROM "Application"
+      WHERE right(regexp_replace(phone, '[^0-9]', '', 'g'), 9) = ${key}
+        AND id <> ${app.id} AND "deletedAt" IS NULL
+      ORDER BY "createdAt" DESC
+      LIMIT 5`;
+    return rows.map((r) => {
+      const canOpen = this.canAccess(r, user);
+      return { id: r.id, fullName: canOpen ? r.fullName : null, canOpen };
+    });
+  }
+
+  /**
    * Кто видит и правит заявку — то же правило, что у списка (findAll):
    * свою (TJ или CN) — всегда; чужую — руководство и те, кому выданы «все
    * лиды» / «все заявки» её вида (canAccessApplication). Раньше карточка по
@@ -1020,6 +1092,15 @@ export class ApplicationsService {
       this.ensureCanEdit(existing, user);
       if (!roleAllowsApplication(user as any, existing.status, 'update')) {
         throw new ForbiddenException('Нет права изменять такие записи');
+      }
+    }
+
+    // +992 — ровно 9 цифр, но только для нового/изменённого номера: старую
+    // запись с ошибкой в номере должно быть можно править (QA №20).
+    for (const [next, prev] of [[dto.phone, existing.phone], [dto.whatsappPhone, existing.whatsappPhone]] as const) {
+      if (next != null && next.trim() !== (prev ?? '').trim()) {
+        const err = tjPhoneError(next);
+        if (err) throw new BadRequestException(err);
       }
     }
 

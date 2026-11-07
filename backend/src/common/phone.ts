@@ -234,3 +234,22 @@ export function maskPhoneForLog(phone: string | null | undefined): string {
   if (digits.length < 4) return '—';
   return `***${digits.slice(-4)}`;
 }
+
+/**
+ * Номер Таджикистана: «+992» и ровно 9 цифр (QA №20). Раньше проходили 8 и
+ * 13 цифр, а «+992 992 …» (лишнее «992», набранное в поле номера) давал
+ * дубли, которые не находились поиском.
+ *
+ * null — номер верный или он не таджикский (у других стран свои длины).
+ * Проверять только НОВЫЙ или ИЗМЕНЁННЫЙ номер: старые записи с ошибкой
+ * должны оставаться редактируемыми.
+ */
+export function tjPhoneError(phone: string | null | undefined): string | null {
+  if (typeof phone !== 'string') return null;
+  const trimmed = phone.trim();
+  let digits = trimmed.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  const tj = trimmed.startsWith('+992') || (digits.startsWith('992') && digits.length >= 10);
+  if (!tj) return null;
+  return digits.length === 12 ? null : 'Номер Таджикистана: +992 и ровно 9 цифр';
+}

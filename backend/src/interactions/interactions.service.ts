@@ -138,7 +138,8 @@ export class InteractionsService {
         type: clean.type as InteractionType,
         summary: clean.summary as string,
         details: clean.details ?? null,
-        visibleToStudent: dto.visibleToStudent ?? true,
+        // Не указано — запись внутренняя (QA №30).
+        visibleToStudent: dto.visibleToStudent ?? false,
         occurredAt: clean.occurredAt ?? new Date(),
       },
       include: { author: { select: { id: true, fullName: true, isActive: true, role: true } } },

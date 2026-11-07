@@ -22,7 +22,7 @@ import {
   TransactionType,
 } from '@prisma/client';
 import { MANAGER_ROLES, hasRole } from '../auth/role-utils';
-import { tjLocalDay, tjYMD } from '../common/tj-time';
+import { tjEndOfMonth, tjLocalDay, tjStartOfMonth, tjStartOfNextMonth, tjYMD } from '../common/tj-time';
 import { REPORTING_CURRENCY } from '../common/reporting-currency';
 import { RevenueSchemeService } from '../revenue-scheme/revenue-scheme.service';
 
@@ -465,13 +465,13 @@ export class FinanceService {
       if (dto.receiptKind === 'REASON_ONLY') {
         if (!dto.noReceiptReason || dto.noReceiptReason.trim().length < 5) {
           throw new BadRequestException(
-            'Укажи причину отсутствия чека (мин. 5 символов)',
+            'Укажите причину отсутствия чека (мин. 5 символов)',
           );
         }
       } else {
         // RECEIPT или CASH_PHOTO — нужен url прикреплённой фотки
         if (!dto.receiptUrl) {
-          throw new BadRequestException('Загрузи фото чека или наличных');
+          throw new BadRequestException('Загрузите фото чека или наличных');
         }
       }
     }
@@ -1015,13 +1015,13 @@ export class FinanceService {
       if (effReceiptKind === 'REASON_ONLY') {
         if (!effNoReceiptReason || effNoReceiptReason.trim().length < 5) {
           throw new BadRequestException(
-            'Укажи причину отсутствия чека (мин. 5 символов)',
+            'Укажите причину отсутствия чека (мин. 5 символов)',
           );
         }
       } else {
         // RECEIPT / CASH_PHOTO — нужен URL прикреплённой фотки
         if (!effReceiptUrl) {
-          throw new BadRequestException('Загрузи фото чека или наличных');
+          throw new BadRequestException('Загрузите фото чека или наличных');
         }
       }
     }
@@ -1261,6 +1261,11 @@ export class FinanceService {
     ]);
     const incomeTotal = grouped.find((g) => g.type === 'INCOME')?._sum.amount || 0;
 
+    // Фиксированные суммы схемы (ФОТ и т.п.) — МЕСЯЧНЫЕ. За квартал их три,
+    // за год — двенадцать; раньше они вычитались один раз за любой период, и
+    // прибыль за год/«всё время» выходила завышенной (QA №47).
+    const fixedMonths = await this.monthsInPeriod(opts.from, opts.to);
+
     // Прежде чем что-то делить — если по какой-то причине активной
     // схемы нет (RevenueSchemeService не заинжекчен / БД пустая до
     // прогонки миграции), возвращаем консистентный «пустой» ответ,
@@ -1306,7 +1311,7 @@ export class FinanceService {
           (acc, it) => acc + (typeof it.amountCents === 'number' ? it.amountCents : 0),
           0,
         );
-        allocated = Math.round(cents) / 100;
+        allocated = Math.round(cents * fixedMonths) / 100;
         totalFixedAllocated += allocated;
       }
       return {
@@ -1334,10 +1339,40 @@ export class FinanceService {
       },
       totalPercentageAllocated: Math.round(totalPercentageAllocated * 100) / 100,
       totalFixedAllocated: Math.round(totalFixedAllocated * 100) / 100,
+      /** Сколько месяцев в периоде: фиксированные суммы умножены на это число. */
+      fixedMonths,
       netAfterDistribution,
       currency: REPORTING_CURRENCY,
       nonTjsTotals: nonTjs,
     };
+  }
+
+  /**
+   * Число месяцев в периоде для месячных сумм: каждый календарный месяц
+   * Душанбе — его доля дней, попавшая в период (полный месяц = 1). Без «с» —
+   * с первого месяца, где есть операции; без «по» — до конца текущего месяца.
+   */
+  private async monthsInPeriod(from?: Date, to?: Date): Promise<number> {
+    let start = from;
+    if (!start) {
+      const first = await this.prisma.transaction.findFirst({
+        where: { reversedAt: null },
+        orderBy: { date: 'asc' },
+        select: { date: true },
+      });
+      start = tjStartOfMonth(first?.date ?? new Date());
+    }
+    const end = to ?? tjEndOfMonth(new Date());
+    if (end.getTime() < start.getTime()) return 0;
+    let months = 0;
+    let monthStart = tjStartOfMonth(start);
+    for (let guard = 0; guard < 600 && monthStart.getTime() <= end.getTime(); guard++) {
+      const next = tjStartOfNextMonth(monthStart);
+      const overlap = Math.min(end.getTime() + 1, next.getTime()) - Math.max(start.getTime(), monthStart.getTime());
+      if (overlap > 0) months += overlap / (next.getTime() - monthStart.getTime());
+      monthStart = next;
+    }
+    return Math.round(months * 100) / 100;
   }
 
   /**

@@ -97,6 +97,7 @@ export class ApplicationsController {
     @Query('sort') sort?: string,
     @Query('ranks') ranks?: string,
     @Query('deleted') deleted?: string,
+    @Query('brief') brief?: string,
   ) {
     // QA-fix #45: validate enum query params (раньше bad value → 500).
     // Единый источник истины — Prisma enum'ы. Добавили значение в schema.prisma
@@ -136,6 +137,7 @@ export class ApplicationsController {
       sort,
       ranks: ranks?.slice(0, 2000),
       deleted: deleted === '1' || deleted === 'true',
+      brief: brief === '1' || brief === 'true',
     });
   }
 
@@ -205,7 +207,8 @@ export class ApplicationsController {
     await this.apps.assertCanView(id, user);
     // user нужен сервису ещё и чтобы решить, отдавать ли блок «Партнёр»
     // (руководству — да, менеджерам — поля в ответе нет вообще).
-    return this.apps.findOne(id, user);
+    const app = await this.apps.findOne(id, user);
+    return { ...app, phoneTwins: await this.apps.phoneTwins(app, user) };
   }
 
   @UseGuards(JwtAuthGuard)

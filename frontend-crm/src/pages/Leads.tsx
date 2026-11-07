@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import CrmSelect from '../components/CrmSelect';
 import { AnimatePresence, motion } from 'framer-motion';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -218,6 +219,11 @@ export default function Leads() {
   const [serverError, setServerError] = useState<string | null>(null);
   /** Форма нового лида живёт в окне: страница начинается сразу со списка. */
   const [formOpen, setFormOpen] = useState(false);
+  // Окно «Такой лид уже есть»: найденный лид + то, что сотрудник ввёл.
+  const [dupLead, setDupLead] = useState<{
+    existing: NonNullable<CreateStaffApplicationResult['existing']>;
+    payload: CreateStaffApplicationInput;
+  } | null>(null);
   /** Лид, который правим (то же окно, что «Новый лид»); null — создаём новый. */
   const [editing, setEditing] = useState<Application | null>(null);
   /**
@@ -261,6 +267,7 @@ export default function Leads() {
       const matched = PHONE_CODES.find((c) => v.startsWith(c.code));
       if (!matched) return t('leads.err.phoneCode');
       const digits = v.slice(matched.code.length).replace(/\D/g, '');
+      if (matched.code === '+992' && digits.length !== 9) return t('validate.phoneTj');
       if (digits.length < matched.minDigits) return t('leads.err.phoneShort');
       if (digits.length > matched.maxDigits) return t('leads.err.phoneLong');
       return undefined;
@@ -301,8 +308,12 @@ export default function Leads() {
     }
 
     if (!country && (!editing || editing.country)) e.country = t('leads.err.countryRequired');
-    if (comment.length > MAX_COMMENT) e.comment = t('leads.err.commentLong');
-    else if (/[<>]/.test(comment)) e.comment = t('leads.err.commentChars');
+    // Комментарий проверяем, только если его меняли: старый текст с «< >»
+    // (его когда-то пропускала карточка) не должен блокировать правку лида.
+    if (!editing || !unchanged(comment, editing.comment)) {
+      if (comment.length > MAX_COMMENT) e.comment = t('leads.err.commentLong');
+      else if (/[<>]/.test(comment)) e.comment = t('leads.err.commentChars');
+    }
 
     (Object.keys(e) as (keyof FormErrors)[]).forEach((k) => {
       if (!e[k]) delete e[k];
@@ -450,7 +461,14 @@ export default function Leads() {
   const createMut = useInvalidatingMutation<CreateStaffApplicationResult, CreateStaffApplicationInput>({
     mutationFn: createStaffApplication,
     invalidate: [keys.applications.all],
-    onSuccess: (res) => {
+    onSuccess: (res, vars) => {
+      // Номер уже у открытого лида — ничего не создано: спрашиваем, форма
+      // остаётся открытой с введёнными данными (QA №24).
+      if (res.duplicate && res.merged === false && res.existing) {
+        setDupLead({ existing: res.existing, payload: vars });
+        return;
+      }
+      setDupLead(null);
       // Сохранили — окно закрывается, новая строка появляется в списке.
       resetForm();
       setFormOpen(false);
@@ -521,7 +539,8 @@ export default function Leads() {
             : {
                 ...payload,
                 birthday: birthday || '',
-                comment: comment.trim(),
+                // Неизменённый комментарий не шлём (см. проверку выше).
+                comment: comment.trim() === (editing.comment || '').trim() ? undefined : comment.trim(),
                 country: (country || null) as Country | null,
               }),
           ...(statusChanged ? { status: leadStatus } : {}),
@@ -550,6 +569,59 @@ export default function Leads() {
   // ловят Esc на document и закрываются раньше, чем до window дойдёт всплытие,
   // — обычный обработчик видел бы попап уже закрытым и закрывал окно следом.
   // Найдено браузерным тестом.
+  const dupDialog = dupLead && (
+    <div className="dialog-backdrop" onClick={() => setDupLead(null)} data-testid="lead-dup-dialog">
+      <div className="dialog-card" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
+        <div className="dialog-title">{t('leads.dup.title')}</div>
+        <div className="dialog-message">
+          {dupLead.existing.fullName
+            ? t('leads.dup.messageNamed').replace('{name}', dupLead.existing.fullName)
+            : t('leads.dup.messageHidden')}
+          {dupLead.existing.manager && (
+            <div className="profile-field-hint" style={{ marginTop: 6 }}>
+              {t('leads.dup.manager').replace('{name}', dupLead.existing.manager.fullName)}
+              {dupLead.existing.status ? ` · ${statusLabel(dupLead.existing.status)}` : ''}
+            </div>
+          )}
+          <div className="profile-field-hint" style={{ marginTop: 6 }}>{t('leads.dup.hint')}</div>
+        </div>
+        <div className="dialog-actions" style={{ flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary" onClick={() => setDupLead(null)} data-testid="lead-dup-back">
+            {t('leads.dup.back')}
+          </button>
+          {dupLead.existing.canOpen && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              data-testid="lead-dup-open"
+              onClick={() => { const id = dupLead.existing.id; setDupLead(null); resetForm(); setFormOpen(false); navigate(`/applications/${id}`); }}
+            >
+              {t('leads.dup.open')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-primary"
+            data-testid="lead-dup-merge"
+            disabled={createMut.isPending}
+            onClick={() => createMut.mutate({ ...dupLead.payload, confirmDuplicate: true })}
+          >
+            {t('leads.dup.merge')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Esc в окне «Такой лид уже есть» — назад к форме (форма Esc не ловит,
+  // пока открыта .dialog-card).
+  useEffect(() => {
+    if (!dupLead) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDupLead(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dupLead]);
+
   const requestCloseRef = useRef(requestCloseForm);
   requestCloseRef.current = requestCloseForm;
   useEffect(() => {
@@ -1851,6 +1923,8 @@ export default function Leads() {
           </AnimatePresence>
         </div>
       </div>
+      {/* Поверх окна «Новый лид» — в body, как остальные подтверждения. */}
+      {dupDialog && createPortal(dupDialog, document.body)}
     </motion.div>
   );
 }

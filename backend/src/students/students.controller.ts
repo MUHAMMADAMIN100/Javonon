@@ -67,6 +67,17 @@ const docFileFilter = (
 export class StudentsController {
   constructor(private students: StudentsService) {}
 
+  /**
+   * Номера кабинетов, которые реально есть у студентов, — для фильтра
+   * «Кабинет» (QA №27: в фильтре были зашиты 1–3, а в базе есть 4, 5, 6).
+   * Объявлен ДО @Get(':id').
+   */
+  @Permissions('students:read')
+  @Get('cabinets')
+  cabinets() {
+    return this.students.cabinets();
+  }
+
   @Permissions('students:read')
   @Get()
   list(

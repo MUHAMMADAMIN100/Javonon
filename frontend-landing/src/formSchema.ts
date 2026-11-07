@@ -287,11 +287,11 @@ export function countProgress(form: any): { filled: number; total: number } {
 
 // По запросу основателя разрешена кириллица во всех формах. Регексы
 // принимают и латиницу, и русский (включая Ёё), и цифры/пунктуацию.
-export const LATIN_RE = /^[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ0-9 .,'\-/()&+#@№]*$/;
+export const LATIN_RE = /^[A-Za-z0-9 .,'\-/()&+#@№]*$/;
 /** Только буквы (любой алфавит) + пробел/дефис/апостроф — для ФИО, должностей */
-export const LETTERS_RE = /^[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ\s'\-]*$/;
+export const LETTERS_RE = /^[A-Za-z\s'\-]*$/;
 /** Только буквы и цифры — для паспорта/специальности/степени */
-export const LATIN_DIGITS_RE = /^[A-Za-zА-Яа-яЁёҚқҒғҲҳҶҷӢӣӮӯ0-9]*$/;
+export const LATIN_DIGITS_RE = /^[A-Za-z0-9]*$/;
 
 // Email по RFC обязан быть в латинице — здесь кириллицу НЕ разрешаем.
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -303,9 +303,9 @@ export function validateField(def: FieldDef, raw: any, row?: any): string | unde
     return def.optional ? undefined : 'Майдони ҳатмӣ';
   }
 
-  if (def.lettersOnly && !LETTERS_RE.test(v)) return 'Танҳо ҳарфҳо иҷозат дода мешаванд';
-  if (def.latinDigits && !LATIN_DIGITS_RE.test(v)) return 'Танҳо ҳарфҳо ва рақамҳо (бе аломатҳо)';
-  if (def.latin && !LATIN_RE.test(v)) return 'Аломатҳои иҷозатнашуда';
+  if (def.lettersOnly && !LETTERS_RE.test(v)) return 'Танҳо ҳарфҳои лотинӣ — мисли шиноснома';
+  if (def.latinDigits && !LATIN_DIGITS_RE.test(v)) return 'Танҳо ҳарфҳои лотинӣ ва рақамҳо (бе аломатҳо)';
+  if (def.latin && !LATIN_RE.test(v)) return 'Танҳо бо ҳарфҳои лотинӣ (ба забони англисӣ, мисли шиноснома)';
   // digitsOnly без kind=number (например, телефон родственника, индекс): только цифры
   if (def.digitsOnly && def.kind !== 'number' && !/^\d+$/.test(v)) return 'Танҳо рақамҳо';
 
@@ -333,6 +333,8 @@ export function validateField(def: FieldDef, raw: any, row?: any): string | unde
   if (def.kind === 'date') {
     const d = new Date(v);
     if (Number.isNaN(d.getTime())) return 'Сана нодуруст';
+    const year = Number(v.slice(0, v.indexOf('-')));
+    if (!(year >= 1900 && year <= 2100)) return 'Соли нодуруст (1900–2100)';
     if (def.key === 'birthDate' && d.getTime() > Date.now()) return 'Санаи таваллуд бояд дар гузашта бошад';
     if (def.key === 'passportExpiry' && d.getTime() < Date.now()) return 'Мӯҳлати эътибори шиноснома гузаштааст';
     return undefined;
@@ -366,4 +368,35 @@ export function validateField(def: FieldDef, raw: any, row?: any): string | unde
 
   if (v.length > 2000) return 'Қимат хеле дароз аст (>2000 аломат)';
   return undefined;
+}
+
+
+/**
+ * Проверка всей анкеты перед сохранением (QA №29). missing — пустые
+ * обязательные (черновик сохранять МОЖНО, они подсвечиваются); invalid —
+ * заполненные с ошибкой (кириллица там, где нужна латиница, невозможная дата
+ * и т.п.) — с такими анкета НЕ сохраняется.
+ */
+export function collectFormErrors(form: any, sections: SectionDef[] = FORM_SECTIONS): { missing: number; invalid: number } {
+  let missing = 0;
+  let invalid = 0;
+  const check = (def: FieldDef, value: any, row?: any) => {
+    const v = value == null ? '' : String(value).trim();
+    if (!v) {
+      if (!def.optional) missing++;
+      return;
+    }
+    if (validateField(def, value, row)) invalid++;
+  };
+  for (const s of sections) {
+    if (s.fields) {
+      for (const f of s.fields) check(f, form?.[s.key]?.[f.key]);
+    } else if (s.table) {
+      for (const row of form?.[s.key] || []) {
+        if (row?.__notAttended) continue;
+        for (const c of s.table.columns) check(c, row?.[c.key], row);
+      }
+    }
+  }
+  return { missing, invalid };
 }

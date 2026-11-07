@@ -1,4 +1,5 @@
 import { secureRandomString } from '../common/random';
+import { tjPhoneError } from '../common/phone';
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Optional } from '@nestjs/common';
 import { PAID_STUDENT_WHERE, UNPAID_STUDENT_WHERE } from '../common/paid-student';
 import { Direction, Prisma, Role, StudentStatus } from '@prisma/client';
@@ -91,6 +92,11 @@ export class StudentsService {
   }
 
   async create(dto: CreateStudentDto, _user?: CurrentUser) {
+    // +992 — ровно 9 цифр (QA №20).
+    for (const ph of dto.phones ?? []) {
+      const err = tjPhoneError(ph);
+      if (err) throw new BadRequestException(`${err}: ${ph}`);
+    }
     const cabinet = dto.cabinet ?? CABINET_BY_DIRECTION[dto.direction];
     const emailNormalized = dto.email.trim().toLowerCase();
 
@@ -387,13 +393,28 @@ export class StudentsService {
     return { transactions, paymentRequests, totalPaid, totalPaidOther };
   }
 
+  /** Кабинеты студентов CRM (без учеников только академии), по возрастанию. */
+  async cabinets(): Promise<number[]> {
+    const rows = await this.prisma.student.groupBy({ by: ['cabinet'], where: { academyOnly: false } });
+    return rows.map((r) => r.cabinet).filter((c): c is number => typeof c === 'number').sort((a, b) => a - b);
+  }
+
   async update(id: string, dto: UpdateStudentDto, user: CurrentUser) {
     const existing = await this.findOne(id);
     this.ensureCanEdit(existing, user);
 
     const data: Prisma.StudentUpdateInput = {};
     if (dto.fullName !== undefined) data.fullName = dto.fullName;
-    if (dto.phones !== undefined) data.phones = dto.phones;
+    if (dto.phones !== undefined) {
+      // Проверяем только добавленные/изменённые номера (QA №20).
+      const before = new Set((existing.phones || []).map((p: string) => p.trim()));
+      for (const ph of dto.phones) {
+        if (before.has(ph.trim())) continue;
+        const err = tjPhoneError(ph);
+        if (err) throw new BadRequestException(`${err}: ${ph}`);
+      }
+      data.phones = dto.phones;
+    }
     if (dto.phoneLabels !== undefined) data.phoneLabels = dto.phoneLabels;
     if (dto.preferredChannel !== undefined) data.preferredChannel = dto.preferredChannel;
     // Онбординг: по ТЗ ведёт CLIENT_MANAGER + elevated (FOUNDER/ADMIN/

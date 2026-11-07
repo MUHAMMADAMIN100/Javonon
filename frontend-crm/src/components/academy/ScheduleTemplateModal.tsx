@@ -34,6 +34,8 @@ export default function ScheduleTemplateModal({
   const [from, setFrom] = useState(tjToday());
   const [to, setTo] = useState('');
   const [topic, setTopic] = useState('');
+  // Пересечения с уже существующими занятиями — только с явной отметкой (QA №40).
+  const [allowOverlap, setAllowOverlap] = useState(false);
 
   const timeValid = /^\d{2}:\d{2}$/.test(startTime) && /^\d{2}:\d{2}$/.test(endTime) && endTime > startTime;
   const datesValid = !!from && !!to && to >= from;
@@ -55,7 +57,7 @@ export default function ScheduleTemplateModal({
   });
 
   const createMut = useMutation({
-    mutationFn: () => bulkSessions(groupId, { weekdays: days, startTime, endTime, from, to, topic: topic.trim() || undefined }),
+    mutationFn: () => bulkSessions(groupId, { weekdays: days, startTime, endTime, from, to, topic: topic.trim() || undefined, allowOverlap }),
     onSuccess: (r) => {
       toast(t('academy.template.created').replace('{n}', String(r.created ?? 0)), 'success');
       qc.invalidateQueries({ queryKey: keys.groups.all });
@@ -128,6 +130,20 @@ export default function ScheduleTemplateModal({
           </span>
         ) : null}
       </div>
+      {valid && !preview.isFetching && (preview.data?.overlaps ?? 0) > 0 && (
+        <div className="acad-template-overlap" data-testid="tpl-overlap">
+          <div>
+            <Icon name="warning" size={16} />{' '}
+            {t('academy.template.overlap')
+              .replace('{n}', String(preview.data!.overlaps))
+              .replace('{list}', (preview.data!.overlapSample ?? []).join(', ') + ((preview.data!.overlaps ?? 0) > 3 ? '…' : ''))}
+          </div>
+          <label className="acad-template-overlap-ok">
+            <input type="checkbox" checked={allowOverlap} onChange={(e) => setAllowOverlap(e.target.checked)} data-testid="tpl-allow-overlap" />
+            {t('academy.template.overlapOk')}
+          </label>
+        </div>
+      )}
 
       <div className="form-actions">
         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={createMut.isPending}>
@@ -136,7 +152,7 @@ export default function ScheduleTemplateModal({
         <button
           type="button"
           className="btn btn-primary"
-          disabled={!valid || !preview.data || !preview.data.count || createMut.isPending}
+          disabled={!valid || !preview.data || !preview.data.count || createMut.isPending || ((preview.data.overlaps ?? 0) > 0 && !allowOverlap)}
           onClick={() => createMut.mutate()}
           data-testid="tpl-create"
         >

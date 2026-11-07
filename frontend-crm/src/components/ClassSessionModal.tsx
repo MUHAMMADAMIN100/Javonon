@@ -184,6 +184,23 @@ export default function ClassSessionModal({
     () => !!startsAt && !!endsAt && endsAt <= startsAt,
     [startsAt, endsAt],
   );
+  // Занятие — в пределах одного дня (QA №39), как проверяет сервер.
+  const multiDay = !!startsAt && !!endsAt && !rangeInvalid && startsAt.slice(0, 10) !== endsAt.slice(0, 10);
+
+  // Выбрали начало: если время не выбрано (полночь) — 10:00; конец, пустой
+  // или в другой день, — тот же день через 1,5 часа (как у шаблона по умолчанию).
+  const onStartChange = (v: string) => {
+    let next = v;
+    if (/T00:00$/.test(next) && !startsAt) next = `${next.slice(0, 10)}T10:00`;
+    setStartsAt(next);
+    if (next && (!endsAt || endsAt.slice(0, 10) !== next.slice(0, 10) || endsAt <= next)) {
+      const [h, m] = next.slice(11, 16).split(':').map(Number);
+      const total = Math.min(23 * 60 + 59, h * 60 + m + 90);
+      const hh = String(Math.floor(total / 60)).padStart(2, '0');
+      const mm = String(total % 60).padStart(2, '0');
+      setEndsAt(`${next.slice(0, 10)}T${hh}:${mm}`);
+    }
+  };
 
   // Срок ДЗ по умолчанию — день следующего занятия группы (иначе через неделю).
   const lessonDay = startsAt.slice(0, 10);
@@ -208,7 +225,7 @@ export default function ClassSessionModal({
   }, [suggestedDue, nextQuery.isFetched]);
   const dueMissing = !!homework.trim() && !homeworkDue;
   const dueTooEarly = !!homework.trim() && !!homeworkDue && !!lessonDay && homeworkDue < lessonDay;
-  const canSubmit = !!group && !!startsAt && !!endsAt && !rangeInvalid && !dueMissing && !dueTooEarly && !saveMut.isPending;
+  const canSubmit = !!group && !!startsAt && !!endsAt && !rangeInvalid && !multiDay && !dueMissing && !dueTooEarly && !saveMut.isPending;
   const marked = (session?._count?.journal ?? 0) > 0;
 
   const onDelete = async () => {
@@ -254,7 +271,7 @@ export default function ClassSessionModal({
       <div className="form-grid-2 acad-form-grid">
         <div className="form-group">
           <label>{t('classes.field.start')} *</label>
-          <CrmDatePicker value={startsAt} onChange={setStartsAt} showTime disabled={editing && !canRun} placeholder={t('classes.field.start')} />
+          <CrmDatePicker value={startsAt} onChange={onStartChange} showTime disabled={editing && !canRun} placeholder={t('classes.field.start')} />
         </div>
         <div className="form-group">
           <label>{t('classes.field.end')} *</label>
@@ -262,6 +279,7 @@ export default function ClassSessionModal({
         </div>
       </div>
       {rangeInvalid && <div className="form-error-text" style={{ marginTop: -10, marginBottom: 12 }}>{t('classes.invalidRange')}</div>}
+      {multiDay && <div className="form-error-text" style={{ marginTop: -10, marginBottom: 12 }} data-testid="session-multiday">{t('classes.multiDay')}</div>}
 
       <div className="form-group">
         <label>{t('classes.field.topic')}</label>

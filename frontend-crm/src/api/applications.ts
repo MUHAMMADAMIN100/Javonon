@@ -2,6 +2,8 @@ import { api } from './client';
 import type { Application, ApplicationSource, ApplicationStatus, Country, Direction, Student } from './types';
 
 export interface AppFilters {
+  /** '1' — облегчённые строки (окно дашборда, QA №22). */
+  brief?: string;
   status?: ApplicationStatus;
   direction?: Direction;
   /** Страна, выбранная клиентом на лендинге (GET /applications?country=…). */
@@ -121,6 +123,8 @@ export interface CreateStaffApplicationInput {
   managerId?: string;
   /** Статус сразу в форме; не передан — «Новый лид». */
   status?: ApplicationStatus;
+  /** Номер уже у открытого лида — добавить в него повторное обращение. */
+  confirmDuplicate?: boolean;
 }
 
 /**
@@ -131,6 +135,10 @@ export interface CreateStaffApplicationInput {
  */
 export type CreateStaffApplicationResult = Application & {
   duplicate?: boolean;
+  /** false — лид НЕ создан и НЕ слит: сервер спрашивает (QA №24); true — слит. */
+  merged?: boolean;
+  /** Найденный открытый лид с тем же номером (имя/статус — только если он виден). */
+  existing?: { id: string; fullName: string | null; status: ApplicationStatus | null; manager: { id: string; fullName: string } | null; canOpen: boolean };
   statusError?: string;
 };
 

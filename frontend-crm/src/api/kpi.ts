@@ -32,6 +32,8 @@ export interface KpiRow {
   id: string;
   fullName: string;
   email: string;
+  /** Своя роль (Настройки → Роли) — подпись вместо базовой должности. */
+  customRole?: { name: string; isActive?: boolean } | null;
   // По ТЗ §2: 5 ролей + legacy EMPLOYEE. Раньше тут был узкий
   // 3-ролевой union — новые роли проваливались мимо type-safety.
   role: Role;
@@ -65,6 +67,15 @@ export interface KpiRow {
 
 export const leaderboard = (params?: { from?: string; to?: string }) =>
   api.get<KpiRow[]>('/kpi/leaderboard', { params }).then((r) => r.data);
+
+/** Что не вошло в рейтинг KPI — сверка с дашбордом (QA №14). */
+export interface KpiOutside {
+  incomeTotal: number;
+  sales: { rated: number; founder: number; fired: number; otherRoles: number; otherIncome: number; unassigned: number };
+  enrolled: { total: number; rated: number; founder: number; fired: number; other: number; noManager: number; twoManagers: number };
+}
+export const kpiOutside = (params?: { from?: string; to?: string }) =>
+  api.get<KpiOutside>('/kpi/leaderboard/outside', { params }).then((r) => r.data);
 
 export const myKpi = () => api.get<KpiRow | null>('/kpi/me').then((r) => r.data);
 

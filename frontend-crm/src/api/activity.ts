@@ -38,7 +38,9 @@ export type ActivityAction =
   | 'RECORD_DELETE'
   | 'RECORD_RESTORE'
   // «Войти как»: вход/выход основателя и его изменения в этом режиме.
-  | 'IMPERSONATION';
+  | 'IMPERSONATION'
+  // Исправление явной ошибки в старом номере (QA №21), автор — «Система».
+  | 'PHONE_FIX';
 
 export interface ActivityEntry {
   id: string;
@@ -86,4 +88,5 @@ export const ACTIVITY_LABEL: Record<ActivityAction, string> = localized('activit
   RECORD_DELETE: 'Удаление',
   RECORD_RESTORE: 'Восстановление',
   IMPERSONATION: '«Войти как»',
+  PHONE_FIX: 'Исправление номера',
 });

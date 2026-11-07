@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { canSeeData, hasActiveRole, hiddenAmount, roleCan } from '../lib/permissions';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { KpiRow, leaderboard } from '../api/kpi';
+import { KpiRow, kpiOutside, leaderboard } from '../api/kpi';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
@@ -10,6 +10,7 @@ import { useRoleLabel } from '../lib/labels';
 import { tjLastDaysRange } from '../lib/tjTime';
 import KpiDetailsModal from '../components/KpiDetailsModal';
 import FitNumber from '../components/FitNumber';
+import Icon from '../Icon';
 import BonusProgress from '../components/BonusProgress';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 
@@ -41,6 +42,10 @@ const RANGE_KEYS: Array<{ key: string; days: number | null }> = [
 export default function Kpi() {
   const { t } = useT();
   const roleLabel = useRoleLabel();
+  // Своя роль (SMM, Lead Qualifier…) — как в списке сотрудников; без неё —
+  // должность (QA №13: раньше всем показывалась базовая должность).
+  const roleText = (r: { role: string; customRole?: { name: string; isActive?: boolean } | null }) =>
+    r.customRole?.name && r.customRole.isActive !== false ? r.customRole.name : roleLabel(r.role);
   const me = useAuth((s) => s.user);
   const [rangeIdx, setRangeIdx] = useState(2); // 30 days по умолчанию
   /** Строка, по которой открыто окно подробностей (id, а не объект: после
@@ -193,7 +198,7 @@ export default function Kpi() {
                 fontSize: 12,
                 color: 'rgba(255,255,255,0.55)',
                 letterSpacing: '0.08em',
-              }}>{roleLabel(top.role)}</div>
+              }}>{roleText(top)}</div>
             </div>
             <div className="kpi-top-sum">
               <FitNumber testId="kpi-top-sales" style={{
@@ -275,7 +280,7 @@ export default function Kpi() {
                   <td className="kpi-c-who">
                     <div className="kpi-name" style={{ fontWeight: 500 }}>{r.fullName} {isMe && <span className="kpi-you" style={{ fontFamily: 'Times New Roman, Georgia, serif', fontStyle: 'italic', color: 'var(--primary-dark)' }}>{t('kpi.label.itsYou')}</span>}</div>
                     <div className="kpi-role" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                      {roleLabel(r.role)}
+                      {roleText(r)}
                     </div>
                   </td>
                   <td className="kpi-c-leads">{r.applicationsAssigned}</td>
@@ -325,6 +330,8 @@ export default function Kpi() {
           </tbody>
         </table>
       </div>
+      {/* Сверка с дашбордом: что не вошло в сумму по сотрудникам. */}
+      {showTop && <KpiOutsideNote params={params} />}
       <AnimatePresence>
         {detailsId && rows.find((r) => r.id === detailsId) && (
           <KpiDetailsModal
@@ -368,5 +375,63 @@ function KpiBento({ eyebrow, label, value, accent, span = 'span-3' }: {
         }}>{label}</div>
       </div>
     </motion.div>
+  );
+}
+
+/**
+ * «Почему сумма по сотрудникам не равна дашборду» (QA №14): дашборд считает
+ * весь доход и все зачисленные лиды, рейтинг — только действующих менеджеров
+ * и только продажи по сделкам. Показываем, куда ушла разница.
+ */
+function KpiOutsideNote({ params }: { params?: { from: string; to: string } }) {
+  const { t } = useT();
+  const q = useQuery({ queryKey: ['kpi', 'outside', params ?? {}], queryFn: () => kpiOutside(params) });
+  const d = q.data;
+  if (!d) return null;
+  const money = (n: number) => `${n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TJS`;
+  const salesRows: [string, number][] = (
+    [
+      ['kpi.outside.founder', d.sales.founder],
+      ['kpi.outside.fired', d.sales.fired],
+      ['kpi.outside.otherRoles', d.sales.otherRoles],
+      ['kpi.outside.otherIncome', d.sales.otherIncome],
+      ['kpi.outside.unassigned', d.sales.unassigned],
+    ] as [string, number][]
+  ).filter(([, v]) => v > 0);
+  const enrolledRows: [string, number][] = (
+    [
+      ['kpi.outside.founder', d.enrolled.founder],
+      ['kpi.outside.fired', d.enrolled.fired],
+      ['kpi.outside.otherRoles', d.enrolled.other],
+      ['kpi.outside.noManager', d.enrolled.noManager],
+    ] as [string, number][]
+  ).filter(([, v]) => v > 0);
+  return (
+    <details className="card kpi-outside" data-testid="kpi-outside">
+      <summary className="kpi-outside-summary">
+        <Icon name="info" size={18} /> {t('kpi.outside.title')}
+      </summary>
+      <div className="kpi-outside-body">
+        <div className="kpi-outside-col">
+          <div className="kpi-outside-head">{t('kpi.outside.income')}</div>
+          <div className="kpi-outside-row is-total"><span>{t('kpi.outside.dashboard')}</span><b>{money(d.incomeTotal)}</b></div>
+          <div className="kpi-outside-row"><span>{t('kpi.outside.rated')}</span><b>{money(d.sales.rated)}</b></div>
+          {salesRows.map(([k, v]) => (
+            <div key={k} className="kpi-outside-row"><span>{t(k)}</span><b>{money(v)}</b></div>
+          ))}
+        </div>
+        <div className="kpi-outside-col">
+          <div className="kpi-outside-head">{t('kpi.outside.enrolledHead')}</div>
+          <div className="kpi-outside-row is-total"><span>{t('kpi.outside.dashboard')}</span><b>{d.enrolled.total}</b></div>
+          <div className="kpi-outside-row"><span>{t('kpi.outside.rated')}</span><b>{d.enrolled.rated}</b></div>
+          {enrolledRows.map(([k, v]) => (
+            <div key={k} className="kpi-outside-row"><span>{t(k)}</span><b>{v}</b></div>
+          ))}
+          {d.enrolled.twoManagers > 0 && (
+            <div className="kpi-outside-note">{t('kpi.outside.twoManagers').replace('{n}', String(d.enrolled.twoManagers))}</div>
+          )}
+        </div>
+      </div>
+    </details>
   );
 }

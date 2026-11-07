@@ -1879,6 +1879,7 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
       <NonTjsStrip totals={breakdown.nonTjsTotals} />
 
       {buckets.map((b) => {
+        const months = breakdown.fixedMonths ?? 1;
         const color = b.color && b.color !== '#ffffff' ? b.color : '#94a3b8';
         const pctOfIncome = Math.min(100, (b.allocated / denom) * 100);
         const kindLabel =
@@ -1906,6 +1907,10 @@ function RevenueDistributionCard({ breakdown }: { breakdown: import('../api/fina
                 <b style={{ color }}>{headline}</b>
                 <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11 }}>
                   · {kindLabel}
+                  {/* Сумма месячная: за период длиннее месяца — умножена (QA №47). */}
+                  {isFixed && months !== 1 && (
+                    <span data-testid="dist-months"> {t('finance.distribution.months').replace('{n}', months.toLocaleString('ru-RU', { maximumFractionDigits: 2 }))}</span>
+                  )}
                 </span>
                 {isFixed && b.items.length > 0 && (
                   <span style={{ color: 'var(--text-soft)', marginLeft: 6, fontSize: 11 }}>

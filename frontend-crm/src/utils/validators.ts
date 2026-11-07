@@ -38,14 +38,23 @@ export const positive = (msg = tr('validate.positive')): Rule => (v) => {
   return undefined;
 };
 
-// Телефон по E.164: от 7 до 15 цифр всего (с учётом кода страны).
+/** +992 — ровно 9 цифр после кода страны (QA №20). Не таджикский номер — undefined. */
+export function tjPhoneError(v: unknown): string | undefined {
+  const s = String(v ?? '').trim();
+  const digits = s.replace(/\D/g, '');
+  const tj = s.startsWith('+992') || (digits.startsWith('992') && digits.length >= 10);
+  if (!tj) return undefined;
+  return digits.length === 12 ? undefined : tr('validate.phoneTj');
+}
+
+// Телефон по E.164: от 7 до 15 цифр всего (с учётом кода страны); +992 — ровно 9.
 export const phoneRule = (msg = tr('validate.phone')): Rule => (v) => {
   const s = String(v ?? '').trim();
   if (!s) return undefined;
   const digits = s.replace(/\D/g, '');
   if (digits.length < 7) return tr('validate.phoneShort');
   if (digits.length > 15) return msg;
-  return undefined;
+  return tjPhoneError(s);
 };
 
 export const passwordRule = (msg = tr('validate.password')): Rule => (v) => {

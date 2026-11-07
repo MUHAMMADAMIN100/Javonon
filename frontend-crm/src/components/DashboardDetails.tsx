@@ -87,7 +87,9 @@ function ApplicationsDetails({
   // «Открыть список» — на «Заявки», если роль туда пускает.
   const me = useAuth((s) => s.user);
   const canOpenList = roleCan(me, ['leads:read', 'applications:read']);
-  const filters = { from: range.from || undefined, to: range.to || undefined };
+  // brief — сервер отдаёт только нужные окну поля (QA №22: раньше весь лид
+  // со студентом и программой, 3+ МБ за «всё время»).
+  const filters = { from: range.from || undefined, to: range.to || undefined, brief: '1' };
   const query = useQuery({
     queryKey: keys.applications.list(filters),
     queryFn: () => listApplications(filters),

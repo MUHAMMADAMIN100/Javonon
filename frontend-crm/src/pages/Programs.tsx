@@ -105,11 +105,14 @@ const emptyForm: Partial<Program> = {
   major: '',
   direction: 'BACHELOR',
   cost: 0,
-  currency: 'CNY',
+  // Валюту выбирают явно: на сайте нет ни одной программы в CNY, а дефолт
+  // молча ставил юани (QA №50).
+  currency: '',
   duration: '',
   language: '',
   description: '',
-  published: true,
+  // Новая программа — черновик: на публичный сайт только по галочке (QA №50).
+  published: false,
   englishLevel: '',
   hasGrant: false,
   grantDetails: '',
@@ -135,6 +138,12 @@ export default function Programs() {
   const [direction, setDirection] = useState<Direction | ''>('');
   const [debounced, setDebounced] = useState({ city: '', major: '', direction: '' as Direction | '' });
   const [editing, setEditing] = useState<Partial<Program> | null>(null);
+  // Ошибки формы — после ввода в поле или попытки сохранить, а не сразу
+  // при открытии пустой формы (QA №50).
+  const formErrorsRef = useRef<Record<string, string | undefined>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [submitTried, setSubmitTried] = useState(false);
+  const shownErr = (k: string) => (touched[k] || submitTried ? (formErrorsRef.current as Record<string, string | undefined>)[k] : undefined);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [pendingPreview, setPendingPreview] = useState<string | null>(null);
@@ -161,6 +170,8 @@ export default function Programs() {
   const openCreate = () => {
     setPendingImage(null);
     setPendingPreview(null);
+    setTouched({});
+    setSubmitTried(false);
     setEditing({ ...emptyForm });
   };
 
@@ -284,8 +295,10 @@ export default function Programs() {
           city: editing.city || '',
           major: editing.major || '',
           cost: editing.cost ?? '',
+          currency: editing.currency || '',
         },
         {
+          currency: required(t('programs.err.currency')),
           name: compose(required(t('programs.err.name')), minLen(2), maxLen(200)),
           university: compose(required(t('programs.err.university')), minLen(2), maxLen(200)),
           city: maxLen(100),
@@ -295,10 +308,15 @@ export default function Programs() {
       )
     : {};
   const formInvalid = hasErrors(formErrors);
+  formErrorsRef.current = formErrors;
 
   const onSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editing || formInvalid) return;
+    if (!editing) return;
+    if (formInvalid) {
+      setSubmitTried(true);
+      return;
+    }
     saveMut.mutate({ editing, pendingImage, pendingGalleryFiles, pendingScholarships });
   };
 
@@ -426,7 +444,7 @@ export default function Programs() {
                     {(canUpdate || canRemove) && (
                       <div className="program-card-actions" onClick={(e) => e.stopPropagation()}>
                         {canUpdate && (
-                          <button className="btn btn-sm btn-secondary" onClick={() => setEditing({ ...p })} data-testid="program-edit">
+                          <button className="btn btn-sm btn-secondary" onClick={() => { setTouched({}); setSubmitTried(false); setEditing({ ...p }); }} data-testid="program-edit">
                             <Icon name="edit" size={14} />
                           </button>
                         )}
@@ -504,12 +522,12 @@ export default function Programs() {
                 <input
                   value={editing.name || ''}
                   onChange={(e) => setEditing({ ...editing, name: safeText(e.target.value) })}
-                  className={`crm-input${formErrors.name ? ' input-error' : ''}`}
+                  onBlur={() => setTouched((s) => ({ ...s, name: true }))}
+                  className={`crm-input${shownErr('name') ? ' input-error' : ''}`}
                   maxLength={200}
                   placeholder={t('programs.ph.name')}
-                  required
                 />
-                {formErrors.name && <div className="form-error-text">{formErrors.name}</div>}
+                {shownErr('name') && <div className="form-error-text">{shownErr('name')}</div>}
               </div>
               <div className="form-grid-2">
                 <div className="form-group">
@@ -517,12 +535,12 @@ export default function Programs() {
                   <input
                     value={editing.university || ''}
                     onChange={(e) => setEditing({ ...editing, university: safeText(e.target.value) })}
-                    className={`crm-input${formErrors.university ? ' input-error' : ''}`}
+                    onBlur={() => setTouched((s) => ({ ...s, university: true }))}
+                    className={`crm-input${shownErr('university') ? ' input-error' : ''}`}
                     maxLength={200}
                     placeholder={t('programs.ph.university')}
-                    required
                   />
-                  {formErrors.university && <div className="form-error-text">{formErrors.university}</div>}
+                  {shownErr('university') && <div className="form-error-text">{shownErr('university')}</div>}
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.country')}</label>
@@ -577,7 +595,13 @@ export default function Programs() {
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.currency')}</label>
-                  <CrmSelect className="crm-select" value={editing.currency || 'CNY'} onChange={(e) => setEditing({ ...editing, currency: e.target.value })}>
+                  <CrmSelect
+                    className={`crm-select${shownErr('currency') ? ' input-error' : ''}`}
+                    value={editing.currency || ''}
+                    onChange={(e) => { setEditing({ ...editing, currency: e.target.value }); setTouched((s) => ({ ...s, currency: true })); }}
+                    data-testid="program-currency"
+                  >
+                    <option value="">{t('programs.currency.choose')}</option>
                     <option value="CNY">{t('programs.currency.CNY')}</option>
                     <option value="USD">USD</option>
                     <option value="EUR">{t('programs.currency.EUR')}</option>
@@ -591,6 +615,7 @@ export default function Programs() {
                     <option value="KZT">KZT</option>
                     <option value="UZS">UZS</option>
                   </CrmSelect>
+                  {shownErr('currency') && <div className="form-error-text">{shownErr('currency')}</div>}
                 </div>
                 <div className="form-group">
                   <label>{t('programs.field.duration')}</label>
@@ -829,7 +854,7 @@ export default function Programs() {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={saving || formInvalid}
+                  disabled={saving}
                   title={formInvalid ? t('programs.fixErrors') : ''}
                 >
                   {saving ? t('common.loading') : t('common.save')}
