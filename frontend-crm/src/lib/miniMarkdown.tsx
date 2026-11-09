@@ -37,7 +37,11 @@ function parseBlocks(src: string): Block[] {
   while (i < lines.length) {
     const line = lines[i];
     if (!line.trim()) { i++; continue; }
-    // Heading
+    // Heading. «# Заголовок» — тоже заголовок (раньше такая строка не попадала
+    // ни в одну ветку, абзац выходил пустым, i не рос — бесконечный цикл и
+    // зависание вкладки «Оферты»).
+    const h1 = /^#\s+(.*)$/.exec(line);
+    if (h1) { out.push({ kind: 'heading', level: 2, content: h1[1] }); i++; continue; }
     const h2 = /^##\s+(.*)$/.exec(line);
     if (h2) { out.push({ kind: 'heading', level: 2, content: h2[1] }); i++; continue; }
     const h3 = /^###\s+(.*)$/.exec(line);
@@ -68,6 +72,9 @@ function parseBlocks(src: string): Block[] {
       para.push(lines[i]);
       i++;
     }
+    // Страховка от зацикливания: строку не узнали ни одним правилом — берём её
+    // абзацем как есть и обязательно идём дальше.
+    if (para.length === 0) { para.push(lines[i]); i++; }
     out.push({ kind: 'paragraph', content: para.join(' ') });
   }
   return out;
@@ -154,8 +161,13 @@ function renderBoldItalic(text: string): ReactNode {
         continue;
       }
     }
-    // Обычный символ — копим в строку
+    // Обычный символ — копим в строку. Непарную «*» или «`» берём как есть
+    // (раньше на «цена * 2» цикл стоял на месте и вешал вкладку).
     let chunk = '';
+    if (text[i] === '*' || text[i] === '`') {
+      chunk += text[i];
+      i++;
+    }
     while (i < text.length && text[i] !== '*' && text[i] !== '`') {
       chunk += text[i];
       i++;
