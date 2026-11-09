@@ -176,38 +176,23 @@ export default function Kpi() {
           data-testid="kpi-top"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          style={{
-            background: 'linear-gradient(135deg, var(--text), var(--primary-darker))',
-            color: 'white',
-            marginBottom: 24,
-            borderColor: 'transparent',
-          }}
+          style={{ marginBottom: 20 }}
         >
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.16em',
-            color: 'var(--primary-light)',
-            marginBottom: 12,
-          }}>{t('kpi.label.topPerformer')}</div>
+          {/* Лидер периода — светлая карточка с синим акцентом (редизайн 2026). */}
+          <div className="kpi-top-label">{t('kpi.label.topPerformer')}</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 32, flexWrap: 'wrap' }}>
             <div>
               <div className="kpi-top-name" data-testid="kpi-top-name">{top.fullName}</div>
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 12,
-                color: 'rgba(255,255,255,0.55)',
-                letterSpacing: '0.08em',
-              }}>{roleText(top)}</div>
+              <div className="kpi-top-role">{roleText(top)}</div>
             </div>
             <div className="kpi-top-sum">
               <FitNumber testId="kpi-top-sales" style={{
                 fontFamily: 'var(--font-display)',
-                fontSize: 64,
-                fontWeight: 500,
-                letterSpacing: '-0.04em',
-                lineHeight: 1,
-                color: 'var(--primary-light)',
+                fontSize: 40,
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                lineHeight: 1.1,
+                color: 'var(--primary)',
               }}>{fmtMoney(top.salesAmount, top.currency)}</FitNumber>
               <div style={{
                 fontFamily: 'var(--font-mono)',
@@ -275,7 +260,8 @@ export default function Kpi() {
                     letterSpacing: '-0.02em',
                     color: rank < 3 ? 'var(--primary-dark)' : 'var(--text-light)',
                   }}>
-                    {rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : `#${rank + 1}`}
+                    {/* Места — метками, а не эмодзи-медалями (редизайн 2026). */}
+                    <span className={`kpi-rank r${Math.min(rank + 1, 4)}`}>#{rank + 1}</span>
                   </td>
                   <td className="kpi-c-who">
                     <div className="kpi-name" style={{ fontWeight: 500 }}>{r.fullName} {isMe && <span className="kpi-you" style={{ fontFamily: 'Times New Roman, Georgia, serif', fontStyle: 'italic', color: 'var(--primary-dark)' }}>{t('kpi.label.itsYou')}</span>}</div>

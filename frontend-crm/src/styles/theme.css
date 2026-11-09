@@ -868,3 +868,41 @@ table, .num, input[type='number'] { font-variant-numeric: tabular-nums; }
   .dash-kpi-icon.is-corner { display: none; }
   .dash-kpi-label { padding-right: 0; min-height: 0; }
 }
+
+/* ═════════════════ Часть 2: продажи и академия ═════════════════ */
+/* Статусы в таблицах — в одну строку. */
+.table .badge { white-space: nowrap; }
+/* Плитки-показатели (звонки и др.): спокойные карточки вместо огромных цифр. */
+.bento { grid-auto-rows: minmax(120px, auto); gap: 14px; }
+.bento-card { border-radius: var(--radius-lg); border: 1px solid var(--border); padding: 18px; }
+.bento-card.feature { background: var(--primary); border-color: var(--primary); color: #fff; }
+.bento-card.accent { background: var(--primary); border-color: var(--primary); color: #fff; }
+.bento-card.accent .bento-num { color: #C9D9F2; }
+.bento-num {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--text-light);
+}
+.bento-card.feature .bento-num { color: #C9D9F2; }
+/* KPI: лидер периода и места. */
+.card.kpi-top-card { padding: 20px 22px; background: #fff; border: 1px solid var(--border); box-shadow: inset 4px 0 0 var(--primary); }
+.kpi-top-label { font-size: 12.5px; font-weight: 600; color: var(--text-light); margin-bottom: 8px; }
+.kpi-top-name { font-family: var(--font-display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
+.kpi-top-role { font-size: 13px; color: var(--text-light); margin-top: 2px; }
+.kpi-top-card .kpi-top-sum div { color: var(--text-light) !important; }
+.kpi-rank {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 34px; height: 26px; padding: 0 8px;
+  border-radius: 999px;
+  font: 800 13px var(--font-display);
+  background: #EEF2F8; color: var(--text-soft);
+}
+.kpi-rank.r1 { background: var(--primary); color: #fff; }
+.kpi-rank.r2 { background: #1E5BB8; color: #fff; }
+.kpi-rank.r3 { background: #DCE6F4; color: var(--primary); }
+/* Партнёры: кнопки действий переносятся, а не уезжают за край. */
+@media (min-width: 901px) {
+  .partner-actions { flex-wrap: wrap; row-gap: 4px; }
+}
