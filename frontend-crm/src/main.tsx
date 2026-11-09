@@ -10,6 +10,8 @@ import { installTjLocalePatch } from './lib/tjLocalePatch';
 import { watchIconFont } from './lib/iconFont';
 import { I18nProvider } from './lib/i18n';
 import './index.css';
+// Дизайн 2026 (редизайн): слой поверх index.css — подключается последним.
+import './styles/theme.css';
 
 // Глобально форсируем Asia/Dushanbe для всех toLocaleString* без явной
 // timeZone. По ТЗ — все времена в системе показываются в TJ-зоне.

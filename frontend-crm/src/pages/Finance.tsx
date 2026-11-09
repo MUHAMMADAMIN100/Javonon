@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+// Графики — отдельным куском сборки: Recharts грузится, только когда открыли «Аналитику».
+const FinanceAnalytics = lazy(() => import('../components/FinanceAnalytics'));
 import CrmSelect from '../components/CrmSelect';
 import { pageParam, useUrlListState } from '../lib/useUrlListState';
 import Pagination from '../components/Pagination';
@@ -224,6 +226,17 @@ export default function Finance() {
   const period = useDashboardPeriod();
   const range = period.range;
   const rangeOk = !period.invalid;
+  // Вкладки «Обзор и журнал» / «Аналитика» (редизайн 2026) — в ссылке (?tab=analytics),
+  // период — общий для обеих.
+  const [tabParams, setTabParams] = useSearchParams();
+  const tab: 'overview' | 'analytics' = tabParams.get('tab') === 'analytics' ? 'analytics' : 'overview';
+  const setTab = (next: 'overview' | 'analytics') =>
+    setTabParams((prev) => {
+      const n = new URLSearchParams(prev);
+      if (next === 'analytics') n.set('tab', 'analytics');
+      else n.delete('tab');
+      return n;
+    }, { replace: true });
   // Страница журнала — в ссылке, как в остальных списках CRM.
   const { values: txUrl, setValue: setTxUrl } = useUrlListState(
     { page: pageParam() },
@@ -508,6 +521,27 @@ export default function Finance() {
     <>
       {/* Один период на всю страницу — тот же переключатель, что на дашборде. */}
       <PeriodSwitcher state={period} busy={overviewQuery.isFetching || txQuery.isFetching} />
+      <div className="page-tabs" role="tablist" aria-label={t('finance.title')}>
+        {(['overview', 'analytics'] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={tab === k}
+            className={`page-tab${tab === k ? ' is-active' : ''}`}
+            onClick={() => setTab(k)}
+            data-testid={`finance-tab-${k}`}
+          >
+            <Icon name={k === 'overview' ? 'receipt_long' : 'monitoring'} size={18} />
+            {t(k === 'overview' ? 'finance.tab.overview' : 'finance.tab.analytics')}
+          </button>
+        ))}
+      </div>
+      {tab === 'analytics' ? (
+        <Suspense fallback={<div className="card" style={{ padding: 24, color: 'var(--text-light)' }}>{t('common.loading')}</div>}>
+          <FinanceAnalytics range={range} rangeOk={rangeOk} period={period.period} />
+        </Suspense>
+      ) : (<>
       {/* Главное для владельца — сразу под периодом: выручка, прибыль,
           зарплаты, расходы, средний чек и долги клиентов. */}
       {/* Нет доступа к сводке (менеджер открыл страницу по ссылке) — карточек нет, а не пустые прочерки. */}
@@ -939,6 +973,7 @@ export default function Finance() {
           />
         )}
       </AnimatePresence>
+      </>)}
     </>
   );
 }

@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
+import SearchPalette from './SearchPalette';
+import { NAV_GROUPS, resolveRoute } from './navGroups';
 import NotificationBell from './NotificationBell';
 import RealtimeStatusBanner from './RealtimeStatusBanner';
 import ImpersonationBar from './ImpersonationBar';
@@ -17,6 +19,7 @@ import { useAuth } from '../store/auth';
 import { me as apiMe } from '../api/auth';
 import { useT } from '../lib/i18n';
 import { isTeacherOnly } from '../lib/roles';
+import { fmtDateText } from '../lib/tjTime';
 
 /**
  * Заголовок страницы — ОДИН, и живёт он здесь.
@@ -71,9 +74,15 @@ const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; title
   { path: '/excuses',      eyebrowKey: 'eyebrow.hr',             num: '26', titleKey: 'workday.title' },
 ];
 
+/** «Понедельник, 9 ноября» — над заголовком главной и задач (группа без подписи). */
+function todayLabel(): string {
+  const txt = fmtDateText(new Date(), { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Dushanbe' });
+  return txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : '';
+}
+
 export default function Layout() {
   const loc = useLocation();
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const { toast } = useUI();
   const { t } = useT();
   const logout = useAuth((s) => s.logout);
@@ -82,10 +91,14 @@ export default function Layout() {
   useFileToken();
   // Счётчики непрочитанных в чате — на любой странице, не только в чате.
   useChatUnreadSync();
-  const chatUnread = useChatUnreadTotal();
+  useChatUnreadTotal();
   const route = TITLE_ROUTES.find((r) => loc.pathname.startsWith(r.path));
+  // Над заголовком — группа меню, в которой лежит раздел («Продажи»,
+  // «Деньги»): так же, как в боковом меню (редизайн 2026).
+  const navHit = resolveRoute(loc.pathname);
+  const navGroup = navHit ? NAV_GROUPS.find((g) => g.key === navHit.groupKey) : undefined;
   const meta = route
-    ? { eyebrow: `${t(route.eyebrowKey)} · ${route.num}`, title: t(route.titleKey) }
+    ? { eyebrow: navGroup && navGroup.key !== 'main' ? t(navGroup.labelKey) : todayLabel(), title: t(route.titleKey) }
     : { eyebrow: t('eyebrow.javononCrm'), title: 'Javonon' };
 
   // По ТЗ §2: «права передаются основателем». Когда FOUNDER меняет
@@ -139,87 +152,58 @@ export default function Layout() {
     }
   });
 
-  // Close mobile drawer on route change
+  // Поиск по CRM: Ctrl K / ⌘K с любой страницы.
   useEffect(() => {
-    setMobileNavOpen(false);
-  }, [loc.pathname]);
-
-  // Lock body scroll when drawer open
-  useEffect(() => {
-    if (mobileNavOpen) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = prev; };
-    }
-  }, [mobileNavOpen]);
-
-  // Escape key closes drawer (для планшетов с клавиатурой)
-  useEffect(() => {
-    if (!mobileNavOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileNavOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [mobileNavOpen]);
+  }, []);
+  // Перешли на другую страницу — поиск закрыт.
+  useEffect(() => { setSearchOpen(false); }, [loc.pathname]);
 
   return (
-    <div className={`app-layout${mobileNavOpen ? ' nav-open' : ''}`}>
+    <div className="app-layout v2">
       <RealtimeStatusBanner />
       <ImpersonationBar />
       {/* Звонок из CRM — роли с «Звонки — звонок из CRM». */}
       {!isTeacherOnly(me as any) && roleCan(me as any, 'calls:dial') && <Dialpad />}
-      <Sidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-      <AnimatePresence>
-        {mobileNavOpen && (
-          <motion.div
-            className="sidebar-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => setMobileNavOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+      <Sidebar />
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <div className="main">
-        <motion.div
-          className="topbar"
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          <button
-            type="button"
-            className="topbar-burger"
-            onClick={() => setMobileNavOpen((v) => !v)}
-            aria-label={t('sidebar.menu')}
-          >
-            <Icon name={mobileNavOpen ? 'close' : 'menu'} size={24} />
-            {/* На телефоне полосы иконок нет — непрочитанные видны на кнопке меню. */}
-            {chatUnread.count > 0 && !mobileNavOpen && (
-              <span className={`rail-badge burger-badge${chatUnread.mention ? ' is-mention' : ''}`} data-testid="burger-badge">
-                {chatUnread.mention ? '@' : chatUnread.count > 99 ? '99+' : chatUnread.count}
-              </span>
-            )}
-          </button>
+        <header className="topbar">
           <AnimatePresence mode="wait">
             <motion.div
-              key={meta.eyebrow}
+              key={meta.title}
               className="topbar-title-block"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              transition={{ duration: 0.2 }}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.15 }}
             >
               <div className="topbar-eyebrow">{meta.eyebrow}</div>
-              <div className="topbar-title">
-                {meta.title}
-              </div>
+              <h1 className="topbar-title" style={{ margin: 0 }}>{meta.title}</h1>
             </motion.div>
           </AnimatePresence>
           <div className="topbar-actions">
+            <button
+              type="button"
+              className="topbar-search"
+              onClick={() => setSearchOpen(true)}
+              aria-label={t('search.title')}
+              data-testid="topbar-search"
+            >
+              <Icon name="search" size={20} />
+              <span className="topbar-search-text">{t('search.button')}</span>
+              <kbd>Ctrl K</kbd>
+            </button>
             <NotificationBell />
           </div>
-        </motion.div>
+        </header>
         <div className="content">
           <motion.div
             key={loc.pathname}

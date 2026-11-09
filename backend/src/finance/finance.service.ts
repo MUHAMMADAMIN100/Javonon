@@ -2058,6 +2058,31 @@ export class FinanceService {
     };
   }
 
+  /**
+   * Доход по способу оплаты (наличные, перевод, карта…) — для вкладки
+   * «Аналитика» в «Финансах» (редизайн 2026). Те же правила, что у summary:
+   * только TJS, без удалённых строк и их зеркал.
+   */
+  async byChannel(opts: { from?: Date; to?: Date }) {
+    this.validateRange(opts);
+    const rows = await this.prisma.transaction.groupBy({
+      by: ['paymentChannel'],
+      where: {
+        ...(opts.from || opts.to
+          ? { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
+          : {}),
+        reversedAt: null,
+        type: 'INCOME',
+        currency: REPORTING_CURRENCY,
+      },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    return rows
+      .map((r) => ({ channel: (r.paymentChannel as string | null) ?? 'UNKNOWN', amount: r._sum.amount || 0, count: r._count._all }))
+      .sort((a, b) => b.amount - a.amount);
+  }
+
   /** Группировка по категориям — для дашборда руководителя. */
   async byCategory(opts: { from?: Date; to?: Date }) {
     this.validateRange(opts);
@@ -2184,6 +2209,7 @@ export class FinanceService {
             currency: true,
             program: { select: { name: true } },
             payments: { where: { status: 'APPROVED' }, select: { amount: true } },
+            paymentStages: { where: { status: { not: 'PAID' } }, select: { dueDate: true }, orderBy: { dueDate: 'asc' }, take: 1 },
           },
           orderBy: { createdAt: 'desc' },
         })
@@ -2202,6 +2228,11 @@ export class FinanceService {
         const currency = deals[0].currency;
         const same = deals.filter((d) => d.currency === currency);
         const left = same.reduce((sum, d) => sum + Math.max(0, d.totalAmount - d.payments.reduce((p, x) => p + x.amount, 0)), 0);
+        // На сколько дней просрочен самый ранний неоплаченный этап (0 — не просрочен,
+        // null — плана этапов нет) — для графика «долги по срокам» в «Аналитике».
+        const dues = same.map((d) => d.paymentStages[0]?.dueDate).filter((x): x is Date => !!x);
+        const firstDue = dues.length ? new Date(Math.min(...dues.map((x) => x.getTime()))) : null;
+        const overdueDays = firstDue ? Math.max(0, Math.floor((Date.now() - firstDue.getTime()) / 86_400_000)) : null;
         return {
           ...a,
           debt: {
@@ -2210,16 +2241,17 @@ export class FinanceService {
             programName: deals[0].program?.name ?? a.program?.name ?? null,
             source: 'deal' as const,
             submissionId: deals[0].id,
+            overdueDays,
           },
         };
       }
       if (a.program) {
         return {
           ...a,
-          debt: { amount: Number(a.program.cost), currency: a.program.currency || 'TJS', programName: a.program.name, source: 'program' as const, submissionId: null },
+          debt: { amount: Number(a.program.cost), currency: a.program.currency || 'TJS', programName: a.program.name, source: 'program' as const, submissionId: null, overdueDays: null },
         };
       }
-      return { ...a, debt: { amount: null, currency: null, programName: null, source: null, submissionId: null } };
+      return { ...a, debt: { amount: null, currency: null, programName: null, source: null, submissionId: null, overdueDays: null } };
     });
   }
 }

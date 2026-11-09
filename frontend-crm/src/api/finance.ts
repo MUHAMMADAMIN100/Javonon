@@ -250,6 +250,10 @@ export const financeOverview = (params?: { from?: string; to?: string }) =>
 export const financeSummary = (params?: { from?: string; to?: string }) =>
   api.get<FinanceSummary>('/finance/summary', { params }).then((r) => r.data);
 
+/** Доход по способу оплаты — «Финансы → Аналитика» (редизайн 2026). channel 'UNKNOWN' — не указан. */
+export const financeByChannel = (params?: { from?: string; to?: string }) =>
+  api.get<Array<{ channel: PaymentChannel | 'UNKNOWN'; amount: number; count: number }>>('/finance/by-channel', { params }).then((r) => r.data);
+
 export const financeByCategory = (params?: { from?: string; to?: string }) =>
   api
     .get<Array<{ type: TransactionType; category: TransactionCategory; amount: number; count: number }>>(
@@ -265,6 +269,8 @@ export interface DebtInfo {
   programName: string | null;
   source: 'deal' | 'program' | null;
   submissionId: string | null;
+  /** На сколько дней просрочен самый ранний неоплаченный этап (0 — в срок, null — без плана). */
+  overdueDays?: number | null;
 }
 export const pendingPayments = () =>
   api.get<any[]>('/finance/pending-payments').then((r) => r.data);

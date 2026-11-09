@@ -51,6 +51,8 @@ export default function UserMenu({
     if (!r) return;
     const bottom = Math.max(8, window.innerHeight - (variant === 'rail' ? r.bottom : r.top - 8));
     if (variant === 'rail') setPos({ left: r.right + 12, bottom });
+    // Сверху мало места (строка пользователя вверху «Ещё» на телефоне) — открываем вниз.
+    else if (r.top < 340 && window.innerHeight - r.bottom > r.top) setPos({ left: Math.max(8, r.left), top: r.bottom + 8, width: Math.min(r.width, window.innerWidth - 16) });
     else setPos({ left: Math.max(8, r.left), bottom, width: Math.min(r.width, window.innerWidth - 16) });
   };
   useLayoutEffect(() => {

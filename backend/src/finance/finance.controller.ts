@@ -449,6 +449,15 @@ export class FinanceController {
     });
   }
 
+  /** Доход по способу оплаты — «Финансы → Аналитика» (редизайн 2026). */
+  @Get('by-channel')
+  byChannel(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.svc.byChannel({
+      from: parseDate(from, 'from'),
+      to: parseDate(to, 'to', true),
+    });
+  }
+
   @Get('by-category')
   byCategory(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.byCategory({

@@ -2,15 +2,23 @@ import { useState } from 'react';
 import { canSeeData, hasActiveRole, roleCan } from '../lib/permissions';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import Icon from '../Icon';
+import { listTasks } from '../api/tasks';
+import { listPendingPayments } from '../api/submissions';
+import { listApplicationsPage } from '../api/applications';
+import { buildNavCtx } from '../components/navGroups';
+import { tjFormatTime, tjFormatDate, tjToday } from '../lib/tjTime';
+import { prevRangeOf, type Delta } from '../lib/periodCompare';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { applicationStats } from '../api/applications';
+import type { Task } from '../api/types';
 import { studentStats } from '../api/students';
 import { financeSummary, pendingPayments, type FinanceSummary } from '../api/finance';
 import { leaderboard, type KpiRow } from '../api/kpi';
 import { isFinishedApplicationStatus, isNewLeadApplicationStatus } from '../api/types';
 import { useAuth } from '../store/auth';
 import { keys } from '../lib/queryKeys';
-import { isElevated, hasRole } from '../lib/roles';
+import { isElevated, hasRole, isFounder } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useApplicationStatusLabel, useCountryLabel, useDirectionLabel } from '../lib/labels';
 import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
@@ -21,13 +29,6 @@ function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
 }
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 32 },
-  show: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.5, ease: [0.22, 1, 0.36, 1] as const },
-  }),
-};
 
 export default function Dashboard() {
   const { t } = useT();
@@ -142,6 +143,51 @@ export default function Dashboard() {
   // раньше места раздавались при 0 TJS и 0 зачислений (UX из QA-отчёта).
   const topPerformers = (leaderQuery.data ?? []).filter((p) => p.salesAmount > 0 || p.applicationsEnrolled > 0).slice(0, 3);
 
+  // ── Сравнение с прошлым периодом той же длины (редизайн 2026) ──
+  const prev = prevRangeOf(range, period.period, tjToday());
+  const prevApp = useQuery({
+    queryKey: keys.applications.stats(prev ?? { from: 'none' }),
+    queryFn: () => applicationStats(prev!),
+    enabled: !!prev && !invalid,
+    staleTime: 60_000,
+  });
+  const prevStu = useQuery({
+    queryKey: keys.students.stats(prev ?? { from: 'none' }),
+    queryFn: () => studentStats(prev!),
+    enabled: !!prev && !invalid,
+    staleTime: 60_000,
+  });
+  const prevFin = useQuery<FinanceSummary>({
+    queryKey: keys.finance.summary(prev ?? { from: 'none' }),
+    queryFn: () => financeSummary(prev!),
+    enabled: !!prev && showFinance && !invalid,
+    staleTime: 60_000,
+  });
+
+  // ── Рабочие блоки: задачи на сегодня, платежи на одобрение, последние лиды ──
+  const navCtx = buildNavCtx(me);
+  const showTasks = navCtx.show('tasks:read', navCtx.isWorkforce);
+  const tasksQuery = useQuery<Task[]>({
+    queryKey: ['tasks', 'dashboard-today'],
+    queryFn: () => listTasks(true),
+    enabled: showTasks,
+    staleTime: 30_000,
+  });
+  // Одобряет платежи основатель; сотрудник с ролью — по её галочке (как на странице сделки).
+  const canApprove = roleCan(me, 'submissions:approve', isFounder(me as any));
+  const approvalsQuery = useQuery({
+    queryKey: ['submissions', 'pending-payments', 'dashboard'],
+    queryFn: () => listPendingPayments(),
+    enabled: canApprove,
+    staleTime: 30_000,
+  });
+  const recentQuery = useQuery({
+    queryKey: ['applications', 'dashboard-recent'],
+    queryFn: () => listApplicationsPage({ page: 1, pageSize: 5, sort: '-createdAt' } as any),
+    enabled: canOpenApps,
+    staleTime: 30_000,
+  });
+
   const busy =
     appStatsQuery.isFetching ||
     stuStatsQuery.isFetching ||
@@ -253,230 +299,255 @@ export default function Dashboard() {
     ? (stuStats.byStatus?.find((s: any) => s.status === 'ACTIVE')?._count ?? 0)
     : null;
 
-  // Bento KPI cards
-  const kpis: Array<{
-    eyebrow: string; label: string; value: any; em?: string;
-    accent?: 'feature' | 'accent' | undefined;
-    span: string; row?: string;
-    detail: DashboardDetailKind;
-  }> = [
-    { eyebrow: `${t('eyebrow.total')} · 01`, label: t('dashboard.kpi.total'), value: appStats?.total ?? '—', accent: 'feature', span: 'span-4', row: 'row-2', detail: 'total' },
-    // `?? '—'` не ловит 0: настоящий ноль периода остаётся нулём, «—» видно
-    // только пока данных нет.
-    { eyebrow: `${t('eyebrow.new')} · 02`, label: t('dashboard.kpi.new'), value: newCount ?? '—', span: 'span-2', detail: 'new' },
-    { eyebrow: `${t('eyebrow.pipeline')} · 03`, label: t('dashboard.kpi.pipeline'), value: inProgress ?? '—', accent: 'accent', span: 'span-2', detail: 'pipeline' },
-    { eyebrow: `${t('eyebrow.active')} · 04`, label: t('dashboard.kpi.active'), value: activeStudents ?? '—', span: 'span-3', detail: 'active' },
-    { eyebrow: `${t('eyebrow.win')} · 05`, label: t('dashboard.kpi.enrolled'), value: enrolled ?? '—', span: 'span-3', detail: 'enrolled' },
+  // Сравнение «к прошлому периоду»: доля роста и хорошо ли это.
+  const prevByStatus: Array<{ status: string; _count: number }> = prevApp.data?.byStatus || [];
+  const prevSum = (pred: (s: string) => boolean) =>
+    prevByStatus.reduce((acc, row) => (pred(row.status) ? acc + (row._count || 0) : acc), 0);
+  const prevActive = prevStu.data ? (prevStu.data.byStatus?.find((x: any) => x.status === 'ACTIVE')?._count ?? 0) : null;
+  const cmp = (cur: number | null, before: number | null | undefined, upIsGood = true): Delta | undefined => {
+    if (cur == null || before == null || !prev) return undefined;
+    if (before === 0) return cur > 0 ? { text: `+${cur.toLocaleString('ru-RU')}`, tone: upIsGood ? 'good' : 'bad' } : { text: '0%', tone: 'flat' };
+    const pct = Math.round(((cur - before) / Math.abs(before)) * 100);
+    if (pct === 0) return { text: '0%', tone: 'flat' };
+    const up = pct > 0;
+    return { text: `${up ? '▲' : '▼'} ${Math.abs(pct)}%`, tone: up === upIsGood ? 'good' : 'bad' };
+  };
+  const vsPrev = prev ? t('dashboard.v2.vsPrev') : period.suffix;
+  // Точные даты сравнения — подсказкой при наведении (чтобы «▲ 12%» было проверяемо).
+  const prevTitle = prev ? `${t('dashboard.v2.comparedWith')} ${tjFormatDate(prev.from + 'T12:00:00Z')} — ${tjFormatDate(prev.to + 'T12:00:00Z')}` : undefined;
+
+  const leadCards: KpiDef[] = [
+    { kind: 'total', icon: 'groups', label: t('dashboard.kpi.total'), value: appStats?.total ?? null, delta: cmp(appStats?.total ?? null, prevApp.data?.total) },
+    { kind: 'new', icon: 'person_add', label: t('dashboard.kpi.new'), value: newCount, delta: cmp(newCount, prevApp.data ? prevSum(isNewLeadApplicationStatus) : null) },
+    { kind: 'pipeline', icon: 'pending_actions', label: t('dashboard.kpi.pipeline'), value: inProgress, delta: cmp(inProgress, prevApp.data ? prevSum((x) => !isNewLeadApplicationStatus(x) && !isFinishedApplicationStatus(x)) : null) },
+    { kind: 'active', icon: 'school', label: t('dashboard.kpi.active'), value: activeStudents, delta: cmp(activeStudents, prevActive) },
+    { kind: 'enrolled', icon: 'verified', label: t('dashboard.kpi.enrolled'), value: enrolled, delta: cmp(enrolled, prevApp.data ? prevSum(isFinishedApplicationStatus) : null) },
   ];
+
+  // Задачи на сегодня: свои незакрытые со сроком до конца дня (и просроченные).
+  const today = tjToday();
+  const nowMs = Date.now();
+  const todayTasks = (tasksQuery.data ?? [])
+    .filter((x) => x.status !== 'DONE' && x.deadline && tjFormatDateKey(x.deadline) <= today)
+    .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())
+    .slice(0, 5);
+  const overdueCount = todayTasks.filter((x) => new Date(x.deadline!).getTime() < nowMs).length;
+  const approvals = (approvalsQuery.data ?? []).slice(0, 4);
+  const recent = (recentQuery.data?.items ?? []).slice(0, 5);
 
   return (
     <>
       <PeriodSwitcher state={period} busy={busy} />
       <DashboardDetails kind={detail} range={range} periodLabel={period.suffix} onClose={() => setDetail(null)} />
 
-      <div className="bento" style={{ marginBottom: 32, ...staleStyle }}>
-        {kpis.map((k, i) => (
-          <motion.div
-            key={k.label}
-            className={`bento-card${mayOpen(k.detail) ? ' is-clickable' : ''}${k.accent ? ' ' + k.accent : ''} ${k.span}${k.row ? ' ' + k.row : ''}`}
-            {...(openable(k.detail) ?? {})}
-            variants={fadeUp}
-            custom={i}
-            initial="hidden"
-            animate="show"
-            whileHover={{ y: -3 }}
-          >
-            <span className="bento-num">{k.eyebrow}</span>
-            <div style={{ marginTop: 'auto' }}>
-              <FitNumber
-                testId={`kpi-value-${i}`}
-                style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: k.accent === 'feature' ? 'clamp(80px, 9vw, 128px)' : 'clamp(48px, 6vw, 80px)',
-                  fontWeight: 500,
-                  letterSpacing: '-0.04em',
-                  lineHeight: 0.9,
-                  marginBottom: 12,
-                }}
-              >
-                {k.value}
-              </FitNumber>
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: k.accent === 'feature' ? 'rgba(255,255,255,0.55)'
-                  : k.accent === 'accent' ? 'rgba(5,7,6,0.65)'
-                  : 'var(--text-soft)',
-              }}>
-                {k.label}
-                {k.em && (
-                  <span style={{
-                    fontFamily: 'Times New Roman, Georgia, serif',
-                    fontStyle: 'italic',
-                    fontSize: 18,
-                    letterSpacing: '-0.01em',
-                    textTransform: 'none',
-                    marginLeft: 8,
-                    color: k.accent === 'feature' ? 'var(--primary-light)' : 'var(--primary-dark)',
-                  }}>{k.em}</span>
-                )}
-              </div>
-            </div>
-          </motion.div>
+      <section className="dash-kpis" aria-label={t('dashboard.v2.kpis')} style={staleStyle}>
+        {leadCards.map((k, i) => (
+          <KpiCard key={k.kind} def={k} index={i} note={vsPrev} noteTitle={prevTitle} open={openable(k.kind)} />
         ))}
-      </div>
+      </section>
 
-      {/* Financial bento — visible only for ADMIN / ACCOUNTANT */}
       {showFinance && finance && (
         <>
-          <div className="crm-section-head" style={{ marginTop: 8 }}>
-            <span className="crm-section-eyebrow">{t('eyebrow.financeMoney')}</span>
+          <div className="crm-section-head dash-section-head">
             <div className="crm-section-titleline">
               <h2 className="crm-section-title">{t('dashboard.section.finance')}</h2>
               <PeriodChip suffix={period.suffix} />
             </div>
+            {navCtx.show('finance:read', navCtx.elevated) && (
+              <Link to="/finance?tab=analytics" className="dash-link" data-testid="dash-finance-analytics">
+                {t('dashboard.v2.analytics')} <Icon name="arrow_forward" size={16} />
+              </Link>
+            )}
           </div>
-          <div className="bento" style={{ marginBottom: 32, ...staleStyle }}>
-            <motion.div
-              className={`bento-card feature span-3 row-2${mayOpen('profit') ? ' is-clickable' : ''}`}
-              {...(openable('profit') ?? {})}
-              whileHover={{ y: -3 }}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <span className="bento-num">{t('eyebrow.profit')} · 06</span>
-              <div style={{ marginTop: 'auto' }}>
-                <FitNumber testId="finance-profit-value" style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'clamp(56px, 7vw, 96px)',
-                  fontWeight: 500,
-                  letterSpacing: '-0.04em',
-                  lineHeight: 0.9,
-                  marginBottom: 12,
-                }}>{fmtMoney(finance.netProfit)}</FitNumber>
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  letterSpacing: '0.12em',
-                  color: 'rgba(255,255,255,0.55)',
-                  textTransform: 'uppercase',
-                }}>{`${t('dashboard.finance.netProfit')} ${period.suffix}`}</div>
-              </div>
-            </motion.div>
-
-            <SmallBento
-              eyebrow={`${t('eyebrow.income')} · 07`}
-              label={t('dashboard.finance.income')}
-              value={fmtMoney(finance.totalIncome)}
+          <section className="dash-kpis dash-kpis-money" style={staleStyle}>
+            <KpiCard
+              money
+              def={{ kind: 'profit', icon: 'savings', label: t('dashboard.finance.netProfit'), value: finance.netProfit, delta: cmp(finance.netProfit, prevFin.data?.netProfit) }}
+              note={vsPrev}
+              noteTitle={prevTitle}
+              open={openable('profit')}
+              valueTestId="finance-profit-value"
               accent
-              detail={openable('income')}
             />
-            <SmallBento
-              eyebrow={`${t('eyebrow.expense')} · 08`}
-              label={t('dashboard.finance.expense')}
-              value={fmtMoney(finance.totalExpense)}
-              detail={openable('expense')}
+            <KpiCard
+              money
+              def={{ kind: 'income', icon: 'trending_up', label: t('dashboard.finance.income'), value: finance.totalIncome, delta: cmp(finance.totalIncome, prevFin.data?.totalIncome) }}
+              note={vsPrev}
+              noteTitle={prevTitle}
+              open={openable('income')}
             />
-            <SmallBento
-              eyebrow={`${t('dashboard.finance.debt')} · 09`}
-              label={t('dashboard.finance.debtNow')}
-              value={String(pending.length)}
-              span="span-3"
-              detail={openable('debt')}
+            <KpiCard
+              money
+              def={{ kind: 'expense', icon: 'trending_down', label: t('dashboard.finance.expense'), value: finance.totalExpense, delta: cmp(finance.totalExpense, prevFin.data?.totalExpense, false) }}
+              note={vsPrev}
+              noteTitle={prevTitle}
+              open={openable('expense')}
             />
-          </div>
+            <KpiCard
+              def={{ kind: 'debt', icon: 'hourglass_top', label: t('dashboard.finance.debtNow'), value: pending.length, delta: undefined }}
+              note={t('dashboard.v2.now')}
+              open={openable('debt')}
+              warn={pending.length > 0}
+            />
+          </section>
         </>
       )}
 
-      {/* Top 3 performers — only ADMIN */}
-      {showTop && topPerformers.length > 0 && (
-        <>
-          <div className="crm-section-head" style={{ marginTop: 8 }}>
-            <span className="crm-section-eyebrow">{t('eyebrow.topTeamLeader')}</span>
-            <div className="crm-section-titleline">
-              <h2 className="crm-section-title">{t('dashboard.section.top')}</h2>
-              <PeriodChip suffix={period.suffix} />
+      <section className="dash-grid-3">
+        <BreakdownCard
+          title={t('dashboard.breakdown.funnel')}
+          subtitle={period.suffix}
+          total={appStats?.total}
+          action={canOpenApps ? { to: listLink({}) ?? '/leads', label: t('dashboard.v2.allLeads') } : undefined}
+          rows={byStatus.map((s) => ({
+            label: appStatusLabel(s.status),
+            value: s._count,
+            to: listLink({ status: s.status }),
+          }))}
+          style={staleStyle}
+        />
+
+        {showTasks && (
+          <div className="card dash-card" data-testid="dash-tasks">
+            <div className="dash-card-head">
+              <h3 className="dash-card-title">{t('dashboard.v2.tasksToday')}</h3>
+              {overdueCount > 0 && <span className="dash-pill is-warn">{t('dashboard.v2.overdue').replace('{n}', String(overdueCount))}</span>}
             </div>
+            {tasksQuery.isLoading ? (
+              <div className="dash-empty">{t('common.loading')}</div>
+            ) : todayTasks.length === 0 ? (
+              <div className="dash-empty">{t('dashboard.v2.noTasks')}</div>
+            ) : (
+              <ul className="dash-list">
+                {todayTasks.map((task) => {
+                  const late = new Date(task.deadline!).getTime() < nowMs;
+                  return (
+                    <li key={task.id}>
+                      <Link to={`/tasks?task=${task.id}`} className="dash-row">
+                        <Icon name={late ? 'error' : 'radio_button_unchecked'} size={18} className={late ? 'dash-ico-warn' : 'dash-ico-muted'} />
+                        <span className="dash-row-main">
+                          <span className="dash-row-title">{task.title}</span>
+                          <span className={`dash-row-sub${late ? ' is-warn' : ''}`}>
+                            {late ? `${t('dashboard.v2.overdueShort')} · ` : ''}
+                            {tjFormatDateKey(task.deadline!) === today ? `${t('dashboard.v2.today')}, ${tjFormatTime(task.deadline)}` : tjFormatDate(task.deadline)}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <Link to="/tasks" className="dash-link">{t('dashboard.v2.allTasks')} <Icon name="arrow_forward" size={16} /></Link>
           </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))',
-            gap: 14,
-            marginBottom: 32,
-            ...staleStyle,
-          }}>
-            {topPerformers.map((p, i) => (
-              <motion.div
-                key={p.id}
-                className="card"
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06 }}
-                style={{ padding: 24, position: 'relative' }}
-              >
-                <div style={{
-                  position: 'absolute', top: 16, right: 20,
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 28,
-                  letterSpacing: '-0.02em',
-                  color: i === 0 ? 'var(--primary-dark)' : 'var(--text-light)',
-                }}>
-                  {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
-                </div>
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  letterSpacing: '0.12em',
-                  color: 'var(--text-light)',
-                  marginBottom: 8,
-                  textTransform: 'uppercase',
-                }}>{t('eyebrow.rank')} #{i + 1}</div>
-                <div style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 22,
-                  fontWeight: 500,
-                  letterSpacing: '-0.01em',
-                  marginBottom: 16,
-                }}>{p.fullName}</div>
-                <FitNumber style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 36,
-                  fontWeight: 500,
-                  letterSpacing: '-0.03em',
-                  color: 'var(--primary-dark)',
-                  marginBottom: 6,
-                }}>{fmtMoney(p.salesAmount)}</FitNumber>
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  letterSpacing: '0.10em',
-                  color: 'var(--text-soft)',
-                  textTransform: 'uppercase',
-                }}>{t('kpi.col.enrolled').toUpperCase()} {p.applicationsEnrolled} · {t('kpi.col.conversion').toUpperCase()} {p.conversionRate}%</div>
-              </motion.div>
-            ))}
+        )}
+
+        {showTop && (
+          <div className="card dash-card" style={staleStyle} data-testid="dash-top">
+            <div className="dash-card-head">
+              <h3 className="dash-card-title">{t('dashboard.section.top')}</h3>
+              <span className="dash-card-sub">{period.suffix}</span>
+            </div>
+            {topPerformers.length === 0 ? (
+              <div className="dash-empty">{t('dashboard.v2.noTop')}</div>
+            ) : (
+              <ul className="dash-list">
+                {topPerformers.map((p, i) => (
+                  <li key={p.id} className="dash-person">
+                    <span className={`dash-rank r${i + 1}`}>#{i + 1}</span>
+                    <span className="dash-avatar">{initialsOf(p.fullName)}</span>
+                    <span className="dash-row-main">
+                      <span className="dash-row-title">{p.fullName}</span>
+                      <span className="dash-row-sub">
+                        {t('kpi.col.enrolled')}: {p.applicationsEnrolled} · {t('kpi.col.conversion')}: {p.conversionRate}%
+                      </span>
+                    </span>
+                    <span className="dash-money">{fmtMoney(p.salesAmount)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {navCtx.show('kpi:read', navCtx.isWorkforce) && <Link to="/kpi" className="dash-link">{t('dashboard.v2.allKpi')} <Icon name="arrow_forward" size={16} /></Link>}
           </div>
-        </>
+        )}
+      </section>
+
+      {(canApprove || canOpenApps) && (
+        <section className="dash-grid-2">
+          {canApprove && (
+            <div className="card dash-card" data-testid="dash-approvals">
+              <div className="dash-card-head">
+                <h3 className="dash-card-title">
+                  {t('dashboard.v2.approvals')}
+                  {(approvalsQuery.data?.length ?? 0) > 0 && <span className="dash-count"> · {approvalsQuery.data!.length}</span>}
+                </h3>
+              </div>
+              {approvalsQuery.isLoading ? (
+                <div className="dash-empty">{t('common.loading')}</div>
+              ) : approvals.length === 0 ? (
+                <div className="dash-empty">{t('dashboard.v2.noApprovals')}</div>
+              ) : (
+                <ul className="dash-list">
+                  {approvals.map((pay) => (
+                    <li key={pay.id}>
+                      <Link to={`/submissions/${pay.submissionId}`} className="dash-row">
+                        <span className="dash-row-main">
+                          <span className="dash-row-title">{pay.submission?.student?.fullName || (pay.submission as any)?.newStudentName || '—'}</span>
+                          <span className="dash-row-sub">
+                            {[pay.submission?.program?.name, pay.submission?.manager?.fullName].filter(Boolean).join(' · ')}
+                          </span>
+                        </span>
+                        <span className="dash-money">{fmtMoney(pay.amount, pay.submission?.currency || 'TJS')}</span>
+                        <Icon name="chevron_right" size={18} className="dash-ico-muted" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link to="/submissions?tab=pending" className="dash-link">{t('dashboard.v2.allApprovals')} <Icon name="arrow_forward" size={16} /></Link>
+            </div>
+          )}
+          {canOpenApps && (
+            <div className="card dash-card" data-testid="dash-recent">
+              <div className="dash-card-head">
+                <h3 className="dash-card-title">{t('dashboard.v2.recentLeads')}</h3>
+              </div>
+              {recentQuery.isLoading ? (
+                <div className="dash-empty">{t('common.loading')}</div>
+              ) : recent.length === 0 ? (
+                <div className="dash-empty">{t('common.empty')}</div>
+              ) : (
+                <ul className="dash-list">
+                  {recent.map((a: any) => (
+                    <li key={a.id}>
+                      <Link to={`/applications/${a.id}`} className="dash-row">
+                        <span className="dash-avatar">{initialsOf(a.fullName)}</span>
+                        <span className="dash-row-main">
+                          <span className="dash-row-title">{a.fullName}</span>
+                          <span className="dash-row-sub">{[a.phone, a.manager?.fullName || t('leads.manager.unassigned')].filter(Boolean).join(' · ')}</span>
+                        </span>
+                        <span className="badge badge-gray">{appStatusLabel(a.status)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link to="/leads" className="dash-link">{t('dashboard.v2.allLeads')} <Icon name="arrow_forward" size={16} /></Link>
+            </div>
+          )}
+        </section>
       )}
 
-      <div className="crm-section-head">
-        <span className="crm-section-eyebrow">{t('eyebrow.details')}</span>
+      <div className="crm-section-head dash-section-head">
         <div className="crm-section-titleline">
           <h2 className="crm-section-title">{t('dashboard.section.breakdown')}</h2>
           <PeriodChip suffix={period.suffix} />
         </div>
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 16, ...staleStyle }}>
-        {/* Страны идут первыми: это единственный вопрос о цели обучения,
-            на который клиент реально отвечает в форме лендинга. Раньше
-            первым стоял срез «по направлениям», где 100% лидов с сайта
-            показывались «Бакалавриатом» — направление формой не
-            спрашивается, бэкенд подставлял плейсхолдер. */}
+      <section className="dash-grid-3" style={staleStyle}>
+        {/* Страны первыми: это единственный вопрос о цели обучения, на который
+            клиент реально отвечает в форме сайта (направление там не спрашивают). */}
         <BreakdownCard
-          eyebrow={`01 · ${t('eyebrow.countries')}`}
           title={t('dashboard.breakdown.countries')}
           total={appStats?.total}
           rows={[
@@ -486,66 +557,34 @@ export default function Dashboard() {
               to: listLink({ country: c.country }),
             })),
             ...(countryUnset > 0
-              ? [{
-                  label: t('dashboard.breakdown.countryPending'),
-                  value: countryUnset,
-                  to: listLink({ countryPending: 'true' }),
-                  muted: true,
-                }]
+              ? [{ label: t('dashboard.breakdown.countryPending'), value: countryUnset, to: listLink({ countryPending: 'true' }), muted: true }]
               : []),
           ]}
         />
         <BreakdownCard
-          eyebrow={`02 · ${t('eyebrow.directions')}`}
           title={t('dashboard.breakdown.directions')}
           total={appStats?.total}
           rows={[
-            // Направления, которые клиент выбрал (или менеджер проставил
-            // руками). Лиды с лендинга сюда не попадают: там плейсхолдер, а
-            // не ответ — иначе весь входящий поток выглядел бы бакалавриатом.
             ...(appStats?.byDirection || []).map((d: any) => ({
               label: directionLabel(d.direction),
               value: d._count,
               to: listLink({ direction: d.direction }),
             })),
-            // …а вот и они, отдельной строкой. Раньше это была сноска под
-            // заголовком, и сумма строк не сходилась с «Всего заявок».
             ...(unconfirmedDirections > 0
-              ? [{
-                  label: t('dashboard.breakdown.directionsPending'),
-                  value: unconfirmedDirections,
-                  to: listLink({ directionPending: 'true' }),
-                  muted: true,
-                }]
+              ? [{ label: t('dashboard.breakdown.directionsPending'), value: unconfirmedDirections, to: listLink({ directionPending: 'true' }), muted: true }]
               : []),
           ]}
         />
         <BreakdownCard
-          eyebrow={`03 · ${t('eyebrow.cabinets')}`}
           title={t('dashboard.breakdown.cabinets')}
           total={stuStats?.total}
           rows={(stuStats?.byCabinet || []).map((c: any) => ({
-            label: c.cabinet == null
-              ? t('dashboard.breakdown.noCabinet')
-              : `${t('app.field.cabinet')} ${c.cabinet}`,
+            label: c.cabinet == null ? t('dashboard.breakdown.noCabinet') : `${t('app.field.cabinet')} ${c.cabinet}`,
             value: c._count,
-            // Кабинет без номера отфильтровать нечем — такая строка не ссылка.
             to: c.cabinet == null ? undefined : listLink({ cabinet: String(c.cabinet) }, '/students'),
           }))}
         />
-        <BreakdownCard
-          eyebrow={`04 · ${t('eyebrow.funnel')}`}
-          title={t('dashboard.breakdown.funnel')}
-          total={appStats?.total}
-          rows={byStatus.map((s) => ({
-            // Через хук, а не через STATUS_LABEL: разрез по статусам обязан
-            // переключаться на таджикский вместе с остальным дашбордом.
-            label: appStatusLabel(s.status),
-            value: s._count,
-            to: listLink({ status: s.status }),
-          }))}
-        />
-      </div>
+      </section>
     </>
   );
 }
@@ -567,170 +606,114 @@ function PeriodChip({ suffix }: { suffix: string }) {
   return <span className="crm-period-chip">{suffix}</span>;
 }
 
-function SmallBento({ eyebrow, label, value, accent, span = 'span-3', detail }: {
-  eyebrow: string; label: string; value: string; accent?: boolean; span?: string;
-  /** Свойства карточки-кнопки (окно подробностей), см. openable() в Dashboard. */
-  detail?: Record<string, unknown>;
+type KpiDef = { kind: DashboardDetailKind; icon: string; label: string; value: number | null; delta?: Delta };
+
+/** «2026-11-09» — календарный день срока по Душанбе. */
+function tjFormatDateKey(iso: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dushanbe', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+}
+
+function initialsOf(name: string): string {
+  return (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+}
+
+/**
+ * Карточка показателя: подпись, число, сравнение с прошлым периодом.
+ * Порядок строк «подпись → число» держим: на него опираются автотесты окон
+ * «подробнее» (вторая строка карточки — значение).
+ */
+function KpiCard({ def, note, noteTitle, open, index, money, accent, warn, valueTestId }: {
+  def: KpiDef;
+  note?: string;
+  noteTitle?: string;
+  open?: Record<string, unknown>;
+  index?: number;
+  money?: boolean;
+  accent?: boolean;
+  warn?: boolean;
+  valueTestId?: string;
 }) {
+  const value = def.value == null ? '—' : money ? fmtMoney(def.value) : def.value.toLocaleString('ru-RU');
   return (
     <motion.div
-      className={`bento-card ${accent ? 'accent' : ''} ${span}${detail ? ' is-clickable' : ''}`}
-      {...(detail ?? {})}
-      initial={{ opacity: 0, y: 20 }}
+      className={`dash-kpi${open ? ' is-clickable' : ''}${accent ? ' is-accent' : ''}${warn ? ' is-warn' : ''}`}
+      {...(open ?? {})}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -3 }}
+      transition={{ duration: 0.25, delay: (index ?? 0) * 0.03 }}
     >
-      <span className="bento-num">{eyebrow}</span>
-      <div style={{ marginTop: 'auto' }}>
-        <FitNumber style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(40px, 5vw, 56px)',
-          fontWeight: 500,
-          letterSpacing: '-0.04em',
-          lineHeight: 0.9,
-          marginBottom: 12,
-        }}>{value}</FitNumber>
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          color: accent ? 'rgba(5,7,6,0.65)' : 'var(--text-soft)',
-        }}>{label}</div>
+      <div className="dash-kpi-label">
+        <span>{def.label}</span>
       </div>
+      <FitNumber
+        testId={valueTestId ?? (index != null ? `kpi-value-${index}` : undefined)}
+        style={{ fontFamily: 'var(--font-display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}
+      >
+        {value}
+      </FitNumber>
+      <div className="dash-kpi-foot" title={noteTitle}>
+        {def.delta && <span className={`dash-delta is-${def.delta.tone}`}>{def.delta.text}</span>}
+        {note && <span>{note}</span>}
+      </div>
+      {/* Значок — последним в разметке: строки карточки читаются «подпись → сумма». */}
+      <span className="dash-kpi-icon is-corner" aria-hidden="true"><Icon name={def.icon} size={17} /></span>
     </motion.div>
   );
 }
 
-function BreakdownCard({
-  eyebrow,
-  title,
-  rows,
-  total,
-  note,
-}: {
-  eyebrow: string;
+/** Разрез «строка → число → доля» со ссылкой в отфильтрованный список. */
+function BreakdownCard({ title, subtitle, rows, total, action, style }: {
   title: string;
-  rows: Array<{
-    label: string;
-    value: any;
-    /** Куда ведёт строка. Без ссылки строка остаётся обычным текстом. */
-    to?: string;
-    /** Приглушённая строка «не указано» — она про отсутствие ответа. */
-    muted?: boolean;
-  }>;
-  /**
-   * От чего считать проценты. Общее число заявок/студентов периода, а не
-   * сумма строк: иначе «2 · 20%» означало бы «20% от тех десяти, у кого
-   * направление проставлено» — доля, которую никто на экране не видит.
-   */
+  subtitle?: string;
+  rows: Array<{ label: string; value: any; to?: string; muted?: boolean }>;
+  /** От чего считать доли — общее число за период, а не сумма строк. */
   total?: number;
-  /** Пояснение под заголовком: почему сумма строк меньше общего числа. */
-  note?: string;
+  action?: { to: string; label: string };
+  style?: React.CSSProperties;
 }) {
   const { t } = useT();
   const rowsSum = rows.reduce((s, r) => s + (Number(r.value) || 0), 0);
   const base = total && total > 0 ? total : rowsSum || 1;
-
   return (
-    <motion.div
-      className="card"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      style={{ padding: 24 }}
-    >
-      <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
-        letterSpacing: '0.16em',
-        color: 'var(--text-light)',
-        marginBottom: 6,
-      }}>
-        {eyebrow}
+    <div className="card dash-card" style={style}>
+      <div className="dash-card-head">
+        <h3 className="dash-card-title">{title}</h3>
+        {subtitle && <span className="dash-card-sub">{subtitle}</span>}
       </div>
-      <h3 style={{
-        fontFamily: 'var(--font-display)',
-        fontSize: 22,
-        fontWeight: 500,
-        letterSpacing: '-0.02em',
-        marginBottom: note ? 6 : 20,
-      }}>
-        {title}
-      </h3>
-      {note && (
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.04em',
-          color: 'var(--text-light)',
-          marginBottom: 20,
-        }}>
-          {note}
-        </div>
-      )}
       {rows.length === 0 ? (
-        <div style={{ color: 'var(--text-light)', fontSize: 14, padding: '12px 0' }}>{t('common.empty')}</div>
+        <div className="dash-empty">{t('common.empty')}</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="dash-bars">
           {rows.map((r) => {
             const n = Number(r.value) || 0;
             const exact = (n / base) * 100;
             const pct = Math.round(exact);
-            // Доля меньше половины процента округляется в ноль, и строка
-            // «4 · 0%» читается как ошибка. Показываем «<1%»: значение есть,
-            // просто оно мелкое на фоне всего потока заявок.
             const pctLabel = n > 0 && pct === 0 ? '<1%' : `${pct}%`;
             const body = (
               <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-                  <span style={{ fontSize: 14, color: r.muted ? 'var(--text-soft)' : undefined }}>{r.label}</span>
-                  <span style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {r.value}
-                    <span style={{ color: 'var(--text-light)', marginLeft: 6 }}>· {pctLabel}</span>
-                  </span>
+                <div className="dash-bar-top">
+                  <span className={r.muted ? 'is-muted' : undefined}>{r.label}</span>
+                  <span className="dash-bar-num">{r.value}<span> · {pctLabel}</span></span>
                 </div>
-                <div style={{
-                  height: 4,
-                  background: 'var(--bg-mute)',
-                  borderRadius: 2,
-                  overflow: 'hidden',
-                }}>
+                <div className="dash-bar-track">
                   <motion.div
+                    className="dash-bar-fill"
                     initial={{ width: 0 }}
                     animate={{ width: `${Math.max(exact, n > 0 ? 1.5 : 0)}%` }}
-                    transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-                    style={{
-                      height: '100%',
-                      background: 'var(--primary)',
-                      borderRadius: 2,
-                    }}
+                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                   />
                 </div>
               </>
             );
-            // Строка-ссылка, а не onClick на div: работает средняя кнопка
-            // мыши и Ctrl+клик «открыть в новой вкладке», как ждут от списка.
             return r.to ? (
-              <Link
-                key={r.label}
-                to={r.to}
-                className="breakdown-row is-link"
-                title={t('dashboard.breakdown.openList')}
-              >
-                {body}
-              </Link>
+              <Link key={r.label} to={r.to} className="breakdown-row is-link" title={t('dashboard.breakdown.openList')}>{body}</Link>
             ) : (
               <div key={r.label} className="breakdown-row">{body}</div>
             );
           })}
         </div>
       )}
-    </motion.div>
+      {action && <Link to={action.to} className="dash-link">{action.label} <Icon name="arrow_forward" size={16} /></Link>}
+    </div>
   );
 }
