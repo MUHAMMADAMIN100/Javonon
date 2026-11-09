@@ -17,6 +17,8 @@ import PartnerLogin from './pages/PartnerLogin';
 import PartnerCabinet from './pages/PartnerCabinet';
 import { watchIconFont } from './iconFont';
 import './index.css';
+// Кабинеты — в стиле новой CRM (только внутри .stu-page/.stu-login-page).
+import './cabinet-v2.css';
 
 // Пока шрифт значков грузится — пустое место вместо слов «arrow_outward» и т. п.
 watchIconFont();

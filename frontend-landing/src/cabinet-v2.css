@@ -1,0 +1,50 @@
+/*
+ * Кабинеты студента и партнёра, их вход и регистрация — в стиле новой CRM
+ * (редизайн 2026: Manrope + Inter, синий #01368B, спокойные карточки).
+ *
+ * ТОЛЬКО внутри .stu-page / .stu-login-page — эти классы есть лишь у кабинетов,
+ * публичный сайт не меняется. Переменные шрифтов и «ночного» фона
+ * переопределены на корне кабинета, поэтому их подхватывают и встроенные
+ * стили страниц (var(--display), var(--mono), var(--night)).
+ */
+.stu-page,
+.stu-login-page {
+  --display: 'Manrope', 'Inter', system-ui, sans-serif;
+  --mono: 'Inter', system-ui, sans-serif;
+  /* Чёрные плашки (баланс партнёра, боковая панель входа) — фирменный синий. */
+  --night: #01368B;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+.stu-page h1, .stu-page h2, .stu-page h3,
+.stu-login-page h1, .stu-login-page h2, .stu-login-page h3 {
+  font-family: var(--display);
+  letter-spacing: -0.015em;
+}
+.stu-page .stu-card {
+  border-radius: 14px;
+  border: 1px solid #E4E9F1;
+  box-shadow: none;
+}
+.stu-page .stu-section-title { font-family: var(--display); font-weight: 700; }
+.stu-page .stu-badge { font-family: 'Inter', sans-serif; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.stu-page .stu-tabs { border-radius: 12px; }
+.stu-page .stu-progress-fill { background: #01368B; }
+.stu-page :where(input, select, textarea):focus-visible,
+.stu-login-page :where(input, select, textarea):focus-visible {
+  outline: 2px solid #1E5BB8;
+  outline-offset: 1px;
+}
+/* Плитки статистики партнёра — без лишнего зазора, по 2 на телефоне (как было). */
+.stu-page .partner-stats { align-items: stretch; }
+/* Главная кнопка входа/регистрации — фирменный синий, как в CRM. */
+.stu-login-page button[type='submit'],
+.stu-page form button[type='submit'] {
+  background: #01368B;
+  border-color: #01368B;
+  color: #fff;
+}
+.stu-login-page button[type='submit']:hover:not(:disabled),
+.stu-page form button[type='submit']:hover:not(:disabled) {
+  background: #012457;
+  border-color: #012457;
+}
