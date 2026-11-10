@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Logger, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Logger, Param, Patch, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -19,6 +19,7 @@ export function financeElevated(me: any): boolean {
   return roleAllows(me, 'finance:update', () => isElevated(me));
 }
 import { FinanceService, CreateTransactionDto } from './finance.service';
+import { FinanceAccountsService, AccountDto, TransferDto } from './finance-accounts.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionCategory, TransactionType } from '@prisma/client';
@@ -214,7 +215,79 @@ export class FinanceController {
     private svc: FinanceService,
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private accounts: FinanceAccountsService,
   ) {}
+
+  // ── Счета (раздел «Финансы», 10.11.2026) ──────────────────────────────
+  // Смотреть — всем, кому открыт раздел (finance:read на контроллере);
+  // менять счета и раскладку — «Финансы — изменение»; переводы вносить —
+  // «Финансы — внесение», отменять — «Финансы — удаление». У должностей —
+  // основатель, админ, бухгалтер.
+
+  /** Счета с остатками на сегодня и сколько операций ещё без счёта. */
+  @Get('accounts')
+  listAccounts() {
+    return this.accounts.listAccounts();
+  }
+
+  @Post('accounts')
+  @Permissions('finance:update')
+  createAccount(@Body() dto: AccountDto) {
+    return this.accounts.createAccount(dto);
+  }
+
+  @Patch('accounts/:id')
+  @Permissions('finance:update')
+  updateAccount(@Param('id') id: string, @Body() dto: AccountDto) {
+    return this.accounts.updateAccount(id, dto);
+  }
+
+  /** С какого дня ведутся остатки счетов. */
+  @Get('config')
+  getConfig() {
+    return this.accounts.getConfig();
+  }
+
+  @Put('config')
+  @Permissions('finance:update')
+  setConfig(@Body() dto: { balanceSince?: string | null }) {
+    return this.accounts.setConfig(dto);
+  }
+
+  /** Раскладка операций без счёта: способ оплаты · валюта → счёт. */
+  @Get('channel-map')
+  channelMap() {
+    return this.accounts.channelMap();
+  }
+
+  @Put('channel-map')
+  @Permissions('finance:update')
+  setChannelMap(@Body() dto: { channel?: string; currency?: string; accountId?: string | null }) {
+    return this.accounts.setChannelMap(dto);
+  }
+
+  /** Остаток в сомони на конец каждого дня месяца (?ym=ГГГГ-ММ). */
+  @Get('balance-days')
+  balanceDays(@Query('ym') ym?: string) {
+    return this.accounts.balanceDays(String(ym || ''));
+  }
+
+  @Get('transfers')
+  listTransfers(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.accounts.listTransfers({ from: parseDate(from, 'from'), to: parseDate(to, 'to', true) });
+  }
+
+  @Post('transfers')
+  @Permissions('finance:create')
+  createTransfer(@Body() dto: TransferDto, @CurrentUser() me: any) {
+    return this.accounts.createTransfer(dto, me.id);
+  }
+
+  @Delete('transfers/:id')
+  @Permissions('finance:delete')
+  reverseTransfer(@Param('id') id: string) {
+    return this.accounts.reverseTransfer(id);
+  }
 
   @Get('transactions')
   list(

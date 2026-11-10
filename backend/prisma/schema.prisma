@@ -1047,6 +1047,12 @@ model Transaction {
   // Метка для бонусной системы: уже учтена в SalaryRecord ?
   bonusApplied Boolean @default(false)
 
+  // Счёт, на который пришли / с которого ушли деньги (раздел «Финансы»,
+  // 10.11.2026). Пусто у старых операций и у операций из других разделов:
+  // их счёт определяется по способу оплаты и валюте (FinanceChannelMap).
+  accountId String?
+  account   FinanceAccount? @relation("TransactionAccount", fields: [accountId], references: [id], onDelete: SetNull)
+
   // Soft-delete для возвратов / отменённых сделок (bug #25 из audit:edge-cases).
   // Когда SaleSubmission переходит в CANCELLED, оригинальная INCOME-транзакция
   // помечается reversedAt=now() (для аудит-трейла остаётся, но исключается
@@ -1064,6 +1070,7 @@ model Transaction {
   @@index([managerId])
   @@index([paidViaId])
   @@index([reversedAt])
+  @@index([accountId])
 }
 
 // ============================================================
@@ -2795,4 +2802,81 @@ model PaymentStage {
   @@index([status, dueDate])
   @@index([dueDate])
   @@index([paymentId])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Финансы: счета, переводы между ними и раскладка операций без счёта
+// (перенос раздела из Sabt, макет утверждён 10.11.2026).
+// ─────────────────────────────────────────────────────────────────────
+enum FinanceAccountKind {
+  BANK
+  CASH
+  SAVINGS
+}
+
+/// Счёт компании: банк, наличные или накопления. Остаток не хранится —
+/// считается: стартовый остаток + доходы − расходы ± переводы.
+model FinanceAccount {
+  id           String             @id @default(uuid())
+  name         String
+  kind         FinanceAccountKind @default(BANK)
+  /// Валюта счёта; у каждой операции на счёте та же валюта.
+  currency     String             @default("TJS")
+  color        String?
+  /// Сколько было на счёте в день запуска учёта.
+  startBalance Float              @default(0)
+  archived     Boolean            @default(false)
+  position     Int                @default(0)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  transactions Transaction[]       @relation("TransactionAccount")
+  transfersOut FinanceTransfer[]   @relation("FinanceTransferFrom")
+  transfersIn  FinanceTransfer[]   @relation("FinanceTransferTo")
+  channelMaps  FinanceChannelMap[]
+}
+
+/// Перевод между своими счетами — в доход и расход не входит. Если валюты
+/// счетов разные, toAmount — сколько пришло на счёт «куда».
+model FinanceTransfer {
+  id            String         @id @default(uuid())
+  fromAccountId String
+  fromAccount   FinanceAccount @relation("FinanceTransferFrom", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  toAccountId   String
+  toAccount     FinanceAccount @relation("FinanceTransferTo", fields: [toAccountId], references: [id], onDelete: Restrict)
+  amount        Float
+  toAmount      Float
+  date          DateTime
+  comment       String?
+  recordedById  String?
+  /// Отменён: из остатков исключён, в журнале виден.
+  reversedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([date])
+  @@index([fromAccountId])
+  @@index([toAccountId])
+}
+
+/// Куда класть операции без счёта: способ оплаты + валюта → счёт.
+/// channel — значение PaymentChannel или 'NONE' (способ не указан).
+model FinanceChannelMap {
+  id        String         @id @default(uuid())
+  channel   String
+  currency  String
+  accountId String
+  account   FinanceAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  updatedAt DateTime       @updatedAt
+
+  @@unique([channel, currency])
+}
+
+/// Настройки раздела «Финансы» — одна строка (id = 'default').
+model FinanceConfig {
+  id           String    @id @default("default")
+  /// С этого дня ведутся остатки счетов: более ранние операции на остатки
+  /// не влияют (в отчётах и графиках остаются). Пусто — вся история.
+  balanceSince DateTime?
+  updatedAt    DateTime  @updatedAt
 }

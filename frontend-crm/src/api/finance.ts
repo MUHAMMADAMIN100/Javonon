@@ -144,6 +144,9 @@ export interface Transaction {
   student?: { id: string; fullName: string } | null;
   manager?: { id: string; fullName: string; role?: string } | null;
   recordedBy?: { id: string; fullName: string; role?: string } | null;
+  /** Счёт операции; пусто — счёт определяется по способу оплаты (Настройки). */
+  accountId?: string | null;
+  account?: FinanceAccountRef | null;
 }
 
 /**
@@ -199,6 +202,7 @@ export interface CreateTransactionDto {
   productCategoryEnum?: ProductCategoryEnum | null;
   paymentPhase?: PaymentPhaseStatus | null;
   paidViaId?: string | null;
+  accountId?: string | null;
 }
 
 export interface TransactionFilters {
@@ -447,3 +451,109 @@ export const uploadReceipt = (file: File) => {
     { headers: { 'Content-Type': 'multipart/form-data' } },
   ).then((r) => r.data);
 };
+
+// ── Счета, переводы, остаток по дням (раздел «Финансы», 10.11.2026) ──
+
+export type FinanceAccountKind = 'BANK' | 'CASH' | 'SAVINGS';
+export interface FinanceAccountRef {
+  id: string;
+  name: string;
+  currency: string;
+  color: string | null;
+}
+export interface FinanceAccount extends FinanceAccountRef {
+  kind: FinanceAccountKind;
+  startBalance: number;
+  archived: boolean;
+  position: number;
+  createdAt: string;
+  /** Остаток на сегодня: старт + доходы − расходы ± переводы. */
+  balance: number;
+}
+export interface AccountsResponse {
+  accounts: FinanceAccount[];
+  /** Сумма остатков действующих счетов по валютам. */
+  totals: Record<string, number>;
+  /** Операции, которым ещё не назначен счёт (ни сами, ни по способу оплаты). */
+  unassigned: { count: number; byCurrency: Record<string, { income: number; expense: number }> };
+  /** С какого дня ведутся остатки (ГГГГ-ММ-ДД); null — вся история. */
+  balanceSince: string | null;
+}
+export interface AccountInput {
+  name?: string;
+  kind?: FinanceAccountKind;
+  currency?: string;
+  color?: string | null;
+  startBalance?: number;
+  archived?: boolean;
+}
+export const listAccounts = () => api.get<AccountsResponse>('/finance/accounts').then((r) => r.data);
+export const createAccount = (dto: AccountInput) => api.post<FinanceAccount>('/finance/accounts', dto).then((r) => r.data);
+export const updateAccount = (id: string, dto: AccountInput) =>
+  api.patch<FinanceAccount>(`/finance/accounts/${id}`, dto).then((r) => r.data);
+
+/** Пара «способ оплаты · валюта» у операций без счёта и куда их класть. */
+export interface ChannelMapRow {
+  channel: string;
+  currency: string;
+  count: number;
+  accountId: string | null;
+}
+export const getChannelMap = () =>
+  api.get<{ rows: ChannelMapRow[] }>('/finance/channel-map').then((r) => r.data);
+/** С какого дня ведутся остатки: более ранние операции на них не влияют, в отчётах остаются. */
+export interface FinanceConfig {
+  balanceSince: string | null;
+}
+export const getFinanceConfig = () => api.get<FinanceConfig>('/finance/config').then((r) => r.data);
+export const setFinanceConfig = (dto: FinanceConfig) => api.put<FinanceConfig>('/finance/config', dto).then((r) => r.data);
+
+export const setChannelMap = (dto: { channel: string; currency: string; accountId: string | null }) =>
+  api.put('/finance/channel-map', dto).then((r) => r.data);
+
+export interface BalanceDay {
+  date: string;
+  /** Остаток в сомони на конец дня; null — день ещё не наступил. */
+  balance: number | null;
+  income: number;
+  expense: number;
+}
+export interface BalanceDays {
+  ym: string;
+  today: string;
+  /** День начала учёта остатков; дни раньше — null. */
+  since: string | null;
+  hasAccounts: boolean;
+  days: BalanceDay[];
+}
+export const getBalanceDays = (ym: string) =>
+  api.get<BalanceDays>('/finance/balance-days', { params: { ym } }).then((r) => r.data);
+
+export interface FinanceTransfer {
+  id: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  toAmount: number;
+  date: string;
+  comment: string | null;
+  recordedById: string | null;
+  reversedAt: string | null;
+  createdAt: string;
+  fromAccount: FinanceAccountRef;
+  toAccount: FinanceAccountRef;
+}
+export interface TransferInput {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  toAmount?: number | null;
+  date?: string;
+  comment?: string | null;
+}
+export const listTransfers = (params: { from?: string; to?: string } = {}) =>
+  api.get<FinanceTransfer[]>('/finance/transfers', { params }).then((r) => r.data);
+export const createTransfer = (dto: TransferInput) =>
+  api.post<FinanceTransfer>('/finance/transfers', dto).then((r) => r.data);
+export const reverseTransfer = (id: string) =>
+  api.delete<FinanceTransfer>(`/finance/transfers/${id}`).then((r) => r.data);

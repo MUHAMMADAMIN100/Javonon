@@ -51,6 +51,8 @@ export interface NavItem {
    * ловятся автоматически по префиксу `to`.
    */
   aliases?: string[];
+  /** Подпись на нижней панели телефона, если она короче или понятнее основной. */
+  tabLabelKey?: string;
   visible: (c: NavCtx) => boolean;
 }
 
@@ -142,8 +144,12 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: 'account_balance_wallet',
     labelKey: 'nav.group.finance',
     items: [
-      { to: '/finance', icon: 'payments', labelKey: 'sidebar.finance', visible: (c) => c.show('finance:read', c.elevated) },
+      // Раздел «Финансы» из Sabt (10.11.2026): Обзор, Транзакции, Настройки;
+      // «Зарплата» — пока отдельным пунктом (во 2-й части уйдёт в «Расход»).
+      { to: '/finance', icon: 'space_dashboard', labelKey: 'sidebar.financeOverview', tabLabelKey: 'sidebar.finance', visible: (c) => c.show('finance:read', c.elevated) },
       { to: '/salary', icon: 'paid', labelKey: 'sidebar.salary', visible: (c) => c.show('salary:read', c.elevated) },
+      { to: '/finance/transactions', icon: 'swap_vert', labelKey: 'sidebar.financeTransactions', visible: (c) => c.show('finance:read', c.elevated) },
+      { to: '/finance/settings', icon: 'tune', labelKey: 'sidebar.financeSettings', visible: (c) => c.show('finance:read', c.elevated) },
     ],
   },
   {

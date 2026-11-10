@@ -622,6 +622,12 @@ table, .num, input[type='number'] { font-variant-numeric: tabular-nums; }
   .cmdk { max-height: calc(100dvh - 24px); }
 }
 
+/* Телефон: старое правило из index.css (≤600px) ставило низ страницы 16px !important — последние строки
+   (например «Вперёд» у пагинации) оказывались под кнопкой звонка и нижней панелью. Возвращаем запас под панель. */
+@media (max-width: 600px) {
+  html body .app-layout.v2 .main .content:not(:has(.chat-card)) { padding-bottom: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom, 0px)) !important; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-layout.v2 .rail-btn, .app-layout.v2 .sidebar-panel-nav a { transition: none; }
   .app-layout.v2 .rail-skeleton { animation: none; }
@@ -892,3 +898,244 @@ table, .num, input[type='number'] { font-variant-numeric: tabular-nums; }
 @media (min-width: 901px) {
   .partner-actions { flex-wrap: wrap; row-gap: 4px; }
 }
+
+/* ═════════════════ Финансы (перенос из Sabt, 10.11.2026) ═════════════════
+   Обзор · Транзакции · Настройки. Классы fin-* — только для этих экранов. */
+.fin-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  margin: 0 0 18px;
+}
+.fin-toolbar .page-tabs { margin: 0; border-bottom: 0; background: #E9EEF5; border-radius: 12px; padding: 4px; gap: 4px; }
+.fin-toolbar .page-tab { min-height: 36px; border-bottom: 0; margin: 0; border-radius: 9px; padding: 0 14px; }
+.fin-toolbar .page-tab.is-active { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(10, 13, 26, .08); }
+.fin-toolbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.fin-btn-in { color: var(--success) !important; border-color: #BFE3CB !important; }
+.fin-btn-out { color: #B91C1C !important; border-color: #F5C2C2 !important; }
+
+.fin-monthnav { display: inline-flex; align-items: center; gap: 8px; }
+.fin-monthnav-box { display: inline-flex; align-items: center; gap: 2px; height: 40px; padding: 0 4px; border: 1px solid #D5DDE8; border-radius: 10px; background: #fff; }
+.fin-monthnav-arrow { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--text-soft); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.fin-monthnav-arrow:hover { background: #EEF2F8; color: var(--text); }
+.fin-monthnav-label { min-width: 128px; text-align: center; font: 700 14px var(--font-display); }
+.fin-monthnav-busy { color: var(--text-light); font-weight: 700; }
+
+.fin-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.fin-block { margin-bottom: 22px; }
+.fin-card.fin-block, .fin-recent, .fin-flow, .fin-curve, .fin-cal { margin-bottom: 18px; }
+.fin-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.fin-card-title { margin: 0; font: 700 15px var(--font-display); letter-spacing: -0.01em; color: var(--text); }
+.fin-card-note { font-size: 12.5px; color: var(--text-light); }
+.fin-card-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border-soft); display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--text-soft); }
+.fin-card-links { display: flex; flex-wrap: wrap; gap: 14px; }
+.fin-link { background: none; border: 0; padding: 0; color: var(--primary); font: 600 13.5px 'Inter', sans-serif; cursor: pointer; text-decoration: none; }
+.fin-link:hover { color: #012457; text-decoration: underline; }
+.fin-empty-line { margin: 0; color: var(--text-light); font-size: 14px; }
+.fin-muted-line { margin: 0; color: var(--text-light); font-size: 12.5px; line-height: 1.45; }
+.fin-num { font-family: var(--font-display); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fin-big { font: 800 28px var(--font-display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+.fin-card .is-in, .fin-big.is-in, .fin-num.is-in, .fin-cal-head .is-in, .fin-cal-sum .is-in { color: var(--success); }
+.fin-card .is-out, .fin-big.is-out, .fin-num.is-out, .fin-cal-head .is-out, .fin-cal-sum .is-out { color: #B91C1C; }
+.fin-money { font-family: var(--font-display); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+.fin-money.is-in { color: var(--success); }
+.fin-money.is-out { color: #B91C1C; }
+.fin-money-sub { color: var(--text-light); font-weight: 600; }
+.fin-subtitle { margin: 6px 0 10px; font: 700 14px var(--font-display); color: var(--text); }
+
+.fin-acc-mark { border-radius: 8px; color: #fff; font-family: var(--font-display); font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.fin-acc-inline { display: inline-flex; align-items: center; gap: 8px; }
+.fin-acc-inline.is-strong { font-weight: 600; }
+.fin-cur-chip { font-size: 11px; font-weight: 700; color: var(--text-light); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; }
+
+/* Деньги на счетах */
+.fin-accounts { margin-bottom: 18px; display: flex; flex-direction: column; gap: 10px; }
+.fin-acc-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 12px; }
+.fin-acc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.fin-acc-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.fin-acc-card.is-skeleton { min-height: 84px; background: linear-gradient(90deg, #F1F4F9 0%, #E9EEF5 50%, #F1F4F9 100%); background-size: 200% 100%; animation: fin-shimmer 1.4s ease-in-out infinite; border-color: transparent; }
+@keyframes fin-shimmer { to { background-position: -200% 0; } }
+.fin-acc-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.fin-acc-name { font-size: 13.5px; font-weight: 600; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; }
+.fin-acc-balance { font: 800 21px var(--font-display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.fin-acc-balance.is-out { color: #B91C1C; }
+.fin-warn-line { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; padding: 8px 12px; border-radius: 10px; background: #FFF4E5; color: #92400E; font-size: 13px; font-weight: 600; text-decoration: none; margin: 0; }
+a.fin-warn-line:hover { background: #FFEAD0; }
+.fin-acc-empty { flex-direction: row; align-items: center; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.fin-acc-empty > .material-symbols-rounded { color: var(--primary); width: 48px; height: 48px; border-radius: 12px; background: #E8F0FB; display: inline-flex; align-items: center; justify-content: center; }
+.fin-acc-empty > div { flex: 1 1 260px; display: flex; flex-direction: column; gap: 4px; }
+
+/* Карточки месяца */
+.fin-month { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
+.fin-month-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(280px, 0.85fr); gap: 14px; }
+.fin-rows { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.fin-row { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 8px; font-size: 14px; }
+.fin-row:hover { background: #F8FAFD; }
+.fin-dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 10px; }
+.fin-row-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-bars { display: flex; flex-direction: column; gap: 10px; }
+.fin-bar-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 13px; }
+.fin-bar { grid-column: 1 / -1; height: 10px; border-radius: 999px; background: #EEF2F7; overflow: hidden; }
+.fin-bar > span { display: block; height: 100%; border-radius: 999px; }
+.fin-formula { margin: 0; font-size: 12.5px; color: var(--text-soft); line-height: 1.45; }
+.fin-note-box { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--bg); font-size: 12.5px; color: var(--text-soft); line-height: 1.45; }
+.fin-qcards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.fin-qcard { text-align: left; background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; font-family: 'Inter', sans-serif; color: var(--text); transition: border-color .12s, box-shadow .12s; min-width: 0; }
+.fin-qcard:hover { border-color: #B9C7DD; box-shadow: 0 8px 20px -14px rgba(10, 13, 26, .35); }
+.fin-qcard-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--text-light); font-weight: 500; }
+.fin-qcard-head .material-symbols-rounded { color: var(--primary); }
+.fin-qcard-value { font: 800 21px var(--font-display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.fin-qcard-value.is-out { color: #B91C1C; }
+.fin-qcard-sub { font-size: 12px; color: var(--text-light); line-height: 1.4; }
+
+/* Денежный поток за 12 месяцев */
+.fin-flow-totals { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--text-soft); }
+.fin-flow-chart { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; align-items: end; height: 220px; padding-top: 6px; border-bottom: 1px solid var(--border); }
+.fin-flow-col { height: 100%; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end; gap: 6px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; padding: 4px 2px 0; min-width: 0; }
+.fin-flow-col:hover { background: #F5F8FC; }
+.fin-flow-col.is-current { background: #EEF3FB; }
+.fin-flow-bars { flex: 1 1 auto; display: flex; align-items: flex-end; justify-content: center; gap: 3px; min-height: 0; }
+.fin-flow-in, .fin-flow-out { width: 38%; max-width: 22px; border-radius: 5px 5px 0 0; min-height: 0; }
+.fin-flow-in { background: #16A34A; }
+.fin-flow-out { background: repeating-linear-gradient(135deg, #DC2626 0 4px, #EF6B6B 4px 7px); }
+.fin-flow-label { font-size: 11.5px; color: var(--text-light); font-weight: 600; text-align: center; padding-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fin-flow-col.is-current .fin-flow-label { color: var(--primary); }
+
+/* Последние операции и таблицы */
+.fin-table-wrap { overflow-x: auto; margin: 0 -18px -18px; }
+.fin-recent-table { width: 100%; }
+.fin-recent-table th:first-child, .fin-recent-table td:first-child { padding-left: 18px; }
+.fin-recent-table th:last-child, .fin-recent-table td:last-child { padding-right: 18px; }
+.tx-row.is-reversed td { opacity: .55; }
+.table tr.is-archived td { opacity: .6; }
+.fin-tr-flow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-weight: 600; }
+.fin-tr-acc { display: inline-flex; align-items: center; gap: 8px; }
+.fin-tr-arrow { color: var(--text-light); font-size: 20px; }
+
+/* Кривая остатка */
+.fin-curve-box { position: relative; }
+.fin-curve-box svg { display: block; }
+.fin-curve-tip { position: absolute; top: 0; transform: translateX(-50%); background: #0A0D1A; color: #fff; border-radius: 10px; padding: 8px 10px; font-size: 12px; display: flex; flex-direction: column; gap: 2px; pointer-events: none; white-space: nowrap; box-shadow: var(--shadow-lg); }
+.fin-curve-tip .is-in { color: #86EFAC; }
+.fin-curve-tip .is-out { color: #FCA5A5; }
+
+/* Календарь операций */
+.fin-cal-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 14px; }
+.fin-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.fin-cal-wd { font-size: 12px; font-weight: 600; color: var(--text-light); padding: 0 6px; }
+.fin-cal-wd.is-wknd { color: #8A94AB; }
+.fin-cal-day { min-height: 118px; border: 1px solid var(--border-soft); border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 3px; background: #fff; min-width: 0; }
+.fin-cal-day.is-empty { border-color: transparent; background: transparent; }
+.fin-cal-day.is-past { background: #FBFCFE; }
+.fin-cal-day.is-today { border: 1.5px solid var(--primary); background: #EEF3FB; }
+.fin-cal-day.is-drop { outline: 2px dashed var(--primary); outline-offset: -2px; }
+.fin-cal-daytop { display: flex; align-items: center; gap: 4px; min-height: 22px; }
+.fin-cal-num { font: 700 12.5px var(--font-display); color: var(--text-soft); }
+.fin-cal-day.is-today .fin-cal-num { color: var(--primary); }
+.fin-cal-sum { font-size: 10.5px; font-weight: 600; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fin-cal-add { margin-left: auto; width: 22px; height: 22px; border: 0; border-radius: 6px; background: transparent; color: var(--text-light); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity .12s; }
+.fin-cal-sum + .fin-cal-add { margin-left: 2px; }
+.fin-cal-day:hover .fin-cal-add, .fin-cal-add:focus-visible { opacity: 1; }
+.fin-cal-add:hover { background: #E8F0FB; color: var(--primary); }
+.fin-cal-item { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 5px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; font: 500 12px 'Inter', sans-serif; color: var(--text); text-align: left; min-height: 30px; }
+.fin-cal-item.is-small { font-size: 11.5px; min-height: 24px; padding: 2px 4px; }
+.fin-cal-item:hover { background: #EEF3FB; }
+.fin-cal-item[draggable="true"] { cursor: grab; }
+.fin-cal-dot { width: 6px; height: 6px; border-radius: 999px; flex: 0 0 6px; }
+.fin-cal-item.tone-in .fin-cal-dot { background: #16A34A; }
+.fin-cal-item.tone-out .fin-cal-dot { background: #DC2626; }
+.fin-cal-item.tone-move .fin-cal-dot { background: var(--primary); }
+.fin-cal-name { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fin-cal-amt { font-weight: 700; white-space: nowrap; }
+.fin-cal-item.tone-in .fin-cal-amt { color: var(--success); }
+.fin-cal-item.tone-out .fin-cal-amt { color: #B91C1C; }
+.fin-cal-item.tone-move .fin-cal-amt { color: var(--text-soft); }
+.fin-cal-more { border: 0; background: transparent; color: var(--primary); font: 600 11.5px 'Inter', sans-serif; cursor: pointer; text-align: left; padding: 2px 4px; }
+.fin-cal-mini { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.fin-cal-mini .fin-cal-wd { text-align: center; padding: 0; }
+.fin-cal-miniday { min-height: 44px; border: 1px solid var(--border-soft); border-radius: 10px; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font: 600 13px var(--font-display); color: var(--text-soft); cursor: pointer; padding: 0; }
+.fin-cal-miniday.is-today { color: var(--primary); border-color: #9DB6DC; }
+.fin-cal-miniday.is-picked { background: var(--primary); border-color: var(--primary); color: #fff; }
+.fin-cal-dots { display: flex; gap: 3px; min-height: 5px; }
+.fin-cal-dots i { width: 5px; height: 5px; border-radius: 999px; }
+.fin-cal-dots .tone-in { background: #16A34A; }
+.fin-cal-dots .tone-out { background: #DC2626; }
+.fin-cal-dots .tone-move { background: var(--primary); }
+.fin-cal-miniday.is-picked .fin-cal-dots i { background: #fff; }
+.fin-cal-daylist { display: flex; flex-direction: column; gap: 4px; }
+.fin-cal-daylist .fin-subtitle::first-letter { text-transform: uppercase; }
+.fin-cal-addday { align-self: stretch; justify-content: center; margin-top: 6px; min-height: 44px; }
+
+/* «+» в дне: доход или расход */
+.fin-pick-backdrop { position: fixed; inset: 0; z-index: 900; background: rgba(7, 11, 23, .35); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.fin-pick { background: #fff; border-radius: 16px; padding: 16px; display: flex; flex-wrap: wrap; gap: 8px; box-shadow: var(--shadow-lg); }
+
+/* Разделы «Финансов» чипами — только телефон */
+.fin-subnav { display: none; }
+
+/* Настройки */
+.fin-settings-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.fin-settings-head > div { max-width: 760px; display: flex; flex-direction: column; gap: 4px; }
+.fin-inline-edit { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.fin-inline-edit .crm-input { width: 130px; min-height: 34px; text-align: right; }
+.fin-link-num { background: none; border: 0; padding: 4px 6px; border-radius: 8px; cursor: pointer; font: 700 14px var(--font-display); color: var(--text); display: inline-flex; align-items: center; gap: 6px; }
+.fin-link-num:hover { background: #EEF2F8; }
+.fin-link-num .material-symbols-rounded { color: var(--text-light); }
+.fin-map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.fin-map-item { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.fin-map-label .fin-muted-line { display: inline; }
+.fin-colors { border: 0; padding: 0; margin: 0; }
+.fin-colors legend { font-size: 13px; font-weight: 600; color: var(--text-soft); margin-bottom: 8px; padding: 0; }
+.fin-color-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.fin-color { width: 32px; height: 32px; border-radius: 10px; border: 2px solid transparent; cursor: pointer; }
+.fin-color.is-on { border-color: var(--text); box-shadow: inset 0 0 0 3px #fff; }
+
+@media (max-width: 1180px) {
+  .fin-month-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-result { grid-column: 1 / -1; }
+  .fin-qcards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .fin-subnav { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: -4px 0 14px; padding: 0 0 2px; }
+  .fin-subnav::-webkit-scrollbar { display: none; }
+  .fin-subnav-chip { flex: 0 0 auto; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #D5DDE8; background: #fff; color: var(--text); font: 600 13px 'Inter', sans-serif; display: inline-flex; align-items: center; text-decoration: none; }
+  .fin-subnav-chip.is-active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .fin-toolbar { gap: 10px; }
+  .fin-toolbar .page-tabs { width: 100%; }
+  .fin-toolbar .page-tab { flex: 1 1 0; justify-content: center; }
+  .fin-monthnav { width: 100%; }
+  .fin-monthnav-box { flex: 1 1 auto; justify-content: space-between; height: 44px; }
+  .fin-monthnav-arrow { width: 40px; height: 40px; }
+  .fin-toolbar-actions { margin-left: 0; width: 100%; }
+  .fin-toolbar-actions .btn { flex: 1 1 0; justify-content: center; min-height: 44px; }
+  .fin-flow-chart { height: 180px; gap: 4px; }
+  .fin-flow-label { font-size: 10px; }
+}
+@media (max-width: 720px) {
+  .fin-month-cards { grid-template-columns: 1fr; }
+  .fin-acc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .fin-acc-card { padding: 11px 12px; gap: 6px; }
+  .fin-acc-balance { font-size: 17px; }
+  .fin-card { padding: 14px; }
+  .fin-big { font-size: 24px; }
+  .fin-qcards { gap: 8px; }
+  .fin-qcard { padding: 12px; }
+  .fin-qcard-value { font-size: 18px; }
+  .fin-table-wrap { margin: 0 -14px -14px; }
+  .fin-flow-totals { width: 100%; }
+  /* 12 подписей в строку не помещаются — через месяц, текущий всегда. */
+  .fin-flow-col.is-skip:not(.is-current) .fin-flow-label { visibility: hidden; }
+  .fin-flow-label { overflow: visible; text-overflow: clip; }
+}
+@media (max-width: 340px) {
+  .fin-acc-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fin-acc-card.is-skeleton { animation: none; }
+}
+.fin-transfers { margin-top: 22px; }
+
+/* Финансы: с какого дня ведутся остатки */
+.fin-since { display: flex; flex-direction: row; align-items: center; gap: 14px; flex-wrap: wrap; }
+.fin-since-icon { width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: var(--primary-soft); color: var(--primary); flex: none; }
+.fin-since-body { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.fin-since-actions { flex: none; min-width: 190px; }
+@media (max-width: 600px) { .fin-since { align-items: flex-start; } .fin-since-actions { flex: 1 1 100%; } .fin-since-actions .btn { width: 100%; justify-content: center; } }

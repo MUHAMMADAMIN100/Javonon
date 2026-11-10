@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { FinanceController } from './finance.controller';
 import { FinanceService } from './finance.service';
+import { FinanceAccountsService } from './finance-accounts.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RealtimeModule } from '../realtime/realtime.module';
@@ -39,7 +40,7 @@ import { RevenueSchemeModule } from '../revenue-scheme/revenue-scheme.module';
     RevenueSchemeModule,
   ],
   controllers: [FinanceController],
-  providers: [FinanceService],
-  exports: [FinanceService],
+  providers: [FinanceService, FinanceAccountsService],
+  exports: [FinanceService, FinanceAccountsService],
 })
 export class FinanceModule {}

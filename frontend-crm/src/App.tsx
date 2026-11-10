@@ -18,6 +18,8 @@ import Activity from './pages/Activity';
 import TimeTracker from './pages/TimeTracker';
 import Workday from './pages/Workday';
 import Finance from './pages/Finance';
+import FinanceTransactions from './pages/FinanceTransactions';
+import FinanceSettings from './pages/FinanceSettings';
 import Salary from './pages/Salary';
 import Kpi from './pages/Kpi';
 import Reports from './pages/Reports';
@@ -109,6 +111,8 @@ export default function App() {
         <Route path="/excuses" element={<Workday />} />
         <Route path="/attendance" element={<Workday />} />
         <Route path="/finance" element={<Finance />} />
+        <Route path="/finance/transactions" element={<FinanceTransactions />} />
+        <Route path="/finance/settings" element={<FinanceSettings />} />
         <Route path="/salary" element={<Salary />} />
         <Route path="/submissions" element={<Submissions />} />
         <Route path="/submissions/new" element={<SubmissionForm />} />

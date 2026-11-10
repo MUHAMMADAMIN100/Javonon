@@ -47,6 +47,10 @@ export const keys = {
     timeseries: (p: Record<string, unknown> = {}) => ['finance', 'timeseries', p] as const,
     breakdown: (p: Record<string, unknown> = {}) => ['finance', 'breakdown', p] as const,
     pending: () => ['finance', 'pending'] as const,
+    accounts: () => ['finance', 'accounts'] as const,
+    channelMap: () => ['finance', 'channel-map'] as const,
+    balanceDays: (ym: string) => ['finance', 'balance-days', ym] as const,
+    transfers: (p: Record<string, unknown> = {}) => ['finance', 'transfers', p] as const,
   },
   salary: {
     all: ['salary'] as const,

@@ -139,6 +139,8 @@ export default function Sidebar() {
   const groupMention = (g: VisibleGroup) => g.items.some((it) => mentionFor(it.to));
   const badgeText = (n: number, mention = false) => (mention ? '@' : n > 99 ? '99+' : String(n));
   const isActive = (to: string) => hit?.to === to || loc.pathname === to;
+  // Вкладка телефона горит и на вложенных страницах раздела (/finance → /finance/settings).
+  const tabActive = (to: string) => isActive(to) || loc.pathname.startsWith(to + '/');
   const initials = user?.fullName?.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '?';
 
   // ═════════ Компьютер: раскрытая группа и всё, что её открывает/закрывает ═════════
@@ -288,7 +290,7 @@ export default function Sidebar() {
     const all: NavItem[] = groups.flatMap((g) => g.items);
     const tabs = TAB_PRIORITY.map((to) => all.find((i) => i.to === to)).filter((x): x is NavItem => !!x).slice(0, 4);
     const tabTos = new Set(tabs.map((x) => x.to));
-    const moreActive = !!hit && !tabTos.has(hit.to);
+    const moreActive = !!hit && !tabs.some((x) => tabActive(x.to));
     // Непрочитанное в чате, если чата нет среди вкладок, — на «Ещё».
     const moreBadge = tabTos.has('/chat') ? 0 : chatBadge.count;
     return (
@@ -298,13 +300,14 @@ export default function Sidebar() {
             <NavLink
               key={it.to}
               to={it.to}
-              className={`tab-link${isActive(it.to) && !moreOpen ? ' active' : ''}`}
-              aria-current={isActive(it.to) ? 'page' : undefined}
+              end
+              className={`tab-link${tabActive(it.to) && !moreOpen ? ' active' : ''}`}
+              aria-current={tabActive(it.to) ? 'page' : undefined}
               data-testid={`tab-${it.to.slice(1).replace('/', '-')}`}
               {...prefetchProps(it.to)}
             >
               <span className="tab-link-pill"><Icon name={it.icon} size={22} /></span>
-              <span className="tab-link-label">{t(it.labelKey)}</span>
+              <span className="tab-link-label">{t(it.tabLabelKey ?? it.labelKey)}</span>
               {badgeFor(it.to) > 0 && <span className="tab-badge">{badgeText(badgeFor(it.to), mentionFor(it.to))}</span>}
             </NavLink>
           ))}
@@ -340,6 +343,7 @@ export default function Sidebar() {
                     <NavLink
                       key={it.to}
                       to={it.to}
+                      end
                       className={`more-tile${isActive(it.to) ? ' active' : ''}`}
                       onClick={() => setMoreOpen(false)}
                       {...prefetchProps(it.to)}
@@ -458,6 +462,7 @@ export default function Sidebar() {
       const link = (
         <NavLink
           to={it.to}
+          end
           onClick={closeOnPick}
           // Пункт подсвечен и на своих алиасах: карточка лида — /applications/:id.
           className={isActive(it.to) ? 'active' : undefined}

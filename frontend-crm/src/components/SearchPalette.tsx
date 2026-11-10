@@ -75,7 +75,8 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
 
   const hits: Hit[] = useMemo(() => {
     const nq = norm(q);
-    const nav = (nq ? sections.filter((s) => norm(s.title).includes(nq)) : sections).slice(0, nq ? 6 : 8);
+    // Ищем и по названию раздела, и по группе меню: «финансы» находит «Обзор», «Транзакции»…
+    const nav = (nq ? sections.filter((s) => norm(s.title).includes(nq) || norm(s.sub || '').includes(nq)) : sections).slice(0, nq ? 6 : 8);
     const leads: Hit[] = searchOn
       ? (leadsQ.data?.items ?? []).slice(0, 6).map((a: any) => ({
           key: `lead:${a.id}`,
