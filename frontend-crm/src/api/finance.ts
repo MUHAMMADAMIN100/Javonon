@@ -147,6 +147,8 @@ export interface Transaction {
   /** Счёт операции; пусто — счёт определяется по способу оплаты (Настройки). */
   accountId?: string | null;
   account?: FinanceAccountRef | null;
+  /** Сколько легло на счёт в его валюте, если она другая ($-оплата на счёт в сомони). */
+  accountAmount?: number | null;
 }
 
 /**
@@ -528,6 +530,82 @@ export interface BalanceDays {
 }
 export const getBalanceDays = (ym: string) =>
   api.get<BalanceDays>('/finance/balance-days', { params: { ym } }).then((r) => r.data);
+
+// ── Доход (часть 2) ──────────────────────────────────────────────────────
+export type IncomeDirection = 'CONTRACT' | 'ACADEMY' | 'MASTERCLASS' | 'OTHER';
+export interface IncomeDirectionSum {
+  key: IncomeDirection;
+  /** Сумма в сомони (оплаты в другой валюте — по сумме в сомони при одобрении). */
+  tjs: number;
+  /** Оплаты в другой валюте без суммы в сомони. */
+  foreign: Record<string, number>;
+  count: number;
+}
+export interface ContractRow {
+  submissionId: string;
+  group: 'waiting' | 'paid';
+  name: string;
+  studentId: string | null;
+  program: string | null;
+  manager: { id: string; name: string } | null;
+  total: number;
+  currency: string;
+  status: string;
+  stagesCount: number;
+  stageOrder: number | null;
+  paidTotal: number;
+  left: number;
+  payments: Array<{ amount: number; date: string }>;
+  dueDate: string | null;
+  dueDays: number | null;
+  dueAmount: number | null;
+  waiting: number;
+  overdue: number;
+  paidInMonth: number;
+  lastPaidAt: string | null;
+  nextDueDate: string | null;
+  pendingCount: number;
+  pendingSum: number;
+}
+export interface IncomePaymentRow {
+  id: string;
+  direction: IncomeDirection;
+  date: string;
+  amount: number;
+  currency: string;
+  tjs: number | null;
+  who: string | null;
+  studentId: string | null;
+  comment: string | null;
+  account: FinanceAccountRef | null;
+}
+export interface IncomeResponse {
+  ym: string;
+  from: string;
+  to: string;
+  today: string;
+  directions: IncomeDirectionSum[];
+  contracts: {
+    waiting: { byCurrency: Record<string, number>; overdue: Record<string, number>; deals: number; overdueDeals: number };
+    received: { byCurrency: Record<string, number>; tjs: number; noRate: Record<string, number>; count: number };
+    pending: { count: number; byCurrency: Record<string, number> };
+    overdue: Array<{ submissionId: string; name: string; days: number; amount: number; currency: string }>;
+    rows: ContractRow[];
+    footer: { deals: number; total: Record<string, number>; paidInMonth: Record<string, number>; waiting: Record<string, number> };
+  };
+  payments: IncomePaymentRow[];
+}
+export const getIncome = (ym: string) => api.get<IncomeResponse>('/finance/income', { params: { ym } }).then((r) => r.data);
+export interface AcceptPaymentInput {
+  amount: number;
+  paidAt: string;
+  accountId: string;
+  amountTjs?: number | null;
+  receiptUrls?: string[];
+  notes?: string;
+}
+export const acceptContractPayment = (submissionId: string, dto: AcceptPaymentInput) =>
+  api.post<{ status: 'APPROVED' | 'PENDING'; paymentId: string }>(`/finance/income/contracts/${submissionId}/pay`, dto).then((r) => r.data);
 
 export interface FinanceTransfer {
   id: string;

@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth';
-import { isFounder } from '../lib/roles';
+import { isElevated, isFounder } from '../lib/roles';
+import { listAccounts, type FinanceAccount } from '../api/finance';
 import { hasActiveRole, hiddenAmount, roleCan } from '../lib/permissions';
 import { useRealtime } from '../realtime';
 import { useUI } from '../ui/Dialogs';
@@ -73,12 +74,14 @@ export default function SubmissionDetail() {
   const s = query.data;
 
   const approveMut = useMutation({
-    mutationFn: ({ paymentId, amountTjs }: { paymentId: string; amountTjs?: number }) => approvePayment(paymentId, amountTjs),
+    mutationFn: ({ paymentId, amountTjs, accountId }: { paymentId: string; amountTjs?: number; accountId?: string }) =>
+      approvePayment(paymentId, amountTjs, accountId),
     onSuccess: () => {
       toast(t('deal.toast.approved'), 'success');
       qc.invalidateQueries({ queryKey: ['submission', id] });
       qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
       qc.invalidateQueries({ queryKey: ['submissions'] });
+      qc.invalidateQueries({ queryKey: keys.finance.all });
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
@@ -140,6 +143,14 @@ export default function SubmissionDetail() {
   const [rejectPaymentId, setRejectPaymentId] = useState<string | null>(null);
   // Одобрение платежа по сделке не в сомони — сначала спрашиваем сумму в сомони.
   const [approveTarget, setApproveTarget] = useState<SubmissionPayment | null>(null);
+  // Счёт, на который пришли деньги, выбирается при одобрении (Финансы, 10.11.2026).
+  // Подходят счета в валюте сделки, для сделки не в сомони — и в сомони.
+  const canSeeAccounts = roleCan(me, 'finance:read', isElevated(me));
+  const accountsQ = useQuery({ queryKey: keys.finance.accounts(), queryFn: listAccounts, enabled: canSeeAccounts && !!s });
+  const dealCur = (s?.currency || 'TJS').toUpperCase();
+  const approveAccounts = (accountsQ.data?.accounts ?? []).filter(
+    (a) => !a.archived && (a.currency === dealCur || (dealCur !== 'TJS' && a.currency === 'TJS')),
+  );
   const [showEditSubmission, setShowEditSubmission] = useState(false);
   const [editPaymentId, setEditPaymentId] = useState<string | null>(null);
 
@@ -436,7 +447,13 @@ export default function SubmissionDetail() {
             // Завершённая сделка — тоже: зависшие с прошлого неодобренные платежи
             // основатель разбирает как обычно (закрыть с такими теперь нельзя).
             canReview={canApprove && p.status === 'PENDING' && (s.status === 'ACTIVE' || s.status === 'COMPLETED') && (founder || !isOwnSubmission)}
-            onApprove={() => (s.currency === 'TJS' ? approveMut.mutate({ paymentId: p.id }) : setApproveTarget(p))}
+            onApprove={() =>
+              // Окно — когда есть что выбрать (счёт) или что ввести (сумма в сомони);
+              // единственный подходящий счёт ставится сам, без окна.
+              s.currency !== 'TJS' || approveAccounts.length > 1
+                ? setApproveTarget(p)
+                : approveMut.mutate({ paymentId: p.id, accountId: approveAccounts[0]?.id })
+            }
             onReject={() => onReject(p.id)}
             busy={approveMut.isPending || rejectMut.isPending}
             /* Управление платежом — только FOUNDER.
@@ -478,13 +495,14 @@ export default function SubmissionDetail() {
         <ApproveTjsModal
           payment={approveTarget}
           currency={s.currency}
+          accounts={approveAccounts}
           busy={approveMut.isPending}
           onClose={() => {
             if (!approveMut.isPending) setApproveTarget(null);
           }}
-          onSubmit={(amountTjs) => {
+          onSubmit={({ amountTjs, accountId }) => {
             approveMut.mutate(
-              { paymentId: approveTarget.id, amountTjs },
+              { paymentId: approveTarget.id, amountTjs, accountId },
               { onSuccess: () => setApproveTarget(null) },
             );
           }}
@@ -875,19 +893,36 @@ const REJECT_REASON_MAX = 500;
  * этот платёж в сомони. Для TJS-сделки окно не открывается — одобрение в
  * одно нажатие, как раньше.
  */
+/**
+ * Одобрение платежа: на какой счёт пришли деньги (если счета заведены) и, для
+ * сделки не в сомони, сумма в сомони — по ней считается бонус менеджера, а на
+ * счёт в сомони ложится именно она.
+ */
 function ApproveTjsModal({
-  payment, currency, busy, onClose, onSubmit,
+  payment,
+  currency,
+  accounts,
+  busy,
+  onClose,
+  onSubmit,
 }: {
   payment: SubmissionPayment;
   currency: string;
+  accounts: FinanceAccount[];
   busy: boolean;
   onClose: () => void;
-  onSubmit: (amountTjs: number) => void;
+  onSubmit: (v: { amountTjs?: number; accountId?: string }) => void;
 }) {
   const { t } = useT();
+  const cur = (currency || 'TJS').toUpperCase();
+  const needTjs = cur !== 'TJS';
   const [value, setValue] = useState('');
+  const [accountId, setAccountId] = useState(
+    () => (accounts.find((a) => a.id === payment.accountId) ?? accounts.find((a) => a.currency === cur) ?? accounts[0])?.id ?? '',
+  );
+  const acc = accounts.find((a) => a.id === accountId) || null;
   const amount = parseFloat(value.replace(',', '.'));
-  const isValid = isFinite(amount) && amount > 0;
+  const isValid = (!needTjs || (isFinite(amount) && amount > 0)) && (accounts.length === 0 || !!acc);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -903,7 +938,10 @@ function ApproveTjsModal({
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid || busy) return;
-    onSubmit(Math.round(amount * 100) / 100);
+    onSubmit({
+      ...(needTjs && { amountTjs: Math.round(amount * 100) / 100 }),
+      ...(acc && { accountId: acc.id }),
+    });
   };
 
   return (
@@ -923,28 +961,45 @@ function ApproveTjsModal({
         onSubmit={submit}
         style={{ maxWidth: 440, textAlign: 'left' }}
       >
-        <h3 style={{ fontSize: 18, marginBottom: 8, textAlign: 'center' }}>{t('deal.approveTjs.title')}</h3>
-        <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12, lineHeight: 1.45 }}>
-          {t('deal.approveTjs.text').replace('{currency}', currency)}
-        </p>
+        <h3 style={{ fontSize: 18, marginBottom: 8, textAlign: 'center' }}>
+          {needTjs ? t('deal.approveTjs.title') : t('deal.approveAcc.title')}
+        </h3>
+        {needTjs && (
+          <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 12, lineHeight: 1.45 }}>
+            {t('deal.approveTjs.text').replace('{currency}', cur)}
+          </p>
+        )}
         <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, marginBottom: 12 }}>
-          {payment.amount.toLocaleString('ru-RU')} {currency}
+          {payment.amount.toLocaleString('ru-RU')} {cur}
         </div>
-        <Field label={`${t('deal.approveTjs.field')} *`}>
-          <input
-            className="crm-input"
-            type="number"
-            min={0}
-            step={1}
-            inputMode="decimal"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            autoFocus={!isTouchDevice()}
-            disabled={busy}
-            data-testid="approve-tjs-input"
-            placeholder="0"
-          />
-        </Field>
+        {accounts.length > 0 && (
+          <Field label={t('deal.approveAcc.field')}>
+            <CrmSelect className="crm-select" value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={busy} data-testid="approve-account">
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} · {a.currency}{needTjs && a.currency === 'TJS' ? ` (${t('finance.inc.byRate')})` : ''}
+                </option>
+              ))}
+            </CrmSelect>
+          </Field>
+        )}
+        {needTjs && (
+          <Field label={`${acc?.currency === 'TJS' ? t('finance.inc.tjsArrived') : t('deal.approveTjs.field')} *`}>
+            <input
+              className="crm-input"
+              type="number"
+              min={0}
+              step={1}
+              inputMode="decimal"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              autoFocus={!isTouchDevice()}
+              disabled={busy}
+              data-testid="approve-tjs-input"
+              placeholder="0"
+            />
+          </Field>
+        )}
         <div className="dialog-actions" style={{ justifyContent: 'flex-end' }}>
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
           <button type="submit" className="btn btn-primary" disabled={!isValid || busy} data-testid="approve-tjs-submit">

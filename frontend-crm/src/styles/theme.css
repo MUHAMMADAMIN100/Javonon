@@ -618,6 +618,8 @@ table, .num, input[type='number'] { font-variant-numeric: tabular-nums; }
   body:has(.mobile-tabbar) .toast-stack { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom, 0px)); }
   /* «Ещё» открыт — кнопка звонка не закрывает плитки. */
   body:has(.more-sheet) .dialpad-fab { display: none !important; }
+  /* Открыто окно (форма, подтверждение) — кнопка звонка не закрывает его поля и кнопки. */
+  body:has(.dialog-backdrop) .dialpad-fab { display: none !important; }
   .cmdk-backdrop { padding-top: 12px; }
   .cmdk { max-height: calc(100dvh - 24px); }
 }
@@ -1139,3 +1141,64 @@ a.fin-warn-line:hover { background: #FFEAD0; }
 .fin-since-body { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .fin-since-actions { flex: none; min-width: 190px; }
 @media (max-width: 600px) { .fin-since { align-items: flex-start; } .fin-since-actions { flex: 1 1 100%; } .fin-since-actions .btn { width: 100%; justify-content: center; } }
+
+/* ── Финансы → Доход (часть 2, 10.11.2026) ── */
+.inc-lead { flex: 1 1 320px; margin: 0; }
+.inc-dirs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.inc-dir { --dir: var(--primary); text-align: left; background: #fff; border: 1px solid #E4E9F1; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; color: var(--text); font-family: 'Inter', sans-serif; transition: border-color .15s, box-shadow .15s; min-width: 0; }
+.inc-dir:hover { border-color: #B9C7DD; }
+.inc-dir.is-active { border: 2px solid var(--dir); padding: 13px 15px; box-shadow: 0 6px 18px -10px rgba(1, 54, 139, .45); }
+.inc-dir:focus-visible { outline: 2px solid var(--dir); outline-offset: 2px; }
+.inc-dir-head { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
+.inc-dir-icon { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; color: var(--dir); background: color-mix(in srgb, var(--dir) 12%, #fff); flex: none; }
+.inc-dir-value { font: 800 22px var(--font-display); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.inc-dir-foreign, .inc-dir-sub { font-size: 12.5px; color: var(--text-light); line-height: 1.4; }
+.inc-dir-warn { font-size: 12.5px; font-weight: 600; color: #B91C1C; }
+.inc-contracts { gap: 14px; }
+.inc-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.inc-tile { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; background: #FBFCFE; color: var(--text); text-decoration: none; min-width: 0; }
+a.inc-tile:hover { border-color: #B9C7DD; }
+.inc-tile-label { font-size: 12.5px; color: var(--text-light); font-weight: 500; }
+.inc-tile-value { font: 800 20px var(--font-display); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.inc-tile-value.is-in { color: var(--success); }
+.inc-tile-sub { font-size: 12px; color: var(--text-light); line-height: 1.4; }
+.inc-tile-sub.is-bad { color: #B91C1C; font-weight: 600; }
+.fin-warn-line.is-bad { background: #FEF2F2; color: #B91C1C; }
+.inc-table td { vertical-align: top; }
+.inc-table tr.is-overdue td:first-child { box-shadow: inset 3px 0 0 #DC2626; }
+.inc-group-row td { background: var(--bg); font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-light); padding-top: 8px; padding-bottom: 8px; }
+.inc-name { font-weight: 600; color: var(--text); text-decoration: none; }
+.inc-name:hover { color: var(--primary); text-decoration: underline; }
+.inc-stage { font-size: 13px; }
+.inc-bar { height: 6px; border-radius: 99px; background: #E9EEF5; overflow: hidden; margin: 5px 0 3px; max-width: 160px; }
+.inc-bar > span { display: block; height: 100%; background: var(--success); border-radius: inherit; }
+.inc-due-note { font-size: 12px; color: var(--text-light); font-weight: 600; }
+.inc-due-note.is-bad { color: #B91C1C; }
+.inc-due-note.is-warn { color: #B45309; }
+.inc-pay { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.inc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.inc-chip.is-paid { background: #ECFDF3; color: #15803D; }
+.inc-chip.is-pending { background: #FFF4E5; color: #92400E; }
+.inc-left { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.inc-act { text-align: right; white-space: nowrap; }
+.inc-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding-top: 4px; border-top: 1px solid var(--border); padding-top: 12px; }
+.inc-foot b { font: 800 16px var(--font-display); }
+.inc-cards { display: flex; flex-direction: column; gap: 10px; }
+.inc-group { margin: 6px 0 0; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-light); }
+.inc-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.inc-card.is-overdue { border-left: 3px solid #DC2626; }
+.inc-card-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.inc-card-top .fin-num { font-weight: 700; white-space: nowrap; }
+.inc-card-due { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; align-items: center; }
+.inc-card-act { margin-top: 6px; }
+.inc-card-act .btn { width: 100%; justify-content: center; min-height: 44px; }
+.inc-card .inc-bar { max-width: none; }
+.inc-accept-sub { margin: 0 0 14px; font-size: 13.5px; color: var(--text-soft); }
+@media (max-width: 1100px) { .inc-dirs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) {
+  .inc-tiles { grid-template-columns: 1fr; }
+  .inc-dir-value { font-size: 19px; }
+}
+@media (max-width: 380px) { .inc-dirs { gap: 8px; } .inc-dir { padding: 12px; } .inc-dir.is-active { padding: 11px; } .inc-dir-icon { width: 30px; height: 30px; } }
+.inc-attach { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.inc-attach .btn { cursor: pointer; }

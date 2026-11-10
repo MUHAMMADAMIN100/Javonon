@@ -47,6 +47,7 @@ const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; title
   { path: '/activity',     eyebrowKey: 'eyebrow.audit',          num: '06', titleKey: 'activity.title' },
   { path: '/users',        eyebrowKey: 'eyebrow.team',           num: '07', titleKey: 'users.title' },
   // Подстраницы «Финансов» — раньше общего /finance (поиск идёт по startsWith).
+  { path: '/finance/income', eyebrowKey: 'eyebrow.finance',      num: '08', titleKey: 'finance.inc.title' },
   { path: '/finance/transactions', eyebrowKey: 'eyebrow.finance', num: '08', titleKey: 'finance.txp.title' },
   { path: '/finance/settings', eyebrowKey: 'eyebrow.finance',    num: '08', titleKey: 'finance.settings.title' },
   { path: '/finance',      eyebrowKey: 'eyebrow.finance',        num: '08', titleKey: 'finance.overview.title' },

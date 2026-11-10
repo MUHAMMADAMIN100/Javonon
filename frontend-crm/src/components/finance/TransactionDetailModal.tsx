@@ -42,7 +42,9 @@ export default function TransactionDetailModal({
     [t('finance.col.manager'), (tx as any).manager?.fullName || '—'],
     [t('finance.paymentChannel'), (tx as any).paymentChannel
       ? t(`finance.channel.${(tx as any).paymentChannel}`) : '—'],
-    [t('finance.acc.field'), tx.account ? `${tx.account.name} · ${tx.account.currency}` : t('finance.acc.byChannelShort')],
+    [t('finance.acc.field'), tx.account
+      ? `${tx.account.name} · ${tx.account.currency}${tx.accountAmount != null && tx.account.currency !== tx.currency ? ` · ${t('finance.acc.landed').replace('{sum}', fmtMoney(tx.accountAmount, tx.account.currency))}` : ''}`
+      : t('finance.acc.byChannelShort')],
     [t('finance.col.comment'), tx.comment || '—'],
   ];
 

@@ -97,7 +97,7 @@ function parseCurrency(val: unknown): string {
 }
 
 /** «YYYY-MM» → первое число месяца (по Душанбе). */
-function monthStartOf(ym: string): Date {
+export function monthStartOf(ym: string): Date {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(ym)) throw new BadRequestException('Месяц в формате ГГГГ-ММ');
   const [y, m] = ym.split('-').map(Number);
   // Полдень 1-го числа по UTC — заведомо внутри этого дня по Душанбе.
@@ -157,7 +157,7 @@ export class FinanceAccountsService {
       this.prisma.financeChannelMap.findMany(),
       this.prisma.transaction.findMany({
         where: { reversedAt: null, ...dateWhere },
-        select: { id: true, type: true, amount: true, currency: true, date: true, accountId: true, paymentChannel: true, category: true },
+        select: { id: true, type: true, amount: true, accountAmount: true, currency: true, date: true, accountId: true, paymentChannel: true, category: true },
       }),
       this.prisma.financeTransfer.findMany({
         where: { reversedAt: null, ...dateWhere },
@@ -194,7 +194,10 @@ export class FinanceAccountsService {
     for (const t of txs) {
       const delta = t.type === 'INCOME' ? t.amount : -t.amount;
       if (t.accountId) {
-        rows.push({ date: t.date, accountId: t.accountId, delta });
+        // Валюта счёта может отличаться от валюты операции ($-оплата на счёт в сомони) —
+        // тогда на счёт легла accountAmount.
+        const onAccount = t.accountAmount ?? t.amount;
+        rows.push({ date: t.date, accountId: t.accountId, delta: t.type === 'INCOME' ? onAccount : -onAccount });
         continue;
       }
       const channel = t.paymentChannel ?? derived.get(t.id) ?? CHANNEL_NONE;

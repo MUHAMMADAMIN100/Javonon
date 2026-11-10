@@ -51,6 +51,7 @@ export const keys = {
     channelMap: () => ['finance', 'channel-map'] as const,
     balanceDays: (ym: string) => ['finance', 'balance-days', ym] as const,
     transfers: (p: Record<string, unknown> = {}) => ['finance', 'transfers', p] as const,
+    income: (ym: string) => ['finance', 'income', ym] as const,
   },
   salary: {
     all: ['salary'] as const,

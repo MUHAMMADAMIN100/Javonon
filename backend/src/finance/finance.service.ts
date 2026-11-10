@@ -894,14 +894,16 @@ export class FinanceService {
     }
     // Счёт операции: валюта операции должна совпадать с валютой счёта.
     // Поставить счёт можно и оплате по сделке — сумму и дату это не меняет.
-    let accountPatch: { accountId: string | null } | Record<string, never> = {};
+    // Сумма «на счёт в другой валюте» (accountAmount) относится к прежнему счёту —
+    // при смене счёта сбрасывается: в журнале счёт ставится только в валюте операции.
+    let accountPatch: { accountId: string | null; accountAmount: null } | Record<string, never> = {};
     if (patch.accountId !== undefined && (patch.accountId || null) !== before.accountId) {
       if (!patch.accountId) {
-        accountPatch = { accountId: null };
+        accountPatch = { accountId: null, accountAmount: null };
       } else {
         if (!this.accounts) throw new BadRequestException('Счета недоступны');
         const acc = await this.accounts.accountForTransaction(patch.accountId, (patch.currency ?? before.currency) as string);
-        accountPatch = { accountId: acc.id };
+        accountPatch = { accountId: acc.id, accountAmount: null };
       }
     } else if (patch.currency && patch.currency !== before.currency && before.accountId) {
       const acc = await this.prisma.financeAccount.findUnique({ where: { id: before.accountId }, select: { currency: true, name: true } });

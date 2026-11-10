@@ -1052,6 +1052,9 @@ model Transaction {
   // их счёт определяется по способу оплаты и валюте (FinanceChannelMap).
   accountId String?
   account   FinanceAccount? @relation("TransactionAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  /// Сколько пришло/ушло на счёт в ЕГО валюте, когда она не совпадает с валютой
+  /// операции (оплата сделки в $ на счёт в сомони). Пусто — равно amount.
+  accountAmount Float?
 
   // Soft-delete для возвратов / отменённых сделок (bug #25 из audit:edge-cases).
   // Когда SaleSubmission переходит в CANCELLED, оригинальная INCOME-транзакция
@@ -2295,6 +2298,9 @@ model SubmissionPayment {
   // одобренных до появления колонки, — такие в объём не входят и
   // показываются отдельно, как раньше.
   amountTjs            Float?
+  /// Счёт, на который пришли деньги (Финансы → Доход → «Принять оплату» или выбор при одобрении).
+  accountId            String?
+  account              FinanceAccount?         @relation("SubmissionPaymentAccount", fields: [accountId], references: [id], onDelete: SetNull)
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
 
@@ -2834,6 +2840,7 @@ model FinanceAccount {
   transfersOut FinanceTransfer[]   @relation("FinanceTransferFrom")
   transfersIn  FinanceTransfer[]   @relation("FinanceTransferTo")
   channelMaps  FinanceChannelMap[]
+  submissionPayments SubmissionPayment[] @relation("SubmissionPaymentAccount")
 }
 
 /// Перевод между своими счетами — в доход и расход не входит. Если валюты

@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { FinanceController } from './finance.controller';
 import { FinanceService } from './finance.service';
 import { FinanceAccountsService } from './finance-accounts.service';
+import { FinanceIncomeService } from './finance-income.service';
+import { SubmissionsModule } from '../submissions/submissions.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RealtimeModule } from '../realtime/realtime.module';
@@ -38,9 +40,11 @@ import { RevenueSchemeModule } from '../revenue-scheme/revenue-scheme.module';
     // RevenueSchemeModule нужен FinanceService.distribution() — читает
     // активную FOUNDER-editable схему и раскладывает доход по её buckets.
     RevenueSchemeModule,
+    // «Доход → Контракты»: принять оплату по сделке тем же путём, что и в «Сделках».
+    SubmissionsModule,
   ],
   controllers: [FinanceController],
-  providers: [FinanceService, FinanceAccountsService],
+  providers: [FinanceService, FinanceAccountsService, FinanceIncomeService],
   exports: [FinanceService, FinanceAccountsService],
 })
 export class FinanceModule {}

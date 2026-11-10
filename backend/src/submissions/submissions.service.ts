@@ -1225,7 +1225,12 @@ export class SubmissionsService {
   }
 
   /** Добавить новый платёж к существующей сделке (продолжение оплаты). */
-  async addPayment(userId: string, submissionId: string, dto: CreatePaymentDto, opts: { anyDeal?: boolean } = {}) {
+  async addPayment(
+    userId: string,
+    submissionId: string,
+    dto: CreatePaymentDto,
+    opts: { anyDeal?: boolean; receiptsOptional?: boolean; accountId?: string | null } = {},
+  ) {
     const submission = await this.prisma.saleSubmission.findUnique({
       where: { id: submissionId },
       include: { payments: true },
@@ -1258,10 +1263,12 @@ export class SubmissionsService {
     const method = dto.paymentMethod || SubmissionPaymentMethod.TRANSFER;
     const addReceiptUrls: string[] = Array.isArray(dto.receiptUrls) ? dto.receiptUrls : [];
     const addDepositProofUrls: string[] = Array.isArray(dto.depositProofUrls) ? dto.depositProofUrls : [];
-    if (method === SubmissionPaymentMethod.TRANSFER && addReceiptUrls.length === 0) {
+    // Чек обязателен для менеджера; бухгалтер или основатель, принимающий оплату
+    // в Финансах, сам видит деньги на счёте — у него чек по желанию (решение 10.11.2026).
+    if (!opts.receiptsOptional && method === SubmissionPaymentMethod.TRANSFER && addReceiptUrls.length === 0) {
       throw new BadRequestException('Загрузите минимум 1 чек перевода');
     }
-    if (method === SubmissionPaymentMethod.CASH && addDepositProofUrls.length === 0) {
+    if (!opts.receiptsOptional && method === SubmissionPaymentMethod.CASH && addDepositProofUrls.length === 0) {
       throw new BadRequestException('Загрузите минимум 1 скрин пополнения счёта');
     }
 
@@ -1282,6 +1289,7 @@ export class SubmissionsService {
           nextDueAmount: dto.nextDueAmount ?? null,
           notes: dto.notes?.trim() || null,
           status: SubmissionPaymentStatus.PENDING,
+          accountId: opts.accountId ?? null,
         },
       });
     });
@@ -1674,7 +1682,7 @@ export class SubmissionsService {
   async approvePayment(
     paymentId: string,
     reviewerId: string,
-    opts: { amountTjs?: unknown; allowed?: boolean } = {},
+    opts: { amountTjs?: unknown; allowed?: boolean; accountId?: string | null } = {},
   ) {
     const reviewer = await this.prisma.user.findUnique({
       where: { id: reviewerId },
@@ -1718,6 +1726,14 @@ export class SubmissionsService {
     // сама сумма платежа. Сравнение валюты — точное, как в бонусной базе.
     const isForeignDeal = (submission.currency || MANAGER_BONUS_CURRENCY) !== MANAGER_BONUS_CURRENCY;
     const amountTjs = isForeignDeal ? parseAmountTjs(opts.amountTjs) : null;
+    // Счёт, на который пришли деньги: выбран при одобрении или указан, когда
+    // оплату принимали в Финансах. Валюта счёта = валюта сделки; $-оплата на
+    // счёт в сомони ложится суммой в сомони (accountAmount).
+    const finAccount = await this.resolvePaymentAccount(
+      opts.accountId !== undefined ? opts.accountId : payment.accountId,
+      (submission.currency || 'TJS').toUpperCase(),
+      amountTjs,
+    );
     // Конфликт интересов: сотрудник с правом одобрения не одобряет платежи по
     // своей же сделке (иначе self-approve + бонус себе). Основателю можно:
     // над ним одобрять некому, и платёж по его сделке висел бы вечно, а
@@ -1974,6 +1990,7 @@ export class SubmissionsService {
           // смена правила не должна переносить уже засчитанные платежи).
           bonusMonthBy: BONUS_MONTH_RULE,
           amountTjs,
+          ...(finAccount && { accountId: finAccount.accountId }),
         },
       });
       if (claim.count === 0) {
@@ -2224,6 +2241,7 @@ export class SubmissionsService {
           productCategoryEnum,
           incomeSource,
           paymentPhase,
+          ...(finAccount && { accountId: finAccount.accountId, accountAmount: finAccount.accountAmount }),
         },
       });
 
@@ -2586,6 +2604,27 @@ export class SubmissionsService {
   }
 
   /** FOUNDER отклоняет платёж с обязательной причиной. */
+  /**
+   * Счёт для одобряемого платежа. null — счёта нет (операция разложится по
+   * способу оплаты, как раньше). Валюта счёта должна совпадать с валютой
+   * сделки; для сделки не в сомони можно и счёт в сомони — тогда на счёт
+   * ложится сумма в сомони.
+   */
+  private async resolvePaymentAccount(accountId: string | null | undefined, dealCurrency: string, amountTjs: number | null) {
+    if (!accountId) return null;
+    const acc = await this.prisma.financeAccount.findUnique({ where: { id: accountId } });
+    if (!acc) throw new BadRequestException('Счёт не найден');
+    if (acc.archived) throw new BadRequestException(`Счёт «${acc.name}» в архиве — выберите другой`);
+    if (acc.currency === dealCurrency) return { accountId: acc.id, accountAmount: null as number | null };
+    if (acc.currency === 'TJS' && dealCurrency !== 'TJS' && amountTjs && amountTjs > 0) {
+      return { accountId: acc.id, accountAmount: amountTjs };
+    }
+    throw new BadRequestException(
+      `Счёт «${acc.name}» в ${acc.currency}, а сделка в ${dealCurrency} — выберите счёт в ${dealCurrency}` +
+        (dealCurrency !== 'TJS' ? ' или в сомони' : ''),
+    );
+  }
+
   async rejectPayment(paymentId: string, reviewerId: string, reason: string, allowed?: boolean) {
     const reviewer = await this.prisma.user.findUnique({
       where: { id: reviewerId },
@@ -3615,6 +3654,13 @@ export class SubmissionsService {
           await tx.transaction.update({
             where: { id: payment.financeTransactionId! },
             data: financeUpdate,
+          });
+        }
+        // $-оплата, пришедшая на счёт в сомони: сумма в сомони — это и сумма на счёте.
+        if (payment.status === SubmissionPaymentStatus.APPROVED && payment.financeTransactionId && data.amountTjs !== undefined) {
+          await tx.transaction.updateMany({
+            where: { id: payment.financeTransactionId, accountAmount: { not: null } },
+            data: { accountAmount: data.amountTjs },
           });
         }
 

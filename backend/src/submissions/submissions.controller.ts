@@ -286,9 +286,14 @@ export class SubmissionsController {
   @Post('payments/:id/approve')
   @Roles(Role.FOUNDER)
   @Permissions('submissions:approve')
-  approve(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { amountTjs?: number | string }) {
+  approve(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { amountTjs?: number | string; accountId?: string | null }) {
     // amountTjs — сумма в сомони; обязательна только для сделки не в TJS.
-    return this.svc.approvePayment(id, me.id, { amountTjs: body?.amountTjs, allowed: roleAllows(me, 'submissions:approve', () => isFounder(me)) });
+    return this.svc.approvePayment(id, me.id, {
+      amountTjs: body?.amountTjs,
+      allowed: roleAllows(me, 'submissions:approve', () => isFounder(me)),
+      // Счёт, на который пришли деньги (необязательно; без него — по способу оплаты).
+      ...(body?.accountId !== undefined && { accountId: body.accountId || null }),
+    });
   }
 
   /** FOUNDER отклоняет платёж с причиной. */

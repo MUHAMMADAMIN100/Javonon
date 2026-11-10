@@ -29,6 +29,7 @@ export default function TransactionForm({
   editTx,
   initialType,
   initialDate,
+  initialProduct,
   onClose,
   onCreated,
 }: {
@@ -40,6 +41,8 @@ export default function TransactionForm({
   initialType?: TransactionType;
   /** «+» в дне календаря — дата этого дня. */
   initialDate?: string;
+  /** «Доход → Академия / Мастер-классы / Прочее → + Оплата» — продукт сразу выбран. */
+  initialProduct?: ProductCategoryEnum;
   /** Правим существующую запись, а не создаём новую. */
   editTx?: Transaction | null;
   // Разрешено ли пользователю выбирать EXPENSE. Backend режет POST
@@ -130,7 +133,7 @@ export default function TransactionForm({
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   // Google Sheet parity — новые enum-поля
   const [incomeSource, setIncomeSource] = useState<IncomeSource | ''>((editTx as any)?.incomeSource || '');
-  const [productCategoryEnum, setProductCategoryEnum] = useState<ProductCategoryEnum | ''>((editTx as any)?.productCategoryEnum || '');
+  const [productCategoryEnum, setProductCategoryEnum] = useState<ProductCategoryEnum | ''>((editTx as any)?.productCategoryEnum || initialProduct || '');
   const [paymentPhase, setPaymentPhase] = useState<PaymentPhaseStatus | ''>((editTx as any)?.paymentPhase || '');
   const [paidViaId, setPaidViaId] = useState<string>((editTx as any)?.paidViaId || '');
   // Ошибка суммы — у поля и словами (QA №53: на минус было просто «Ошибка»).
@@ -554,6 +557,7 @@ export default function TransactionForm({
               <CrmSelect
                 className="crm-select"
                 value={productCategoryEnum}
+                data-testid="tx-product"
                 onChange={(e) => setProductCategoryEnum(e.target.value as ProductCategoryEnum | '')}
               >
                 <option value="">—</option>

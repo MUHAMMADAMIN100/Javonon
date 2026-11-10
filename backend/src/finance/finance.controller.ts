@@ -20,6 +20,8 @@ export function financeElevated(me: any): boolean {
 }
 import { FinanceService, CreateTransactionDto } from './finance.service';
 import { FinanceAccountsService, AccountDto, TransferDto } from './finance-accounts.service';
+import { FinanceIncomeService, AcceptPaymentDto } from './finance-income.service';
+import { tjLocalDay } from '../common/tj-time';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionCategory, TransactionType } from '@prisma/client';
@@ -216,6 +218,7 @@ export class FinanceController {
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private accounts: FinanceAccountsService,
+    private incomeSvc: FinanceIncomeService,
   ) {}
 
   // ── Счета (раздел «Финансы», 10.11.2026) ──────────────────────────────
@@ -240,6 +243,19 @@ export class FinanceController {
   @Permissions('finance:update')
   updateAccount(@Param('id') id: string, @Body() dto: AccountDto) {
     return this.accounts.updateAccount(id, dto);
+  }
+
+  /** «Доход»: направления за месяц, сделки «ждём / оплачено», оплаты остальных направлений. */
+  @Get('income')
+  income(@Query('ym') ym?: string) {
+    return this.incomeSvc.income(ym || tjLocalDay(new Date()).slice(0, 7));
+  }
+
+  /** «Принять оплату» по сделке: платёж на выбранный счёт; кто может одобрять — одобряет сразу. */
+  @Post('income/contracts/:id/pay')
+  @Permissions('finance:create')
+  acceptContractPayment(@CurrentUser() me: any, @Param('id') id: string, @Body() dto: AcceptPaymentDto) {
+    return this.incomeSvc.acceptContractPayment(me, id, dto);
   }
 
   /** С какого дня ведутся остатки счетов. */
