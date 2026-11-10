@@ -70,27 +70,28 @@ export const SETTINGS_PERMS = [
   'settings:schedule', 'settings:penalty-rules', 'settings:locations', 'settings:revenue',
 ];
 
-/**
- * Группы меню — по макету редизайна (утверждён 09.11.2026): боковое меню с
- * подписями. Условия видимости каждого пункта перенесены 1:1 из прежних
- * групп — меняется только раскладка, не права.
- * Группа `main` без подписи (Главная, Задачи), `system` — внизу меню.
- */
+/** Группы меню; «Академия» добавлена 17.10.2026 вслед за «Продажами». */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    key: 'main',
+    key: 'dashboard',
     icon: 'space_dashboard',
-    labelKey: 'nav.v2.main',
+    labelKey: 'nav.group.dashboard',
     items: [
       { to: '/dashboard', icon: 'dashboard', labelKey: 'sidebar.dashboard', visible: (c) => !c.isTeacherOnly },
-      { to: '/tasks', icon: 'task_alt', labelKey: 'sidebar.tasks', visible: (c) => c.show('tasks:read', c.isWorkforce) },
+      { to: '/kpi', icon: 'leaderboard', labelKey: 'sidebar.kpi', visible: (c) => c.show('kpi:read', c.isWorkforce) },
+      { to: '/reports', icon: 'description', labelKey: 'sidebar.reports', visible: (c) => c.show('reports:read', c.isWorkforce) },
     ],
   },
   {
     key: 'sales',
     icon: 'sell',
-    labelKey: 'nav.v2.sales',
+    labelKey: 'nav.group.sales',
     items: [
+      // «Лиды» — все клиенты отдела продаж во всех статусах: ввод, раздача
+      // менеджерам и ведение. С 23.10.2026 сюда влиты «Заявки» (решение
+      // основателя): пункт один, старый адрес /applications ведёт сюда, а
+      // карточка /applications/:id подсвечивает этот пункт (алиас). Видят
+      // его с правом хотя бы одного вида: «Новые лиды» или «Лиды в работе».
       {
         to: '/leads',
         icon: 'person_add',
@@ -99,62 +100,75 @@ export const NAV_GROUPS: NavGroup[] = [
         visible: (c) => c.show(['leads:read', 'applications:read'], c.isWorkforce),
       },
       { to: '/students', icon: 'school', labelKey: 'sidebar.students', visible: (c) => c.show('students:read', c.isWorkforce) },
+      // «Сделки» — менеджеры оформляют закрытых студентов; FOUNDER одобряет.
       { to: '/submissions', icon: 'handshake', labelKey: 'sidebar.submissions', visible: (c) => !c.isTeacherOnly && c.show(['submissions:read', 'submissions:all', 'submissions:approve'], true) },
-      { to: '/partners', icon: 'diversity_3', labelKey: 'sidebar.partners', visible: (c) => c.show('partners:read', c.elevated) },
-      { to: '/programs', icon: 'menu_book', labelKey: 'sidebar.programs', visible: (c) => c.show('programs:read', c.isWorkforce) },
       { to: '/pipelines', icon: 'route', labelKey: 'sidebar.pipelines', visible: (c) => c.show('pipelines:read', c.elevated) },
+      { to: '/partners', icon: 'diversity_3', labelKey: 'sidebar.partners', visible: (c) => c.show('partners:read', c.elevated) },
+    ],
+  },
+  {
+    // Академия: группы с журналом и уроками, ученики, расписание, LMS.
+    // Учитель видит свои группы и учеников (сервер режет выборку сам),
+    // руководство — все. «Группы» и «Расписание» по-прежнему видны всей
+    // рабочей группе: учить может любой сотрудник, а пустой список —
+    // не утечка.
+    key: 'academy',
+    icon: 'school',
+    labelKey: 'nav.group.academy',
+    items: [
+      { to: '/groups', icon: 'diversity_2', labelKey: 'sidebar.groups', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
+      { to: '/academy/students', icon: 'person_book', labelKey: 'sidebar.academyStudents', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.academyManager) },
+      // Уровни (Beginner, Elementary…) ведёт руководство академии.
+      { to: '/academy/levels', icon: 'stairs', labelKey: 'sidebar.academyLevels', visible: (c) => c.show('academy:levels', c.academyManager) },
+      { to: '/schedule', icon: 'calendar_month', labelKey: 'sidebar.schedule', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
+      { to: '/lms', icon: 'auto_stories', labelKey: 'sidebar.lms', visible: (c) => c.show('lms:read', c.elevated) },
     ],
   },
   {
     key: 'comms',
     icon: 'chat_bubble',
-    labelKey: 'nav.v2.comms',
+    labelKey: 'nav.group.comms',
     items: [
-      { to: '/calls', icon: 'call', labelKey: 'sidebar.calls', visible: (c) => c.show('calls:read', c.isWorkforce) },
-      { to: '/inbox', icon: 'inbox', labelKey: 'sidebar.inbox', visible: (c) => c.show('inbox:read', c.isWorkforce) },
-      { to: '/massmail', icon: 'campaign', labelKey: 'sidebar.massmail', visible: (c) => c.show('massmail:read', c.elevated) },
+      // База-условие здесь буквально `true` — чат доступен и ACCOUNTANT'у.
+      // Учителю академии чата нет (17.10.2026).
       { to: '/chat', icon: 'forum', labelKey: 'sidebar.chat', visible: (c) => !c.isTeacherOnly && c.show('chat:read', true) },
+      { to: '/inbox', icon: 'inbox', labelKey: 'sidebar.inbox', visible: (c) => c.show('inbox:read', c.isWorkforce) },
+      { to: '/calls', icon: 'call', labelKey: 'sidebar.calls', visible: (c) => c.show('calls:read', c.isWorkforce) },
+      { to: '/massmail', icon: 'campaign', labelKey: 'sidebar.massmail', visible: (c) => c.show('massmail:read', c.elevated) },
     ],
   },
   {
-    key: 'academy',
-    icon: 'school',
-    labelKey: 'nav.v2.academy',
-    items: [
-      { to: '/groups', icon: 'diversity_2', labelKey: 'sidebar.groups', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
-      { to: '/schedule', icon: 'calendar_month', labelKey: 'sidebar.schedule', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.isWorkforce) },
-      { to: '/academy/students', icon: 'person_book', labelKey: 'sidebar.academyStudents', visible: (c) => c.isTeacherOnly || c.show(ACADEMY_PERMS, c.academyManager) },
-      { to: '/academy/levels', icon: 'stairs', labelKey: 'sidebar.academyLevels', visible: (c) => c.show('academy:levels', c.academyManager) },
-      { to: '/lms', icon: 'auto_stories', labelKey: 'sidebar.lms', visible: (c) => c.show('lms:read', c.elevated) },
-    ],
-  },
-  {
-    key: 'money',
+    key: 'finance',
     icon: 'account_balance_wallet',
-    labelKey: 'nav.v2.money',
+    labelKey: 'nav.group.finance',
     items: [
       { to: '/finance', icon: 'payments', labelKey: 'sidebar.finance', visible: (c) => c.show('finance:read', c.elevated) },
       { to: '/salary', icon: 'paid', labelKey: 'sidebar.salary', visible: (c) => c.show('salary:read', c.elevated) },
-      { to: '/kpi', icon: 'leaderboard', labelKey: 'sidebar.kpi', visible: (c) => c.show('kpi:read', c.isWorkforce) },
     ],
   },
   {
-    key: 'team',
+    key: 'staff',
     icon: 'groups',
-    labelKey: 'nav.v2.team',
+    labelKey: 'nav.group.staff',
     items: [
+      // /profile/:id — тот же UserDetail, что и /users/:id (см. App.tsx).
       { to: '/users', icon: 'group', labelKey: 'sidebar.users', aliases: ['/profile'], visible: (c) => c.show('users:read', c.elevated) },
+      { to: '/tasks', icon: 'task_alt', labelKey: 'sidebar.tasks', visible: (c) => c.show('tasks:read', c.isWorkforce) },
+      // «Время / Посещаемость / Причины» схлопнуты в /workday со вкладками,
+      // но старые роуты живы в App.tsx и рендерят тот же Workday.
       { to: '/workday', icon: 'schedule', labelKey: 'sidebar.workday', aliases: ['/time', '/attendance', '/excuses'], visible: (c) => !c.isTeacherOnly },
-      { to: '/reports', icon: 'description', labelKey: 'sidebar.reports', visible: (c) => c.show('reports:read', c.isWorkforce) },
+      // Аудит-лог — основатель; роли — пункт «Журнал активности».
       { to: '/activity', icon: 'history', labelKey: 'sidebar.activity', visible: (c) => c.isFounder || (c.hasCustomRole && c.can('activity:read')) },
     ],
   },
   {
-    key: 'system',
+    key: 'settings',
     icon: 'tune',
-    labelKey: 'nav.v2.system',
+    labelKey: 'nav.group.settings',
     items: [
+      { to: '/programs', icon: 'menu_book', labelKey: 'sidebar.programs', visible: (c) => c.show('programs:read', c.isWorkforce) },
       { to: '/offers', icon: 'description', labelKey: 'sidebar.offers', visible: (c) => c.show('offers:read', c.elevated) },
+      // Настройки — основатель; роли — если открыт хоть один их пункт.
       { to: '/settings', icon: 'settings', labelKey: 'sidebar.settings', visible: (c) => c.isFounder || (c.hasCustomRole && c.can(...SETTINGS_PERMS)) },
     ],
   },

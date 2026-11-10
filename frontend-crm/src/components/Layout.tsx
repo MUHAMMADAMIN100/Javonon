@@ -74,7 +74,7 @@ const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; title
   { path: '/excuses',      eyebrowKey: 'eyebrow.hr',             num: '26', titleKey: 'workday.title' },
 ];
 
-/** «Понедельник, 9 ноября» — над заголовком главной и задач (группа без подписи). */
+/** «Понедельник, 9 ноября» — над заголовком главной. */
 function todayLabel(): string {
   const txt = fmtDateText(new Date(), { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Dushanbe' });
   return txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : '';
@@ -94,11 +94,11 @@ export default function Layout() {
   useChatUnreadTotal();
   const route = TITLE_ROUTES.find((r) => loc.pathname.startsWith(r.path));
   // Над заголовком — группа меню, в которой лежит раздел («Продажи»,
-  // «Деньги»): так же, как в боковом меню (редизайн 2026).
+  // «Финансы»), а над главной — сегодняшняя дата.
   const navHit = resolveRoute(loc.pathname);
   const navGroup = navHit ? NAV_GROUPS.find((g) => g.key === navHit.groupKey) : undefined;
   const meta = route
-    ? { eyebrow: navGroup && navGroup.key !== 'main' ? t(navGroup.labelKey) : todayLabel(), title: t(route.titleKey) }
+    ? { eyebrow: navGroup && navHit?.to !== '/dashboard' ? t(navGroup.labelKey) : todayLabel(), title: t(route.titleKey) }
     : { eyebrow: t('eyebrow.javononCrm'), title: 'Javonon' };
 
   // По ТЗ §2: «права передаются основателем». Когда FOUNDER меняет

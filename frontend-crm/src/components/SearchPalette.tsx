@@ -68,7 +68,7 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
       group: t('search.sections'),
       icon: it.icon,
       title: t(it.labelKey),
-      sub: g.key === 'main' ? undefined : t(g.labelKey),
+      sub: t(g.labelKey),
       to: it.to,
     })));
   }, [user, t]);
