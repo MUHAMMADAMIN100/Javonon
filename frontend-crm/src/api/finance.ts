@@ -694,6 +694,29 @@ export const payPartnerPayout = (id: string, dto: { accountId: string; date: str
 export const getOtherExpense = (ym: string) => api.get<OtherExpense>('/finance/expense/other', { params: { ym } }).then((r) => r.data);
 export const setOtherPlan = (dto: { ym: string; amount: number | null }) => api.put('/finance/expense/other-plan', dto).then((r) => r.data);
 
+// ── Расход → Зарплата (часть 2) ──────────────────────────────────────────
+export interface PayrollRow {
+  userId: string; name: string; role: string | null; position: string | null; isActive: boolean; hasRate: boolean;
+  hours: number; lateMinutes: number; base: number; sales: number; bonus: number; bonusPercent: number | null; extra: number;
+  penalties: number; penaltiesPending: number; net: number; advances: number;
+  advancesList: Array<{ id: string; amount: number; date: string; account: { id: string; name: string } | null; comment: string | null }>;
+  paidOut: number; toPay: number; status: 'paid' | 'covered' | 'zero' | 'due'; paidAt: string | null;
+  record: { id: string; status: string } | null;
+}
+export interface PayrollSheet {
+  ym: string; payUntil: string; closed: boolean; closedAt: string | null; canClose: boolean;
+  cards: { accrued: number; advances: number; paid: number; paidCount: number; toPay: number; employees: number };
+  rows: PayrollRow[];
+}
+export const getPayroll = (ym?: string) => api.get<PayrollSheet>('/finance/payroll', { params: ym ? { ym } : {} }).then((r) => r.data);
+export const getPayrollHistory = (userId: string) =>
+  api.get<{ user: { id: string; name: string }; rows: Array<{ ym: string; net: number; advances: number; status: string; paidAt: string | null }> }>(`/finance/payroll/history/${userId}`).then((r) => r.data);
+export const payrollAdvance = (dto: { userId: string; ym: string; amount: number; accountId: string; date: string; note?: string }) =>
+  api.post('/finance/payroll/advance', dto).then((r) => r.data);
+export const payrollPay = (dto: { userId: string; ym: string; accountId: string; date: string }) => api.post('/finance/payroll/pay', dto).then((r) => r.data);
+export const payrollClose = (ym: string) => api.post<{ ok: boolean; nextYm: string }>('/finance/payroll/close', { ym }).then((r) => r.data);
+export const payrollReopen = (ym: string) => api.post('/finance/payroll/reopen', { ym }).then((r) => r.data);
+
 export interface FinanceTransfer {
   id: string;
   fromAccountId: string;

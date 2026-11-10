@@ -19,7 +19,7 @@ import { fmtMoney } from './financeShared';
 
 /** Пять статей расхода: цвет, значок и куда ведёт карточка. */
 export const EXPENSE_GROUP_META: Array<{ key: ExpenseGroup; color: string; icon: string; to: string }> = [
-  { key: 'salary', color: '#C2410C', icon: 'payments', to: '/salary' },
+  { key: 'salary', color: '#C2410C', icon: 'payments', to: '/finance/expense/salary' },
   { key: 'rent', color: '#4F46E5', icon: 'apartment', to: '/finance/expense/rent' },
   { key: 'partners', color: '#0E7C86', icon: 'handshake', to: '/finance/expense/partners' },
   { key: 'debts', color: '#DC2626', icon: 'receipt_long', to: '/finance/expense/debts' },

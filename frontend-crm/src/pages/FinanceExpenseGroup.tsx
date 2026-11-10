@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import Icon from '../Icon';
@@ -10,12 +10,14 @@ import FinanceSubnav from '../components/finance/FinanceSubnav';
 import TransactionForm from '../components/finance/TransactionForm';
 import { MonthNav, fmtMoney, monthLabel, useYmParam, currentYm } from '../components/finance/financeShared';
 import { EXPENSE_GROUP_META, ExpensePayModal, parseAmount, useMonthIn } from '../components/finance/ExpenseShared';
+import PayrollSection from '../components/finance/PayrollSection';
 import {
   createDebt,
   createSubscription,
   deleteDebt,
   deleteTransaction,
   getDebts,
+  getPayroll,
   getOtherExpense,
   getPartnersBoard,
   getSubscriptions,
@@ -48,8 +50,8 @@ import { fmtDateText, tjToday } from '../lib/tjTime';
  * Долги и кредиты, Комиссии партнёрам, Прочее. Зарплата — своя страница.
  */
 
-type Kind = 'rent' | 'debts' | 'partners' | 'other';
-const KINDS: Kind[] = ['rent', 'debts', 'partners', 'other'];
+type Kind = 'salary' | 'rent' | 'debts' | 'partners' | 'other';
+const KINDS: Kind[] = ['salary', 'rent', 'debts', 'partners', 'other'];
 const CURRENCIES = ['TJS', 'USD', 'EUR', 'CNY', 'RUB'];
 
 function day(d: string | null): string {
@@ -118,6 +120,13 @@ export default function FinanceExpenseGroup() {
   };
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   useRealtime({ 'transaction:new': refresh, 'transaction:updated': refresh, 'transaction:deleted': refresh, 'transaction:reversed': refresh, 'finance:accounts': refresh });
+  // Зарплата без месяца в ссылке — основной открытый месяц (прошлый, пока не закрыт).
+  const [params] = useSearchParams();
+  const needDefault = kind === 'salary' && !params.get('ym');
+  const defQ = useQuery({ queryKey: keys.finance.expense('payroll', 'default'), queryFn: () => getPayroll(), enabled: needDefault });
+  useEffect(() => {
+    if (needDefault && defQ.data?.ym) setYm(defQ.data.ym);
+  }, [needDefault, defQ.data?.ym]);
   if (!KINDS.includes(kind as Kind)) return <Navigate to="/finance/expense" replace />;
   const k = kind as Kind;
   const meta = EXPENSE_GROUP_META.find((g) => g.key === k)!;
@@ -132,6 +141,7 @@ export default function FinanceExpenseGroup() {
         </h2>
         <MonthNav ym={ym} onChange={setYm} />
       </div>
+      {k === 'salary' && (needDefault ? <div className="fin-card"><p className="fin-empty-line">{t('common.loading')}</p></div> : <PayrollSection ym={ym} onYm={setYm} />)}
       {k === 'rent' && <RentSection ym={ym} />}
       {k === 'debts' && <DebtsSection ym={ym} />}
       {k === 'partners' && <PartnersSection ym={ym} />}

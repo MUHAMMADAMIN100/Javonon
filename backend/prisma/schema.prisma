@@ -1063,6 +1063,10 @@ model Transaction {
   subscription   FinanceSubscription? @relation("TransactionSubscription", fields: [subscriptionId], references: [id], onDelete: SetNull)
   debtId         String?
   debt           FinanceDebt?         @relation("TransactionDebt", fields: [debtId], references: [id], onDelete: SetNull)
+  /// Зарплатная операция (Финансы → Расход → Зарплата): за какой месяц
+  /// начисления (ГГГГ-ММ) и что это — аванс или выплата. Сотрудник — managerId.
+  salaryYm       String?
+  salaryKind     SalaryTxKind?
 
   // Soft-delete для возвратов / отменённых сделок (bug #25 из audit:edge-cases).
   // Когда SaleSubmission переходит в CANCELLED, оригинальная INCOME-транзакция
@@ -1084,6 +1088,7 @@ model Transaction {
   @@index([accountId])
   @@index([subscriptionId])
   @@index([debtId])
+  @@index([managerId, salaryYm])
 }
 
 // ============================================================
@@ -2965,4 +2970,19 @@ model FinanceOtherPlan {
   ym        String   @id
   amount    Float
   updatedAt DateTime @updatedAt
+}
+
+/// Вид зарплатной операции: аванс (уходит со счёта сразу, уменьшает «к выплате»)
+/// или выплата остатка за месяц.
+enum SalaryTxKind {
+  ADVANCE
+  PAYOUT
+}
+
+/// Закрытый зарплатный месяц: выплачено всем, авансы и выплаты за него больше
+/// не вносятся. Переоткрыть можно — деньги при этом не трогаются.
+model FinancePayrollMonth {
+  ym         String   @id
+  closedAt   DateTime @default(now())
+  closedById String?
 }

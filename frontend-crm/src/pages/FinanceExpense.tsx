@@ -135,7 +135,7 @@ function ExpenseCards({ data }: { data?: ExpenseSummary }) {
       note = (c.other.planSource === 'own' ? t('finance.exp.planOwn') : t('finance.exp.planAvg')).replace('{sum}', fmtMoney(c.other.plan));
     }
     return (
-      <Link key={key} to={key === 'salary' ? meta.to : `${meta.to}?ym=${data.ym}`} className="exp-card" style={{ ['--grp' as any]: meta.color }} data-testid={`exp-card-${key}`}>
+      <Link key={key} to={key === 'salary' ? `${meta.to}?ym=${c.salary.forYm}` : `${meta.to}?ym=${data.ym}`} className="exp-card" style={{ ['--grp' as any]: meta.color }} data-testid={`exp-card-${key}`}>
         <span className="exp-card-head">
           <span className="inc-dir-icon exp-icon" aria-hidden="true"><Icon name={meta.icon} size={20} /></span>
           {t(`finance.exp.g.${key}`)}

@@ -1291,3 +1291,29 @@ a.inc-tile:hover { border-color: #B9C7DD; }
   .exp-actions .btn { min-height: 40px; }
 }
 @media (max-width: 380px) { .exp-cards { grid-template-columns: 1fr; } }
+
+/* ── Финансы → Расход → Зарплата (часть 2, 10.11.2026) ── */
+.pay-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pay-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pay-hint { flex: 1 1 320px; font-size: 12.5px; color: var(--text-soft); background: #F3F6FB; border-radius: 10px; padding: 8px 12px; }
+.pay-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.pay-table td { vertical-align: top; }
+.pay-row { cursor: pointer; }
+.pay-row:hover td, .pay-row.is-open td { background: #F8FAFD; }
+.pay-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.pay-table tfoot td { font-weight: 800; border-top: 2px solid var(--border); }
+.pay-details-row > td { background: #F8FAFD; }
+.pay-details { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 18px; padding: 6px 4px 10px; cursor: default; }
+.pay-block { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pay-block h4 { margin: 0; font: 700 13px 'Inter', sans-serif; color: var(--text); }
+.pay-adv-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.pay-why { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-soft); }
+.pay-dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 6px 0; font-size: 13px; }
+.pay-dl dt { color: var(--text-light); }
+.pay-dl dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.pay-dl dd.is-out { color: #B91C1C; }
+.pay-card-act { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pay-card .pay-details { grid-template-columns: 1fr; padding: 8px 0 0; border-top: 1px solid var(--border); margin-top: 6px; }
+@media (max-width: 1100px) { .pay-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pay-details { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 720px) { .pay-adv-form { grid-template-columns: 1fr; } .pay-card-act .btn { min-height: 44px; } }
+@media (max-width: 380px) { .pay-cards { grid-template-columns: 1fr; } }

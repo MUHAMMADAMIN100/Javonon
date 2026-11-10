@@ -178,7 +178,7 @@ export class SalaryService {
               currency: rec.currency,
               /** Доплата за прошлые месяцы, вошедшая в запись (уже в bonusAmount). */
               bonusArrearsAmount: recordArrearsAmount(rec),
-              record: { id: rec.id, status: rec.status, netAmount: rec.netAmount, periodStart: rec.periodStart, periodEnd: rec.periodEnd },
+              record: { id: rec.id, status: rec.status, netAmount: rec.netAmount, periodStart: rec.periodStart, periodEnd: rec.periodEnd, paidAt: rec.paidAt },
             };
           }
           const p = await this.preview(u.id, periodStart, periodEnd, 0);
@@ -911,7 +911,12 @@ export class SalaryService {
   /** QA-fix: атомарное claim PENDING → PAID, чтобы повторный вызов
    *  не создавал вторую expense-транзакцию (раньше можно было дёрнуть
    *  /salary/:id/pay дважды и получить дубль расхода). */
-  async markPaid(id: string) {
+  /**
+   * Выплата зарплаты. Авансы за месяц этой записи (Финансы → Расход →
+   * Зарплата) уже ушли со счёта — выплачивается остаток. Из Финансов
+   * передаются счёт и дата выплаты; со страницы «Зарплата» — без счёта.
+   */
+  async markPaid(id: string, opts: { accountId?: string | null; date?: Date; recordedById?: string | null } = {}) {
     const rec = await this.prisma.salaryRecord.findUnique({ where: { id } });
     if (!rec) throw new NotFoundException('Запись не найдена');
     if (rec.status === 'PAID') throw new BadRequestException('Зарплата уже выплачена');
@@ -926,10 +931,26 @@ export class SalaryService {
       );
     }
 
+    const salaryYm = tjLocalDay(rec.periodStart).slice(0, 7);
+    const adv = await this.prisma.transaction.aggregate({
+      where: { managerId: rec.userId, salaryYm, salaryKind: 'ADVANCE', type: 'EXPENSE', reversedAt: null },
+      _sum: { amount: true },
+    });
+    const advances = round(adv._sum.amount ?? 0);
+    const payAmount = round(rec.netAmount - advances);
+    let accountId: string | null = null;
+    if (opts.accountId) {
+      const acc = await this.prisma.financeAccount.findUnique({ where: { id: opts.accountId } });
+      if (!acc || acc.archived) throw new BadRequestException('Счёт не найден или в архиве');
+      if (acc.currency !== rec.currency) throw new BadRequestException(`Счёт «${acc.name}» в ${acc.currency}, а зарплата в ${rec.currency}`);
+      accountId = acc.id;
+    }
+    const paidAt = opts.date ?? new Date();
+
     return this.prisma.$transaction(async (tx) => {
       const claim = await tx.salaryRecord.updateMany({
         where: { id, status: { not: 'PAID' } },
-        data: { status: 'PAID', paidAt: new Date() },
+        data: { status: 'PAID', paidAt },
       });
       if (claim.count === 0) {
         throw new BadRequestException('Зарплата уже выплачена');
@@ -956,17 +977,26 @@ export class SalaryService {
       if (txIds.length) {
         await tx.transaction.updateMany({ where: { id: { in: txIds }, reversedAt: null }, data: { bonusApplied: true } });
       }
-      await tx.transaction.create({
-        data: {
-          type: 'EXPENSE',
-          category: 'SALARY',
-          amount: rec.netAmount,
-          currency: rec.currency,
-          managerId: rec.userId,
-          comment: `Зарплата за период ${tjLocalDay(rec.periodStart)} — ${tjLocalDay(rec.periodEnd)}`,
-          date: new Date(),
-        },
-      });
+      // Всё покрыто авансами — выплачивать нечего, запись просто закрывается.
+      if (payAmount > 0.005) {
+        await tx.transaction.create({
+          data: {
+            type: 'EXPENSE',
+            category: 'SALARY',
+            amount: payAmount,
+            currency: rec.currency,
+            managerId: rec.userId,
+            comment:
+              `Зарплата за период ${tjLocalDay(rec.periodStart)} — ${tjLocalDay(rec.periodEnd)}` +
+              (advances > 0 ? ` (за вычетом аванса ${advances})` : ''),
+            date: paidAt,
+            accountId,
+            salaryYm,
+            salaryKind: 'PAYOUT',
+            recordedById: opts.recordedById ?? null,
+          },
+        });
+      }
       return tx.salaryRecord.findUnique({
         where: { id },
         include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },

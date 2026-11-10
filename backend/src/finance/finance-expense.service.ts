@@ -5,6 +5,7 @@ import { PartnersService } from '../partners/partners.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { tjEndOfDay, tjEndOfMonth, tjLocalDay, tjParseLocalDate, tjStartOfDay } from '../common/tj-time';
 import { FINANCE_CURRENCIES, monthStartOf } from './finance-accounts.service';
+import { FinancePayrollService } from './finance-payroll.service';
 
 /**
  * Финансы → «Расход» (часть 2, 10.11.2026): пять статей — Зарплата, Аренда и
@@ -117,6 +118,7 @@ export class FinanceExpenseService {
     private prisma: PrismaService,
     private salary: SalaryService,
     private partners: PartnersService,
+    private payrollSheet: FinancePayrollService,
     private realtime: RealtimeGateway,
   ) {}
 
@@ -145,19 +147,9 @@ export class FinanceExpenseService {
 
   // ── зарплата: начислено за месяц и что из этого не выплачено ──────────
   private async payroll(ym: string) {
-    const start = monthStartOf(ym);
-    const { rows } = await this.salary.previewAll(start, tjEndOfMonth(start));
-    const list = (rows as any[]).filter((r) => (r.netAmount ?? 0) > 0.005 || r.record);
-    let accrued = 0;
-    let toPay = 0;
-    let paidCount = 0;
-    for (const r of list) {
-      const net = Math.max(0, r.record ? r.record.netAmount : r.netAmount) || 0;
-      accrued += net;
-      if (r.record?.status === 'PAID') paidCount++;
-      else toPay += net;
-    }
-    return { ym, employees: list.length, paidCount, accrued: round2(accrued), toPay: round2(toPay) };
+    // Та же ведомость, что в «Расход → Зарплата»: авансы уменьшают «к выплате».
+    const sh = await this.payrollSheet.sheet(ym);
+    return { ym, employees: sh.cards.employees, paidCount: sh.cards.paidCount, accrued: sh.cards.accrued, toPay: sh.cards.toPay };
   }
 
   // ── аренда и подписки ─────────────────────────────────────────────────

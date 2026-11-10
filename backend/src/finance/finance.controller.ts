@@ -22,6 +22,7 @@ import { FinanceService, CreateTransactionDto } from './finance.service';
 import { FinanceAccountsService, AccountDto, TransferDto } from './finance-accounts.service';
 import { FinanceIncomeService, AcceptPaymentDto } from './finance-income.service';
 import { FinanceExpenseService, SubscriptionDto, DebtDto } from './finance-expense.service';
+import { FinancePayrollService } from './finance-payroll.service';
 import { tjLocalDay } from '../common/tj-time';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -221,6 +222,7 @@ export class FinanceController {
     private accounts: FinanceAccountsService,
     private incomeSvc: FinanceIncomeService,
     private expenseSvc: FinanceExpenseService,
+    private payrollSvc: FinancePayrollService,
   ) {}
 
   // ── Счета (раздел «Финансы», 10.11.2026) ──────────────────────────────
@@ -337,6 +339,41 @@ export class FinanceController {
   @Permissions('finance:update')
   setOtherPlan(@Body() dto: { ym?: string; amount?: number | string | null }) {
     return this.expenseSvc.setOtherPlan(dto);
+  }
+
+  // ── «Расход → Зарплата»: ведомость месяца, авансы, выплата, закрытие ──
+  @Get('payroll')
+  payroll(@Query('ym') ym?: string) {
+    return this.payrollSvc.sheet(ym || undefined);
+  }
+
+  @Get('payroll/history/:userId')
+  payrollHistory(@Param('userId') userId: string) {
+    return this.payrollSvc.history(userId);
+  }
+
+  @Post('payroll/advance')
+  @Permissions('salary:pay')
+  payrollAdvance(@CurrentUser() me: any, @Body() dto: { userId?: string; ym?: string; amount?: number | string; accountId?: string; date?: string; note?: string }) {
+    return this.payrollSvc.giveAdvance(me, dto);
+  }
+
+  @Post('payroll/pay')
+  @Permissions('salary:pay')
+  payrollPay(@CurrentUser() me: any, @Body() dto: { userId?: string; ym?: string; accountId?: string; date?: string }) {
+    return this.payrollSvc.pay(me, dto);
+  }
+
+  @Post('payroll/close')
+  @Permissions('salary:pay')
+  payrollClose(@CurrentUser() me: any, @Body() dto: { ym?: string }) {
+    return this.payrollSvc.close(me, dto?.ym);
+  }
+
+  @Post('payroll/reopen')
+  @Permissions('salary:pay')
+  payrollReopen(@Body() dto: { ym?: string }) {
+    return this.payrollSvc.reopen(dto?.ym);
   }
 
   /** С какого дня ведутся остатки счетов. */
