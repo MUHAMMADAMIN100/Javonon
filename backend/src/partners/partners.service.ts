@@ -775,17 +775,48 @@ export class PartnersService {
     });
   }
 
-  async adminMarkPayout(id: string, action: 'paid' | 'rejected') {
+  /**
+   * Выплата по заявке партнёра. «Выплачено» пишет и расход «Выплата партнёру»
+   * (Финансы → Расход → Комиссии партнёрам): из Финансов — со счёта и датой,
+   * со страницы партнёров — без счёта (он определится по способу оплаты).
+   */
+  async adminMarkPayout(
+    id: string,
+    action: 'paid' | 'rejected',
+    opts: { accountId?: string | null; date?: Date; recordedById?: string | null; receiptUrl?: string | null } = {},
+  ) {
     return this.prisma.$transaction(async (tx) => {
-      const p = await tx.partnerPayout.findUnique({ where: { id } });
+      const p = await tx.partnerPayout.findUnique({ where: { id }, include: { partner: { select: { fullName: true } } } });
       if (!p) throw new NotFoundException('Выплата не найдена');
       if (p.status !== 'REQUESTED') {
         throw new ForbiddenException('Этот payout уже обработан');
       }
       if (action === 'paid') {
+        const currency = (p.currency || 'TJS').toUpperCase();
+        let accountId: string | null = null;
+        if (opts.accountId) {
+          const acc = await tx.financeAccount.findUnique({ where: { id: opts.accountId } });
+          if (!acc || acc.archived) throw new BadRequestException('Счёт не найден или в архиве');
+          if (acc.currency !== currency) throw new BadRequestException(`Счёт «${acc.name}» в ${acc.currency}, а выплата в ${currency}`);
+          accountId = acc.id;
+        }
+        const paidAt = opts.date ?? new Date();
+        await tx.transaction.create({
+          data: {
+            type: 'EXPENSE',
+            category: 'PARTNER_COMMISSION',
+            amount: p.amountCents / 100,
+            currency,
+            date: paidAt,
+            comment: `Выплата партнёру ${p.partner?.fullName ?? ''}`.trim(),
+            recordedById: opts.recordedById ?? null,
+            accountId,
+            ...(opts.receiptUrl ? { receiptUrl: opts.receiptUrl, receiptKind: 'RECEIPT' as const } : {}),
+          },
+        });
         return tx.partnerPayout.update({
           where: { id },
-          data: { status: 'PAID', paidAt: new Date() },
+          data: { status: 'PAID', paidAt },
         });
       } else {
         // Возвращаем зарезервированную сумму на баланс

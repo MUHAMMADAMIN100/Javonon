@@ -52,6 +52,7 @@ export const keys = {
     balanceDays: (ym: string) => ['finance', 'balance-days', ym] as const,
     transfers: (p: Record<string, unknown> = {}) => ['finance', 'transfers', p] as const,
     income: (ym: string) => ['finance', 'income', ym] as const,
+    expense: (kind: string, p: string | number) => ['finance', 'expense', kind, p] as const,
   },
   salary: {
     all: ['salary'] as const,

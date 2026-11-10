@@ -1,5 +1,6 @@
 import { useChatUnreadTotal } from '../lib/chatUnread';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useAuth } from '../store/auth';
@@ -172,10 +173,19 @@ export default function Sidebar() {
   const panelGroup = visibleKey ? groups.find((g) => g.key === visibleKey) : undefined;
   const railTabKey = (isKnownGroup(railFocusKey) ? railFocusKey : null) ?? activeGroupKey ?? groups[0]?.key ?? null;
 
+  // Панель может ещё дорисовываться (или доигрывать закрытие после Escape) —
+  // пробуем несколько кадров, пока первый пункт действительно не получит фокус.
   const focusPanelFirstItem = useCallback(() => {
-    requestAnimationFrame(() => {
-      panelNavRef.current?.querySelector<HTMLAnchorElement>('a')?.focus({ preventScroll: true });
-    });
+    let tries = 0;
+    const step = () => {
+      const a = panelNavRef.current?.querySelector<HTMLAnchorElement>('a');
+      if (a?.isConnected) {
+        a.focus({ preventScroll: true });
+        if (document.activeElement === a) return;
+      }
+      if (++tries < 20) requestAnimationFrame(step);
+    };
+    step();
   }, []);
 
   // Escape закрывает панель, открытую и мышью (фокус тогда на странице), и
@@ -421,7 +431,8 @@ export default function Sidebar() {
       case 'ArrowRight':
         e.preventDefault();
         cancelClose();
-        setOpenKey(g.key);
+        // Панель рисуем сразу, чтобы фокус встал на первый пункт без задержки.
+        flushSync(() => setOpenKey(g.key));
         focusPanelFirstItem();
         return;
       case 'ArrowDown': next = idx + 1; break;

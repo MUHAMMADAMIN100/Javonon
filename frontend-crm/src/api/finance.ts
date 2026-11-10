@@ -14,7 +14,10 @@ export type TransactionCategory =
   | 'MISC_EXPENSE'
   | 'TARGETED_ADS'
   | 'OTHER_INCOME'
-  | 'OTHER_EXPENSE';
+  | 'OTHER_EXPENSE'
+  | 'SUBSCRIPTION'
+  | 'PARTNER_COMMISSION'
+  | 'LOAN_PAYMENT';
 
 export const TRANSACTION_CATEGORY_LABEL: Record<TransactionCategory, string> = localized('finance.cat', {
   TUITION_PAYMENT: 'Оплата обучения',
@@ -28,6 +31,9 @@ export const TRANSACTION_CATEGORY_LABEL: Record<TransactionCategory, string> = l
   TARGETED_ADS: 'Target (реклама)',
   OTHER_INCOME: 'Прочий доход',
   OTHER_EXPENSE: 'Прочие расходы',
+  SUBSCRIPTION: 'Подписки',
+  PARTNER_COMMISSION: 'Выплата партнёру',
+  LOAN_PAYMENT: 'Долги и кредиты',
 });
 // Алиас для совместимости с новым именованием (см. запросы UI).
 export const CATEGORY_LABEL = TRANSACTION_CATEGORY_LABEL;
@@ -46,6 +52,9 @@ export const EXPENSE_CATEGORIES: TransactionCategory[] = [
   'MISC_EXPENSE',
   'TARGETED_ADS',
   'OTHER_EXPENSE',
+  'SUBSCRIPTION',
+  'PARTNER_COMMISSION',
+  'LOAN_PAYMENT',
 ];
 
 // === Google Sheet parity — enum-типы из Prisma-схемы, продублированы литералами.
@@ -149,6 +158,8 @@ export interface Transaction {
   account?: FinanceAccountRef | null;
   /** Сколько легло на счёт в его валюте, если она другая ($-оплата на счёт в сомони). */
   accountAmount?: number | null;
+  subscriptionId?: string | null;
+  debtId?: string | null;
 }
 
 /**
@@ -205,6 +216,8 @@ export interface CreateTransactionDto {
   paymentPhase?: PaymentPhaseStatus | null;
   paidViaId?: string | null;
   accountId?: string | null;
+  subscriptionId?: string | null;
+  debtId?: string | null;
 }
 
 export interface TransactionFilters {
@@ -606,6 +619,80 @@ export interface AcceptPaymentInput {
 }
 export const acceptContractPayment = (submissionId: string, dto: AcceptPaymentInput) =>
   api.post<{ status: 'APPROVED' | 'PENDING'; paymentId: string }>(`/finance/income/contracts/${submissionId}/pay`, dto).then((r) => r.data);
+
+// ── Расход (часть 2) ─────────────────────────────────────────────────────
+export type ExpenseGroup = 'salary' | 'rent' | 'partners' | 'debts' | 'other';
+export interface MoneySplit { tjs: number; foreign: Record<string, number> }
+export interface ExpenseSummary {
+  ym: string;
+  current: string;
+  fact: Record<ExpenseGroup, MoneySplit>;
+  cards: {
+    salary: { forYm: string; employees: number; paidCount: number; accrued: number; toPay: number; paid: number };
+    rent: { count: number; paidCount: number; toPay: number; monthly: number; paid: number };
+    partners: { waiting: number; partners: number; requests: number; paid: number };
+    debts: { toPay: number; paid: number; remaining: number; count: number; dueNames: string[]; overdue: number };
+    other: { spent: number; plan: number; planSource: 'own' | 'avg'; paid: number };
+  };
+}
+export interface ExpensePlanRow { ym: string; salary: number; rent: number; partners: number; debts: number; other: number; otherSource: 'own' | 'avg' }
+export interface ExpensePlan {
+  months: number;
+  rows: ExpensePlanRow[];
+  average: { avg: number; months: number; from: string | null; to: string | null };
+  payroll: { ym: string; accrued: number; toPay: number };
+}
+export interface ExpenseChart { ym: string; current: string; rows: Array<{ ym: string; kind: 'fact' | 'current' | 'plan'; groups: Record<ExpenseGroup, number>; total: number }> }
+export interface ExpensePaymentRef { id: string; amount: number; date: string; account: { id: string; name: string } | null }
+export interface SubscriptionRow {
+  id: string; name: string; kind: 'RENT' | 'SUBSCRIPTION'; amount: number; currency: string; payDay: number | null;
+  startYm: string; endYm: string | null; note: string | null; archived: boolean; active: boolean;
+  account: FinanceAccountRef | null; paid: number; left: number; status: 'paid' | 'partial' | 'none'; payments: ExpensePaymentRef[];
+}
+export interface SubscriptionsResponse { ym: string; rows: SubscriptionRow[]; monthly: MoneySplit; toPay: MoneySplit; hidden: number }
+export interface SubscriptionInput {
+  name?: string; kind?: 'RENT' | 'SUBSCRIPTION'; amount?: number; currency?: string; payDay?: number | null;
+  startYm?: string; endYm?: string | null; accountId?: string | null; note?: string | null; archived?: boolean;
+}
+export interface DebtRow {
+  id: string; name: string; kind: 'BANK' | 'PERSON'; total: number; currency: string; paidBefore: number;
+  monthlyAmount: number | null; payDay: number | null; startYm: string | null; dueDate: string | null; note: string | null;
+  account: FinanceAccountRef | null; paidTotal: number; left: number; closed: boolean; late: boolean; overdue: number;
+  dueMonth: number; paidMonth: number; nextDate: string | null; nextAmount: number | null; payments: ExpensePaymentRef[];
+}
+export interface DebtsResponse { ym: string; rows: DebtRow[]; stats: { remaining: MoneySplit; paidMonth: MoneySplit; dueMonth: MoneySplit } }
+export interface DebtInput {
+  name?: string; kind?: 'BANK' | 'PERSON'; total?: number; currency?: string; paidBefore?: number; monthlyAmount?: number | null;
+  payDay?: number | null; startYm?: string | null; dueDate?: string | null; accountId?: string | null; note?: string | null;
+}
+export interface PartnersBoard {
+  ym: string; waiting: number; balance: number; requested: number; paidMonth: MoneySplit;
+  partners: Array<{ id: string; name: string; balance: number; requested: number; paidTotal: number }>;
+  requests: Array<{ id: string; partner: { id: string; name: string }; amount: number; currency: string; method: string | null; details: string | null; requestedAt: string }>;
+  payments: Array<{ id: string; amount: number; currency: string; date: string; comment: string | null; account: { id: string; name: string } | null }>;
+}
+export interface OtherExpense {
+  ym: string; spent: MoneySplit; plan: number; planSource: 'own' | 'avg';
+  average: { avg: number; months: number; from: string | null; to: string | null };
+  byCategory: Array<{ category: TransactionCategory; tjs: number; foreign: Record<string, number>; count: number }>;
+  rows: Array<{ id: string; amount: number; currency: string; date: string; category: TransactionCategory; comment: string | null; account: { id: string; name: string } | null; paidVia: { id: string; fullName: string } | null }>;
+  plans: Array<{ ym: string; amount: number | null }>;
+}
+export const getExpenseSummary = (ym: string) => api.get<ExpenseSummary>('/finance/expense/summary', { params: { ym } }).then((r) => r.data);
+export const getExpensePlan = (months: number) => api.get<ExpensePlan>('/finance/expense/plan', { params: { months } }).then((r) => r.data);
+export const getExpenseChart = (ym: string) => api.get<ExpenseChart>('/finance/expense/chart', { params: { ym } }).then((r) => r.data);
+export const getSubscriptions = (ym: string) => api.get<SubscriptionsResponse>('/finance/expense/subscriptions', { params: { ym } }).then((r) => r.data);
+export const createSubscription = (dto: SubscriptionInput) => api.post('/finance/expense/subscriptions', dto).then((r) => r.data);
+export const updateSubscription = (id: string, dto: SubscriptionInput) => api.patch(`/finance/expense/subscriptions/${id}`, dto).then((r) => r.data);
+export const getDebts = (ym: string) => api.get<DebtsResponse>('/finance/expense/debts', { params: { ym } }).then((r) => r.data);
+export const createDebt = (dto: DebtInput) => api.post('/finance/expense/debts', dto).then((r) => r.data);
+export const updateDebt = (id: string, dto: DebtInput) => api.patch(`/finance/expense/debts/${id}`, dto).then((r) => r.data);
+export const deleteDebt = (id: string) => api.delete(`/finance/expense/debts/${id}`).then((r) => r.data);
+export const getPartnersBoard = (ym: string) => api.get<PartnersBoard>('/finance/expense/partners', { params: { ym } }).then((r) => r.data);
+export const payPartnerPayout = (id: string, dto: { accountId: string; date: string; receiptUrl?: string }) =>
+  api.post(`/finance/expense/partners/payouts/${id}/pay`, dto).then((r) => r.data);
+export const getOtherExpense = (ym: string) => api.get<OtherExpense>('/finance/expense/other', { params: { ym } }).then((r) => r.data);
+export const setOtherPlan = (dto: { ym: string; amount: number | null }) => api.put('/finance/expense/other-plan', dto).then((r) => r.data);
 
 export interface FinanceTransfer {
   id: string;

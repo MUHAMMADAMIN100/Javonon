@@ -53,6 +53,9 @@ enum TransactionCategory {
   TARGETED_ADS // Таргет-реклама (Instagram/Facebook — отличается от общего MARKETING)
   OTHER_INCOME
   OTHER_EXPENSE
+  SUBSCRIPTION // подписки (сервисы, связь) — «Аренда и подписки»
+  PARTNER_COMMISSION // выплата партнёру его комиссии
+  LOAN_PAYMENT // возврат долга / платёж по кредиту
 }
 
 enum SalaryStatus {
@@ -1055,6 +1058,11 @@ model Transaction {
   /// Сколько пришло/ушло на счёт в ЕГО валюте, когда она не совпадает с валютой
   /// операции (оплата сделки в $ на счёт в сомони). Пусто — равно amount.
   accountAmount Float?
+  /// Оплата позиции «Аренда и подписки» / платёж по долгу (Финансы → Расход).
+  subscriptionId String?
+  subscription   FinanceSubscription? @relation("TransactionSubscription", fields: [subscriptionId], references: [id], onDelete: SetNull)
+  debtId         String?
+  debt           FinanceDebt?         @relation("TransactionDebt", fields: [debtId], references: [id], onDelete: SetNull)
 
   // Soft-delete для возвратов / отменённых сделок (bug #25 из audit:edge-cases).
   // Когда SaleSubmission переходит в CANCELLED, оригинальная INCOME-транзакция
@@ -1074,6 +1082,8 @@ model Transaction {
   @@index([paidViaId])
   @@index([reversedAt])
   @@index([accountId])
+  @@index([subscriptionId])
+  @@index([debtId])
 }
 
 // ============================================================
@@ -2841,6 +2851,8 @@ model FinanceAccount {
   transfersIn  FinanceTransfer[]   @relation("FinanceTransferTo")
   channelMaps  FinanceChannelMap[]
   submissionPayments SubmissionPayment[] @relation("SubmissionPaymentAccount")
+  subscriptions      FinanceSubscription[] @relation("SubscriptionAccount")
+  debts              FinanceDebt[]         @relation("DebtAccount")
 }
 
 /// Перевод между своими счетами — в доход и расход не входит. Если валюты
@@ -2886,4 +2898,71 @@ model FinanceConfig {
   /// не влияют (в отчётах и графиках остаются). Пусто — вся история.
   balanceSince DateTime?
   updatedAt    DateTime  @updatedAt
+}
+
+/// «Расход → Аренда и подписки»: повторяющийся платёж. Действует с startYm
+/// по endYm включительно (пусто — бессрочно). Оплата — расход с subscriptionId.
+enum FinanceSubscriptionKind {
+  RENT
+  SUBSCRIPTION
+}
+
+model FinanceSubscription {
+  id        String                  @id @default(uuid())
+  name      String
+  kind      FinanceSubscriptionKind @default(SUBSCRIPTION)
+  amount    Float
+  currency  String                  @default("TJS")
+  /// Число месяца, к которому платить; пусто — без срока.
+  payDay    Int?
+  startYm   String
+  endYm     String?
+  /// Счёт, с которого обычно платим.
+  accountId String?
+  account   FinanceAccount?         @relation("SubscriptionAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  note      String?
+  archived  Boolean                 @default(false)
+  position  Int                     @default(0)
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  transactions Transaction[] @relation("TransactionSubscription")
+}
+
+/// «Расход → Долги и кредиты»: сколько должны. Остаток = total − paidBefore −
+/// платежи (расходы с debtId). План: monthlyAmount каждый месяц с startYm
+/// (кредит) или весь остаток к dueDate («вернуть до»).
+enum FinanceDebtKind {
+  BANK
+  PERSON
+}
+
+model FinanceDebt {
+  id            String          @id @default(uuid())
+  name          String
+  kind          FinanceDebtKind @default(PERSON)
+  total         Float
+  currency      String          @default("TJS")
+  /// Отдали до того, как долг завели в CRM.
+  paidBefore    Float           @default(0)
+  monthlyAmount Float?
+  payDay        Int?
+  startYm       String?
+  dueDate       DateTime?
+  accountId     String?
+  account       FinanceAccount? @relation("DebtAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  note          String?
+  /// Удалён из списка; уже отданное остаётся в журнале.
+  archived      Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  transactions Transaction[] @relation("TransactionDebt")
+}
+
+/// «Расход → Прочее»: своя цифра на месяц (без неё — среднее прошлых месяцев).
+model FinanceOtherPlan {
+  ym        String   @id
+  amount    Float
+  updatedAt DateTime @updatedAt
 }

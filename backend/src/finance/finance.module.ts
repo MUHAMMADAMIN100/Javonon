@@ -3,6 +3,9 @@ import { FinanceController } from './finance.controller';
 import { FinanceService } from './finance.service';
 import { FinanceAccountsService } from './finance-accounts.service';
 import { FinanceIncomeService } from './finance-income.service';
+import { FinanceExpenseService } from './finance-expense.service';
+import { SalaryModule } from '../salary/salary.module';
+import { PartnersModule } from '../partners/partners.module';
 import { SubmissionsModule } from '../submissions/submissions.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -42,9 +45,12 @@ import { RevenueSchemeModule } from '../revenue-scheme/revenue-scheme.module';
     RevenueSchemeModule,
     // «Доход → Контракты»: принять оплату по сделке тем же путём, что и в «Сделках».
     SubmissionsModule,
+    // «Расход»: начисления зарплаты (SalaryService.previewAll) и выплаты партнёрам.
+    SalaryModule,
+    PartnersModule,
   ],
   controllers: [FinanceController],
-  providers: [FinanceService, FinanceAccountsService, FinanceIncomeService],
+  providers: [FinanceService, FinanceAccountsService, FinanceIncomeService, FinanceExpenseService],
   exports: [FinanceService, FinanceAccountsService],
 })
 export class FinanceModule {}

@@ -125,6 +125,9 @@ export interface CreateTransactionDto {
   paidViaId?: string | null;
   /** Счёт операции; валюта операции = валюта счёта. */
   accountId?: string | null;
+  /** Оплата позиции «Аренда и подписки» / платёж по долгу (Финансы → Расход). */
+  subscriptionId?: string | null;
+  debtId?: string | null;
 }
 
 // Валидация значения против enum-объекта, экспортируемого prisma-client-js
@@ -409,6 +412,22 @@ export class FinanceService {
       dto.currency = acc.currency;
       accountId = acc.id;
     }
+    // Позиция аренды/подписки или долг — только у расхода, в их валюте.
+    let subscriptionId: string | null = null;
+    let debtId: string | null = null;
+    if (dto.subscriptionId || dto.debtId) {
+      if (dto.type !== 'EXPENSE') throw new BadRequestException('Оплата позиции или долга — это расход');
+      const target = dto.subscriptionId
+        ? await this.prisma.financeSubscription.findUnique({ where: { id: dto.subscriptionId }, select: { id: true, name: true, currency: true, archived: true } })
+        : await this.prisma.financeDebt.findUnique({ where: { id: dto.debtId! }, select: { id: true, name: true, currency: true, archived: true } });
+      if (!target || target.archived) throw new BadRequestException(dto.subscriptionId ? 'Позиция не найдена' : 'Долг не найден');
+      const cur = (dto.currency || 'TJS').toUpperCase();
+      if (target.currency !== cur) {
+        throw new BadRequestException(`«${target.name}» в ${target.currency}, а оплата в ${cur} — выберите счёт в ${target.currency}`);
+      }
+      if (dto.subscriptionId) subscriptionId = target.id;
+      else debtId = target.id;
+    }
     // === Invariant: TUITION_PAYMENT принадлежит только SubmissionPayment-потоку.
     // Аудит HIGH (Finance vs Salary divergence): finance.breakdown группирует
     // Transaction «как есть», а salary.preview суммирует SubmissionPayment
@@ -648,6 +667,8 @@ export class FinanceService {
         paymentPhase: isIncome ? (paymentPhase ?? null) : null,
         paidViaId: isExpense ? paidViaId : null,
         accountId,
+        subscriptionId,
+        debtId,
       },
       include: {
         student: { select: { id: true, fullName: true } },

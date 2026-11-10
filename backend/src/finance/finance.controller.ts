@@ -21,6 +21,7 @@ export function financeElevated(me: any): boolean {
 import { FinanceService, CreateTransactionDto } from './finance.service';
 import { FinanceAccountsService, AccountDto, TransferDto } from './finance-accounts.service';
 import { FinanceIncomeService, AcceptPaymentDto } from './finance-income.service';
+import { FinanceExpenseService, SubscriptionDto, DebtDto } from './finance-expense.service';
 import { tjLocalDay } from '../common/tj-time';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -219,6 +220,7 @@ export class FinanceController {
     private notifications: NotificationsService,
     private accounts: FinanceAccountsService,
     private incomeSvc: FinanceIncomeService,
+    private expenseSvc: FinanceExpenseService,
   ) {}
 
   // ── Счета (раздел «Финансы», 10.11.2026) ──────────────────────────────
@@ -256,6 +258,85 @@ export class FinanceController {
   @Permissions('finance:create')
   acceptContractPayment(@CurrentUser() me: any, @Param('id') id: string, @Body() dto: AcceptPaymentDto) {
     return this.incomeSvc.acceptContractPayment(me, id, dto);
+  }
+
+  // ── «Расход» (часть 2): сводка, план вперёд, график, статьи ──────────────
+  @Get('expense/summary')
+  expenseSummary(@Query('ym') ym?: string) {
+    return this.expenseSvc.summary(ym || tjLocalDay(new Date()).slice(0, 7));
+  }
+
+  @Get('expense/plan')
+  expensePlan(@Query('months') months?: string) {
+    return this.expenseSvc.plan(Number(months) || 3);
+  }
+
+  @Get('expense/chart')
+  expenseChart(@Query('ym') ym?: string) {
+    return this.expenseSvc.chart(ym || tjLocalDay(new Date()).slice(0, 7));
+  }
+
+  @Get('expense/subscriptions')
+  subscriptions(@Query('ym') ym?: string) {
+    return this.expenseSvc.subscriptions(ym || tjLocalDay(new Date()).slice(0, 7));
+  }
+
+  @Post('expense/subscriptions')
+  @Permissions('finance:update')
+  createSubscription(@Body() dto: SubscriptionDto) {
+    return this.expenseSvc.createSubscription(dto);
+  }
+
+  @Patch('expense/subscriptions/:id')
+  @Permissions('finance:update')
+  updateSubscription(@Param('id') id: string, @Body() dto: SubscriptionDto) {
+    return this.expenseSvc.updateSubscription(id, dto);
+  }
+
+  @Get('expense/debts')
+  debts(@Query('ym') ym?: string) {
+    return this.expenseSvc.debts(ym || tjLocalDay(new Date()).slice(0, 7));
+  }
+
+  @Post('expense/debts')
+  @Permissions('finance:update')
+  createDebt(@Body() dto: DebtDto) {
+    return this.expenseSvc.createDebt(dto);
+  }
+
+  @Patch('expense/debts/:id')
+  @Permissions('finance:update')
+  updateDebt(@Param('id') id: string, @Body() dto: DebtDto) {
+    return this.expenseSvc.updateDebt(id, dto);
+  }
+
+  @Delete('expense/debts/:id')
+  @Permissions('finance:update')
+  removeDebt(@Param('id') id: string) {
+    return this.expenseSvc.removeDebt(id);
+  }
+
+  @Get('expense/partners')
+  partnersBoard(@Query('ym') ym?: string) {
+    return this.expenseSvc.partnersBoard(ym || tjLocalDay(new Date()).slice(0, 7));
+  }
+
+  /** Выплата по заявке партнёра со счёта — расход «Выплата партнёру». */
+  @Post('expense/partners/payouts/:id/pay')
+  @Permissions('finance:create')
+  payPartnerPayout(@CurrentUser() me: any, @Param('id') id: string, @Body() dto: { accountId?: string; date?: string; receiptUrl?: string }) {
+    return this.expenseSvc.payPartnerPayout(me, id, dto);
+  }
+
+  @Get('expense/other')
+  otherExpense(@Query('ym') ym?: string) {
+    return this.expenseSvc.other(ym || tjLocalDay(new Date()).slice(0, 7));
+  }
+
+  @Put('expense/other-plan')
+  @Permissions('finance:update')
+  setOtherPlan(@Body() dto: { ym?: string; amount?: number | string | null }) {
+    return this.expenseSvc.setOtherPlan(dto);
   }
 
   /** С какого дня ведутся остатки счетов. */

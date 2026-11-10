@@ -49,6 +49,6 @@ import { PartnerJwtGuard } from './partner-jwt.guard';
   // CommissionOutboxService экспортируется двум потребителям: submissions
   // (пишет строку в транзакции одобрения и сам же её закрывает) и cron
   // (добирает то, что быстрый путь потерял на рестарте).
-  exports: [ReferralsService, CommissionOutboxService],
+  exports: [ReferralsService, CommissionOutboxService, PartnersService],
 })
 export class PartnersModule {}
