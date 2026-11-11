@@ -1345,3 +1345,33 @@ a.inc-tile:hover { border-color: #B9C7DD; }
 .bk-list li .material-symbols-rounded { color: var(--text-light); }
 .bk-when { font-weight: 600; font-variant-numeric: tabular-nums; }
 .bk-list .fin-link { margin-left: auto; }
+
+/* ── Финансы → Планирование (часть 3, 11.11.2026) ── */
+.plan-filters { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.plan-legend { font-size: 12.5px; color: var(--text-light); }
+.plan-late-tile { border-color: #FBCACA; background: #FFF8F8; }
+.plan-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.plan-day { min-height: 104px; border: 1px solid var(--border); border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 3px; background: #fff; min-width: 0; }
+.plan-day.is-empty { border: 0; background: transparent; }
+.plan-day.is-past { background: #FBFCFE; }
+.plan-day.is-today { border: 1.5px solid var(--primary); background: #EEF3FB; }
+.plan-day.is-drop { outline: 2px dashed var(--primary); outline-offset: -2px; }
+.plan-num { font-size: 12px; font-weight: 700; color: var(--text-soft); }
+.plan-item { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 4px; text-align: left; border: 1px solid transparent; border-radius: 7px; padding: 3px 5px; background: #F5F7FB; cursor: pointer; font: 500 11.5px 'Inter', sans-serif; color: var(--text); min-width: 0; }
+.plan-item:hover { border-color: #B9C7DD; }
+.plan-item.is-done { opacity: .55; }
+.plan-item.is-late { border-color: #FBCACA; background: #FEF2F2; }
+.plan-item[draggable="true"] { cursor: grab; }
+.plan-mark { font-weight: 800; color: var(--text-light); }
+.plan-item.is-late .plan-mark { color: #B91C1C; }
+.plan-item.is-done .plan-mark { color: #15803D; }
+.plan-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-amt { grid-column: 2; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.plan-item.is-in .plan-amt { color: #15803D; }
+.plan-item.is-out .plan-amt { color: #B91C1C; }
+.plan-list { display: flex; flex-direction: column; gap: 10px; }
+.plan-day-row { display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.plan-day-row.is-today .plan-day-head { color: var(--primary); }
+.plan-day-head { font-size: 12.5px; font-weight: 700; color: var(--text-soft); text-transform: capitalize; }
+.plan-day-row .plan-item { font-size: 13px; padding: 7px 9px; min-height: 40px; }
+.plan-notes p { margin: 0 0 4px; }

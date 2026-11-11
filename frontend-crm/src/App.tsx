@@ -21,6 +21,7 @@ import Finance from './pages/Finance';
 import FinanceTransactions from './pages/FinanceTransactions';
 import FinanceIncome from './pages/FinanceIncome';
 import FinanceActivity from './pages/FinanceActivity';
+import FinancePlanning from './pages/FinancePlanning';
 import FinanceExpense from './pages/FinanceExpense';
 import FinanceExpenseGroup from './pages/FinanceExpenseGroup';
 import FinanceSettings from './pages/FinanceSettings';
@@ -117,6 +118,7 @@ export default function App() {
         <Route path="/finance" element={<Finance />} />
         <Route path="/finance/income" element={<FinanceIncome />} />
         <Route path="/finance/activity" element={<FinanceActivity />} />
+        <Route path="/finance/planning" element={<FinancePlanning />} />
         <Route path="/finance/expense" element={<FinanceExpense />} />
         <Route path="/finance/expense/:kind" element={<FinanceExpenseGroup />} />
         <Route path="/finance/transactions" element={<FinanceTransactions />} />

@@ -6,6 +6,7 @@ import { FinanceIncomeService } from './finance-income.service';
 import { FinanceExpenseService } from './finance-expense.service';
 import { FinancePayrollService } from './finance-payroll.service';
 import { FinanceBackupService } from './finance-backup.service';
+import { FinancePlanningService } from './finance-planning.service';
 import { SalaryModule } from '../salary/salary.module';
 import { PartnersModule } from '../partners/partners.module';
 import { SubmissionsModule } from '../submissions/submissions.module';
@@ -52,7 +53,7 @@ import { RevenueSchemeModule } from '../revenue-scheme/revenue-scheme.module';
     PartnersModule,
   ],
   controllers: [FinanceController],
-  providers: [FinanceService, FinanceAccountsService, FinanceIncomeService, FinanceExpenseService, FinancePayrollService, FinanceBackupService],
+  providers: [FinanceService, FinanceAccountsService, FinanceIncomeService, FinanceExpenseService, FinancePayrollService, FinanceBackupService, FinancePlanningService],
   exports: [FinanceService, FinanceAccountsService],
 })
 export class FinanceModule {}

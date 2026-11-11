@@ -492,7 +492,7 @@ function DirectionPayments({ data, dir, month, canAdd, onAdd }: {
  * можно и счёт в сомони («по курсу»): тогда нужна сумма в сомони — она и
  * ляжет на счёт. Кто может одобрять — платёж одобряется сразу.
  */
-function AcceptPaymentModal({ row, accounts, canApprove, onClose }: {
+export function AcceptPaymentModal({ row, accounts, canApprove, onClose }: {
   row: ContractRow;
   accounts: FinanceAccount[];
   canApprove: boolean;

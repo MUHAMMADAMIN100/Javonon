@@ -24,6 +24,7 @@ import { FinanceIncomeService, AcceptPaymentDto } from './finance-income.service
 import { FinanceExpenseService, SubscriptionDto, DebtDto } from './finance-expense.service';
 import { FinancePayrollService } from './finance-payroll.service';
 import { FinanceBackupService } from './finance-backup.service';
+import { FinancePlanningService } from './finance-planning.service';
 import type { Response } from 'express';
 import { logFinance, diffFields, txSnapshot, txSummary, TX_FIELDS } from './finance-activity';
 import { tjLocalDay } from '../common/tj-time';
@@ -227,6 +228,7 @@ export class FinanceController {
     private expenseSvc: FinanceExpenseService,
     private payrollSvc: FinancePayrollService,
     private backupSvc: FinanceBackupService,
+    private planningSvc: FinancePlanningService,
   ) {}
 
   // ── Счета (раздел «Финансы», 10.11.2026) ──────────────────────────────
@@ -430,6 +432,12 @@ export class FinanceController {
     const res = await this.payrollSvc.reopen(dto?.ym);
     await logFinance(this.prisma, { actorId: me?.id, action: 'payroll.reopen', entity: 'FinancePayrollMonth', entityId: dto?.ym ?? null, summary: String(dto?.ym ?? '') });
     return res;
+  }
+
+  /** «Планирование»: календарь месяца — факт и план, просрочки. */
+  @Get('planning')
+  planning(@Query('ym') ym?: string) {
+    return this.planningSvc.month(ym || tjLocalDay(new Date()).slice(0, 7));
   }
 
   // ── Резервные копии и отчёт Excel (часть 3) ──

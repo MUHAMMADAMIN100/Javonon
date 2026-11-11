@@ -743,6 +743,18 @@ async function saveBlob(url: string, params: Record<string, string> | undefined,
 export const downloadBackup = (id: string) => saveBlob(`/finance/backups/${id}/download`, undefined, 'javonon-finance.json.gz');
 export const downloadReport = (ym: string) => saveBlob('/finance/report.xlsx', { ym }, `javonon-finance-${ym}.xlsx`);
 
+// ── Планирование (часть 3) ───────────────────────────────────────────────
+export interface PlanItem {
+  id: string; kind: 'stage' | 'income' | 'expense' | 'salary' | 'subscription' | 'debt' | 'payout'; dir: 'in' | 'out';
+  date: string; name: string; amount: number; currency: string; status: 'done' | 'wait' | 'late'; ref?: Record<string, unknown>;
+}
+export interface PlanningResponse {
+  ym: string; today: string; items: PlanItem[];
+  kpi: { in: { done: Record<string, number>; wait: Record<string, number> }; out: { done: Record<string, number>; wait: Record<string, number> } };
+  overdue: Array<PlanItem & { days: number }>;
+}
+export const getFinancePlanning = (ym: string) => api.get<PlanningResponse>('/finance/planning', { params: { ym } }).then((r) => r.data);
+
 export interface FinanceTransfer {
   id: string;
   fromAccountId: string;
