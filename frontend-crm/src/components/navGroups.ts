@@ -149,7 +149,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/finance', icon: 'space_dashboard', labelKey: 'sidebar.financeOverview', tabLabelKey: 'sidebar.finance', visible: (c) => c.show('finance:read', c.elevated) },
       { to: '/finance/income', icon: 'trending_up', labelKey: 'sidebar.financeIncome', visible: (c) => c.show('finance:read', c.elevated) },
       { to: '/finance/expense', icon: 'trending_down', labelKey: 'sidebar.financeExpense', visible: (c) => c.show('finance:read', c.elevated) },
-      { to: '/salary', icon: 'paid', labelKey: 'sidebar.salary', visible: (c) => c.show('salary:read', c.elevated) },
+      // Ведомость — в «Расход → Зарплата» (11.11.2026); отдельный пункт остаётся
+      // только тем, кому дана зарплата без финансов. Подробный расчёт — кнопкой в ведомости.
+      { to: '/salary', icon: 'paid', labelKey: 'sidebar.salary', visible: (c) => c.show('salary:read', c.elevated) && !c.show('finance:read', c.elevated) },
       { to: '/finance/transactions', icon: 'swap_vert', labelKey: 'sidebar.financeTransactions', visible: (c) => c.show('finance:read', c.elevated) },
       { to: '/finance/settings', icon: 'tune', labelKey: 'sidebar.financeSettings', visible: (c) => c.show('finance:read', c.elevated) },
     ],
