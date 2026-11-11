@@ -187,7 +187,7 @@ export class ProgramsController {
     ] as const) {
       const val = (dto as any)[f];
       if (val !== undefined && val !== null && /[<>]/.test(String(val))) {
-        throw new BadRequestException(`Поле ${f} содержит недопустимые символы`);
+        throw new BadRequestException(`Поле ${f}: нельзя использовать знаки < и >`);
       }
     }
     // imageUrl: scheme regex чтобы `javascript:` не сохранилось как

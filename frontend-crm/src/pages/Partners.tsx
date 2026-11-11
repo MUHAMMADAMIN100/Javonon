@@ -669,6 +669,7 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             onClick={(e) => e.stopPropagation()}
             onSubmit={submit}
+            noValidate
           >
             <div className="dialog-icon">
               <Icon name="person_add" size={28} />

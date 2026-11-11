@@ -43,7 +43,7 @@ import { useAuth } from '../store/auth';
 import { hasRole, isElevated } from '../lib/roles';
 import { roleCan } from '../lib/permissions';
 import { useMediaQuery } from '../lib/useMediaQuery';
-import { fmtDateText, tjToday } from '../lib/tjTime';
+import { fmtDateText, tjDateInput, tjToday } from '../lib/tjTime';
 
 /**
  * «Финансы → Расход → статья» (часть 2, 10.11.2026): Аренда и подписки,
@@ -56,7 +56,7 @@ const CURRENCIES = ['TJS', 'USD', 'EUR', 'CNY', 'RUB'];
 
 function day(d: string | null): string {
   if (!d) return '—';
-  return fmtDateText(`${d.slice(0, 10)}T00:00:00Z`, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return fmtDateText(`${tjDateInput(d)}T00:00:00Z`, { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
 function useCan() {

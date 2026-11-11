@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Optional } from '@nestjs/common';
-import { tjPhoneError } from '../common/phone';
+import { normalizePhoneOrNull } from '../common/phone';
 import { ApplicationSource, ApplicationStatus, Country, Direction, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -364,11 +364,13 @@ export class ApplicationsService {
     // назначение менеджера, реферальная атрибуция) — иначе при 400 в БД
     // осталась бы половинчатая заявка.
     const birthday = this.parseBirthday(dto.birthday);
-    // +992 — ровно 9 цифр (QA №20): и с сайта, и из CRM.
-    for (const ph of [dto.phone, dto.whatsappPhone]) {
-      const err = tjPhoneError(ph);
-      if (err) throw new BadRequestException(err);
-    }
+    // QA-2: один формат телефона «+<код><номер>» и понятные ошибки («номер
+    // слишком короткий…»). +992 — по-прежнему ровно 9 цифр (QA №20).
+    const mainPhone = normalizePhoneOrNull(dto.phone, 'Телефон');
+    if (!mainPhone) throw new BadRequestException('Укажите телефон');
+    dto.phone = mainPhone;
+    if (dto.whatsappPhone) dto.whatsappPhone = normalizePhoneOrNull(dto.whatsappPhone, 'WhatsApp') ?? undefined;
+    if ((dto as any).secondaryPhone) (dto as any).secondaryPhone = normalizePhoneOrNull((dto as any).secondaryPhone, 'Второй телефон');
 
     // Повторное обращение. Номер сравниваем по последним 9 цифрам
     // («+992 90 123-45-67» и «901234567» — один человек). Замок на номер
@@ -810,9 +812,28 @@ export class ApplicationsService {
     ranks?: string;
     /** Корзина: только удалённые (иначе удалённых в выдаче нет вовсе). */
     deleted?: boolean;
+    /** QA-2: «Дубли» — лиды с одним телефоном и лиды-дубли старых сделок (только руководство). */
+    duplicates?: boolean;
   }) {
     const where: Prisma.ApplicationWhereInput = {};
     if (filters.deleted) where.deletedAt = { not: null };
+    if (filters.duplicates) {
+      // Один человек — один лид. Дубли: тот же телефон (последние 9 цифр) у
+      // нескольких живых лидов; плюс «Успешные», созданные старыми сделками
+      // и больше ни к одной живой сделке не привязанные (qa2-data-fix).
+      const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        WITH live AS (
+          SELECT id, right(regexp_replace(phone, '[^0-9]', '', 'g'), 9) AS tail
+          FROM "Application" WHERE "deletedAt" IS NULL
+        )
+        SELECT l.id FROM live l
+        WHERE length(l.tail) = 9 AND l.tail IN (SELECT tail FROM live GROUP BY tail HAVING count(*) > 1)
+        UNION
+        SELECT a.id FROM "Application" a
+        WHERE a."deletedAt" IS NULL AND a."createdBySubmissionId" IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM "SaleSubmission" s WHERE s."applicationId" = a.id AND s.status <> 'CANCELLED')`;
+      where.id = { in: rows.map((r) => r.id) };
+    }
     const and: Prisma.ApplicationWhereInput[] = [];
     // Фильтр по статусу разворачиваем в группу равнозначных значений: пока
     // перенос строк не прогнали (он опт-ин, MIGRATE_LEAD_STATUSES — см.
@@ -876,7 +897,10 @@ export class ApplicationsService {
     // лидов: там первый вопрос как раз «что осталось без хозяина», а id
     // пустоты не бывает.
     if (filters.managerUserId === UNASSIGNED_MANAGER) {
-      and.push({ managerId: null, chinaManagerId: null });
+      // QA-2: «Не назначен» — нет основного (TJ) менеджера. Лид, у которого
+      // есть только CN-менеджер, раньше не попадал ни сюда, ни к TJ-менеджерам:
+      // сумма по фильтру менеджеров не сходилась с итогом (2 330 из 2 331).
+      and.push({ managerId: null });
     } else if (filters.managerUserId) {
       and.push({
         OR: [
@@ -1097,11 +1121,17 @@ export class ApplicationsService {
 
     // +992 — ровно 9 цифр, но только для нового/изменённого номера: старую
     // запись с ошибкой в номере должно быть можно править (QA №20).
-    for (const [next, prev] of [[dto.phone, existing.phone], [dto.whatsappPhone, existing.whatsappPhone]] as const) {
-      if (next != null && next.trim() !== (prev ?? '').trim()) {
-        const err = tjPhoneError(next);
-        if (err) throw new BadRequestException(err);
-      }
+    // Новый или изменённый номер — в общий формат «+<код><номер>» (QA-2).
+    if (dto.phone != null && dto.phone.trim() !== (existing.phone ?? '').trim()) {
+      const ph = normalizePhoneOrNull(dto.phone, 'Телефон');
+      if (!ph) throw new BadRequestException('Укажите телефон');
+      dto.phone = ph;
+    }
+    if (dto.whatsappPhone != null && dto.whatsappPhone.trim() !== (existing.whatsappPhone ?? '').trim()) {
+      dto.whatsappPhone = normalizePhoneOrNull(dto.whatsappPhone, 'WhatsApp') ?? '';
+    }
+    if ((dto as any).secondaryPhone != null && String((dto as any).secondaryPhone).trim() !== ((existing as any).secondaryPhone ?? '').trim()) {
+      (dto as any).secondaryPhone = normalizePhoneOrNull((dto as any).secondaryPhone, 'Второй телефон') ?? '';
     }
 
     // Номер меняют на номер другой открытой заявки — это дубль, не даём.

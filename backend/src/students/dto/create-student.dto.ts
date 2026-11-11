@@ -9,7 +9,7 @@ export class CreateStudentDto {
   @IsString()
   @MinLength(2)
   @MaxLength(120)
-  @Matches(NO_HTML_RE, { message: 'ФИО содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'ФИО: нельзя использовать знаки < и >' })
   fullName: string;
 
   @IsOptional()
@@ -59,6 +59,6 @@ export class CreateStudentDto {
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  @Matches(NO_HTML_RE, { message: 'Комментарий содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'Комментарий: нельзя использовать знаки < и >' })
   comment?: string;
 }

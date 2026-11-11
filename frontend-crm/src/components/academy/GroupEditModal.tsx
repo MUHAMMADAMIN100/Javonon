@@ -17,9 +17,10 @@ export default function GroupEditModal({ group, onClose }: { group: StudyGroup; 
 
   const mut = useMutation({
     mutationFn: () => updateGroup(group.id, groupFormPayload(value)),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.groups.all })]).catch(() => undefined);
       toast(t('toast.saved'), 'success');
-      qc.invalidateQueries({ queryKey: keys.groups.all });
       onClose();
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '../../Icon';
 import { useT } from '../../lib/i18n';
+import { ruPlural } from '../../lib/plural';
 import { fmtDateText, tjToday } from '../../lib/tjTime';
 import { TRANSACTION_CATEGORY_LABEL, type BalanceDays, type FinanceTransfer, type Transaction } from '../../api/finance';
 import { fmtMoney, monthRange } from './financeShared';
@@ -247,7 +248,7 @@ export function TxCalendar({
         <b className="is-in">+{compact(totals.inc)}</b> · <b className="is-out">−{compact(totals.exp)}</b> · {t('finance.cal.result')}{' '}
         <b className={totals.inc - totals.exp >= 0 ? 'is-in' : 'is-out'}>{totals.inc - totals.exp >= 0 ? '+' : '−'}{compact(Math.abs(totals.inc - totals.exp))} {t('finance.cal.tjs')}</b>
       </span>
-      <span className="fin-card-note">{t('finance.cal.count').replace('{n}', String(transactions.length))}</span>
+      <span className="fin-card-note">{t(ruPlural(transactions.length, 'finance.cal.count1', 'finance.cal.count2', 'finance.cal.count')).replace('{n}', String(transactions.length))}</span>
     </div>
   );
 

@@ -347,9 +347,13 @@ export function needsDecision(s: {
  */
 export function weeklyPattern(sessions: Array<{ startsAt: Date; endsAt: Date }>) {
   const fmt = (d: Date) =>
-    new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dushanbe', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dushanbe', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d).replace(/^24:/, '00:');
   const seen = new Map<string, { weekday: number; from: string; to: string }>();
   for (const s of sessions) {
+    // Занятие длиннее суток или без длительности — старые кривые данные
+    // («00:00–00:00», QA-2 №13): в расписание по дням недели не идут.
+    const len = s.endsAt.getTime() - s.startsAt.getTime();
+    if (!(len > 0 && len <= 24 * 60 * 60 * 1000)) continue;
     const wdName = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dushanbe', weekday: 'short' }).format(s.startsAt);
     const weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(wdName) + 1;
     const from = fmt(s.startsAt);

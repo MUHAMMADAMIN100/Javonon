@@ -27,7 +27,7 @@ import { useAuth } from '../store/auth';
 import { hasRole, isFounder } from '../lib/roles';
 import { roleCan } from '../lib/permissions';
 import { useMediaQuery } from '../lib/useMediaQuery';
-import { fmtDateText, tjToday } from '../lib/tjTime';
+import { fmtDateText, tjDateInput, tjToday } from '../lib/tjTime';
 
 /**
  * «Финансы → Доход» (часть 2, макет утверждён 10.11.2026): четыре направления.
@@ -467,7 +467,7 @@ function DirectionPayments({ data, dir, month, canAdd, onAdd }: {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} data-testid={`inc-pay-${r.id}`}>
-                  <td data-label={t('common.date')} style={{ whiteSpace: 'nowrap' }}>{shortDate(r.date.slice(0, 10))}</td>
+                  <td data-label={t('common.date')} style={{ whiteSpace: 'nowrap' }}>{shortDate(tjDateInput(r.date))}</td>
                   <td data-label={t('finance.inc.col.who')}>
                     {r.who ? (r.studentId ? <Link to={`/students/${r.studentId}`}>{r.who}</Link> : r.who) : <span className="fin-muted-line">{r.comment || '—'}</span>}
                     {r.who && r.comment && <div className="fin-muted-line">{r.comment}</div>}

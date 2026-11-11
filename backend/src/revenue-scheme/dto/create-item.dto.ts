@@ -14,7 +14,7 @@ export class CreateItemDto {
   @IsString()
   @MinLength(1, { message: 'Название обязательно' })
   @MaxLength(120)
-  @Matches(NO_HTML_RE, { message: 'Название содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'Название: нельзя использовать знаки < и >' })
   name!: string;
 
   // Копейки-целые (не Float — избегаем IEEE-754 в бухгалтерии, как в

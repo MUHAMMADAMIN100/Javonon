@@ -670,12 +670,13 @@ export default function Leads() {
       // Потолок — как у бэкенда (200 символов, иначе 400).
       search: stringParam('', 200),
       // «Удалённые» — корзина лидов.
-      view: enumParam(['deleted'] as const),
+      view: enumParam(['deleted', 'duplicates'] as const),
       page: pageParam(),
     },
     { pageKey: 'page' },
   );
   const trash = periodValues.view === 'deleted';
+  const dups = periodValues.view === 'duplicates';
   // В корзине — только «Восстановить»: без галочек и назначения менеджера.
   const bulkOn = canAssignAny && !trash;
   const { from, to, manager, scope, page, directionPending, countryPending } = periodValues;
@@ -696,6 +697,7 @@ export default function Leads() {
     direction: filterDirection || undefined,
     source: filterSource || undefined,
     deleted: trash || undefined,
+    duplicates: dups || undefined,
     from: from || undefined,
     to: to || undefined,
     manager: manager || undefined,
@@ -1416,16 +1418,17 @@ export default function Leads() {
         </div>
         <div className="card-body">
           <div className="filters">
-            {(canDeleteAnyKind || trash) && (
+            {(canDeleteAnyKind || trash || dups) && (
               <CrmSelect
                 className="crm-select"
-                value={trash ? 'deleted' : ''}
-                onChange={(e) => setPeriod('view', (e.target.value || '') as 'deleted' | '')}
+                value={trash ? 'deleted' : dups ? 'duplicates' : ''}
+                onChange={(e) => setPeriod('view', (e.target.value || '') as 'deleted' | 'duplicates' | '')}
                 title={t('leads.view.deleted')}
                 data-testid="leads-filter-view"
               >
                 <option value="">{t('leads.view.active')}</option>
                 <option value="deleted">{t('leads.view.deleted')}</option>
+                {isElevated(me) && <option value="duplicates">{t('leads.view.duplicates')}</option>}
               </CrmSelect>
             )}
             {(seesApplications || filterStatus) && (

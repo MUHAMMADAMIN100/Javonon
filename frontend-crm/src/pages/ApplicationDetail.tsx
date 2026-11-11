@@ -50,6 +50,8 @@ import {
 import { useT } from '../lib/i18n';
 import { useChannelLabel, useCountryLabel, useDirectionLabel, useStudentStatusLabel } from '../lib/labels';
 import { tjFormatFull } from '../lib/tjTime';
+import { canOpenDeals } from '../components/navGroups';
+import QueryErrorState from '../components/QueryErrorState';
 
 /**
  * Карточка заявки. Устроена как карточка сотрудника: шапка (аватар, имя,
@@ -78,7 +80,6 @@ export default function ApplicationDetail() {
     enabled: !!id,
   });
   const app = appQuery.data ?? null;
-  const error = appQuery.error ? (appQuery.error as any).message : null;
 
   const studentId = app?.studentId;
   const studentKey = studentId ? keys.students.one(studentId) : ['students', 'one', null];
@@ -205,7 +206,9 @@ export default function ApplicationDetail() {
     deleteMut.mutate(undefined as any);
   };
 
-  if (error) return <div className="error-banner">{error}</div>;
+  if (appQuery.isError) {
+    return <QueryErrorState error={appQuery.error} backTo="/leads" backLabelKey="errorState.toLeads" onRetry={() => appQuery.refetch()} />;
+  }
   if (!app) return <Loading />;
 
   // Новые/успешные исходы считаем вместе с legacy-значениями: перенос строк на
@@ -297,7 +300,7 @@ export default function ApplicationDetail() {
             {/* Только своя заявка (или руководство): сделка засчитывается тому,
                 кто её оформил, — по чужому клиенту это была бы чужая продажа.
                 Доступ «все заявки / лиды» сделок не открывает. */}
-            {(isAdmin || isMine) && !isEnrolled && roleCan(me, 'submissions:create') && (
+            {(isAdmin || isMine) && !isEnrolled && roleCan(me, 'submissions:create') && canOpenDeals(me) && (
               <button
                 type="button"
                 className="btn btn-secondary client-deal-btn"

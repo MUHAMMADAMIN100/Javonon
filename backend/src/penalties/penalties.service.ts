@@ -89,7 +89,7 @@ export class PenaltiesService {
     const details = (dto.details || '').trim();
     if (!details) throw new BadRequestException('Опишите причину штрафа');
     if (details.length > 500) throw new BadRequestException('Описание слишком длинное (макс. 500 символов)');
-    if (/[<>]/.test(details)) throw new BadRequestException('Описание содержит недопустимые символы');
+    if (/[<>]/.test(details)) throw new BadRequestException('Описание: нельзя использовать знаки < и >');
 
     // Календарный день: «YYYY-MM-DD» как есть, без даты — сегодня по
     // Душанбе (сырое new Date() ночью легло бы вчерашним UTC-числом).

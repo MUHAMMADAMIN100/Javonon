@@ -1,3 +1,5 @@
+import { BadRequestException } from '@nestjs/common';
+
 /**
  * Сравнение телефонов между собой — ЕДИНСТВЕННЫЙ канонический способ.
  *
@@ -252,4 +254,44 @@ export function tjPhoneError(phone: string | null | undefined): string | null {
   const tj = trimmed.startsWith('+992') || (digits.startsWith('992') && digits.length >= 10);
   if (!tj) return null;
   return digits.length === 12 ? null : 'Номер Таджикистана: +992 и ровно 9 цифр';
+}
+
+/**
+ * QA-2: один формат телефона во всех разделах (лиды, студенты, ученики
+ * академии, журнал звонков) — «+<код страны><номер>» без пробелов и скобок.
+ * Раньше «+992 555 777 888», «987173998» и «+992021280712» лежали рядом,
+ * ломали сортировку и поиск дублей.
+ *
+ *  • 9 цифр без кода — таджикский номер: +992XXXXXXXXX;
+ *  • +992 — ровно 9 цифр после кода;
+ *  • известный код страны — по его длине (parsePhoneIdentity);
+ *  • неизвестный код — «+» и 10–15 цифр принимаем как есть.
+ * Ответ: { phone } или { error } — человеческий текст для 400.
+ */
+export function normalizePhone(raw: string | null | undefined, what = 'Телефон'): { phone: string } | { error: string } {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!s) return { error: `${what}: укажите номер` };
+  if (/[^\d\s()+\-.]/.test(s)) return { error: `${what}: только цифры, можно «+» в начале` };
+  let digits = s.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  const tj = s.startsWith('+992') || (digits.startsWith('992') && digits.length >= 10);
+  if (tj) {
+    if (digits.length === 12) return { phone: `+${digits}` };
+    const n = digits.length - 3;
+    return { error: n < 9 ? `${what}: номер Таджикистана слишком короткий — после +992 нужно 9 цифр (сейчас ${Math.max(0, n)})` : `${what}: номер Таджикистана слишком длинный — после +992 нужно 9 цифр (сейчас ${n})` };
+  }
+  if (digits.length === 9 && !s.startsWith('+')) return { phone: `+992${digits}` };
+  const id = parsePhoneIdentity(s);
+  if (id?.countryCode) return { phone: `+${id.countryCode}${id.national}` };
+  if (s.startsWith('+') && digits.length >= 10 && digits.length <= 15) return { phone: `+${digits}` };
+  if (digits.length < 9) return { error: `${what}: номер слишком короткий — нужно 9 цифр, например +992 90 123 45 67` };
+  return { error: `${what}: номер не распознан — укажите код страны, например +992 90 123 45 67` };
+}
+
+/** normalizePhone, который сразу отвечает 400. Пустое значение — null (поле необязательное). */
+export function normalizePhoneOrNull(raw: string | null | undefined, what = 'Телефон'): string | null {
+  if (raw == null || (typeof raw === 'string' && !raw.trim())) return null;
+  const r = normalizePhone(raw, what);
+  if ('error' in r) throw new BadRequestException(r.error);
+  return r.phone;
 }

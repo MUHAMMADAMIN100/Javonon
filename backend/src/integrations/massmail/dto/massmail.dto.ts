@@ -16,7 +16,7 @@ export class CreateMassmailDto {
   @IsString()
   @MinLength(2)
   @MaxLength(200)
-  @Matches(NO_HTML_RE, { message: 'Название содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'Название: нельзя использовать знаки < и >' })
   name!: string;
 
   @IsEnum(ExternalMessageChannel)

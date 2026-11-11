@@ -47,6 +47,7 @@ const ACTION_VISUAL: Record<ActivityAction, { icon: string; color: string; bg: s
   // «Войти как» — тёмный, как плашка режима.
   IMPERSONATION: { icon: 'switch_account', color: '#1f2937', bg: '#e5e7eb' },
   PHONE_FIX: { icon: 'phone_enabled', color: '#0369a1', bg: '#e0f2fe' },
+  DATA_FIX: { icon: 'build', color: '#0369a1', bg: '#e0f2fe' },
 };
 const FALLBACK_VISUAL = { icon: 'bolt', color: '#64748b', bg: '#f1f5f9' };
 

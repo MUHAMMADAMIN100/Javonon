@@ -320,6 +320,7 @@ export default function Students() {
           found={filteredItems.length}
           total={totalQuery.data?.length}
           filtered={narrowed}
+          loading={loading}
           testId="students-total"
         />
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

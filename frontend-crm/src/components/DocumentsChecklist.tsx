@@ -6,6 +6,7 @@ import { deleteDocument, uploadDocument } from '../api/students';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { tr, useT } from '../lib/i18n';
+import { tjToday } from '../lib/tjTime';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 
@@ -130,7 +131,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
       }
 
       const blob = await zip.generateAsync({ type: 'blob' });
-      const date = new Date().toISOString().slice(0, 10);
+      const date = tjToday();
       const safeName = sanitizeFileName(studentName || 'student');
       saveAs(blob, `${safeName}_${t('docs.zip.documents')}_${date}.zip`);
       toast(t('toast.downloaded'), 'success');

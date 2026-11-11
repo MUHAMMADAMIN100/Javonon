@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CallDirection, CallOutcome } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizePhoneOrNull } from '../common/phone';
 
 export interface CreateCallDto {
   clientName: string;
@@ -37,8 +38,8 @@ export class CallsService {
     let duration = 0;
     if (dto.durationSeconds !== undefined && dto.durationSeconds !== null) {
       const d = Number(dto.durationSeconds);
-      if (!Number.isFinite(d) || d < 0) {
-        throw new BadRequestException('Длительность некорректна');
+      if (!Number.isFinite(d) || d < 0 || !Number.isInteger(d)) {
+        throw new BadRequestException('Длительность: целое число секунд, не меньше нуля');
       }
       if (d > 24 * 3600) throw new BadRequestException('Длительность слишком большая');
       duration = Math.floor(d);
@@ -48,7 +49,8 @@ export class CallsService {
       data: {
         userId,
         clientName,
-        clientPhone: dto.clientPhone?.trim() || null,
+        // QA-2: «123» сохранялся как номер — теперь общий формат и понятная ошибка.
+        clientPhone: normalizePhoneOrNull(dto.clientPhone, 'Телефон клиента'),
         studentId: dto.studentId || null,
         direction: dto.direction || 'OUTGOING',
         outcome: dto.outcome || 'ANSWERED',

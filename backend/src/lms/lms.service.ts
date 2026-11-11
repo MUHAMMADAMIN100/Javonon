@@ -12,16 +12,31 @@ function validateUrl(value: string | null | undefined, field: string): string | 
   const v = value.trim();
   if (!v) return null;
   if (!SAFE_URL_RE.test(v)) {
-    throw new BadRequestException(`${field} должен быть http(s) или относительной ссылкой`);
+    // QA-2: был технический текст «videoUrl должен быть http(s)…».
+    const label = URL_FIELD_LABEL[field] || field;
+    throw new BadRequestException(`${label}: нужна ссылка, которая начинается с https://, например https://youtu.be/…`);
   }
   return v;
 }
+
+const URL_FIELD_LABEL: Record<string, string> = {
+  videoUrl: 'Ссылка на видео',
+  attachmentUrl: 'Ссылка на файл',
+  coverUrl: 'Ссылка на обложку',
+  thumbnailUrl: 'Ссылка на обложку',
+};
+
+// QA-2: ссылки «javascript:», «data:», «vbscript:» в тексте урока не храним —
+// даже если сейчас текст показывается как есть, завтра его могут отрендерить
+// как Markdown со ссылками.
+const DANGEROUS_SCHEME_RE = /(javascript|vbscript)\s*:|data\s*:\s*[a-z]+\/[a-z0-9.+-]+/i;
 
 function validatePlainText(value: string | null | undefined, field: string, maxLen: number): string | null {
   if (value === undefined || value === null) return null;
   const v = value.trim();
   if (v.length > maxLen) throw new BadRequestException(`${field}: макс. ${maxLen} символов`);
-  if (/[<>]/.test(v)) throw new BadRequestException(`${field}: HTML-теги запрещены`);
+  if (/[<>]/.test(v)) throw new BadRequestException(`${field}: нельзя использовать знаки < и >`);
+  if (DANGEROUS_SCHEME_RE.test(v)) throw new BadRequestException(`${field}: ссылки вида «javascript:» и «data:» запрещены — используйте обычную ссылку https://`);
   return v || null;
 }
 

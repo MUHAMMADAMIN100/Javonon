@@ -53,9 +53,26 @@ export class FinancePayrollService {
     return closed ? currentYm() : prev;
   }
 
+  // QA-2: «Расход» открывался ~8 с — summary, plan и chart одной страницы
+  // каждый заново пересчитывали всю ведомость. Теперь три одновременных запроса
+  // делят один расчёт (живёт 2 с); любая операция в «Финансах» его сбрасывает.
+  private sheetCache = new Map<string, { at: number; p: Promise<any> }>();
+  invalidateSheet() {
+    this.sheetCache.clear();
+  }
+
   async sheet(ymRaw?: string) {
     const ym = ymRaw || (await this.defaultYm());
     if (!YM_RE.test(ym)) throw new BadRequestException('Месяц в формате ГГГГ-ММ');
+    const hit = this.sheetCache.get(ym);
+    if (hit && Date.now() - hit.at < 2_000) return hit.p;
+    const p = this.buildSheet(ym);
+    this.sheetCache.set(ym, { at: Date.now(), p });
+    p.catch(() => this.sheetCache.delete(ym));
+    return p;
+  }
+
+  private async buildSheet(ym: string) {
     const start = monthStartOf(ym);
     const end = tjEndOfMonth(start);
     const [{ rows }, closedRow, salaryTx, users] = await Promise.all([
@@ -151,6 +168,7 @@ export class FinancePayrollService {
 
   /** Аванс: расход «Зарплата» со счёта сразу, уменьшает «к выплате» месяца. */
   async giveAdvance(me: { id: string }, dto: { userId?: string; ym?: string; amount?: unknown; accountId?: string; date?: string; note?: string }) {
+    this.invalidateSheet();
     const ym = String(dto?.ym || '');
     await this.assertOpen(ym);
     if (!dto.userId) throw new BadRequestException('Выберите сотрудника');
@@ -189,6 +207,7 @@ export class FinancePayrollService {
 
   /** «Выплатить»: фиксирует расчёт месяца (если ещё нет) и выплачивает остаток за вычетом авансов. */
   async pay(me: { id: string }, dto: { userId?: string; ym?: string; accountId?: string; date?: string }) {
+    this.invalidateSheet();
     const ym = String(dto?.ym || '');
     await this.assertOpen(ym);
     if (!dto.userId) throw new BadRequestException('Выберите сотрудника');
@@ -212,6 +231,7 @@ export class FinancePayrollService {
   }
 
   async close(me: { id: string }, ymRaw: unknown) {
+    this.invalidateSheet();
     const ym = String(ymRaw || '');
     await this.assertOpen(ym);
     const sheet = await this.sheet(ym);
@@ -222,6 +242,7 @@ export class FinancePayrollService {
   }
 
   async reopen(ymRaw: unknown) {
+    this.invalidateSheet();
     const ym = String(ymRaw || '');
     if (!YM_RE.test(ym)) throw new BadRequestException('Месяц в формате ГГГГ-ММ');
     await this.prisma.financePayrollMonth.deleteMany({ where: { ym } });

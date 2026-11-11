@@ -67,8 +67,9 @@ export default function Calls() {
 
   const createMut = useMutation({
     mutationFn: createCall,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: keys.calls.all });
+    onSuccess: async () => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.calls.all })]).catch(() => undefined);
       toast(t('calls.toast.saved'), 'success');
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
@@ -76,8 +77,9 @@ export default function Calls() {
 
   const deleteMut = useMutation({
     mutationFn: deleteCall,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: keys.calls.all });
+    onSuccess: async () => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.calls.all })]).catch(() => undefined);
       toast(t('calls.toast.deleted'), 'info');
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
@@ -93,9 +95,22 @@ export default function Calls() {
   const [notes, setNotes] = useState('');
   const [formOpen, setFormOpen] = useState(false);
 
+  // QA-2: «−3» минуты и «99» секунд раньше молча правились — теперь ошибка у поля.
+  const [showErr, setShowErr] = useState(false);
+  const callErrs = {
+    phone: clientPhone.trim() && clientPhone.replace(/\D/g, '').length < 9 ? t('calls.err.phoneShort') : '',
+    minutes: !/^\d{1,3}$/.test(minutes.trim()) || +minutes > 600 ? t('calls.err.minutes') : '',
+    seconds: !/^\d{1,2}$/.test(seconds.trim()) || +seconds > 59 ? t('calls.err.seconds') : '',
+  };
+  const ce = (k: keyof typeof callErrs) => (showErr ? callErrs[k] : '');
   const onLog = () => {
     if (!clientName.trim()) {
       toast(t('calls.err.clientName'), 'error');
+      return;
+    }
+    if (Object.values(callErrs).some(Boolean)) {
+      setShowErr(true);
+      toast(t('dealForm.err.fixFields'), 'error');
       return;
     }
     const dur = (parseInt(minutes, 10) || 0) * 60 + (parseInt(seconds, 10) || 0);
@@ -117,6 +132,7 @@ export default function Calls() {
           setNotes('');
           setDirection('OUTGOING');
           setOutcome('ANSWERED');
+          setShowErr(false);
           // Звонок записан — окно закрываем, журнал под ним уже обновлён.
           setFormOpen(false);
         },
@@ -202,7 +218,10 @@ export default function Calls() {
               value={clientPhone}
               onChange={(e) => setClientPhone(e.target.value)}
               placeholder="+992 ..."
+              aria-invalid={!!ce('phone')}
+              data-testid="call-phone"
             />
+            {ce('phone') && <div className="form-error-text" data-field-error>{ce('phone')}</div>}
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.direction')}</label>
@@ -229,10 +248,11 @@ export default function Calls() {
               min={0}
               max={600}
               value={minutes}
-              // Минус и дроби не вводятся (QA №42: «−5 мин 999 сек» сохранялось как 11м 39с).
-              onChange={(e) => setMinutes(String(Math.min(600, parseInt(e.target.value.replace(/\D/g, '') || '0', 10))))}
+              onChange={(e) => setMinutes(e.target.value)}
+              aria-invalid={!!ce('minutes')}
               data-testid="call-minutes"
             />
+            {ce('minutes') && <div className="form-error-text" data-field-error>{ce('minutes')}</div>}
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.seconds')}</label>
@@ -243,10 +263,11 @@ export default function Calls() {
               min={0}
               max={59}
               value={seconds}
-              // Секунды — 0…59: больше — это уже минуты.
-              onChange={(e) => setSeconds(String(Math.min(59, parseInt(e.target.value.replace(/\D/g, '') || '0', 10))))}
+              onChange={(e) => setSeconds(e.target.value)}
+              aria-invalid={!!ce('seconds')}
               data-testid="call-seconds"
             />
+            {ce('seconds') && <div className="form-error-text" data-field-error>{ce('seconds')}</div>}
           </div>
         </div>
 
@@ -335,7 +356,8 @@ export default function Calls() {
                 <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{fmtDateTime(c.occurredAt)}</td>
                 <td data-label={t('calls.col.client')}>
                   <div style={{ fontWeight: 500 }}>{c.clientName}</div>
-                  {c.clientPhone && (
+                  {/* Номер не дублируем, если он же стоит вместо имени (звонок с неизвестного номера, QA-2). */}
+                  {c.clientPhone && c.clientPhone.replace(/\D/g, '') !== c.clientName.replace(/\D/g, '') && (
                     <div style={{ color: 'var(--text-soft)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
                       {c.clientPhone}
                     </div>

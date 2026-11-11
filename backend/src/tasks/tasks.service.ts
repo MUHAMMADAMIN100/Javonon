@@ -16,7 +16,9 @@ import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
  * new Date(), читавшем дату как UTC-полночь). Дата со временем без пояса —
  * время Душанбе. Полная ISO-строка с поясом — как есть.
  */
-const DATE_ONLY_RE = /^(\d{4}-\d{2}-\d{2})(?:T00:00(?::00(?:\.0+)?)?)?$/;
+// Только чистая дата — «без времени», до конца дня. «…T00:00» — ровно полночь
+// (QA-2: выбранное 00:00 сохранялось как 23:59).
+const DATE_ONLY_RE = /^(\d{4}-\d{2}-\d{2})$/;
 
 function parseTaskDeadline(raw?: string | null): Date | null {
   if (!raw) return null;

@@ -1,5 +1,6 @@
 import { saveAs } from 'file-saver';
 import { tr } from '../lib/i18n';
+import { tjToday } from '../lib/tjTime';
 import type { Student } from '../api/types';
 import { DIRECTION_LABEL, STUDENT_STATUS_LABEL } from '../api/types';
 
@@ -239,6 +240,6 @@ export async function generateStudentsReport(params: {
   });
 
   const blob = await Packer.toBlob(doc);
-  const fileName = `javonon-students-${new Date().toISOString().slice(0, 10)}.docx`;
+  const fileName = `javonon-students-${tjToday()}.docx`;
   saveAs(blob, fileName);
 }

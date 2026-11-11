@@ -15,6 +15,7 @@ import { captureReferralFromUrl } from './referral';
 import PartnerRegister from './pages/PartnerRegister';
 import PartnerLogin from './pages/PartnerLogin';
 import PartnerCabinet from './pages/PartnerCabinet';
+import NotFound from './pages/NotFound';
 import { watchIconFont } from './iconFont';
 import './index.css';
 // Кабинеты — в стиле новой CRM (только внутри .stu-page/.stu-login-page).
@@ -53,6 +54,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/partner/register" element={<PartnerRegister />} />
             <Route path="/partner/login" element={<PartnerLogin />} />
             <Route path="/partner/cabinet" element={<PartnerCabinet />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

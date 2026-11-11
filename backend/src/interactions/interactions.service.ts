@@ -92,6 +92,8 @@ export class InteractionsService {
         details: i.details,
         author: i.author,
         occurredAt: i.occurredAt,
+        // QA-2 №12: без этого поля CRM считала любую запись «видно студенту».
+        visibleToStudent: i.visibleToStudent,
       })),
       ...callLogs.map((c) => ({
         source: 'call',

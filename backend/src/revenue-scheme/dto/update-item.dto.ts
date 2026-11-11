@@ -14,7 +14,7 @@ export class UpdateItemDto {
   @IsString()
   @MinLength(1)
   @MaxLength(120)
-  @Matches(NO_HTML_RE, { message: 'Название содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'Название: нельзя использовать знаки < и >' })
   name?: string;
 
   @IsOptional()

@@ -33,6 +33,7 @@ import { ClientMoneyInterceptor } from '../common/client-money.interceptor';
 import { hasPermission, isFounder, roleAllows } from '../auth/role-utils';
 import { logFinance } from '../finance/finance-activity';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertFileContent } from '../common/file-sniff';
 
 // Те же типы файлов что и в time-tracking (паспорт/контракт/чек).
 const SUBMISSION_FILE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf']);
@@ -384,6 +385,7 @@ export class SubmissionsController {
   )
   upload(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Файл не загружен');
+    assertFileContent(file, ['image', 'pdf', 'office'], 'Файл');
     // Возвращаем mimeType с сервера (multer уже провалидировал его через
     // submissionFileFilter). Раньше фронт брал mime только из File.type
     // браузера — для .heic в старых браузерах он бывает пустой, и Document

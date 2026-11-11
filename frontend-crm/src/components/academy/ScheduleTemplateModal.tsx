@@ -58,9 +58,10 @@ export default function ScheduleTemplateModal({
 
   const createMut = useMutation({
     mutationFn: () => bulkSessions(groupId, { weekdays: days, startTime, endTime, from, to, topic: topic.trim() || undefined, allowOverlap }),
-    onSuccess: (r) => {
+    onSuccess: async (r) => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.groups.all })]).catch(() => undefined);
       toast(t('academy.template.created').replace('{n}', String(r.created ?? 0)), 'success');
-      qc.invalidateQueries({ queryKey: keys.groups.all });
       onDone?.();
       onClose();
     },

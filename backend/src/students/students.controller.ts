@@ -25,8 +25,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { normalizeDocumentType } from '../common/documents';
 import { parseDate } from '../common/query-date';
+import { isAccountantOnly } from '../auth/role-utils';
 import { Permissions } from '../auth/permissions.decorator';
 import { ClientMoneyInterceptor } from '../common/client-money.interceptor';
+import { assertFileContent } from '../common/file-sniff';
 
 const uploadStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
@@ -80,7 +82,7 @@ export class StudentsController {
 
   @Permissions('students:read')
   @Get()
-  list(
+  async list(
     @CurrentUser() user: any,
     @Query('direction') direction?: string,
     @Query('status') status?: string,
@@ -124,7 +126,11 @@ export class StudentsController {
       }
       limitN = n;
     }
-    return this.students.findAll({
+    // QA-2: бухгалтеру «Студенты» не показаны. Список ему нужен только для
+    // выбора студента в операции «Финансов» — отдаём имена, без телефонов,
+    // почты и прочей карточки.
+    const brief = isAccountantOnly(user);
+    const rows = await this.students.findAll({
       direction: direction as Direction | undefined,
       status: status as StudentStatus | undefined,
       cabinet: cabinetN,
@@ -141,6 +147,9 @@ export class StudentsController {
       from: parseDate(from, 'from'),
       to: parseDate(to, 'to', true),
     });
+    if (!brief) return rows;
+    const strip = (s: any) => ({ id: s.id, fullName: s.fullName, phones: [], status: s.status, direction: s.direction });
+    return Array.isArray(rows) ? rows.map(strip) : { ...(rows as any), items: ((rows as any).items || []).map(strip) };
   }
 
   // from/to — опциональный период дашборда, фильтр по дате СОЗДАНИЯ
@@ -231,6 +240,7 @@ export class StudentsController {
     @CurrentUser() user: any,
   ) {
     if (!file) throw new BadRequestException('Файл не передан');
+    assertFileContent(file, ['image'], 'Фото');
     const url = `/uploads/${file.filename}`;
     return this.students.update(id, { photoUrl: url }, user);
   }
@@ -252,6 +262,9 @@ export class StudentsController {
   ) {
     if (!file) throw new BadRequestException('Файл не передан');
     if (file.size === 0) throw new BadRequestException('Файл пустой');
+    // «Фото 3/4» — только картинка; остальные документы — фото, PDF или Word/Excel.
+    const docType = normalizeDocumentType(type);
+    assertFileContent(file, docType === 'PHOTO' ? ['image'] : ['image', 'pdf', 'office'], docType === 'PHOTO' ? 'Фото 3/4' : 'Документ');
     const url = `/uploads/${file.filename}`;
     return this.students.addDocument(
       id,

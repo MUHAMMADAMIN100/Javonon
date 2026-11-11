@@ -24,7 +24,7 @@ import NewAcademyStudentModal from './NewAcademyStudentModal';
  * только руководство. Учитель и руководство ставят красный флаг.
  * Вышедшие (убранные, отчисленные, окончившие курс) — отдельным списком.
  */
-export default function GroupStudentsTab({ group, onChanged }: { group: StudyGroupDetail; onChanged: () => void }) {
+export default function GroupStudentsTab({ group, onChanged }: { group: StudyGroupDetail; onChanged: () => void | Promise<unknown> }) {
   const { t } = useT();
   const navigate = useNavigate();
   const { toast, confirm } = useUI();
@@ -55,17 +55,19 @@ export default function GroupStudentsTab({ group, onChanged }: { group: StudyGro
     { key: 'joinedAt', label: t('groups.joinedAt'), type: 'date', value: (m) => m.joinedAt },
   ]);
 
-  const invalidate = () => {
-    onChanged();
-    qc.invalidateQueries({ queryKey: keys.academy.journal(group.id) });
-    qc.invalidateQueries({ queryKey: keys.academy.all });
-  };
+  // QA-2 №14: ждём перечитывания группы — потом «Добавлено», без 3–5 с старого списка.
+  const invalidate = () =>
+    Promise.all([
+      onChanged(),
+      qc.invalidateQueries({ queryKey: keys.academy.journal(group.id) }),
+      qc.invalidateQueries({ queryKey: keys.academy.all }),
+    ]).catch(() => undefined);
 
   const removeMut = useMutation({
     mutationFn: (studentId: string) => removeGroupMember(group.id, studentId),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await invalidate();
       toast(t('academy.students.removed'), 'success');
-      invalidate();
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
@@ -230,7 +232,7 @@ function AddStudentsBox({
   canAdd?: boolean;
   /** «Новый ученик» прямо в группу. */
   canCreate?: boolean;
-  onAdded: () => void;
+  onAdded: () => void | Promise<unknown>;
   onCreate: () => void;
 }) {
   const { t } = useT();
@@ -254,11 +256,11 @@ function AddStudentsBox({
 
   const mut = useMutation({
     mutationFn: () => addGroupMembers(groupId, picked.map((p) => p.id)),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await onAdded();
       toast(t('academy.students.added').replace('{n}', String(picked.length)), 'success');
       setPicked([]);
       setSearch('');
-      onAdded();
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });

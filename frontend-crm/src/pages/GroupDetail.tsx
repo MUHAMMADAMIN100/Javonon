@@ -70,10 +70,11 @@ export default function GroupDetail() {
     setParams(p, { replace: true });
   };
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: keys.groups.one(id || '') });
-    qc.invalidateQueries({ queryKey: keys.groups.all });
-  };
+  const invalidate = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: keys.groups.one(id || '') }),
+      qc.invalidateQueries({ queryKey: keys.groups.all }),
+    ]);
 
   const pattern = useMemo(() => weeklyPatternOf(g?.sessions ?? []), [g?.sessions]);
   const next = useMemo(() => {

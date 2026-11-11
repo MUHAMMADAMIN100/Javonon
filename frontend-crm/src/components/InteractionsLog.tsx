@@ -221,7 +221,8 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
           const vis = resolveVisuals(it);
           const source = (it as any).source;
           const isInteraction = !source || source === 'interaction';
-          const visibleToStudent = (it as any).visibleToStudent ?? true;
+          // QA-2 №12: нет признака — не показываем «видно студенту».
+          const visibleToStudent = (it as any).visibleToStudent === true;
           return (
           <motion.div
             key={`${source || 'interaction'}-${it.id}`}

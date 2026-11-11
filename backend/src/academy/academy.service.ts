@@ -1,3 +1,4 @@
+import { normalizePhone } from '../common/phone';
 import {
   BadRequestException,
   ForbiddenException,
@@ -490,7 +491,7 @@ export class AcademyService {
   private normalizeLevelName(raw: string): string {
     const name = (raw || '').trim().replace(/\s+/g, ' ');
     if (!name) throw new BadRequestException('Напишите название уровня');
-    if (/[<>]/.test(name)) throw new BadRequestException('Название содержит недопустимые символы');
+    if (/[<>]/.test(name)) throw new BadRequestException('Название: нельзя использовать знаки < и >');
     return name.slice(0, 60);
   }
 
@@ -1125,10 +1126,11 @@ export class AcademyService {
   }
 
   private normalizePhone(raw: string, what = 'Телефон'): string {
-    const phone = (raw || '').trim();
-    const digits = phone.replace(/\D/g, '');
-    if (digits.length < 9 || digits.length > 15) throw new BadRequestException(`${what} указан неверно`);
-    return phone;
+    // QA-2: общий формат «+<код><номер>» — в базе были +99212322332 (8 цифр)
+    // и +992121901223213 (12 цифр), проходившие проверку «9–15 цифр».
+    const r = normalizePhone(raw, what);
+    if ('error' in r) throw new BadRequestException(r.error);
+    return r.phone;
   }
 
   /** Необязательный телефон родителя: пусто — нет номера. */
@@ -1141,7 +1143,7 @@ export class AcademyService {
   private normalizeName(raw: string): string {
     const name = (raw || '').trim().replace(/\s+/g, ' ');
     if (name.length < 2) throw new BadRequestException('ФИО слишком короткое');
-    if (/[<>]/.test(name)) throw new BadRequestException('ФИО содержит недопустимые символы');
+    if (/[<>]/.test(name)) throw new BadRequestException('ФИО: нельзя использовать знаки < и >');
     return name.slice(0, 120);
   }
 

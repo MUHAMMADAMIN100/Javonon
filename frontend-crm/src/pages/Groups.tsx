@@ -99,10 +99,11 @@ export default function Groups() {
 
   const createMut = useMutation({
     mutationFn: createGroup,
-    onSuccess: (g) => {
+    onSuccess: async (g) => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.groups.all })]).catch(() => undefined);
       toast(t('toast.created'), 'success');
       setCreating(false);
-      qc.invalidateQueries({ queryKey: keys.groups.all });
       navigate(`/groups/${g.id}`);
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
@@ -359,7 +360,7 @@ function CreateGroupForm({
             {[...(users.data ?? [])]
               .sort((a, b) => Number(b.role === 'TEACHER') - Number(a.role === 'TEACHER') || a.fullName.localeCompare(b.fullName, 'ru'))
               .map((u) => (
-                <option key={u.id} value={u.id}>{u.fullName} · {roleLabel(u.role as string)}</option>
+                <option key={u.id} value={u.id}>{u.fullName} · {(u as any).customRole?.name && (u as any).customRole.isActive !== false ? (u as any).customRole.name : roleLabel(u.role as string)}</option>
               ))}
           </CrmSelect>
         </div>

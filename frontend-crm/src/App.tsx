@@ -51,6 +51,7 @@ import AcademyStudents from './pages/AcademyStudents';
 import AcademyStudentDetail from './pages/AcademyStudentDetail';
 import AcademyLevels from './pages/AcademyLevels';
 import Loading from './components/Loading';
+import QueryErrorState from './components/QueryErrorState';
 
 export default function App() {
   const bootstrap = useAuth((s) => s.bootstrap);
@@ -132,8 +133,9 @@ export default function App() {
         <Route path="/lms" element={<Lms />} />
         <Route path="/partners" element={<Partners />} />
         <Route path="/partners/:id" element={<PartnerDetail />} />
+        {/* Неизвестный адрес — понятная 404 внутри CRM, а не молчаливый уход на главную (QA-2). */}
+        <Route path="*" element={<QueryErrorState kind="notFound" />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

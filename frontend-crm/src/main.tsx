@@ -19,6 +19,19 @@ installTjLocalePatch();
 // Пока шрифт значков грузится — пустое место вместо слов «notifications» и т. п.
 watchIconFont();
 
+// QA-2: «AbortError: play() … interrupted by pause()» на дашборде — не наш код
+// (в CRM нет вызовов play()), но засоряет консоль. Глушим только её.
+window.addEventListener('unhandledrejection', (e) => {
+  const r: any = e.reason;
+  if (r?.name === 'AbortError' && /play\(\)/.test(String(r?.message))) e.preventDefault();
+});
+
+// CRM живёт под /admin. Адрес без него (например /login) раньше давал пустую
+// серую страницу — роутер с basename его не видел (QA-2). Переводим в /admin.
+if (!/^\/admin(\/|$)/.test(window.location.pathname)) {
+  window.location.replace(`/admin${window.location.pathname === '/' ? '' : window.location.pathname}${window.location.search}${window.location.hash}`);
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>

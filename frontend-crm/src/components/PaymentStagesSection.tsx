@@ -298,7 +298,9 @@ function EditStageModal({
         // уже сведены с одобренным платежом (бэк вернёт 400 на попытку).
         ...(locked ? {} : { amount: parseFloat(amount), dueDate }),
       }),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.installments.stages(submissionId) }), qc.invalidateQueries({ queryKey: ['submission', submissionId] })]).catch(() => undefined);
       // Бэк перенёс разницу на другой этап — молчать нельзя: менеджер правил
       // одну строку, а изменились две.
       toast(
@@ -307,8 +309,6 @@ function EditStageModal({
           : t('stages.saved'),
         'success',
       );
-      qc.invalidateQueries({ queryKey: keys.installments.stages(submissionId) });
-      qc.invalidateQueries({ queryKey: ['submission', submissionId] });
       onClose();
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),

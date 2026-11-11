@@ -209,6 +209,13 @@ export class SalesService {
     stages?: { name: string; color?: string; isClosingStage?: boolean }[];
   }) {
     const clean = this.validatePipelineFields(data, false);
+    // QA-2: два этапа с одним названием в новой воронке тоже не даём.
+    const seen = new Set<string>();
+    for (const st of data.stages || []) {
+      const key = String(st?.name ?? '').trim().toLowerCase();
+      if (key && seen.has(key)) throw new BadRequestException(`Этап «${String(st.name).trim()}» повторяется — названия этапов должны различаться`);
+      seen.add(key);
+    }
     if (data.isDefault) {
       await this.prisma.pipeline.updateMany({ where: { isDefault: true }, data: { isDefault: false } });
     }
@@ -315,8 +322,18 @@ export class SalesService {
     return { ok: true };
   }
 
+  /** QA-2: два этапа с одним названием в одной воронке путали менеджеров. */
+  private async assertStageNameFree(pipelineId: string, name: string, exceptId?: string) {
+    const dup = await this.prisma.pipelineStage.findFirst({
+      where: { pipelineId, name: { equals: name.trim(), mode: 'insensitive' }, ...(exceptId ? { id: { not: exceptId } } : {}) },
+      select: { id: true },
+    });
+    if (dup) throw new BadRequestException(`Этап «${name.trim()}» уже есть в этой воронке`);
+  }
+
   async addStage(pipelineId: string, data: { name: string; color?: string; isClosingStage?: boolean }) {
     const clean = this.validateStageFields(data);
+    await this.assertStageNameFree(pipelineId, clean.name);
     const last = await this.prisma.pipelineStage.findFirst({
       where: { pipelineId },
       orderBy: { order: 'desc' },
@@ -360,11 +377,26 @@ export class SalesService {
     if (patch.order !== undefined) {
       const o = Math.floor(Number(patch.order));
       if (!Number.isFinite(o) || o < 0 || o > 99) {
-        throw new BadRequestException('order должен быть от 0 до 99');
+        throw new BadRequestException('Порядок этапа должен быть от 0 до 99');
       }
       data.order = o;
     }
-    return this.prisma.pipelineStage.update({ where: { id }, data });
+    const cur = await this.prisma.pipelineStage.findUnique({ where: { id } });
+    if (!cur) throw new NotFoundException('Этап не найден');
+    if (data.name !== undefined) await this.assertStageNameFree(cur.pipelineId, data.name, id);
+    // QA-2: «‹ ›» отвечали 409 — порядок уникален в воронке, а фронт слал две
+    // правки сразу. Теперь сервер сам меняет этапы местами в одной транзакции
+    // (через временный порядок, чтобы не задеть уникальность).
+    return this.prisma.$transaction(async (tx) => {
+      if (data.order !== undefined && data.order !== cur.order) {
+        const other = await tx.pipelineStage.findFirst({ where: { pipelineId: cur.pipelineId, order: data.order } });
+        if (other) {
+          await tx.pipelineStage.update({ where: { id: cur.id }, data: { order: -1 } });
+          await tx.pipelineStage.update({ where: { id: other.id }, data: { order: cur.order } });
+        }
+      }
+      return tx.pipelineStage.update({ where: { id }, data });
+    });
   }
 
   async deleteStage(id: string) {

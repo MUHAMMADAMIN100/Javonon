@@ -12,10 +12,11 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { CallsService, CreateCallDto } from './calls.service';
-import { isElevated, roleAllows } from '../auth/role-utils';
+import { isAccountantOnly, isElevated, roleAllows } from '../auth/role-utils';
 
 /** Все звонки и статистика: руководство по должности, роль — «Звонки всех и статистика». */
-const seesAllCalls = (me: any) => roleAllows(me, 'calls:all', () => isElevated(me));
+// QA-2: бухгалтеру чужие звонки клиентов не отдаются — только свои.
+const seesAllCalls = (me: any) => roleAllows(me, 'calls:all', () => isElevated(me) && !isAccountantOnly(me));
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 import { Permissions } from '../auth/permissions.decorator';
 

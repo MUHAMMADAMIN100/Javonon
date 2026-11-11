@@ -28,9 +28,10 @@ export function tjLocalHHMM(d: Date = new Date()): { h: number; m: number } {
     timeZone: TJ_TZ,
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    // hourCycle h23 и % 24: на части версий Node полночь — «24», а не «00».
+    hourCycle: 'h23',
   }).formatToParts(d);
-  const h = Number(parts.find((p) => p.type === 'hour')?.value || '0');
+  const h = Number(parts.find((p) => p.type === 'hour')?.value || '0') % 24;
   const m = Number(parts.find((p) => p.type === 'minute')?.value || '0');
   return { h, m };
 }

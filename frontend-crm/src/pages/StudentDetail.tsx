@@ -12,6 +12,7 @@ import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
 import { keys } from '../lib/queryKeys';
 import Loading from '../components/Loading';
+import QueryErrorState from '../components/QueryErrorState';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import DocumentsChecklist from '../components/DocumentsChecklist';
 import InteractionsLog from '../components/InteractionsLog';
@@ -243,6 +244,10 @@ export default function StudentDetail() {
     deleteMut.mutate(undefined as any);
   };
 
+  // Чужой студент по ссылке — «Нет доступа», а не вечная загрузка (QA-2).
+  if (studentQuery.isError) {
+    return <QueryErrorState error={studentQuery.error} backTo="/students" backLabelKey="errorState.toStudents" onRetry={() => studentQuery.refetch()} />;
+  }
   if (!student) return <Loading />;
 
   const isAdmin = isElevated(me);

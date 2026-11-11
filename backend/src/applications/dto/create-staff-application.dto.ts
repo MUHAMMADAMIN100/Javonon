@@ -10,8 +10,9 @@ import {
   MinLength,
   MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApplicationSource, ApplicationStatus, ContactChannel, Country } from '@prisma/client';
-import { NO_HTML_RE, PHONE_RE } from './create-application.dto';
+import { NO_HTML_RE } from './create-application.dto';
 import { ACTIVE_APPLICATION_STATUSES } from '../../common/application-status';
 
 /**
@@ -68,16 +69,18 @@ export type StaffApplicationSource = (typeof STAFF_ALLOWED_SOURCES)[number];
 export const STAFF_DEFAULT_SOURCE: ApplicationSource = 'OTHER';
 
 export class CreateStaffApplicationDto {
-  @IsString()
-  @MinLength(2)
-  @MaxLength(120)
-  @Matches(NO_HTML_RE, { message: 'ФИО содержит недопустимые символы' })
+  // QA-2: ФИО из одних пробелов сервер принимал — обрезаем до проверки длины.
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value))
+  @IsString({ message: 'Укажите ФИО' })
+  @MinLength(2, { message: 'ФИО: минимум 2 буквы' })
+  @MaxLength(120, { message: 'ФИО: не длиннее 120 символов' })
+  @Matches(NO_HTML_RE, { message: 'ФИО: нельзя использовать знаки < и >' })
   fullName: string;
 
-  @IsString()
-  @MinLength(5)
-  @MaxLength(40)
-  @Matches(PHONE_RE, { message: 'phone должен содержать только цифры (с опциональным «+» и пробелами/дефисами)' })
+  // Формат и длину проверяет normalizePhone в сервисе — с понятным текстом
+  // («номер слишком короткий…»), а не «только цифры» на короткий номер (QA-2).
+  @IsString({ message: 'Укажите телефон' })
+  @MaxLength(40, { message: 'Телефон слишком длинный' })
   phone: string;
 
   // На форме — чекбокс «тот же номер»: тогда сюда приходит тот же номер,
@@ -85,14 +88,12 @@ export class CreateStaffApplicationDto {
   // CreateApplicationDto — второй регекс завёл бы два расходящихся правила).
   @IsOptional()
   @IsString()
-  @MinLength(5)
-  @MaxLength(40)
-  @Matches(PHONE_RE, { message: 'whatsappPhone должен содержать только цифры (с опциональным «+» и пробелами/дефисами)' })
+  @MaxLength(40, { message: 'WhatsApp: номер слишком длинный' })
   whatsappPhone?: string;
 
   @IsOptional()
   @IsString()
-  @Matches(PHONE_RE, { message: 'secondaryPhone должен содержать только цифры' })
+  @MaxLength(40, { message: 'Второй телефон слишком длинный' })
   secondaryPhone?: string;
 
   @IsOptional()
@@ -115,14 +116,14 @@ export class CreateStaffApplicationDto {
 
   // `YYYY-MM-DD`. Возраст 14–60 проверяется сервисом (parseBirthday),
   // ровно как для заявки с лендинга.
-  @IsOptional()
-  @IsDateString()
-  birthday?: string;
+  // QA-2: форма требует дату рождения (возраст 14–60), сервер — тоже.
+  @IsDateString({}, { message: 'Укажите дату рождения' })
+  birthday: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  @Matches(NO_HTML_RE, { message: 'Комментарий содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'Комментарий: нельзя использовать знаки < и >' })
   comment?: string;
 
   // Канал привлечения со слов клиента. Опционален; без него — OTHER.

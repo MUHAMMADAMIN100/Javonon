@@ -490,6 +490,11 @@ model Application {
   // @default(false) — все строки, существовавшие до колонки, получают false,
   // и настоящих должников среди них восстанавливает backfill миграции.
   paymentPending        Boolean           @default(false)
+  // QA-2: сделка из лида переводит САМ лид в «Успешные» и помнит прежний
+  // статус — отмена или удаление сделки возвращает его. Лид, который создала
+  // сама сделка (сделка без лида), помечен её id: при отмене он уходит в корзину.
+  statusBeforeDeal      ApplicationStatus?
+  createdBySubmissionId String?
   studentId             String?
   // student → SetNull-семантика по сути не задана, потому что removed применяется в коде вручную.
   student               Student?          @relation(fields: [studentId], references: [id])

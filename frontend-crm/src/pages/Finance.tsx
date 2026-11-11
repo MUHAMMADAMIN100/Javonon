@@ -43,6 +43,7 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
+import { tjDateInput } from '../lib/tjTime';
 import { useRealtime } from '../realtime';
 import { useAuth } from '../store/auth';
 import { hasRole, isElevated } from '../lib/roles';
@@ -230,7 +231,7 @@ export default function Finance() {
       ...(txQ.data ?? []).map((tx) => ({ key: `tx-${tx.id}`, date: tx.date, created: tx.createdAt, tx })),
       ...(transfersQ.data ?? []).filter((x) => !x.reversedAt).map((tr) => ({ key: `tr-${tr.id}`, date: tr.date, created: tr.createdAt, tr })),
     ];
-    rows.sort((a, b) => (b.date.slice(0, 10) + b.created).localeCompare(a.date.slice(0, 10) + a.created));
+    rows.sort((a, b) => (tjDateInput(b.date) + b.created).localeCompare(tjDateInput(a.date) + a.created));
     return rows.slice(0, 7);
   }, [txQ.data, transfersQ.data]);
 

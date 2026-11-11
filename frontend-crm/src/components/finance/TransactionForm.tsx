@@ -8,7 +8,7 @@ import { keys } from '../../lib/queryKeys';
 import { useUI } from '../../ui/Dialogs';
 import CrmDatePicker from '../CrmDatePicker';
 import FormModal from '../FormModal';
-import { tjToday } from '../../lib/tjTime';
+import { tjDateInput, tjToday } from '../../lib/tjTime';
 import { fmtDate } from './financeShared';
 import { useT } from '../../lib/i18n';
 import { useAuth } from '../../store/auth';
@@ -112,7 +112,7 @@ export default function TransactionForm({
   const [comment, setComment] = useState(editTx?.comment || '');
   // Сегодня — по Asia/Dushanbe (toISOString даёт UTC-день, что после 19:00
   // ТJT уже завтра по UTC и форма открывалась бы с завтрашним числом).
-  const [date, setDate] = useState(editTx ? String(editTx.date).slice(0, 10) : initialDate || tjToday());
+  const [date, setDate] = useState(editTx ? tjDateInput(editTx.date) : initialDate || tjToday());
   const [submitting, setSubmitting] = useState(false);
   // Синхронный guard от повторной отправки: `setSubmitting(true)` применяется
   // только на следующем React-render, поэтому двойной клик по «Сохранить»
@@ -178,12 +178,20 @@ export default function TransactionForm({
     // вклинится, поэтому окно гонки закрывается до первого микро-таска.
     if (inFlight.current) return;
     const amt = parseFloat(amount);
+    // QA-2: ошибка «Введите сумму» оставалась выше экрана — ведём к полю.
+    const toAmount = () => requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLInputElement>('[data-testid="tx-amount"]');
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el?.focus({ preventScroll: true });
+    });
     if (!amount.trim() || !isFinite(amt)) {
       setAmountErr(t('finance.err.amountEmpty'));
+      toAmount();
       return;
     }
     if (amt <= 0) {
       setAmountErr(t('finance.err.amountPositive'));
+      toAmount();
       return;
     }
     setAmountErr('');

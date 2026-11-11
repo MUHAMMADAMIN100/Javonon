@@ -26,6 +26,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { StudentForgotPasswordDto, StudentLoginDto } from './dto/student-login.dto';
 import { StudentRegisterDto } from './dto/student-register.dto';
+import { assertFileContent } from '../common/file-sniff';
 
 const uploadStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
@@ -162,9 +163,10 @@ export class StudentAuthController {
   ) {
     if (!file) throw new BadRequestException('Файл не передан');
     if (file.size === 0) throw new BadRequestException('Файл пустой');
-    const url = `/uploads/${file.filename}`;
     // QA-fix: валидируем type — невалидное значение нормализуем в OTHER
     const docType = normalizeDocumentType(type);
+    assertFileContent(file, docType === 'PHOTO' ? ['image'] : ['image', 'pdf', 'office'], docType === 'PHOTO' ? 'Фото 3/4' : 'Документ');
+    const url = `/uploads/${file.filename}`;
     if (docType !== 'OTHER') {
       await this.prisma.document.deleteMany({ where: { studentId: user.id, type: docType } });
     }

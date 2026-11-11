@@ -39,6 +39,7 @@ import PaymentStagesSection from '../components/PaymentStagesSection';
 import BackButton from '../components/BackButton';
 import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
 import { keys } from '../lib/queryKeys';
+import { tjDateInput, tjFormatDate, tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
@@ -76,34 +77,30 @@ export default function SubmissionDetail() {
   const approveMut = useMutation({
     mutationFn: ({ paymentId, amountTjs, accountId }: { paymentId: string; amountTjs?: number; accountId?: string }) =>
       approvePayment(paymentId, amountTjs, accountId),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: ['submission', id] }), qc.invalidateQueries({ queryKey: keys.installments.stages(id!) }), qc.invalidateQueries({ queryKey: ['submissions'] }), qc.invalidateQueries({ queryKey: keys.finance.all })]).catch(() => undefined);
       toast(t('deal.toast.approved'), 'success');
-      qc.invalidateQueries({ queryKey: ['submission', id] });
-      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
-      qc.invalidateQueries({ queryKey: ['submissions'] });
-      qc.invalidateQueries({ queryKey: keys.finance.all });
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const rejectMut = useMutation({
     mutationFn: ({ paymentId, reason }: { paymentId: string; reason: string }) => rejectPayment(paymentId, reason),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: ['submission', id] }), qc.invalidateQueries({ queryKey: keys.installments.stages(id!) }), qc.invalidateQueries({ queryKey: ['submissions'] })]).catch(() => undefined);
       toast(t('deal.toast.rejected'), 'success');
-      qc.invalidateQueries({ queryKey: ['submission', id] });
-      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
-      qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
   const statusMut = useMutation({
     mutationFn: (status: 'COMPLETED' | 'CANCELLED') => changeSubmissionStatus(id!, status),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: ['submission', id] }), qc.invalidateQueries({ queryKey: keys.installments.stages(id!) }), qc.invalidateQueries({ queryKey: ['submissions'] })]).catch(() => undefined);
       toast(t('deal.toast.statusUpdated'), 'success');
-      qc.invalidateQueries({ queryKey: ['submission', id] });
-      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
-      qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     // Отказ бэкенда «есть неодобренные платежи» приходит по-русски — показываем
     // свой перевод, чтобы таджикский интерфейс не получил русскую строку.
@@ -156,9 +153,10 @@ export default function SubmissionDetail() {
 
   const deleteSubmissionMut = useMutation({
     mutationFn: () => deleteSubmission(id!),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: ['submissions'] })]).catch(() => undefined);
       toast(t('deal.toast.deleted'), 'success');
-      qc.invalidateQueries({ queryKey: ['submissions'] });
       navigate('/submissions');
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
@@ -166,11 +164,10 @@ export default function SubmissionDetail() {
 
   const deletePaymentMut = useMutation({
     mutationFn: (paymentId: string) => deletePayment(paymentId),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: ['submission', id] }), qc.invalidateQueries({ queryKey: keys.installments.stages(id!) }), qc.invalidateQueries({ queryKey: ['submissions'] })]).catch(() => undefined);
       toast(res?.reversed ? t('deal.toast.paymentDeletedReversed') : t('deal.toast.paymentDeleted'), 'success');
-      qc.invalidateQueries({ queryKey: ['submission', id] });
-      qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
-      qc.invalidateQueries({ queryKey: ['submissions'] });
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
@@ -248,6 +245,20 @@ export default function SubmissionDetail() {
   // Своё красное окно подтверждения, как во всей CRM (QA №33, решение
   // заказчика 07.11.2026; раньше — серое окно браузера).
   const onDeleteSubmission = async () => {
+    // QA-2 №17: сделку с одобренными платежами удалить нельзя — раньше сначала
+    // спрашивали «это нельзя отменить», а потом сервер отвечал отказом.
+    // Объясняем сразу и предлагаем то, что можно: отмену сделки.
+    if (s.status !== 'CANCELLED' && s.payments.some((p) => p.status === 'APPROVED')) {
+      const goCancel = await confirm({
+        title: t('deal.delete.blockedTitle'),
+        message: t(canChangeStatus && s.status === 'ACTIVE' ? 'deal.delete.blocked' : 'deal.delete.blockedAsk'),
+        confirmText: canChangeStatus && s.status === 'ACTIVE' ? t('deal.cancelDeal') : t('common.ok'),
+        hideCancel: !(canChangeStatus && s.status === 'ACTIVE'),
+        icon: 'info',
+      });
+      if (goCancel && canChangeStatus && s.status === 'ACTIVE') onCancel();
+      return;
+    }
     const ok = await confirm({
       title: t('deal.delete.title'),
       message: t('deal.delete.confirm'),
@@ -628,7 +639,7 @@ function PaymentRow({
       <td data-label={t('deal.col.next')} style={{ whiteSpace: 'nowrap' }}>
         {p.nextDueDate ? (
           <>
-            {new Date(p.nextDueDate).toLocaleDateString('ru-RU')}
+            {tjFormatDate(p.nextDueDate)}
             {p.nextDueAmount ? (
               <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
                 {p.nextDueAmount.toLocaleString('ru-RU')} {currency}
@@ -727,7 +738,7 @@ function AddPaymentModal({
   const { toast, confirm } = useUI();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<SubmissionPaymentMethod>('TRANSFER');
-  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
+  const [paidAt, setPaidAt] = useState(tjToday());
   const [receiptUrls, setReceiptUrls] = useState<string[]>([]);
   const [depositProofUrls, setDepositProofUrls] = useState<string[]>([]);
   const [nextDueDate, setNextDueDate] = useState('');
@@ -1449,12 +1460,12 @@ function EditPaymentModal({
   const [amount, setAmount] = useState<string>(String(payment.amount ?? ''));
   const [method, setMethod] = useState<SubmissionPaymentMethod>(payment.paymentMethod);
   const [paidAt, setPaidAt] = useState<string>(
-    payment.paidAt ? new Date(payment.paidAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    payment.paidAt ? tjDateInput(payment.paidAt) : tjToday(),
   );
   const [receiptUrls, setReceiptUrls] = useState<string[]>(payment.receiptUrls || []);
   const [depositProofUrls, setDepositProofUrls] = useState<string[]>(payment.depositProofUrls || []);
   const [nextDueDate, setNextDueDate] = useState<string>(
-    payment.nextDueDate ? new Date(payment.nextDueDate).toISOString().slice(0, 10) : '',
+    payment.nextDueDate ? tjDateInput(payment.nextDueDate) : '',
   );
   const [nextDueAmount, setNextDueAmount] = useState<string>(
     payment.nextDueAmount != null ? String(payment.nextDueAmount) : '',
@@ -1505,10 +1516,10 @@ function EditPaymentModal({
   const dirty =
     amount !== String(payment.amount ?? '') ||
     method !== payment.paymentMethod ||
-    paidAt !== (payment.paidAt ? new Date(payment.paidAt).toISOString().slice(0, 10) : paidAt) ||
+    paidAt !== (payment.paidAt ? tjDateInput(payment.paidAt) : paidAt) ||
     receiptUrls.join('|') !== (payment.receiptUrls || []).join('|') ||
     depositProofUrls.join('|') !== (payment.depositProofUrls || []).join('|') ||
-    nextDueDate !== (payment.nextDueDate ? new Date(payment.nextDueDate).toISOString().slice(0, 10) : '') ||
+    nextDueDate !== (payment.nextDueDate ? tjDateInput(payment.nextDueDate) : '') ||
     nextDueAmount !== (payment.nextDueAmount != null ? String(payment.nextDueAmount) : '') ||
     notes !== (payment.notes || '') ||
     amountTjs !== initialTjs;

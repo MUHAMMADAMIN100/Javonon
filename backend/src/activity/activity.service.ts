@@ -90,7 +90,9 @@ export type ActivityAction =
   // сделанное в этом режиме.
   | 'IMPERSONATION'
   // Исправление явной ошибки в старом номере (+992992…, без «+») — QA №21.
-  | 'PHONE_FIX';
+  | 'PHONE_FIX'
+  // QA-2: разовая правка старых данных (qa2-data-fix.service.ts).
+  | 'DATA_FIX';
 
 /**
  * Action'ы, чьи details/payload содержат ПАРТНЁРСКИЕ данные (имя партнёра,

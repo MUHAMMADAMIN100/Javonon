@@ -20,6 +20,10 @@ const DETAIL_RULES: Array<{ prefix: string; visible: (c: NavCtx) => boolean }> =
   { prefix: '/students/new', visible: (c) => c.show('students:create', c.isWorkforce) },
   { prefix: '/submissions/new', visible: (c) => !c.isTeacherOnly && c.show('submissions:create', true) },
   { prefix: '/profile', visible: () => true },
+  // «Подробный расчёт» зарплаты: в меню пункта нет (ведомость — «Расход → Зарплата»,
+  // 01047dd), но страница открыта всем, у кого есть право на зарплату (QA-2:
+  // ссылка из ведомости уводила основателя на дашборд).
+  { prefix: '/salary', visible: (c) => c.show('salary:read', c.elevated) },
   { prefix: '/time', visible: (c) => !c.isTeacherOnly },
   { prefix: '/attendance', visible: (c) => c.isFounder || (c.hasCustomRole && c.can('attendance:read')) },
   { prefix: '/excuses', visible: (c) => c.isFounder || (c.hasCustomRole && c.can('excuses:read', 'excuses:approve')) },

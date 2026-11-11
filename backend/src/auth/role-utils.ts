@@ -167,3 +167,15 @@ export function isTeacherOnly(user: UserWithRoles | undefined | null): boolean {
   const all = [user.role, ...(user.roles || [])].filter(Boolean) as string[];
   return all.length > 0 && all.every((r) => r === 'TEACHER');
 }
+
+/**
+ * QA-2: бухгалтер без руководящих ролей и без своей роли из «Настройки → Роли».
+ * Клиентская база ему не показана в меню — и сервер её не отдаёт: списка лидов
+ * нет, студенты — только именами (выбор в финансах), звонки и задачи — свои.
+ * Носителю своей роли всё решают её пункты, как везде.
+ */
+export function isAccountantOnly(user: UserWithRoles | undefined | null): boolean {
+  if (!user || user.hasCustomRole) return false;
+  if (!hasRole(user, 'ACCOUNTANT' as Role)) return false;
+  return !hasRole(user, 'FOUNDER' as Role, 'ADMIN' as Role);
+}

@@ -138,7 +138,7 @@ function ExpenseCards({ data }: { data?: ExpenseSummary }) {
       <Link key={key} to={key === 'salary' ? `${meta.to}?ym=${c.salary.forYm}` : `${meta.to}?ym=${data.ym}`} className="exp-card" style={{ ['--grp' as any]: meta.color }} data-testid={`exp-card-${key}`}>
         <span className="exp-card-head">
           <span className="inc-dir-icon exp-icon" aria-hidden="true"><Icon name={meta.icon} size={20} /></span>
-          {t(`finance.exp.g.${key}`)}
+          {key === 'salary' ? t('finance.exp.g.salaryFor').replace('{month}', prevName) : t(`finance.exp.g.${key}`)}
         </span>
         <span className="exp-card-value fin-num" data-testid={`exp-card-${key}-value`}>{fmtMoney(value)}</span>
         <span className="exp-card-sub">{sub}</span>

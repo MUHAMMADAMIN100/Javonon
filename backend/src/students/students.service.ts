@@ -1,5 +1,5 @@
 import { secureRandomString } from '../common/random';
-import { tjPhoneError } from '../common/phone';
+import { normalizePhoneOrNull } from '../common/phone';
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Optional } from '@nestjs/common';
 import { PAID_STUDENT_WHERE, UNPAID_STUDENT_WHERE } from '../common/paid-student';
 import { Direction, Prisma, Role, StudentStatus } from '@prisma/client';
@@ -92,11 +92,8 @@ export class StudentsService {
   }
 
   async create(dto: CreateStudentDto, _user?: CurrentUser) {
-    // +992 — ровно 9 цифр (QA №20).
-    for (const ph of dto.phones ?? []) {
-      const err = tjPhoneError(ph);
-      if (err) throw new BadRequestException(`${err}: ${ph}`);
-    }
+    // QA-2: все номера — в общий формат «+<код><номер>» (+992 — ровно 9 цифр).
+    if (dto.phones) dto.phones = dto.phones.map((ph) => normalizePhoneOrNull(ph, 'Телефон')).filter((x): x is string => !!x);
     const cabinet = dto.cabinet ?? CABINET_BY_DIRECTION[dto.direction];
     const emailNormalized = dto.email.trim().toLowerCase();
 
@@ -408,12 +405,11 @@ export class StudentsService {
     if (dto.phones !== undefined) {
       // Проверяем только добавленные/изменённые номера (QA №20).
       const before = new Set((existing.phones || []).map((p: string) => p.trim()));
-      for (const ph of dto.phones) {
-        if (before.has(ph.trim())) continue;
-        const err = tjPhoneError(ph);
-        if (err) throw new BadRequestException(`${err}: ${ph}`);
-      }
-      data.phones = dto.phones;
+      // Старые номера оставляем как есть (их чинит разовая правка данных),
+      // новые и изменённые — в общий формат.
+      data.phones = dto.phones
+        .map((ph) => (before.has(ph.trim()) ? ph.trim() : normalizePhoneOrNull(ph, 'Телефон')))
+        .filter((x): x is string => !!x);
     }
     if (dto.phoneLabels !== undefined) data.phoneLabels = dto.phoneLabels;
     if (dto.preferredChannel !== undefined) data.preferredChannel = dto.preferredChannel;
@@ -504,7 +500,11 @@ export class StudentsService {
       const beforeS = Array.isArray(before) ? before.join(', ') : (before ?? '—');
       const afterS = Array.isArray(after) ? after.join(', ') : (after ?? '—');
       if (String(beforeS) !== String(afterS)) {
-        changes.push(`${FIELD_LABELS[k]}: ${beforeS} → ${afterS}`);
+        // QA-2: в уведомлении было «/uploads/…png → …svg» — путь к файлу людям
+        // ничего не говорит, а длинная строка давала прокрутку панели вбок.
+        if (k === 'photoUrl') changes.push(after ? (before ? 'Фото заменено' : 'Фото добавлено') : 'Фото удалено');
+        else if (k === 'comment') changes.push('Комментарий изменён');
+        else changes.push(`${FIELD_LABELS[k]}: ${beforeS} → ${afterS}`);
       }
     }
     if (changes.length > 0) {

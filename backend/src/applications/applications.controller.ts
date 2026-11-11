@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Body,
   Controller,
   Delete,
@@ -22,6 +23,7 @@ import { Roles } from '../auth/roles.decorator';
 import { Permissions } from '../auth/permissions.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { parseDate } from '../common/query-date';
+import { isAccountantOnly, isElevated } from '../auth/role-utils';
 
 @Controller('applications')
 export class ApplicationsController {
@@ -97,6 +99,7 @@ export class ApplicationsController {
     @Query('sort') sort?: string,
     @Query('ranks') ranks?: string,
     @Query('deleted') deleted?: string,
+    @Query('duplicates') duplicates?: string,
     @Query('brief') brief?: string,
   ) {
     // QA-fix #45: validate enum query params (раньше bad value → 500).
@@ -115,6 +118,9 @@ export class ApplicationsController {
     // ILIKE %AAA% сканировал бы всю Application таблицу с гигантским
     // паттерном. 200 символов хватит для любого реального поиска.
     if (search && search.length > 200) throw new BadRequestException('Поисковая строка слишком длинная');
+    // QA-2: бухгалтеру раздел «Лиды» не показан — и база лидов с телефонами
+    // ему не отдаётся (раньше API возвращал все 2 338).
+    if (isAccountantOnly(user)) throw new ForbiddenException('Список лидов бухгалтеру не открыт');
     return this.apps.findAll({
       status: status as ApplicationStatus | undefined,
       direction: direction as Direction | undefined,
@@ -137,6 +143,8 @@ export class ApplicationsController {
       sort,
       ranks: ranks?.slice(0, 2000),
       deleted: deleted === '1' || deleted === 'true',
+      // «Дубли» — только руководству: остальным список и так ограничен своими.
+      duplicates: (duplicates === '1' || duplicates === 'true') && isElevated(user),
       brief: brief === '1' || brief === 'true',
     });
   }

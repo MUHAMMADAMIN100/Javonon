@@ -17,7 +17,7 @@ export class CreateUserDto {
   @IsString()
   @MinLength(2)
   @MaxLength(120)
-  @Matches(NO_HTML_RE, { message: 'ФИО содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'ФИО: нельзя использовать знаки < и >' })
   fullName: string;
 
   // trim перед хешированием — иначе пробелы зашьются в хэш и login по

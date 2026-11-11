@@ -155,8 +155,17 @@ export class StudyGroupsService {
           select: { groupId: true, startsAt: true, endsAt: true, topic: true },
         })
       : [];
+    // Старые занятия на несколько дней («09.11 00:00 – 30.11 00:00», до проверки
+    // QA №39) ещё «не кончились» и вставали «следующим занятием» в прошлом,
+    // а в днях недели давали «00:00–00:00» (QA-2 №13). В расчёт идут только
+    // занятия не длиннее суток.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const sane = upcoming.filter((s) => {
+      const len = s.endsAt.getTime() - s.startsAt.getTime();
+      return len > 0 && len <= DAY_MS;
+    });
     return groups.map((g) => {
-      const mine = upcoming.filter((s) => s.groupId === g.id);
+      const mine = sane.filter((s) => s.groupId === g.id);
       return { ...g, nextSession: mine[0] ?? null, pattern: weeklyPattern(mine) };
     });
   }
@@ -598,7 +607,15 @@ export class StudyGroupsService {
     if (dto.homework !== undefined || dto.homeworkDue !== undefined) {
       await this.applyHomework(session, dto, data);
     }
-    if (dto.status !== undefined) data.status = dto.status;
+    if (dto.status !== undefined) {
+      // QA-2: «Проведено» у урока, который ещё не наступил, ставить нельзя —
+      // журнал при этом писал «Урок ещё не наступил». Правило то же, что у отметок.
+      const day = tjLocalDay((data.startsAt as Date | undefined) ?? session.startsAt);
+      if (dto.status === ClassSessionStatus.DONE && day > tjLocalDay()) {
+        throw new BadRequestException('Урок ещё не наступил — «Проведено» ставится в день урока или позже');
+      }
+      data.status = dto.status;
+    }
     if (dto.teacherId !== undefined) {
       const tid = dto.teacherId.trim();
       if (tid) {

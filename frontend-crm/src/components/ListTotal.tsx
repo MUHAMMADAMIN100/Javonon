@@ -16,14 +16,18 @@ export default function ListTotal({
   total,
   filtered,
   testId,
+  loading,
 }: {
   noun: ListNoun;
   found: number;
   total?: number;
   filtered: boolean;
   testId?: string;
+  /** Пока список грузится — не «Всего: 0» (QA-2), а серая заготовка. */
+  loading?: boolean;
 }) {
   const { t } = useT();
+  if (loading) return <span className="list-total is-loading sk-line" data-testid={testId} aria-busy="true" />;
   const text = !filtered
     ? t(`list.total.${noun}`).replace('{n}', String(found))
     : total !== undefined

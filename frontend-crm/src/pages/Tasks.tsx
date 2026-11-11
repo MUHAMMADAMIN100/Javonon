@@ -487,7 +487,7 @@ export default function Tasks() {
                   showTime
                 />
                 {/* Срок в прошлом — предупреждаем (QA №54); без времени — до конца дня. */}
-                {form.deadline && (form.deadline.length <= 10 || form.deadline.endsWith('T00:00')
+                {form.deadline && (form.deadline.length <= 10
                   ? form.deadline.slice(0, 10) < tjToday()
                   : new Date(`${form.deadline}+05:00`).getTime() < Date.now()) && (
                   <div className="form-error-text" style={{ color: '#b45309' }} data-testid="task-deadline-past">{t('tasks.deadlinePast')}</div>

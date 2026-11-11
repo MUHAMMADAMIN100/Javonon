@@ -35,7 +35,7 @@ export class AdminPartnerCreateDto {
   @IsString()
   @MinLength(2, { message: 'ФИО минимум 2 символа' })
   @MaxLength(100, { message: 'ФИО максимум 100 символов' })
-  @Matches(NO_HTML_RE, { message: 'ФИО содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'ФИО: нельзя использовать знаки < и >' })
   fullName!: string;
 
   @IsOptional()

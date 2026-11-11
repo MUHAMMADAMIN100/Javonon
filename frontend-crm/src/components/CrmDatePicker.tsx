@@ -190,6 +190,12 @@ export default function CrmDatePicker({
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const flipUp = spaceBelow < POPOVER_HEIGHT && spaceAbove > spaceBelow;
+    // QA-2: в «Занятиях по шаблону» календарь обрезался сверху — места не
+    // хватало ни снизу, ни сверху. Тогда прижимаем его к верху окна.
+    if (spaceBelow < POPOVER_HEIGHT && spaceAbove < POPOVER_HEIGHT) {
+      setCoords({ top: Math.max(8, window.innerHeight - POPOVER_HEIGHT - 8), left, width: popoverWidth });
+      return true;
+    }
 
     setCoords(
       flipUp
@@ -271,8 +277,10 @@ export default function CrmDatePicker({
     }
     const datePart = format(d, 'yyyy-MM-dd');
     if (showTime) {
-      const safeTime = /^\d{2}:\d{2}$/.test(t) ? t : '00:00';
-      onChange(datePart + 'T' + safeTime);
+      // Время не выбрано — уходит только дата: «00:00» значит ровно полночь,
+      // а не «без времени» (QA-2: дедлайн 00:00 сохранялся как 23:59).
+      const safeTime = /^\d{2}:\d{2}$/.test(t) ? t : '';
+      onChange(safeTime ? datePart + 'T' + safeTime : datePart);
     } else {
       onChange(datePart);
     }

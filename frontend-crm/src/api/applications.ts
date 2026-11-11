@@ -23,6 +23,8 @@ export interface AppFilters {
   countryPending?: boolean;
   /** Корзина: только удалённые. */
   deleted?: boolean;
+  /** QA-2: «Дубли» — лиды с одним телефоном и лиды-дубли старых сделок (руководство). */
+  duplicates?: boolean;
 }
 
 export async function listApplications(filters: AppFilters = {}) {

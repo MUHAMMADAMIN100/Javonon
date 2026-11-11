@@ -100,7 +100,7 @@ export default function GroupFields({
           >
             <option value="">{t('groups.noTeacher')}</option>
             {teacherOptions.map((u) => (
-              <option key={u.id} value={u.id}>{u.fullName} · {roleLabel(u.role as string)}</option>
+              <option key={u.id} value={u.id}>{u.fullName} · {(u as any).customRole?.name && (u as any).customRole.isActive !== false ? (u as any).customRole.name : roleLabel(u.role as string)}</option>
             ))}
           </CrmSelect>
         </div>

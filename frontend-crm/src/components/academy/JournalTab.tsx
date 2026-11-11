@@ -672,6 +672,12 @@ function PctInput({
   useEffect(() => setText(value === null ? '' : String(value)), [value]);
   const commit = () => {
     const trimmed = text.trim();
+    // QA-2: «−5» сохранялось как 5, «8a0» — как 80. Теперь — только целое 0…max.
+    if (trimmed !== '' && !/^\d{1,3}$/.test(trimmed)) {
+      toast(t('academy.journal.range').replace('{max}', String(PCT_MAX)), 'error');
+      setText(value === null ? '' : String(value));
+      return;
+    }
     const next = trimmed === '' ? null : Number(trimmed);
     if (next !== null && (!Number.isInteger(next) || next < 0 || next > PCT_MAX)) {
       toast(t('academy.journal.range').replace('{max}', String(PCT_MAX)), 'error');
@@ -692,7 +698,7 @@ function PctInput({
         data-row={row}
         data-col={col}
         aria-label={testId}
-        onChange={(e) => setText(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+        onChange={(e) => setText(e.target.value.slice(0, 4))}
         onBlur={commit}
         onFocus={(e) => e.currentTarget.select()}
         onKeyDown={(e) => {

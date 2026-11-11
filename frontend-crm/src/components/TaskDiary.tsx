@@ -109,10 +109,11 @@ export default function TaskDiary({ taskId }: { taskId: string }) {
 
   const save = useMutation({
     mutationFn: (text: string) => writeTaskDiary(taskId, text),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.tasks.all })]).catch(() => undefined);
       toast(t('taskDiary.saved'), 'success');
       setDraft(null);
-      qc.invalidateQueries({ queryKey: keys.tasks.all });
     },
     onError: (e: any) => {
       toast(e?.response?.data?.message || t('toast.error'), 'error');

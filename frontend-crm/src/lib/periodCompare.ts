@@ -19,7 +19,11 @@ export function prevRangeOf(r: { from?: string; to?: string }, period: string, t
     const day = clampToMonthEnd ? last : Math.min(d, last);
     return new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), day)).toISOString().slice(0, 10);
   };
-  const back = period === 'month' || period === 'prev' ? 1 : period === 'quarter' ? 3 : period === 'year' ? 12 : 0;
+  // QA-2: «Свой период» 1–30 ноября давал ▲19%, «Этот месяц» с теми же
+  // датами — ▲507%. Целый календарный месяц сравниваем одинаково.
+  const lastDay = (ymd: string) => new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7), 0)).getUTCDate();
+  const wholeMonth = period === 'custom' && r.from.slice(8, 10) === '01' && r.from.slice(0, 7) === r.to.slice(0, 7) && +r.to.slice(8, 10) === lastDay(r.to);
+  const back = period === 'month' || period === 'prev' || wholeMonth ? 1 : period === 'quarter' ? 3 : period === 'year' ? 12 : 0;
   if (back > 0) {
     return { from: shift(r.from, -back), to: period === 'prev' ? shift(r.to, -back, true) : shift(end, -back) };
   }

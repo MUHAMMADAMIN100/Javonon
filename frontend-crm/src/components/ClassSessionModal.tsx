@@ -191,7 +191,9 @@ export default function ClassSessionModal({
   // или в другой день, — тот же день через 1,5 часа (как у шаблона по умолчанию).
   const onStartChange = (v: string) => {
     let next = v;
-    if (/T00:00$/.test(next) && !startsAt) next = `${next.slice(0, 10)}T10:00`;
+    // Время не выбрано (пришла только дата) — 10:00.
+    if (next.length === 10) next = `${next}T10:00`;
+    else if (/T00:00$/.test(next) && !startsAt) next = `${next.slice(0, 10)}T10:00`;
     setStartsAt(next);
     if (next && (!endsAt || endsAt.slice(0, 10) !== next.slice(0, 10) || endsAt <= next)) {
       const [h, m] = next.slice(11, 16).split(':').map(Number);
@@ -275,7 +277,7 @@ export default function ClassSessionModal({
         </div>
         <div className="form-group">
           <label>{t('classes.field.end')} *</label>
-          <CrmDatePicker value={endsAt} onChange={setEndsAt} showTime disabled={editing && !canRun} placeholder={t('classes.field.end')} />
+          <CrmDatePicker value={endsAt} onChange={(v) => setEndsAt(v.length === 10 ? `${v}T${startsAt.slice(11, 16) || '11:30'}` : v)} showTime disabled={editing && !canRun} placeholder={t('classes.field.end')} />
         </div>
       </div>
       {rangeInvalid && <div className="form-error-text" style={{ marginTop: -10, marginBottom: 12 }}>{t('classes.invalidRange')}</div>}

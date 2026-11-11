@@ -18,7 +18,7 @@ export class CreateBucketDto {
   @IsString()
   @MinLength(1, { message: 'Название обязательно' })
   @MaxLength(120, { message: 'Название максимум 120 символов' })
-  @Matches(NO_HTML_RE, { message: 'Название содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'Название: нельзя использовать знаки < и >' })
   name!: string;
 
   @IsOptional()

@@ -20,6 +20,7 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { TimeTrackingService } from './time-tracking.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { assertFileContent } from '../common/file-sniff';
 
 // Фото-доказательство опоздания (ТЗ §5) — только картинки + PDF.
 // Раньше storage принимал любой тип файла (включая .exe/.html), что
@@ -116,6 +117,7 @@ export class TimeTrackingController {
   )
   uploadProof(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Файл не загружен');
+    assertFileContent(file, ['image', 'video'], 'Подтверждение');
     return {
       url: `/uploads/${file.filename}`,
       originalName: file.originalname,

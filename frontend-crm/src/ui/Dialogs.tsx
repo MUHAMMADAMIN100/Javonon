@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { queryClient } from '../lib/queryClient';
 import { AnimatePresence, motion } from 'framer-motion';
 import Icon from '../Icon';
 import { useT } from '../lib/i18n';
@@ -50,11 +51,25 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toast = useCallback((message: string, kind: ToastKind = 'info') => {
-    const id = ++toastIdRef.current;
-    setToasts((prev) => [...prev, { id, kind, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    const show = () => {
+      const id = ++toastIdRef.current;
+      setToasts((prev) => [...prev, { id, kind, message }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4000);
+    };
+    if (kind !== 'success') {
+      show();
+      return;
+    }
+    // QA-2 №14: «Сохранено» — когда данные на экране уже перечитаны (не дольше 4 с).
+    const started = Date.now();
+    const wait = () => {
+      const busy = queryClient.isFetching({ predicate: (q) => q.getObserversCount() > 0 }) > 0;
+      if (!busy || Date.now() - started > 4000) show();
+      else setTimeout(wait, 50);
+    };
+    setTimeout(wait, 0);
   }, []);
 
   return (

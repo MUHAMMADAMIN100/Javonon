@@ -20,13 +20,13 @@ export class CreateTaskDto {
   @IsString()
   @MinLength(3, { message: 'Минимум 3 символа' })
   @MaxLength(200)
-  @Matches(NO_HTML_RE, { message: 'Заголовок содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'Заголовок: нельзя использовать знаки < и >' })
   title: string;
 
   @IsString()
   @MinLength(3, { message: 'Минимум 3 символа' })
   @MaxLength(2000)
-  @Matches(NO_HTML_RE, { message: 'Описание содержит недопустимые символы' })
+  @Matches(NO_HTML_RE, { message: 'Описание: нельзя использовать знаки < и >' })
   description: string;
 
   // Мульти-исполнители (ТЗ §Tasks): минимум один. Легаси-поле

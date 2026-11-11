@@ -202,14 +202,15 @@ function PendingTab({ tabs }: { tabs: React.ReactNode }) {
   const approveMut = useMutation({
     mutationFn: ({ id, kind }: { id: string; kind: 'arrival' | 'lunch' }) =>
       kind === 'lunch' ? approveLunchExcuse(id) : approveExcuse(id),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: ['excuses'] })]).catch(() => undefined);
       toast(
         data.penaltiesRemoved > 0
           ? t('excuses.toast.approvedRemoved').replace('{n}', String(data.penaltiesRemoved))
           : t('excuses.toast.approvedNone'),
         'success',
       );
-      qc.invalidateQueries({ queryKey: ['excuses'] });
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
@@ -217,9 +218,10 @@ function PendingTab({ tabs }: { tabs: React.ReactNode }) {
   const rejectMut = useMutation({
     mutationFn: ({ id, kind }: { id: string; kind: 'arrival' | 'lunch' }) =>
       kind === 'lunch' ? rejectLunchExcuse(id) : rejectExcuse(id),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
+      await Promise.all([qc.invalidateQueries({ queryKey: ['excuses'] })]).catch(() => undefined);
       toast(t('excuses.toast.rejected'), 'success');
-      qc.invalidateQueries({ queryKey: ['excuses'] });
     },
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });

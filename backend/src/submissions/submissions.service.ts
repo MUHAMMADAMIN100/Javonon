@@ -41,6 +41,9 @@ import {
   IncomeSource,
   ProductCategory,
   PaymentPhaseStatus,
+  ApplicationStatus,
+  ApplicationSource,
+  StudentStatus,
 } from '@prisma/client';
 import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
 import { InstallmentsService } from '../installments/installments.service';
@@ -367,6 +370,7 @@ export class SubmissionsService {
         throw new BadRequestException('Некорректная дата следующего платежа');
       }
     }
+    this.assertNextDue(p.nextDueAmount, nextDueDate, dto.totalAmount - p.amount, dto.currency ?? null);
 
     // Snapshot метаданных паспорта — пишем только если есть хотя бы один файл
     // и менеджер передал нового студента (для existing-студента snapshot = []).
@@ -1259,6 +1263,10 @@ export class SubmissionsService {
         throw new BadRequestException('Некорректная дата следующего платежа');
       }
     }
+    if (dto.nextDueAmount != null) {
+      const left = await this.remainingOnContract(this.prisma, submission);
+      this.assertNextDue(dto.nextDueAmount, nextDueDate, left - dto.amount, submission.currency);
+    }
 
     const method = dto.paymentMethod || SubmissionPaymentMethod.TRANSFER;
     const addReceiptUrls: string[] = Array.isArray(dto.receiptUrls) ? dto.receiptUrls : [];
@@ -1332,6 +1340,28 @@ export class SubmissionsService {
       throw new BadRequestException(`Контракт уже оплачен полностью (${fmtMoney(submission.totalAmount)} ${cur}). Новый платёж больше остатка.`);
     }
     throw new BadRequestException(`Платёж больше остатка по контракту. Остаток: ${fmtMoney(remaining)} ${cur}`);
+  }
+
+  /**
+   * QA-2 №16: сумма следующего платежа без даты молча сохранялась и нигде не
+   * показывалась, а 80 при остатке 50 проходило. Теперь: сумма — только с
+   * датой, больше нуля и не больше остатка ПОСЛЕ этого платежа.
+   */
+  private assertNextDue(nextAmount: unknown, nextDate: Date | null, remainingAfter: number, currency: string | null) {
+    if (nextAmount === undefined || nextAmount === null || nextAmount === '') return;
+    const n = Number(nextAmount);
+    if (!isFinite(n) || n <= 0) throw new BadRequestException('Сумма следующего платежа должна быть больше нуля');
+    if (!nextDate) {
+      throw new BadRequestException('Укажите дату следующего платежа — без даты сумма не попадёт в план и напоминания');
+    }
+    const cur = currency || DEFAULT_SUBMISSION_CURRENCY;
+    if (n > remainingAfter + MONEY_EPSILON) {
+      throw new BadRequestException(
+        remainingAfter <= MONEY_EPSILON
+          ? 'После этого платежа контракт оплачен полностью — следующий платёж не нужен'
+          : `Следующий платёж больше остатка по контракту. Останется оплатить: ${fmtMoney(remainingAfter)} ${cur}`,
+      );
+    }
   }
 
   /**
@@ -2014,6 +2044,21 @@ export class SubmissionsService {
       let studentId = submission.studentId;
       let applicationId = submission.applicationId;
 
+      // QA-2: лид, из которого сделана сделка. Из него — поля нового студента
+      // (дата рождения, страна, WhatsApp терялись), и сам он становится
+      // «Успешным» вместо лида-дубля с источником «Сайт».
+      const srcApp = wonFirstApproval && submission.sourceApplicationId
+        ? await tx.application.findUnique({
+            where: { id: submission.sourceApplicationId },
+            select: {
+              id: true, status: true, studentId: true, programId: true, deletedAt: true, source: true,
+              phone: true, secondaryPhone: true, secondaryContactLabel: true, whatsappPhone: true,
+              email: true, birthday: true, country: true, preferredChannel: true, comment: true,
+              chinaManagerId: true,
+            },
+          })
+        : null;
+
       if (wonFirstApproval) {
         if (!studentId) {
           // Bug #31 (HIGH): раньше Student создавался без password — поле
@@ -2024,11 +2069,34 @@ export class SubmissionsService {
           // plain отдаём FOUNDER'у в studentCredentials.
 
           // Создаём студента из snapshot.
+          // Телефоны — как при конвертации лида (applications.service): основной,
+          // WhatsApp, если отличается, и второй номер — с подписями.
+          const phones: string[] = submission.newStudentPhone ? [submission.newStudentPhone] : srcApp?.phone ? [srcApp.phone] : [];
+          const phoneLabels: string[] = phones.length ? ['сам'] : [];
+          const pushPhone = (ph: string | null | undefined, label: string) => {
+            if (ph && !phones.some((x) => phonesMatch(x, ph))) { phones.push(ph); phoneLabels.push(label); }
+          };
+          if (srcApp) {
+            pushPhone(srcApp.whatsappPhone, 'WhatsApp');
+            pushPhone(srcApp.secondaryPhone, srcApp.secondaryContactLabel || '');
+          }
+          // Email студента уникален: из лида берём, только если он ни за кем не числится.
+          let email = submission.newStudentEmail || null;
+          if (!email && srcApp?.email) {
+            const taken = await tx.student.findUnique({ where: { email: srcApp.email.trim() }, select: { id: true } });
+            if (!taken) email = srcApp.email.trim();
+          }
           const newStudent = await tx.student.create({
             data: {
               fullName: submission.newStudentName || 'Без имени',
-              phones: submission.newStudentPhone ? [submission.newStudentPhone] : [],
-              email: submission.newStudentEmail || null,
+              phones,
+              phoneLabels,
+              email,
+              birthday: srcApp?.birthday ?? null,
+              country: srcApp?.country ?? null,
+              preferredChannel: srcApp?.preferredChannel ?? null,
+              comment: srcApp?.comment ?? null,
+              chinaManagerId: srcApp?.chinaManagerId ?? null,
               password: passwordHash,
               direction: program.direction,
               // Кабинет по направлению программы; FOUNDER может изменить вручную.
@@ -2093,25 +2161,59 @@ export class SubmissionsService {
       }
 
       if (wonFirstApproval) {
-        // Application — всегда новая запись с status=SUCCESSFUL_LEAD
-        // (бывший ENROLLED): оплата подтверждена, лид доведён до результата.
-        const stu = await tx.student.findUnique({
-          where: { id: studentId },
-          select: { fullName: true, phones: true },
-        });
-        const phone = (stu?.phones && stu.phones[0]) || submission.newStudentPhone || '';
-        const newApp = await tx.application.create({
-          data: {
-            studentId: studentId,
-            fullName: stu?.fullName || 'Студент',
-            phone,
-            direction: program.direction,
-            programId,
-            status: 'SUCCESSFUL_LEAD',
-            managerId: submission.managerId,
-          },
-        });
-        applicationId = newApp.id;
+        // QA-2: сделка из лида — «Успешным» становится САМ лид (с памятью о
+        // прежнем статусе для отмены), а не новая запись с источником «Сайт»:
+        // дубль портил «Всего лидов», «В воронке» и аналитику источников.
+        // Лид чужого студента не трогаем. Лид, уже связанный с другой ЖИВОЙ
+        // сделкой (вторая программа того же клиента), — тоже: тогда, как и
+        // раньше, отдельная запись. Связь с ОТМЕНЁННОЙ сделкой переносим сюда.
+        let reuse = srcApp && !srcApp.deletedAt && (!srcApp.studentId || srcApp.studentId === studentId) ? srcApp : null;
+        if (reuse) {
+          const holder = await tx.saleSubmission.findFirst({
+            where: { applicationId: reuse.id, NOT: { id: submission.id } },
+            select: { id: true, status: true },
+          });
+          if (holder && holder.status !== SubmissionStatus.CANCELLED) reuse = null;
+          else if (holder) {
+            await tx.saleSubmission.update({ where: { id: holder.id }, data: { applicationId: null } });
+          }
+        }
+        if (reuse) {
+          await tx.application.update({
+            where: { id: reuse.id },
+            data: {
+              studentId,
+              programId: reuse.programId ?? programId,
+              status: ApplicationStatus.SUCCESSFUL_LEAD,
+              // Помним прежний статус всегда (даже если лид уже был «Успешным»):
+              // по нему отмена отличает лид клиента от записи, созданной сделкой.
+              statusBeforeDeal: reuse.status,
+            },
+          });
+          applicationId = reuse.id;
+        } else {
+          const stu = await tx.student.findUnique({
+            where: { id: studentId },
+            select: { fullName: true, phones: true },
+          });
+          const phone = (stu?.phones && stu.phones[0]) || submission.newStudentPhone || '';
+          const newApp = await tx.application.create({
+            data: {
+              studentId: studentId,
+              fullName: stu?.fullName || 'Студент',
+              phone,
+              direction: program.direction,
+              programId,
+              status: 'SUCCESSFUL_LEAD',
+              managerId: submission.managerId,
+              // Источник — как у лида клиента, если он был; иначе «Другое»,
+              // а не «Сайт»: сделку завели в CRM, а не с лендинга.
+              source: srcApp?.source ?? ApplicationSource.OTHER,
+              createdBySubmissionId: submission.id,
+            },
+          });
+          applicationId = newApp.id;
+        }
 
         // Контракты — добавляем по Document на каждый файл. Метаданные берём
         // из snapshot, сохранённого при create() (см. комментарий про паспорт).
@@ -2882,7 +2984,7 @@ export class SubmissionsService {
           where: { id: p.id },
           data: {
             status: SubmissionPaymentStatus.REJECTED,
-            rejectReason: `Сделка отменена менеджером (${reversedAt.toISOString().slice(0, 10)})`,
+            rejectReason: `Сделка отменена менеджером (${tjLocalDay(reversedAt)})`,
           },
         });
       }
@@ -2905,7 +3007,7 @@ export class SubmissionsService {
           approvedPayments.map((p) => p.financeTransactionId),
           {
             reversedAt,
-            reason: `Реверс: сделка #${shortId} отменена ${reversedAt.toISOString().slice(0, 10)}`,
+            reason: `Реверс: сделка #${shortId} отменена ${tjLocalDay(reversedAt)}`,
           },
         );
         commissionReversals.push(...reversals);
@@ -2972,10 +3074,13 @@ export class SubmissionsService {
           status: SubmissionPaymentStatus.REJECTED,
           reviewedById: user.id,
           reviewedAt: reversedAt,
-          rejectReason: `Сделка отменена (${reversedAt.toISOString().slice(0, 10)})`,
+          rejectReason: `Сделка отменена (${tjLocalDay(reversedAt)})`,
         },
       });
       rejectedPending = pending.count;
+
+      // (8) Клиент — «как до сделки» (QA-2 №3).
+      await this.rollbackClientAfterDealTx(tx, submission, user.id);
 
       return tx.saleSubmission.update({
         where: { id: submissionId },
@@ -3117,12 +3222,67 @@ export class SubmissionsService {
    * флаг). ПОСЛЕ delete посчитать уже нельзя, поэтому пересчёт — первый шаг
    * той же транзакции: упадёт удаление — снятый флаг откатится вместе с ним.
    */
+  /**
+   * QA-2 №3: сделку отменили или удалили — клиент возвращается «как до сделки».
+   *  • Лид клиента (сделка из лида) — в статус, который был до «Успешные лиды».
+   *  • Лид, созданный самой сделкой (сделка без лида; у сделок до этой правки —
+   *    любой «Успешный», кроме исходного лида), — в корзину «Удалённые»: до
+   *    сделки его не было, а «Успешным» он раздувал «Зачислено».
+   *  • Студент — «В архив», если у него не осталось других живых сделок.
+   * Идемпотентно: зовётся и при отмене, и при удалении отменённой сделки.
+   */
+  private async rollbackClientAfterDealTx(
+    tx: Prisma.TransactionClient,
+    sub: { id: string; studentId: string | null; applicationId: string | null; sourceApplicationId: string | null },
+    actorId: string | null,
+  ) {
+    if (sub.applicationId) {
+      const app = await tx.application.findUnique({
+        where: { id: sub.applicationId },
+        select: { id: true, status: true, statusBeforeDeal: true, createdBySubmissionId: true, deletedAt: true },
+      });
+      if (app && !app.deletedAt) {
+        const madeByDeal =
+          app.createdBySubmissionId === sub.id ||
+          (!app.createdBySubmissionId && !app.statusBeforeDeal && app.id !== sub.sourceApplicationId &&
+            app.status === ApplicationStatus.SUCCESSFUL_LEAD);
+        if (app.statusBeforeDeal) {
+          await tx.application.update({
+            where: { id: app.id },
+            data: { status: app.statusBeforeDeal, statusBeforeDeal: null, paymentPending: false },
+          });
+        } else if (madeByDeal) {
+          await tx.application.update({
+            where: { id: app.id },
+            data: { deletedAt: new Date(), deletedById: actorId, paymentPending: false },
+          });
+        }
+      }
+    }
+    if (sub.studentId) {
+      const otherLive = await tx.saleSubmission.count({
+        where: {
+          studentId: sub.studentId,
+          id: { not: sub.id },
+          status: { not: SubmissionStatus.CANCELLED },
+          firstApprovedAt: { not: null },
+        },
+      });
+      if (otherLive === 0) {
+        await tx.student.updateMany({
+          where: { id: sub.studentId, academyOnly: false, status: { in: [StudentStatus.ACTIVE, StudentStatus.PAUSED] } },
+          data: { status: StudentStatus.ARCHIVED },
+        });
+      }
+    }
+  }
+
   async remove(submissionId: string, user?: (UserWithRoles & { id: string }) | null) {
     const submission = await this.prisma.saleSubmission.findUnique({
       where: { id: submissionId },
       // applicationId — чтобы снять признак должника до каскадного удаления
       // этапов рассрочки (см. док-комментарий выше).
-      select: { id: true, applicationId: true, managerId: true, status: true },
+      select: { id: true, applicationId: true, managerId: true, status: true, studentId: true, sourceApplicationId: true },
     });
     if (!submission) throw new NotFoundException('Сделка не найдена');
     if (user && !roleDealInScope(user, submission.managerId)) {
@@ -3150,6 +3310,12 @@ export class SubmissionsService {
         applicationId: submission.applicationId,
         settled: true,
       });
+      // Сделка с одобренными сюда доходит только отменённой — откат уже был
+      // при отмене; повтор безвреден. Без одобрений студента и лида сделка не
+      // создавала — откатывать нечего, вызов ничего не меняет.
+      if (submission.status === SubmissionStatus.CANCELLED) {
+        await this.rollbackClientAfterDealTx(tx, submission, user?.id ?? null);
+      }
       await tx.saleSubmission.delete({ where: { id: submissionId } });
     });
     this.realtime.emitStaff('submission:deleted', { submissionId });
@@ -3588,6 +3754,12 @@ export class SubmissionsService {
       }
     }
     if (dto.nextDueAmount !== undefined) data.nextDueAmount = dto.nextDueAmount ?? null;
+    if (dto.nextDueAmount !== undefined || dto.nextDueDate !== undefined) {
+      const effNextAmount = dto.nextDueAmount !== undefined ? dto.nextDueAmount : payment.nextDueAmount;
+      const effNextDate = dto.nextDueDate !== undefined ? (data.nextDueDate as Date | null) : payment.nextDueDate;
+      const left = await this.remainingOnContract(this.prisma, payment.submission, payment.id);
+      this.assertNextDue(effNextAmount, effNextDate, left - (dto.amount ?? payment.amount), payment.submission.currency);
+    }
     if (dto.notes !== undefined) {
       data.notes = dto.notes ? String(dto.notes).trim() || null : null;
     }
@@ -3812,7 +3984,7 @@ export class SubmissionsService {
             reversedAt,
             reason:
               `Реверс: платёж по сделке #${shortId} удалён основателем ` +
-              `${reversedAt.toISOString().slice(0, 10)}`,
+              `${tjLocalDay(reversedAt)}`,
           },
         );
         commissionReversals.push(...reversals);

@@ -1375,3 +1375,49 @@ a.inc-tile:hover { border-color: #B9C7DD; }
 .plan-day-head { font-size: 12.5px; font-weight: 700; color: var(--text-soft); text-transform: capitalize; }
 .plan-day-row .plan-item { font-size: 13px; padding: 7px 9px; min-height: 40px; }
 .plan-notes p { margin: 0 0 4px; }
+
+/* ── Нет доступа / 404 / не удалось загрузить (QA-2, 11.11.2026) ── */
+.err-state { max-width: 520px; margin: 48px auto; padding: 32px 24px; background: #fff; border: 1px solid var(--border); border-radius: 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.err-state-icon { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: #EEF3FB; color: var(--primary); }
+.err-state.is-denied .err-state-icon { background: #FFF4E5; color: #B45309; }
+.err-state.is-failed .err-state-icon { background: #FEF2F2; color: #B91C1C; }
+.err-state-code { font: 800 40px 'Manrope', sans-serif; color: var(--primary); letter-spacing: -0.02em; line-height: 1; }
+.err-state-title { margin: 0; font: 800 20px 'Manrope', sans-serif; color: var(--text); }
+.err-state-text { margin: 0; max-width: 420px; font-size: 14.5px; line-height: 1.5; color: var(--text-soft); }
+.err-state-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 6px; }
+@media (max-width: 600px) { .err-state { margin: 24px 0; padding: 24px 16px; } .err-state-actions .btn { flex: 1 1 140px; min-height: 44px; } }
+
+/* ── QA-2: интерфейс (11.11.2026) ── */
+@keyframes sk-shimmer { 0% { background-position: -420px 0; } 100% { background-position: 420px 0; } }
+.sk-line { display: inline-block; height: 12px; width: 140px; border-radius: 8px; vertical-align: middle;
+  background: linear-gradient(90deg, #EEF2F7 0, #F7F9FC 40%, #EEF2F7 80%); background-size: 840px 100%; animation: sk-shimmer 1.3s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .sk-line { animation: none; } }
+/* Тосты — сверху справа: внизу они закрывали кнопку звонка и кнопки окон. */
+.toast-stack { top: 76px; bottom: auto !important; right: 20px; }
+@media (max-width: 900px) {
+  .toast-stack, body:has(.mobile-tabbar) .toast-stack { top: calc(64px + env(safe-area-inset-top, 0px)); bottom: auto !important; left: 12px; right: 12px; }
+}
+/* «Вы вошли как…» — пока открыто окно, плашка сверху и не закрывает его кнопки. */
+body:has(.dialog-backdrop) .impersonation-bar { top: 12px; bottom: auto; }
+/* Уведомления: длинный текст переносится, панель не уезжает вбок. */
+.notif-panel { overflow-x: hidden; }
+.notif-item-msg, .notif-item-title { overflow-wrap: anywhere; word-break: normal; }
+/* Подписи плиток KPI сотрудника — слово целиком («ОПОЗДАНИЯ», а не «ОПОЗД АНИЯ»). */
+.owner-kpi-title { word-break: keep-all; overflow-wrap: normal; hyphens: none; min-width: 0; }
+/* Вход на телефоне — сразу форма: большой баннер занимал первый экран. */
+@media (max-width: 600px) {
+  .login-page::before, .login-page::after { display: none; }
+  .login-aside { display: none; }
+  .login-card { padding: 32px 20px; }
+}
+.kpi-cols-note { margin: 10px 2px 0; font-size: 12.5px; line-height: 1.5; color: var(--text-soft); max-width: 900px; }
+/* QA-2: «Лиды» на ноутбуке 1150–1365 px — кнопки действий уходили за край.
+   Узкий выбор менеджера (имя с многоточием), поля ячеек меньше. */
+@media (min-width: 901px) and (max-width: 1365px) {
+  .leads-table th, .leads-table td { padding-left: 7px; padding-right: 7px; }
+  .leads-table .mgr-row > .crm-select-trigger { min-width: 0 !important; width: auto !important; max-width: 150px; }
+  .leads-table .mgr-row > .crm-select-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .leads-table .lead-dir { padding: 3px 8px; }
+}
+/* Тосты только сообщают — клики и перетаскивание проходят сквозь них (QA-2: сверху тост закрывал ячейки календаря). */
+.toast-stack .toast { pointer-events: none; }

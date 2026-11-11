@@ -37,10 +37,12 @@ function localDayAndMinutes(date: Date): { weekday: any; minutesFromMidnight: nu
     weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    // hourCycle, а не hour12: false — на части версий Node полночь приходит
+    // часом «24», и приход в 00:11 считался опозданием на 911 мин (QA-2).
+    hourCycle: 'h23',
   }).formatToParts(date);
   const wkRaw = parts.find((p) => p.type === 'weekday')?.value || 'Mon';
-  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10) % 24;
   const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
   return {
     weekday: WEEKDAY_MAP[wkRaw] || 'MON',
@@ -131,8 +133,8 @@ export class TimeTrackingService {
         );
         if (distance > loc.radiusMeters) {
           throw new BadRequestException(
-            `Ты за пределами рабочей зоны (${Math.round(distance)}м от «${loc.name}», ` +
-            `допустимо до ${loc.radiusMeters}м). Подойди ближе или приложи фото/видео.`,
+            `Вы за пределами рабочей зоны (${Math.round(distance)}м от «${loc.name}», ` +
+            `допустимо до ${loc.radiusMeters}м). Подойдите ближе или приложите фото/видео.`,
           );
         }
       }

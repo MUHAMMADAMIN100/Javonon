@@ -82,6 +82,11 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
   /** Какая форма правки открыта под «Личными данными / Оплатой». */
   const [editing, setEditing] = useState<'personal' | 'pay' | 'roles' | 'custom' | null>(null);
+  // QA-2: форма открывалась ниже экрана — без прокрутки её не было видно.
+  useEffect(() => {
+    if (!editing) return;
+    requestAnimationFrame(() => document.querySelector(`[data-testid="edit-form-${editing}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }, [editing]);
   const toggleEdit = (k: 'personal' | 'pay' | 'roles' | 'custom') => setEditing((cur) => (cur === k ? null : k));
   const closeEdit = () => setEditing(null);
   const roleLabel = useRoleLabel();
@@ -723,7 +728,7 @@ function PersonalEditor({
 
   return (
     <EditForm title={t('userDetail.section.personal')} saving={saving} onSave={save} onCancel={onClose}>
-      {canNameEmail && <LabelInput label={t('app.field.fullName')} value={fullName} onChange={setFullName} />}
+      {canNameEmail && <LabelInput label={t('common.fullName')} value={fullName} onChange={setFullName} />}
       {canNameEmail && <LabelInput label={t('userDetail.field.email')} value={email} onChange={setEmail} type="email" />}
       {canHR && <LabelInput label={t('userDetail.field.phone')} value={phone} onChange={setPhone} />}
       {canHR && <LabelInput label={t('userDetail.field.passport')} value={passportNo} onChange={setPassportNo} />}

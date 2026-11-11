@@ -254,7 +254,8 @@ export default function Salary() {
       bonusAmount: acc.bonusAmount + r.bonusAmount,
       kpiBonus: acc.kpiBonus + r.kpiBonus,
       penalties: acc.penalties + r.penalties,
-      netAmount: acc.netAmount + r.netAmount,
+      // QA-2: строка показывает «К выплате 0», а «Итого» складывало −950.
+      netAmount: acc.netAmount + Math.max(0, r.netAmount),
     }),
     { workedMinutes: 0, salesAmount: 0, baseAmount: 0, bonusAmount: 0, kpiBonus: 0, penalties: 0, netAmount: 0 },
   );

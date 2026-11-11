@@ -268,6 +268,15 @@ export default function SubmissionForm() {
       : isFinite(taNum) && paNum > taNum + 0.005 ? t('dealForm.err.payOverTotal') : '',
     receipt: payMethod === 'TRANSFER' && receiptUrls.length === 0 ? t('dealForm.err.receipt') : '',
     deposit: payMethod === 'CASH' && depositProofUrls.length === 0 ? t('dealForm.err.deposit') : '',
+    // QA-2 №16: сумма следующего платежа — только с датой и не больше остатка.
+    nextDate: nextDueAmount.trim() && !nextDueDate ? t('deal.err.nextDate') : '',
+    nextAmount: nextDueAmount.trim()
+      ? !(parseFloat(nextDueAmount) > 0)
+        ? t('deal.err.nextAmount')
+        : isFinite(taNum) && isFinite(paNum) && parseFloat(nextDueAmount) > taNum - paNum + 0.005
+          ? t('deal.err.nextOver').replace('{left}', String(Math.max(0, Math.round((taNum - paNum) * 100) / 100)))
+          : ''
+      : '',
   };
   const fe = (k: keyof typeof fieldErrs) => (showErr ? fieldErrs[k] : '');
 
@@ -639,10 +648,10 @@ export default function SubmissionForm() {
                 />
               </Field>
             )}
-            <Field label={t('deal.field.nextDate')}>
+            <Field label={t('deal.field.nextDate')} error={fe('nextDate')} testid="deal-next-date">
               <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} />
             </Field>
-            <Field label={t('deal.field.nextAmount')}>
+            <Field label={t('deal.field.nextAmount')} error={fe('nextAmount')} testid="deal-next-amount">
               <input className="crm-input" type="number" min={0} step={50} value={nextDueAmount} onChange={(e) => setNextDueAmount(e.target.value)} placeholder="2000" />
             </Field>
           </div>

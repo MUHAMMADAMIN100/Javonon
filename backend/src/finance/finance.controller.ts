@@ -47,6 +47,7 @@ import {
 import { parseDate } from '../common/query-date';
 import { LIST_TAKE_MAX, parseSkip } from '../common/paging';
 import { Permissions } from '../auth/permissions.decorator';
+import { assertFileContent } from '../common/file-sniff';
 
 // Receipts: только изображения и PDF. Whitelist расширений и MIME —
 // раньше можно было загрузить .exe/.html/.php (потенциальный XSS если
@@ -404,6 +405,7 @@ export class FinanceController {
   @Permissions('salary:pay')
   async payrollAdvance(@CurrentUser() me: any, @Body() dto: { userId?: string; ym?: string; amount?: number | string; accountId?: string; date?: string; note?: string }) {
     const res = await this.payrollSvc.giveAdvance(me, dto);
+    this.payrollSvc.invalidateSheet();
     await logFinance(this.prisma, { actorId: me.id, action: 'payroll.advance', entity: 'Transaction', entityId: res.id,
       summary: `${(await this.prisma.user.findUnique({ where: { id: dto.userId }, select: { fullName: true } }))?.fullName ?? ''} · ${res.amount.toLocaleString('ru-RU')} TJS · ${dto.ym}` });
     return res;
@@ -413,6 +415,7 @@ export class FinanceController {
   @Permissions('salary:pay')
   async payrollPay(@CurrentUser() me: any, @Body() dto: { userId?: string; ym?: string; accountId?: string; date?: string }) {
     const res: any = await this.payrollSvc.pay(me, dto);
+    this.payrollSvc.invalidateSheet();
     await logFinance(this.prisma, { actorId: me.id, action: 'payroll.pay', entity: 'SalaryRecord', entityId: res?.id ?? null,
       summary: `${(await this.prisma.user.findUnique({ where: { id: dto.userId }, select: { fullName: true } }))?.fullName ?? ''} · ${Number(res?.netAmount ?? 0).toLocaleString('ru-RU')} TJS · ${dto.ym}` });
     return res;
@@ -422,6 +425,7 @@ export class FinanceController {
   @Permissions('salary:pay')
   async payrollClose(@CurrentUser() me: any, @Body() dto: { ym?: string }) {
     const res = await this.payrollSvc.close(me, dto?.ym);
+    this.payrollSvc.invalidateSheet();
     await logFinance(this.prisma, { actorId: me.id, action: 'payroll.close', entity: 'FinancePayrollMonth', entityId: dto?.ym ?? null, summary: String(dto?.ym ?? '') });
     return res;
   }
@@ -430,6 +434,7 @@ export class FinanceController {
   @Permissions('salary:pay')
   async payrollReopen(@Body() dto: { ym?: string }, @CurrentUser() me: any) {
     const res = await this.payrollSvc.reopen(dto?.ym);
+    this.payrollSvc.invalidateSheet();
     await logFinance(this.prisma, { actorId: me?.id, action: 'payroll.reopen', entity: 'FinancePayrollMonth', entityId: dto?.ym ?? null, summary: String(dto?.ym ?? '') });
     return res;
   }
@@ -632,6 +637,7 @@ export class FinanceController {
     // бы указать любой managerId в dto — bonus inflation).
     // `role` пробрасываем в ActivityLog.actorRole — без неё FOUNDER не мог
     // отфильтровать /activity по «FINANCE_CREATE от SALES_MANAGER».
+    this.payrollSvc.invalidateSheet();
     const tx = await this.svc.create(dto, me.id, {
       id: me.id,
       role: me?.role,
@@ -717,6 +723,7 @@ export class FinanceController {
     // TRANSACTION_MANAGER_CHANGE), без него FOUNDER не мог бы фильтровать
     // /activity по роли автора правки.
     const before = await txSnapshot(this.prisma, id);
+    this.payrollSvc.invalidateSheet();
     const res = await this.svc.update(id, patch, {
       id: me.id,
       role: me?.role,
@@ -780,6 +787,7 @@ export class FinanceController {
     // и роль удалившего. Без этого FOUNDER увидел бы факт удаления
     // только через emit + мог только грепом по логам искать автора.
     const before = await txSnapshot(this.prisma, id);
+    this.payrollSvc.invalidateSheet();
     const res = await this.svc.remove(
       id,
       {
@@ -931,6 +939,7 @@ export class FinanceController {
   )
   uploadReceipt(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Файл не загружен');
+    assertFileContent(file, ['image', 'pdf'], 'Чек');
     return {
       url: `/uploads/${file.filename}`,
       originalName: file.originalname,

@@ -26,6 +26,9 @@ export interface NavCtx {
   isTeacherOnly: boolean;
   /** Руководство академии (основатель, админ, роль с «Академия — управление»). */
   academyManager: boolean;
+  /** «Сделки» без своей роли: основатель, админ, менеджер по продажам (QA-2: у
+   *  бухгалтера и клиентского менеджера пункт был, а сервер отвечал 403). */
+  sellsDeals: boolean;
   /** Хотя бы один из перечисленных permission'ов (OR). */
   can: (...perms: string[]) => boolean;
   /**
@@ -103,7 +106,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { to: '/students', icon: 'school', labelKey: 'sidebar.students', visible: (c) => c.show('students:read', c.isWorkforce) },
       // «Сделки» — менеджеры оформляют закрытых студентов; FOUNDER одобряет.
-      { to: '/submissions', icon: 'handshake', labelKey: 'sidebar.submissions', visible: (c) => !c.isTeacherOnly && c.show(['submissions:read', 'submissions:all', 'submissions:approve'], true) },
+      { to: '/submissions', icon: 'handshake', labelKey: 'sidebar.submissions', visible: (c) => !c.isTeacherOnly && c.show(['submissions:read', 'submissions:all', 'submissions:approve'], c.sellsDeals) },
       { to: '/pipelines', icon: 'route', labelKey: 'sidebar.pipelines', visible: (c) => c.show('pipelines:read', c.elevated) },
       { to: '/partners', icon: 'diversity_3', labelKey: 'sidebar.partners', visible: (c) => c.show('partners:read', c.elevated) },
     ],
@@ -204,10 +207,18 @@ export function buildNavCtx(user: unknown): NavCtx {
     hasCustomRole ? can(...(Array.isArray(perms) ? perms : [perms])) : baseCond;
   const isTeacherOnly = isTeacherOnlyFn(user as any);
   const academyManager = isAcademyManager(user as any);
-  return { elevated, isFounder, isWorkforce, hasCustomRole, isTeacherOnly, academyManager, can, show };
+  const sellsDeals = hasRole(user as any, 'FOUNDER', 'ADMIN', 'SALES_MANAGER');
+  return { elevated, isFounder, isWorkforce, hasCustomRole, isTeacherOnly, academyManager, sellsDeals, can, show };
 }
 
 export type VisibleGroup = NavGroup;
+
+/** Открыт ли пользователю раздел «Сделки» — те же правила, что у меню и маршрута. */
+export function canOpenDeals(user: unknown): boolean {
+  const ctx = buildNavCtx(user);
+  const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.to === '/submissions');
+  return !!item && item.visible(ctx);
+}
 
 /**
  * Группы, в которых остался хотя бы один разрешённый пункт, уже

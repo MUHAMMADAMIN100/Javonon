@@ -316,6 +316,7 @@ export default function Kpi() {
           </tbody>
         </table>
       </div>
+      <p className="kpi-cols-note" data-testid="kpi-cols-note">{t('kpi.colsNote')}</p>
       {/* Сверка с дашбордом: что не вошло в сумму по сотрудникам. */}
       {showTop && <KpiOutsideNote params={params} />}
       <AnimatePresence>

@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { hasPermission, isElevated, isFounder } from '../auth/role-utils';
+import { hasPermission, isAccountantOnly, isElevated, isFounder } from '../auth/role-utils';
 import { tjLocalDay, tjStartOfDay } from '../common/tj-time';
 import {
   diaryFirstDay,
@@ -38,7 +38,8 @@ const TEXT_MAX = 2000;
 export function seesAllTasks(user: any): boolean {
   if (isFounder(user)) return true;
   if (user?.hasCustomRole) return hasPermission(user, 'tasks:all');
-  return isElevated(user);
+  // QA-2: бухгалтеру «Задачи» всей компании не нужны — только свои.
+  return isElevated(user) && !isAccountantOnly(user);
 }
 
 type TaskPeople = {

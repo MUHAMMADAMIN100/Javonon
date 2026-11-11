@@ -235,7 +235,7 @@ function DebtsDetails({ onClose }: { onClose: () => void }) {
     : undefined;
   const columns: DetailsColumn<any>[] = [
     { key: 'fullName', label: t('finance.col.debtor'), value: (a) => a.fullName, render: (a) => <strong>{a.fullName}</strong> },
-    { key: 'program', label: t('sidebar.programs'), value: (a) => a.debt?.programName ?? a.program?.name },
+    { key: 'program', label: t('sidebar.programs'), value: (a) => a.debt?.programName ?? a.program?.name ?? t('finance.debt.noDeal') },
     {
       key: 'amount',
       label: t('finance.debt.col'),

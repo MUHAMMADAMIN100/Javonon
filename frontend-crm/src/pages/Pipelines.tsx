@@ -237,11 +237,11 @@ function PipelineCard({
     const target = pipeline.stages[idx + dir];
     if (!target) return;
     const cur = pipeline.stages[idx];
-    // Меняем местами order (через Promise.all, потом invalidate).
-    Promise.all([
-      updateStage(cur.id, { order: target.order }),
-      updateStage(target.id, { order: cur.order }),
-    ]).then(onChanged);
+    // Сервер сам меняет этапы местами (QA-2: две правки разом давали 409,
+    // а пользователь ошибку не видел).
+    updateStage(cur.id, { order: target.order })
+      .then(onChanged)
+      .catch((e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'));
   };
 
   return (
