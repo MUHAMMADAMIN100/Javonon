@@ -717,6 +717,32 @@ export const payrollPay = (dto: { userId: string; ym: string; accountId: string;
 export const payrollClose = (ym: string) => api.post<{ ok: boolean; nextYm: string }>('/finance/payroll/close', { ym }).then((r) => r.data);
 export const payrollReopen = (ym: string) => api.post('/finance/payroll/reopen', { ym }).then((r) => r.data);
 
+// ── Активность (часть 3) ─────────────────────────────────────────────────
+export interface FinanceActivityRow {
+  id: string; at: string; actorId: string | null; actorName: string | null; action: string; entity: string; entityId: string | null;
+  summary: string; meta: Record<string, unknown> | null; changes: Array<{ field: string; before: unknown; after: unknown }> | null;
+}
+export const getFinanceActivity = (p: { take?: number; before?: string; group?: string; actorId?: string }) =>
+  api.get<{ rows: FinanceActivityRow[]; total: number; actors: Array<{ id: string; name: string | null; count: number }> }>('/finance/activity', { params: p }).then((r) => r.data);
+
+// ── Резервные копии и отчёт Excel (часть 3) ──────────────────────────────
+export interface FinanceBackupRow { id: string; createdAt: string; kind: 'AUTO' | 'MANUAL'; createdByName: string | null; counts: Record<string, number>; sizeBytes: number }
+export const listBackups = () => api.get<{ rows: FinanceBackupRow[] }>('/finance/backups').then((r) => r.data);
+export const createBackup = () => api.post<FinanceBackupRow>('/finance/backups').then((r) => r.data);
+/** Скачать файл с сервера (с токеном) и отдать браузеру. */
+async function saveBlob(url: string, params: Record<string, string> | undefined, fallbackName: string) {
+  const r = await api.get(url, { params, responseType: 'blob' });
+  const cd = String(r.headers['content-disposition'] || '');
+  const name = /filename="([^"]+)"/.exec(cd)?.[1] || fallbackName;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(r.data);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+export const downloadBackup = (id: string) => saveBlob(`/finance/backups/${id}/download`, undefined, 'javonon-finance.json.gz');
+export const downloadReport = (ym: string) => saveBlob('/finance/report.xlsx', { ym }, `javonon-finance-${ym}.xlsx`);
+
 export interface FinanceTransfer {
   id: string;
   fromAccountId: string;

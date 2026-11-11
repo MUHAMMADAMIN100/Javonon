@@ -40,7 +40,7 @@ export interface AcceptPaymentDto {
   notes?: string;
 }
 
-function directionOf(t: { productCategoryEnum: string | null; category: string }): Direction {
+export function directionOf(t: { productCategoryEnum: string | null; category: string }): Direction {
   if (t.productCategoryEnum && (DIRECTIONS as string[]).includes(t.productCategoryEnum)) return t.productCategoryEnum as Direction;
   return t.category === 'TUITION_PAYMENT' ? 'CONTRACT' : 'OTHER';
 }

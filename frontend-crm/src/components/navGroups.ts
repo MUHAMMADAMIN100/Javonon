@@ -153,6 +153,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // только тем, кому дана зарплата без финансов. Подробный расчёт — кнопкой в ведомости.
       { to: '/salary', icon: 'paid', labelKey: 'sidebar.salary', visible: (c) => c.show('salary:read', c.elevated) && !c.show('finance:read', c.elevated) },
       { to: '/finance/transactions', icon: 'swap_vert', labelKey: 'sidebar.financeTransactions', visible: (c) => c.show('finance:read', c.elevated) },
+      { to: '/finance/activity', icon: 'history', labelKey: 'sidebar.financeActivity', visible: (c) => c.show('finance:read', c.elevated) },
       { to: '/finance/settings', icon: 'tune', labelKey: 'sidebar.financeSettings', visible: (c) => c.show('finance:read', c.elevated) },
     ],
   },

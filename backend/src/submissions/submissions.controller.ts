@@ -31,6 +31,8 @@ import { Role, SubmissionStatus, SubmissionPaymentStatus } from '@prisma/client'
 import { Permissions } from '../auth/permissions.decorator';
 import { ClientMoneyInterceptor } from '../common/client-money.interceptor';
 import { hasPermission, isFounder, roleAllows } from '../auth/role-utils';
+import { logFinance } from '../finance/finance-activity';
+import { PrismaService } from '../prisma/prisma.service';
 
 // Те же типы файлов что и в time-tracking (паспорт/контракт/чек).
 const SUBMISSION_FILE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf']);
@@ -64,6 +66,7 @@ export class SubmissionsController {
     // permission-пути `submissions:*` из PERMISSION_CATALOG, и кастомной
     // роли не нужен отдельный ключ ради блока внутри той же карточки.
     private installments: InstallmentsService,
+    private prisma: PrismaService,
   ) {}
 
   /** Менеджер создаёт новую сделку. */
@@ -286,14 +289,22 @@ export class SubmissionsController {
   @Post('payments/:id/approve')
   @Roles(Role.FOUNDER)
   @Permissions('submissions:approve')
-  approve(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { amountTjs?: number | string; accountId?: string | null }) {
+  async approve(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { amountTjs?: number | string; accountId?: string | null }) {
     // amountTjs — сумма в сомони; обязательна только для сделки не в TJS.
-    return this.svc.approvePayment(id, me.id, {
+    const res = await this.svc.approvePayment(id, me.id, {
       amountTjs: body?.amountTjs,
       allowed: roleAllows(me, 'submissions:approve', () => isFounder(me)),
       // Счёт, на который пришли деньги (необязательно; без него — по способу оплаты).
       ...(body?.accountId !== undefined && { accountId: body.accountId || null }),
     });
+    // Журнал «Финансы → Активность»
+    const pay = await this.prisma.submissionPayment.findUnique({
+      where: { id },
+      select: { amount: true, account: { select: { name: true } }, submission: { select: { currency: true, newStudentName: true, student: { select: { fullName: true } } } } },
+    });
+    if (pay) await logFinance(this.prisma, { actorId: me.id, action: 'income.approve', entity: 'SubmissionPayment', entityId: id,
+      summary: `${pay.submission.student?.fullName ?? pay.submission.newStudentName ?? ''} · ${pay.amount.toLocaleString('ru-RU')} ${pay.submission.currency}${pay.account ? ` · → «${pay.account.name}»` : ''}` });
+    return res;
   }
 
   /** FOUNDER отклоняет платёж с причиной. */

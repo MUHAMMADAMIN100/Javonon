@@ -2986,3 +2986,42 @@ model FinancePayrollMonth {
   closedAt   DateTime @default(now())
   closedById String?
 }
+
+/// «Финансы → Активность»: журнал изменений в финансах (кто, когда, что было → стало).
+/// action — код действия (tx.update, account.create, payroll.pay…), changes — [{field, before, after}].
+model FinanceActivity {
+  id        String   @id @default(uuid())
+  at        DateTime @default(now())
+  actorId   String?
+  actorName String?
+  action    String
+  entity    String
+  entityId  String?
+  summary   String
+  meta      Json?
+  changes   Json?
+
+  @@index([at])
+  @@index([action])
+  @@index([actorId])
+}
+
+/// «Финансы → Настройки → Резервные копии»: снимок всех таблиц финансов (gzip JSON).
+/// Ночные (AUTO) и по кнопке (MANUAL). Восстановления из интерфейса нет (решение заказчика).
+enum FinanceBackupKind {
+  AUTO
+  MANUAL
+}
+
+model FinanceBackup {
+  id            String            @id @default(uuid())
+  createdAt     DateTime          @default(now())
+  kind          FinanceBackupKind
+  createdById   String?
+  createdByName String?
+  counts        Json
+  sizeBytes     Int
+  data          Bytes
+
+  @@index([kind, createdAt])
+}

@@ -1317,3 +1317,31 @@ a.inc-tile:hover { border-color: #B9C7DD; }
 @media (max-width: 1100px) { .pay-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pay-details { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 720px) { .pay-adv-form { grid-template-columns: 1fr; } .pay-card-act .btn { min-height: 44px; } }
 @media (max-width: 380px) { .pay-cards { grid-template-columns: 1fr; } }
+
+/* ── Финансы → Активность (часть 3, 11.11.2026) ── */
+.act-actor { min-width: 220px; }
+.act-groups { display: flex; flex-wrap: wrap; gap: 6px; }
+.act-chip { cursor: pointer; }
+.act-row { cursor: pointer; }
+.act-row:hover td, .act-row.is-open td { background: #F8FAFD; }
+.act-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.act-action { font-weight: 600; }
+.act-action.is-ok { color: #15803D; }
+.act-action.is-bad { color: #B91C1C; }
+.act-details { display: flex; flex-direction: column; gap: 4px; font-size: 13px; padding: 4px 2px; }
+.act-changes-title { margin-top: 6px; font-weight: 700; }
+.act-changes { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: 4px 14px; margin: 0; }
+.act-changes dt { color: var(--text-light); }
+.act-changes dd { margin: 0; overflow-wrap: anywhere; }
+.act-changes s { color: var(--text-light); }
+.act-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
+@media (max-width: 720px) { .act-actor { min-width: 0; flex: 1 1 100%; } .act-groups { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } }
+
+/* ── Финансы → Настройки → Резервные копии (часть 3) ── */
+.bk-report { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; }
+.bk-report .crm-select { min-width: 180px; }
+.bk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.bk-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
+.bk-list li .material-symbols-rounded { color: var(--text-light); }
+.bk-when { font-weight: 600; font-variant-numeric: tabular-nums; }
+.bk-list .fin-link { margin-left: auto; }

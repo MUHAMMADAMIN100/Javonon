@@ -7,6 +7,7 @@ import CrmSelect from '../components/CrmSelect';
 import CrmDatePicker from '../components/CrmDatePicker';
 import FinanceSubnav from '../components/finance/FinanceSubnav';
 import { ACCOUNT_COLORS, AccountMark, channelLabel, fmtDate, fmtMoney } from '../components/finance/financeShared';
+import BackupsCard from '../components/finance/BackupsCard';
 import {
   type FinanceAccount,
   type FinanceAccountKind,
@@ -234,6 +235,8 @@ export default function FinanceSettings() {
           </div>
         )}
       </section>
+
+      <BackupsCard canManage={canManage} />
 
       <AnimatePresence>
         {editing && (

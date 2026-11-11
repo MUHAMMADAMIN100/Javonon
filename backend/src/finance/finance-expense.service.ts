@@ -32,7 +32,7 @@ const OTHER_CATS = ['UTILITIES', 'MARKETING', 'OFFICE', 'MISC_EXPENSE', 'TARGETE
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-function groupOf(t: { category: string; subscriptionId?: string | null; debtId?: string | null }): ExpenseGroup {
+export function groupOf(t: { category: string; subscriptionId?: string | null; debtId?: string | null }): ExpenseGroup {
   if (t.subscriptionId) return 'rent';
   if (t.debtId) return 'debts';
   switch (t.category) {
