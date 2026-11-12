@@ -1524,3 +1524,140 @@ body:has(.dialog-backdrop) .impersonation-bar { top: 12px; bottom: auto; }
   .leads-view-tools { display: none; }
   .leads-foot > :last-child { margin-left: 0; width: 100%; }
 }
+
+/* ── Макет UI, часть C: карточка лида — вкладки и «Обзор» (12.11.2026) ── */
+.client-tabs { display: flex; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.client-tab { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 0; background: transparent; font: inherit; font-weight: 500;
+  color: var(--text-soft); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; white-space: nowrap; }
+.client-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.client-tab-badge { padding: 1px 8px; border-radius: 999px; background: var(--bg-soft); font-size: 12px; font-weight: 600; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.client-overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
+.client-ov-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.client-ov-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.client-ov-head .profile-h { margin: 0; }
+.client-ov-count { color: var(--text-soft); font-size: 13px; font-variant-numeric: tabular-nums; }
+.client-ov-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.client-ov-list li { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.client-ov-list li > .icon, .client-ov-list li > span:first-child { color: var(--primary); flex-shrink: 0; }
+.client-ov-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.client-ov-when { color: var(--text-soft); font-size: 12px; }
+.client-ov-progress { height: 8px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
+.client-ov-progress > span { display: block; height: 100%; background: var(--primary); border-radius: inherit; }
+.client-ov-missing { margin: 0; color: var(--text-soft); font-size: 13px; }
+
+/* Телефон: «Позвонить» — квадратная кнопка-значок рядом с «Создать сделку» (номер есть и в контактах). */
+@media (max-width: 600px) {
+  .client-hero .profile-hero-actions .client-call-btn { flex: 0 0 42px; padding: 0; }
+  .client-hero .profile-hero-actions .client-call-btn .client-call-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .client-hero .profile-hero-actions .client-call-btn + .client-deal-btn { flex: 1 1 calc(100% - 50px); }
+}
+
+/* ── Макет UI, часть D: карточка сделки — плитки сумм и шкала этапов (12.11.2026) ── */
+.deal-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.deal-kpi { border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.deal-kpi-label { font-size: 13px; color: var(--text-soft); }
+.deal-kpi-value { font: 800 24px var(--font-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.deal-kpi-value.is-good { color: var(--success); }
+.deal-kpi-sub { font-size: 12.5px; color: var(--text-soft); }
+.deal-kpi.is-late { border-color: #FBCACA; background: #FFF8F8; }
+.deal-kpi.is-late .deal-kpi-value, .deal-kpi.is-late .deal-kpi-sub { color: #B91C1C; }
+.deal-kpi.is-late .deal-kpi-sub { font-weight: 600; }
+.stages-card { margin-top: 24px; padding: 20px 24px 22px; display: flex; flex-direction: column; gap: 18px; }
+.stages-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 10px; }
+.stages-head h3 { margin: 0; font: 800 17px var(--font-display); }
+.stages-head span { font-size: 13px; color: var(--text-soft); }
+.stages-mismatch { padding: 10px 12px; border-radius: 10px; border: 1px solid #ef4444; background: rgba(239, 68, 68, 0.08); color: #b91c1c; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; }
+.stages-mismatch > div:not(.stages-mismatch-stats) { color: var(--text); }
+.stages-mismatch-stats { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+.stages-bar { position: relative; height: 10px; border-radius: 99px; background: #EEF2F7; overflow: hidden; }
+.stages-bar > span { position: absolute; top: 0; bottom: 0; }
+.stages-bar-paid { left: 0; background: var(--success); }
+.stages-bar-pending { background: repeating-linear-gradient(45deg, #F0A35A 0 6px, #F7C796 6px 12px); }
+.stages-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; }
+.stage-tile { text-align: left; cursor: pointer; border: 1px solid var(--border); background: var(--surface, #fff); border-radius: 14px; padding: 14px;
+  display: flex; flex-direction: column; gap: 8px; font: inherit; color: var(--text); min-width: 0; transition: border-color .15s, box-shadow .15s; }
+.stage-tile:hover { border-color: #C9D3E3; }
+.stage-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.stage-tile.is-picked { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.stage-tile.is-late { border-color: #FBCACA; background: #FFF8F8; }
+.stage-tile.is-late.is-picked { border-color: #DC2626; box-shadow: 0 0 0 1px #DC2626; }
+.stage-tile-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.stage-dot { width: 28px; height: 28px; border-radius: 999px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  font: 800 13px var(--font-display); border: 1.5px solid #C9D3E3; color: var(--text-soft); background: transparent; }
+.stage-tile.is-paid .stage-dot { background: var(--success); border-color: var(--success); color: #fff; }
+.stage-tile.is-part .stage-dot { border-color: #F0A35A; color: #B45309; }
+.stage-tile.is-late .stage-dot { border-color: #DC2626; color: #B91C1C; }
+.stage-name { font: 700 14.5px var(--font-display); overflow-wrap: anywhere; }
+.stage-amount { font: 800 20px var(--font-display); font-variant-numeric: tabular-nums; }
+.stage-due { font-size: 12.5px; color: var(--text-soft); }
+.stage-detail { border-radius: 12px; background: #F8FAFD; border: 1px solid #EEF2F7; padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.stage-detail-text { flex: 1 1 320px; font-size: 14px; color: var(--text); min-width: 0; }
+.stage-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 600px) {
+  .stages-card { padding: 16px; }
+  .deal-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .deal-kpi { padding: 12px; }
+  .deal-kpi-value { font-size: 19px; }
+  .stage-detail-actions { width: 100%; }
+  .stage-detail-actions .btn { flex: 1 1 auto; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) { .stage-tile { transition: none; } }
+
+/* ── Макет UI, часть E: «Новая сделка» по шагам (12.11.2026) ── */
+.deal-steps-anchor { scroll-margin-top: 80px; }
+.deal-steps { list-style: none; margin: 0 0 20px; padding: 0 0 16px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.deal-step button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 4px; border: 0; background: transparent; font: inherit; color: var(--text-soft); cursor: pointer; text-align: left; border-radius: 10px; min-width: 0; }
+.deal-step button:hover { background: var(--bg-soft); }
+.deal-step button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.deal-step-mark { width: 30px; height: 30px; border-radius: 999px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font: 800 13px var(--font-display); border: 1.5px solid #C9D3E3; color: var(--text-soft); box-sizing: border-box; }
+.deal-step-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.deal-step-text small { font-size: 11.5px; color: var(--text-soft); }
+.deal-step-text b { font-weight: 600; font-size: 13.5px; color: var(--text); overflow-wrap: anywhere; }
+.deal-step.is-current .deal-step-mark { background: var(--primary); border-color: var(--primary); color: #fff; }
+.deal-step.is-current .deal-step-text b { color: var(--primary); }
+.deal-step.is-done .deal-step-mark { background: var(--success-soft); border-color: var(--success); color: var(--success); }
+.deal-step.is-bad .deal-step-mark { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+.deal-step-body { display: flex; flex-direction: column; gap: 14px; min-height: 220px; }
+.deal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.deal-method { align-self: flex-start; }
+.deal-method button { padding: 8px 16px; font-size: 14px; }
+.deal-next-group { border: 1px dashed var(--border); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.deal-next-head { font-size: 14px; }
+.deal-next-head span { color: var(--text-soft); font-size: 13px; }
+.deal-review { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.deal-review-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.deal-review-row + .deal-review-row { border-top: 1px solid var(--border); }
+.deal-review-row.is-bad { background: var(--danger-soft); }
+.deal-review-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 14px; overflow-wrap: anywhere; }
+.deal-review-text b { font-size: 12.5px; color: var(--text-soft); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.deal-review-bad { color: var(--danger); font-size: 12.5px; font-weight: 600; }
+.deal-review-note { margin: 0; font-size: 13px; color: var(--text-soft); }
+.deal-wizard-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 16px; margin-top: 20px; }
+.deal-wizard-count { margin-left: auto; color: var(--text-soft); font-size: 13px; padding: 0 6px; }
+@media (max-width: 600px) {
+  .deal-steps { grid-template-columns: auto auto auto auto; justify-content: space-between; }
+  .deal-step:not(.is-current) .deal-step-text { display: none; }
+  .deal-step.is-current { grid-column: span 1; }
+  .deal-step button { padding: 4px 2px; }
+  .deal-wizard-count { order: -1; width: 100%; margin: 0; text-align: center; padding: 0 0 4px; }
+  .deal-wizard-foot .btn { flex: 1 1 0; justify-content: center; }
+  .deal-review-row { flex-wrap: wrap; }
+  .deal-method { align-self: stretch; display: flex; }
+  .deal-method button { flex: 1 1 0; padding: 10px 4px; white-space: nowrap; min-width: 0; }
+}
+@media (max-width: 360px) {
+  .deal-method button { font-size: 13px; }
+}
+
+.deal-drop { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center;
+  padding: 16px 14px; border: 1.5px dashed #C9D3E3; border-radius: 12px; background: #F8FAFD; color: var(--text-soft); cursor: pointer; transition: border-color .15s, background .15s; }
+.deal-drop:hover, .deal-drop.is-over { border-color: var(--primary); background: #EEF4FF; }
+.deal-drop:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+.deal-drop.is-busy { cursor: progress; opacity: .75; }
+.deal-drop .material-symbols-rounded { color: var(--primary); }
+.deal-drop-text { font-size: 13.5px; color: var(--text); }
+.deal-drop-text u { color: var(--primary); text-decoration: none; font-weight: 600; }
+.deal-drop small { font-size: 12px; color: var(--text-soft); }
+.deal-drop-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .deal-drop { transition: none; } }

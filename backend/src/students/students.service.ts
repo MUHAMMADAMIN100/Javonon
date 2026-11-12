@@ -17,6 +17,7 @@ import { ReferralsService } from '../partners/referrals.service';
 import { CABINET_BY_DIRECTION } from '../common/cabinets';
 import { parseCalendarDateUtc } from '../common/tj-time';
 import { dateRangeFilter } from '../common/query-date';
+import { clientDeals } from '../submissions/client-deals';
 import { phoneDigitsPattern } from '../common/search';
 
 /**
@@ -351,6 +352,11 @@ export class StudentsService {
    *   Внутренние вызовы (update и т.п.) viewer не передают — и партнёрский
    *   блок им не считается: лишний запрос и лишний риск утечки.
    */
+  /** Сделки студента: по нему самому и по его лидам (сделка до одобрения ещё без студента). */
+  async dealsForStudent(id: string, user: any) {
+    return clientDeals(this.prisma, [{ studentId: id }, { sourceApplication: { studentId: id } }, { application: { studentId: id } }], user);
+  }
+
   async findOne(id: string, viewer?: UserWithRoles | null) {
     // Заявки — из STUDENT_INCLUDE: без удалённых и новые первыми. Карточка
     // студента меняет статус, этап и долг у applications[0]; раньше здесь

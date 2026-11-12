@@ -39,6 +39,9 @@ import PaymentStagesSection from '../components/PaymentStagesSection';
 import BackButton from '../components/BackButton';
 import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
 import { keys } from '../lib/queryKeys';
+import { listSubmissionStages } from '../api/installments';
+import { ruPlural } from '../lib/plural';
+import { coverStages, daysPastDue } from '../lib/stageCoverage';
 import { nextDueError, nextDueMin, tjDateInput, tjFormatDate, tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
@@ -140,6 +143,8 @@ export default function SubmissionDetail() {
   });
 
   const [showAddPayment, setShowAddPayment] = useState(false);
+  // «Принять оплату по этапу» открывает то же окно с остатком этапа.
+  const [payAmount, setPayAmount] = useState<number | null>(null);
   const [rejectPaymentId, setRejectPaymentId] = useState<string | null>(null);
   // Одобрение платежа по сделке не в сомони — сначала спрашиваем сумму в сомони.
   const [approveTarget, setApproveTarget] = useState<SubmissionPayment | null>(null);
@@ -147,6 +152,8 @@ export default function SubmissionDetail() {
   // Подходят счета в валюте сделки, для сделки не в сомони — и в сомони.
   const canSeeAccounts = roleCan(me, 'finance:read', isElevated(me));
   const accountsQ = useQuery({ queryKey: keys.finance.accounts(), queryFn: listAccounts, enabled: canSeeAccounts && !!s });
+  // Этапы — для плитки «Просрочено» (тот же ключ, что у шкалы этапов: один запрос).
+  const stagesQ = useQuery({ queryKey: keys.installments.stages(id ?? ''), queryFn: () => listSubmissionStages(id!), enabled: !!id && !!s });
   const dealCur = (s?.currency || 'TJS').toUpperCase();
   const approveAccounts = (accountsQ.data?.accounts ?? []).filter(
     (a) => !a.archived && (a.currency === dealCur || (dealCur !== 'TJS' && a.currency === 'TJS')),
@@ -202,6 +209,15 @@ export default function SubmissionDetail() {
   const studentName = s.student?.fullName || s.newStudentName || '—';
   const totalPaid = s.payments.filter((p) => p.status === 'APPROVED').reduce((sum, p) => sum + (p.amount ?? 0), 0);
   const remaining = Math.max(0, (s.totalAmount ?? 0) - totalPaid);
+  const pendingSum = s.payments.filter((p) => p.status === 'PENDING').reduce((sum, p) => sum + (p.amount ?? 0), 0);
+  // Просрочка — по этапам (тот же запрос, что у шкалы этапов ниже, общий кеш):
+  // неоплаченный остаток просроченных этапов, а не их полная сумма — деньги,
+  // уже внесённые по этапу или ждущие одобрения, долгом не считаем.
+  const lateCover = coverStages(stagesQ.data?.stages ?? [], totalPaid, pendingSum)
+    .filter((v) => v.st.status === 'OVERDUE' && (s.moneyHidden || v.rest > 0));
+  const firstLate = lateCover[0]?.st;
+  const lateSum = lateCover.reduce((sum, v) => sum + v.rest, 0);
+  const lateDays = firstLate ? daysPastDue(firstLate.dueDate) : 0;
   // Сколько ещё можно внести: контракт минус все неотклонённые платежи (как
   // проверяет сервер). Суммы скрыты от роли — проверяет только сервер.
   const payLimit = s.moneyHidden
@@ -364,11 +380,36 @@ export default function SubmissionDetail() {
             поэтому компонент возвращает null и блока не существует. */}
         <PartnerAttributionCard attribution={s.partnerAttribution} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
-          <Stat label={t('deal.contract')} value={money(s.totalAmount ?? 0)} />
-          <Stat label={t('deal.stat.paid')} value={money(totalPaid)} highlight />
-          <Stat label={t('deal.stat.remaining')} value={money(remaining)} />
-          <Stat label={t('deal.stat.payments')} value={String(s.payments.length)} />
+        {/* Макет (часть D): плитки сумм — контракт, оплачено (доля и что ждёт
+            одобрения), осталось и просрочка по этапам. */}
+        <div className="deal-kpis" data-testid="deal-kpis">
+          <div className="deal-kpi" data-testid="deal-kpi-contract">
+            <span className="deal-kpi-label">{t('deal.contract')}</span>
+            <span className="deal-kpi-value">{money(s.totalAmount ?? 0)}</span>
+          </div>
+          <div className="deal-kpi" data-testid="deal-kpi-paid">
+            <span className="deal-kpi-label">{t('deal.stat.paid')}</span>
+            <span className="deal-kpi-value is-good">{money(totalPaid)}</span>
+            {!s.moneyHidden && (s.totalAmount ?? 0) > 0 && (
+              <span className="deal-kpi-sub">
+                {Math.round((totalPaid / (s.totalAmount ?? 1)) * 100)} %
+                {pendingSum > 0 && ` · ${t('deal.kpi.pending').replace('{sum}', money(pendingSum))}`}
+              </span>
+            )}
+          </div>
+          <div className="deal-kpi" data-testid="deal-kpi-left">
+            <span className="deal-kpi-label">{t('deal.stat.remaining')}</span>
+            <span className="deal-kpi-value">{money(remaining)}</span>
+          </div>
+          {firstLate && (
+            <div className="deal-kpi is-late" data-testid="deal-kpi-late">
+              <span className="deal-kpi-label">{t('stages.total.overdue')}</span>
+              <span className="deal-kpi-value">{money(lateSum)}</span>
+              <span className="deal-kpi-sub">
+                {t('deal.kpi.lateStage').replace('{n}', String(firstLate.order))} · {lateDays} {t(ruPlural(lateDays, 'stages.day1', 'stages.day2', 'stages.day5'))}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Файлы — паспорт + контракт */}
@@ -479,7 +520,13 @@ export default function SubmissionDetail() {
           пустой шаблон = платят разом). Правит этапы тот же, кто правит
           сделку: FOUNDER/ADMIN либо менеджер-владелец. Пометить этап
           оплаченным отсюда НЕЛЬЗЯ — это делает только одобрение платежа. */}
-      <PaymentStagesSection submissionId={s.id} canEdit={canEditStages} />
+      <PaymentStagesSection
+        submissionId={s.id}
+        canEdit={canEditStages}
+        approved={s.moneyHidden ? null : totalPaid}
+        pending={s.moneyHidden ? null : pendingSum}
+        onPay={canAddPayment ? (amount) => { setPayAmount(amount); setShowAddPayment(true); } : undefined}
+      />
 
       {/* Платежи */}
       <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 12 }}>{t('deal.payments')} ({s.payments.length})</h3>
@@ -539,9 +586,11 @@ export default function SubmissionDetail() {
           submissionId={s.id}
           currency={s.currency}
           limit={payLimit}
-          onClose={() => setShowAddPayment(false)}
+          initialAmount={payAmount != null && payLimit != null ? Math.min(payAmount, payLimit) : payAmount}
+          onClose={() => { setShowAddPayment(false); setPayAmount(null); }}
           onSuccess={() => {
             setShowAddPayment(false);
+            setPayAmount(null);
             qc.invalidateQueries({ queryKey: ['submission', id] });
             qc.invalidateQueries({ queryKey: keys.installments.stages(id!) });
             toast(t('deal.toast.paymentAdded'), 'success');
@@ -616,20 +665,6 @@ export default function SubmissionDetail() {
         );
       })()}
     </>
-  );
-}
-
-function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
-      <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontWeight: 700,
-        fontSize: 20,
-        color: highlight ? 'var(--primary-dark)' : 'var(--text)',
-      }}>{value}</div>
-    </div>
   );
 }
 
@@ -772,10 +807,12 @@ function PaymentRow({
 }
 
 function AddPaymentModal({
-  submissionId, currency, limit, onClose, onSuccess,
+  submissionId, currency, limit, initialAmount, onClose, onSuccess,
 }: {
   submissionId: string;
   currency: string;
+  /** Сумма по умолчанию — остаток этапа («Принять оплату по этапу»). */
+  initialAmount?: number | null;
   /** Остаток по контракту; null — суммы скрыты от роли. */
   limit: number | null;
   onClose: () => void;
@@ -783,7 +820,7 @@ function AddPaymentModal({
 }) {
   const { t } = useT();
   const { toast, confirm } = useUI();
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(initialAmount ? String(initialAmount) : '');
   const [method, setMethod] = useState<SubmissionPaymentMethod>('TRANSFER');
   const [paidAt, setPaidAt] = useState(tjToday());
   const [receiptUrls, setReceiptUrls] = useState<string[]>([]);

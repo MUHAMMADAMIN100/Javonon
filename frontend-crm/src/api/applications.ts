@@ -29,6 +29,13 @@ export interface AppFilters {
   duplicates?: boolean;
 }
 
+/** Сделки клиента для карточки лида: суммы — null, если деньги клиентов роли не видны. */
+export type LeadDeal = {
+  id: string; status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED'; program: string | null; manager: string | null;
+  createdAt: string; currency: string; total: number | null; paid: number | null; canOpen: boolean;
+};
+export const leadDeals = (id: string) => api.get<LeadDeal[]>(`/applications/${id}/deals`).then((r) => r.data);
+
 /** Числа быстрых видов списка «Лиды» (те же права, что у списка). */
 export type LeadViewCounts = { all: number; mine: number; new: number; unassigned: number; debt: number };
 export const applicationViewCounts = () => api.get<LeadViewCounts>('/applications/view-counts').then((r) => r.data);

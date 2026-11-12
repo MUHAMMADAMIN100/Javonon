@@ -6,9 +6,10 @@ import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
 import { keys } from '../lib/queryKeys';
 import { tjDateInput, tjFormatDate } from '../lib/tjTime';
+import { coverStages, daysPastDue, type StageCover } from '../lib/stageCoverage';
+import { ruPlural } from '../lib/plural';
 import Icon from '../Icon';
 import CrmDatePicker from './CrmDatePicker';
-import { SortSelect, SortTh, useTableSort } from './TableSort';
 import {
   listSubmissionStages,
   updatePaymentStage,
@@ -62,10 +63,19 @@ const money = (v: number | null | undefined, currency: string) =>
 export default function PaymentStagesSection({
   submissionId,
   canEdit,
+  approved = null,
+  pending = null,
+  onPay,
 }: {
   submissionId: string;
   /** Правит этапы тот же, кто правит сделку: владелец-менеджер или FOUNDER/ADMIN. */
   canEdit: boolean;
+  /** Сумма одобренных платежей сделки; null — суммы роли не видны. */
+  approved?: number | null;
+  /** Сумма платежей, ждущих одобрения. */
+  pending?: number | null;
+  /** «Принять оплату по этапу»: открыть окно платежа с остатком этапа. */
+  onPay?: (amount: number) => void;
 }) {
   const { t } = useT();
   const [editing, setEditing] = useState<PaymentStage | null>(null);
@@ -75,17 +85,7 @@ export default function PaymentStagesSection({
     queryFn: () => listSubmissionStages(submissionId),
   });
   const data = query.data;
-  const sort = useTableSort(
-    data?.stages ?? [],
-    [
-      { key: 'order', label: t('stages.col.order'), type: 'number', value: (s) => s.order },
-      { key: 'title', label: t('stages.col.title'), value: (s) => s.title || `${t('stages.col.title')} ${s.order}` },
-      { key: 'due', label: t('stages.col.due'), type: 'date', value: (s) => s.dueDate },
-      { key: 'amount', label: t('stages.col.amount'), type: 'number', value: (s) => s.amount },
-      { key: 'status', label: t('stages.col.status'), value: (s) => t(`stages.status.${s.status}`) },
-    ],
-    { param: 'sortStages' },
-  );
+  const [picked, setPicked] = useState<string | null>(null);
 
   // Рассрочки у сделки может не быть вовсе (у программы пустой шаблон) —
   // это норма, а не ошибка: платят разом.
@@ -105,137 +105,135 @@ export default function PaymentStagesSection({
   const reconciled = data.reconciled !== false;
   const driftLabel = `${amountDrift > 0 ? '+' : ''}${money(amountDrift, currency)}`;
 
+  // Покрытие этапов (lib/stageCoverage — то же правило, что settleStagesTx на
+  // сервере); деньги, ждущие одобрения, — полосатая часть шкалы.
+  const hidden = approved == null || (data as { moneyHidden?: boolean }).moneyHidden === true;
+  const daysLate = daysPastDue;
+  const view = coverStages(stages, approved ?? 0, pending ?? 0);
+  const current = view.find((v) => v.st.status !== 'PAID') ?? view[view.length - 1];
+  const sel = view.find((v) => v.st.id === picked) ?? current;
+  const name = (st: PaymentStage) => st.title || `${t('stages.col.title')} ${st.order}`;
+  const days = (n: number) => `${n} ${t(ruPlural(n, 'stages.day1', 'stages.day2', 'stages.day5'))}`;
+  const amt = (v: number) => money(v, currency);
+
+  const detail = (v: StageCover) => {
+    const { st } = v;
+    if (st.status === 'PAID') {
+      return hidden
+        ? t('stages.d.paidHidden').replace('{date}', tjFormatDate(st.paidAt))
+        : t('stages.d.paid').replace('{date}', tjFormatDate(st.paidAt)).replace('{sum}', amt(st.amount));
+    }
+    const late = st.status === 'OVERDUE' ? daysLate(st.dueDate) : 0;
+    if (hidden) {
+      return st.status === 'OVERDUE'
+        ? t('stages.d.lateHidden').replace('{days}', days(late))
+        : t('stages.d.dueHidden').replace('{date}', tjFormatDate(st.dueDate));
+    }
+    const parts: string[] = [];
+    if (v.covered > 0) parts.push(t('stages.d.part').replace('{paid}', amt(v.covered)).replace('{sum}', amt(st.amount)));
+    if (v.pend > 0) parts.push(t('stages.d.pending').replace('{sum}', amt(v.pend)));
+    if (v.rest > 0) {
+      parts.push(st.status === 'OVERDUE'
+        ? t('stages.d.late').replace('{sum}', amt(v.rest)).replace('{days}', days(late))
+        : t('stages.d.due').replace('{sum}', amt(v.rest)).replace('{date}', tjFormatDate(st.dueDate)));
+    }
+    return parts.join(' ');
+  };
+  const paidPct = totalAmount > 0 && !hidden ? Math.min(100, ((approved ?? 0) / totalAmount) * 100) : 0;
+  const pendPct = totalAmount > 0 && !hidden ? Math.min(100 - paidPct, ((pending ?? 0) / totalAmount) * 100) : 0;
+  const canPayStage = !!onPay && !hidden && sel && sel.st.status !== 'PAID' && sel.rest > 0;
+
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 24, marginBottom: 12 }}>
-        <h3 style={{ fontSize: 16, margin: 0 }}>
-          {t('stages.title')} ({stages.length})
-        </h3>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {stages.length > 0 && !reconciled && (
-            <span className="badge badge-warning">
-              {t('stages.mismatch')}: {driftLabel}
-            </span>
-          )}
-          {totals.overdueCount > 0 && (
-            <span className="badge badge-danger">
-              {t('stages.total.overdue')}: {money(totals.overdueAmount, currency)}
-            </span>
-          )}
-        </div>
-      </div>
-
       {stages.length === 0 ? (
-        <div className="card" style={{ padding: 20, color: 'var(--text-soft)', fontSize: 13 }}>
-          {t('stages.empty')} — {t('stages.emptyHint')}
+        <div className="card" style={{ padding: 20, marginTop: 24, color: 'var(--text-soft)', fontSize: 13 }} data-testid="stages-empty">
+          <b style={{ color: 'var(--text)' }}>{t('stages.title')}:</b> {t('stages.empty')} — {t('stages.emptyHint')}
         </div>
       ) : (
-        <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ padding: 20 }}>
+        <section className="card stages-card" aria-label={t('stages.title')} data-testid="stages">
+          <div className="stages-head">
+            <h3>{t('stages.title')}</h3>
+            <span>{t('stages.hint.pick')}</span>
+          </div>
+
           {!reconciled && (
-            <div
-              role="alert"
-              style={{
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: `1px solid ${OVERDUE_FILL}`,
-                background: 'rgba(239,68,68,0.08)',
-                color: DANGER_TEXT,
-                fontSize: 12,
-                marginBottom: 16,
-              }}
-            >
-              <b>
-                {t('stages.mismatch')} — {t('stages.diff')}: {driftLabel}
-              </b>
-              <div style={{ marginTop: 4, color: 'var(--text)' }}>{t('stages.mismatch.hint')}</div>
+            <div role="alert" className="stages-mismatch">
+              <b>{t('stages.mismatch')} — {t('stages.diff')}: {driftLabel}</b>
+              <div>{t('stages.mismatch.hint')}</div>
+              <div className="stages-mismatch-stats">
+                <Stat label={t('stages.total.contract')} value={money(totalAmount, currency)} />
+                <Stat label={t('stages.total.plan')} value={money(stagesTotal, currency)} danger />
+              </div>
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 16 }}>
-            {/* Контракт и план стоят рядом намеренно: расхождение между ними
-                не выводится ни из одной другой цифры этой карточки. */}
-            <Stat label={t('stages.total.contract')} value={money(totalAmount, currency)} />
-            <Stat
-              label={t('stages.total.plan')}
-              value={money(stagesTotal, currency)}
-              danger={!reconciled}
-            />
-            <Stat label={t('stages.total.paid')} value={money(totals.paid, currency)} />
-            <Stat label={t('stages.total.outstanding')} value={money(totals.outstanding, currency)} highlight />
-            <Stat label={t('stages.total.overdue')} value={money(totals.overdueAmount, currency)} danger={totals.overdueCount > 0} />
-            <Stat
-              label={t('stages.total.next')}
-              value={totals.nextDueDate ? tjFormatDate(totals.nextDueDate) : '—'}
-            />
+          {!hidden && (
+            <div
+              className="stages-bar"
+              role="img"
+              aria-label={t('stages.bar').replace('{paid}', amt(approved ?? 0)).replace('{sum}', amt(totalAmount))}
+              data-testid="stages-bar"
+            >
+              <span className="stages-bar-paid" style={{ width: `${paidPct}%` }} />
+              {pendPct > 0 && <span className="stages-bar-pending" style={{ left: `${paidPct}%`, width: `${pendPct}%` }} />}
+            </div>
+          )}
+
+          <div className="stages-grid">
+            {view.map((v) => {
+              const { st } = v;
+              const state = st.status === 'PAID' ? 'paid' : st.status === 'OVERDUE' ? 'late' : v.partial || v.pend > 0 ? 'part' : 'wait';
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  className={`stage-tile is-${state}${sel?.st.id === st.id ? ' is-picked' : ''}`}
+                  aria-pressed={sel?.st.id === st.id}
+                  onClick={() => setPicked(st.id)}
+                  data-testid={`stage-${st.order}`}
+                >
+                  <span className="stage-tile-top">
+                    <span className="stage-dot" aria-hidden="true">
+                      {st.status === 'PAID' ? <Icon name="check" size={16} /> : st.order}
+                    </span>
+                    <span className="stage-name">{name(st)}</span>
+                  </span>
+                  <span className="stage-amount">{amt(st.amount)}</span>
+                  <span className="stage-due">{t('stages.dueShort').replace('{date}', tjFormatDate(st.dueDate))}</span>
+                  <span className={STAGE_BADGE[st.status]} style={{ alignSelf: 'flex-start' }}>
+                    {st.status === 'PENDING' && (v.partial || v.pend > 0) ? t('stages.status.part') : t(`stages.status.${st.status}`)}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="table-wrap" style={{ overflowX: 'auto' }}>
-            <SortSelect sort={sort} />
-            <table className="table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <SortTh sort={sort} col="order" style={{ width: 44 }} />
-                  <SortTh sort={sort} col="title" />
-                  <SortTh sort={sort} col="due" />
-                  <SortTh sort={sort} col="amount" style={{ textAlign: 'right' }} />
-                  <SortTh sort={sort} col="status" />
-                  {editable && <th style={{ width: 40 }} />}
-                </tr>
-              </thead>
-              <tbody>
-                {sort.sorted.map((s) => (
-                  <tr
-                    key={s.id}
-                    style={
-                      s.status === 'OVERDUE'
-                        ? { background: 'rgba(239,68,68,0.08)', borderLeft: `3px solid ${OVERDUE_FILL}` }
-                        : undefined
-                    }
+          {sel && (
+            <div className="stage-detail" data-testid="stage-detail">
+              <span className="stage-detail-text">
+                <b>{name(sel.st)}:</b> {detail(sel)}
+              </span>
+              <span className="stage-detail-actions">
+                {editable && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => setEditing(sel.st)}
+                    title={sel.st.status === 'PAID' ? t('stages.paidLocked') : t('stages.edit')}
+                    data-testid="stage-edit"
                   >
-                    <td style={{ color: 'var(--text-soft)' }}>{s.order}</td>
-                    <td data-label={t('stages.col.title')} style={{ fontWeight: 500 }}>
-                      {s.title || `${t('stages.col.title')} ${s.order}`}
-                    </td>
-                    <td data-label={t('stages.col.due')} style={{ color: s.status === 'OVERDUE' ? DANGER_TEXT : 'var(--text-soft)', fontWeight: s.status === 'OVERDUE' ? 600 : 400 }}>
-                      {tjFormatDate(s.dueDate)}
-                    </td>
-                    <td data-label={t('stages.col.amount')} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {money(s.amount, currency)}
-                    </td>
-                    <td data-label={t('stages.col.status')}>
-                      <span className={STAGE_BADGE[s.status]}>
-                        {t(`stages.status.${s.status}`)}
-                      </span>
-                      {s.status === 'PAID' && s.paidAt && (
-                        <span style={{ fontSize: 11, color: 'var(--text-soft)', marginLeft: 6 }}>
-                          {tjFormatDate(s.paidAt)}
-                        </span>
-                      )}
-                    </td>
-                    {editable && (
-                      <td>
-                        <button
-                          className="btn btn-sm btn-secondary"
-                          onClick={() => setEditing(s)}
-                          title={s.status === 'PAID' ? t('stages.paidLocked') : t('stages.edit')}
-                        >
-                          <Icon name="edit" size={14} />
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <p style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 12, marginBottom: 0 }}>
-            {t('stages.hint.settle')}
-          </p>
-          <p style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 6, marginBottom: 0 }}>
-            {t('stages.hint.reconcile')}
-          </p>
-        </motion.div>
+                    <Icon name="edit" size={14} /> {t('stages.edit')}
+                  </button>
+                )}
+                {canPayStage && (
+                  <button type="button" className="btn btn-sm btn-primary" onClick={() => onPay!(sel.rest)} data-testid="stage-pay">
+                    <Icon name="add" size={14} /> {t('stages.pay')}
+                  </button>
+                )}
+              </span>
+            </div>
+          )}
+        </section>
       )}
 
       <AnimatePresence>

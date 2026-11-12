@@ -76,7 +76,8 @@ export default function Kpi() {
   // места остаются у своих людей.
   const rankOf = new Map<string, number | null>(rows.map((r, i) => [r.id, r.rank === undefined ? i + 1 : r.rank]));
   const sort = useTableSort(rows, [
-    { key: 'rank', label: t('kpi.col.rank'), type: 'number', value: (r) => rankOf.get(r.id) ?? 9999 },
+    // Без места в рейтинге (нет продаж) — пусто: общая сортировка ставит пустые в конец в обе стороны.
+    { key: 'rank', label: t('kpi.col.rank'), type: 'number', value: (r) => rankOf.get(r.id) ?? null },
     { key: 'employee', label: t('kpi.col.employee'), value: (r) => r.fullName },
     { key: 'applications', label: t('kpi.col.applications'), type: 'number', value: (r) => r.applicationsAssigned },
     { key: 'enrolled', label: t('kpi.col.enrolled'), type: 'number', value: (r) => r.applicationsEnrolled },

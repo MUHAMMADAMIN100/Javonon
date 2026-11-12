@@ -24,7 +24,7 @@ import Icon from '../Icon';
 import CrmDatePicker from '../components/CrmDatePicker';
 import BackButton from '../components/BackButton';
 import { useT } from '../lib/i18n';
-import { nextDueError, nextDueMin } from '../lib/tjTime';
+import { nextDueError, nextDueMin, tjFormatDate } from '../lib/tjTime';
 import { useAuth } from '../store/auth';
 
 type Mode = 'existing' | 'new';
@@ -93,6 +93,11 @@ export default function SubmissionForm() {
   const [depositProofMetas, setDepositProofMetas] = useState<UploadMeta[]>([]);
   const [nextDueDate, setNextDueDate] = useState('');
   const [nextDueAmount, setNextDueAmount] = useState('');
+
+  // Макет (часть E): форма по шагам. Шаги в шапке кликабельны — вернуться и
+  // поправить можно любой; «Далее» проверяет текущий, «Отправить» — все.
+  const [step, setStep] = useState(1);
+  const topRef = useRef<HTMLDivElement>(null);
 
   // Счётчик активных загрузок файлов (защита от submit во время upload)
   const [pendingUploads, setPendingUploads] = useState(0);
@@ -265,7 +270,9 @@ export default function SubmissionForm() {
 
   // Ошибки формы — все сразу и у своих полей (QA №32: раньше по одной в тосте,
   // поля не подсвечивались). Показываются после первой попытки отправить.
-  const [showErr, setShowErr] = useState(false);
+  // Ошибки показываются по шагам: после «Далее» — у полей этого шага, после
+  // «Отправить» — у всех шагов, где что-то не так.
+  const [errSteps, setErrSteps] = useState<Set<number>>(() => new Set());
   const taNum = parseFloat(totalAmount);
   // Набл. 18 (QA-3): цена программы подставляется в сумму контракта; если
   // менеджер ввёл другую сумму в той же валюте — предупреждаем (скидка бывает,
@@ -315,18 +322,40 @@ export default function SubmissionForm() {
           : ''
       : '',
   };
-  const fe = (k: keyof typeof fieldErrs) => (showErr ? fieldErrs[k] : '');
+  const KEY_STEP: Record<keyof typeof fieldErrs, number> = {
+    student: 1, name: 1, program: 2, contract: 2, total: 2, pay: 3, receipt: 3, deposit: 3, nextDate: 3, nextAmount: 3,
+  };
+  const stepHasErr = (n: number) => (Object.keys(fieldErrs) as (keyof typeof fieldErrs)[]).some((k) => KEY_STEP[k] === n && !!fieldErrs[k]);
+  const fe = (k: keyof typeof fieldErrs) => (errSteps.has(KEY_STEP[k]) ? fieldErrs[k] : '');
+  const goStep = (n: number) => {
+    setStep(n);
+    requestAnimationFrame(() => topRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  };
+  const scrollToError = () =>
+    requestAnimationFrame(() => {
+      document.querySelector('[data-field-error]')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  const goNext = () => {
+    if (pendingUploads > 0) return toast(t('dealForm.err.waitUploads'), 'error');
+    if (stepHasErr(step)) {
+      setErrSteps((prev) => new Set(prev).add(step));
+      toast(t('dealForm.err.fixFields'), 'error');
+      scrollToError();
+      return;
+    }
+    goStep(step + 1);
+  };
 
   const onSubmit = () => {
     // Валидация
     if (pendingUploads > 0) return toast(t('dealForm.err.waitUploads'), 'error');
     if (Object.values(fieldErrs).some(Boolean)) {
-      setShowErr(true);
+      // Все шаги с ошибками подсвечены, открыт первый из них.
+      const bad = [1, 2, 3].filter(stepHasErr);
+      setErrSteps(new Set(bad));
+      setStep(bad[0]);
       toast(t('dealForm.err.fixFields'), 'error');
-      // Прокрутить к первому полю с ошибкой — на телефоне оно может быть далеко.
-      requestAnimationFrame(() => {
-        document.querySelector('[data-field-error]')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      });
+      scrollToError();
       return;
     }
     const ta = taNum;
@@ -377,6 +406,31 @@ export default function SubmissionForm() {
   };
 
   const saving = createMut.isPending;
+
+  const STEP_LABELS = [t('dealForm.step.client'), t('dealForm.step.program'), t('dealForm.step.payment'), t('dealForm.step.review')];
+  const fmtSum = (n: number) => `${n.toLocaleString('ru-RU')} ${currency}`;
+  const leftAfterPay = isFinite(taNum) && taNum > 0 && isFinite(paNum) && paNum > 0 && paNum <= taNum
+    ? Math.round((taNum - paNum) * 100) / 100
+    : null;
+  const filesN = (n: number) => t('dealForm.review.files').replace('{n}', String(n));
+  const reviewClient = (mode === 'existing'
+    ? [selectedStudent?.fullName, selectedStudent?.phones?.[0], newEmail.trim() || selectedStudent?.email]
+    : [newName.trim(), newPhone.trim(), newEmail.trim(), passportUrls.length ? `${t('dealForm.passport')}: ${filesN(passportUrls.length)}` : '']
+  ).filter(Boolean).join(' · ') || '—';
+  const reviewProgram = [
+    selectedProgram ? `${selectedProgram.name}` : '',
+    isFinite(taNum) && taNum > 0 ? fmtSum(taNum) : '',
+    contractUrls.length ? `${t('dealForm.contractFiles')}: ${filesN(contractUrls.length)}` : '',
+  ].filter(Boolean).join(' · ') || '—';
+  const reviewPayment = [
+    isFinite(paNum) && paNum > 0 ? fmtSum(paNum) : '',
+    t(`deal.method.${payMethod}`).toLowerCase(),
+    payDate ? tjFormatDate(payDate) : '',
+    (payMethod === 'CASH' ? depositProofUrls.length : receiptUrls.length) ? t('dealForm.review.proof') : '',
+    nextDueAmount.trim() && nextDueDate
+      ? t('dealForm.review.next').replace('{sum}', fmtSum(parseFloat(nextDueAmount))).replace('{date}', tjFormatDate(nextDueDate))
+      : '',
+  ].filter(Boolean).join(' · ') || '—';
 
   return (
     <>
@@ -446,8 +500,30 @@ export default function SubmissionForm() {
           </div>
         )}
 
-        {/* ===== 1. СТУДЕНТ ===== */}
-        <Section title={`1. ${t('dealForm.section.student')}`}>
+        <div ref={topRef} className="deal-steps-anchor" />
+        <ol className="deal-steps" data-testid="deal-steps" aria-label={t('dealForm.steps')}>
+          {STEP_LABELS.map((label, i) => {
+            const n = i + 1;
+            const state = n === step ? 'is-current' : n < step && !stepHasErr(n) ? 'is-done' : '';
+            const bad = errSteps.has(n) && stepHasErr(n);
+            return (
+              <li key={n} className={`deal-step ${state}${bad ? ' is-bad' : ''}`}>
+                <button type="button" onClick={() => goStep(n)} aria-current={n === step ? 'step' : undefined} data-testid={`deal-step-${n}`}>
+                  <span className="deal-step-mark" aria-hidden="true">
+                    {bad ? '!' : state === 'is-done' ? <Icon name="check" size={16} /> : n}
+                  </span>
+                  <span className="deal-step-text">
+                    <small>{t('dealForm.stepN').replace('{n}', String(n))}</small>
+                    <b>{label}</b>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+
+        {step === 1 && (
+          <div className="deal-step-body" data-testid="deal-step-body-1">
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
             <button
               type="button"
@@ -601,10 +677,11 @@ export default function SubmissionForm() {
               пустая строка приучила бы менеджера не смотреть на это место
               вообще — ровно тогда, когда там однажды появится партнёр. */}
           <PartnerChip preview={partnerPreview} />
-        </Section>
+          </div>
+        )}
 
-        {/* ===== 2. ПРОГРАММА + КОНТРАКТ ===== */}
-        <Section title={`2. ${t('dealForm.section.program')}`}>
+        {step === 2 && (
+          <div className="deal-step-body" data-testid="deal-step-body-2">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             <Field label={`${t('deal.program')} *`} error={fe('program')} testid="deal-field-program">
               <CrmSelect className={`crm-select${fe('program') ? ' input-error' : ''}`} value={programId} onChange={(e) => onProgramChange(e.target.value)}>
@@ -645,23 +722,38 @@ export default function SubmissionForm() {
               </CrmSelect>
             </Field>
           </div>
-        </Section>
+          </div>
+        )}
 
-        {/* ===== 3. ПЕРВЫЙ ПЛАТЁЖ ===== */}
-        <Section title={`3. ${t('dealForm.section.payment')}`}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            <Field label={`${t('common.amount')} *`} error={fe('pay')} testid="deal-field-pay">
-              <input className={`crm-input${fe('pay') ? ' input-error' : ''}`} type="number" min={0} step={50} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="1000" />
-            </Field>
+        {step === 3 && (
+          <div className="deal-step-body" data-testid="deal-step-body-3">
+            <div className="deal-grid">
+              <Field label={`${t('common.amount')} *`} error={fe('pay')} testid="deal-field-pay">
+                <input className={`crm-input${fe('pay') ? ' input-error' : ''}`} type="number" min={0} step={50} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="1000" />
+                {!fe('pay') && isFinite(taNum) && taNum > 0 && (
+                  <div className="profile-field-hint" data-testid="deal-pay-hint">{t('dealForm.payMax').replace('{sum}', fmtSum(taNum))}</div>
+                )}
+              </Field>
+              <Field label={`${t('deal.col.paidAt')} *`}>
+                <CrmDatePicker value={payDate} onChange={setPayDate} />
+              </Field>
+            </div>
             <Field label={`${t('deal.field.method')} *`}>
-              <CrmSelect className="crm-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value as SubmissionPaymentMethod)}>
-                <option value="TRANSFER">{t('deal.method.TRANSFER')}</option>
-                <option value="CASH">{t('deal.method.CASH')}</option>
-                <option value="OTHER">{t('deal.method.OTHER')}</option>
-              </CrmSelect>
-            </Field>
-            <Field label={`${t('deal.col.paidAt')} *`}>
-              <CrmDatePicker value={payDate} onChange={setPayDate} />
+              <div className="seg-toggle deal-method" role="radiogroup" aria-label={t('deal.field.method')} data-testid="deal-method">
+                {(['CASH', 'TRANSFER', 'OTHER'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={payMethod === m}
+                    className={payMethod === m ? 'active' : ''}
+                    onClick={() => setPayMethod(m)}
+                    data-testid={`deal-method-${m}`}
+                  >
+                    {t(`deal.method.${m}`)}
+                  </button>
+                ))}
+              </div>
             </Field>
             {payMethod === 'TRANSFER' && (
               <Field label={`${t('dealForm.receipt')} *`} error={fe('receipt')} testid="deal-field-receipt">
@@ -696,39 +788,81 @@ export default function SubmissionForm() {
                 />
               </Field>
             )}
-            <Field label={t('deal.field.nextDate')} error={fe('nextDate')} testid="deal-next-date">
-              <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} min={nextDueMin(payDate)} />
-            </Field>
-            <Field label={t('deal.field.nextAmount')} error={fe('nextAmount')} testid="deal-next-amount">
-              <input className="crm-input" type="number" min={0} step={50} value={nextDueAmount} onChange={(e) => setNextDueAmount(e.target.value)} placeholder="2000" />
-            </Field>
+            <div className="deal-next-group">
+              <div className="deal-next-head">
+                <b>{t('dealForm.nextTitle')}</b> <span>{t('dealForm.nextOptional')}</span>
+              </div>
+              <div className="deal-grid">
+                <Field label={t('deal.field.nextAmount')} error={fe('nextAmount')} testid="deal-next-amount">
+                  <input className="crm-input" type="number" min={0} step={50} value={nextDueAmount} onChange={(e) => setNextDueAmount(e.target.value)} placeholder="2000" />
+                  {!fe('nextAmount') && leftAfterPay !== null && (
+                    <div className="profile-field-hint" data-testid="deal-next-left">{t('dealForm.leftToPay').replace('{sum}', fmtSum(leftAfterPay))}</div>
+                  )}
+                </Field>
+                <Field label={t('deal.field.nextDate')} error={fe('nextDate')} testid="deal-next-date">
+                  <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} min={nextDueMin(payDate)} />
+                </Field>
+              </div>
+            </div>
           </div>
-        </Section>
+        )}
 
-        <Section title={t('common.comment')}>
-          <textarea
-            className="crm-textarea"
-            rows={3}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder={t('dealForm.commentPlaceholder')}
-            style={{ resize: 'none' }}
-          />
-        </Section>
+        {step === 4 && (
+          <div className="deal-step-body" data-testid="deal-step-body-4">
+            <div className="deal-review">
+              {([
+                [1, STEP_LABELS[0], reviewClient],
+                [2, STEP_LABELS[1], reviewProgram],
+                [3, STEP_LABELS[2], reviewPayment],
+              ] as const).map(([n, title, text]) => (
+                <div key={n} className={`deal-review-row${stepHasErr(n) ? ' is-bad' : ''}`} data-testid={`deal-review-${n}`}>
+                  <div className="deal-review-text">
+                    <b>{title}</b>
+                    <span>{text}</span>
+                    {stepHasErr(n) && <span className="deal-review-bad">{t('dealForm.review.fix')}</span>}
+                  </div>
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => goStep(n)} data-testid={`deal-review-edit-${n}`}>
+                    <Icon name="edit" size={14} /> {t('profile.edit')}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <PartnerChip preview={partnerPreview} />
+            <Field label={t('common.comment')}>
+              <textarea
+                className="crm-textarea"
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={t('dealForm.commentPlaceholder')}
+                style={{ resize: 'none' }}
+                data-testid="deal-notes"
+              />
+            </Field>
+            <p className="deal-review-note">{t('dealForm.review.note')}</p>
+          </div>
+        )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary" onClick={() => navigate('/submissions')} disabled={saving}>
+        <div className="deal-wizard-foot">
+          <button className="btn btn-secondary" onClick={() => navigate('/submissions')} disabled={saving} data-testid="deal-cancel-form">
             {t('common.cancel')}
           </button>
-          {/* BUG-fix: раньше кнопка была `disabled` при pendingUploads>0. Если
-              FileUpload размонтировался в середине загрузки (например, менеджер
-              переключил payMethod TRANSFER→CASH до окончания upload'а),
-              onUploadingChange(false) не вызывался и счётчик оставался >0 —
-              кнопка навсегда серая без объяснения. Теперь клик всегда доходит
-              до onSubmit, а тот покажет внятный toast если загрузка ещё идёт. */}
-          <button className="btn btn-primary" onClick={onSubmit} disabled={saving}>
-            {saving ? t('common.sending') : pendingUploads > 0 ? t('dealForm.uploadingFiles') : t('dealForm.submit')}
-          </button>
+          <span className="deal-wizard-count" data-testid="deal-step-count">{t('dealForm.stepOf').replace('{n}', String(step))}</span>
+          {step > 1 && (
+            <button className="btn btn-secondary" onClick={() => goStep(step - 1)} disabled={saving} data-testid="deal-back">
+              {t('dealForm.back')}
+            </button>
+          )}
+          {step < 4 ? (
+            <button className="btn btn-primary" onClick={goNext} data-testid="deal-next">
+              {t('dealForm.next')}
+            </button>
+          ) : (
+            /* Клик всегда доходит до onSubmit — тот скажет, если загрузка ещё идёт. */
+            <button className="btn btn-primary" onClick={onSubmit} disabled={saving} data-testid="deal-submit">
+              {saving ? t('common.sending') : pendingUploads > 0 ? t('dealForm.uploadingFiles') : t('dealForm.submit')}
+            </button>
+          )}
         </div>
       </motion.div>
     </>
@@ -783,15 +917,6 @@ function PartnerChip({ preview }: { preview: SubmissionPartnerPreview | null }) 
   );
 }
 
-function Section({ title, children }: { title: string; children: any }) {
-  return (
-    <div style={{ marginBottom: 24 }}>
-      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: 'var(--primary-dark)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{title}</h3>
-      {children}
-    </div>
-  );
-}
-
 function Field({ label, children, error, testid }: { label: string; children: any; error?: string; testid?: string }) {
   return (
     <div className={error ? 'deal-field has-error' : 'deal-field'} data-testid={testid}>
@@ -831,7 +956,7 @@ function MultiFileUpload({
   const [uploading, setUploading] = useState(false);
   const [broken, setBroken] = useState<Set<string>>(() => new Set());
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const addInputRef = useRef<HTMLInputElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   // Держит ли компонент активный тик pendingUploads. На unmount возвращаем
   // тик в 0 (иначе счётчик застрянет и кнопка сабмита будет вечно «Загружаем…»).
   const uploadingRef = useRef(false);
@@ -888,7 +1013,6 @@ function MultiFileUpload({
       // Сбрасываем value у input'ов чтобы можно было выбрать те же файлы
       // повторно (иначе onChange не сработает на идентичный FileList).
       if (inputRef.current) inputRef.current.value = '';
-      if (addInputRef.current) addInputRef.current.value = '';
     }
   };
 
@@ -987,35 +1111,35 @@ function MultiFileUpload({
           })}
         </ul>
       )}
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept={accept}
-        onChange={(e) => handleFiles(e.target.files)}
-        disabled={uploading}
-        style={{ fontSize: 13 }}
-      />
-      {/* Скрытый input для повторного добавления батча — доступ через кнопку. */}
-      <input
-        ref={addInputRef}
-        type="file"
-        multiple
-        accept={accept}
-        onChange={(e) => handleFiles(e.target.files)}
-        disabled={uploading}
-        style={{ display: 'none' }}
-      />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button
-          type="button"
-          className="btn btn-sm btn-secondary"
-          onClick={() => addInputRef.current?.click()}
+      {/* Макет (часть E): зона загрузки — перетащить файлы или выбрать. Поле
+          файла внутри подписи: клик и клавиатура открывают выбор файлов. */}
+      <label
+        className={`deal-drop${dragOver ? ' is-over' : ''}${uploading ? ' is-busy' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); if (!uploading) setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); if (!uploading) handleFiles(e.dataTransfer.files); }}
+        data-testid="deal-drop"
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept={accept}
+          onChange={(e) => handleFiles(e.target.files)}
           disabled={uploading}
-        >
-          + {t('dealForm.addMore')}
-        </button>
-        {uploading && <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>{t('common.uploading')}</span>}
+          className="deal-drop-input"
+        />
+        <Icon name={uploading ? 'hourglass_top' : 'upload_file'} size={22} />
+        <span className="deal-drop-text">
+          {uploading ? t('common.uploading') : (
+            <>
+              {values.length ? t('dealForm.drop.more') : t('dealForm.drop')} <u>{t('dealForm.drop.pick')}</u>
+            </>
+          )}
+        </span>
+        <small>{t('dealForm.drop.hint')}</small>
+      </label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {!uploading && values.length > 0 && (
           <span style={{ fontSize: 12, color: 'var(--primary-dark)' }}>
             <Icon name="check_circle" size={14} /> {t('dealForm.files')}: {values.length}

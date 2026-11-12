@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds, email as emailRule, phoneRule, tjPhoneError } from '../utils/validators';
 import CrmDatePicker from '../components/CrmDatePicker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { assignApplicationManager, deleteApplication, getApplication, updateApplication } from '../api/applications';
+import { assignApplicationManager, deleteApplication, getApplication, leadDeals, updateApplication } from '../api/applications';
 import { getStudent, updateStudent, uploadPhoto } from '../api/students';
 import type { Application, ApplicationSource, ApplicationStatus, Country, Direction, Student } from '../api/types';
 import { COUNTRIES, SOURCE_LABEL, STAFF_SOURCES } from '../api/types';
@@ -17,7 +17,7 @@ import { keys } from '../lib/queryKeys';
 import { useFileToken } from '../lib/fileUrl';
 import Loading from '../components/Loading';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
-import DocumentsChecklist from '../components/DocumentsChecklist';
+import DocumentsChecklist, { REQUIRED_DOCUMENTS } from '../components/DocumentsChecklist';
 import DirectionOptions from '../components/DirectionOptions';
 import ManagerBar from '../components/ManagerBar';
 import PartnerAttributionCard from '../components/PartnerAttributionCard';
@@ -51,10 +51,11 @@ import {
 } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useChannelLabel, useCountryLabel, useDirectionLabel, useStudentStatusLabel } from '../lib/labels';
-import { tjFormatFull } from '../lib/tjTime';
+import { tjFormatDate, tjFormatDateTime, tjFormatFull } from '../lib/tjTime';
 import { canOpenDeals } from '../components/navGroups';
 import QueryErrorState from '../components/QueryErrorState';
 import { DetailSkeleton } from '../components/Skeleton';
+import { INTERACTION_ICON, INTERACTION_LABEL, listInteractions } from '../api/interactions';
 
 /**
  * Карточка заявки. Устроена как карточка сотрудника: шапка (аватар, имя,
@@ -65,6 +66,8 @@ import { DetailSkeleton } from '../components/Skeleton';
 export default function ApplicationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  // Вкладка карточки — в ссылке (?tab=history): «назад» и обновление её помнят.
+  const [searchParams, setSearchParams] = useSearchParams();
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
@@ -92,6 +95,14 @@ export default function ApplicationDetail() {
     enabled: !!studentId,
   });
   const student = studentQuery.data ?? null;
+  // «Обзор»: последние записи истории (тот же кеш, что у вкладки «История») и сделки клиента.
+  const studentTabs = !!studentId && !!app && !isNewLeadApplicationStatus(app.status);
+  const interactionsQ = useQuery({
+    queryKey: keys.interactions.list(studentId ?? ''),
+    queryFn: () => listInteractions(studentId!),
+    enabled: studentTabs,
+  });
+  const dealsQ = useQuery({ queryKey: ['applications', 'deals', id], queryFn: () => leadDeals(id!), enabled: !!id });
 
   const reload = () => {
     qc.invalidateQueries({ queryKey: appKey });
@@ -265,12 +276,31 @@ export default function ApplicationDetail() {
   // блок появлялся только после перевода лида в работу.
   const showPeople = true;
 
+  // Макет (часть C): вкладки карточки — только у клиента со студентом (история,
+  // документы и анкета принадлежат студенту); у нового лида — один «Обзор».
+  const TABS = ['overview', 'history', 'docs', 'form'] as const;
+  type Tab = (typeof TABS)[number];
+  const rawTab = searchParams.get('tab') as Tab | null;
+  const tab: Tab = withStudent && rawTab && TABS.includes(rawTab) ? rawTab : 'overview';
+  const setTab = (next: Tab) => {
+    const p = new URLSearchParams(searchParams);
+    if (next === 'overview') p.delete('tab');
+    else p.set('tab', next);
+    setSearchParams(p, { replace: true });
+  };
+  const interactionsCount = interactionsQ.data?.length;
+  const typedDocs = (student?.documents ?? []).filter((d: any) => d.type && d.type !== 'OTHER');
+  const docsUploaded = REQUIRED_DOCUMENTS.filter((r) => typedDocs.some((d: any) => d.type === r.type)).length;
+  const docsMissing = REQUIRED_DOCUMENTS.filter((r) => !typedDocs.some((d: any) => d.type === r.type));
+  const canCreateDeal = (isAdmin || isMine) && !isEnrolled && roleCan(me, 'submissions:create') && canOpenDeals(me);
+  const goCreateDeal = () => navigate(`/submissions/new?applicationId=${encodeURIComponent(app.id)}`);
+
   return (
     <div className="client-page">
       <BackButton fallback="/leads" />
 
       <ClientHero
-        eyebrow={t('client.eyebrow.lead')}
+        eyebrow={`${t('client.eyebrow.lead')} · ${t('client.meta.created').replace('{date}', tjFormatDate(app.createdAt))}${app.source ? ` · ${t('client.meta.source').replace('{source}', SOURCE_LABEL[app.source as ApplicationSource] ?? app.source)}` : ''}`}
         name={withStudent ? student!.fullName : app.fullName}
         avatarId={app.studentId || app.id}
         photoUrl={withStudent ? student!.photoUrl : null}
@@ -294,6 +324,17 @@ export default function ApplicationDetail() {
         contacts={contacts}
         actions={
           <>
+            {telLink(phones[0]) && (
+              <a
+                className="btn btn-secondary client-call-btn"
+                href={telLink(phones[0])!}
+                aria-label={`${t('client.call')}: ${phones[0]}`}
+                title={phones[0]}
+                data-testid="client-call"
+              >
+                <Icon name="call" size={18} /> <span className="client-call-label">{t('client.call')}</span>
+              </a>
+            )}
             {/*
               ЕДИНСТВЕННЫЙ вход «заявка → сделка». id заявки уходит в query,
               бэкенд кладёт его в SaleSubmission.sourceApplicationId, и связь
@@ -337,132 +378,248 @@ export default function ApplicationDetail() {
         }
       />
 
-      <section className="card profile-section" data-testid="client-main">
-        <div className={`profile-cols${showPeople ? '' : ' is-single'}`}>
-          <div className="profile-group" data-testid="group-client">
-            <div className="profile-group-head">
-              <h3 className="profile-h">{t('client.section.data')}</h3>
-              {canEditData && <EditButton active={editing} testId="edit-client" onClick={() => setEditing((v) => !v)} />}
-            </div>
-            <div className="profile-grid client-grid">
-              <Field
-                label={phones.length > 1 ? t('app.field.phones') : t('app.field.phone')}
-                testId="field-phone"
-                value={
-                  phones.length === 0 ? '—' : phones.map((p, i) => (
-                    <div key={i}>
-                      {p}
-                      {/* Номер с ошибкой и повторы — видно сразу (QA №21). */}
-                      {tjPhoneError(p) && <div className="client-field-warn" data-testid="phone-warn">{tjPhoneError(p)}</div>}
-                      {i === 0 && !withStudent && (app.phoneTwins?.length ?? 0) > 0 && (
-                        <div className="client-field-warn" data-testid="phone-twins">
-                          {t('app.phoneTwins')}{' '}
-                          {app.phoneTwins!.map((tw, k) => (
-                            <span key={tw.id}>
-                              {k > 0 && ', '}
-                              {tw.canOpen ? <a className="client-link" href={`/admin/applications/${tw.id}`} onClick={(e) => { e.preventDefault(); navigate(`/applications/${tw.id}`); }}>{tw.fullName}</a> : t('app.phoneTwinsHidden')}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {withStudent
-                        ? student!.phoneLabels?.[i] && <span className="client-field-sub"> · {student!.phoneLabels[i]}</span>
-                        : i === 1 && app.secondaryContactLabel && <span className="client-field-sub"> · {app.secondaryContactLabel}</span>}
-                    </div>
-                  ))
-                }
-              />
-              <Field
-                label={t('app.field.whatsapp')}
-                testId="field-whatsapp"
-                value={wa ? <a href={wa} target="_blank" rel="noopener noreferrer" className="client-link">{app.whatsappPhone}</a> : '—'}
-              />
-              <Field label={t('userDetail.field.email')} testId="field-email" value={email || '—'} />
-              <Field label={t('app.field.birthday')} testId="field-birthday" value={<BirthdayValue iso={birthday} />} />
-              <Field label={t('app.field.country')} testId="field-country" value={countryLabel(country)} />
-              {/* Неподтверждённое направление — плейсхолдер бэкенда, а не выбор
-                  клиента: форма на сайте спрашивает страну. Показываем «—». */}
-              <Field
-                label={t('app.field.direction')}
-                testId="field-direction"
-                value={directionConfirmed === false
-                  ? <span className="client-muted" title={t('app.direction.unconfirmed')}>—</span>
-                  : directionLabel(direction)}
-              />
-              {withStudent && (
-                <Field
-                  label={t('app.field.cabinet')}
-                  testId="field-cabinet"
-                  value={<>№{student!.cabinet}</>}
-                  hint={student!.directionConfirmed === false ? t('student.cabinet.pending') : undefined}
-                />
-              )}
-              {withStudent && <Field label={t('common.status')} testId="field-student-status" value={studentStatusLabel(student!.status)} />}
-              {channel && <Field label={t('app.field.preferredChannel')} testId="field-channel" value={channelLabel(channel)} />}
-              <Field label={t('client.created.lead')} testId="field-created" value={tjFormatFull(app.createdAt)} />
-              <Field label={t('app.field.comment')} testId="field-comment" wide value={<span className="client-pre">{comment || '—'}</span>} />
-            </div>
-          </div>
-          {showPeople && (
-            <div className="profile-group" data-testid="group-people">
-              <div className="profile-group-head">
-                <h3 className="profile-h">{t('client.section.people')}</h3>
-              </div>
-              <ManagerBar
-                manager={app.manager}
-                chinaManager={app.chinaManager}
-                onReassign={onReassign}
-                canAssign={roleCan(me, isNew ? 'leads:assign' : 'applications:assign', isAdmin)}
-                canTransfer={canTransferOthers(me, transferScopeOf(app.status))}
-              />
-              {/* Партнёр — только руководству и только у партнёрских клиентов:
-                  решает бэкенд, у менеджера по продажам ключа в JSON нет. */}
-              <PartnerAttributionCard attribution={app.partnerAttribution} variant="field" />
-            </div>
-          )}
-        </div>
-
-        {editing && canEditData && (
-          <div className="profile-edit">
-            {withStudent ? (
-              <StudentEditForm
-                student={student!}
-                saving={updateStudentMut.isPending}
-                onSave={(patch) => updateStudentMut.mutate(patch)}
-                onCancel={() => setEditing(false)}
-              />
-            ) : (
-              <NewApplicationEditor app={app} onSaved={() => { setEditing(false); reload(); }} onCancel={() => setEditing(false)} />
-            )}
-          </div>
-        )}
-      </section>
-
       {withStudent && (
+        <div className="client-tabs" role="tablist" aria-label={t('client.tabs.label')} data-testid="client-tabs">
+          {([
+            ['overview', t('client.tab.overview'), null],
+            ['history', t('client.tab.history'), interactionsCount],
+            ['docs', t('client.tab.docs'), `${docsUploaded} / ${REQUIRED_DOCUMENTS.length}`],
+            ['form', t('client.tab.form'), null],
+          ] as const).map(([key, label, badge]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              className={`client-tab${tab === key ? ' active' : ''}`}
+              onClick={() => setTab(key)}
+              data-testid={`client-tab-${key}`}
+            >
+              {label}
+              {badge !== null && badge !== undefined && <span className="client-tab-badge">{badge}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'overview' && (
         <>
-          <section className="card profile-section" data-testid="client-docs">
-            <h3 className="profile-h">{t('client.section.docs')}</h3>
-            <DocumentsChecklist
-              studentId={student!.id}
-              studentName={student!.fullName}
-              documents={student!.documents || []}
-              applicationForm={student!.applicationForm}
-              onChange={reload}
-              editable={canActStudent && roleCan(me, 'students:documents')}
-            />
+          <section className="card profile-section" data-testid="client-main">
+            <div className={`profile-cols${showPeople ? '' : ' is-single'}`}>
+              <div className="profile-group" data-testid="group-client">
+                <div className="profile-group-head">
+                  <h3 className="profile-h">{t('client.section.data')}</h3>
+                  {canEditData && <EditButton active={editing} testId="edit-client" onClick={() => setEditing((v) => !v)} />}
+                </div>
+                <div className="profile-grid client-grid">
+                  <Field
+                    label={phones.length > 1 ? t('app.field.phones') : t('app.field.phone')}
+                    testId="field-phone"
+                    value={
+                      phones.length === 0 ? '—' : phones.map((p, i) => (
+                        <div key={i}>
+                          {p}
+                          {/* Номер с ошибкой и повторы — видно сразу (QA №21). */}
+                          {tjPhoneError(p) && <div className="client-field-warn" data-testid="phone-warn">{tjPhoneError(p)}</div>}
+                          {i === 0 && !withStudent && (app.phoneTwins?.length ?? 0) > 0 && (
+                            <div className="client-field-warn" data-testid="phone-twins">
+                              {t('app.phoneTwins')}{' '}
+                              {app.phoneTwins!.map((tw, k) => (
+                                <span key={tw.id}>
+                                  {k > 0 && ', '}
+                                  {tw.canOpen ? <a className="client-link" href={`/admin/applications/${tw.id}`} onClick={(e) => { e.preventDefault(); navigate(`/applications/${tw.id}`); }}>{tw.fullName}</a> : t('app.phoneTwinsHidden')}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {withStudent
+                            ? student!.phoneLabels?.[i] && <span className="client-field-sub"> · {student!.phoneLabels[i]}</span>
+                            : i === 1 && app.secondaryContactLabel && <span className="client-field-sub"> · {app.secondaryContactLabel}</span>}
+                        </div>
+                      ))
+                    }
+                  />
+                  <Field
+                    label={t('app.field.whatsapp')}
+                    testId="field-whatsapp"
+                    value={wa ? <a href={wa} target="_blank" rel="noopener noreferrer" className="client-link">{app.whatsappPhone}</a> : '—'}
+                  />
+                  <Field label={t('userDetail.field.email')} testId="field-email" value={email || '—'} />
+                  <Field label={t('app.field.birthday')} testId="field-birthday" value={<BirthdayValue iso={birthday} />} />
+                  <Field label={t('app.field.country')} testId="field-country" value={countryLabel(country)} />
+                  {/* Неподтверждённое направление — плейсхолдер бэкенда, а не выбор
+                      клиента: форма на сайте спрашивает страну. Показываем «—». */}
+                  <Field
+                    label={t('app.field.direction')}
+                    testId="field-direction"
+                    value={directionConfirmed === false
+                      ? <span className="client-muted" title={t('app.direction.unconfirmed')}>—</span>
+                      : directionLabel(direction)}
+                  />
+                  {withStudent && (
+                    <Field
+                      label={t('app.field.cabinet')}
+                      testId="field-cabinet"
+                      value={<>№{student!.cabinet}</>}
+                      hint={student!.directionConfirmed === false ? t('student.cabinet.pending') : undefined}
+                    />
+                  )}
+                  {withStudent && <Field label={t('common.status')} testId="field-student-status" value={studentStatusLabel(student!.status)} />}
+                  {channel && <Field label={t('app.field.preferredChannel')} testId="field-channel" value={channelLabel(channel)} />}
+                  <Field label={t('client.created.lead')} testId="field-created" value={tjFormatFull(app.createdAt)} />
+                  <Field label={t('app.field.comment')} testId="field-comment" wide value={<span className="client-pre">{comment || '—'}</span>} />
+                </div>
+              </div>
+              {showPeople && (
+                <div className="profile-group" data-testid="group-people">
+                  <div className="profile-group-head">
+                    <h3 className="profile-h">{t('client.section.people')}</h3>
+                  </div>
+                  <ManagerBar
+                    manager={app.manager}
+                    chinaManager={app.chinaManager}
+                    onReassign={onReassign}
+                    canAssign={roleCan(me, isNew ? 'leads:assign' : 'applications:assign', isAdmin)}
+                    canTransfer={canTransferOthers(me, transferScopeOf(app.status))}
+                  />
+                  {/* Партнёр — только руководству и только у партнёрских клиентов:
+                      решает бэкенд, у менеджера по продажам ключа в JSON нет. */}
+                  <PartnerAttributionCard attribution={app.partnerAttribution} variant="field" />
+                </div>
+              )}
+            </div>
+
+            {editing && canEditData && (
+              <div className="profile-edit">
+                {withStudent ? (
+                  <StudentEditForm
+                    student={student!}
+                    saving={updateStudentMut.isPending}
+                    onSave={(patch) => updateStudentMut.mutate(patch)}
+                    onCancel={() => setEditing(false)}
+                  />
+                ) : (
+                  <NewApplicationEditor app={app} onSaved={() => { setEditing(false); reload(); }} onCancel={() => setEditing(false)} />
+                )}
+              </div>
+            )}
           </section>
 
-          {/* Вместо прежнего блока «Комментарии» (он ничего не сохранял) —
-              настоящая история общения клиента: звонки, переписка, заметки. */}
-          <InteractionsLog studentId={student!.id} canEdit={canActStudent} />
 
-          <ApplicationFormSection
-            studentId={student!.id}
-            initialForm={student!.applicationForm}
-            canEdit={canActStudent && roleCan(me, 'students:update')}
-            onSaved={reload}
-          />
+          <div className="client-overview-grid">
+            {withStudent && (
+              <section className="card client-ov-card" data-testid="ov-history">
+                <div className="client-ov-head">
+                  <h3 className="profile-h">{t('client.tab.history')}</h3>
+                  <button type="button" className="profile-link-btn" onClick={() => setTab('history')} data-testid="ov-history-all">
+                    {t('client.ov.allHistory').replace('{n}', String(interactionsCount ?? 0))} →
+                  </button>
+                </div>
+                {(interactionsQ.data ?? []).length === 0 ? (
+                  <p className="client-muted" style={{ margin: 0 }}>{t('client.ov.noHistory')}</p>
+                ) : (
+                  <ul className="client-ov-list">
+                    {[...(interactionsQ.data ?? [])]
+                      .sort((x, y) => y.occurredAt.localeCompare(x.occurredAt))
+                      .slice(0, 3)
+                      .map((it) => (
+                        <li key={it.id}>
+                          <Icon name={INTERACTION_ICON[it.type] ?? 'chat'} size={18} />
+                          <span className="client-ov-text">
+                            <span><b>{INTERACTION_LABEL[it.type] ?? it.type}</b> · {it.summary}</span>
+                            <span className="client-ov-when">{tjFormatDateTime(it.occurredAt)}</span>
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </section>
+            )}
+            {withStudent && (
+              <section className="card client-ov-card" data-testid="ov-docs">
+                <div className="client-ov-head">
+                  <h3 className="profile-h">{t('client.tab.docs')}</h3>
+                  <span className="client-ov-count">{t('client.ov.docsOf').replace('{n}', String(docsUploaded)).replace('{m}', String(REQUIRED_DOCUMENTS.length))}</span>
+                </div>
+                <div className="client-ov-progress" role="progressbar" aria-valuemin={0} aria-valuemax={REQUIRED_DOCUMENTS.length} aria-valuenow={docsUploaded}>
+                  <span style={{ width: `${Math.round((docsUploaded / REQUIRED_DOCUMENTS.length) * 100)}%` }} />
+                </div>
+                {docsMissing.length > 0 && (
+                  <p className="client-ov-missing">
+                    {t('client.ov.missing')} {docsMissing.slice(0, 3).map((d) => d.label).join(', ')}
+                    {docsMissing.length > 3 ? ` ${t('client.ov.more').replace('{n}', String(docsMissing.length - 3))}` : ''}
+                  </p>
+                )}
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTab('docs')} data-testid="ov-docs-open">{t('client.ov.openDocs')}</button>
+              </section>
+            )}
+            <section className="card client-ov-card" data-testid="ov-deals">
+              <div className="client-ov-head">
+                <h3 className="profile-h">{t('client.ov.deals')}</h3>
+              </div>
+              {dealsQ.isLoading ? (
+                <span className="sk-line" style={{ width: '60%' }} />
+              ) : (dealsQ.data ?? []).length === 0 ? (
+                <>
+                  <p className="client-muted" style={{ margin: canCreateDeal ? '0 0 10px' : 0 }}>{t(canCreateDeal ? 'client.ov.noDeals' : 'client.ov.noDealsShort')}</p>
+                  {canCreateDeal && (
+                    <button type="button" className="btn btn-primary btn-sm" onClick={goCreateDeal} data-testid="ov-deals-create">
+                      <Icon name="handshake" size={16} /> {t('applicationDetail.createDeal')}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <ul className="client-ov-list">
+                  {(dealsQ.data ?? []).map((d) => {
+                    const body = (
+                      <span className="client-ov-text">
+                        <span><b>{d.program || '—'}</b> · {t(`deal.status.${d.status}`)}</span>
+                        {d.total !== null && (
+                          <span className="client-ov-when">{t('client.ov.paidOf').replace('{paid}', (d.paid ?? 0).toLocaleString('ru-RU')).replace('{total}', d.total.toLocaleString('ru-RU')).replace('{cur}', d.currency)}</span>
+                        )}
+                      </span>
+                    );
+                    return (
+                      <li key={d.id} data-testid="ov-deal">
+                        <Icon name="handshake" size={18} />
+                        {d.canOpen && canOpenDeals(me)
+                          ? <a className="client-link" href={`/admin/submissions/${d.id}`} onClick={(e) => { e.preventDefault(); navigate(`/submissions/${d.id}`); }}>{body}</a>
+                          : body}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
         </>
+      )}
+
+      {withStudent && tab === 'docs' && (
+        <section className="card profile-section" data-testid="client-docs">
+          <h3 className="profile-h">{t('client.section.docs')}</h3>
+          <DocumentsChecklist
+            studentId={student!.id}
+            studentName={student!.fullName}
+            documents={student!.documents || []}
+            applicationForm={student!.applicationForm}
+            onChange={reload}
+            editable={canActStudent && roleCan(me, 'students:documents')}
+          />
+        </section>
+      )}
+
+      {/* Вместо прежнего блока «Комментарии» (он ничего не сохранял) —
+          настоящая история общения клиента: звонки, переписка, заметки. */}
+      {withStudent && tab === 'history' && <InteractionsLog studentId={student!.id} canEdit={canActStudent} />}
+
+      {withStudent && tab === 'form' && (
+        <ApplicationFormSection
+          studentId={student!.id}
+          initialForm={student!.applicationForm}
+          canEdit={canActStudent && roleCan(me, 'students:update')}
+          onSaved={reload}
+        />
       )}
     </div>
   );

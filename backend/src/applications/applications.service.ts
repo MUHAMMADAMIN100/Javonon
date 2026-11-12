@@ -28,6 +28,7 @@ import { MailService } from '../mail/mail.service';
 import { SmsService } from '../sms/sms.service';
 import { ActivityService } from '../activity/activity.service';
 import { canSeePartnerAttribution, hasPermission, isFounder, UserWithRoles } from '../auth/role-utils';
+import { clientDeals } from '../submissions/client-deals';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
@@ -778,6 +779,15 @@ export class ApplicationsService {
       select: { id: true, fullName: true, role: true },
       orderBy: { fullName: 'asc' },
     });
+  }
+
+  /** Сделки клиента для карточки лида (см. контроллер): по лиду, лиду-источнику и его студенту. */
+  async dealsForLead(id: string, user: any) {
+    const app = await this.prisma.application.findUnique({ where: { id }, select: { id: true, studentId: true } });
+    if (!app) throw new NotFoundException('Лид не найден');
+    const or: Prisma.SaleSubmissionWhereInput[] = [{ applicationId: id }, { sourceApplicationId: id }];
+    if (app.studentId) or.push({ studentId: app.studentId });
+    return clientDeals(this.prisma, or, user);
   }
 
   /** Числа быстрых видов «Лидов» — тем же findAll, с правами пользователя. */

@@ -167,6 +167,14 @@ export class StudentsController {
     });
   }
 
+  /** Сделки студента для блока «Сделки» его карточки (макет UI): доступ — как к карточке. */
+  @Permissions('students:read')
+  @Get(':id/deals')
+  async deals(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.students.assertCanView(id, user);
+    return this.students.dealsForStudent(id, user);
+  }
+
   @Permissions('students:read')
   @Get(':id')
   async one(@Param('id') id: string, @CurrentUser() user: any) {

@@ -227,6 +227,20 @@ export class ApplicationsController {
     return this.apps.bulkAssignManager(body, user);
   }
 
+  /**
+   * Сделки клиента для блока «Сделки» карточки лида (макет 11.11.2026): по
+   * самому лиду, по лиду-источнику и по его студенту. Доступ — как к карточке;
+   * суммы — только тем, кому видны деньги клиентов; «открыть» — тем, кому
+   * откроется сама сделка.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Permissions('leads:read', 'applications:read')
+  @Get(':id/deals')
+  async deals(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.apps.assertCanView(id, user);
+    return this.apps.dealsForLead(id, user);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Permissions('leads:read', 'applications:read')
   @Get(':id')
