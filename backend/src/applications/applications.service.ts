@@ -780,6 +780,29 @@ export class ApplicationsService {
     });
   }
 
+  /** Числа быстрых видов «Лидов» — тем же findAll, с правами пользователя. */
+  async viewCounts(user: any) {
+    const base = {
+      currentUserId: user?.id,
+      currentUserRole: user?.role,
+      currentUserRoles: user?.roles,
+      currentUserPermissions: user?.permissions,
+      currentUserHasCustomRole: user?.hasCustomRole,
+      page: 1,
+      pageSize: 1,
+    };
+    const total = async (extra: Record<string, unknown>) =>
+      ((await this.findAll({ ...base, ...extra } as any)) as { total: number }).total;
+    const [all, mine, fresh, unassigned, debt] = await Promise.all([
+      total({}),
+      total({ mine: true }),
+      total({ status: ApplicationStatus.NEW_LEAD }),
+      total({ managerUserId: UNASSIGNED_MANAGER }),
+      total({ debt: true }),
+    ]);
+    return { all, mine, new: fresh, unassigned, debt };
+  }
+
   async findAll(filters: {
     /** Облегчённые строки (окно дашборда): без студента и программы. */
     brief?: boolean;
@@ -819,11 +842,14 @@ export class ApplicationsService {
     ranks?: string;
     /** Корзина: только удалённые (иначе удалённых в выдаче нет вовсе). */
     deleted?: boolean;
+    /** Быстрый вид «С долгом»: только лиды с отметкой должника (paymentPending). */
+    debt?: boolean;
     /** QA-2: «Дубли» — лиды с одним телефоном и лиды-дубли старых сделок (только руководство). */
     duplicates?: boolean;
   }) {
     const where: Prisma.ApplicationWhereInput = {};
     if (filters.deleted) where.deletedAt = { not: null };
+    if (filters.debt) where.paymentPending = true;
     if (filters.duplicates) {
       // Один человек — один лид. Дубли: тот же телефон (последние 9 цифр) у
       // нескольких живых лидов; плюс «Успешные», созданные старыми сделками

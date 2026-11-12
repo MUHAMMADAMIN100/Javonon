@@ -25,6 +25,7 @@ import FormModal from '../components/FormModal';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import BusyLabel from '../components/BusyLabel';
 
 function fmtDateTime(iso: string) {
   return fmtDateText(iso, {
@@ -286,7 +287,7 @@ export default function Calls() {
             {t('common.cancel')}
           </button>
           <button className="btn btn-primary" onClick={onLog} disabled={createMut.isPending}>
-            <Icon name="call" size={16} /> {createMut.isPending ? t('common.saving') : t('calls.new')}
+            <Icon name="call" size={16} /> <BusyLabel busy={createMut.isPending}>{t('calls.new')}</BusyLabel>
           </button>
         </div>
       </FormModal>

@@ -26,6 +26,7 @@ import { roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import TaskDiary, { DiaryCountdown } from '../components/TaskDiary';
 import { useEscClose } from '../lib/useEscClose';
+import { TableSkeleton } from '../components/Skeleton';
 
 type Scope = 'all' | 'mine';
 /** Значение фильтра «Исполнитель» для задач, которые ещё никому не назначены. */
@@ -278,6 +279,7 @@ export default function Tasks() {
           found={shown.length}
           total={narrowed ? totalAll : undefined}
           filtered={narrowed}
+          loading={loading}
           testId="tasks-total"
         />
         <div className="card-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -534,7 +536,7 @@ export default function Tasks() {
 
         <AnimatePresence mode="wait">
           {loading ? (
-            <Loading />
+            <TableSkeleton cols={4} avatar={false} testId="tasks-skeleton" />
           ) : shown.length === 0 ? (
             <motion.div key="empty" className="empty" data-testid="tasks-empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="empty-icon"><Icon name="task_alt" size={48} /></div>

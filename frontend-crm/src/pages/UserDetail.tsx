@@ -41,6 +41,8 @@ import { tjFormatDateTime } from '../lib/tjTime';
 import ProfileMonthDetails, { type MonthTile } from '../components/ProfileMonthDetails';
 import { EditButton, EditForm, Field, LabelInput, heroColor, heroInitials } from '../components/ProfileParts';
 import BonusProgress from '../components/BonusProgress';
+import BusyLabel from '../components/BusyLabel';
+import { DetailSkeleton } from '../components/Skeleton';
 
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -160,7 +162,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   // возвращаться там некуда.
   const back = userId !== 'me' ? <BackButton fallback="/users" /> : null;
 
-  if (isLoading) return <>{back}<div className="card" style={{ padding: 24 }}>{t('common.loading')}</div></>;
+  if (isLoading) return <>{back}<DetailSkeleton testId="profile-skeleton" /></>;
   if (error || !data) {
     // 403 — нет прав на этого сотрудника: показываем причину с сервера.
     const msg = (error as any)?.response?.status === 403 ? (error as any)?.response?.data?.message : null;
@@ -1025,7 +1027,7 @@ function OfferSection() {
             disabled={!agreed || busy}
             style={{ marginLeft: 'auto' }}
           >
-            {busy ? t('common.saving') : t('offer.sign')}
+            <BusyLabel busy={busy}>{t('offer.sign')}</BusyLabel>
           </button>
         </div>
       )}
@@ -1141,7 +1143,7 @@ function RolesEditor({ user, userId, onSaved, onClose }: { user: FullProfile['us
           {t('common.cancel')}
         </button>
         <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving} data-testid="edit-save">
-          {saving ? t('common.saving') : t('common.save')}
+          <BusyLabel busy={saving}>{t('common.save')}</BusyLabel>
         </button>
       </div>
     </div>
@@ -1206,7 +1208,7 @@ function CustomRoleEditor({
           {t('common.cancel')}
         </button>
         <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving} data-testid="edit-save">
-          {saving ? t('common.saving') : t('common.save')}
+          <BusyLabel busy={saving}>{t('common.save')}</BusyLabel>
         </button>
       </div>
     </div>
@@ -1363,7 +1365,7 @@ function DocEditButton({
           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
             <button className="btn btn-sm btn-secondary" onClick={() => setOpen(false)} disabled={saving}>{t('common.cancel')}</button>
             <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
-              {saving ? t('common.saving') : t('common.save')}
+              <BusyLabel busy={saving}>{t('common.save')}</BusyLabel>
             </button>
           </div>
         </div>,

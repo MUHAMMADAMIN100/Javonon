@@ -7,6 +7,7 @@ import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { tr, useT } from '../lib/i18n';
 import { tjToday } from '../lib/tjTime';
+import BusyLabel from './BusyLabel';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 
@@ -179,7 +180,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
               style={documents.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
             >
               <Icon name={zipping ? 'progress_activity' : 'folder_zip'} size={16} style={{ marginRight: 4 }} />
-              {zipping ? t('common.saving') : `ZIP (${documents.length})`}
+              <BusyLabel busy={zipping}>{`ZIP (${documents.length})`}</BusyLabel>
             </motion.button>
           </div>
         </div>

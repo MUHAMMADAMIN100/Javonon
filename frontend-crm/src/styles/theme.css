@@ -1444,3 +1444,83 @@ body:has(.dialog-backdrop) .impersonation-bar { top: 12px; bottom: auto; }
 .inbox-ch-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .inbox-ch { padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 500; background: var(--bg-soft); border: 1px solid var(--border); color: var(--text-soft); }
 .inbox-ch.is-on { background: #dcfce7; border-color: #86efac; color: #166534; }
+
+/* ── Макет UI, часть A: заготовки, пустое состояние, кнопка без прыжка (12.11.2026) ── */
+.sk-line.is-sm { height: 10px; }
+.sk-line.is-lg { height: 18px; }
+.sk-circle, .sk-block { display: inline-block; flex-shrink: 0; border-radius: 50%; width: 36px; height: 36px;
+  background: linear-gradient(90deg, #EEF2F7 0, #F7F9FC 40%, #EEF2F7 80%); background-size: 840px 100%; animation: sk-shimmer 1.3s linear infinite; }
+.sk-circle.is-lg { width: 64px; height: 64px; }
+.sk-block { border-radius: 10px; width: 100%; height: 120px; }
+.sk-stack { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.sk-table { display: flex; flex-direction: column; }
+.sk-row { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(auto-fit, minmax(80px, 1fr)); align-items: center; gap: 16px;
+  padding: 14px 16px; border-bottom: 1px solid var(--border); min-height: 64px; }
+.sk-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sk-cell { display: block; min-width: 0; }
+.sk-cell .sk-line { max-width: 100%; }
+.sk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.sk-card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.sk-detail { display: flex; flex-direction: column; gap: 16px; }
+.sk-detail-hero { display: flex; align-items: center; gap: 16px; padding: 24px; }
+.sk-detail-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; padding: 24px; }
+.sk-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+@media (max-width: 600px) {
+  .sk-row { grid-template-columns: 1fr; gap: 8px; }
+  .sk-row .sk-cell:nth-child(n+3) { display: none; }
+  .sk-detail-body { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .sk-circle, .sk-block { animation: none; } }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 40px 20px; max-width: 520px; margin: 0 auto; }
+.empty-state-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 16px;
+  background: var(--bg-soft); color: var(--primary); margin-bottom: 4px; }
+.empty-state-title { font-weight: 600; font-size: 16px; color: var(--text); }
+.empty-state-text { margin: 0; color: var(--text-soft); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.empty-state-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+
+/* Появление строк и окон: 0,18 с, прозрачность и сдвиг 6 px. */
+@keyframes crm-appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.crm-appear { animation: crm-appear .18s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .crm-appear { animation: none; } }
+
+/* Кнопка на время сохранения: ширина не меняется, внутри крутилка. */
+.busy-label { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: inherit; }
+.busy-label.is-busy .busy-label-text { visibility: hidden; }
+@keyframes busy-spin { to { transform: rotate(360deg); } }
+.busy-label-spin { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%;
+  border: 2px solid currentColor; border-right-color: transparent; animation: busy-spin .7s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .busy-label-spin { animation-duration: 1.6s; } }
+
+/* ── Макет UI, часть B: «Лиды» — быстрые виды, плотность, колонки, липкая шапка (12.11.2026) ── */
+.leads-views-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.leads-views { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.lead-view { display: inline-flex; align-items: center; gap: 6px; }
+.lead-view-count { min-width: 18px; padding: 1px 7px; border-radius: 999px; background: var(--bg-soft); color: var(--text-soft); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.lead-view.active .lead-view-count { background: rgba(255,255,255,.22); color: inherit; }
+.lead-view-count:empty { display: none; }
+.leads-view-tools { display: inline-flex; align-items: center; gap: 8px; }
+.seg-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-card); }
+.seg-toggle button { border: 0; background: transparent; padding: 6px 12px; font: inherit; font-size: 13px; color: var(--text-soft); cursor: pointer; }
+.seg-toggle button.active { background: var(--primary); color: #fff; }
+.cols-menu { position: relative; }
+.cols-menu-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 200px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(15,23,42,.14); }
+.leads-table.is-dense td { padding-top: 6px; padding-bottom: 6px; }
+.leads-table.is-dense .lead-name-cell .avatar, .leads-table.is-dense .cl-name .avatar { transform: scale(.85); }
+.leads-table.hide-phone tr > :nth-child(2), .leads-table.hide-details tr > :nth-child(3), .leads-table.hide-status tr > :nth-child(4),
+.leads-table.hide-manager tr > :nth-child(5), .leads-table.hide-created tr > :nth-child(6) { display: none; }
+@media (min-width: 901px) {
+  .leads-scroll { max-height: calc(100vh - 250px); overflow: auto; }
+  .leads-scroll thead th { position: sticky; top: 0; z-index: 3; background: var(--bg-card); box-shadow: inset 0 -1px 0 var(--border); }
+}
+.leads-foot { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; margin-top: 12px; }
+.leads-foot-range { color: var(--text-soft); font-size: 13px; }
+.leads-foot-size { display: inline-flex; align-items: center; gap: 8px; color: var(--text-soft); font-size: 13px; }
+.leads-foot-size .crm-select { width: 84px; }
+.leads-foot > :last-child { margin-left: auto; }
+@media (max-width: 600px) {
+  .leads-views { display: flex; overflow-x: auto; flex-wrap: nowrap; max-width: 100%; scrollbar-width: none; }
+  .leads-view-tools { display: none; }
+  .leads-foot > :last-child { margin-left: 0; width: 100%; }
+}

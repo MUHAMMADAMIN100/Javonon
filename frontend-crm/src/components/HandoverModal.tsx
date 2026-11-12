@@ -9,6 +9,7 @@ import { useRoleLabel } from '../lib/labels';
 import CrmSelect from './CrmSelect';
 import Icon from '../Icon';
 import { useEscClose } from '../lib/useEscClose';
+import BusyLabel from './BusyLabel';
 
 /**
  * Окно «Уволить» / «Передать дела».
@@ -198,7 +199,7 @@ export default function HandoverModal({ target, kind, onClose, onDone }: Props) 
                 data-testid="handover-submit"
                 disabled={busy || !counts || (kind === 'handover' && nonZero.length === 0)}
               >
-                {busy ? t('common.saving') : kind === 'dismiss' ? t('handover.confirmDismiss') : t('handover.confirmTransfer')}
+                <BusyLabel busy={busy}>{kind === 'dismiss' ? t('handover.confirmDismiss') : t('handover.confirmTransfer')}</BusyLabel>
               </button>
             </div>
           </motion.form>

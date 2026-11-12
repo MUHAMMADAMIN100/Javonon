@@ -28,6 +28,7 @@ import ListTotal, { type ListNoun } from '../components/ListTotal';
 import { dateParam, enumParam, ignoredParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
 import DismissedMark, { withDismissed } from '../components/DismissedMark';
+import { TableSkeleton } from '../components/Skeleton';
 
 const STATUS_COLOR: Record<SubmissionStatus, string> = {
   ACTIVE: '#0ea5e9',
@@ -634,10 +635,10 @@ function PendingPaymentCard({ p }: { p: PendingPayment }) {
   );
 }
 
+/** Заготовки карточек сделок вместо «Загрузка…» (макет, часть A). */
 function Loading() {
-  const { t } = useT();
-  return <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-soft)' }}>{t('common.loading')}</div>;
+  return <div className="card" style={{ padding: 0 }}><TableSkeleton rows={6} cols={3} testId="deals-skeleton" /></div>;
 }
 function Empty({ children }: { children: any }) {
-  return <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>{children}</div>;
+  return <div className="card empty-card crm-appear" data-testid="deals-empty" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>{children}</div>;
 }

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Icon from '../Icon';
 import CrmDatePicker from './CrmDatePicker';
 import { useT } from '../lib/i18n';
+import BusyLabel from './BusyLabel';
 
 /**
  * Общие детали карточек-«досье»: сотрудник (UserDetail), заявка
@@ -72,7 +73,7 @@ export function EditForm({ title, saving, onSave, onCancel, children, footer, te
       <div className="profile-edit-actions">
         <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel} disabled={saving}>{t('common.cancel')}</button>
         <button type="button" className="btn btn-sm btn-primary" onClick={onSave} disabled={saving} data-testid="edit-save">
-          {saving ? t('common.saving') : t('common.save')}
+          <BusyLabel busy={saving}>{t('common.save')}</BusyLabel>
         </button>
       </div>
     </div>

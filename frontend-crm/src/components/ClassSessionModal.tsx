@@ -23,6 +23,7 @@ import {
 } from '../api/studyGroups';
 import { addMaterialLink, deleteMaterial, uploadMaterials } from '../api/academy';
 import { addDaysKey, fileSize, materialIcon } from './academy/academyUi';
+import BusyLabel from './BusyLabel';
 
 /**
  * Занятие: время, тема, ДЗ со сроком, файлы и ссылки, замена учителя,
@@ -463,7 +464,7 @@ export default function ClassSessionModal({
           disabled={!canSubmit}
           data-testid="session-save"
         >
-          {saveMut.isPending ? t('common.saving') : t('common.save')}
+          <BusyLabel busy={saveMut.isPending}>{t('common.save')}</BusyLabel>
         </button>
       </div>
       {editing && canRun && marked && <div className="acad-hint" style={{ textAlign: 'right' }}>{t('academy.lessons.cantDelete')}</div>}

@@ -6,6 +6,7 @@ import { useUI } from '../../ui/Dialogs';
 import { keys } from '../../lib/queryKeys';
 import { updateGroup, type StudyGroup } from '../../api/studyGroups';
 import GroupFields, { groupFormDirty, groupFormPayload, groupFormValue } from './GroupFields';
+import BusyLabel from '../BusyLabel';
 
 /** «Редактировать» в списке групп — те же поля, что во вкладке «Настройки» группы. */
 export default function GroupEditModal({ group, onClose }: { group: StudyGroup; onClose: () => void }) {
@@ -48,7 +49,7 @@ export default function GroupEditModal({ group, onClose }: { group: StudyGroup; 
           onClick={() => mut.mutate()}
           data-testid="ge-save"
         >
-          {mut.isPending ? t('common.saving') : t('common.save')}
+          <BusyLabel busy={mut.isPending}>{t('common.save')}</BusyLabel>
         </button>
       </div>
     </FormModal>

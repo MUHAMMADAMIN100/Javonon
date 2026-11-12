@@ -38,6 +38,7 @@ import { enumParam, stringParam, useUrlListState } from '../lib/useUrlListState'
 import { matchesSearch } from '../lib/listSearch';
 import { isTouchDevice } from '../lib/touch';
 import { useEscClose } from '../lib/useEscClose';
+import BusyLabel from '../components/BusyLabel';
 
 type Tab = 'partners' | 'commissions' | 'payouts';
 const COMMISSION_STATUSES = ['PENDING', 'APPROVED', 'PAID', 'REVERSED'] as const;
@@ -752,7 +753,7 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
                 {t('common.cancel')}
               </button>
               <button type="submit" className="btn btn-primary" disabled={busy}>
-                {busy ? t('common.saving') : t('common.create')}
+                <BusyLabel busy={busy}>{t('common.create')}</BusyLabel>
               </button>
             </div>
           </motion.form>

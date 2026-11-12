@@ -31,6 +31,7 @@ import { presenceSortValue, presenceText, usePresence } from '../lib/usePresence
 import type { PresenceState } from '../api/presence';
 import PresenceDot from '../components/PresenceDot';
 import { useEscClose } from '../lib/useEscClose';
+import BusyLabel from '../components/BusyLabel';
 
 const EMPTY_FORM = {
   email: '', fullName: '', password: '',
@@ -612,7 +613,7 @@ export default function Users() {
                   className="btn btn-primary"
                   disabled={formInvalid || createMut.isPending}
                 >
-                  {createMut.isPending ? t('common.saving') : t('common.create')}
+                  <BusyLabel busy={createMut.isPending}>{t('common.create')}</BusyLabel>
                 </button>
               </div>
             </motion.form>

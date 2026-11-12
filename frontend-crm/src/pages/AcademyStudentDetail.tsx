@@ -49,6 +49,7 @@ import {
   tjWeekdayOf,
   weekdayKey,
 } from '../components/academy/academyUi';
+import BusyLabel from '../components/BusyLabel';
 
 /**
  * Карточка ученика академии: контакты (и телефоны родителей), уровень с
@@ -630,7 +631,7 @@ function EditStudentModal({
           disabled={mut.isPending || fullName.trim().length < 2 || !email.trim() || !!fatherErr || !!motherErr}
           data-testid="ae-save"
         >
-          {mut.isPending ? t('common.saving') : t('common.save')}
+          <BusyLabel busy={mut.isPending}>{t('common.save')}</BusyLabel>
         </button>
       </div>
     </FormModal>
@@ -674,7 +675,7 @@ function LevelModal({
       <div className="form-actions">
         <button className="btn btn-secondary" onClick={onClose} disabled={mut.isPending}>{t('common.cancel')}</button>
         <button className="btn btn-primary" onClick={() => mut.mutate()} disabled={mut.isPending} data-testid="al-save">
-          {mut.isPending ? t('common.saving') : t('common.save')}
+          <BusyLabel busy={mut.isPending}>{t('common.save')}</BusyLabel>
         </button>
       </div>
     </FormModal>
@@ -724,7 +725,7 @@ function ReinstateModal({
       <div className="form-actions">
         <button className="btn btn-secondary" onClick={onClose} disabled={mut.isPending}>{t('common.cancel')}</button>
         <button className="btn btn-primary" onClick={() => mut.mutate()} disabled={mut.isPending} data-testid="reinstate-submit">
-          {mut.isPending ? t('common.saving') : t('academy.expelled.reinstate')}
+          <BusyLabel busy={mut.isPending}>{t('academy.expelled.reinstate')}</BusyLabel>
         </button>
       </div>
     </FormModal>

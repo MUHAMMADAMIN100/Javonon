@@ -7,6 +7,7 @@ import { useT } from '../../lib/i18n';
 import { useUI } from '../../ui/Dialogs';
 import { FLAGS_FOR_DECISION, giveFlag } from '../../api/academy';
 import { FlagDots } from './academyUi';
+import BusyLabel from '../BusyLabel';
 
 /**
  * Красный флаг ученику — всегда с причиной. Окно предупреждает, что этот
@@ -95,7 +96,7 @@ export default function FlagModal({
           onClick={() => mut.mutate()}
           data-testid="flag-submit"
         >
-          <Icon name="flag" size={16} /> {mut.isPending ? t('common.saving') : t('academy.flags.give')}
+          <Icon name="flag" size={16} /> <BusyLabel busy={mut.isPending}>{t('academy.flags.give')}</BusyLabel>
         </button>
       </div>
     </FormModal>

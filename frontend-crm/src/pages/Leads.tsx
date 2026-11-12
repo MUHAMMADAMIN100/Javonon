@@ -19,6 +19,7 @@ import {
   type BulkAssignManagerResult,
   type CreateStaffApplicationInput,
   type CreateStaffApplicationResult,
+  applicationViewCounts,
 } from '../api/applications';
 import type { Application, ApplicationSource, ApplicationStatus, Country, Direction } from '../api/types';
 import {
@@ -77,6 +78,10 @@ import {
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds } from '../utils/validators';
 import DismissedMark from '../components/DismissedMark';
 import { useEscClose } from '../lib/useEscClose';
+import BusyLabel from '../components/BusyLabel';
+import { TableSkeleton } from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
+import QueryErrorState from '../components/QueryErrorState';
 
 /**
  * Экран «Лиды» — все клиенты отдела продаж: ручной ввод, раздача
@@ -368,6 +373,12 @@ export default function Leads() {
     setEditing(null);
     setFormOpen(true);
   };
+  /** «Сбросить фильтры» (то же, что кнопка у поиска): режимы «Мои / Все» и корзина остаются. */
+  const resetLeadFilters = () => {
+    setSearchInput('');
+    resetPeriod(['status', 'direction', 'source', 'from', 'to', 'manager', 'country', 'search', 'directionPending', 'countryPending', 'debt']);
+  };
+
 
   /** Изменить лид: то же окно, поля заполнены текущими данными. */
   const openEdit = (a: Application) => {
@@ -644,7 +655,7 @@ export default function Leads() {
   // те же фильтры и ту же страницу. Любой фильтр сбрасывает страницу сам
   // (pageKey). Набор параметров — тот же, что был у «Заявок»: их старые
   // ссылки ведут сюда (App.tsx).
-  const { values: periodValues, setValue: setPeriod, reset: resetPeriod } = useUrlListState(
+  const { values: periodValues, setValue: setPeriod, setValues: setPeriodValues, reset: resetPeriod } = useUrlListState(
     {
       from: dateParam(),
       to: dateParam(),
@@ -670,6 +681,10 @@ export default function Leads() {
       search: stringParam('', 200),
       // «Удалённые» — корзина лидов.
       view: enumParam(['deleted', 'duplicates'] as const),
+      // Быстрый вид «С долгом» (макет таблицы «Лиды»).
+      debt: boolParam(),
+      // Строк на странице: 25 (по умолчанию), 50, 100.
+      size: enumParam(['50', '100'] as const),
       page: pageParam(),
     },
     { pageKey: 'page' },
@@ -678,7 +693,8 @@ export default function Leads() {
   const dups = periodValues.view === 'duplicates';
   // В корзине — только «Восстановить»: без галочек и назначения менеджера.
   const bulkOn = canAssignAny && !trash;
-  const { from, to, manager, scope, page, directionPending, countryPending } = periodValues;
+  const { from, to, manager, scope, page, directionPending, countryPending, debt } = periodValues;
+  const pageSize = periodValues.size ? Number(periodValues.size) : PAGE_SIZE;
   // `country` в этом компоненте уже занято полем формы нового лида,
   // поэтому фильтр списка зовём filterCountry.
   const filterCountry = periodValues.country;
@@ -708,12 +724,75 @@ export default function Leads() {
     // Явное направление / страна сильнее «не указано» (как в бывших «Заявках»).
     directionPending: directionPending && !filterDirection ? true : undefined,
     countryPending: countryPending && !filterCountry ? true : undefined,
+    debt: debt && !trash ? true : undefined,
   };
   /** Список сужен фильтром («Мои / Все» и корзина — режимы просмотра, а не фильтры). */
   const narrowed = !!(
     filterStatus || filterDirection || filterSource || from || to || manager || filterCountry || urlSearch ||
-    directionPending || countryPending
+    directionPending || countryPending || debt
   );
+
+  /**
+   * Быстрые виды (макет): Все / Мои / Новые / Без менеджера / С долгом.
+   * Вид — это набор обычных фильтров в ссылке, отдельного состояния нет:
+   * чипы фильтров и вид всегда говорят одно и то же.
+   */
+  const viewCountsQuery = useQuery({
+    queryKey: ['applications', 'view-counts'],
+    queryFn: applicationViewCounts,
+    staleTime: 30_000,
+    enabled: !trash && !dups,
+  });
+  const vc = viewCountsQuery.data;
+  type QuickView = 'all' | 'mine' | 'new' | 'unassigned' | 'debt';
+  const otherNarrow = !!(filterDirection || filterSource || from || to || filterCountry || urlSearch || directionPending || countryPending);
+  const activeView: QuickView | null = otherNarrow
+    ? null
+    : debt && !filterStatus && !manager ? 'debt'
+    : manager === 'none' && !filterStatus && !debt ? 'unassigned'
+    : filterStatus === 'NEW_LEAD' && !manager && !debt ? 'new'
+    : !filterStatus && !manager && !debt ? (wide && scope === 'mine' ? 'mine' : 'all')
+    : null;
+  // Одной записью в ссылку: несколько setPeriod подряд читали бы старый адрес
+  // и затирали друг друга.
+  const pickView = (v: QuickView) => {
+    setSearchInput('');
+    setPeriodValues({
+      status: v === 'new' ? 'NEW_LEAD' : '',
+      direction: '', source: '', from: '', to: '', country: '', search: '',
+      directionPending: false, countryPending: false,
+      manager: v === 'unassigned' ? 'none' : '',
+      debt: v === 'debt',
+      ...(v === 'mine' ? { scope: 'mine' } : v === 'all' || v === 'unassigned' ? { scope: wide ? 'all' : 'mine' } : {}),
+    } as any);
+  };
+  const quickViews: { key: QuickView; label: string; count?: number; testId: string }[] = [
+    { key: 'all', label: t('common.all'), count: vc?.all, testId: 'leads-scope-all' },
+    ...(wide ? [{ key: 'mine' as QuickView, label: t('scope.mine'), count: vc?.mine, testId: 'leads-scope-mine' }] : []),
+    { key: 'new', label: t('leads.view.new'), count: vc?.new, testId: 'leads-view-new' },
+    ...(wide ? [{ key: 'unassigned' as QuickView, label: t('leads.view.unassigned'), count: vc?.unassigned, testId: 'leads-view-unassigned' }] : []),
+    { key: 'debt', label: t('leads.view.debt'), count: vc?.debt, testId: 'leads-view-debt' },
+  ];
+
+  // Плотность строк и колонки — у каждого свои, запоминаем в браузере.
+  const [dense, setDense] = useState(() => { try { return localStorage.getItem('javonon_leads_density') === 'dense'; } catch { return false; } });
+  const [hiddenCols, setHiddenCols] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('javonon_leads_cols') || '[]'); } catch { return []; }
+  });
+  const [colsOpen, setColsOpen] = useState(false);
+  const setDensity = (v: boolean) => { setDense(v); try { localStorage.setItem('javonon_leads_density', v ? 'dense' : 'comfy'); } catch { /* приватный режим */ } };
+  const toggleCol = (c: string) => setHiddenCols((cur) => {
+    const next = cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c];
+    try { localStorage.setItem('javonon_leads_cols', JSON.stringify(next)); } catch { /* приватный режим */ }
+    return next;
+  });
+  const OPTIONAL_COLS: { key: string; label: string }[] = [
+    { key: 'phone', label: t('app.field.phone') },
+    { key: 'details', label: t('leads.col.details') },
+    { key: 'status', label: t('common.status') },
+    { key: 'manager', label: t('app.field.manager') },
+    { key: 'created', label: t('reports.col.date') },
+  ];
 
   // Страница, порядок и счётчик — на сервере (как «Заявки»): лидов всех
   // статусов — тысячи. Порядок берём из ссылки (?sort=), где его хранит
@@ -728,7 +807,7 @@ export default function Leads() {
     : sortKey === 'direction' ? labelRanks(DIRECTION_VALUES, directionLabel)
     : sortKey === 'source' ? labelRanks(APPLICATION_SOURCES, (s) => SOURCE_LABEL[s as ApplicationSource])
     : undefined;
-  const pageQuery = { ...leadFilters, page, pageSize: PAGE_SIZE, sort: sortParam, ranks };
+  const pageQuery = { ...leadFilters, page, pageSize, sort: sortParam, ranks };
   const leadsKey = keys.applications.list(pageQuery);
   // Мутации удаления объявлены выше списка — ключ передаём через ref.
   leadsKeyRef.current = leadsKey;
@@ -795,7 +874,7 @@ export default function Leads() {
   // replace — техническая коррекция, а не переход: в истории ей не место.
   useEffect(() => {
     if (!leadsQuery.isSuccess || leadsQuery.isPlaceholderData) return;
-    const totalPages = Math.max(1, Math.ceil(found / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(found / pageSize));
     if (page > totalPages) setPeriod('page', totalPages, { replace: true });
   }, [leadsQuery.isSuccess, leadsQuery.isPlaceholderData, found, page, setPeriod]);
 
@@ -1412,7 +1491,7 @@ export default function Leads() {
                 {t('common.cancel')}
               </button>
               <button type="submit" className="btn btn-primary" data-testid="lead-modal-save" disabled={createMut.isPending || updateMut.isPending}>
-                {createMut.isPending || updateMut.isPending ? t('common.saving') : editing ? t('common.save') : t('leads.form.submit')}
+                <BusyLabel busy={createMut.isPending || updateMut.isPending}>{editing ? t('common.save') : t('leads.form.submit')}</BusyLabel>
               </button>
             </div>
           </form>
@@ -1429,30 +1508,10 @@ export default function Leads() {
             found={found}
             total={totalQuery.data?.total}
             filtered={narrowed}
+            loading={leadsQuery.isLoading}
             testId="leads-total"
           />
-          {wide && (
-            <div className="scope-switch" data-testid="leads-scope">
-              <button
-                type="button"
-                className={`scope-btn${scope === 'mine' ? ' active' : ''}`}
-                data-testid="leads-scope-mine"
-                onClick={() => setPeriod('scope', 'mine')}
-              >
-                <Icon name="person" size={16} />
-                {t('scope.mine')}
-              </button>
-              <button
-                type="button"
-                className={`scope-btn${scope === 'all' ? ' active' : ''}`}
-                data-testid="leads-scope-all"
-                onClick={() => setPeriod('scope', 'all')}
-              >
-                <Icon name="groups" size={16} />
-                {t('common.all')}
-              </button>
-            </div>
-          )}
+
           {canCreate && (
             <button type="button" className="btn btn-primary" data-testid="lead-new" onClick={openForm}>
               <Icon name="add" size={18} />
@@ -1461,6 +1520,47 @@ export default function Leads() {
           )}
         </div>
         <div className="card-body">
+          {!trash && !dups && (
+            <div className="leads-views-row">
+              <div className="leads-views scope-switch" role="tablist" aria-label={t('leads.views.label')} data-testid="leads-scope">
+                {quickViews.map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeView === v.key}
+                    className={`lead-view scope-btn${activeView === v.key ? ' active' : ''}`}
+                    data-testid={v.testId}
+                    onClick={() => pickView(v.key)}
+                  >
+                    {v.label}
+                    <span className="lead-view-count">{v.count === undefined ? '' : v.count.toLocaleString('ru-RU')}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="leads-view-tools">
+                <div className="seg-toggle" role="group" aria-label={t('leads.density')} data-testid="leads-density">
+                  <button type="button" className={!dense ? 'active' : ''} aria-pressed={!dense} onClick={() => setDensity(false)} data-testid="leads-density-comfy">{t('leads.density.comfy')}</button>
+                  <button type="button" className={dense ? 'active' : ''} aria-pressed={dense} onClick={() => setDensity(true)} data-testid="leads-density-dense">{t('leads.density.dense')}</button>
+                </div>
+                <div className="cols-menu">
+                  <button type="button" className="btn btn-secondary btn-sm" aria-expanded={colsOpen} onClick={() => setColsOpen((v) => !v)} data-testid="leads-cols">
+                    <Icon name="view_column" size={16} /> {t('leads.cols')}
+                  </button>
+                  {colsOpen && (
+                    <div className="cols-menu-pop" role="menu" data-testid="leads-cols-menu" onMouseLeave={() => setColsOpen(false)}>
+                      {OPTIONAL_COLS.map((c) => (
+                        <label key={c.key} className="crm-checkbox-label">
+                          <input type="checkbox" className="crm-checkbox" checked={!hiddenCols.includes(c.key)} onChange={() => toggleCol(c.key)} data-testid={`leads-col-${c.key}`} />
+                          {c.label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           <div className="filters">
             {(canDeleteAnyKind || trash || dups) && (
               <CrmSelect
@@ -1630,24 +1730,29 @@ export default function Leads() {
               ...(filterCountry
                 ? [{ key: 'country', label: countryLabel(filterCountry), onClear: () => resetPeriod(['country']) }]
                 : []),
+              ...(debt ? [{ key: 'debt', label: t('leads.view.debt'), onClear: () => resetPeriod(['debt']) }] : []),
             ]}
           />
 
           <AnimatePresence mode="wait">
             {leadsQuery.isLoading ? (
-              <Loading />
+              <TableSkeleton cols={5} testId="leads-skeleton" />
+            ) : leadsQuery.isError ? (
+              <QueryErrorState error={leadsQuery.error} onRetry={() => leadsQuery.refetch()} />
             ) : leads.length === 0 ? (
-              <motion.div
-                key="empty"
-                className="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                <div className="empty-icon"><Icon name={narrowed ? 'search_off' : 'inbox'} size={48} /></div>
-                {/* «Лидов нет» под поиском врало бы: лиды есть, не
-                    нашлись именно эти. */}
-                <span data-testid="leads-empty">{trash ? t('leads.trash.empty') : narrowed ? t('common.empty') : t('leads.list.empty')}</span>
+              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                {/* «Лидов нет» под поиском врало бы: лиды есть, не нашлись
+                    именно эти. Макет: объяснение и что сделать дальше. */}
+                <EmptyState
+                  icon={narrowed ? 'search_off' : trash ? 'delete' : 'inbox'}
+                  title={trash ? t('leads.trash.empty') : narrowed ? t('leads.empty.filtered') : t('leads.list.empty')}
+                  text={narrowed ? t('empty.filteredHint') : trash ? undefined : t('leads.empty.hint')}
+                  testId="leads-empty"
+                  actions={[
+                    ...(narrowed ? [{ label: t('empty.resetFilters'), onClick: resetLeadFilters, testId: 'leads-empty-reset' }] : []),
+                    ...(!trash && canCreate ? [{ label: t('leads.form.title'), onClick: openForm, primary: !narrowed, icon: 'add', testId: 'leads-empty-new' }] : []),
+                  ]}
+                />
               </motion.div>
             ) : (
               <motion.div
@@ -1743,8 +1848,11 @@ export default function Leads() {
                 )}
 
                 <SortSelect sort={sort} />
-                <div className="table-wrap">
-                <table className="table client-list leads-table">
+                <div className="table-wrap leads-scroll" data-testid="leads-scroll">
+                <table
+                  className={`table client-list leads-table${dense ? ' is-dense' : ''}${hiddenCols.map((c) => ` hide-${c}`).join('')}`}
+                  data-testid="leads-table"
+                >
                   <thead>
                     <tr>
                       <SortTh
@@ -1973,12 +2081,27 @@ export default function Leads() {
                   </tbody>
                 </table>
                 </div>
-                <Pagination
-                  page={page}
-                  total={found}
-                  pageSize={PAGE_SIZE}
-                  onChange={setPage}
-                />
+                {/* Макет: «Показаны 1–25 из N · строк на странице 25 ▾ · ‹ 1 2 ›». */}
+                <div className="leads-foot" data-testid="leads-foot">
+                  <span className="leads-foot-range" data-testid="leads-range">
+                    {t('leads.foot.range')
+                      .replace('{from}', String(found ? (page - 1) * pageSize + 1 : 0))
+                      .replace('{to}', String(Math.min(found, page * pageSize)))
+                      .replace('{n}', found.toLocaleString('ru-RU'))}
+                  </span>
+                  <label className="leads-foot-size">
+                    {t('leads.foot.perPage')}
+                    <CrmSelect
+                      className="crm-select"
+                      value={String(pageSize)}
+                      onChange={(e) => setPeriod('size', e.target.value === String(PAGE_SIZE) ? '' : (e.target.value as '50' | '100'))}
+                      data-testid="leads-page-size"
+                    >
+                      {[PAGE_SIZE, 50, 100].map((n) => <option key={n} value={String(n)}>{n}</option>)}
+                    </CrmSelect>
+                  </label>
+                  <Pagination page={page} total={found} pageSize={pageSize} onChange={setPage} />
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

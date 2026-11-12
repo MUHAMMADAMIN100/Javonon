@@ -16,6 +16,7 @@ import {
   type PaymentStageStatus,
 } from '../api/installments';
 import { useEscClose } from '../lib/useEscClose';
+import BusyLabel from './BusyLabel';
 
 /**
  * Этапы рассрочки в карточке сделки.
@@ -377,7 +378,7 @@ function EditStageModal({
             {t('common.cancel')}
           </button>
           <button className="btn btn-primary" onClick={() => mut.mutate()} disabled={!canSubmit || mut.isPending}>
-            {mut.isPending ? t('common.saving') : t('common.save')}
+            <BusyLabel busy={mut.isPending}>{t('common.save')}</BusyLabel>
           </button>
         </div>
       </motion.div>

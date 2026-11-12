@@ -16,6 +16,7 @@ import { useT } from '../lib/i18n';
 import { useDirectionLabel, useChannelLabel } from '../lib/labels';
 import CredRow from '../components/CredRow';
 import { STUDENT_LOGIN_URL } from '../lib/landingUrl';
+import BusyLabel from '../components/BusyLabel';
 
 export default function StudentNew() {
   const navigate = useNavigate();
@@ -231,7 +232,7 @@ export default function StudentNew() {
               className="btn btn-primary"
               disabled={submitting || isInvalid}
             >
-              {submitting ? t('common.saving') : t('common.create')}
+              <BusyLabel busy={submitting}>{t('common.create')}</BusyLabel>
             </button>
           </div>
         </form>

@@ -16,6 +16,7 @@ import {
   type TaskDiaryWeekday,
 } from '../api/tasks';
 import DismissedMark from './DismissedMark';
+import BusyLabel from './BusyLabel';
 
 /**
  * Дневник задачи — как дневник ДЗ ученика: каждый исполнитель за каждый
@@ -214,7 +215,7 @@ export default function TaskDiary({ taskId }: { taskId: string }) {
               data-testid="diary-save"
             >
               <Icon name={me.todayText ? 'edit' : 'send'} size={16} />
-              {save.isPending ? t('common.saving') : me.todayText ? t('taskDiary.update') : t('taskDiary.save')}
+              <BusyLabel busy={save.isPending}>{me.todayText ? t('taskDiary.update') : t('taskDiary.save')}</BusyLabel>
             </button>
           </div>
         </div>

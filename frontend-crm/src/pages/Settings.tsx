@@ -42,6 +42,7 @@ import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { useRealtime } from '../realtime';
 import { me as apiMe } from '../api/auth';
+import BusyLabel from '../components/BusyLabel';
 
 type Tab = 'schedule' | 'penalties' | 'location' | 'roles' | 'salary' | 'revenueScheme';
 
@@ -580,7 +581,7 @@ function RoleForm({
       <div className="role-form-actions">
         <button className="btn btn-sm btn-secondary" onClick={onCancel} disabled={saving}>{t('common.cancel')}</button>
         <button className="btn btn-sm btn-primary" onClick={save} disabled={saving || !ready} data-testid="role-save">
-          {saving ? t('common.saving') : (initial ? t('common.save') : t('common.create'))}
+          <BusyLabel busy={saving}>{(initial ? t('common.save') : t('common.create'))}</BusyLabel>
         </button>
       </div>
     </div>

@@ -12,6 +12,7 @@ import { optimistic, useOptimisticMutation } from '../lib/optimistic';
 import { useT } from '../lib/i18n';
 import { useAuth } from '../store/auth';
 import { roleCan } from '../lib/permissions';
+import BusyLabel from '../components/BusyLabel';
 
 /** Сумма продаж — в сомони, как везде в CRM. */
 function fmtTjs(n: number) {
@@ -232,7 +233,7 @@ export default function Reports() {
             {t('common.cancel')}
           </button>
           <button className="btn btn-primary" onClick={onSave} disabled={saving} data-testid="report-save">
-            <Icon name="save" size={16} /> {saving ? t('common.saving') : t('common.save')}
+            <Icon name="save" size={16} /> <BusyLabel busy={saving}>{t('common.save')}</BusyLabel>
           </button>
         </div>
       </FormModal>

@@ -3,6 +3,7 @@ import CrmSelect from './CrmSelect';
 import { countProgress, displayValue, useTranslatedSections, type FieldDef } from '../formSchema';
 import Icon from '../Icon';
 import { useT } from '../lib/i18n';
+import BusyLabel from './BusyLabel';
 
 type Props = {
   form: any;
@@ -121,7 +122,7 @@ export default function ApplicationFormView({ form, canEdit, onSave }: Props) {
               {t('common.cancel')}
             </button>
             <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={saving}>
-              {saving ? t('common.saving') : t('common.save')}
+              <BusyLabel busy={saving}>{t('common.save')}</BusyLabel>
             </button>
           </div>
         )}

@@ -23,6 +23,7 @@ import {
   audienceCount,
   campaignRecipients,
 } from '../api/massmail';
+import BusyLabel from '../components/BusyLabel';
 
 const STATUS_COLOR: Record<string, string> = {
   DRAFT: '#94a3b8',
@@ -345,7 +346,7 @@ function CreateForm({ onClose }: { onClose: () => void }) {
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn btn-sm btn-secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
         <button className="btn btn-sm btn-primary" onClick={submit} disabled={busy}>
-          {busy ? t('common.saving') : t('common.create')}
+          <BusyLabel busy={busy}>{t('common.create')}</BusyLabel>
         </button>
       </div>
     </div>

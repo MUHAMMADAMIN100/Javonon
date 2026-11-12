@@ -17,6 +17,7 @@ import Icon from '../Icon';
 import PhoneInput from './PhoneInput';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { useT } from '../lib/i18n';
+import BusyLabel from './BusyLabel';
 
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -617,7 +618,7 @@ export default function ApplicationFormSection({ studentId, initialForm, canEdit
               title={t('appForm.save')}
             >
               <Icon name="save" size={18} />
-              {manualSaving ? t('common.saving') : manualSaved ? `${t('common.save')} ✓` : t('appForm.save')}
+              <BusyLabel busy={manualSaving}>{manualSaved ? `${t('common.save')} ✓` : t('appForm.save')}</BusyLabel>
             </button>
             <div className="af-save-hint">
               {dirty

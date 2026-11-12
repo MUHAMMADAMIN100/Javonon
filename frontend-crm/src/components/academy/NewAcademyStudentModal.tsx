@@ -16,6 +16,7 @@ import { STUDENT_LOGIN_URL } from '../../lib/landingUrl';
 import { compose, email as emailRule, maxLen, minLen, phoneRule, required } from '../../utils/validators';
 import { createAcademyStudent, listLevels } from '../../api/academy';
 import { listGroups } from '../../api/studyGroups';
+import BusyLabel from '../BusyLabel';
 
 /**
  * Ученик только академии (не клиент агентства): ФИО, телефон, телефоны
@@ -249,7 +250,7 @@ export default function NewAcademyStudentModal({
             {t('common.cancel')}
           </button>
           <button type="submit" className="btn btn-primary" disabled={mut.isPending} data-testid="as-submit">
-            {mut.isPending ? t('common.saving') : t('common.create')}
+            <BusyLabel busy={mut.isPending}>{t('common.create')}</BusyLabel>
           </button>
         </div>
       </form>

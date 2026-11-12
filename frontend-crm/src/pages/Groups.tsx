@@ -24,6 +24,8 @@ import GroupEditModal from '../components/academy/GroupEditModal';
 import { useGroupRemoval } from '../components/academy/useGroupRemoval';
 import { useRoleLabel } from '../lib/labels';
 import { teacherOptions } from '../lib/teachers';
+import BusyLabel from '../components/BusyLabel';
+import { TableSkeleton } from '../components/Skeleton';
 
 /**
  * Группы академии.
@@ -220,7 +222,7 @@ export default function Groups() {
       )}
 
       {query.isLoading ? (
-        <Loading />
+        <TableSkeleton cols={4} avatar={false} testId="groups-skeleton" />
       ) : groups.length === 0 ? (
         <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-soft)' }}>
           {t('groups.empty')}
@@ -385,7 +387,7 @@ function CreateGroupForm({
             })
           }
         >
-          {busy ? t('common.saving') : t('common.create')}
+          <BusyLabel busy={busy}>{t('common.create')}</BusyLabel>
         </button>
       </div>
     </div>

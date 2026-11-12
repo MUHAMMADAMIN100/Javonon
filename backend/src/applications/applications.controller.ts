@@ -100,6 +100,8 @@ export class ApplicationsController {
     @Query('ranks') ranks?: string,
     @Query('deleted') deleted?: string,
     @Query('duplicates') duplicates?: string,
+    // Быстрый вид «С долгом» (макет таблицы «Лиды»): только с отметкой должника.
+    @Query('debt') debt?: string,
     @Query('brief') brief?: string,
     // QA-3 (набл. 13): без страницы список можно ограничить (?limit=50).
     @Query('limit') limit?: string,
@@ -147,6 +149,7 @@ export class ApplicationsController {
       deleted: deleted === '1' || deleted === 'true',
       // «Дубли» — только руководству: остальным список и так ограничен своими.
       duplicates: (duplicates === '1' || duplicates === 'true') && isElevated(user),
+      debt: debt === '1' || debt === 'true',
       brief: brief === '1' || brief === 'true',
       limit: limit ? Math.min(500, Math.max(1, parseInt(limit, 10) || 0)) || undefined : undefined,
     });
@@ -157,6 +160,19 @@ export class ApplicationsController {
   // общий parseDate, что и у /finance/summary: границы считаются по
   // Asia/Dushanbe, `to` inclusive до 23:59:59.999 TJT. Без параметров
   // ответ ровно прежний — за всё время.
+  /**
+   * Числа на быстрых видах списка «Лиды» (макет 11.11.2026): Все, Мои, Новые,
+   * Без менеджера, С долгом. Считаются тем же findAll, что и сам список, —
+   * права те же: менеджер видит числа только по своим лидам.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Permissions('leads:read', 'applications:read')
+  @Get('view-counts')
+  viewCounts(@CurrentUser() user: any) {
+    if (isAccountantOnly(user)) throw new ForbiddenException('Список лидов бухгалтеру не открыт');
+    return this.apps.viewCounts(user);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('stats')
   stats(

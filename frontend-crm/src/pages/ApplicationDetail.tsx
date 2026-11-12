@@ -54,6 +54,7 @@ import { useChannelLabel, useCountryLabel, useDirectionLabel, useStudentStatusLa
 import { tjFormatFull } from '../lib/tjTime';
 import { canOpenDeals } from '../components/navGroups';
 import QueryErrorState from '../components/QueryErrorState';
+import { DetailSkeleton } from '../components/Skeleton';
 
 /**
  * Карточка заявки. Устроена как карточка сотрудника: шапка (аватар, имя,
@@ -211,7 +212,7 @@ export default function ApplicationDetail() {
   if (appQuery.isError) {
     return <QueryErrorState error={appQuery.error} backTo="/leads" backLabelKey="errorState.toLeads" onRetry={() => appQuery.refetch()} />;
   }
-  if (!app) return <Loading />;
+  if (!app) return <DetailSkeleton testId="lead-skeleton" />;
 
   // Новые/успешные исходы считаем вместе с legacy-значениями: перенос строк на
   // бэкенде опт-ин (MIGRATE_LEAD_STATUSES, см. api/types.ts и DEPLOY.md), и

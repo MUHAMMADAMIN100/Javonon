@@ -10,6 +10,8 @@ export interface AppFilters {
   country?: Country;
   search?: string;
   mine?: boolean;
+  /** Быстрый вид «С долгом». */
+  debt?: boolean;
   /** Фильтр по конкретному менеджеру (TJ или CN) — userId */
   manager?: string;
   /** Источник заявки — сайт, Instagram, реферал и т.д. */
@@ -26,6 +28,10 @@ export interface AppFilters {
   /** QA-2: «Дубли» — лиды с одним телефоном и лиды-дубли старых сделок (руководство). */
   duplicates?: boolean;
 }
+
+/** Числа быстрых видов списка «Лиды» (те же права, что у списка). */
+export type LeadViewCounts = { all: number; mine: number; new: number; unassigned: number; debt: number };
+export const applicationViewCounts = () => api.get<LeadViewCounts>('/applications/view-counts').then((r) => r.data);
 
 export async function listApplications(filters: AppFilters = {}) {
   const { data } = await api.get<Application[]>('/applications', { params: filters });

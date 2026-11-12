@@ -9,6 +9,7 @@ import { useUI } from '../../ui/Dialogs';
 import { keys } from '../../lib/queryKeys';
 import { completeCourse, getCoursePreview } from '../../api/academy';
 import { Avatar, LevelBadge } from './academyUi';
+import BusyLabel from '../BusyLabel';
 
 /**
  * «Завершить курс»: у каждого ученика уже выбран следующий уровень (по
@@ -136,7 +137,7 @@ export default function CompleteCourseModal({
               disabled={mut.isPending}
               data-testid="course-submit"
             >
-              <Icon name="school" size={16} /> {mut.isPending ? t('common.saving') : t('academy.course.complete')}
+              <Icon name="school" size={16} /> <BusyLabel busy={mut.isPending}>{t('academy.course.complete')}</BusyLabel>
             </button>
           </div>
         </>

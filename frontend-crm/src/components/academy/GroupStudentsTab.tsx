@@ -15,6 +15,7 @@ import { getJournal, pickStudents, type JournalStudent } from '../../api/academy
 import { Avatar, FlagDots, LevelBadge, TotalBadge, leftKey, pct } from './academyUi';
 import FlagModal from './FlagModal';
 import NewAcademyStudentModal from './NewAcademyStudentModal';
+import BusyLabel from '../BusyLabel';
 
 /**
  * Ученики группы: уровень, средний итог, посещаемость, флаги, «в группе с».
@@ -374,7 +375,7 @@ function AddStudentsBox({
             </span>
           ))}
           <button className="btn btn-primary btn-sm" onClick={() => mut.mutate()} disabled={mut.isPending} data-testid="add-students-submit">
-            {mut.isPending ? t('common.saving') : `${t('common.add')} (${picked.length})`}
+            <BusyLabel busy={mut.isPending}>{`${t('common.add')} (${picked.length})`}</BusyLabel>
           </button>
         </div>
       )}

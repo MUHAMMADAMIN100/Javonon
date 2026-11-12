@@ -21,6 +21,7 @@ import {
 import { type Role } from '../api/types';
 import { useRoleLabel } from '../lib/labels';
 import { useRealtime } from '../realtime';
+import BusyLabel from '../components/BusyLabel';
 
 // Все 5 ТЗ-ролей + «общая» (для legacy fallback). Каждая роль может
 // иметь свою активную оферту с уникальными принципами работы.
@@ -223,7 +224,7 @@ function CreateForm({ role, onClose }: { role: Role | null; onClose: () => void 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn btn-sm btn-secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
         <button className="btn btn-sm btn-primary" onClick={submit} disabled={busy}>
-          {busy ? t('common.saving') : t('common.create')}
+          <BusyLabel busy={busy}>{t('common.create')}</BusyLabel>
         </button>
       </div>
     </div>
@@ -397,7 +398,7 @@ function OfferCard({
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button className="btn btn-sm btn-secondary" onClick={() => setEditing(false)} disabled={busy}>{t('common.cancel')}</button>
             <button className="btn btn-sm btn-primary" onClick={save} disabled={busy}>
-              {busy ? t('common.saving') : t('common.save')}
+              <BusyLabel busy={busy}>{t('common.save')}</BusyLabel>
             </button>
           </div>
         </>

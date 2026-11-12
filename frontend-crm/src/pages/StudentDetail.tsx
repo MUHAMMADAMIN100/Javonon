@@ -43,6 +43,8 @@ import { tjFormatFull } from '../lib/tjTime';
 import { STUDENT_LOGIN_URL } from '../lib/landingUrl';
 import StudentAcademyBlock from '../components/academy/StudentAcademyBlock';
 import { useEscClose } from '../lib/useEscClose';
+import BusyLabel from '../components/BusyLabel';
+import { DetailSkeleton } from '../components/Skeleton';
 
 function CredRow({ label, value }: { label: string; value: string }) {
   const { t } = useT();
@@ -250,7 +252,7 @@ export default function StudentDetail() {
   if (studentQuery.isError) {
     return <QueryErrorState error={studentQuery.error} backTo="/students" backLabelKey="errorState.toStudents" onRetry={() => studentQuery.refetch()} />;
   }
-  if (!student) return <Loading />;
+  if (!student) return <DetailSkeleton testId="student-skeleton" />;
 
   const isAdmin = isElevated(me);
   const assigned = !!student.managerId || !!student.chinaManagerId;
@@ -408,7 +410,7 @@ export default function StudentDetail() {
                   extra={student.email ? (
                     <div className="profile-role-actions">
                       <button type="button" className="profile-link-btn" onClick={onRegenerate} disabled={regenerating} data-testid="client-reset-password">
-                        <Icon name="refresh" size={14} /> {regenerating ? t('common.saving') : t('userDetail.action.resetPassword')}
+                        <Icon name="refresh" size={14} /> <BusyLabel busy={regenerating}>{t('userDetail.action.resetPassword')}</BusyLabel>
                       </button>
                     </div>
                   ) : undefined}

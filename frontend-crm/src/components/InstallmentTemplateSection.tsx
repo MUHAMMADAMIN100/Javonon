@@ -13,6 +13,7 @@ import {
   previewStageAmounts,
   type InstallmentTemplateStageInput,
 } from '../api/installments';
+import BusyLabel from './BusyLabel';
 
 /**
  * Шаблон рассрочки программы.
@@ -248,7 +249,7 @@ export default function InstallmentTemplateSection({
             disabled={!sumOk || !rowsValid || mut.isPending}
             onClick={onSave}
           >
-            {mut.isPending ? t('common.saving') : t('common.save')}
+            <BusyLabel busy={mut.isPending}>{t('common.save')}</BusyLabel>
           </button>
         </div>
       )}

@@ -27,6 +27,7 @@ import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
 import { useEscClose } from '../lib/useEscClose';
 import { fmtDurationRu } from '../lib/plural';
+import { CardsSkeleton } from '../components/Skeleton';
 
 // Допускаем кириллицу и латиницу в названиях программ/университетов
 // (по запросу основателя — пишут на русском тоже). Защита только от
@@ -400,7 +401,7 @@ export default function Programs() {
 
         <AnimatePresence mode="wait">
           {loading ? (
-            <Loading />
+            <CardsSkeleton count={6} testId="programs-skeleton" />
           ) : items.length === 0 ? (
             <motion.div key="e" className="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className="empty-icon"><Icon name="school" size={48} /></div>

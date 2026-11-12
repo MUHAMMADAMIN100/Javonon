@@ -9,6 +9,7 @@ import PasswordInput from './PasswordInput';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
 import { useEscClose } from '../lib/useEscClose';
+import BusyLabel from './BusyLabel';
 
 type Mode =
   | { kind: 'self' }
@@ -158,7 +159,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
                 {t('common.cancel')}
               </button>
               <button type="submit" className="btn btn-primary" disabled={busy}>
-                {busy ? t('common.saving') : t('common.save')}
+                <BusyLabel busy={busy}>{t('common.save')}</BusyLabel>
               </button>
             </div>
           </motion.form>

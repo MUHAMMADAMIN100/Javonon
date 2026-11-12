@@ -36,6 +36,10 @@ import {
   useUrlListState,
 } from '../lib/useUrlListState';
 import { useEscClose } from '../lib/useEscClose';
+import BusyLabel from '../components/BusyLabel';
+import { TableSkeleton } from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
+import QueryErrorState from '../components/QueryErrorState';
 
 type Scope = 'all' | 'mine';
 
@@ -466,11 +470,21 @@ export default function Students() {
 
         <AnimatePresence mode="wait">
           {loading ? (
-            <Loading />
+            <TableSkeleton cols={4} testId="students-skeleton" />
+          ) : studentsQuery.isError ? (
+            <QueryErrorState error={studentsQuery.error} onRetry={() => studentsQuery.refetch()} />
           ) : filteredItems.length === 0 ? (
-            <motion.div key="empty" className="empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              <div className="empty-icon"><Icon name="school" size={48} /></div>
-              {t('common.empty')}
+            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <EmptyState
+                icon={narrowed ? 'search_off' : 'school'}
+                title={narrowed ? t('students.empty.filtered') : t('students.empty')}
+                text={narrowed ? t('empty.filteredHint') : t('students.empty.hint')}
+                testId="students-empty"
+                actions={[
+                  ...(narrowed ? [{ label: t('empty.resetFilters'), onClick: () => reset(['search', 'direction', 'status', 'cabinet', 'manager', 'from', 'to']), testId: 'students-empty-reset' }] : []),
+                  ...(!founder && roleCan(me, 'students:create') ? [{ label: t('studentNew.title'), onClick: () => navigate('/students/new'), primary: !narrowed, icon: 'add', testId: 'students-empty-new' }] : []),
+                ]}
+              />
             </motion.div>
           ) : (
             <motion.div key="table" className="table-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -650,7 +664,7 @@ export default function Students() {
                   style={!reportDatesValid && !generating ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                   title={t('common.download')}
                 >
-                  {generating ? t('common.saving') : t('common.download')}
+                  <BusyLabel busy={generating}>{t('common.download')}</BusyLabel>
                 </motion.button>
               </div>
             </motion.div>

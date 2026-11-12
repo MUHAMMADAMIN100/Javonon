@@ -45,6 +45,8 @@ import { isTouchDevice } from '../lib/touch';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import DismissedMark from '../components/DismissedMark';
 import { useEscClose } from '../lib/useEscClose';
+import BusyLabel from '../components/BusyLabel';
+import { DetailSkeleton } from '../components/Skeleton';
 
 /** Отказ бэкенда закрыть сделку с неодобренными платежами (changeStatus) — его текст узнаём, чтобы показать перевод. */
 const CLOSE_WITH_PENDING_MESSAGE = 'Нельзя закрыть сделку: есть неодобренные платежи. Сначала их нужно одобрить или отклонить.';
@@ -187,7 +189,7 @@ export default function SubmissionDetail() {
     { param: 'sortPayments' },
   );
 
-  if (query.isLoading) return <div className="card" style={{ padding: 24 }}>{t('common.loading')}</div>;
+  if (query.isLoading) return <DetailSkeleton fields={6} testId="deal-skeleton" />;
   if (!s) {
     return (
       <>
@@ -1440,7 +1442,7 @@ function EditSubmissionModal({
         <div className="dialog-actions" style={{ justifyContent: 'flex-end' }}>
           <button className="btn btn-secondary" onClick={attemptClose} disabled={mut.isPending}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={onSubmit} disabled={mut.isPending}>
-            {mut.isPending ? t('common.saving') : t('common.save')}
+            <BusyLabel busy={mut.isPending}>{t('common.save')}</BusyLabel>
           </button>
         </div>
       </motion.div>
@@ -1702,7 +1704,7 @@ function EditPaymentModal({
             disabled={mut.isPending || readOnly}
             title={readOnly ? t('deal.rejectedNoEdit') : undefined}
           >
-            {mut.isPending ? t('common.saving') : t('common.save')}
+            <BusyLabel busy={mut.isPending}>{t('common.save')}</BusyLabel>
           </button>
         </div>
       </motion.div>

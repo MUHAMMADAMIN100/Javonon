@@ -5,6 +5,7 @@ import FormModal from '../FormModal';
 import { useT } from '../../lib/i18n';
 import { useUI } from '../../ui/Dialogs';
 import { decide, type AcademyStudentCard } from '../../api/academy';
+import BusyLabel from '../BusyLabel';
 
 /**
  * Решение руководства по ученику: «Отчислить» (ученик выходит из всех
@@ -74,7 +75,7 @@ export default function DecisionModal({
           onClick={() => mut.mutate()}
           data-testid="decision-submit"
         >
-          {mut.isPending ? t('common.saving') : expel ? t('academy.decision.expel') : t('academy.decision.keep')}
+          <BusyLabel busy={mut.isPending}>{expel ? t('academy.decision.expel') : t('academy.decision.keep')}</BusyLabel>
         </button>
       </div>
     </FormModal>

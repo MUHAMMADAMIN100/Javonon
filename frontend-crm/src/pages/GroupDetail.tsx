@@ -21,6 +21,7 @@ import { useGroupRemoval } from '../components/academy/useGroupRemoval';
 import { usePatternText, weekdayKey, tjWeekdayOf } from '../components/academy/academyUi';
 import { weeklyPatternOf } from '../components/academy/pattern';
 import { getGroup, updateGroup, type StudyGroupDetail } from '../api/studyGroups';
+import BusyLabel from '../components/BusyLabel';
 
 type Tab = 'journal' | 'lessons' | 'students' | 'calendar' | 'settings';
 const TABS: Tab[] = ['journal', 'lessons', 'students', 'calendar', 'settings'];
@@ -264,7 +265,7 @@ function GroupSettings({ group, canEdit, canRemove, onSaved }: {
           onClick={() => mut.mutate()}
           data-testid="gs-save"
         >
-          {mut.isPending ? t('common.saving') : t('common.save')}
+          <BusyLabel busy={mut.isPending}>{t('common.save')}</BusyLabel>
         </button>
       </div>
       </>

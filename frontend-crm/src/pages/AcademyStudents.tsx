@@ -20,6 +20,7 @@ import { listGroups } from '../api/studyGroups';
 import { listUsers } from '../api/users';
 import { AcademyStatusBadge, Avatar, FlagDots, LevelBadge, TotalBadge, pct } from '../components/academy/academyUi';
 import NewAcademyStudentModal from '../components/academy/NewAcademyStudentModal';
+import { TableSkeleton } from '../components/Skeleton';
 
 const STATUSES: AcademyStatus[] = ['ACTIVE', 'PENDING', 'EXPELLED', 'NO_GROUP'];
 const TYPES = ['ACADEMY', 'AGENCY'] as const;
@@ -217,7 +218,7 @@ export default function AcademyStudents() {
 
         <AnimatePresence mode="wait">
           {query.isLoading ? (
-            <Loading />
+            <TableSkeleton cols={4} testId="academy-students-skeleton" />
           ) : items.length === 0 ? (
             <motion.div key="empty" className="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <div className="empty-icon"><Icon name="person_book" size={48} /></div>

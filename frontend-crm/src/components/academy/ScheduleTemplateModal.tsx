@@ -9,6 +9,7 @@ import { keys } from '../../lib/queryKeys';
 import { tjToday } from '../../lib/tjTime';
 import { bulkSessions } from '../../api/studyGroups';
 import { weekdayKey } from './academyUi';
+import BusyLabel from '../BusyLabel';
 
 /**
  * Занятия по шаблону: дни недели, время, «с … по …». Пока поля
@@ -157,7 +158,7 @@ export default function ScheduleTemplateModal({
           onClick={() => createMut.mutate()}
           data-testid="tpl-create"
         >
-          {createMut.isPending ? t('common.saving') : t('academy.template.create')}
+          <BusyLabel busy={createMut.isPending}>{t('academy.template.create')}</BusyLabel>
         </button>
       </div>
     </FormModal>
