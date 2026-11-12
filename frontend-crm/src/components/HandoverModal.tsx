@@ -8,6 +8,7 @@ import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
 import CrmSelect from './CrmSelect';
 import Icon from '../Icon';
+import { useEscClose } from '../lib/useEscClose';
 
 /**
  * Окно «Уволить» / «Передать дела».
@@ -60,18 +61,7 @@ export default function HandoverModal({ target, kind, onClose, onDone }: Props) 
     if (busy) return;
     onClose();
   };
-  const closeRef = useRef(close);
-  closeRef.current = close;
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      closeRef.current();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [open]);
+  useEscClose(open, close);
 
   const d = info.data;
   const counts = d?.counts;
@@ -144,10 +134,15 @@ export default function HandoverModal({ target, kind, onClose, onDone }: Props) 
             {info.isLoading && <div className="handover-muted">{t('handover.loading')}</div>}
             {info.isError && <div className="error-banner">{t('toast.error')}</div>}
 
+            {(d?.keptSuccessful ?? 0) > 0 && (
+              <div className="handover-muted" style={{ marginBottom: 8 }} data-testid="handover-kept">
+                {t('handover.keptSuccessful').replace('{n}', String(d!.keptSuccessful))}
+              </div>
+            )}
             {counts && (
               <>
                 {nonZero.length === 0 ? (
-                  <div className="handover-muted" data-testid="handover-nothing">{t('handover.nothing')}</div>
+                  <div className="handover-muted" data-testid="handover-nothing">{t((d?.keptSuccessful ?? 0) > 0 ? 'handover.nothingOpen' : 'handover.nothing')}</div>
                 ) : (
                   <>
                     <div className="handover-label">{t('handover.has')}</div>

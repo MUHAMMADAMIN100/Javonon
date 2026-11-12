@@ -30,6 +30,8 @@ export interface BonusProgressData {
 
 export interface KpiRow {
   id: string;
+  /** Место в рейтинге (равные результаты делят место); null — результата за период нет. */
+  rank?: number | null;
   fullName: string;
   email: string;
   /** Своя роль (Настройки → Роли) — подпись вместо базовой должности. */

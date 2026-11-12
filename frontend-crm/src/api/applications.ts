@@ -121,6 +121,10 @@ export interface CreateStaffApplicationInput {
   birthday?: string;
   country?: Country;
   comment?: string;
+  /** Откуда пришёл клиент (QA-3): каналы, которые сотрудник ставит руками. */
+  source?: ApplicationSource;
+  /** Направление, если клиент его уже назвал. */
+  direction?: Direction;
   /** Кому лид (23.10.2026). Не передан — тому, кто создаёт. */
   managerId?: string;
   /** Статус сразу в форме; не передан — «Новый лид». */

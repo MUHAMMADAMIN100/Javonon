@@ -8,6 +8,7 @@ import { useT } from '../lib/i18n';
 import { roleCan } from '../lib/permissions';
 import { listApplicationsPage } from '../api/applications';
 import { listStudents } from '../api/students';
+import { listAcademyStudents } from '../api/academy';
 import { buildNavCtx, visibleGroups } from './navGroups';
 
 /**
@@ -47,6 +48,12 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
   const canLeads = roleCan(user as any, ['leads:read', 'applications:read']);
   const canStudents = roleCan(user as any, 'students:read');
   const searchOn = open && debounced.length >= 2;
+  // QA-3 (BUG-25): ученики академии — отдельный список («Ученики»); ищем их
+  // тому, кому этот раздел виден в меню (права режет сервер, как и в разделе).
+  const canAcademy = useMemo(
+    () => visibleGroups(buildNavCtx(user)).some((g) => g.items.some((it) => it.to === '/academy/students')),
+    [user],
+  );
 
   const leadsQ = useQuery({
     queryKey: ['search', 'leads', debounced],
@@ -58,6 +65,13 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
     queryKey: ['search', 'students', debounced],
     queryFn: () => listStudents({ search: debounced, limit: 6 } as any),
     enabled: searchOn && canStudents,
+    staleTime: 30_000,
+  });
+
+  const academyQ = useQuery({
+    queryKey: ['search', 'academy', debounced],
+    queryFn: () => listAcademyStudents({ search: debounced }),
+    enabled: searchOn && canAcademy,
     staleTime: 30_000,
   });
 
@@ -97,8 +111,20 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
           to: `/students/${s.id}`,
         }))
       : [];
-    return [...nav, ...leads, ...students];
-  }, [q, sections, searchOn, leadsQ.data, studentsQ.data, t]);
+    // Ученик академии, который уже показан как студент CRM, второй раз не нужен.
+    const shown = new Set((studentsQ.data ?? []).slice(0, 6).map((s: any) => s.id));
+    const academy: Hit[] = searchOn
+      ? (academyQ.data?.items ?? []).filter((s) => !shown.has(s.id)).slice(0, 6).map((s) => ({
+          key: `academy:${s.id}`,
+          group: t('search.academy'),
+          icon: 'person_book',
+          title: s.fullName,
+          sub: [s.phone, s.groups?.map((g: any) => g.name).filter(Boolean).join(', ')].filter(Boolean).join(' · '),
+          to: `/academy/students/${s.id}`,
+        }))
+      : [];
+    return [...nav, ...leads, ...students, ...academy];
+  }, [q, sections, searchOn, leadsQ.data, studentsQ.data, academyQ.data, t]);
 
   useEffect(() => { setActive(0); }, [q]);
   useEffect(() => {
@@ -127,7 +153,7 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
     }
   };
 
-  const loading = searchOn && (leadsQ.isFetching || studentsQ.isFetching);
+  const loading = searchOn && (leadsQ.isFetching || studentsQ.isFetching || academyQ.isFetching);
   let lastGroup = '';
 
   return createPortal(

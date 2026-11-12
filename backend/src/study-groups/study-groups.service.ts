@@ -141,20 +141,23 @@ export class StudyGroupsService {
     });
 
     // Ближайшее занятие и «по каким дням» — одной выборкой на все группы
-    // (4 недели вперёд), чтобы список не делал запрос на каждую карточку.
+    // (8 недель назад — 4 недели вперёд), чтобы список не делал запрос на
+    // каждую карточку. Прошлые недели нужны, чтобы отличить регулярный день
+    // от разового занятия (QA-3, BUG-38).
     const now = new Date();
-    const upcoming = groups.length
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const window = groups.length
       ? await this.prisma.classSession.findMany({
           where: {
             groupId: { in: groups.map((g) => g.id) },
             status: { not: ClassSessionStatus.CANCELLED },
-            endsAt: { gte: now },
-            startsAt: { lte: new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000) },
+            startsAt: { gte: new Date(now.getTime() - 8 * WEEK_MS), lte: new Date(now.getTime() + 4 * WEEK_MS) },
           },
           orderBy: { startsAt: 'asc' },
-          select: { groupId: true, startsAt: true, endsAt: true, topic: true },
+          select: { groupId: true, startsAt: true, endsAt: true, topic: true, fromTemplate: true },
         })
       : [];
+    const upcoming = window.filter((s) => s.endsAt.getTime() >= now.getTime());
     // Старые занятия на несколько дней («09.11 00:00 – 30.11 00:00», до проверки
     // QA №39) ещё «не кончились» и вставали «следующим занятием» в прошлом,
     // а в днях недели давали «00:00–00:00» (QA-2 №13). В расчёт идут только
@@ -166,7 +169,8 @@ export class StudyGroupsService {
     });
     return groups.map((g) => {
       const mine = sane.filter((s) => s.groupId === g.id);
-      return { ...g, nextSession: mine[0] ?? null, pattern: weeklyPattern(mine) };
+      const next = mine[0] ? { startsAt: mine[0].startsAt, endsAt: mine[0].endsAt, topic: mine[0].topic } : null;
+      return { ...g, nextSession: next, pattern: weeklyPattern(mine, window.filter((s) => s.groupId === g.id)) };
     });
   }
 
@@ -786,7 +790,7 @@ export class StudyGroupsService {
 
     const topic = dto.topic?.trim().slice(0, 200) || null;
     const res = await this.prisma.classSession.createMany({
-      data: fresh.map((s) => ({ groupId, startsAt: s.startsAt, endsAt: s.endsAt, topic })),
+      data: fresh.map((s) => ({ groupId, startsAt: s.startsAt, endsAt: s.endsAt, topic, fromTemplate: true })),
     });
     return { created: res.count, skipped };
   }

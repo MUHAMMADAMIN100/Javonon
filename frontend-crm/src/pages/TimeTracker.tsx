@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -22,6 +22,8 @@ import { useRealtimeEvent } from '../realtime';
 import { fmtDateText, tjFormatTime, TJ_TZ } from '../lib/tjTime';
 import { tr, useT } from '../lib/i18n';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import { useEscClose } from '../lib/useEscClose';
+import { checkProofFile, PROOF_ACCEPT, type ProofKind } from '../lib/proofFile';
 
 function fmtMin(min: number): string {
   if (min <= 0) return `0${tr('time.m')}`;
@@ -131,6 +133,10 @@ export default function TimeTracker() {
   const isWorking = status === 'WORKING';
   const isOnLunch = status === 'ON_LUNCH';
   const isClockedOut = !today || status === 'OFF';
+  // Сегодня уже отмечался и закончил день: «Начать» = продолжить ту же запись.
+  const resumeDay = !!today && status === 'OFF';
+  // Запоминаем на момент нажатия: после оптимистичного обновления статус уже «работаю».
+  const resumedRef = useRef(false);
 
   // Все 4 экшена — оптимистично переключают status в today.
   // Если сервер вернёт 400 (например double clock-in) — TanStack откатит.
@@ -166,12 +172,12 @@ export default function TimeTracker() {
     mutationFn: (vars) => apiClockIn(vars),
     queryKey: todayKey,
     applyOptimistic: (cur) => {
-      const patch: Partial<TimeEntry> = { status: 'WORKING', clockIn: new Date().toISOString() };
       if (!cur) {
         return {
           id: 'tmp',
           userId: '',
-          ...patch,
+          status: 'WORKING',
+          clockIn: new Date().toISOString(),
           lunchOut: null,
           lunchIn: null,
           clockOut: null,
@@ -180,10 +186,12 @@ export default function TimeTracker() {
           lateMinutes: 0,
         } as TimeEntry;
       }
-      return { ...cur, ...patch } as TimeEntry;
+      // QA-3 (BUG-30): день продолжается в той же записи — время первого
+      // прихода и опоздание остаются прежними.
+      return { ...cur, status: 'WORKING', clockOut: null } as TimeEntry;
     },
     invalidateAlso: [historyKey, keys.time.team()],
-    onSuccess: () => toast(t('time.toast.started'), 'success'),
+    onSuccess: () => toast(t(resumedRef.current ? 'time.toast.resumed' : 'time.toast.started'), 'success'),
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
   const lunchOutMut = buildMut(apiLunchOut, { status: 'ON_LUNCH', lunchOut: new Date().toISOString() }, t('time.toast.lunchOut'));
@@ -232,7 +240,7 @@ export default function TimeTracker() {
     const start = new Date(today.clockIn).getTime();
     const now = Date.now();
     const totalSinceStart = Math.floor((now - start) / 60000);
-    elapsedMin = totalSinceStart - today.totalLunchMinutes;
+    elapsedMin = totalSinceStart - today.totalLunchMinutes - (today.pausedMinutes ?? 0);
     if (isOnLunch && today.lunchOut) {
       elapsedMin -= Math.floor((now - new Date(today.lunchOut).getTime()) / 60000);
     }
@@ -285,7 +293,7 @@ export default function TimeTracker() {
               letterSpacing: '-0.04em',
               lineHeight: 1,
             }}>
-              {isClockedOut ? '00:00' : fmtMin(elapsedMin)}
+              {isClockedOut ? (today ? fmtMin(today.totalMinutes) : '00:00') : fmtMin(elapsedMin)}
             </div>
             <div style={{
               fontFamily: 'var(--font-mono)',
@@ -384,8 +392,13 @@ export default function TimeTracker() {
               style={{ fontSize: 15, padding: '14px 28px' }}
             >
               <Icon name="play_arrow" size={20} />
-              {t('time.clockIn')}
+              {t(resumeDay ? 'time.resume' : 'time.clockIn')}
             </motion.button>
+          )}
+          {resumeDay && today?.clockOut && (
+            <div style={{ flexBasis: '100%', fontSize: 13, color: 'var(--text-soft)' }} data-testid="time-resume-hint">
+              {t('time.resume.hint').replace('{time}', fmtTime(today.clockOut))}
+            </div>
           )}
           {isWorking && (
             <>
@@ -500,9 +513,11 @@ export default function TimeTracker() {
       <AnimatePresence>
         {showClockInModal && (
           <ClockInModal
+            resume={resumeDay}
             onCancel={() => setShowClockInModal(false)}
             onConfirm={(vars) => {
               setShowClockInModal(false);
+              resumedRef.current = resumeDay;
               clockInMut.mutate(vars);
             }}
           />
@@ -536,10 +551,55 @@ export default function TimeTracker() {
   );
 }
 
+/**
+ * Поле файла с проверкой ДО отправки (QA-3, BUG-29): «✓» получает только
+ * подходящий файл; неподходящий сразу даёт ошибку под полем и не выбирается.
+ */
+function ProofFileInput({
+  kind, file, onFile, capture,
+}: {
+  kind: ProofKind; file: File | null; onFile: (f: File | null) => void; capture?: boolean;
+}) {
+  const { t } = useT();
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <>
+      <input
+        type="file"
+        accept={PROOF_ACCEPT[kind]}
+        {...(capture ? { capture: 'environment' as const } : {})}
+        data-testid={`time-file-${kind}`}
+        onChange={(e) => {
+          const f = e.target.files?.[0] || null;
+          const bad = f ? checkProofFile(f, kind) : null;
+          if (bad) {
+            setErr(t(bad === 'type' ? `time.file.type.${kind}` : `time.file.${bad}`));
+            onFile(null);
+            e.target.value = '';
+            return;
+          }
+          setErr(null);
+          onFile(f);
+        }}
+        style={{ width: '100%' }}
+      />
+      {err && <div className="form-error-text" role="alert" data-testid="time-file-error" style={{ marginTop: 6 }}>{err}</div>}
+      {file && !err && (
+        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }} data-testid="time-file-ok">
+          ✓ {file.name} ({(file.size / 1024).toFixed(0)} {t('finance.kb')})
+        </div>
+      )}
+    </>
+  );
+}
+
 function ClockInModal({
+  resume,
   onCancel,
   onConfirm,
 }: {
+  /** Сегодня день уже был начат и закончен — продолжаем ту же запись. */
+  resume?: boolean;
   onCancel: () => void;
   onConfirm: (vars: { lat?: number; lon?: number; proofUrl?: string }) => void;
 }) {
@@ -549,6 +609,7 @@ function ClockInModal({
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  useEscClose(true, onCancel, uploading);
 
   const detectLocation = () => {
     if (!navigator.geolocation) {
@@ -578,7 +639,7 @@ function ClockInModal({
     if (proofFile) {
       setUploading(true);
       try {
-        const r = await uploadTimeProof(proofFile);
+        const r = await uploadTimeProof(proofFile, 'presence');
         proofUrl = r.url;
       } catch (e: any) {
         toast(e?.response?.data?.message || t('dealForm.uploadError'), 'error');
@@ -607,7 +668,7 @@ function ClockInModal({
         style={{ maxWidth: 480 }}
       >
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 8 }}>
-          {t('time.proof.title')}
+          {t(resume ? 'time.proof.titleResume' : 'time.proof.title')}
         </h3>
         <p style={{ color: 'var(--text-soft)', fontSize: 14, marginBottom: 20 }}>
           {t('time.proof.text')}
@@ -627,24 +688,13 @@ function ClockInModal({
 
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>{t('time.proof.orMedia')}</div>
-          <input
-            type="file"
-            accept="image/*,video/*"
-            capture="environment"
-            onChange={(e) => setProofFile(e.target.files?.[0] || null)}
-            style={{ width: '100%' }}
-          />
-          {proofFile && (
-            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
-              ✓ {proofFile.name} ({(proofFile.size / 1024).toFixed(0)} {t('finance.kb')})
-            </div>
-          )}
+          <ProofFileInput kind="presence" file={proofFile} onFile={setProofFile} capture />
         </div>
 
         <div className="dialog-actions">
           <button className="btn btn-secondary" onClick={onCancel} disabled={uploading}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={submit} disabled={uploading || (!coords && !proofFile)}>
-            {uploading ? t('common.uploading') : t('time.startWork')}
+            {uploading ? t('common.uploading') : t(resume ? 'time.resume' : 'time.startWork')}
           </button>
         </div>
       </motion.div>
@@ -667,6 +717,7 @@ function ExcuseModal({
   const [reason, setReason] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  useEscClose(true, onCancel, submitting);
 
   const submit = async () => {
     if (!reason.trim() && !file) {
@@ -677,7 +728,7 @@ function ExcuseModal({
     try {
       let excuseUrl: string | undefined;
       if (file) {
-        const r = await uploadTimeProof(file);
+        const r = await uploadTimeProof(file, 'excuse');
         excuseUrl = r.url;
       }
       await submitLateExcuse(entry.id, {
@@ -725,17 +776,7 @@ function ExcuseModal({
         />
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>{t('time.excuse.media')}</div>
-          <input
-            type="file"
-            accept="image/*,video/*"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            style={{ width: '100%' }}
-          />
-          {file && (
-            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
-              ✓ {file.name}
-            </div>
-          )}
+          <ProofFileInput kind="excuse" file={file} onFile={setFile} />
         </div>
 
         <div className="dialog-actions">
@@ -776,7 +817,7 @@ function LunchExcuseModal({
     try {
       let excuseUrl: string | undefined;
       if (file) {
-        const r = await uploadTimeProof(file);
+        const r = await uploadTimeProof(file, 'excuse');
         excuseUrl = r.url;
       }
       await submitLunchLateExcuse(entry.id, {
@@ -824,17 +865,7 @@ function LunchExcuseModal({
         />
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>{t('time.excuse.media')}</div>
-          <input
-            type="file"
-            accept="image/*,video/*"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            style={{ width: '100%' }}
-          />
-          {file && (
-            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-soft)' }}>
-              ✓ {file.name}
-            </div>
-          )}
+          <ProofFileInput kind="excuse" file={file} onFile={setFile} />
         </div>
 
         <div className="dialog-actions" style={{ justifyContent: 'flex-end' }}>

@@ -3984,3 +3984,13 @@ section.dark .section-head h2 em { color: var(--emerald-2); }
 /* Анкета: итог сохранения — «не сохранено: N ошибок» / «черновик, не заполнено N» (QA №29). */
 .af-save-note { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4; background: #fff7ed; color: #9a3412; }
 .af-save-note.is-bad { background: #fef2f2; color: #b91c1c; }
+
+/* QA-3, BUG-18: оформленный текст урока (lib/markdownLite). */
+.md-lite { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.md-lite-soft { color: var(--text-soft); margin: 4px 0 10px; }
+.md-lite p { margin: 0 0 6px; }
+.md-lite p:last-child, .md-lite ul:last-child, .md-lite ol:last-child { margin-bottom: 0; }
+.md-lite ul, .md-lite ol { margin: 0 0 6px; padding-left: 20px; }
+.md-lite strong { font-weight: 600; color: var(--text); }
+.md-lite code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.92em; padding: 1px 5px; border-radius: 5px; background: rgba(15, 23, 42, 0.06); }
+.md-lite a { color: var(--primary, #01368B); text-decoration: underline; }

@@ -28,6 +28,7 @@ import { hasRole, isFounder } from '../lib/roles';
 import { roleCan } from '../lib/permissions';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { fmtDateText, tjDateInput, tjToday } from '../lib/tjTime';
+import { canOpenDeals } from '../components/navGroups';
 
 /**
  * «Финансы → Доход» (часть 2, макет утверждён 10.11.2026): четыре направления.
@@ -215,6 +216,7 @@ function ContractsBoard({ data, month, monthLower, canAccept, onAccept }: {
   onAccept: (r: ContractRow) => void;
 }) {
   const { t } = useT();
+  const me = useAuth((s) => s.user);
   const narrow = useMediaQuery('(max-width: 720px)');
   const c = data.contracts;
   const waitingRows = c.rows.filter((r) => r.group === 'waiting');
@@ -359,11 +361,22 @@ function ContractsBoard({ data, month, monthLower, canAccept, onAccept }: {
           )}
           {noRate.length > 0 && <span className="inc-tile-sub">{t('finance.inc.noRateSum').replace('{sum}', noRate.map(([k, v]) => fmtMoney(v, k)).join(' + '))}</span>}
         </div>
-        <Link to="/submissions?tab=pending" className="inc-tile is-link" data-testid="inc-tile-pending">
-          <span className="inc-tile-label">{t('finance.inc.pending')}</span>
-          <span className="inc-tile-value fin-num">{c.pending.count ? moneyList(c.pending.byCurrency) : '0'}</span>
-          <span className="inc-tile-sub">{c.pending.count ? t('finance.inc.pendingSub').replace('{n}', String(c.pending.count)) : t('finance.inc.pendingNone')}</span>
-        </Link>
+        {/* QA-3 (BUG-36): ссылка — только тем, кому открыт раздел «Сделки»;
+            остальным (бухгалтеру) — та же карточка без перехода и с пояснением. */}
+        {canOpenDeals(me) ? (
+          <Link to="/submissions?tab=pending" className="inc-tile is-link" data-testid="inc-tile-pending">
+            <span className="inc-tile-label">{t('finance.inc.pending')}</span>
+            <span className="inc-tile-value fin-num">{c.pending.count ? moneyList(c.pending.byCurrency) : '0'}</span>
+            <span className="inc-tile-sub">{c.pending.count ? t('finance.inc.pendingSub').replace('{n}', String(c.pending.count)) : t('finance.inc.pendingNone')}</span>
+          </Link>
+        ) : (
+          <div className="inc-tile" data-testid="inc-tile-pending">
+            <span className="inc-tile-label">{t('finance.inc.pending')}</span>
+            <span className="inc-tile-value fin-num">{c.pending.count ? moneyList(c.pending.byCurrency) : '0'}</span>
+            <span className="inc-tile-sub">{c.pending.count ? t('finance.inc.pendingSub').replace('{n}', String(c.pending.count)) : t('finance.inc.pendingNone')}</span>
+            {c.pending.count > 0 && <span className="inc-tile-sub" data-testid="inc-tile-pending-note">{t('finance.inc.pendingNoAccess')}</span>}
+          </div>
+        )}
       </div>
 
       {c.overdue.length > 0 && (

@@ -8,6 +8,7 @@ import Icon from '../Icon';
 import PasswordInput from './PasswordInput';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
+import { useEscClose } from '../lib/useEscClose';
 
 type Mode =
   | { kind: 'self' }
@@ -46,18 +47,7 @@ export default function ChangePasswordModal({ open, mode, onClose }: Props) {
   // вешается один раз на открытие, а close зависит от busy. stopPropagation:
   // на телефоне под окном открыта выезжающая панель — её Esc тоже закрывает,
   // а одно нажатие должно закрыть только окно.
-  const closeRef = useRef(close);
-  closeRef.current = close;
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      closeRef.current();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [open]);
+  useEscClose(open, close);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

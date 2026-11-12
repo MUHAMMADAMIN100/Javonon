@@ -43,6 +43,7 @@ import { isFounder, displayRoleLabel, isTeacherOnly } from '../lib/roles';
 import { roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
+import { useEscClose } from '../lib/useEscClose';
 import { ROLE_LABEL, type Role } from '../api/types';
 import DismissedMark from '../components/DismissedMark';
 
@@ -95,6 +96,8 @@ export default function Chat() {
   const unreadMap = useChatUnreadMap();
   const { toast, confirm } = useUI();
   const me = useAuth((s) => s.user);
+  // Основатель смотрит CRM глазами сотрудника: чат — только чтение (набл. 8, QA-3).
+  const readOnlyChat = !!(me as any)?.impersonation;
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeId, setActiveId] = useState<string | null>(searchParams.get('room'));
@@ -1921,6 +1924,7 @@ export default function Chat() {
             {!editing && <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
+              disabled={readOnlyChat}
               title={t('chat.attach')}
               style={{
                 width: 40, height: 40, borderRadius: '50%',
@@ -1951,14 +1955,16 @@ export default function Chat() {
               onChange={onInputChange}
               onKeyDown={onInputKeyDown}
               onPaste={onPaste}
-              placeholder={t('chat.placeholder')}
+              // «Войти как»: писать от имени сотрудника нельзя (сервер — 403).
+              disabled={readOnlyChat}
+              placeholder={readOnlyChat ? t('chat.readonlyImpersonation') : t('chat.placeholder')}
             />
             <button
               type="submit"
               className="chat-send-btn"
               data-testid="chat-send"
               aria-label={editing ? t('common.save') : t('common.send')}
-              disabled={editing ? (!input.trim() && !editing.attachments?.length) : (!input.trim() && pendingFiles.length === 0)}
+              disabled={readOnlyChat || (editing ? (!input.trim() && !editing.attachments?.length) : (!input.trim() && pendingFiles.length === 0))}
             >
               <Icon name={editing ? 'check' : 'send'} size={18} />
             </button>
@@ -2511,6 +2517,7 @@ function DeleteDirectDialog({ peerName, onCancel, onConfirm, allowBoth = true }:
 }) {
   const { t } = useT();
   const [forAll, setForAll] = useState(false);
+  useEscClose(true, onCancel);
   return (
     <motion.div
       className="dialog-backdrop"

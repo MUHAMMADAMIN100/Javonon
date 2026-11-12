@@ -400,6 +400,27 @@ export class SalesService {
   }
 
   async deleteStage(id: string) {
+    const stage = await this.prisma.pipelineStage.findUnique({
+      where: { id },
+      select: { id: true, name: true, pipelineId: true, isClosingStage: true },
+    });
+    if (!stage) throw new NotFoundException('Этап не найден — возможно, он уже удалён');
+    // QA-3 (BUG-16): единственный финальный этап («Закрыт ✓») удалить нельзя —
+    // без него лиды воронки некуда завершать, и «зачислено» перестаёт считаться.
+    if (stage.isClosingStage) {
+      const otherFinal = await this.prisma.pipelineStage.count({
+        where: { pipelineId: stage.pipelineId, isClosingStage: true, id: { not: id } },
+      });
+      if (otherFinal === 0) {
+        throw new BadRequestException(
+          `«${stage.name}» — финальный этап воронки, удалить его нельзя. Сначала отметьте финальным другой этап.`,
+        );
+      }
+    }
+    const total = await this.prisma.pipelineStage.count({ where: { pipelineId: stage.pipelineId } });
+    if (total <= 1) {
+      throw new BadRequestException('В воронке должен остаться хотя бы один этап. Удалите воронку целиком, если она не нужна.');
+    }
     await this.prisma.pipelineStage.delete({ where: { id } });
     return { ok: true };
   }

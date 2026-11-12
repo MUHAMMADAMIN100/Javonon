@@ -44,6 +44,8 @@ export type HandoverInfo = {
   user: { id: string; fullName: string; isActive: boolean };
   counts: HandoverCounts;
   total: number;
+  /** Успешные лиды сотрудника: не передаются, остаются его результатом. */
+  keptSuccessful?: number;
   /** Сколько менеджеров доступно режиму «автоматически». */
   autoTargets: { salesManagers: number; clientManagers: number };
   /** Действующие сотрудники, кому можно передать всё. */

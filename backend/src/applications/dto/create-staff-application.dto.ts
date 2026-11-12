@@ -11,7 +11,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ApplicationSource, ApplicationStatus, ContactChannel, Country } from '@prisma/client';
+import { ApplicationSource, ApplicationStatus, ContactChannel, Country, Direction } from '@prisma/client';
 import { NO_HTML_RE } from './create-application.dto';
 import { ACTIVE_APPLICATION_STATUSES } from '../../common/application-status';
 
@@ -129,6 +129,11 @@ export class CreateStaffApplicationDto {
   // Канал привлечения со слов клиента. Опционален; без него — OTHER.
   // @IsIn, а не @IsEnum(ApplicationSource): полный enum пропустил бы
   // LANDING_FORM / SELF_REGISTRATION / REFERRAL (см. блок выше).
+  /** QA-3 (BUG-07): направление можно указать сразу при создании лида. */
+  @IsOptional()
+  @IsEnum(Direction, { message: 'Выберите направление из списка' })
+  direction?: Direction;
+
   @IsOptional()
   @IsIn(STAFF_ALLOWED_SOURCES as readonly string[], {
     message: 'Недопустимый источник для лида, введённого вручную',

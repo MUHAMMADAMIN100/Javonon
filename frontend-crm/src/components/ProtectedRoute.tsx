@@ -42,22 +42,37 @@ export const TEACHER_HOME = '/groups';
 const under = (pathname: string, prefix: string) =>
   prefix.endsWith('/') ? pathname.startsWith(prefix) : pathname === prefix || pathname.startsWith(prefix + '/');
 
+/** Домашние адреса: с них учителя ведём в его группы (это его «главная»), а не пишем «нет доступа». */
+const HOME_PATHS = ['/', '/dashboard'];
+
+/**
+ * Закрыт ли раздел этому человеку. QA-3 (BUG-28): раньше запрещённая страница
+ * по прямой ссылке МОЛЧА открывала дашборд (учителю — «Учебные группы»), и
+ * человек думал, что ссылка сломана. Теперь внутри обычной рамки CRM (меню на
+ * месте) показывается «Нет доступа к разделу» — см. Layout. Сама страница при
+ * этом не монтируется и запросов к серверу не шлёт.
+ */
+export function routeDenied(user: any, pathname: string): boolean {
+  if (!user) return false;
+  if (isTeacherOnly(user)) {
+    if (HOME_PATHS.includes(pathname)) return false; // уйдёт редиректом в группы
+    return !TEACHER_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+  }
+  const ctx = buildNavCtx(user);
+  const detail = DETAIL_RULES.find((r) => under(pathname, r.prefix));
+  if (detail) return !detail.visible(ctx);
+  const item = NAV_ITEMS.find((i) => under(pathname, i.to));
+  if (!item || item.to === '/dashboard') return false;
+  return !item.visible(ctx);
+}
+
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const user = useAuth((s) => s.user);
   const location = useLocation();
   if (!user) return <Navigate to="/login" replace />;
-
-  if (isTeacherOnly(user as any)) {
-    const allowed = TEACHER_PREFIXES.some((p) => location.pathname === p || location.pathname.startsWith(p + '/'));
-    return allowed ? <>{children}</> : <Navigate to={TEACHER_HOME} replace />;
+  // Учитель на «главной» — в свои группы: дашборда у него нет.
+  if (isTeacherOnly(user as any) && HOME_PATHS.includes(location.pathname)) {
+    return <Navigate to={TEACHER_HOME} replace />;
   }
-
-  const path = location.pathname;
-  const ctx = buildNavCtx(user);
-  const detail = DETAIL_RULES.find((r) => under(path, r.prefix));
-  if (detail) return detail.visible(ctx) ? <>{children}</> : <Navigate to="/dashboard" replace />;
-
-  const item = NAV_ITEMS.find((i) => under(path, i.to));
-  if (!item || item.to === '/dashboard') return <>{children}</>;
-  return item.visible(ctx) ? <>{children}</> : <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
 }

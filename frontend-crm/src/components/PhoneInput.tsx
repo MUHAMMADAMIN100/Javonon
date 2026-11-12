@@ -77,9 +77,11 @@ interface Props {
   error?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  /** data-testid поля с номером (без кода страны). */
+  testId?: string;
 }
 
-export default function PhoneInput({ value, onChange, error, placeholder, disabled }: Props) {
+export default function PhoneInput({ value, onChange, error, placeholder, disabled, testId }: Props) {
   const { t } = useT();
   const [countryIdx, setCountryIdx] = useState(() => findCountryByPhone(value || '+992').idx);
   const [local, setLocal] = useState(() => findCountryByPhone(value || '+992').rest);
@@ -327,6 +329,7 @@ export default function PhoneInput({ value, onChange, error, placeholder, disabl
         autoComplete="tel-national"
         value={local}
         disabled={disabled}
+        data-testid={testId}
         placeholder={placeholder || '9'.repeat(country.minDigits)}
         style={inputStyle}
         onChange={(e) => {

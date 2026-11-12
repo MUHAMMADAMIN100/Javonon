@@ -16,6 +16,7 @@ import { tjFormatDate } from '../lib/tjTime';
 import Loading from './Loading';
 import Icon from '../Icon';
 import { SortSelect, SortTh, sortRows, useTableSort } from './TableSort';
+import { useEscClose } from '../lib/useEscClose';
 
 /**
  * Окно «что стоит за числами» по клику на строку рейтинга KPI.
@@ -63,13 +64,7 @@ export default function KpiDetailsModal({
   });
   const d = query.data;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscClose(true, onClose);
 
   const errStatus = (query.error as any)?.response?.status;
   const tabs: Array<{ key: Tab; label: string; count: number | null }> = [

@@ -64,10 +64,15 @@ export class ExcusesService {
         orderBy: { lunchLateExcuseAt: 'desc' },
       }),
     ]);
-    const items = [
+    const raw = [
       ...arrival.map((e) => ({ ...e, kind: 'arrival' as const })),
       ...lunch.map((e) => ({ ...e, kind: 'lunch' as const })),
     ];
+    // QA-3 (BUG-32): сумма штрафа «если отклонить» — чтобы окно подтверждения
+    // называло реальную цифру, а не «по шкале».
+    const items = await Promise.all(
+      raw.map(async (e) => ({ ...e, penaltyIfRejected: await this.penalties.previewLatePenalty(e.id, e.kind) })),
+    );
     return items.sort((a, b) => {
       const aT = (a.kind === 'arrival' ? a.lateExcuseAt : a.lunchLateExcuseAt)?.getTime() ?? 0;
       const bT = (b.kind === 'arrival' ? b.lateExcuseAt : b.lunchLateExcuseAt)?.getTime() ?? 0;

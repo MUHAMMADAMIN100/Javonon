@@ -61,14 +61,39 @@ export class FinancePlanningService {
     const items: PlanItem[] = [];
     const overdueOld: PlanItem[] = [];
 
-    // ── факт: операции месяца ──
-    const txs = await this.prisma.transaction.findMany({
-      where: { reversedAt: null, date: { gte: from, lte: to } },
-      select: {
-        id: true, type: true, category: true, amount: true, currency: true, date: true, comment: true, payerName: true,
-        productCategoryEnum: true, subscriptionId: true, debtId: true, student: { select: { fullName: true } }, manager: { select: { fullName: true } },
-      },
-    });
+    // QA-3 (набл. 13): все выборки месяца — одним заходом, а не друг за другом
+    // (на боевой базе каждый лишний круг — сотни миллисекунд).
+    const needPlan = ym >= curYm;
+    const prev = addYm(ym, -1);
+    const [txs, subs, planParts] = await Promise.all([
+      // ── факт: операции месяца ──
+      this.prisma.transaction.findMany({
+        where: { reversedAt: null, date: { gte: from, lte: to } },
+        select: {
+          id: true, type: true, category: true, amount: true, currency: true, date: true, comment: true, payerName: true,
+          productCategoryEnum: true, subscriptionId: true, debtId: true, student: { select: { fullName: true } }, manager: { select: { fullName: true } },
+        },
+      }),
+      // ── план: неоплаченные этапы сделок ──
+      this.prisma.saleSubmission.findMany({
+        where: { status: 'ACTIVE', paymentStages: { some: { status: { not: 'PAID' }, dueDate: { lte: to } } } },
+        select: {
+          id: true, totalAmount: true, currency: true, newStudentName: true, managerId: true,
+          student: { select: { fullName: true } },
+          paymentStages: { orderBy: { order: 'asc' }, select: { id: true, order: true, amount: true, dueDate: true, status: true } },
+          payments: { where: { status: 'APPROVED' }, select: { amount: true } },
+        },
+      }),
+      // ── план расходов: только для текущего и будущих месяцев ──
+      needPlan
+        ? Promise.all([
+            this.payroll.sheet(prev, 60_000),
+            this.expense.subscriptions(ym),
+            this.expense.debts(ym),
+            this.expense.partnersBoard(ym),
+          ])
+        : Promise.resolve(null),
+    ]);
     const grouped = new Map<string, PlanItem>();
     for (const t of txs) {
       const date = tjLocalDay(t.date);
@@ -92,16 +117,6 @@ export class FinancePlanningService {
     }
     items.push(...grouped.values());
 
-    // ── план: неоплаченные этапы сделок ──
-    const subs = await this.prisma.saleSubmission.findMany({
-      where: { status: 'ACTIVE', paymentStages: { some: { status: { not: 'PAID' }, dueDate: { lte: to } } } },
-      select: {
-        id: true, totalAmount: true, currency: true, newStudentName: true, managerId: true,
-        student: { select: { fullName: true } },
-        paymentStages: { orderBy: { order: 'asc' }, select: { id: true, order: true, amount: true, dueDate: true, status: true } },
-        payments: { where: { status: 'APPROVED' }, select: { amount: true } },
-      },
-    });
     for (const s of subs) {
       const A = s.payments.reduce((x, p) => x + p.amount, 0);
       const name = s.student?.fullName || s.newStudentName || '—';
@@ -125,15 +140,8 @@ export class FinancePlanningService {
       }
     }
 
-    // ── план расходов: только для текущего и будущих месяцев ──
-    if (ym >= curYm) {
-      const prev = addYm(ym, -1);
-      const [sheet, subsList, debts, partners] = await Promise.all([
-        this.payroll.sheet(prev),
-        this.expense.subscriptions(ym),
-        this.expense.debts(ym),
-        this.expense.partnersBoard(ym),
-      ]);
+    if (planParts) {
+      const [sheet, subsList, debts, partners] = planParts;
       if (sheet.cards.toPay > 0.005) {
         const date = dayIn(ym, 10);
         items.push({ id: `salary-${prev}`, kind: 'salary', dir: 'out', date, currency: 'TJS', amount: sheet.cards.toPay, status: status(date),

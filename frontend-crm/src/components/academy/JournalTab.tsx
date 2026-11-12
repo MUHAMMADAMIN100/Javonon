@@ -669,27 +669,31 @@ function PctInput({
   const { t } = useT();
   const { toast } = useUI();
   const [text, setText] = useState(value === null ? '' : String(value));
-  useEffect(() => setText(value === null ? '' : String(value)), [value]);
+  // QA-3 (BUG-37): неверное значение («150», «-5», «75.5») раньше стиралось, а
+  // сообщение мелькало тостом в углу — учитель его не видел. Теперь введённое
+  // остаётся в ячейке, она краснеет, и под ней стоит подсказка, пока значение
+  // не исправят (Esc — вернуть прежнее).
+  const [bad, setBad] = useState(false);
+  useEffect(() => { setText(value === null ? '' : String(value)); setBad(false); }, [value]);
+  const rangeText = t('academy.journal.range').replace('{max}', String(PCT_MAX));
   const commit = () => {
     const trimmed = text.trim();
-    // QA-2: «−5» сохранялось как 5, «8a0» — как 80. Теперь — только целое 0…max.
-    if (trimmed !== '' && !/^\d{1,3}$/.test(trimmed)) {
-      toast(t('academy.journal.range').replace('{max}', String(PCT_MAX)), 'error');
-      setText(value === null ? '' : String(value));
+    const ok = trimmed === '' || (/^\d{1,3}$/.test(trimmed) && Number(trimmed) <= PCT_MAX);
+    if (!ok) {
+      if (!bad) toast(rangeText, 'error');
+      setBad(true);
       return;
     }
+    setBad(false);
     const next = trimmed === '' ? null : Number(trimmed);
-    if (next !== null && (!Number.isInteger(next) || next < 0 || next > PCT_MAX)) {
-      toast(t('academy.journal.range').replace('{max}', String(PCT_MAX)), 'error');
-      setText(value === null ? '' : String(value));
-      return;
-    }
     if (next !== value) onSave(next);
   };
   return (
-    <span className={`acad-pct${disabled ? ' is-disabled' : ''}`} title={title}>
+    <span className={`acad-pct${disabled ? ' is-disabled' : ''}${bad ? ' has-error' : ''}`} title={title}>
+      {bad && <span className="acad-pct-err" role="alert" data-testid="journal-cell-error">{rangeText}</span>}
       <input
         className="acad-pct-input"
+        aria-invalid={bad}
         inputMode="numeric"
         value={text}
         disabled={disabled}
@@ -698,7 +702,7 @@ function PctInput({
         data-row={row}
         data-col={col}
         aria-label={testId}
-        onChange={(e) => setText(e.target.value.slice(0, 4))}
+        onChange={(e) => { setText(e.target.value.slice(0, 6)); if (bad) setBad(false); }}
         onBlur={commit}
         onFocus={(e) => e.currentTarget.select()}
         onKeyDown={(e) => {
@@ -710,8 +714,12 @@ function PctInput({
             } else (e.target as HTMLInputElement).blur();
           }
           if (e.key === 'Escape') {
-            setText(value === null ? '' : String(value));
-            (e.target as HTMLInputElement).blur();
+            const prev = value === null ? '' : String(value);
+            setText(prev);
+            setBad(false);
+            // blur вызовет commit со старым текстом из замыкания — подменяем значение поля сразу.
+            (e.target as HTMLInputElement).value = prev;
+            requestAnimationFrame(() => (e.target as HTMLInputElement).blur());
           }
         }}
       />

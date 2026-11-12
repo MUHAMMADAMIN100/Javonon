@@ -22,13 +22,20 @@ import { TimeTrackingService } from './time-tracking.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
 import { assertFileContent } from '../common/file-sniff';
 
-// Фото-доказательство опоздания (ТЗ §5) — только картинки + PDF.
+// Подтверждение присутствия — фото или видео; причина опоздания — ещё и PDF
+// (справка). QA-3 (BUG-29): окно предлагало «фото/видео», а сервер видео
+// отклонял «Можно: JPG, PNG, WEBP, HEIC, PDF». Список — один на форму и
+// сервер; содержимое проверяется после сохранения (assertFileContent).
 // Раньше storage принимал любой тип файла (включая .exe/.html), что
 // открывало stored-XSS если файл потом отдавался как static.
-const TIME_PROOF_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf']);
-const TIME_PROOF_MIME = new Set([
-  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf',
+const TIME_PROOF_EXT = new Set([
+  '.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif', '.pdf', '.mp4', '.mov', '.webm', '.m4v', '.3gp',
 ]);
+const TIME_PROOF_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf',
+  'video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v', 'video/3gpp',
+]);
+const TIME_PROOF_HINT = 'Можно фото (JPG, PNG, WEBP, HEIC) или видео (MP4, MOV, WEBM)';
 
 const timeProofStorage = diskStorage({
   destination: process.env.UPLOADS_DIR || './uploads',
@@ -41,7 +48,7 @@ const timeProofStorage = diskStorage({
 const timeProofFilter: any = (_req: any, file: any, cb: any) => {
   const ext = (extname(file.originalname || '') || '').toLowerCase();
   if (!TIME_PROOF_EXT.has(ext) || !TIME_PROOF_MIME.has(file.mimetype)) {
-    return cb(new BadRequestException('Недопустимый тип файла. Можно: JPG, PNG, WEBP, HEIC, PDF.'), false);
+    return cb(new BadRequestException(`Этот файл не подходит. ${TIME_PROOF_HINT}; к причине опоздания — ещё PDF.`), false);
   }
   cb(null, true);
 };
@@ -115,9 +122,12 @@ export class TimeTrackingController {
       limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800', 10) }, // 50MB
     }),
   )
-  uploadProof(@UploadedFile() file: Express.Multer.File) {
+  uploadProof(@UploadedFile() file: Express.Multer.File, @Query('kind') kind?: string) {
     if (!file) throw new BadRequestException('Файл не загружен');
-    assertFileContent(file, ['image', 'video'], 'Подтверждение');
+    // kind=excuse — причина опоздания (можно PDF-справку); иначе — подтверждение
+    // присутствия: только фото или видео с места.
+    if (kind === 'excuse') assertFileContent(file, ['image', 'video', 'pdf'], 'Файл к причине опоздания');
+    else assertFileContent(file, ['image', 'video'], 'Подтверждение присутствия');
     return {
       url: `/uploads/${file.filename}`,
       originalName: file.originalname,

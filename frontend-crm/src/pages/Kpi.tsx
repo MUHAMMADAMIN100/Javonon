@@ -71,11 +71,12 @@ export default function Kpi() {
     queryFn: () => leaderboard(params),
   });
   const rows = kpiQuery.data ?? [];
-  // Место в рейтинге — порядок, в котором строки пришли с сервера. При
-  // сортировке по другой колонке медали остаются у своих людей.
-  const rankOf = new Map(rows.map((r, i) => [r.id, i]));
+  // Место считает сервер (продажи → зачислено → конверсия → лиды; равные
+  // делят место; без результата места нет). При сортировке по другой колонке
+  // места остаются у своих людей.
+  const rankOf = new Map<string, number | null>(rows.map((r, i) => [r.id, r.rank === undefined ? i + 1 : r.rank]));
   const sort = useTableSort(rows, [
-    { key: 'rank', label: t('kpi.col.rank'), type: 'number', value: (r) => rankOf.get(r.id) },
+    { key: 'rank', label: t('kpi.col.rank'), type: 'number', value: (r) => rankOf.get(r.id) ?? 9999 },
     { key: 'employee', label: t('kpi.col.employee'), value: (r) => r.fullName },
     { key: 'applications', label: t('kpi.col.applications'), type: 'number', value: (r) => r.applicationsAssigned },
     { key: 'enrolled', label: t('kpi.col.enrolled'), type: 'number', value: (r) => r.applicationsEnrolled },
@@ -87,9 +88,10 @@ export default function Kpi() {
     { key: 'tasks', label: t('kpi.col.tasks'), type: 'number', value: (r) => r.tasksDone },
   ]);
 
-  const top = rows[0];
+  // Лидер — только тот, у кого есть результат; при нулях у всех лидера нет.
+  const top = rows[0] && rankOf.get(rows[0].id) != null ? rows[0] : null;
   const myRow = rows.find((r) => r.id === me?.id);
-  const myRank = myRow ? rows.findIndex((r) => r.id === me?.id) + 1 : 0;
+  const myRank = myRow ? rankOf.get(myRow.id) ?? null : null;
 
   return (
     <>
@@ -123,7 +125,7 @@ export default function Kpi() {
           style={{ marginBottom: 32 }}
         >
           <div className="bento-card feature span-3 row-2">
-            <span className="bento-num">{t('kpi.label.thisRank')} · #{myRank}</span>
+            <span className="bento-num" data-testid="kpi-my-rank">{t('kpi.label.thisRank')} · {myRank != null ? `#${myRank}` : t('kpi.rank.none')}</span>
             <div style={{ marginTop: 'auto' }}>
               <FitNumber testId="kpi-my-sales" style={{
                 fontFamily: 'var(--font-display)',
@@ -169,6 +171,14 @@ export default function Kpi() {
         </div>
       )}
 
+      {/* Нет результата ни у кого — честно «лидера нет», а не случайный «топ-1». */}
+      {showTop && !top && rows.length > 0 && (
+        <div className="card kpi-top-card" data-testid="kpi-no-leader" style={{ marginBottom: 20 }}>
+          <div className="kpi-top-label">{t('kpi.label.topPerformer')}</div>
+          <div className="kpi-top-name">{t('kpi.noLeader')}</div>
+          <div className="kpi-top-role">{t('kpi.noLeader.hint')}</div>
+        </div>
+      )}
       {/* Top performer banner for ADMIN */}
       {showTop && top && (
         <motion.div
@@ -231,7 +241,7 @@ export default function Kpi() {
             )}
             {sort.sorted.map((r, i) => {
               const isMe = r.id === me?.id;
-              const rank = rankOf.get(r.id) ?? i;
+              const rank = rankOf.get(r.id) ?? null;
               return (
                 <tr
                   key={r.id}
@@ -253,15 +263,18 @@ export default function Kpi() {
                       }
                     : {})}
                 >
-                  <td className={`kpi-c-rank${rank < 3 ? ' is-medal' : ''}`} style={{
+                  <td className={`kpi-c-rank${rank != null && rank <= 3 ? ' is-medal' : ''}`} style={{
                     fontFamily: 'var(--font-display)',
                     fontWeight: 500,
                     fontSize: 18,
                     letterSpacing: '-0.02em',
-                    color: rank < 3 ? 'var(--primary-dark)' : 'var(--text-light)',
+                    color: rank != null && rank <= 3 ? 'var(--primary-dark)' : 'var(--text-light)',
                   }}>
-                    {/* Места — метками, а не эмодзи-медалями (редизайн 2026). */}
-                    <span className={`kpi-rank r${Math.min(rank + 1, 4)}`}>#{rank + 1}</span>
+                    {/* Места — метками, а не эмодзи-медалями (редизайн 2026).
+                        Без результата за период места нет — «—». */}
+                    {rank != null
+                      ? <span className={`kpi-rank r${Math.min(rank, 4)}`} data-testid={`kpi-rank-${i}`}>#{rank}</span>
+                      : <span className="kpi-rank r4" title={t('kpi.rank.noneHint')} data-testid={`kpi-rank-${i}`}>—</span>}
                   </td>
                   <td className="kpi-c-who">
                     <div className="kpi-name" style={{ fontWeight: 500 }}>{r.fullName} {isMe && <span className="kpi-you" style={{ fontFamily: 'Times New Roman, Georgia, serif', fontStyle: 'italic', color: 'var(--primary-dark)' }}>{t('kpi.label.itsYou')}</span>}</div>
@@ -317,6 +330,7 @@ export default function Kpi() {
         </table>
       </div>
       <p className="kpi-cols-note" data-testid="kpi-cols-note">{t('kpi.colsNote')}</p>
+      <p className="kpi-cols-note" data-testid="kpi-rank-rule">{t('kpi.rankRule')}</p>
       {/* Сверка с дашбордом: что не вошло в сумму по сотрудникам. */}
       {showTop && <KpiOutsideNote params={params} />}
       <AnimatePresence>

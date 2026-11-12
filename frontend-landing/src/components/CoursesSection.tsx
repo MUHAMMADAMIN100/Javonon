@@ -10,6 +10,7 @@ import {
 } from '../studentApi';
 import Loading from './Loading';
 import Icon from '../Icon';
+import { MarkdownLite } from '../lib/markdownLite';
 
 export default function CoursesSection() {
   const [my, setMy] = useState<StudentCourse[]>([]);
@@ -84,14 +85,7 @@ export default function CoursesSection() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 500, fontSize: 16, marginBottom: 4 }}>{l.title}</div>
-                  {l.content && (
-                    <div style={{
-                      fontSize: 14,
-                      color: 'var(--text-soft)',
-                      whiteSpace: 'pre-wrap',
-                      marginBottom: 10,
-                    }}>{l.content}</div>
-                  )}
+                  {l.content && <MarkdownLite text={l.content} className="md-lite-soft" />}
                   {l.videoUrl && (
                     <a
                       href={l.videoUrl}

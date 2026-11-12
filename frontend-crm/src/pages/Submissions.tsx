@@ -329,6 +329,8 @@ function DealsList<T>({
 
 function MySubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
   const { t } = useT();
+  // QA-3 (BUG-34): подсказка «Нажмите „Новая сделка“» — только тем, у кого кнопка есть.
+  const canCreateDeal = roleCan(useAuth((s) => s.user), 'submissions:create');
   const p = params(f);
   const query = useQuery({
     queryKey: ['submissions', 'mine', p],
@@ -346,7 +348,7 @@ function MySubmissions({ f, narrowed }: { f: DealFilters; narrowed: boolean }) {
       query={query}
       totalQuery={narrowed ? totalQuery : query}
       narrowed={narrowed}
-      emptyText={t('deals.empty.mine')}
+      emptyText={t(canCreateDeal ? 'deals.empty.mine' : 'deals.empty.mineView')}
       render={(s: SaleSubmission) => <SubmissionCard key={s.id} s={s} />}
     />
   );

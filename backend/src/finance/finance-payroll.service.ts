@@ -61,11 +61,19 @@ export class FinancePayrollService {
     this.sheetCache.clear();
   }
 
-  async sheet(ymRaw?: string) {
+  /**
+   * maxAgeMs — сколько можно жить ответу из кэша. Экран «Зарплата» берёт
+   * свежую ведомость (2 с — только чтобы один экран не считал её трижды).
+   * «Планированию» нужна одна цифра прошлого месяца («осталось выплатить»):
+   * ему хватает минуты — выплаты и авансы кэш сбрасывают сами
+   * (invalidateSheet), а пересчёт всех сотрудников на каждое открытие
+   * «Планирования» и давал 8–10 секунд (QA-3, набл. 13).
+   */
+  async sheet(ymRaw?: string, maxAgeMs = 2_000) {
     const ym = ymRaw || (await this.defaultYm());
     if (!YM_RE.test(ym)) throw new BadRequestException('Месяц в формате ГГГГ-ММ');
     const hit = this.sheetCache.get(ym);
-    if (hit && Date.now() - hit.at < 2_000) return hit.p;
+    if (hit && Date.now() - hit.at < maxAgeMs) return hit.p;
     const p = this.buildSheet(ym);
     this.sheetCache.set(ym, { at: Date.now(), p });
     p.catch(() => this.sheetCache.delete(ym));
@@ -83,10 +91,12 @@ export class FinancePayrollService {
         orderBy: { date: 'asc' },
         select: { id: true, amount: true, date: true, managerId: true, salaryKind: true, comment: true, account: { select: { id: true, name: true } } },
       }),
-      this.prisma.user.findMany({ select: { id: true, customRole: { select: { name: true } } } }),
+      this.prisma.user.findMany({ select: { id: true, customRole: { select: { name: true, isActive: true } } } }),
     ]);
-    // Должность — название своей роли сотрудника (если есть).
-    const positionOf = new Map<string, string | null>(users.map((u) => [u.id, u.customRole?.name ?? null]));
+    // Должность — название своей роли сотрудника (если есть и роль действует).
+    const positionOf = new Map<string, string | null>(
+      users.map((u) => [u.id, u.customRole && u.customRole.isActive !== false ? u.customRole.name : null]),
+    );
     const byUser = new Map<string, typeof salaryTx>();
     for (const t of salaryTx) {
       if (!t.managerId) continue;

@@ -3,6 +3,7 @@ import { queryClient } from '../lib/queryClient';
 import { AnimatePresence, motion } from 'framer-motion';
 import Icon from '../Icon';
 import { useT } from '../lib/i18n';
+import { useEscClose } from '../lib/useEscClose';
 
 type ConfirmOptions = {
   title?: string;
@@ -49,6 +50,8 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
     dialog.resolve(result);
     setDialog(null);
   };
+  // Esc = «Отмена» (QA-3): подтверждение — верхнее окно, оно и закрывается.
+  useEscClose(!!dialog, () => closeDialog(false));
 
   const toast = useCallback((message: string, kind: ToastKind = 'info') => {
     const show = () => {

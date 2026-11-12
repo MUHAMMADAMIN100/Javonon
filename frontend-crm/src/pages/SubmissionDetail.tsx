@@ -39,14 +39,15 @@ import PaymentStagesSection from '../components/PaymentStagesSection';
 import BackButton from '../components/BackButton';
 import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
 import { keys } from '../lib/queryKeys';
-import { tjDateInput, tjFormatDate, tjToday } from '../lib/tjTime';
+import { nextDueError, nextDueMin, tjDateInput, tjFormatDate, tjToday } from '../lib/tjTime';
 import { useT } from '../lib/i18n';
 import { isTouchDevice } from '../lib/touch';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import DismissedMark from '../components/DismissedMark';
+import { useEscClose } from '../lib/useEscClose';
 
 /** Отказ бэкенда закрыть сделку с неодобренными платежами (changeStatus) — его текст узнаём, чтобы показать перевод. */
-const CLOSE_WITH_PENDING_MESSAGE = 'Нельзя закрыть сделку: есть неодобренные платежи. Сначала основатель должен одобрить или отклонить их.';
+const CLOSE_WITH_PENDING_MESSAGE = 'Нельзя закрыть сделку: есть неодобренные платежи. Сначала их нужно одобрить или отклонить.';
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: '#0ea5e9',
@@ -96,7 +97,7 @@ export default function SubmissionDetail() {
   });
 
   const statusMut = useMutation({
-    mutationFn: (status: 'COMPLETED' | 'CANCELLED') => changeSubmissionStatus(id!, status),
+    mutationFn: (status: 'COMPLETED' | 'CANCELLED' | 'ACTIVE') => changeSubmissionStatus(id!, status),
     onSuccess: async () => {
       // QA-2: сначала перечитываем список, потом «готово» — без 3–5 с старых данных.
       await Promise.all([qc.invalidateQueries({ queryKey: ['submission', id] }), qc.invalidateQueries({ queryKey: keys.installments.stages(id!) }), qc.invalidateQueries({ queryKey: ['submissions'] })]).catch(() => undefined);
@@ -213,7 +214,12 @@ export default function SubmissionDetail() {
   const inScope = !custom || isOwnSubmission || roleCan(me, 'submissions:all');
   const may = (key: string) => inScope && roleCan(me, key);
   const canAddPayment = s.status === 'ACTIVE' && (custom ? may('submissions:payment-add') : isOwnSubmission);
-  const canChangeStatus = s.status === 'ACTIVE' && (custom ? may('submissions:status') : isOwnSubmission);
+  // Основатель закрывает и отменяет любую сделку (сервер разрешал это и раньше,
+  // кнопок не было). QA-3 (BUG-42): закрытую сделку он может вернуть в работу
+  // или отменить — из любого состояния есть выход.
+  const canChangeStatus = s.status === 'ACTIVE' && (custom ? may('submissions:status') : founder || isOwnSubmission);
+  const canReopen = s.status === 'COMPLETED' && founder;
+  const canCancelNow = canChangeStatus || canReopen;
   const canEditDeal = custom ? may('submissions:update') : founder || isOwnSubmission;
   const canDeleteDeal = custom ? may('submissions:delete') : founder;
   const canEditStages = custom ? may('submissions:stages') : founder || isOwnSubmission;
@@ -232,13 +238,36 @@ export default function SubmissionDetail() {
       toast(t('deal.close.pendingBlocked'), 'error');
       return;
     }
-    if (await confirm({ title: t('deal.close.title'), message: t('deal.close.message') })) {
-      statusMut.mutate('COMPLETED');
-    }
+    // QA-3 (BUG-11): окно пишет реальные цифры. «Оплачен полностью» — только
+    // при остатке 0; при долге — сколько осталось и красная кнопка.
+    const hasDebt = !s.moneyHidden && remaining > 0;
+    const ok = await confirm(
+      hasDebt
+        ? {
+            title: t('deal.close.debtTitle'),
+            message: t('deal.close.debtMessage')
+              .replace('{left}', money(remaining))
+              .replace('{paid}', money(totalPaid))
+              .replace('{total}', money(s.totalAmount ?? 0)),
+            confirmText: t('deal.close.debtOk'),
+            danger: true,
+          }
+        : { title: t('deal.close.title'), message: t(s.moneyHidden ? 'deal.close.messageHidden' : 'deal.close.message') },
+    );
+    if (ok) statusMut.mutate('COMPLETED');
   };
   const onCancel = async () => {
-    if (await confirm({ title: t('deal.cancel.title'), message: t('deal.cancel.message') })) {
-      statusMut.mutate('CANCELLED');
+    const ok = await confirm({
+      title: t('deal.cancel.title'),
+      message: t(totalPaid > 0 && !s.moneyHidden ? 'deal.cancel.messagePaid' : 'deal.cancel.message').replace('{paid}', money(totalPaid)),
+      confirmText: t('deal.cancel.ok'),
+      danger: true,
+    });
+    if (ok) statusMut.mutate('CANCELLED');
+  };
+  const onReopen = async () => {
+    if (await confirm({ title: t('deal.reopen.title'), message: t('deal.reopen.message'), confirmText: t('deal.reopen.ok') })) {
+      statusMut.mutate('ACTIVE');
     }
   };
 
@@ -251,12 +280,12 @@ export default function SubmissionDetail() {
     if (s.status !== 'CANCELLED' && s.payments.some((p) => p.status === 'APPROVED')) {
       const goCancel = await confirm({
         title: t('deal.delete.blockedTitle'),
-        message: t(canChangeStatus && s.status === 'ACTIVE' ? 'deal.delete.blocked' : 'deal.delete.blockedAsk'),
-        confirmText: canChangeStatus && s.status === 'ACTIVE' ? t('deal.cancelDeal') : t('common.ok'),
-        hideCancel: !(canChangeStatus && s.status === 'ACTIVE'),
+        message: t(canCancelNow ? 'deal.delete.blocked' : 'deal.delete.blockedAsk'),
+        confirmText: canCancelNow ? t('deal.cancelDeal') : t('common.ok'),
+        hideCancel: !canCancelNow,
         icon: 'info',
       });
-      if (goCancel && canChangeStatus && s.status === 'ACTIVE') onCancel();
+      if (goCancel && canCancelNow) onCancel();
       return;
     }
     const ok = await confirm({
@@ -302,6 +331,12 @@ export default function SubmissionDetail() {
               <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 4 }}>
                 {t('deal.manager')}: {s.manager.fullName}
                 <DismissedMark person={s.manager} />
+              </div>
+            )}
+            {/* QA-3 (BUG-13): сделка из лида записана на менеджера лида — видно, кто её оформил. */}
+            {s.createdBy && s.createdBy.id !== s.managerId && (
+              <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 2 }} data-testid="deal-created-by">
+                {t('deal.createdBy')}: {s.createdBy.fullName}
               </div>
             )}
           </div>
@@ -367,7 +402,7 @@ export default function SubmissionDetail() {
         )}
 
         {/* Кнопки менеджера */}
-        {(canAddPayment || canChangeStatus) && (
+        {(canAddPayment || canChangeStatus || canReopen) && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid var(--border-soft)', paddingTop: 12 }}>
             {canAddPayment && (
               <button className="btn btn-sm btn-primary" onClick={() => setShowAddPayment(true)} data-testid="deal-add-payment">
@@ -380,6 +415,16 @@ export default function SubmissionDetail() {
                   <Icon name="check" size={14} /> {t('deal.closeDeal')}
                 </button>
                 <button className="btn btn-sm btn-danger" onClick={onCancel} data-testid="deal-cancel">
+                  <Icon name="close" size={14} /> {t('deal.cancelDeal')}
+                </button>
+              </>
+            )}
+            {canReopen && (
+              <>
+                <button className="btn btn-sm btn-secondary" onClick={onReopen} disabled={statusMut.isPending} data-testid="deal-reopen">
+                  <Icon name="undo" size={14} /> {t('deal.reopen')}
+                </button>
+                <button className="btn btn-sm btn-danger" onClick={onCancel} disabled={statusMut.isPending} data-testid="deal-cancel">
                   <Icon name="close" size={14} /> {t('deal.cancelDeal')}
                 </button>
               </>
@@ -400,7 +445,7 @@ export default function SubmissionDetail() {
               flexWrap: 'wrap',
               borderTop: '1px solid var(--border-soft)',
               paddingTop: 12,
-              marginTop: canAddPayment || canChangeStatus ? 12 : 0,
+              marginTop: canAddPayment || canChangeStatus || canReopen ? 12 : 0,
             }}
           >
             {canEditDeal && (
@@ -768,6 +813,8 @@ function AddPaymentModal({
     }
     if (method === 'TRANSFER' && receiptUrls.length === 0) return toast(t('deal.err.receipt'), 'error');
     if (method === 'CASH' && depositProofUrls.length === 0) return toast(t('deal.err.deposit'), 'error');
+    const nextErr = nextDueError(nextDueDate, paidAt);
+    if (nextErr) return toast(t(nextErr), 'error');
     mut.mutate();
   };
 
@@ -791,17 +838,7 @@ function AddPaymentModal({
     if (ok) onClose();
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        attemptClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirty, mut.isPending]);
+  useEscClose(true, () => { void attemptClose(); });
 
   return (
     <motion.div
@@ -863,7 +900,7 @@ function AddPaymentModal({
             </Field>
           )}
           <Field label={t('deal.field.nextDate')}>
-            <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} />
+            <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} min={nextDueMin(paidAt)} />
           </Field>
           <Field label={t('deal.field.nextAmount')}>
             <input className="crm-input" type="number" min={0} step={50} value={nextDueAmount} onChange={(e) => setNextDueAmount(e.target.value)} />
@@ -935,16 +972,7 @@ function ApproveTjsModal({
   const amount = parseFloat(value.replace(',', '.'));
   const isValid = (!needTjs || (isFinite(amount) && amount > 0)) && (accounts.length === 0 || !!acc);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscClose(true, () => { void onClose(); });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1056,17 +1084,7 @@ function RejectReasonModal({
     if (ok) onClose();
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        attemptClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, trimmed]);
+  useEscClose(true, () => { void attemptClose(); });
 
   return (
     <motion.div
@@ -1209,17 +1227,7 @@ function EditSubmissionModal({
     if (ok) onClose();
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        void attemptClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mut.isPending]);
+  useEscClose(true, () => { void attemptClose(); });
 
   return (
     <motion.div
@@ -1507,6 +1515,11 @@ function EditPaymentModal({
     }
     if (method === 'TRANSFER' && receiptUrls.length === 0) return toast(t('deal.err.receipt'), 'error');
     if (method === 'CASH' && depositProofUrls.length === 0) return toast(t('deal.err.deposit'), 'error');
+    // Дату следующего платежа проверяем, только если её поменяли (как сервер).
+    if (nextDueDate !== (payment.nextDueDate ? tjDateInput(payment.nextDueDate) : '')) {
+      const nextErr = nextDueError(nextDueDate, paidAt);
+      if (nextErr) return toast(t(nextErr), 'error');
+    }
     mut.mutate();
   };
 
@@ -1540,17 +1553,7 @@ function EditPaymentModal({
     if (ok) onClose();
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        void attemptClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mut.isPending, readOnly, dirty]);
+  useEscClose(true, () => { void attemptClose(); });
 
   return (
     <motion.div
@@ -1663,7 +1666,7 @@ function EditPaymentModal({
             </Field>
           )}
           <Field label={t('deal.field.nextDate')}>
-            <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} disabled={readOnly} />
+            <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} disabled={readOnly} min={nextDueMin(paidAt)} />
           </Field>
           <Field label={t('deal.field.nextAmount')}>
             <input

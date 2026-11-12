@@ -51,6 +51,12 @@ export const createCampaign = (data: {
 }) =>
   api.post<MassMailCampaign>('/integrations/massmail', data).then((r) => r.data);
 
+/** Сколько человек получит рассылку (QA-3): для формы и окна подтверждения. */
+export const audienceCount = (audience: { type: string; value?: string }) =>
+  api.post<{ count: number }>('/integrations/massmail/audience-count', { audience }).then((r) => r.data.count);
+export const campaignRecipients = (id: string) =>
+  api.get<{ count: number }>(`/integrations/massmail/${id}/recipients`).then((r) => r.data.count);
+
 export const sendCampaignNow = (id: string) =>
   api.post<MassMailCampaign>(`/integrations/massmail/${id}/send`).then((r) => r.data);
 

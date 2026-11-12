@@ -28,6 +28,7 @@ import {
   DIRECTION_LABEL,
   SOURCE_BADGE,
   SOURCE_LABEL,
+  STAFF_SOURCES,
   STATUS_BADGE,
   isLegacyApplicationStatus,
 } from '../api/types';
@@ -54,6 +55,7 @@ import { isTouchDevice } from '../lib/touch';
 import { useRealtime } from '../realtime';
 import { useUI } from '../ui/Dialogs';
 import PhoneInput, { COUNTRIES as PHONE_COUNTRIES } from '../components/PhoneInput';
+import { leadPhoneError } from '../lib/leadPhone';
 import CrmDatePicker from '../components/CrmDatePicker';
 import Pagination from '../components/Pagination';
 import Loading from '../components/Loading';
@@ -74,6 +76,7 @@ import {
 } from '../lib/useUrlListState';
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds } from '../utils/validators';
 import DismissedMark from '../components/DismissedMark';
+import { useEscClose } from '../lib/useEscClose';
 
 /**
  * Экран «Лиды» — все клиенты отдела продаж: ручной ввод, раздача
@@ -212,6 +215,9 @@ export default function Leads() {
   const [birthday, setBirthday] = useState('');
   const [country, setCountry] = useState<Country | ''>('');
   const [comment, setComment] = useState('');
+  // QA-3 (BUG-07): источник и направление — в той же форме и при создании, и при правке.
+  const [source, setSource] = useState<ApplicationSource>('OTHER');
+  const [direction, setDirection] = useState<Direction | ''>('');
   /** Кому лид: '' — при создании «мне», при правке — «не назначен». */
   const [managerPick, setManagerPick] = useState('');
   const [leadStatus, setLeadStatus] = useState<ApplicationStatus>('NEW_LEAD');
@@ -262,15 +268,10 @@ export default function Leads() {
   const errors: FormErrors = useMemo(() => {
     // Контакты студента в этом окне не правятся — и не проверяются.
     if (contactsLocked) return {};
+    // Те же правила, что в карточке лида (lib/leadPhone).
     const validatePhoneValue = (value: string): string | undefined => {
-      const v = (value || '').trim();
-      const matched = PHONE_CODES.find((c) => v.startsWith(c.code));
-      if (!matched) return t('leads.err.phoneCode');
-      const digits = v.slice(matched.code.length).replace(/\D/g, '');
-      if (matched.code === '+992' && digits.length !== 9) return t('validate.phoneTj');
-      if (digits.length < matched.minDigits) return t('leads.err.phoneShort');
-      if (digits.length > matched.maxDigits) return t('leads.err.phoneLong');
-      return undefined;
+      const key = leadPhoneError(value);
+      return key ? t(key) : undefined;
     };
 
     const e: FormErrors = {};
@@ -332,6 +333,8 @@ export default function Leads() {
     setBirthday('');
     setCountry('');
     setComment('');
+    setSource('OTHER');
+    setDirection('');
     setManagerPick('');
     setLeadStatus('NEW_LEAD');
     setTouched({});
@@ -379,6 +382,9 @@ export default function Leads() {
     setBirthday(a.birthday ? String(a.birthday).slice(0, 10) : '');
     setCountry((a.country as Country) || '');
     setComment(a.comment || '');
+    setSource(a.source ?? 'OTHER');
+    // Неподтверждённое направление (плейсхолдер лендинга) — пустой выбор.
+    setDirection(a.directionConfirmed === false ? '' : (a.direction as Direction) || '');
     setManagerPick(a.managerId ?? '');
     setLeadStatus(a.status);
     setFormOpen(true);
@@ -505,6 +511,8 @@ export default function Leads() {
   /** Лид коллеги без «Передачи чужих»: менеджер виден, но не меняется. */
   const managerLocked = !!editing && !canAssignRow(editing);
   const showStatusField = editing ? canEditRow(editing) && seesApplications : canPickStatus;
+  /** «Сайт», «Самозапись», «Реферал» поставила система — источник не меняется. */
+  const sourceLocked = !!editing && !STAFF_SOURCES.includes(editing.source ?? 'OTHER');
 
   const submit = (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -542,6 +550,9 @@ export default function Leads() {
                 // Неизменённый комментарий не шлём (см. проверку выше).
                 comment: comment.trim() === (editing.comment || '').trim() ? undefined : comment.trim(),
                 country: (country || null) as Country | null,
+                // Источник и направление — только если их поменяли.
+                ...(!sourceLocked && source !== (editing.source ?? 'OTHER') ? { source } : {}),
+                ...(direction && (editing.directionConfirmed === false || direction !== editing.direction) ? { direction } : {}),
               }),
           ...(statusChanged ? { status: leadStatus } : {}),
         } as Partial<Application>,
@@ -555,9 +566,10 @@ export default function Leads() {
       // Не выбрали менеджера — лид того, кто его создаёт (сервер — так же).
       ...(canPickManager && managerPick ? { managerId: managerPick } : {}),
       ...(canPickStatus && leadStatus !== 'NEW_LEAD' ? { status: leadStatus } : {}),
-      // `source` не шлём: в ApplicationSource нет значения «введено
-      // сотрудником», выдумывать новое — destructive-изменение схемы.
-      // Бэкенд подставит OTHER (STAFF_DEFAULT_SOURCE).
+      // Источник — из каналов, которые сотрудник ставит руками (сервер
+      // «Сайт»/«Самозапись»/«Реферал» для этого пути отвергает).
+      source,
+      ...(direction ? { direction } : {}),
     });
   };
 
@@ -615,28 +627,15 @@ export default function Leads() {
 
   // Esc в окне «Такой лид уже есть» — назад к форме (форма Esc не ловит,
   // пока открыта .dialog-card).
-  useEffect(() => {
-    if (!dupLead) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDupLead(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [dupLead]);
+  useEscClose(!!dupLead, () => setDupLead(null));
 
   const requestCloseRef = useRef(requestCloseForm);
   requestCloseRef.current = requestCloseForm;
-  useEffect(() => {
-    if (!formOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      const popupOpen = [
-        ...document.querySelectorAll('.crm-datepicker-popover, .crm-select-popover, .phone-dropdown, .dialog-card'),
-      ].some((el) => !el.classList.contains('lead-modal-card'));
-      if (popupOpen) return;
-      requestCloseRef.current();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [formOpen]);
+  useEscClose(formOpen, () => {
+    // Окно без общего обработчика поверх формы (например, обязательное) — Esc не наш.
+    const other = [...document.querySelectorAll('.dialog-card')].some((el) => !el.classList.contains('lead-modal-card'));
+    if (!other) requestCloseRef.current();
+  });
 
   /* ============================ список ============================ */
 
@@ -954,17 +953,32 @@ export default function Leads() {
       .map((r) => `${r.name} — ${r.count}`)
       .join(', ');
 
-  const askReassign = (opts: { reassign: number; total: number; owners: string; manager: string }) =>
-    confirm({
-      title: t('leads.bulk.confirm.title'),
-      message: t('leads.bulk.confirm.message')
-        .replace('{k}', String(opts.reassign))
+  /**
+   * QA-3 (BUG-41): текст окна = данные. Свои лиды — «закреплены за вами», а не
+   * «за другими менеджерами (сам пользователь)». Три случая: только свои,
+   * только чужие, вперемешку.
+   */
+  const askReassign = (opts: { owners: { id: string; name: string; count: number }[]; total: number; manager: string }) => {
+    const mine = opts.owners.filter((o) => o.id === me?.id).reduce((s, o) => s + o.count, 0);
+    const others = opts.owners.filter((o) => o.id !== me?.id);
+    const othersCount = others.reduce((s, o) => s + o.count, 0);
+    const fill = (key: string) =>
+      t(key)
+        .replace('{k}', String(othersCount))
+        .replace('{mine}', String(mine))
         .replace('{n}', String(opts.total))
-        .replace('{list}', opts.owners)
-        .replace('{manager}', opts.manager),
+        .replace('{list}', formatOwners(others))
+        .replace('{manager}', opts.manager);
+    if (othersCount === 0) {
+      return confirm({ title: t('leads.bulk.confirmMine.title'), message: fill('leads.bulk.confirmMine.message'), confirmText: t('leads.bulk.confirmMine.ok') });
+    }
+    return confirm({
+      title: t('leads.bulk.confirm.title'),
+      message: fill(mine > 0 ? 'leads.bulk.confirmMixed.message' : 'leads.bulk.confirm.message'),
       confirmText: t('leads.bulk.confirm.ok'),
       danger: true,
     });
+  };
 
   // Кому раздавать пачку: раздающему лиды или заявки — всем, иначе себе.
   const bulkOptions = pickable(canAssignToAnyone(me, 'NEW_LEAD') || canAssignToAnyone(me, 'IN_PROCESSING'));
@@ -1019,9 +1033,8 @@ export default function Leads() {
       const conflict = asBulkReassignConflict(err);
       if (conflict && !vars.confirmReassign) {
         const ok = await askReassign({
-          reassign: conflict.reassignCount,
           total: conflict.total,
-          owners: formatOwners(conflict.conflicts.map((c) => ({ name: c.managerName, count: c.count }))),
+          owners: conflict.conflicts.map((c) => ({ id: c.managerId, name: c.managerName, count: c.count })),
           manager: bulkOptions.find((m) => m.id === vars.managerId)?.fullName || '',
         });
         if (ok) bulkMut.mutate({ ...vars, confirmReassign: true });
@@ -1048,10 +1061,11 @@ export default function Leads() {
     const taken = picked.filter((a) => a.managerId && a.managerId !== bulkManagerId);
     let confirmReassign = false;
     if (taken.length > 0) {
-      const byOwner = new Map<string, { name: string; count: number }>();
+      const byOwner = new Map<string, { id: string; name: string; count: number }>();
       for (const a of taken) {
         const key = a.managerId as string;
         const row = byOwner.get(key) || {
+          id: key,
           name: a.manager?.fullName || managers.find((m) => m.id === key)?.fullName || '—',
           count: 0,
         };
@@ -1059,9 +1073,8 @@ export default function Leads() {
         byOwner.set(key, row);
       }
       const ok = await askReassign({
-        reassign: taken.length,
         total: picked.length,
-        owners: formatOwners([...byOwner.values()]),
+        owners: [...byOwner.values()],
         manager: target.fullName,
       });
       if (!ok) return;
@@ -1267,6 +1280,37 @@ export default function Leads() {
                   ))}
                 </CrmSelect>
                 {invalid('country') && <div className="form-error-text">{errors.country}</div>}
+              </div>
+            </div>
+
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label>{t('app.field.source')}</label>
+                <CrmSelect
+                  className="crm-select"
+                  value={source}
+                  onChange={(e) => setSource(e.target.value as ApplicationSource)}
+                  disabled={sourceLocked}
+                  data-testid="lead-form-source"
+                >
+                  {sourceLocked && <option value={source}>{SOURCE_LABEL[source]}</option>}
+                  {STAFF_SOURCES.map((s) => (
+                    <option key={s} value={s}>{SOURCE_LABEL[s]}</option>
+                  ))}
+                </CrmSelect>
+                {sourceLocked && <div className="form-hint-text" data-testid="lead-source-locked">{t('leads.source.locked')}</div>}
+              </div>
+              <div className="form-group">
+                <label>{t('app.field.direction')}</label>
+                <CrmSelect
+                  className="crm-select"
+                  value={direction}
+                  onChange={(e) => setDirection(e.target.value as Direction | '')}
+                  data-testid="lead-form-direction"
+                >
+                  <option value="">{t('app.direction.notChosen')}</option>
+                  <DirectionOptions />
+                </CrmSelect>
               </div>
             </div>
               </>

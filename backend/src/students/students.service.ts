@@ -17,6 +17,7 @@ import { ReferralsService } from '../partners/referrals.service';
 import { CABINET_BY_DIRECTION } from '../common/cabinets';
 import { parseCalendarDateUtc } from '../common/tj-time';
 import { dateRangeFilter } from '../common/query-date';
+import { phoneDigitsPattern } from '../common/search';
 
 /**
  * DOB из CRM → UTC-полночь. Раньше здесь стоял голый `new Date(b)`: для
@@ -151,6 +152,9 @@ export class StudentsService {
         comment: student.comment,
         status: 'NEW_LEAD',
         studentId: student.id,
+        // QA-3 (BUG-13): лид студента — с тем же менеджером, что и студент.
+        managerId: student.managerId,
+        chinaManagerId: student.chinaManagerId,
       },
     });
 
@@ -300,13 +304,22 @@ export class StudentsService {
       });
     }
     if (filters.search) {
-      and.push({
-        OR: [
-          { fullName: { contains: filters.search, mode: 'insensitive' } },
-          { email: { contains: filters.search, mode: 'insensitive' } },
-          { phones: { has: filters.search } },
-        ],
-      });
+      const or: Prisma.StudentWhereInput[] = [
+        { fullName: { contains: filters.search, mode: 'insensitive' } },
+        { email: { contains: filters.search, mode: 'insensitive' } },
+        { phones: { has: filters.search } },
+      ];
+      // QA-3 (BUG-25): номер — по одним цифрам, как у лидов. Раньше студент
+      // находился только по номеру, набранному символ в символ («+992…»), и
+      // поиск по телефону показывал лид, но не студента.
+      const pattern = phoneDigitsPattern(filters.search);
+      if (pattern && pattern.length >= 6) {
+        const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+          SELECT s.id FROM "Student" s
+          WHERE EXISTS (SELECT 1 FROM unnest(s.phones) p WHERE regexp_replace(p, '[^0-9]', '', 'g') LIKE ${pattern})`;
+        if (rows.length) or.push({ id: { in: rows.map((r) => r.id) } });
+      }
+      and.push({ OR: or });
     }
     if (and.length) where.AND = and;
     // BUG #16 (HIGH): typeahead-пикер (SubmissionForm и пр.) передаёт

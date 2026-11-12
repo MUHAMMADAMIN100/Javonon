@@ -129,6 +129,14 @@ export type ApplicationSource =
   | 'EVENT'
   | 'OTHER';
 
+/**
+ * Источники, которые сотрудник ставит руками (зеркало STAFF_ALLOWED_SOURCES на
+ * сервере). «Сайт», «Самозапись» и «Реферал» определяет система.
+ */
+export const STAFF_SOURCES: ApplicationSource[] = [
+  'INSTAGRAM', 'TELEGRAM', 'GOOGLE_ADS', 'TIKTOK', 'WORD_OF_MOUTH', 'EVENT', 'OTHER',
+];
+
 export const APPLICATION_SOURCES: ApplicationSource[] = [
   'LANDING_FORM',
   'SELF_REGISTRATION',
@@ -283,6 +291,8 @@ export interface User {
   email: string;
   fullName: string;
   role: Role;
+  /** Может вести группы академии (список сотрудников): должность «Учитель» или роль с ведением групп. */
+  canTeach?: boolean;
   /** Дополнительные роли (один человек может быть, например, ADMIN+ACCOUNTANT). */
   roles?: Role[];
   /** Permissions (берём из customRole) — backend кладёт в JWT-payload при validate. */

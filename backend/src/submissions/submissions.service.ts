@@ -49,13 +49,14 @@ import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
 import { InstallmentsService } from '../installments/installments.service';
 import { BONUS_MONTH_RULE, MANAGER_BONUS_CURRENCY, bonusMonthLockedFor } from '../common/manager-bonus-volume';
 import { tjLocalDay } from '../common/tj-time';
+import { alignManagersTx } from '../common/manager-sync';
 
 /**
  * Отказ закрыть сделку, пока у неё есть неодобренные платежи. Фронт узнаёт
  * этот текст и показывает свой перевод (ключ deal.close.pendingBlocked).
  */
 const CLOSE_WITH_PENDING_MESSAGE =
-  'Нельзя закрыть сделку: есть неодобренные платежи. Сначала основатель должен одобрить или отклонить их.';
+  'Нельзя закрыть сделку: есть неодобренные платежи. Сначала их нужно одобрить или отклонить.';
 
 /**
  * Bug #31 (HIGH): студент, созданный из SaleSubmission через approvePayment,
@@ -336,13 +337,25 @@ export class SubmissionsService {
     // sourceApplicationId заведена ровно ради неё, поэтому ниже этот флаг
     // решает, можно ли пропустить серверный поиск заявки-источника.
     let sourceApplicationHasAttribution = false;
+    // QA-3 (BUG-13, решение заказчика 12.11.2026): сделка из лида записывается
+    // на МЕНЕДЖЕРА ЛИДА — он её владелец, ему идут студент и бонус. Раньше
+    // владельцем становился тот, кто оформил: основатель оформлял сделку по
+    // лиду менеджера, и продажа, студент и бонус уходили основателю. У лида
+    // нет менеджера (или он уволен) — владелец, как раньше, оформивший.
+    const creatorId = managerId;
+    let ownerId = managerId;
+    let ownerFromLead: { leadName: string } | null = null;
     if (sourceApplicationIdRaw) {
       const sourceApp = await this.prisma.application.findUnique({
         where: { id: sourceApplicationIdRaw },
-        select: { id: true },
+        select: { id: true, fullName: true, managerId: true, manager: { select: { isActive: true } } },
       });
       if (!sourceApp) throw new NotFoundException('Лид-источник не найден');
       sourceApplicationId = sourceApp.id;
+      if (sourceApp.managerId && sourceApp.manager?.isActive !== false && sourceApp.managerId !== creatorId) {
+        ownerId = sourceApp.managerId;
+        ownerFromLead = { leadName: sourceApp.fullName };
+      }
       sourceApplicationHasAttribution = await this.applicationCarriesAttribution(
         sourceApp.id,
       );
@@ -370,7 +383,7 @@ export class SubmissionsService {
         throw new BadRequestException('Некорректная дата следующего платежа');
       }
     }
-    this.assertNextDue(p.nextDueAmount, nextDueDate, dto.totalAmount - p.amount, dto.currency ?? null);
+    this.assertNextDue(p.nextDueAmount, nextDueDate, dto.totalAmount - p.amount, dto.currency ?? null, { paidAt, notPast: true });
 
     // Snapshot метаданных паспорта — пишем только если есть хотя бы один файл
     // и менеджер передал нового студента (для existing-студента snapshot = []).
@@ -483,7 +496,7 @@ export class SubmissionsService {
     const DUPLICATE_WINDOW_MS = 60_000;
     const existing = await this.prisma.saleSubmission.findFirst({
       where: {
-        managerId,
+        managerId: ownerId,
         contractUrls: { equals: ctrUrls },
         programId: dto.programId,
         totalAmount: dto.totalAmount,
@@ -530,7 +543,8 @@ export class SubmissionsService {
 
     const submission = await this.prisma.saleSubmission.create({
       data: {
-        managerId,
+        managerId: ownerId,
+        createdById: creatorId,
         studentId: dto.studentId || null,
         newStudentName: dto.studentId ? null : (dto.newStudentName?.trim() || null),
         newStudentPhone: dto.studentId ? null : (dto.newStudentPhone?.trim() || null),
@@ -579,7 +593,23 @@ export class SubmissionsService {
       },
     });
 
-    this.realtime.emitStaff('submission:new', { submissionId: submission.id, managerId });
+    this.realtime.emitStaff('submission:new', { submissionId: submission.id, managerId: ownerId });
+    // Менеджер лида узнаёт, что на него оформили сделку (сам он её не создавал).
+    if (ownerFromLead) {
+      try {
+        const creator = await this.prisma.user.findUnique({ where: { id: creatorId }, select: { fullName: true } });
+        const data = {
+          type: 'DEAL_ASSIGNED',
+          title: 'На вас оформлена сделка',
+          message: `Лид «${ownerFromLead.leadName}»: сделку оформил(а) ${creator?.fullName ?? 'коллега'}. Она записана на вас как на менеджера лида.`,
+          payload: { submissionId: submission.id },
+        };
+        const notif = await this.prisma.notification.create({ data: { userId: ownerId, ...data } });
+        this.realtime.emitUser(ownerId, 'notification:new', { id: notif.id, ...data });
+      } catch (e) {
+        this.logger.warn(`Уведомление о сделке ${submission.id} не отправлено: ${(e as Error).message}`);
+      }
+    }
     return submission;
   }
 
@@ -1263,9 +1293,9 @@ export class SubmissionsService {
         throw new BadRequestException('Некорректная дата следующего платежа');
       }
     }
-    if (dto.nextDueAmount != null) {
+    if (dto.nextDueAmount != null || nextDueDate) {
       const left = await this.remainingOnContract(this.prisma, submission);
-      this.assertNextDue(dto.nextDueAmount, nextDueDate, left - dto.amount, submission.currency);
+      this.assertNextDue(dto.nextDueAmount, nextDueDate, left - dto.amount, submission.currency, { paidAt, notPast: true });
     }
 
     const method = dto.paymentMethod || SubmissionPaymentMethod.TRANSFER;
@@ -1347,7 +1377,27 @@ export class SubmissionsService {
    * показывалась, а 80 при остатке 50 проходило. Теперь: сумма — только с
    * датой, больше нуля и не больше остатка ПОСЛЕ этого платежа.
    */
-  private assertNextDue(nextAmount: unknown, nextDate: Date | null, remainingAfter: number, currency: string | null) {
+  private assertNextDue(
+    nextAmount: unknown,
+    nextDate: Date | null,
+    remainingAfter: number,
+    currency: string | null,
+    when?: { paidAt?: Date | null; notPast?: boolean },
+  ) {
+    // QA-3 (BUG-10): «следующий платёж» — это будущее. Раньше дату можно было
+    // поставить в прошлое и раньше самого платежа — такой срок сразу считался
+    // просроченным, а напоминание уходило задним числом. Сравниваем календарные
+    // дни по Душанбе. `when` не передают только там, где дата не менялась.
+    if (nextDate && when) {
+      const nextDay = tjLocalDay(nextDate);
+      if (when.paidAt && nextDay <= tjLocalDay(when.paidAt)) {
+        const [y, m, d] = tjLocalDay(when.paidAt).split('-');
+        throw new BadRequestException(`Следующий платёж должен быть позже этого платежа (${d}.${m}.${y}) — выберите более позднюю дату`);
+      }
+      if (when.notPast && nextDay < tjLocalDay()) {
+        throw new BadRequestException('Дата следующего платежа уже прошла — выберите сегодня или позже');
+      }
+    }
     if (nextAmount === undefined || nextAmount === null || nextAmount === '') return;
     const n = Number(nextAmount);
     if (!isFinite(n) || n <= 0) throw new BadRequestException('Сумма следующего платежа должна быть больше нуля');
@@ -1636,6 +1686,7 @@ export class SubmissionsService {
         program: true,
         student: true,
         manager: { select: { id: true, fullName: true, isActive: true, role: true } },
+        createdBy: { select: { id: true, fullName: true } },
         application: true,
         payments: {
           orderBy: { paidAt: 'desc' },
@@ -1658,7 +1709,9 @@ export class SubmissionsService {
     // кто-то вызовет getOne() из другого сервиса.
     if (!user) throw new ForbiddenException('Недостаточно прав');
     const elevated = seesAllDeals(user, () => hasRole(user, 'ADMIN'));
-    if (!elevated && s.managerId !== user.id) {
+    // Оформивший сделку видит её и после того, как она записана на менеджера
+    // лида (QA-3): иначе сделка «исчезала» бы у него сразу после создания.
+    if (!elevated && s.managerId !== user.id && s.createdById !== user.id) {
       throw new ForbiddenException('Это не ваша сделка');
     }
 
@@ -1720,7 +1773,7 @@ export class SubmissionsService {
     });
     // allowed — от контроллера: роль с «Одобрение и отклонение платежей».
     if (!reviewer || !(opts.allowed ?? isFounder(reviewer as any))) {
-      throw new ForbiddenException('Только основатель может одобрять');
+      throw new ForbiddenException('Одобрять платежи может основатель или сотрудник с правом «Сделки — одобрение платежей»');
     }
 
     const payment = await this.prisma.submissionPayment.findUnique({
@@ -2054,7 +2107,7 @@ export class SubmissionsService {
               id: true, status: true, studentId: true, programId: true, deletedAt: true, source: true,
               phone: true, secondaryPhone: true, secondaryContactLabel: true, whatsappPhone: true,
               email: true, birthday: true, country: true, preferredChannel: true, comment: true,
-              chinaManagerId: true,
+              chinaManagerId: true, managerId: true,
             },
           })
         : null;
@@ -2101,7 +2154,8 @@ export class SubmissionsService {
               direction: program.direction,
               // Кабинет по направлению программы; FOUNDER может изменить вручную.
               cabinet: CABINET_BY_DIRECTION[program.direction] ?? DEFAULT_CABINET,
-              managerId: submission.managerId,
+              // QA-3 (BUG-13): студент — на менеджера лида; нет лида — на владельца сделки.
+              managerId: srcApp?.managerId ?? submission.managerId,
               programId,
             },
           });
@@ -2214,6 +2268,10 @@ export class SubmissionsService {
           });
           applicationId = newApp.id;
         }
+
+        // QA-3 (BUG-13): лид и студент — с одним менеджером. Пустое место одной
+        // стороны заполняется значением другой (занятое не переписывается).
+        await alignManagersTx(tx, applicationId, studentId);
 
         // Контракты — добавляем по Document на каждый файл. Метаданные берём
         // из snapshot, сохранённого при create() (см. комментарий про паспорт).
@@ -2733,7 +2791,7 @@ export class SubmissionsService {
       select: { id: true, role: true, roles: true },
     });
     if (!reviewer || !(allowed ?? isFounder(reviewer as any))) {
-      throw new ForbiddenException('Только основатель может отклонять');
+      throw new ForbiddenException('Отклонять платежи может основатель или сотрудник с правом «Сделки — одобрение платежей»');
     }
 
     const r = (reason || '').trim();
@@ -2839,13 +2897,43 @@ export class SubmissionsService {
         throw new ForbiddenException('Это не ваша сделка');
       }
     }
-    if (status !== SubmissionStatus.COMPLETED && status !== SubmissionStatus.CANCELLED) {
-      throw new BadRequestException('Можно ставить только COMPLETED или CANCELLED');
+    if (
+      status !== SubmissionStatus.COMPLETED &&
+      status !== SubmissionStatus.CANCELLED &&
+      status !== SubmissionStatus.ACTIVE
+    ) {
+      throw new BadRequestException('Неизвестный статус сделки');
     }
     if (submission.status === status) {
       // Идемпотентность: повторный CANCEL не плодит refund-транзакции.
       return submission;
     }
+    // QA-3 (BUG-42): ИЗ ЛЮБОГО СОСТОЯНИЯ ЕСТЬ ВЫХОД. Раньше закрытую сделку с
+    // одобренным платежом нельзя было ни отменить (кнопки не было), ни удалить
+    // (сервер требовал сначала отмену). Теперь основатель может вернуть закрытую
+    // сделку в работу или отменить её; отмена идёт тем же путём, что у активной
+    // (доход сторнируется, лид и студент — как до сделки). Отмена — конечное
+    // состояние: отменённую сделку можно только удалить.
+    const actorIsFounder = isFounder(user as any);
+    if (submission.status === SubmissionStatus.CANCELLED) {
+      throw new BadRequestException('Сделка отменена — вернуть её нельзя. Если клиент передумал, оформите новую сделку.');
+    }
+    if (submission.status === SubmissionStatus.COMPLETED && !actorIsFounder) {
+      throw new ForbiddenException('Закрытую сделку возвращает в работу или отменяет только основатель');
+    }
+    if (status === SubmissionStatus.ACTIVE) {
+      // Сюда доходит только «закрыта → в работе». Признак должника считается
+      // заново от плана рассрочки — как при закрытии.
+      return this.prisma.$transaction(async (tx) => {
+        const row = await tx.saleSubmission.update({ where: { id: submissionId }, data: { status } });
+        await this.installments.syncPaymentPendingForSubmissionTx(tx, {
+          submissionId,
+          applicationId: submission.applicationId,
+        });
+        return row;
+      });
+    }
+    const cancelledBy = actorIsFounder ? 'основателем' : 'менеджером';
 
     // COMPLETED — реверсить нечего (деньги остаются в выручке), но ДОЛГ
     // обязан пересчитаться. Раньше здесь стоял голый update статуса, и сделка,
@@ -2956,7 +3044,7 @@ export class SubmissionsService {
                 studentId: original.studentId,
                 managerId: original.managerId,
                 recordedById: user.id,
-                comment: `Возврат по сделке #${shortId} (отмена менеджером)`,
+                comment: `Возврат по сделке #${shortId} (отмена ${cancelledBy})`,
                 // Reversal-EXPENSE — корректирующая запись; маркируем
                 // reversedAt, чтобы при возможном UN-CANCEL её не «отменить
                 // повторно» и чтобы отчёты могли её отличить как pair-entry.
@@ -2984,7 +3072,7 @@ export class SubmissionsService {
           where: { id: p.id },
           data: {
             status: SubmissionPaymentStatus.REJECTED,
-            rejectReason: `Сделка отменена менеджером (${tjLocalDay(reversedAt)})`,
+            rejectReason: `Сделка отменена ${cancelledBy} (${tjLocalDay(reversedAt)})`,
           },
         });
       }
@@ -3758,7 +3846,18 @@ export class SubmissionsService {
       const effNextAmount = dto.nextDueAmount !== undefined ? dto.nextDueAmount : payment.nextDueAmount;
       const effNextDate = dto.nextDueDate !== undefined ? (data.nextDueDate as Date | null) : payment.nextDueDate;
       const left = await this.remainingOnContract(this.prisma, payment.submission, payment.id);
-      this.assertNextDue(effNextAmount, effNextDate, left - (dto.amount ?? payment.amount), payment.submission.currency);
+      // Дату проверяем, только если её поменяли: у старого платежа срок мог
+      // давно пройти, и это не должно мешать поправить в нём сумму или чек.
+      const nextDateChanged =
+        dto.nextDueDate !== undefined &&
+        (effNextDate ? tjLocalDay(effNextDate) : null) !== (payment.nextDueDate ? tjLocalDay(payment.nextDueDate) : null);
+      this.assertNextDue(
+        effNextAmount,
+        effNextDate,
+        left - (dto.amount ?? payment.amount),
+        payment.submission.currency,
+        nextDateChanged ? { paidAt: (data.paidAt as Date | undefined) ?? payment.paidAt, notPast: true } : undefined,
+      );
     }
     if (dto.notes !== undefined) {
       data.notes = dto.notes ? String(dto.notes).trim() || null : null;
@@ -3925,8 +4024,11 @@ export class SubmissionsService {
       throw new ForbiddenException('Это не ваша сделка');
     }
     if (payment.submission._count.payments <= 1) {
+      // QA-3 (BUG-42): без адресов API — человеку нужен следующий шаг, а не путь.
       throw new BadRequestException(
-        'Это единственный платёж сделки — удаляйте всю сделку через DELETE /submissions/:id',
+        payment.status === SubmissionPaymentStatus.APPROVED
+          ? 'Это единственный платёж сделки, и он уже одобрен. Отдельно его не удалить: отмените сделку — доход вернётся в «Финансах», после этого сделку можно удалить.'
+          : 'Это единственный платёж сделки. Отдельно его не удалить — удалите сделку целиком (кнопка «Удалить сделку»).',
       );
     }
 

@@ -19,6 +19,7 @@ function notificationHref(n: Notification): string | null {
   if (n.type === 'CHAT_MESSAGE' || n.type === 'CHAT_MENTION') {
     return p.roomId ? `/chat?room=${p.roomId}` : '/chat';
   }
+  if (p.submissionId) return `/submissions/${p.submissionId}`;
   if (p.applicationId) return `/applications/${p.applicationId}`;
   // Академия: флаги и отчисление — карточка ученика академии (учителю
   // карточка студента CRM закрыта), напоминание о занятии — группа.

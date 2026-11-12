@@ -5,8 +5,10 @@ import CrmDatePicker from '../components/CrmDatePicker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignApplicationManager, deleteApplication, getApplication, updateApplication } from '../api/applications';
 import { getStudent, updateStudent, uploadPhoto } from '../api/students';
-import type { Application, ApplicationStatus, Country, Direction, Student } from '../api/types';
-import { COUNTRIES } from '../api/types';
+import type { Application, ApplicationSource, ApplicationStatus, Country, Direction, Student } from '../api/types';
+import { COUNTRIES, SOURCE_LABEL, STAFF_SOURCES } from '../api/types';
+import PhoneInput from '../components/PhoneInput';
+import { leadPhoneError, phoneHasOwnDigits } from '../lib/leadPhone';
 import { isFinishedApplicationStatus, isNewLeadApplicationStatus } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
@@ -258,7 +260,9 @@ export default function ApplicationDetail() {
   if (email) contacts.push({ icon: 'mail', text: email, href: `mailto:${email}`, testId: 'contact-email' });
   if (country) contacts.push({ icon: 'public', text: countryLabel(country), testId: 'contact-country' });
 
-  const showPeople = !isNew || !!app.partnerAttribution;
+  // QA-3 (BUG-33): менеджеры (TJ и CN) видны и у лида в «Новых лидах» — раньше
+  // блок появлялся только после перевода лида в работу.
+  const showPeople = true;
 
   return (
     <div className="client-page">
@@ -403,15 +407,13 @@ export default function ApplicationDetail() {
               <div className="profile-group-head">
                 <h3 className="profile-h">{t('client.section.people')}</h3>
               </div>
-              {!isNew && (
-                <ManagerBar
-                  manager={app.manager}
-                  chinaManager={app.chinaManager}
-                  onReassign={onReassign}
-                  canAssign={roleCan(me, isNew ? 'leads:assign' : 'applications:assign', isAdmin)}
-                  canTransfer={canTransferOthers(me, transferScopeOf(app.status))}
-                />
-              )}
+              <ManagerBar
+                manager={app.manager}
+                chinaManager={app.chinaManager}
+                onReassign={onReassign}
+                canAssign={roleCan(me, isNew ? 'leads:assign' : 'applications:assign', isAdmin)}
+                canTransfer={canTransferOthers(me, transferScopeOf(app.status))}
+              />
               {/* Партнёр — только руководству и только у партнёрских клиентов:
                   решает бэкенд, у менеджера по продажам ключа в JSON нет. */}
               <PartnerAttributionCard attribution={app.partnerAttribution} variant="field" />
@@ -486,6 +488,8 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
     birthday: app.birthday ? String(app.birthday).slice(0, 10) : '',
     country: (app.country || '') as Country | '',
     phone: app.phone || '',
+    whatsappPhone: app.whatsappPhone || '',
+    source: (app.source || 'OTHER') as string,
     secondaryPhone: app.secondaryPhone || '',
     secondaryContactLabel: app.secondaryContactLabel || '',
     preferredChannel: (app.preferredChannel || '') as string,
@@ -499,8 +503,15 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
   const [form, setForm] = useState(initial);
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
+  // QA-3 (BUG-08): WhatsApp правится здесь же. Галочка «тот же номер» — как в
+  // «Новом лиде»: сменили основной телефон — WhatsApp меняется вместе с ним.
+  const [sameWa, setSameWa] = useState(!app.whatsappPhone || app.whatsappPhone === app.phone);
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const changed = (k: keyof typeof form) => form[k].trim() !== initial[k].trim();
+  /** «Сайт», «Самозапись», «Реферал» поставила система — источник не меняется. */
+  const sourceLocked = !STAFF_SOURCES.includes((app.source || 'OTHER') as ApplicationSource);
+  const waValue = sameWa ? form.phone : form.whatsappPhone;
+  const waChanged = waValue.trim() !== initial.whatsappPhone.trim() && !(sameWa && !initial.whatsappPhone && !changed('phone'));
 
   // Ошибки только у изменённых полей — старые данные правку не блокируют.
   const errors: Partial<Record<keyof typeof form, string>> = {};
@@ -514,10 +525,15 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
     if (age === undefined) errors.birthday = t('leads.err.birthdayInvalid');
     else if (age < MIN_AGE || age > MAX_AGE) errors.birthday = t('leads.err.birthdayAge');
   }
+  // QA-3 (BUG-09): те же правила и та же маска, что в «Новом лиде» (lib/leadPhone).
+  const phoneErr = (v: string) => { const k = leadPhoneError(v); return k ? t(k) : undefined; };
   if (changed('phone')) {
-    errors.phone = !form.phone.trim() ? t('leads.err.phoneRequired') : phoneRule()(form.phone);
+    errors.phone = !phoneHasOwnDigits(form.phone) ? t('leads.err.phoneRequired') : phoneErr(form.phone);
   }
-  if (changed('secondaryPhone') && form.secondaryPhone.trim()) errors.secondaryPhone = phoneRule()(form.secondaryPhone);
+  if (!sameWa && form.whatsappPhone.trim() !== initial.whatsappPhone.trim() && phoneHasOwnDigits(form.whatsappPhone)) {
+    errors.whatsappPhone = phoneErr(form.whatsappPhone);
+  }
+  if (changed('secondaryPhone') && phoneHasOwnDigits(form.secondaryPhone)) errors.secondaryPhone = phoneErr(form.secondaryPhone);
   if (changed('email') && form.email.trim()) errors.email = emailRule()(form.email.trim());
   if (changed('comment')) {
     if (form.comment.length > 2000) errors.comment = t('leads.err.commentLong');
@@ -536,7 +552,9 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
     if (changed('birthday')) patch.birthday = form.birthday || '';
     if (changed('country')) patch.country = form.country || null;
     if (changed('phone')) patch.phone = form.phone.trim();
-    if (changed('secondaryPhone')) patch.secondaryPhone = form.secondaryPhone.trim();
+    if (waChanged) patch.whatsappPhone = phoneHasOwnDigits(waValue) ? waValue.trim() : '';
+    if (!sourceLocked && changed('source')) patch.source = form.source;
+    if (changed('secondaryPhone')) patch.secondaryPhone = phoneHasOwnDigits(form.secondaryPhone) ? form.secondaryPhone.trim() : '';
     if (changed('secondaryContactLabel')) patch.secondaryContactLabel = form.secondaryContactLabel.trim();
     if (changed('preferredChannel') && form.preferredChannel) patch.preferredChannel = form.preferredChannel;
     if (changed('email')) patch.email = form.email.trim();
@@ -600,10 +618,28 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
         </CrmSelect>
       </EditField>
       <EditField label={t('app.field.mainPhone')} error={err('phone')}>
-        <input className={`crm-input${err('phone') ? ' input-error' : ''}`} value={form.phone} onChange={(e) => set({ phone: e.target.value })} data-testid="edit-phone" />
+        <PhoneInput value={form.phone} onChange={(v) => set({ phone: v })} error={!!err('phone')} testId="edit-phone" />
+      </EditField>
+      <EditField label={t('app.field.whatsapp')} error={err('whatsappPhone')}>
+        <label className="crm-checkbox-label" style={{ marginBottom: sameWa ? 0 : 8 }}>
+          <input
+            type="checkbox"
+            className="crm-checkbox"
+            checked={sameWa}
+            onChange={(e) => {
+              setSameWa(e.target.checked);
+              if (!e.target.checked && !phoneHasOwnDigits(form.whatsappPhone)) set({ whatsappPhone: '' });
+            }}
+            data-testid="edit-wa-same"
+          />
+          {t('leads.field.sameAsPhone')}
+        </label>
+        {!sameWa && (
+          <PhoneInput value={form.whatsappPhone} onChange={(v) => set({ whatsappPhone: v })} error={!!err('whatsappPhone')} testId="edit-whatsapp" />
+        )}
       </EditField>
       <EditField label={t('app.field.secondaryPhoneHint')} error={err('secondaryPhone')}>
-        <input className={`crm-input${err('secondaryPhone') ? ' input-error' : ''}`} value={form.secondaryPhone} onChange={(e) => set({ secondaryPhone: e.target.value })} placeholder="+992 ..." />
+        <PhoneInput value={form.secondaryPhone} onChange={(v) => set({ secondaryPhone: v })} error={!!err('secondaryPhone')} testId="edit-secondary-phone" />
       </EditField>
       <EditField label={t('app.field.secondaryLabel')}>
         <input
@@ -631,10 +667,18 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
           directionConfirmed=false и не попадала бы ни в срез дашборда
           «по направлениям», ни в фильтр списка. */}
       <EditField label={t('app.field.direction')}>
-        <CrmSelect className="crm-select" value={form.direction} onChange={(e) => set({ direction: e.target.value as Direction | '' })}>
+        <CrmSelect className="crm-select" value={form.direction} onChange={(e) => set({ direction: e.target.value as Direction | '' })} data-testid="edit-direction">
           <option value="">{t('app.direction.notChosen')}</option>
           <DirectionOptions />
         </CrmSelect>
+      </EditField>
+      {/* QA-3 (BUG-07): источник — в карточке, как и в «Новом лиде». */}
+      <EditField label={t('app.field.source')}>
+        <CrmSelect className="crm-select" value={form.source} onChange={(e) => set({ source: e.target.value })} disabled={sourceLocked} data-testid="edit-source">
+          {sourceLocked && <option value={form.source}>{SOURCE_LABEL[form.source as ApplicationSource]}</option>}
+          {STAFF_SOURCES.map((s) => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
+        </CrmSelect>
+        {sourceLocked && <div className="form-hint-text">{t('leads.source.locked')}</div>}
       </EditField>
     </EditForm>
   );

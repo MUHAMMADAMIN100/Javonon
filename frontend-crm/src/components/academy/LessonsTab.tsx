@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { sessionStatusKey } from '../../lib/tjTime';
 import { roleCan } from '../../lib/permissions';
 import { useAuth } from '../../store/auth';
@@ -31,16 +31,27 @@ export default function LessonsTab({
   group,
   meId,
   onChanged,
+  autoTemplate,
+  onAutoTemplateDone,
 }: {
   group: StudyGroupDetail;
   meId?: string;
   onChanged: () => void;
+  /** Пришли из пустого журнала по кнопке «Занятия по шаблону» — окно шаблона открыто сразу. */
+  autoTemplate?: boolean;
+  onAutoTemplateDone?: () => void;
 }) {
   const { t } = useT();
   useFileToken();
   const me = useAuth((s) => s.user);
   const [modal, setModal] = useState<{ session?: ClassSession | null } | null>(null);
   const [template, setTemplate] = useState(false);
+  useEffect(() => {
+    if (!autoTemplate) return;
+    setTemplate(true);
+    onAutoTemplateDone?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoTemplate]);
   const [diaryFor, setDiaryFor] = useState<string | null>(null);
   const [upcomingLimit, setUpcomingLimit] = useState(PAGE);
   const [pastLimit, setPastLimit] = useState(PAGE);

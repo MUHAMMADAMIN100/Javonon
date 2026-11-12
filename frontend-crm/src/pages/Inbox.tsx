@@ -8,6 +8,7 @@ import Icon from '../Icon';
 import { tr, useT } from '../lib/i18n';
 import {
   InboxChannel,
+  inboxChannels,
   InboxMessage,
   INBOX_CHANNEL_LABEL,
   INBOX_CHANNEL_ICON,
@@ -30,6 +31,8 @@ export default function Inbox() {
   const [channelFilter, setChannelFilter] = useState<InboxChannel | ''>('');
   const [selected, setSelected] = useState<{ channel: InboxChannel; handle: string } | null>(null);
 
+  // Статус каналов нужен только на пустом экране; меняется редко.
+  const channelsQ = useQuery({ queryKey: ['inbox', 'channels'], queryFn: inboxChannels, staleTime: 5 * 60_000 });
   const threadsQuery = useQuery({
     queryKey: ['inbox', 'threads', channelFilter || 'all'],
     queryFn: () => inboxThreads(channelFilter || undefined),
@@ -138,8 +141,23 @@ export default function Inbox() {
               flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'var(--text-soft)', padding: 40, textAlign: 'center', lineHeight: 1.5,
             }}>
-              {/* Вместо одинокой стрелки — подсказка (QA №46). */}
-              {threads.length > 0 ? t('inbox.pickThread') : t('inbox.howToConnect')}
+              {/* Вместо одинокой стрелки — подсказка (QA №46). Каналов в «Настройках»
+                  нет — показываем их честный статус (QA-3, BUG-20). */}
+              {threads.length > 0 ? t('inbox.pickThread') : (
+                <div data-testid="inbox-channels">
+                  <div style={{ marginBottom: 12 }}>{t('inbox.howToConnect')}</div>
+                  <div className="inbox-ch-list">
+                    {(['WHATSAPP', 'INSTAGRAM', 'TELEGRAM', 'SMS'] as InboxChannel[]).map((ch) => {
+                      const on = channelsQ.data?.[ch];
+                      return (
+                        <span key={ch} className={`inbox-ch${on ? ' is-on' : ''}`} data-testid={`inbox-ch-${ch}`}>
+                          {INBOX_CHANNEL_LABEL[ch]} — {channelsQ.data ? t(on ? 'inbox.ch.on' : 'inbox.ch.off') : '…'}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </motion.div>

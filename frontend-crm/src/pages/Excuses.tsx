@@ -25,7 +25,7 @@ import {
   type LatenessTotals,
 } from '../api/excuses';
 import { listUsers } from '../api/users';
-import { tjFormatDateTime, tjFormatFull } from '../lib/tjTime';
+import { tjFormatDate, tjFormatDateTime, tjFormatFull } from '../lib/tjTime';
 import { localized, useT } from '../lib/i18n';
 // Файлы лежат на backend (Railway), а не на фронте (Vercel) — нужен
 // абсолютный URL. Audit fix #11: /uploads защищён JWT, токен подставляется
@@ -227,6 +227,38 @@ function PendingTab({ tabs }: { tabs: React.ReactNode }) {
   });
 
   const items = query.data || [];
+  const { confirm } = useUI();
+  /**
+   * QA-3 (BUG-32): решение — только через подтверждение. Раньше «Отклонить»
+   * срабатывало сразу, карточка исчезала, под курсор вставала следующая, и
+   * двойной щелчок штрафовал другого человека. В окне — кто, сколько минут и
+   * сколько составит штраф.
+   */
+  const who = (e: ExcuseEntry) => {
+    const min = e.kind === 'lunch' ? (e.lateLunchMinutes ?? 0) : e.lateMinutes;
+    return t(e.kind === 'lunch' ? 'excuses.confirm.whoLunch' : 'excuses.confirm.who')
+      .replace('{name}', e.user?.fullName || '—')
+      .replace('{min}', String(min))
+      .replace('{date}', tjFormatDate(e.clockIn));
+  };
+  const askReject = async (e: ExcuseEntry) => {
+    const sum = e.penaltyIfRejected ?? 0;
+    const ok = await confirm({
+      title: t('excuses.confirm.rejectTitle'),
+      message: `${who(e)} ${sum > 0 ? t('excuses.confirm.rejectPenalty').replace('{sum}', fmtTjs(sum)) : t('excuses.confirm.rejectNoPenalty')}`,
+      confirmText: t('excuses.reject'),
+      danger: true,
+    });
+    if (ok) rejectMut.mutate({ id: e.id, kind: e.kind });
+  };
+  const askApprove = async (e: ExcuseEntry) => {
+    const ok = await confirm({
+      title: t('excuses.confirm.approveTitle'),
+      message: `${who(e)} ${t('excuses.confirm.approveText')}`,
+      confirmText: t('excuses.approve'),
+    });
+    if (ok) approveMut.mutate({ id: e.id, kind: e.kind });
+  };
   return (
     <>
       <FilterBar tabs={tabs} />
@@ -242,8 +274,8 @@ function PendingTab({ tabs }: { tabs: React.ReactNode }) {
             <ExcuseCard
               key={`${e.id}-${e.kind}`}
               view={fromPending(e)}
-              onApprove={canDecide ? () => approveMut.mutate({ id: e.id, kind: e.kind }) : undefined}
-              onReject={canDecide ? () => rejectMut.mutate({ id: e.id, kind: e.kind }) : undefined}
+              onApprove={canDecide ? () => askApprove(e) : undefined}
+              onReject={canDecide ? () => askReject(e) : undefined}
               busy={approveMut.isPending || rejectMut.isPending}
             />
           ))}

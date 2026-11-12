@@ -7,6 +7,7 @@ import { useRoleLabel } from '../../lib/labels';
 import { listPrograms } from '../../api/programs';
 import { listUsers } from '../../api/users';
 import type { StudyGroup, StudyGroupStatus, UpdateStudyGroupDto } from '../../api/studyGroups';
+import { teacherOptions } from '../../lib/teachers';
 
 export interface GroupFormValue {
   name: string;
@@ -68,12 +69,8 @@ export default function GroupFields({
   const roleLabel = useRoleLabel();
   const programs = useQuery({ queryKey: keys.programs.list(), queryFn: () => listPrograms() });
   const users = useQuery({ queryKey: keys.users.list(), queryFn: () => listUsers() });
-  // Учителя академии — первыми: обычно группу ведёт именно учитель.
-  const teacherOptions = useMemo(() => {
-    const list = [...(users.data ?? [])];
-    const isTeacher = (u: any) => u.role === 'TEACHER' || (u.roles || []).includes('TEACHER');
-    return list.sort((a, b) => Number(isTeacher(b)) - Number(isTeacher(a)) || a.fullName.localeCompare(b.fullName, 'ru'));
-  }, [users.data]);
+  // Только те, кто может вести группы, плюс уже назначенный учитель (lib/teachers).
+  const teacherList = useMemo(() => teacherOptions(users.data, value.teacherId), [users.data, value.teacherId]);
 
   const set = (patch: Partial<GroupFormValue>) => onChange({ ...value, ...patch });
 
@@ -99,7 +96,7 @@ export default function GroupFields({
             data-testid={`${testIdPrefix}-teacher`}
           >
             <option value="">{t('groups.noTeacher')}</option>
-            {teacherOptions.map((u) => (
+            {teacherList.map((u) => (
               <option key={u.id} value={u.id}>{u.fullName} · {(u as any).customRole?.name && (u as any).customRole.isActive !== false ? (u as any).customRole.name : roleLabel(u.role as string)}</option>
             ))}
           </CrmSelect>

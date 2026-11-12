@@ -180,10 +180,13 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   // Права — как раньше: ФИО/email и роли меняет основатель, кадры и оплату — админ.
   const canEditNameEmail = isFounder(meStore);
   const canEditRoles = isFounder(meStore);
+  const canEditPay = isFounder(meStore);
   // Телефон, паспорт, дата приёма: руководство; роль — «Сотрудники — изменение»,
   // если личные данные ей видны (иначе в форме была бы маска вместо номера).
-  const canEditHR = isAdmin || (viewerRole && !own && !personalHidden && roleCan(meStore, 'users:update'));
   const isFounderTarget = user.role === 'FOUNDER' || (user.roles || []).includes('FOUNDER' as any);
+  // Карточку основателя правит только он сам (сервер остальным отвечает 403).
+  const canEditHR = (isAdmin || (viewerRole && !own && !personalHidden && roleCan(meStore, 'users:update')))
+    && (!isFounderTarget || isFounder(meStore));
   const onEditSaved = () => {
     setEditing(null);
     qc.invalidateQueries({ queryKey });
@@ -351,7 +354,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
           <div className="profile-group" data-testid="group-pay">
             <div className="profile-group-head">
               <h3 className="profile-h">{t('userDetail.section.salary')}</h3>
-              {isAdmin && <EditButton active={editing === 'pay'} testId="edit-pay" onClick={() => toggleEdit('pay')} />}
+              {/* QA-3 (BUG-27): оклад, почасовую и KPI меняет только основатель (сервер — 403). */}
+              {canEditPay && <EditButton active={editing === 'pay'} testId="edit-pay" onClick={() => toggleEdit('pay')} />}
             </div>
             <div className="profile-grid">
               <Field label={t('userDetail.field.baseSalary')} value={fmtMoney(salary.baseSalary)} />
@@ -414,7 +418,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
             {editing === 'personal' && (
               <PersonalEditor user={user} userId={realId} canNameEmail={canEditNameEmail} canHR={canEditHR} onSaved={onEditSaved} onClose={closeEdit} />
             )}
-            {editing === 'pay' && <PayEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
+            {editing === 'pay' && canEditPay && <PayEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
             {editing === 'roles' && <RolesEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
             {editing === 'custom' && <CustomRoleEditor user={user} userId={realId} onSaved={onEditSaved} onClose={closeEdit} />}
           </div>

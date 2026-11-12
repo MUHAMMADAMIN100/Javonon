@@ -19,6 +19,8 @@ import { useAuth } from '../store/auth';
 import { me as apiMe } from '../api/auth';
 import { useT } from '../lib/i18n';
 import { isTeacherOnly } from '../lib/roles';
+import { routeDenied, TEACHER_HOME } from './ProtectedRoute';
+import QueryErrorState from './QueryErrorState';
 import { fmtDateText } from '../lib/tjTime';
 
 /**
@@ -218,7 +220,17 @@ export default function Layout() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
-            <Outlet />
+            {routeDenied(me, loc.pathname) ? (
+              <QueryErrorState
+                kind="denied"
+                titleKey="errorState.section.title"
+                textKey="errorState.section.text"
+                backTo={isTeacherOnly(me as any) ? TEACHER_HOME : '/dashboard'}
+                backLabelKey={isTeacherOnly(me as any) ? 'errorState.toGroups' : 'errorState.toHome'}
+              />
+            ) : (
+              <Outlet />
+            )}
           </motion.div>
         </div>
       </div>

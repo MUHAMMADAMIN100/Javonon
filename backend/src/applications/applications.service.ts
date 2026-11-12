@@ -46,6 +46,9 @@ import {
   isWritableApplicationStatus,
 } from '../common/application-status';
 
+/** Сколько лидов отдаёт список без страницы и без ?limit (самые новые). */
+const UNPAGED_LIST_MAX = 500;
+
 // Направление, которое подставляется КАЖДОЙ заявке из create() (= каждой
 // заявке с лендинга: другого клиента у этого метода нет).
 // ЭТО ПЛЕЙСХОЛДЕР, А НЕ ОТВЕТ КЛИЕНТА: форма лендинга больше не спрашивает
@@ -358,7 +361,7 @@ export class ApplicationsService {
    */
   private async persistNewLead(
     dto: CreateApplicationDto | CreateStaffApplicationDto,
-    opts: { source: ApplicationSource; autoAssignManager: boolean; managerId?: string | null },
+    opts: { source: ApplicationSource; autoAssignManager: boolean; managerId?: string | null; direction?: Direction | null },
   ): Promise<{ app: Prisma.ApplicationGetPayload<{}>; duplicate: boolean }> {
     // Валидируем дату рождения ДО любых side-effect'ов (создание заявки,
     // назначение менеджера, реферальная атрибуция) — иначе при 400 в БД
@@ -421,7 +424,7 @@ export class ApplicationsService {
   private async insertLead(
     db: Prisma.TransactionClient | PrismaService,
     dto: CreateApplicationDto | CreateStaffApplicationDto,
-    opts: { source: ApplicationSource; autoAssignManager: boolean; managerId?: string | null },
+    opts: { source: ApplicationSource; autoAssignManager: boolean; managerId?: string | null; direction?: Direction | null },
     birthday: Date | null,
   ) {
 
@@ -463,10 +466,11 @@ export class ApplicationsService {
         // (SubmissionsService) — пишут Application напрямую через Prisma
         // с настоящим направлением и получают directionConfirmed=true
         // по @default из схемы.
-        direction: DEFAULT_DIRECTION,
+        // QA-3 (BUG-07): направление, выбранное сотрудником в форме, — настоящее.
+        direction: opts.direction ?? DEFAULT_DIRECTION,
         // …и честно помечаем, что это плейсхолдер, а не ответ. Иначе он
         // попадёт в дашборд/фильтр как настоящее направление клиента.
-        directionConfirmed: false,
+        directionConfirmed: !!opts.direction,
         // Статус пишем ЯВНО, хотя в схеме на колонке стоит @default(NEW).
         // Дефолт остался легаси намеренно (enum правим только аддитивно, см.
         // комментарий в schema.prisma), а новый лид обязан попадать сразу в
@@ -679,6 +683,7 @@ export class ApplicationsService {
       source: dto.source || STAFF_DEFAULT_SOURCE,
       autoAssignManager: false,
       managerId,
+      direction: dto.direction ?? null,
     });
     if (duplicate) {
       // С этим номером уже есть открытая заявка: новой нет, в прежнюю —
@@ -778,6 +783,8 @@ export class ApplicationsService {
   async findAll(filters: {
     /** Облегчённые строки (окно дашборда): без студента и программы. */
     brief?: boolean;
+    /** Без страницы: не больше стольких строк (QA-3). */
+    limit?: number;
     status?: ApplicationStatus;
     direction?: Direction;
     // Фильтр CRM по стране (тулбар «Страна»), зеркалит фильтр по источнику.
@@ -945,12 +952,17 @@ export class ApplicationsService {
             status: true, createdAt: true, managerId: true,
             manager: { select: { id: true, fullName: true, isActive: true } },
           },
+          ...(filters.limit ? { take: filters.limit } : {}),
         });
       }
+      // QA-3 (набл. 13): полный список без страницы отдавал ВСЕ лиды (2335
+      // строк, ~3,5 МБ) и не слушал ?limit. Экраны CRM берут страницу (page) или
+      // облегчённый brief; здесь — не больше UNPAGED_LIST_MAX самых новых.
       return this.prisma.application.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         include: MANAGER_INCLUDE,
+        take: filters.limit ?? UNPAGED_LIST_MAX,
       });
     }
     const size = filters.pageSize ?? 20;
@@ -1135,6 +1147,15 @@ export class ApplicationsService {
     }
 
     // Номер меняют на номер другой открытой заявки — это дубль, не даём.
+    // QA-3 (BUG-07): «Сайт», «Самозапись», «Реферал» поставила система — это
+    // подтверждённое происхождение лида, руками его не переписать.
+    if (dto.source != null && dto.source !== existing.source) {
+      const machine: ApplicationSource[] = ['LANDING_FORM', 'SELF_REGISTRATION', 'REFERRAL'];
+      if (machine.includes(existing.source)) {
+        throw new BadRequestException('Источник этого лида определён автоматически — изменить его нельзя');
+      }
+    }
+
     if (dto.phone != null) {
       const key = phoneKey(dto.phone);
       if (key && key !== phoneKey(existing.phone)) {

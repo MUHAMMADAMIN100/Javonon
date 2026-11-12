@@ -319,13 +319,15 @@ function AccountModal({ account, onClose, onSaved }: { account: FinanceAccount |
   const [color, setColor] = useState(account?.color ?? ACCOUNT_COLORS[0]);
   const [start, setStart] = useState(account ? String(account.startBalance) : '0');
   const [err, setErr] = useState('');
+  /** Пустое название — ошибка у самого поля, а не внизу окна (QA-3, набл. 22). */
+  const [nameErr, setNameErr] = useState(false);
   const [busy, setBusy] = useState(false);
   const dirty = !account ? !!name.trim() : name !== account.name || kind !== account.kind || currency !== account.currency || color !== account.color;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
-    if (!name.trim()) return setErr(t('finance.acc.errName'));
+    if (!name.trim()) return setNameErr(true);
     const sb = parseAmount(start || '0');
     if (!account && !Number.isFinite(sb)) return setErr(t('finance.acc.errNumber'));
     setBusy(true);
@@ -347,7 +349,8 @@ function AccountModal({ account, onClose, onSaved }: { account: FinanceAccount |
         <div className="form-grid-2">
           <div className="form-group form-span-2">
             <label htmlFor="acc-name">{t('finance.acc.name')}</label>
-            <input id="acc-name" className={`crm-input${err && !name.trim() ? ' input-error' : ''}`} value={name} maxLength={60} autoFocus onChange={(e) => setName(e.target.value)} placeholder={t('finance.acc.namePh')} data-testid="acc-name" />
+            <input id="acc-name" className={`crm-input${nameErr && !name.trim() ? ' input-error' : ''}`} value={name} maxLength={60} autoFocus onChange={(e) => { setName(e.target.value); if (nameErr) setNameErr(false); }} placeholder={t('finance.acc.namePh')} aria-invalid={nameErr && !name.trim()} data-testid="acc-name" />
+            {nameErr && !name.trim() && <div className="form-error-text" role="alert" data-testid="acc-name-error">{t('finance.acc.errName')}</div>}
           </div>
           <div className="form-group">
             <label>{t('finance.acc.kind')}</label>

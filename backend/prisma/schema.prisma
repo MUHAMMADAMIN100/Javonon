@@ -278,6 +278,7 @@ model User {
   offerSignatures          OfferSignature[]
   workSchedules            WorkSchedule[]
   submissions              SaleSubmission[]    @relation("SubmissionManager")
+  submissionsCreated       SaleSubmission[]    @relation("SubmissionCreatedBy")
   submissionPaymentReviews SubmissionPayment[] @relation("SubmissionPaymentReviewer")
   // Позиции внутри buckets схемы распределения выручки. При удалении
   // сотрудника ссылка обнуляется (SetNull) — «место» в схеме остаётся,
@@ -900,6 +901,9 @@ model TimeEntry {
   // Кэш отработанных минут — пересчитывается при clockOut
   totalMinutes              Int             @default(0)
   totalLunchMinutes         Int             @default(0)
+  // QA-3 (BUG-30): минуты между «Закончить день» и повторным «Начать работу»
+  // в тот же день. День остаётся одной записью, пауза в отработанное не входит.
+  pausedMinutes             Int             @default(0)
   // Опоздание относительно нормы (в минутах). Расчёт: clockIn - 09:00.
   lateMinutes               Int             @default(0)
   // Опоздание после обеда (lunchIn - scheduled lunch end). Штраф
@@ -2192,6 +2196,11 @@ model SaleSubmission {
   // когда-нибудь появится ручка переназначения сделки, уже одобренный объём
   // месяца НЕ переедет к новому владельцу задним числом.
   manager                         User?            @relation("SubmissionManager", fields: [managerId], references: [id], onDelete: SetNull)
+  // QA-3 (BUG-13): кто ОФОРМИЛ сделку. Сделка из лида записывается на менеджера
+  // лида (managerId), а оформить её мог основатель или админ — он здесь.
+  // У сделок до 12.11.2026 — null (оформивший и был владельцем).
+  createdById                     String?
+  createdBy                       User?            @relation("SubmissionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   // Контракт — PDF/фото подписанного контракта.
   contractUrls                    String[]         @default([])
   // Snapshot метаданных контракт-файлов (см. комментарий выше про паспорт).
@@ -2542,6 +2551,11 @@ model ClassSession {
   teacherId      String?
   teacher        User?              @relation("ClassSessionTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   status         ClassSessionStatus @default(SCHEDULED)
+  // QA-3 (BUG-38): занятие создано «Занятиями по шаблону» (регулярное
+  // расписание), а не добавлено вручную разово. По нему строится «по каким
+  // дням» группы. У занятий до 12.11.2026 — false: для них регулярность
+  // определяется по повторам (см. academy/journal-math.ts weeklyPattern).
+  fromTemplate   Boolean            @default(false)
   // Идемпотентность напоминания: cron проставляет отметку, отправив
   // уведомление, и по этой сессии больше не срабатывает. Без колонки
   // повторный запуск (или рестарт пода) шлёт напоминание заново.

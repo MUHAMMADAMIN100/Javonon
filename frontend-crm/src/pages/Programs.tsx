@@ -25,6 +25,8 @@ import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import Loading from '../components/Loading';
 import { isElevated } from '../lib/roles';
+import { useEscClose } from '../lib/useEscClose';
+import { fmtDurationRu } from '../lib/plural';
 
 // Допускаем кириллицу и латиницу в названиях программ/университетов
 // (по запросу основателя — пишут на русском тоже). Защита только от
@@ -126,7 +128,7 @@ export default function Programs() {
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
-  const { t } = useT();
+  const { t, lang } = useT();
   const isAdmin = isElevated(me);
   // Права роли «Программы — …»; должность — руководство, как раньше.
   const canCreate = roleCan(me, 'programs:create', isAdmin);
@@ -213,6 +215,8 @@ export default function Programs() {
   const items = countryFilter
     ? allItems.filter((p) => p.country === countryFilter)
     : allItems;
+  /** Включён хоть один фильтр или поиск — пустой список значит «не нашлось». */
+  const filtersOn = !!countryFilter || Object.values(filters).some((v) => v !== undefined && v !== '');
   const navigate = useNavigate();
   const loading = programsQuery.isLoading;
 
@@ -260,6 +264,7 @@ export default function Programs() {
     onError: (e: any) => toast(e?.response?.data?.message || t('programs.toast.saveError'), 'error'),
   });
   const saving = saveMut.isPending;
+  useEscClose(!!editing, () => closeEditor(), saving);
 
   const deleteMut = useOptimisticMutation<unknown, string, Program[]>({
     mutationFn: deleteProgram,
@@ -399,7 +404,8 @@ export default function Programs() {
           ) : items.length === 0 ? (
             <motion.div key="e" className="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className="empty-icon"><Icon name="school" size={48} /></div>
-              {t('programs.empty')}
+              {/* QA-3 (BUG-24): пустой результат фильтра — это «ничего не найдено», а не «программ нет». */}
+              <span data-testid="programs-empty">{filtersOn ? t('programs.emptyFiltered') : t('programs.empty')}</span>
             </motion.div>
           ) : (
             <motion.div key="g" className="programs-grid" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>
@@ -460,7 +466,7 @@ export default function Programs() {
                     <span><Icon name="location_on" size={14} /> {p.city}</span>
                     <span><Icon name="menu_book" size={14} /> {DIRECTION_LABEL[p.direction]}</span>
                     <span><Icon name="school" size={14} /> {p.major}</span>
-                    {p.duration && <span><Icon name="schedule" size={14} /> {p.duration}</span>}
+                    {p.duration && <span data-testid="program-duration"><Icon name="schedule" size={14} /> {lang === 'ru' ? fmtDurationRu(p.duration) : p.duration}</span>}
                     {p.language && <span><Icon name="translate" size={14} /> {p.language}</span>}
                     {p.englishLevel && <span><Icon name="record_voice_over" size={14} /> {p.englishLevel}</span>}
                     {p.avgAdmissionScore && <span><Icon name="grade" size={14} /> {p.avgAdmissionScore}</span>}

@@ -26,6 +26,8 @@ export interface ExcuseEntry {
   lateLunchPenaltyApplied?: boolean;
   // Discriminator — какой тип объяснения
   kind: ExcuseKind;
+  /** Штраф, который начислится при отклонении причины (0 — по шкале не штрафуется). */
+  penaltyIfRejected?: number;
   date: string;
   user: { id: string; fullName: string; role: string; email: string };
 }
@@ -61,6 +63,8 @@ export interface LatenessItem {
   /** id отметки прихода — общий у утра и обеда одного дня. */
   id: string;
   kind: ExcuseKind;
+  /** Штраф, который начислится при отклонении причины (0 — по шкале не штрафуется). */
+  penaltyIfRejected?: number;
   user: { id: string; fullName: string; email: string; isActive: boolean };
   clockIn: string;
   minutes: number;

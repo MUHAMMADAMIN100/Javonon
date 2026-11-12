@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -51,5 +51,12 @@ export class ReportsController {
   @Post()
   upsert(@CurrentUser() me: any, @Body() body: DailyReportInput) {
     return this.svc.upsert(me.id, body);
+  }
+
+  /** Удалить СВОЙ отчёт (QA-3, BUG-06: ошибочный отчёт было не убрать). */
+  @Permissions('reports:create')
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() me: any) {
+    return this.svc.removeOwn(id, me.id);
   }
 }

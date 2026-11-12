@@ -20,6 +20,8 @@ import {
   sendCampaignNow,
   cancelCampaign,
   deleteCampaign,
+  audienceCount,
+  campaignRecipients,
 } from '../api/massmail';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -54,11 +56,27 @@ export default function MassMail() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['massmail'] });
 
   const onSendNow = async (c: MassMailCampaign) => {
+    // QA-3 (набл. 20): сначала узнаём, скольким людям уйдёт сообщение, и
+    // показываем это число в подтверждении — рассылку отозвать нельзя.
+    let n: number;
+    try {
+      n = await campaignRecipients(c.id);
+    } catch (e: any) {
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
+      return;
+    }
+    if (n === 0) {
+      toast(t('massmail.noRecipients'), 'error');
+      return;
+    }
     const ok = await confirm({
       title: t('massmail.confirm.send'),
-      message: `«${c.name}» (${MASS_MAIL_CHANNEL_LABEL[c.channel]})`,
-      confirmText: t('massmail.action.send'),
-      danger: false,
+      message: t('massmail.confirm.sendMessage')
+        .replace('{name}', c.name)
+        .replace('{channel}', MASS_MAIL_CHANNEL_LABEL[c.channel])
+        .replace('{n}', n.toLocaleString('ru-RU')),
+      confirmText: t('massmail.confirm.sendOk').replace('{n}', n.toLocaleString('ru-RU')),
+      danger: true,
     });
     if (!ok) return;
     try {
@@ -212,6 +230,13 @@ function CreateForm({ onClose }: { onClose: () => void }) {
   const [audienceType, setAudienceType] = useState<'' | 'all-leads' | 'paid-students' | 'by-direction'>('');
   const [showErr, setShowErr] = useState(false);
   const [audienceValue, setAudienceValue] = useState('');
+  const audienceReady = !!audienceType && (audienceType !== 'by-direction' || !!audienceValue);
+  const countQ = useQuery({
+    queryKey: ['massmail', 'audience-count', audienceType, audienceValue],
+    queryFn: () => audienceCount({ type: audienceType, ...(audienceType === 'by-direction' ? { value: audienceValue } : {}) }),
+    enabled: audienceReady,
+    staleTime: 30_000,
+  });
   const [busy, setBusy] = useState(false);
 
   const errs = {
@@ -281,6 +306,16 @@ function CreateForm({ onClose }: { onClose: () => void }) {
             <option value="by-direction">{t('app.field.direction')}</option>
           </CrmSelect>
           {showErr && errs.audience && <div className="form-error-text">{errs.audience}</div>}
+          {/* QA-3 (набл. 20): сколько людей получит рассылку — видно до создания. */}
+          {audienceReady && (
+            <div className="form-hint-text" data-testid="massmail-recipients" title={t('massmail.recipients.hint')}>
+              {countQ.isFetching && countQ.data === undefined
+                ? t('massmail.recipients.loading')
+                : countQ.data !== undefined
+                  ? t('massmail.recipients').replace('{n}', countQ.data.toLocaleString('ru-RU'))
+                  : ''}
+            </div>
+          )}
         </div>
         {audienceType === 'by-direction' && (
           <div className="form-group">

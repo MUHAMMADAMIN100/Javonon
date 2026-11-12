@@ -30,6 +30,7 @@ import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../l
 import { presenceSortValue, presenceText, usePresence } from '../lib/usePresence';
 import type { PresenceState } from '../api/presence';
 import PresenceDot from '../components/PresenceDot';
+import { useEscClose } from '../lib/useEscClose';
 
 const EMPTY_FORM = {
   email: '', fullName: '', password: '',
@@ -93,10 +94,11 @@ export default function Users() {
   const founder = isFounder(me);
   // Права роли «Сотрудники — …»; должность — как раньше (всё).
   const viewerRole = hasActiveRole(me) && !founder;
-  const canCreate = roleCan(me, 'users:create');
-  const canDismiss = roleCan(me, 'users:dismiss');
-  // Пароль коллеги меняют только основатель, админ и бухгалтер (сервер).
-  const canSetPassword = !viewerRole;
+  // QA-3 (BUG-27, BUG-35): добавлять, увольнять, возвращать сотрудников и
+  // менять им пароль может только основатель — так же отвечает сервер (403).
+  const canCreate = founder;
+  const canDismiss = founder;
+  const canSetPassword = founder;
   const presence = usePresence(founder);
   const presenceOf = (u: User) => presence.byId.get(u.id);
   const presenceStates: PresenceState[] = ['ONLINE', 'AWAY', 'OFFLINE'];
@@ -220,6 +222,7 @@ export default function Users() {
     setTouched({});
     setError(null);
   };
+  useEscClose(creating, closeCreate, createMut.isPending);
 
   // Увольнение идёт через окно передачи дел: сначала видно, что числится за
   // сотрудником, и выбирается, кому это отдать.
@@ -343,7 +346,7 @@ export default function Users() {
             <thead>
               <tr>
                 {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
-                <th></th>
+                {founder && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -426,7 +429,7 @@ export default function Users() {
                     </div>
                   </td>
                   <td data-label={t('profile.field.createdAt')}>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('ru-RU') : '—'}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
+                  {founder && <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {u.isActive === false ? (
                         canDismiss && (
@@ -459,7 +462,7 @@ export default function Users() {
                         </>
                       )}
                     </div>
-                  </td>
+                  </td>}
                 </tr>
                 );
               })}

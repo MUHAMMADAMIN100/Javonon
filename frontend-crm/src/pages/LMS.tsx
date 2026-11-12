@@ -28,9 +28,11 @@ import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../l
 import { isElevated } from '../lib/roles';
 import { roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
+import { ruPlural } from '../lib/plural';
+import { MarkdownLite, stripMarkdown } from '../lib/markdownLite';
 
 export default function Lms() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const me = useAuth((s) => s.user);
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
@@ -183,7 +185,7 @@ export default function Lms() {
                   color: 'var(--text-soft)',
                   textTransform: 'uppercase',
                 }}>
-                  <span>{c._count?.lessons ?? 0} {t('lms.lessons')}</span>
+                  <span data-testid="lms-lessons-count">{c._count?.lessons ?? 0} {t(lang === 'ru' ? ruPlural(c._count?.lessons ?? 0, 'lms.lessons.one', 'lms.lessons.few', 'lms.lessons') : 'lms.lessons')}</span>
                   <span>·</span>
                   <span>{c._count?.enrollments ?? 0} {t('lms.students')}</span>
                   {c.published && <span style={{ color: 'var(--primary-dark)' }}>· {t('lms.course.published')}</span>}
@@ -450,7 +452,10 @@ function CourseEditor({ course, canUpdate, canRemove, onChange, onTogglePublish,
               ) : (
                 <>
                   <div style={{ fontWeight: 500, fontSize: 15 }}>{l.title}</div>
-                  {l.content && <div style={{ fontSize: 13, color: 'var(--text-soft)', marginTop: 4, whiteSpace: 'pre-wrap' }}>{l.content.slice(0, 200)}{l.content.length > 200 ? '...' : ''}</div>}
+                  {/* QA-3 (BUG-18): короткий текст — оформленным; длинный — превью без знаков разметки. */}
+                  {l.content && (l.content.length <= 400
+                    ? <MarkdownLite text={l.content} className="md-lite-soft" />
+                    : <div style={{ fontSize: 13, color: 'var(--text-soft)', marginTop: 4, whiteSpace: 'pre-wrap' }} data-testid="lms-lesson-preview">{stripMarkdown(l.content).slice(0, 400)}…</div>)}
                   {l.videoUrl && (
                     <a href={l.videoUrl} target="_blank" rel="noreferrer" style={{
                       fontFamily: 'var(--font-mono)',

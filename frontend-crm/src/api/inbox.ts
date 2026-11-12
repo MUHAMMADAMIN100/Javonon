@@ -4,6 +4,10 @@ export type InboxChannel = 'WHATSAPP' | 'INSTAGRAM' | 'TELEGRAM' | 'SMS';
 export type InboxDirection = 'IN' | 'OUT';
 export type InboxStatus = 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
 
+/** Подключён ли каждый канал (ключи на сервере) — для честного статуса во «Входящих». */
+export const inboxChannels = () =>
+  api.get<Record<InboxChannel, boolean>>('/integrations/inbox/channels').then((r) => r.data);
+
 export const INBOX_CHANNEL_LABEL: Record<InboxChannel, string> = {
   WHATSAPP: 'WhatsApp',
   INSTAGRAM: 'Instagram',

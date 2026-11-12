@@ -1215,7 +1215,9 @@ export class AcademyService {
       },
       select: { id: true, fullName: true, email: true },
     });
-    return { ...student, password };
+    // Без доступа пароль никому не известен и в ответ не уходит (набл. 11, QA-3).
+    if (dto.withAccess === false) return { ...student, password: null, access: false };
+    return { ...student, password, access: true };
   }
 
   /**
@@ -1752,22 +1754,25 @@ export class AcademyService {
     // Ближайшее занятие и «по каким дням» — по ближайшим неделям расписания.
     const now = new Date();
     const horizon = new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000);
-    const [upcoming, levelHistory, diaryDue] = await Promise.all([
+    // 8 недель назад — чтобы отличить регулярный день от разового занятия (QA-3, BUG-38).
+    const since = new Date(now.getTime() - 56 * 24 * 60 * 60 * 1000);
+    const [sessionWindow, levelHistory, diaryDue] = await Promise.all([
       active.length
         ? this.prisma.classSession.findMany({
             where: {
               groupId: { in: active.map((m) => m.groupId) },
               status: { not: ClassSessionStatus.CANCELLED },
-              endsAt: { gte: now },
-              startsAt: { lte: horizon },
+              startsAt: { gte: since, lte: horizon },
             },
             orderBy: { startsAt: 'asc' },
-            select: { groupId: true, startsAt: true, endsAt: true, topic: true },
+            select: { groupId: true, startsAt: true, endsAt: true, topic: true, fromTemplate: true },
           })
-        : Promise.resolve([] as Array<{ groupId: string; startsAt: Date; endsAt: Date; topic: string | null }>),
+        : Promise.resolve([] as Array<{ groupId: string; startsAt: Date; endsAt: Date; topic: string | null; fromTemplate: boolean }>),
       this.levelHistoryOf(s.id),
       this.diaryDueToday(s.id, active.map((m) => m.groupId)),
     ]);
+    // Ближайшие (ещё не закончившиеся) занятия — для «следующего занятия».
+    const upcoming = sessionWindow.filter((x) => x.endsAt.getTime() >= now.getTime());
 
     return {
       hasAcademy: true as const,
@@ -1795,14 +1800,15 @@ export class AcademyService {
       flags: activeFlags.map((f) => ({ id: f.id, reason: f.reason, createdAt: f.createdAt, group: f.group })),
       groups: active.map((m) => {
         const mine = upcoming.filter((u) => u.groupId === m.groupId);
+        const mineAll = sessionWindow.filter((u) => u.groupId === m.groupId);
         return {
           id: m.group.id,
           name: m.group.name,
           status: m.group.status,
           teacher: m.group.teacher ? { fullName: m.group.teacher.fullName } : null,
           joinedAt: m.joinedAt,
-          nextLesson: mine[0] ?? null,
-          pattern: weeklyPattern(mine),
+          nextLesson: mine[0] ? { groupId: mine[0].groupId, startsAt: mine[0].startsAt, endsAt: mine[0].endsAt, topic: mine[0].topic } : null,
+          pattern: weeklyPattern(mine, mineAll),
         };
       }),
       summary: summarize(marks.get(s.id) ?? []),

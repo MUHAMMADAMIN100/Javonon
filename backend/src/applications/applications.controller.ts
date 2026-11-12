@@ -101,6 +101,8 @@ export class ApplicationsController {
     @Query('deleted') deleted?: string,
     @Query('duplicates') duplicates?: string,
     @Query('brief') brief?: string,
+    // QA-3 (набл. 13): без страницы список можно ограничить (?limit=50).
+    @Query('limit') limit?: string,
   ) {
     // QA-fix #45: validate enum query params (раньше bad value → 500).
     // Единый источник истины — Prisma enum'ы. Добавили значение в schema.prisma
@@ -146,6 +148,7 @@ export class ApplicationsController {
       // «Дубли» — только руководству: остальным список и так ограничен своими.
       duplicates: (duplicates === '1' || duplicates === 'true') && isElevated(user),
       brief: brief === '1' || brief === 'true',
+      limit: limit ? Math.min(500, Math.max(1, parseInt(limit, 10) || 0)) || undefined : undefined,
     });
   }
 

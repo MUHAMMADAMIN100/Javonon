@@ -120,8 +120,22 @@ async function bootstrap() {
   const checkOrigin = (origin: string | undefined, cb: (err: any, ok?: boolean) => void) => {
     if (!origin) return cb(null, true); // запросы без Origin (curl, server-to-server)
     if (isAllowedOrigin(origin)) return cb(null, true);
-    return cb(new Error(`CORS blocked for origin: ${origin}`), false);
+    // Чужой сайт: без CORS-заголовков. Ошибку НЕ бросаем — она превращалась в 500.
+    return cb(null, false);
   };
+
+  // QA-3 (BUG-26): запрос с чужого сайта — это отказ (403), а не «ошибка
+  // сервера» (500). Раньше cors-колбэк бросал Error, и Express отвечал 500 и на
+  // GET, и на предварительный OPTIONS: в мониторинге это выглядело как падение
+  // API. Запросы без Origin (сервер-сервер, вебхуки, curl) идут как раньше.
+  app.use((req: any, res: any, next: any) => {
+    const origin = req.headers?.origin as string | undefined;
+    if (origin && !isAllowedOrigin(origin)) {
+      res.status(403).json({ statusCode: 403, error: 'Forbidden', message: 'Запросы с этого сайта не разрешены' });
+      return;
+    }
+    next();
+  });
 
   app.enableCors({
     origin: checkOrigin,

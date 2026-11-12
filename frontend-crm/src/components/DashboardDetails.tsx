@@ -296,14 +296,17 @@ function DebtDetails({ onClose }: { onClose: () => void }) {
   const more = (n: number) => t('details.more').replace('{n}', String(n));
   const columns: DetailsColumn<any>[] = [
     { key: 'fullName', label: t('finance.col.student'), value: (a) => a.fullName, render: (a) => <strong>{a.fullName}</strong> },
-    { key: 'program', label: t('sidebar.programs'), value: (a) => a.program?.name },
+    // QA-3 (BUG-03): программа и сумма — из долга (a.debt), как в «Финансах».
+    // Раньше окно читало a.program, которого у должника обычно нет, и обе
+    // колонки показывали «—».
+    { key: 'program', label: t('sidebar.programs'), value: (a) => a.debt?.programName ?? a.program?.name ?? t('finance.debt.noDeal') },
     {
       key: 'amount',
-      label: t('common.amount'),
+      label: t('finance.debt.col'),
       type: 'number',
       align: 'right',
-      value: (a) => (a.program ? Number(a.program.cost) : null),
-      render: (a) => (a.program ? fmtMoney(Number(a.program.cost), a.program.currency || 'TJS') : null),
+      value: (a) => a.debt?.amount ?? null,
+      render: (a) => (a.debt?.amount != null ? fmtMoney(Number(a.debt.amount), a.debt.currency || REPORTING_CURRENCY) : t('finance.debt.noAmount')),
     },
     { key: 'manager', label: t('finance.col.manager'), value: (a) => a.manager?.fullName },
   ];
@@ -318,8 +321,8 @@ function DebtDetails({ onClose }: { onClose: () => void }) {
       columns={columns}
       rowKey={(a) => a.id}
       rowHref={(a) => `/applications/${a.id}`}
-      searchOf={(a) => [a.fullName, a.program?.name, a.manager?.fullName]}
-      listHref="/finance"
+      searchOf={(a) => [a.fullName, a.debt?.programName ?? a.program?.name, a.manager?.fullName]}
+      listHref="/finance#finance-debts"
       emptyText={t('finance.outstanding.empty')}
       onClose={onClose}
     />

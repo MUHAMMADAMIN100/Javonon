@@ -42,6 +42,7 @@ import { useDirectionLabel, useStudentStatusLabel, useOnboardingLabel, useChanne
 import { tjFormatFull } from '../lib/tjTime';
 import { STUDENT_LOGIN_URL } from '../lib/landingUrl';
 import StudentAcademyBlock from '../components/academy/StudentAcademyBlock';
+import { useEscClose } from '../lib/useEscClose';
 
 function CredRow({ label, value }: { label: string; value: string }) {
   const { t } = useT();
@@ -96,6 +97,7 @@ export default function StudentDetail() {
   const countryLabel = useCountryLabel();
   const [editing, setEditing] = useState(false);
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
+  useEscClose(!!credentials, () => setCredentials(null));
 
   const studentKey = id ? keys.students.one(id) : ['students', 'one', null];
   const studentQuery = useQuery<Student>({
@@ -235,8 +237,8 @@ export default function StudentDetail() {
   const onDeleteStudent = async () => {
     if (!id) return;
     const ok = await confirm({
-      title: t('common.delete') + ' · ' + t('studentDetail.title'),
-      message: '',
+      title: t('studentDetail.delete.title'),
+      message: t('studentDetail.delete.message').replace('{name}', student?.fullName || ''),
       confirmText: t('common.delete'),
       danger: true,
     });

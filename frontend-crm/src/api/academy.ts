@@ -273,8 +273,8 @@ export interface NewAcademyStudent {
   levelId?: string;
 }
 
-export async function createAcademyStudent(payload: NewAcademyStudent) {
-  const { data } = await api.post<{ id: string; fullName: string; email: string; password: string }>(
+export async function createAcademyStudent(payload: NewAcademyStudent & { withAccess?: boolean }) {
+  const { data } = await api.post<{ id: string; fullName: string; email: string; password: string | null; access?: boolean }>(
     '/academy/students',
     payload,
   );

@@ -8,6 +8,7 @@ import SearchField from './SearchField';
 import { SortSelect, SortTh, useTableSort, type SortColumn } from './TableSort';
 import { matchesSearch } from '../lib/listSearch';
 import { useT } from '../lib/i18n';
+import { useEscClose } from '../lib/useEscClose';
 
 /**
  * Окно «подробнее» по клику на карточку-цифру (дашборд, «Текущий месяц» в
@@ -95,13 +96,7 @@ export default function DetailsModal<T>({
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscClose(true, onClose);
 
   const shown = (rows ?? []).filter((r) =>
     searchOf ? matchesSearch(search, searchOf(r), phonesOf ? phonesOf(r) : []) : true,

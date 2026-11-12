@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Icon from '../Icon';
 import { useT } from '../lib/i18n';
+import { useEscClose } from '../lib/useEscClose';
 
 type Props = {
   open: boolean;
@@ -36,14 +37,7 @@ export default function UnsavedChangesDialog({
   const _message = message ?? t('unsaved.message');
   const _confirmLabel = confirmLabel ?? t('unsaved.confirm');
   const _cancelLabel = cancelLabel ?? t('unsaved.cancel');
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onCancel]);
+  useEscClose(open, onCancel);
 
   return (
     <AnimatePresence>

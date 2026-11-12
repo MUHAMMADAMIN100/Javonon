@@ -151,6 +151,49 @@ export default function Finance() {
     }, 400);
   };
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  // QA-3 (BUG-03): ссылка «Открыть в списке» из окна должников ведёт на
+  // #finance-debts — прокручиваем к таблице долгов, когда она загрузилась
+  // (сам переход по адресу с «#» страницу не прокручивает).
+  // Блоки выше таблицы (графики, аналитика) догружаются позже и сдвигают её
+  // вниз, поэтому одной прокрутки мало: пока высота страницы меняется (до 4 с),
+  // возвращаем таблицу к верху экрана. Человек начал листать сам — отпускаем.
+  // Удержание живёт в ref, а не в cleanup эффекта: иначе первое же обновление
+  // данных страницы обрывало его.
+  const debtsScrolled = useRef(false);
+  const debtsHoldStop = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (debtsScrolled.current || window.location.hash !== '#finance-debts' || pendingQ.isLoading) return;
+    const el = document.getElementById('finance-debts');
+    if (!el) return;
+    debtsScrolled.current = true;
+    const go = () => el.scrollIntoView({ behavior: 'auto', block: 'start' });
+    requestAnimationFrame(go);
+    const ro = new ResizeObserver(go);
+    [document.documentElement, document.body, document.querySelector('.content'), el.parentElement]
+      .forEach((n) => { if (n) ro.observe(n); });
+    const poll = window.setInterval(go, 250);
+    let stopped = false;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      ro.disconnect();
+      window.clearInterval(poll);
+      window.clearTimeout(timer);
+      window.removeEventListener('wheel', stop);
+      window.removeEventListener('touchstart', stop);
+      window.removeEventListener('keydown', stop);
+      window.removeEventListener('mousedown', stop);
+    };
+    window.addEventListener('wheel', stop, { passive: true });
+    window.addEventListener('touchstart', stop, { passive: true });
+    window.addEventListener('keydown', stop);
+    window.addEventListener('mousedown', stop);
+    const timer = window.setTimeout(stop, 4000);
+    debtsHoldStop.current = stop;
+  }, [pendingQ.isLoading, pendingQ.data]);
+  // При размонтировании сбрасываем и флаг: в режиме разработки React запускает
+  // эффекты дважды, и без сброса второй запуск удержание уже не включал.
+  useEffect(() => () => { debtsHoldStop.current?.(); debtsHoldStop.current = null; debtsScrolled.current = false; }, []);
   useRealtime({
     'transaction:new': () => schedule({ finance: true }),
     'transaction:updated': () => schedule({ finance: true }),

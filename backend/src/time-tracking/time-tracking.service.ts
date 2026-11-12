@@ -152,20 +152,55 @@ export class TimeTrackingService {
       ? Math.max(0, minutesFromMidnight - sched.startMinute)
       : 0;
 
-    const entry = await this.prisma.timeEntry.create({
-      data: {
-        userId,
-        clockIn: now,
-        date: now,
-        status: TimeEntryStatus.WORKING,
-        lateMinutes,
-        clockInLat: hasGeo ? opts!.lat : null,
-        clockInLon: hasGeo ? opts!.lon : null,
-        clockInProofUrl: hasProof ? opts!.proofUrl : null,
-      },
+    // QA-3 (BUG-30): ОДИН ДЕНЬ — ОДНА ЗАПИСЬ. Раньше «Начать работу» после
+    // «Закончить день» в ту же дату создавало вторую запись: опоздание и
+    // штраф считались дважды (приход в 12:00 = «опоздал на 3 часа»). Теперь
+    // повторный приход открывает ту же запись заново: опоздание — одно, по
+    // первому приходу; перерыв между «закончил» и «начал снова» копится в
+    // pausedMinutes и в отработанное не входит. Замок на сотрудника — чтобы
+    // двойное нажатие не создало две записи.
+    const { entry, action } = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'time:' + userId}))`;
+      const todays = await tx.timeEntry.findFirst({
+        where: { userId, clockIn: { gte: tjStartOfDay(now), lt: tjStartOfNextDay(now) } },
+        orderBy: { clockIn: 'desc' },
+      });
+      if (todays) {
+        if (todays.status !== TimeEntryStatus.OFF) {
+          throw new BadRequestException('Рабочий день уже идёт');
+        }
+        const pausedFrom = todays.clockOut ?? now;
+        const gap = Math.max(0, Math.round((now.getTime() - pausedFrom.getTime()) / 60000));
+        const reopened = await tx.timeEntry.update({
+          where: { id: todays.id },
+          data: {
+            status: TimeEntryStatus.WORKING,
+            clockOut: null,
+            autoClosed: false,
+            pausedMinutes: todays.pausedMinutes + gap,
+            // Подтверждение первого прихода остаётся; пустое — дополняем.
+            ...(todays.clockInLat == null && hasGeo ? { clockInLat: opts!.lat, clockInLon: opts!.lon } : {}),
+            ...(!todays.clockInProofUrl && hasProof ? { clockInProofUrl: opts!.proofUrl } : {}),
+          },
+        });
+        return { entry: reopened, action: 'resume' as const };
+      }
+      const created = await tx.timeEntry.create({
+        data: {
+          userId,
+          clockIn: now,
+          date: now,
+          status: TimeEntryStatus.WORKING,
+          lateMinutes,
+          clockInLat: hasGeo ? opts!.lat : null,
+          clockInLon: hasGeo ? opts!.lon : null,
+          clockInProofUrl: hasProof ? opts!.proofUrl : null,
+        },
+      });
+      return { entry: created, action: 'clockIn' as const };
     });
     // По ТЗ — посещаемость у основателя обновляется мгновенно.
-    this.realtime.emitStaff('attendance:updated', { userId, entryId: entry.id, action: 'clockIn' });
+    this.realtime.emitStaff('attendance:updated', { userId, entryId: entry.id, action });
     return entry;
   }
 
@@ -332,7 +367,7 @@ export class TimeTrackingService {
    * Закрыть забытую сессию: уход = конец рабочего дня по графику (но не
    * раньше последней отметки), обед, если он не закрыт, — до этого момента.
    */
-  private async closeAutomatically(active: { id: string; userId: string; clockIn: Date; lunchIn: Date | null; lunchOut: Date | null; status: TimeEntryStatus; totalLunchMinutes: number }) {
+  private async closeAutomatically(active: { id: string; userId: string; clockIn: Date; lunchIn: Date | null; lunchOut: Date | null; status: TimeEntryStatus; totalLunchMinutes: number; pausedMinutes?: number }) {
     const lastTouch = active.lunchIn || active.lunchOut || active.clockIn;
     const end = await this.scheduledEnd(active.userId, active.clockIn);
     const at = end.getTime() > lastTouch.getTime() ? end : lastTouch;
@@ -347,7 +382,7 @@ export class TimeTrackingService {
         status: TimeEntryStatus.OFF,
         clockOut: at,
         totalLunchMinutes: lunch,
-        totalMinutes: Math.max(0, wallMin - lunch),
+        totalMinutes: Math.max(0, wallMin - lunch - (active.pausedMinutes ?? 0)),
         autoClosed: true,
       },
     });
@@ -364,7 +399,7 @@ export class TimeTrackingService {
     try {
       const open = await this.prisma.timeEntry.findMany({
         where: { clockOut: null, status: { not: TimeEntryStatus.OFF } },
-        select: { id: true, userId: true, clockIn: true, lunchIn: true, lunchOut: true, status: true, totalLunchMinutes: true },
+        select: { id: true, userId: true, clockIn: true, lunchIn: true, lunchOut: true, status: true, totalLunchMinutes: true, pausedMinutes: true },
       });
       const now = Date.now();
       for (const e of open) {
@@ -387,7 +422,8 @@ export class TimeTrackingService {
     }
     const totalLunch = active.totalLunchMinutes + extraLunch;
     const totalMs = now.getTime() - active.clockIn.getTime();
-    const totalMin = Math.max(0, Math.round(totalMs / 60000) - totalLunch);
+    // Перерыв между «закончил» и «начал снова» в тот же день — не работа (QA-3).
+    const totalMin = Math.max(0, Math.round(totalMs / 60000) - totalLunch - active.pausedMinutes);
     // ПЕРЕРАБОТКА УБРАНА (решение учредителя): раньше здесь считалась норма
     // дня по графику и overtimeMinutes = totalMin − норма, и значение
     // писалось в TimeEntry. Больше не считаем и не пишем — колонка

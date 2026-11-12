@@ -176,6 +176,31 @@ export class PenaltiesService {
   }
 
   /**
+   * Какой штраф начислится, если причину этого опоздания отклонить, — для окна
+   * подтверждения (QA-3, BUG-32: «Отклонить? Начислится штраф N»). Считает тем
+   * же правилом, что settleEntry. 0 — по шкале компании такое опоздание не
+   * штрафуется (или штраф за этот день уже есть/не положен).
+   */
+  async previewLatePenalty(entryId: string, kind: LateKind): Promise<number> {
+    const e = await this.prisma.timeEntry.findUnique({
+      where: { id: entryId },
+      select: { ...ENTRY_SELECT, latePenaltyApplied: true, lateLunchPenaltyApplied: true },
+    });
+    if (!e) return 0;
+    const minutes = kind === 'arrival' ? e.lateMinutes : e.lateLunchMinutes;
+    if (minutes < LATE_THRESHOLD_MIN) return 0;
+    if (kind === 'arrival' ? e.latePenaltyApplied : e.lateLunchPenaltyApplied) return 0;
+    const reason: PenaltyReason = kind === 'arrival' ? 'LATE_ARRIVAL' : 'LATE_FROM_LUNCH';
+    const { rule, hasRules } = await this.settings.findPenaltyForLate(minutes);
+    if (rule) return rule.amount;
+    if (hasRules) return 0;
+    const prior = await this.prisma.penalty.count({
+      where: { userId: e.userId, reason, date: { gte: tjCalendarDay(tjStartOfMonth(e.clockIn)), lt: tjCalendarDay(e.clockIn) } },
+    });
+    return LATE_BASE_AMOUNT_TJS + prior * LATE_INCREMENT_TJS;
+  }
+
+  /**
    * Решение по одному опозданию:
    *   APPROVED — штрафа нет, запись закрыта;
    *   PENDING  — ждём основателя, запись остаётся открытой;
@@ -196,6 +221,17 @@ export class PenaltiesService {
       (await db.timeEntry.updateMany({ where: claimWhere, data: claimData })).count === 1;
 
     if (minutes < LATE_THRESHOLD_MIN) return 'none';
+    // QA-3 (BUG-30): опоздание — одно на день, по ПЕРВОМУ приходу. Вторая
+    // запись того же дня (старые данные до правки) штраф не создаёт.
+    if (kind === 'arrival') {
+      const earlier = await this.prisma.timeEntry.count({
+        where: { userId: e.userId, clockIn: { gte: tjStartOfDay(e.clockIn), lt: e.clockIn } },
+      });
+      if (earlier > 0) {
+        await claim(this.prisma);
+        return 'none';
+      }
+    }
     if (status === 'APPROVED') return (await claim(this.prisma)) ? 'excused' : 'none';
     if (status === 'PENDING') return 'pending';
 

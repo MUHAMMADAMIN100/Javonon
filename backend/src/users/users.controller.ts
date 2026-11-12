@@ -137,6 +137,15 @@ export class MeController {
   }
 }
 
+/**
+ * QA-3 (BUG-27, BUG-35): добавлять, увольнять, возвращать сотрудников и
+ * передавать их дела может только основатель. @Roles(FOUNDER) — первая
+ * линия (RolesGuard), эта проверка — вторая, на случай правок guard'а.
+ */
+function assertFounder(me: any, what: string) {
+  if (!isFounder(me)) throw new ForbiddenException(`${what} может только основатель`);
+}
+
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.ACCOUNTANT)
 @Controller('users')
@@ -163,9 +172,10 @@ export class UsersController {
     return users.map((u) => (u.id === me.id ? u : { ...u, email: maskEmail(u.email) as string }));
   }
 
-  @Permissions('users:create')
+  @Roles(Role.FOUNDER)
   @Post()
   create(@Body() dto: CreateUserDto, @CurrentUser() me: any) {
+    assertFounder(me, 'Добавлять сотрудников');
     return this.users.create(dto, me);
   }
 
@@ -200,9 +210,10 @@ export class UsersController {
   }
 
   /** «Уволить» (история сохраняется). DELETE оставлен для совместимости. */
-  @Permissions('users:dismiss')
+  @Roles(Role.FOUNDER)
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() me: any) {
+    assertFounder(me, 'Увольнять сотрудников');
     if (id === me.id) {
       throw new BadRequestException('Нельзя уволить самого себя');
     }
@@ -210,9 +221,10 @@ export class UsersController {
   }
 
   /** Body: { mode: 'USER' | 'AUTO', toUserId? } — кому передать дела. */
-  @Permissions('users:dismiss')
+  @Roles(Role.FOUNDER)
   @Post(':id/dismiss')
   dismiss(@Param('id') id: string, @CurrentUser() me: any, @Body() body: any) {
+    assertFounder(me, 'Увольнять сотрудников');
     if (id === me.id) {
       throw new BadRequestException('Нельзя уволить самого себя');
     }
@@ -220,22 +232,25 @@ export class UsersController {
   }
 
   /** Что числится за сотрудником и кому можно передать (окно «Уволить»). */
-  @Permissions('users:dismiss')
+  @Roles(Role.FOUNDER)
   @Get(':id/handover')
-  handoverInfo(@Param('id') id: string) {
+  handoverInfo(@Param('id') id: string, @CurrentUser() me: any) {
+    assertFounder(me, 'Увольнять сотрудников и передавать их дела');
     return this.users.handoverInfo(id);
   }
 
   /** Передать дела уже уволенного сотрудника. Body как у dismiss. */
-  @Permissions('users:dismiss')
+  @Roles(Role.FOUNDER)
   @Post(':id/handover')
   handover(@Param('id') id: string, @CurrentUser() me: any, @Body() body: any) {
+    assertFounder(me, 'Передавать дела сотрудников');
     return this.users.handoverDismissed(id, me, body);
   }
 
-  @Permissions('users:dismiss')
+  @Roles(Role.FOUNDER)
   @Post(':id/restore')
-  restore(@Param('id') id: string) {
+  restore(@Param('id') id: string, @CurrentUser() me: any) {
+    assertFounder(me, 'Возвращать уволенных сотрудников');
     return this.users.restore(id);
   }
 

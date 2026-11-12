@@ -206,11 +206,18 @@ function PipelineCard({
   const { t } = useT();
   const [newStageName, setNewStageName] = useState('');
 
+  // QA-3 (BUG-15): отказ сервера («…не должно содержать HTML-теги», дубль
+  // названия) показываем — раньше добавление молча ничего не делало.
   const onAddStage = async () => {
     if (!newStageName.trim()) return;
-    await addStage(pipeline.id, { name: newStageName.trim(), color: DEFAULT_STAGE_COLOR });
-    setNewStageName('');
-    onChanged();
+    try {
+      await addStage(pipeline.id, { name: newStageName.trim(), color: DEFAULT_STAGE_COLOR });
+      setNewStageName('');
+      onChanged();
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      toast((Array.isArray(m) ? m.join(', ') : m) || t('toast.error'), 'error');
+    }
   };
 
   const onDeleteStage = async (s: PipelineStage) => {
@@ -220,9 +227,16 @@ function PipelineCard({
       danger: true,
     });
     if (!ok) return;
-    await deleteStage(s.id);
-    onChanged();
+    try {
+      await deleteStage(s.id);
+      onChanged();
+    } catch (e: any) {
+      toast(e?.response?.data?.message || t('toast.error'), 'error');
+    }
   };
+  /** Единственный финальный этап не удаляется (так же отвечает сервер) — крестик не показываем. */
+  const finalCount = pipeline.stages.filter((x) => x.isClosingStage).length;
+  const canDeleteStage = (s: PipelineStage) => pipeline.stages.length > 1 && !(s.isClosingStage && finalCount <= 1);
 
   const onPatchStage = async (s: PipelineStage, patch: Partial<PipelineStage>) => {
     try {
@@ -302,6 +316,7 @@ function PipelineCard({
             onMoveUp={() => moveStage(i, -1)}
             onMoveDown={() => moveStage(i, 1)}
             onDelete={() => onDeleteStage(s)}
+            deletable={canDeleteStage(s)}
             onChange={(patch) => onPatchStage(s, patch)}
           />
         ))}
@@ -333,7 +348,10 @@ function StageChip({
   onMoveDown,
   onDelete,
   onChange,
+  deletable,
 }: {
+  /** false — крестика нет (единственный финальный этап или последний этап воронки). */
+  deletable?: boolean;
   stage: PipelineStage;
   perms: PipelinePerms;
   canMoveUp: boolean;
@@ -394,7 +412,9 @@ function StageChip({
           <button title={tr('common.edit')} onClick={() => setEditing(true)} style={btnIcon}>✎</button>
         </>
       )}
-      {perms.remove && <button title="✕" onClick={onDelete} style={{ ...btnIcon, color: 'var(--danger)' }}>×</button>}
+      {perms.remove && deletable !== false && (
+        <button title={tr('common.delete')} aria-label={tr('common.delete')} onClick={onDelete} style={{ ...btnIcon, color: 'var(--danger)' }} data-testid="stage-delete">×</button>
+      )}
     </div>
   );
 }

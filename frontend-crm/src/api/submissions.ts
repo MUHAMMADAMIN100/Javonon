@@ -77,6 +77,9 @@ export interface SaleSubmission {
   program?: { id: string; name: string; university: string };
   student?: { id: string; fullName: string } | null;
   manager?: { id: string; fullName: string; role: string };
+  /** Кто оформил сделку (у сделок до 12.11.2026 — нет). */
+  createdById?: string | null;
+  createdBy?: { id: string; fullName: string } | null;
   application?: { id: string; status: string } | null;
   /**
    * Партнёр, приведший клиента. Приходит ТОЛЬКО руководству

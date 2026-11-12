@@ -220,6 +220,10 @@ export default function StudentNew() {
             />
             {showErr('comment') && <div className="form-error-text">{errors.comment}</div>}
           </div>
+          {/* QA-3 (набл. 11): форма создаёт и доступ в кабинет — говорим об этом заранее. */}
+          <div className="form-hint-text" data-testid="student-new-access-hint" style={{ marginBottom: 12 }}>
+            {t('studentNew.accessHint')}
+          </div>
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => navigate('/students')}>{t('common.cancel')}</button>
             <button

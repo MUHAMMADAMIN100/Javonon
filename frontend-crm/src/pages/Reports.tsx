@@ -1,8 +1,8 @@
 import { fmtDateText, TJ_TZ, tjLastDaysRange } from '../lib/tjTime';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
-import { reportToday, reportsMine, upsertReport, type DailyReport } from '../api/reports';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { deleteReport, reportToday, reportsMine, upsertReport, type DailyReport } from '../api/reports';
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import FormModal from '../components/FormModal';
@@ -28,9 +28,12 @@ function fmtDate(iso: string) {
 export default function Reports() {
   // Свой отчёт за день: роль — «Ежедневные отчёты — свой отчёт за день».
   const canWrite = roleCan(useAuth((s) => s.user), 'reports:create');
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const { t } = useT();
+  const qc = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
+  /** Ошибки полей: показываются под полем после попытки сохранить. */
+  const [errs, setErrs] = useState<Record<string, string>>({});
   const [calls, setCalls] = useState('0');
   const [meetings, setMeetings] = useState('0');
   const [contacted, setContacted] = useState('0');
@@ -68,19 +71,30 @@ export default function Reports() {
     { key: 'activity', label: t('reports.field.activity'), value: (r) => r.activitySummary },
   ]);
 
-  // При загрузке/обновлении today — синкаем форму.
+  /**
+   * Форма = сохранённый отчёт за сегодня (или нули). QA-3 (BUG-04): раньше
+   * поля заполнялись только при загрузке, и после «Отмена» в форме оставались
+   * отменённые значения. Теперь форма сбрасывается при КАЖДОМ открытии и при
+   * отмене — «Отмена» значит «ничего не менял».
+   */
+  const resetForm = () => {
+    setCalls(String(today?.callsCount ?? 0));
+    setMeetings(String(today?.meetingsCount ?? 0));
+    setContacted(String(today?.applicationsContacted ?? 0));
+    setSalesCount(String(today?.salesCount ?? 0));
+    setSalesAmount(String(today?.salesAmount ?? 0));
+    setOfflineConsult(String(today?.offlineConsultations ?? 0));
+    setOnlineConsult(String(today?.onlineConsultations ?? 0));
+    setActivity(today?.activitySummary || '');
+    setChallenges(today?.challenges || '');
+    setErrs({});
+  };
+  const openForm = () => { resetForm(); setFormOpen(true); };
+  const closeForm = () => { setFormOpen(false); resetForm(); };
+  // Отчёт подгрузился или обновился, пока окно закрыто, — держим поля в ногу.
   useEffect(() => {
-    if (today) {
-      setCalls(String(today.callsCount));
-      setMeetings(String(today.meetingsCount));
-      setContacted(String(today.applicationsContacted));
-      setSalesCount(String(today.salesCount));
-      setSalesAmount(String(today.salesAmount));
-      setOfflineConsult(String(today.offlineConsultations ?? 0));
-      setOnlineConsult(String(today.onlineConsultations ?? 0));
-      setActivity(today.activitySummary || '');
-      setChallenges(today.challenges || '');
-    }
+    if (!formOpen) resetForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today?.id, today?.callsCount, today?.meetingsCount, today?.applicationsContacted, today?.salesCount, today?.salesAmount, today?.offlineConsultations, today?.onlineConsultations, today?.activitySummary, today?.challenges]);
 
   // Оптимистично патчим today + invalidate history.
@@ -94,21 +108,64 @@ export default function Reports() {
   });
   const saving = upsertMut.isPending;
 
+  // QA-3 (BUG-05): числа проверяются, а не «чинятся» молча. Раньше «1.5»
+  // превращалось в 15, а «-5» в 5 — человек сохранял не то, что ввёл.
+  const intOf = (raw: string): number | null => (/^\d{1,6}$/.test(raw.trim()) ? Number(raw.trim()) : raw.trim() === '' ? 0 : null);
+  const moneyOf = (raw: string): number | null => {
+    const v = raw.trim().replace(',', '.');
+    if (v === '') return 0;
+    return /^\d{1,9}(\.\d{1,2})?$/.test(v) ? Number(v) : null;
+  };
   const onSave = () => {
+    const ints = { calls, meetings, contacted, salesCount, offlineConsult, onlineConsult } as const;
+    const next: Record<string, string> = {};
+    const nums: Record<string, number> = {};
+    for (const [k, raw] of Object.entries(ints)) {
+      const n = intOf(raw);
+      if (n === null) next[k] = t('reports.err.int');
+      else nums[k] = n;
+    }
+    const amount = moneyOf(salesAmount);
+    if (amount === null) next.salesAmount = t('reports.err.money');
+    else if (amount > 0 && nums.salesCount === 0) next.salesCount = t('reports.err.salesCount');
+    setErrs(next);
+    if (Object.keys(next).length) {
+      toast(t('reports.err.fix'), 'error');
+      return;
+    }
     upsertMut.mutate({
-      callsCount: parseInt(calls, 10) || 0,
-      meetingsCount: parseInt(meetings, 10) || 0,
-      applicationsContacted: parseInt(contacted, 10) || 0,
-      salesCount: parseInt(salesCount, 10) || 0,
-      salesAmount: parseFloat(salesAmount) || 0,
-      offlineConsultations: parseInt(offlineConsult, 10) || 0,
-      onlineConsultations: parseInt(onlineConsult, 10) || 0,
+      callsCount: nums.calls,
+      meetingsCount: nums.meetings,
+      applicationsContacted: nums.contacted,
+      salesCount: nums.salesCount,
+      salesAmount: amount as number,
+      offlineConsultations: nums.offlineConsult,
+      onlineConsultations: nums.onlineConsult,
       activitySummary: activity.trim() || undefined,
       challenges: challenges.trim() || undefined,
     }, {
       // Отчёт сохранён — окно закрываем, история под ним уже обновилась.
       onSuccess: () => setFormOpen(false),
     });
+  };
+
+  // QA-3 (BUG-06): свой отчёт можно удалить — с подтверждением и датой в тексте.
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => deleteReport(id),
+    onSuccess: async () => {
+      await Promise.all([qc.invalidateQueries({ queryKey: todayKey }), qc.invalidateQueries({ queryKey: historyKey })]).catch(() => undefined);
+      toast(t('reports.toast.deleted'), 'success');
+    },
+    onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
+  });
+  const onDelete = async (r: DailyReport) => {
+    const ok = await confirm({
+      title: t('reports.delete.title'),
+      message: t('reports.delete.message').replace('{date}', fmtDate(r.date)),
+      confirmText: t('common.delete'),
+      danger: true,
+    });
+    if (ok) deleteMut.mutate(r.id);
   };
 
   const totalCalls = history.reduce((s, r) => s + r.callsCount, 0);
@@ -124,7 +181,7 @@ export default function Reports() {
           сегодня уже сдан или ещё нет. */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         {canWrite && (
-          <button className="btn btn-primary" data-testid="report-new" onClick={() => setFormOpen(true)}>
+          <button className="btn btn-primary" data-testid="report-new" onClick={openForm}>
             <Icon name={today ? 'edit' : 'add'} size={16} />
             {today ? t('reports.editToday') : t('reports.new')}
           </button>
@@ -134,19 +191,19 @@ export default function Reports() {
       <FormModal
         open={formOpen}
         title={today ? t('reports.editToday') : t('reports.new')}
-        onClose={() => setFormOpen(false)}
+        onClose={closeForm}
         busy={saving}
         testId="report-form"
       >
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16 }}>
-          <NumberField label={t('reports.field.calls')} value={calls} onChange={setCalls} />
-          <NumberField label={t('reports.field.meetings')} value={meetings} onChange={setMeetings} />
-          <NumberField label={t('reports.field.applications')} value={contacted} onChange={setContacted} />
-          <NumberField label={t('reports.field.offline')} value={offlineConsult} onChange={setOfflineConsult} />
-          <NumberField label={t('reports.field.online')} value={onlineConsult} onChange={setOnlineConsult} />
-          <NumberField label={t('reports.field.salesCount')} value={salesCount} onChange={setSalesCount} highlight />
-          <NumberField label={t('reports.field.salesAmount')} value={salesAmount} onChange={setSalesAmount} highlight />
+          <NumberField name="calls" label={t('reports.field.calls')} value={calls} onChange={setCalls} error={errs.calls} />
+          <NumberField name="meetings" label={t('reports.field.meetings')} value={meetings} onChange={setMeetings} error={errs.meetings} />
+          <NumberField name="contacted" label={t('reports.field.applications')} value={contacted} onChange={setContacted} error={errs.contacted} />
+          <NumberField name="offline" label={t('reports.field.offline')} value={offlineConsult} onChange={setOfflineConsult} error={errs.offlineConsult} />
+          <NumberField name="online" label={t('reports.field.online')} value={onlineConsult} onChange={setOnlineConsult} error={errs.onlineConsult} />
+          <NumberField name="salesCount" label={t('reports.field.salesCount')} value={salesCount} onChange={setSalesCount} error={errs.salesCount} highlight />
+          <NumberField name="salesAmount" label={t('reports.field.salesAmount')} value={salesAmount} onChange={setSalesAmount} error={errs.salesAmount} highlight money />
         </div>
 
         <div className="form-group" style={{ marginTop: 16 }}>
@@ -171,10 +228,10 @@ export default function Reports() {
         </div>
 
         <div className="form-actions">
-          <button type="button" className="btn btn-secondary" onClick={() => setFormOpen(false)}>
+          <button type="button" className="btn btn-secondary" onClick={closeForm} data-testid="report-cancel">
             {t('common.cancel')}
           </button>
-          <button className="btn btn-primary" onClick={onSave} disabled={saving}>
+          <button className="btn btn-primary" onClick={onSave} disabled={saving} data-testid="report-save">
             <Icon name="save" size={16} /> {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
@@ -186,7 +243,7 @@ export default function Reports() {
         <SmallStat eyebrow={t('eyebrow.deals30')} value={String(totalSalesCount)} label={t('reports.up.dealsClosed')} span="span-3" />
         <SmallStat eyebrow={t('eyebrow.calls')} value={String(totalCalls)} label={t('reports.up.calls')} span="span-2" />
         <SmallStat eyebrow={t('eyebrow.meetings')} value={String(totalMeetings)} label={t('reports.up.meetings')} span="span-2" />
-        <SmallStat eyebrow={t('eyebrow.apps')} value={String(totalContacted)} label={t('reports.up.apps')} span="span-2" />
+        <SmallStat eyebrow={t('eyebrow.leadContacts')} value={String(totalContacted)} label={t('reports.up.apps')} span="span-2" />
       </div>
 
       {/* История */}
@@ -200,10 +257,11 @@ export default function Reports() {
           <thead>
             <tr>
               {sort.columns.map((c) => <SortTh key={c.key} sort={sort} col={c.key} />)}
+              {canWrite && <th></th>}
             </tr>
           </thead>
           <tbody>
-            {history.length === 0 && <tr><td colSpan={7} className="empty">{t('reports.empty')}</td></tr>}
+            {history.length === 0 && <tr><td colSpan={canWrite ? 8 : 7} className="empty">{t('reports.empty')}</td></tr>}
             {sort.sorted.map((r) => (
               <tr key={r.id}>
                 <td style={{ fontWeight: 500 }}>{fmtDate(r.date)}</td>
@@ -214,6 +272,20 @@ export default function Reports() {
                 <td data-label={t('reports.field.salesCount')} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--primary-dark)' }}>{r.salesCount}</td>
                 <td data-label={t('reports.field.salesAmount')} style={{ fontFamily: 'var(--font-display)', fontWeight: 500, color: 'var(--primary-dark)' }}>{fmtTjs(r.salesAmount)}</td>
                 <td data-label={t('reports.field.activity')} className="td-stack" style={{ color: 'var(--text-soft)', fontSize: 13 }}>{r.activitySummary || '—'}</td>
+                {canWrite && (
+                  <td>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-danger"
+                      onClick={() => onDelete(r)}
+                      disabled={deleteMut.isPending}
+                      data-testid="report-delete"
+                      title={t('reports.delete.title')}
+                    >
+                      <Icon name="delete" size={14} /> {t('common.delete')}
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -223,18 +295,24 @@ export default function Reports() {
   );
 }
 
-function NumberField({ label, value, onChange, highlight }: {
-  label: string; value: string; onChange: (v: string) => void; highlight?: boolean;
+function NumberField({ name, label, value, onChange, highlight, money, error }: {
+  name: string; label: string; value: string; onChange: (v: string) => void; highlight?: boolean;
+  /** Сумма: можно копейки («1500,50»). Остальные поля — только целые. */
+  money?: boolean; error?: string;
 }) {
   return (
     <div className="form-group" style={{ marginBottom: 0 }}>
       <label style={highlight ? { color: 'var(--primary-dark)' } : undefined}>{label}</label>
       <input
-        type="number"
-        min={0}
-        step={highlight ? '0.01' : 1}
-        inputMode={highlight ? 'decimal' : 'numeric'}
+        // Текстовое поле с цифровой клавиатурой: type="number" молча отдаёт
+        // пустую строку на «1.5.2» или «-», и проверить ввод было нечем.
+        type="text"
+        inputMode={money ? 'decimal' : 'numeric'}
+        autoComplete="off"
         value={value}
+        className={error ? 'input-error' : undefined}
+        aria-invalid={!!error}
+        data-testid={`report-${name}`}
         onFocus={(e) => {
           // Если в поле стоит "0" — сразу выделяем, чтобы первое нажатие
           // цифры затёрло нолик, а не дописало к нему ("03" → пользователь
@@ -242,23 +320,21 @@ function NumberField({ label, value, onChange, highlight }: {
           if (value === '0' || value === '') e.currentTarget.select();
         }}
         onChange={(e) => {
-          // Минус и лишние знаки не вводятся: число в отчёте не бывает < 0,
-          // а в счётчиках (звонки, встречи…) — только целое.
-          let v = e.target.value.replace(highlight ? /[^\d.,]/g : /\D/g, '').replace(',', '.');
-          // Убираем leading zeros у целых чисел: "03" → "3", "001" → "1".
-          // Десятичные ("0.5") не трогаем. Пустое — оставляем пустым.
-          if (v.length > 1 && v.startsWith('0') && !v.startsWith('0.')) {
-            v = v.replace(/^0+/, '') || '0';
-          }
+          // Ввод НЕ переписываем (QA-3, BUG-05): «1.5» остаётся «1.5», «-5» —
+          // «-5», а ошибка показывается под полем при сохранении. Убираем
+          // только ведущие нули у целого: «03» → «3».
+          let v = e.target.value.slice(0, 14);
+          if (/^0\d+$/.test(v)) v = v.replace(/^0+/, '') || '0';
           onChange(v);
         }}
         style={{
           fontFamily: 'var(--font-display)',
           fontSize: 22,
           fontWeight: 500,
-          borderColor: highlight ? 'var(--primary)' : undefined,
+          borderColor: error ? undefined : highlight ? 'var(--primary)' : undefined,
         }}
       />
+      {error && <div className="form-error-text" role="alert" data-testid={`report-${name}-error`}>{error}</div>}
     </div>
   );
 }

@@ -27,6 +27,27 @@ export class InboxController {
     });
   }
 
+  /**
+   * Какие каналы подключены (QA-3, BUG-20). Раньше пустые «Входящие» отсылали в
+   * «Настройки», где каналов нет: подключение делает разработчик (ключи
+   * сервера). Экран теперь показывает честный статус каждого канала. Ключи
+   * наружу не уходят — только «да / нет».
+   */
+  @Get('channels')
+  channels() {
+    const has = (...names: string[]) => names.every((n) => !!(process.env[n] || '').trim());
+    const sms = (process.env.SMS_PROVIDER || '').toLowerCase().trim();
+    return {
+      WHATSAPP: has('WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'),
+      INSTAGRAM: has('IG_PAGE_ACCESS_TOKEN', 'IG_ACCOUNT_ID'),
+      TELEGRAM: has('TELEGRAM_BOT_TOKEN'),
+      SMS:
+        (sms === 'smsru' && has('SMSRU_API_ID')) ||
+        (sms === 'twilio' && has('TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN')) ||
+        (sms === 'payom' && has('PAYOM_TOKEN')),
+    };
+  }
+
   @Get('threads')
   threads(@Query('channel') channel?: ExternalMessageChannel, @Query('take') take?: string) {
     return this.svc.threads({

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import Icon from '../Icon';
 import { useT } from '../lib/i18n';
 import { useUI } from '../ui/Dialogs';
+import { useEscClose } from '../lib/useEscClose';
 
 /**
  * Окно формы по центру экрана.
@@ -104,21 +105,12 @@ export default function FormModal({
   const closeRef = useRef(requestClose);
   closeRef.current = requestClose;
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      // Поверх формы может быть открыт календарь, список стран или другое
-      // окно — Esc тогда принадлежит им, а не нам.
-      const popupOpen = [
-        ...document.querySelectorAll('.crm-datepicker-popover, .crm-select-popover, .phone-dropdown, .dialog-card'),
-      ].some((el) => !el.classList.contains('form-modal-card'));
-      if (popupOpen) return;
-      closeRef.current();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [open]);
+  // Поверх формы может быть открыт календарь, список или другое окно — Esc
+  // тогда принадлежит им (общий порядок окон ведёт useEscClose).
+  useEscClose(open, () => {
+    const other = [...document.querySelectorAll('.dialog-card')].some((el) => !el.classList.contains('form-modal-card'));
+    if (!other) closeRef.current();
+  });
 
   // Фон страницы не должен прокручиваться под открытым окном.
   useEffect(() => {

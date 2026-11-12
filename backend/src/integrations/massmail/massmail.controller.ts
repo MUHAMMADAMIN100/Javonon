@@ -26,6 +26,20 @@ export class MassmailController {
     return this.mm.create({ ...body, createdById: me.id });
   }
 
+  /** Сколько получателей у аудитории — подсказка в форме до создания рассылки. */
+  @Permissions('massmail:create', 'massmail:send')
+  @Post('audience-count')
+  audienceCount(@Body() body: { audience?: { type?: string; value?: any } }) {
+    return this.mm.audienceCount(body?.audience || {});
+  }
+
+  /** Сколько получателей у готовой рассылки — для окна «Отправить сейчас?». */
+  @Permissions('massmail:send', 'massmail:create')
+  @Get(':id/recipients')
+  recipients(@Param('id') id: string) {
+    return this.mm.recipientsCount(id);
+  }
+
   @Permissions('massmail:send')
   @Post(':id/send')
   sendNow(@Param('id') id: string) {

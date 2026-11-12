@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -126,6 +127,15 @@ export class CreateAcademyStudentDto {
   @IsOptional()
   @IsUUID()
   levelId?: string;
+
+  /**
+   * Создать доступ в кабинет ученика (QA-3, набл. 11). По умолчанию — да:
+   * логин и пароль показываются один раз. false — ученик без доступа: пароль
+   * не выдаётся и в ответе не приходит; выдать его можно позже («Новый пароль»).
+   */
+  @IsOptional()
+  @IsBoolean()
+  withAccess?: boolean;
 }
 
 export class UpdateAcademyStudentDto {

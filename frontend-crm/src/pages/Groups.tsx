@@ -23,6 +23,7 @@ import LessonsCalendar from '../components/academy/LessonsCalendar';
 import GroupEditModal from '../components/academy/GroupEditModal';
 import { useGroupRemoval } from '../components/academy/useGroupRemoval';
 import { useRoleLabel } from '../lib/labels';
+import { teacherOptions } from '../lib/teachers';
 
 /**
  * Группы академии.
@@ -357,8 +358,7 @@ function CreateGroupForm({
           <label style={labelStyle}>{t('groups.field.teacher')}</label>
           <CrmSelect className="crm-select" value={teacherId} onChange={(e) => setTeacherId(e.target.value)} data-testid="group-form-teacher">
             <option value="">{t('groups.noTeacher')}</option>
-            {[...(users.data ?? [])]
-              .sort((a, b) => Number(b.role === 'TEACHER') - Number(a.role === 'TEACHER') || a.fullName.localeCompare(b.fullName, 'ru'))
+            {teacherOptions(users.data, teacherId)
               .map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName} · {(u as any).customRole?.name && (u as any).customRole.isActive !== false ? (u as any).customRole.name : roleLabel(u.role as string)}</option>
               ))}

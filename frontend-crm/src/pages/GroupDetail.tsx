@@ -60,6 +60,8 @@ export default function GroupDetail() {
   });
   const g = query.data;
   const [completing, setCompleting] = useState(false);
+  /** Открыть окно «Занятия по шаблону» сразу после перехода на вкладку «Уроки». */
+  const [autoTemplate, setAutoTemplate] = useState(false);
 
   const rawTab = params.get('tab') as Tab | null;
   const tab: Tab = rawTab && TABS.includes(rawTab) && (rawTab !== 'settings' || g?.access.manage) ? rawTab : 'journal';
@@ -174,10 +176,13 @@ export default function GroupDetail() {
         ))}
       </div>
 
-      {tab === 'journal' && <JournalTab groupId={g.id} meId={me?.id} onGoLessons={() => setTab('lessons')} />}
+      {/* QA-3 (BUG-19): кнопка в пустом журнале называется «Занятия по шаблону» —
+          она и открывает окно шаблона (раньше только переключала на «Уроки»,
+          и нажимать приходилось второй раз уже там). */}
+      {tab === 'journal' && <JournalTab groupId={g.id} meId={me?.id} onGoLessons={() => { setAutoTemplate(true); setTab('lessons'); }} />}
       {tab === 'lessons' && (
         <div className="card acad-card-pad">
-          <LessonsTab group={g} meId={me?.id} onChanged={invalidate} />
+          <LessonsTab group={g} meId={me?.id} onChanged={invalidate} autoTemplate={autoTemplate} onAutoTemplateDone={() => setAutoTemplate(false)} />
         </div>
       )}
       {tab === 'students' && (

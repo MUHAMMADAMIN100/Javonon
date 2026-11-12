@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
 import { tjCalendarDay, tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
@@ -146,6 +146,15 @@ export class DailyReportsService {
       ...(filters.take ? { take: filters.take } : {}),
       include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
     });
+  }
+
+  /** Удаление своего отчёта — без оглядки на должность: чужой удалить нельзя никому. */
+  async removeOwn(id: string, requesterId: string) {
+    const rec = await this.prisma.dailyReport.findUnique({ where: { id } });
+    if (!rec) throw new NotFoundException('Отчёт не найден — возможно, он уже удалён');
+    if (rec.userId !== requesterId) throw new ForbiddenException('Удалить можно только свой отчёт');
+    await this.prisma.dailyReport.delete({ where: { id } });
+    return { ok: true };
   }
 
   async remove(id: string, requesterId: string, role: Role) {

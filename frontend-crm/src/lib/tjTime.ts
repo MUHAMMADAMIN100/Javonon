@@ -46,6 +46,33 @@ export function tjToday(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TJ_TZ }).format(new Date());
 }
 
+/** YYYY-MM-DD плюс N календарных дней (без часовых поясов — чистая арифметика дат). */
+export function addDaysYmd(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return ymd;
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
+ * Самая ранняя дата «следующего платежа» (QA-3, BUG-10): на следующий день
+ * после этого платежа и не раньше сегодняшнего дня. Те же правила — на сервере
+ * (SubmissionsService.assertNextDue).
+ */
+export function nextDueMin(paidAt: string | null | undefined): string {
+  const today = tjToday();
+  const afterPay = paidAt ? addDaysYmd(paidAt.slice(0, 10), 1) : today;
+  return afterPay > today ? afterPay : today;
+}
+
+/** Ключ текста ошибки даты следующего платежа или '' — та же проверка, что на сервере. */
+export function nextDueError(nextDate: string, paidAt: string | null | undefined): '' | 'deal.err.nextBeforePay' | 'deal.err.nextPast' {
+  if (!nextDate) return '';
+  const next = nextDate.slice(0, 10);
+  if (paidAt && next <= paidAt.slice(0, 10)) return 'deal.err.nextBeforePay';
+  if (next < tjToday()) return 'deal.err.nextPast';
+  return '';
+}
+
 /** Y/M/D в Asia/Dushanbe для произвольной даты. */
 export function tjYMD(d: Date = new Date()): { y: number; m: number; d: number } {
   const [y, mo, da] = new Intl.DateTimeFormat('en-CA', { timeZone: TJ_TZ }).format(d).split('-').map(Number);

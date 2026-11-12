@@ -267,10 +267,26 @@ export class KpiService {
         };
       });
 
-    // Сортируем по продажам — топ-менеджеры наверху. Ключ сортировки
-    // одновалютный (TJS), поэтому сравнение осмысленно: до фикса валюты
-    // порядок мест зависел от того, в какой валюте оформлена сделка.
-    return result.sort((a, b) => b.salesAmount - a.salesAmount);
+    // МЕСТА (QA-3, BUG-02). Раньше сортировали только по продажам: при равных
+    // продажах (а у большинства за период их 0) порядок был случайным —
+    // «топ-1» доставался человеку с 0 лидов, а менеджер с зачислением и
+    // конверсией 100% стоял последним. Правило теперь одно и записано под
+    // таблицей: продажи → зачислено → конверсия → лиды. Полное равенство по
+    // всем четырём — место делится. Нет ни продаж, ни зачислений, ни лидов —
+    // места нет вовсе (rank = null): «лидером» с нулями быть нельзя.
+    // Ключ продаж одновалютный (TJS), поэтому сравнение осмысленно.
+    const cmp = (a: (typeof result)[number], b: (typeof result)[number]) =>
+      b.salesAmount - a.salesAmount ||
+      b.applicationsEnrolled - a.applicationsEnrolled ||
+      b.conversionRate - a.conversionRate ||
+      b.applicationsAssigned - a.applicationsAssigned;
+    const sorted = result.sort((a, b) => cmp(a, b) || a.fullName.localeCompare(b.fullName, 'ru'));
+    let place = 0;
+    return sorted.map((row, i) => {
+      const hasResult = row.salesAmount > 0 || row.applicationsEnrolled > 0 || row.applicationsAssigned > 0;
+      if (i === 0 || cmp(sorted[i - 1], row) !== 0) place = i + 1;
+      return { ...row, rank: hasResult ? place : null };
+    });
   }
 
   /** KPI одного сотрудника + история по месяцам. */

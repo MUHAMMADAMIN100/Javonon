@@ -168,13 +168,24 @@ export class UsersService {
       where,
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, email: true, fullName: true, role: true, createdAt: true,
+        id: true, email: true, fullName: true, role: true, roles: true, createdAt: true,
         isActive: true,
         customRoleId: true,
-        customRole: { select: { id: true, name: true, isActive: true } },
+        customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
       },
     });
-    return users;
+    // canTeach — кого показывать в списках «Учитель» (QA-3, набл. 21: раньше там
+    // были все сотрудники, включая бухгалтера). Учитель — должность «Учитель»
+    // или действующая роль с «Группы академии — ведение». Сами галочки роли
+    // наружу не отдаём — только признак.
+    return users.map(({ roles, customRole, ...u }) => ({
+      ...u,
+      customRole: customRole ? { id: customRole.id, name: customRole.name, isActive: customRole.isActive } : null,
+      canTeach:
+        u.role === 'TEACHER' ||
+        (roles || []).includes('TEACHER' as any) ||
+        (!!customRole && customRole.isActive !== false && (customRole.permissions || []).includes('groups:write')),
+    }));
   }
 
   async findOne(id: string) {
@@ -614,6 +625,10 @@ export class UsersService {
     // через API вообще (основатель в системе один — сидер), кастомную роль
     // назначает только основатель, оклады задают основатель/админ/бухгалтер.
     const level = UsersService.actorLevel(actor);
+    // QA-3 (BUG-35): сотрудников добавляет только основатель.
+    if (actor && level !== 'founder') {
+      throw new ForbiddenException('Добавлять сотрудников может только основатель');
+    }
     if (dto.role === 'FOUNDER') {
       throw new ForbiddenException('Роль «Основатель» назначить нельзя');
     }
@@ -682,24 +697,42 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto, requester?: { id: string; role?: string; roles?: string[]; hasCustomRole?: boolean }) {
     const target = await this.findOne(id);
 
-    // Роль меняет только основатель (как PUT /users/:id/roles), «Основатель»
-    // не выдаётся вообще. Оклады/KPI, пароль и email чужого сотрудника —
-    // основатель, админ, бухгалтер; кастомная роль правит только карточку.
+    // QA-3 (BUG-27, BUG-35). Общий PATCH проверяет КАЖДОЕ поле отдельно:
+    // пароль, оклад, почасовая, KPI, роль, ФИО и email меняет только
+    // основатель (свой пароль сотрудник меняет через /auth/change-password,
+    // где нужен текущий). Остальным остаётся карточка: телефон, паспорт,
+    // дата приёма. Раньше админ и бухгалтер этим же запросом меняли оклад и
+    // пароль любому сотруднику.
     if (requester) {
       const level = UsersService.actorLevel(requester);
       const isSelf = requester.id === id;
-      if (dto.role !== undefined && dto.role !== target.role) {
-        if (dto.role === 'FOUNDER') throw new ForbiddenException('Роль «Основатель» назначить нельзя');
-        if (level !== 'founder') throw new ForbiddenException('Роль меняет только основатель');
+      if (dto.role === 'FOUNDER' && dto.role !== target.role) {
+        throw new ForbiddenException('Роль «Основатель» назначить нельзя');
+      }
+      if (level !== 'founder') {
+        const founderOnly: Array<[string, string]> = [
+          ['password', 'пароль'],
+          ['baseSalary', 'оклад'],
+          ['hourlyRate', 'почасовую ставку'],
+          ['bonusPercent', 'процент бонуса'],
+          ['kpiTargetPct', 'KPI'],
+          ['kpiAutoStepPct', 'KPI'],
+          ['kpiMaxPct', 'KPI'],
+          ['role', 'роль'],
+          ['email', 'email'],
+          ['fullName', 'ФИО'],
+        ];
+        const hit = Array.from(
+          new Set(founderOnly.filter(([f]) => (dto as any)[f] !== undefined).map(([, label]) => label)),
+        );
+        if (hit.length) {
+          if (isSelf && hit.length === 1 && hit[0] === 'пароль') {
+            throw new ForbiddenException('Свой пароль меняется в меню профиля — «Сменить пароль»');
+          }
+          throw new ForbiddenException(`Менять ${hit.join(', ')} сотрудника может только основатель`);
+        }
       }
       if (level === 'custom') {
-        const locked = ['baseSalary', 'hourlyRate', 'bonusPercent', 'kpiTargetPct', 'kpiAutoStepPct', 'kpiMaxPct', 'email'] as const;
-        if (locked.some((f) => (dto as any)[f] !== undefined)) {
-          throw new ForbiddenException('Оклад, KPI и email меняют основатель, админ или бухгалтер');
-        }
-        if (dto.password && !isSelf) {
-          throw new ForbiddenException('Пароль сотрудника меняют основатель, админ или бухгалтер');
-        }
         // Телефон и паспорт коллеги — тому, кому они видны («Личные данные
         // сотрудников»): иначе в форму пришла бы маска «+992 •• ••• •• 45»
         // и легла бы в базу вместо номера.
@@ -880,9 +913,18 @@ export class UsersService {
    */
   async handoverInfo(id: string) {
     const target = await this.findOne(id);
-    const [counts, targets, candidates] = await Promise.all([
+    const [counts, targets, keptSuccessful, candidates] = await Promise.all([
       handoverCounts(this.prisma, id),
       autoTargets(this.prisma, id),
+      // Успешные лиды не передаются (это результат сотрудника в KPI) — окно
+      // должно сказать об этом, а не «ничего не числится» (QA-3, набл. 23).
+      this.prisma.application.count({
+        where: {
+          deletedAt: null,
+          status: { in: FINISHED_APPLICATION_STATUSES },
+          OR: [{ managerId: id }, { chinaManagerId: id }],
+        },
+      }),
       this.prisma.user.findMany({
         where: { isActive: true, id: { not: id } },
         select: { id: true, fullName: true, role: true, roles: true },
@@ -893,6 +935,7 @@ export class UsersService {
       user: { id: target.id, fullName: target.fullName, isActive: target.isActive },
       counts,
       total: handoverTotal(counts),
+      keptSuccessful,
       autoTargets: targets,
       candidates,
     };

@@ -81,9 +81,21 @@ export default function AcademyLevels() {
   };
 
   const onDelete = async (l: AcademyLevel) => {
+    // QA-3 (набл. 21): уровень с учениками не удаляется (сервер ответит отказом) —
+    // говорим об этом сразу и с числом, а не после «Удалить?».
+    if (l.students > 0) {
+      await confirm({
+        title: t('academy.levels.deleteBlockedTitle'),
+        message: t('academy.levels.deleteBlocked').replace('{name}', l.name).replace('{n}', String(l.students)),
+        confirmText: t('common.ok'),
+        hideCancel: true,
+        icon: 'info',
+      });
+      return;
+    }
     const ok = await confirm({
       title: t('academy.levels.deleteConfirm'),
-      message: l.name,
+      message: t('academy.levels.deleteMessage').replace('{name}', l.name),
       danger: true,
       confirmText: t('common.delete'),
     });

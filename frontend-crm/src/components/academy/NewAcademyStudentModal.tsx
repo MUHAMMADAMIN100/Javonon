@@ -50,7 +50,9 @@ export default function NewAcademyStudentModal({
   const [groupId, setGroupId] = useState(presetGroupId ?? '');
   const [comment, setComment] = useState('');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [created, setCreated] = useState<{ id: string; fullName: string; email: string; password: string } | null>(null);
+  const [created, setCreated] = useState<{ id: string; fullName: string; email: string; password: string | null } | null>(null);
+  // Набл. 11 (QA-3): доступ в кабинет — явный выбор, а не побочный эффект формы.
+  const [withAccess, setWithAccess] = useState(true);
 
   // Учителю сервер отдаёт только его группы.
   const groups = useQuery({
@@ -83,6 +85,7 @@ export default function NewAcademyStudentModal({
         comment: comment.trim() || undefined,
         groupId: groupId || undefined,
         levelId: levelId || undefined,
+        withAccess,
       }),
     onSuccess: (r) => {
       setCreated(r);
@@ -92,7 +95,7 @@ export default function NewAcademyStudentModal({
   });
 
   const copyAll = async () => {
-    if (!created) return;
+    if (!created || !created.password) return;
     const text = `${t('userDetail.field.email')}: ${created.email}\n${t('login.password')}: ${created.password}\n${t('login.title')}: ${STUDENT_LOGIN_URL}`;
     try {
       await navigator.clipboard.writeText(text);
@@ -108,18 +111,22 @@ export default function NewAcademyStudentModal({
         <div className="acad-created">
           <div className="acad-created-icon"><Icon name="check_circle" size={28} /></div>
           <div className="acad-created-text">
-            <b>{created.fullName}</b> — {t('studentDetail.password.oneTime')}
+            <b>{created.fullName}</b> — {created.password ? t('studentDetail.password.oneTime') : t('academy.newStudent.noAccessDone')}
           </div>
         </div>
-        <div className="creds-box" data-testid="academy-creds">
-          <CredRow label={t('userDetail.field.email')} value={created.email} />
-          <CredRow label={t('login.password')} value={created.password} />
-          <CredRow label={t('login.title')} value={STUDENT_LOGIN_URL.replace('https://', '')} small />
-        </div>
+        {created.password && (
+          <div className="creds-box" data-testid="academy-creds">
+            <CredRow label={t('userDetail.field.email')} value={created.email} />
+            <CredRow label={t('login.password')} value={created.password} />
+            <CredRow label={t('login.title')} value={STUDENT_LOGIN_URL.replace('https://', '')} small />
+          </div>
+        )}
         <div className="form-actions">
-          <button type="button" className="btn btn-secondary" onClick={copyAll} data-testid="academy-creds-copy">
-            <Icon name="content_copy" size={16} /> {t('common.copy')}
-          </button>
+          {created.password && (
+            <button type="button" className="btn btn-secondary" onClick={copyAll} data-testid="academy-creds-copy">
+              <Icon name="content_copy" size={16} /> {t('common.copy')}
+            </button>
+          )}
           <button type="button" className="btn btn-primary" onClick={onClose} data-testid="academy-creds-close">
             {t('common.done')}
           </button>
@@ -227,6 +234,15 @@ export default function NewAcademyStudentModal({
         <div className="form-group">
           <label>{t('common.comment')}</label>
           <textarea className="crm-textarea" rows={2} maxLength={1000} value={comment} onChange={(e) => setComment(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="crm-checkbox-label">
+            <input type="checkbox" className="crm-checkbox" checked={withAccess} onChange={(e) => setWithAccess(e.target.checked)} data-testid="as-access" />
+            {t('academy.newStudent.access')}
+          </label>
+          <div className="form-hint-text" data-testid="as-access-hint">
+            {t(withAccess ? 'academy.newStudent.accessOn' : 'academy.newStudent.accessOff')}
+          </div>
         </div>
         <div className="form-actions">
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={mut.isPending}>

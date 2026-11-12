@@ -1,6 +1,6 @@
 import { fmtDateText, TJ_TZ } from '../lib/tjTime';
 import { tjToday } from '../lib/tjTime';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import CrmSelect from '../components/CrmSelect';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,6 +25,7 @@ import { hasRole, isElevated, displayRoleLabel, isTeacherOnly } from '../lib/rol
 import { roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import TaskDiary, { DiaryCountdown } from '../components/TaskDiary';
+import { useEscClose } from '../lib/useEscClose';
 
 type Scope = 'all' | 'mine';
 /** Значение фильтра «Исполнитель» для задач, которые ещё никому не назначены. */
@@ -120,6 +121,18 @@ export default function Tasks() {
     if (fromUrl) setOpenIdState(fromUrl);
   }, [params]);
   const openTask = items.find((x) => x.id === openId) ?? null;
+  // QA-3 (набл. 22): пришли по ссылке из уведомления, а задачи уже нет (удалили
+  // или сняли с вас) — раньше молча открывался список. Теперь говорим об этом.
+  const missingToldRef = useRef<string | null>(null);
+  useEffect(() => {
+    const fromUrl = params.get('task');
+    if (!fromUrl || !tasksQuery.isSuccess || tasksQuery.isFetching) return;
+    if (items.some((x) => x.id === fromUrl) || missingToldRef.current === fromUrl) return;
+    missingToldRef.current = fromUrl;
+    toast(t('tasks.openMissing'), 'info');
+    setOpenId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, tasksQuery.isSuccess, tasksQuery.isFetching, items]);
   const canChangeTask = (task: Task) =>
     seesAll ||
     (!!me &&
@@ -658,13 +671,7 @@ function TaskModal({
   onStatus: (s: TaskStatus) => void; onDelete: () => void; onClose: () => void;
 }) {
   const { t } = useT();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscClose(true, onClose);
   const people = (task.assignees ?? []).map((a) => a.fullName).join(', ');
   return (
     <motion.div

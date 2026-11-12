@@ -17,6 +17,7 @@ export interface DailyReport {
   user?: { id: string; fullName: string; role: string };
 }
 
+export const deleteReport = (id: string) => api.delete<{ ok: boolean }>(`/reports/${id}`).then((r) => r.data);
 export const reportToday = () => api.get<DailyReport | null>('/reports/today').then((r) => r.data);
 export const reportsMine = (params?: { from?: string; to?: string; take?: number }) =>
   api.get<DailyReport[]>('/reports/me', { params }).then((r) => r.data);

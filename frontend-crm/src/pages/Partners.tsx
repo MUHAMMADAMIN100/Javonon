@@ -37,6 +37,7 @@ import ActiveFilterChips from '../components/ActiveFilterChips';
 import { enumParam, stringParam, useUrlListState } from '../lib/useUrlListState';
 import { matchesSearch } from '../lib/listSearch';
 import { isTouchDevice } from '../lib/touch';
+import { useEscClose } from '../lib/useEscClose';
 
 type Tab = 'partners' | 'commissions' | 'payouts';
 const COMMISSION_STATUSES = ['PENDING', 'APPROVED', 'PAID', 'REVERSED'] as const;
@@ -588,6 +589,7 @@ function AddPartnerModal({ open, onClose, onCreated }: AddModalProps) {
     reset();
     onClose();
   };
+  useEscClose(open, close, busy);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -772,6 +774,7 @@ type ShareModalProps = {
 function ShareLinkModal({ data, onClose }: ShareModalProps) {
   const { toast } = useUI();
   const { t } = useT();
+  useEscClose(!!data, onClose);
 
   const copyUrl = async () => {
     if (!data) return;

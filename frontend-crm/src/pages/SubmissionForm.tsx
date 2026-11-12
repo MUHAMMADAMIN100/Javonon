@@ -24,6 +24,8 @@ import Icon from '../Icon';
 import CrmDatePicker from '../components/CrmDatePicker';
 import BackButton from '../components/BackButton';
 import { useT } from '../lib/i18n';
+import { nextDueError, nextDueMin } from '../lib/tjTime';
+import { useAuth } from '../store/auth';
 
 type Mode = 'existing' | 'new';
 
@@ -72,6 +74,8 @@ export default function SubmissionForm() {
   const [contractUrls, setContractUrls] = useState<string[]>([]);
   const [contractMetas, setContractMetas] = useState<UploadMeta[]>([]);
   const [totalAmount, setTotalAmount] = useState('');
+  /** Сумма, подставленная из цены программы (чтобы смена программы её обновляла). */
+  const autoTotalRef = useRef('');
   const [currency, setCurrency] = useState('TJS');
   const [notes, setNotes] = useState('');
 
@@ -124,6 +128,13 @@ export default function SubmissionForm() {
     retry: false,
   });
   const sourceApp = applicationQuery.data;
+  const me = useAuth((s) => s.user);
+  // Менеджер лида, если это не я: сделка, студент и бонус — ему (так же решает сервер).
+  const leadOwner = (() => {
+    const m = (sourceApp as any)?.manager as { id?: string; fullName?: string; isActive?: boolean } | null | undefined;
+    if (!m?.id || !m.fullName || m.isActive === false || m.id === me?.id) return null;
+    return { id: m.id, fullName: m.fullName };
+  })();
 
   /**
    * Студент, подставленный из заявки. Список `studentOptions` наполняется
@@ -256,6 +267,30 @@ export default function SubmissionForm() {
   // поля не подсвечивались). Показываются после первой попытки отправить.
   const [showErr, setShowErr] = useState(false);
   const taNum = parseFloat(totalAmount);
+  // Набл. 18 (QA-3): цена программы подставляется в сумму контракта; если
+  // менеджер ввёл другую сумму в той же валюте — предупреждаем (скидка бывает,
+  // поэтому это подсказка, а не запрет). Раньше сделку на программу за 9 000
+  // можно было оформить на 2 TJS без единого вопроса.
+  const selectedProgram = (programsQuery.data || []).find((p) => p.id === programId) || null;
+  const programCost = Number((selectedProgram as any)?.cost) || 0;
+  const programCurrency = String((selectedProgram as any)?.currency || '').toUpperCase();
+  const priceMismatch =
+    selectedProgram && programCost > 0 && programCurrency === currency && isFinite(taNum) && taNum > 0 && Math.abs(taNum - programCost) > 0.004
+      ? { cost: programCost, currency: programCurrency }
+      : null;
+  const onProgramChange = (id: string) => {
+    setProgramId(id);
+    const p = (programsQuery.data || []).find((x) => x.id === id) as any;
+    const cost = Number(p?.cost) || 0;
+    const cur = String(p?.currency || '').toUpperCase();
+    // Подставляем только в пустое поле или поверх прошлой автоподстановки.
+    if (cost > 0 && (totalAmount.trim() === '' || totalAmount === autoTotalRef.current)) {
+      const v = String(cost);
+      autoTotalRef.current = v;
+      setTotalAmount(v);
+      if ((SUBMISSION_CURRENCIES as readonly string[]).includes(cur)) setCurrency(cur);
+    }
+  };
   const paNum = parseFloat(payAmount);
   const fieldErrs = {
     student: mode === 'existing' && !studentId ? t('dealForm.err.student') : '',
@@ -269,7 +304,9 @@ export default function SubmissionForm() {
     receipt: payMethod === 'TRANSFER' && receiptUrls.length === 0 ? t('dealForm.err.receipt') : '',
     deposit: payMethod === 'CASH' && depositProofUrls.length === 0 ? t('dealForm.err.deposit') : '',
     // QA-2 №16: сумма следующего платежа — только с датой и не больше остатка.
-    nextDate: nextDueAmount.trim() && !nextDueDate ? t('deal.err.nextDate') : '',
+    nextDate: nextDueAmount.trim() && !nextDueDate
+      ? t('deal.err.nextDate')
+      : nextDueError(nextDueDate, payDate) ? t(nextDueError(nextDueDate, payDate)) : '',
     nextAmount: nextDueAmount.trim()
       ? !(parseFloat(nextDueAmount) > 0)
         ? t('deal.err.nextAmount')
@@ -397,6 +434,12 @@ export default function SubmissionForm() {
                   <div style={{ color: 'var(--text-soft)', marginTop: 2 }}>
                     {t('submissionForm.fromApplication.hint')}
                   </div>
+                  {/* QA-3 (BUG-13): сделка из лида записывается на менеджера лида. */}
+                  {leadOwner && (
+                    <div style={{ marginTop: 6, fontWeight: 600 }} data-testid="deal-owner-note">
+                      {t('submissionForm.ownerNote').replace('{name}', leadOwner.fullName)}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -564,7 +607,7 @@ export default function SubmissionForm() {
         <Section title={`2. ${t('dealForm.section.program')}`}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             <Field label={`${t('deal.program')} *`} error={fe('program')} testid="deal-field-program">
-              <CrmSelect className={`crm-select${fe('program') ? ' input-error' : ''}`} value={programId} onChange={(e) => setProgramId(e.target.value)}>
+              <CrmSelect className={`crm-select${fe('program') ? ' input-error' : ''}`} value={programId} onChange={(e) => onProgramChange(e.target.value)}>
                 <option value="">{t('common.choose')}</option>
                 {(programsQuery.data || []).map((p) => (
                   <option key={p.id} value={p.id}>
@@ -584,6 +627,11 @@ export default function SubmissionForm() {
             </Field>
             <Field label={`${t('deal.contractAmount')} *`} error={fe('total')} testid="deal-field-total">
               <input className={`crm-input${fe('total') ? ' input-error' : ''}`} type="number" min={0} step={50} value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="3000" />
+              {priceMismatch && (
+                <div className="deal-price-note" data-testid="deal-price-note">
+                  {t('dealForm.priceMismatch').replace('{price}', `${priceMismatch.cost.toLocaleString('ru-RU')} ${priceMismatch.currency}`)}
+                </div>
+              )}
             </Field>
             <Field label={t('common.currency')}>
               {/* Список — общий с бэком (SUBMISSION_CURRENCIES). Значение вне
@@ -649,7 +697,7 @@ export default function SubmissionForm() {
               </Field>
             )}
             <Field label={t('deal.field.nextDate')} error={fe('nextDate')} testid="deal-next-date">
-              <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} />
+              <CrmDatePicker value={nextDueDate} onChange={setNextDueDate} min={nextDueMin(payDate)} />
             </Field>
             <Field label={t('deal.field.nextAmount')} error={fe('nextAmount')} testid="deal-next-amount">
               <input className="crm-input" type="number" min={0} step={50} value={nextDueAmount} onChange={(e) => setNextDueAmount(e.target.value)} placeholder="2000" />

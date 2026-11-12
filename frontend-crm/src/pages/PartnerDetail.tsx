@@ -21,6 +21,7 @@ import Loading from '../components/Loading';
 import BackButton from '../components/BackButton';
 import QrCode from '../components/QrCode';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
+import { useEscClose } from '../lib/useEscClose';
 
 type Tab = 'clients' | 'commissions' | 'payouts' | 'clicks';
 
@@ -68,6 +69,7 @@ export default function PartnerDetail() {
   const { toast } = useUI();
   const [tab, setTab] = useState<Tab>('clients');
   const [qrOpen, setQrOpen] = useState(false);
+  useEscClose(qrOpen, () => setQrOpen(false));
 
   const detailQuery = useQuery({
     queryKey: ['admin', 'partners', id, 'detail'],

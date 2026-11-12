@@ -2,6 +2,7 @@ import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, Matches, MaxLen
 import { ApplicationStatus, ContactChannel, Country, Direction } from '@prisma/client';
 import { ACTIVE_APPLICATION_STATUSES } from '../../common/application-status';
 import { NO_HTML_RE } from './create-application.dto';
+import { STAFF_ALLOWED_SOURCES, StaffApplicationSource } from './create-staff-application.dto';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 
@@ -36,18 +37,18 @@ export class UpdateApplicationDto {
 
   @IsOptional()
   @IsString()
-  @Matches(PHONE_RE, { message: 'phone должен содержать только цифры' })
+  @Matches(PHONE_RE, { message: 'Телефон: только цифры (можно «+», пробелы, скобки и дефис), от 7 до 20 знаков' })
   phone?: string;
 
   // WhatsApp-номер: менеджер может поправить его в карточке заявки.
   @IsOptional()
   @IsString()
-  @Matches(PHONE_RE, { message: 'whatsappPhone должен содержать только цифры' })
+  @Matches(PHONE_RE, { message: 'WhatsApp: только цифры (можно «+», пробелы, скобки и дефис), от 7 до 20 знаков' })
   whatsappPhone?: string;
 
   @IsOptional()
   @IsString()
-  @Matches(PHONE_RE, { message: 'secondaryPhone должен содержать только цифры' })
+  @Matches(PHONE_RE, { message: 'Второй телефон: только цифры (можно «+», пробелы, скобки и дефис), от 7 до 20 знаков' })
   secondaryPhone?: string;
 
   @IsOptional()
@@ -69,6 +70,15 @@ export class UpdateApplicationDto {
   @IsOptional()
   @IsEnum(Direction)
   direction?: Direction;
+
+  /**
+   * QA-3 (BUG-07): источник лида можно поправить — но только среди тех, что
+   * сотрудник вправе ставить руками. «Сайт», «Самозапись» и «Реферал»
+   * определяются автоматически и не меняются (см. ApplicationsService.update).
+   */
+  @IsOptional()
+  @IsIn(STAFF_ALLOWED_SOURCES as readonly string[], { message: 'Выберите источник из списка' })
+  source?: StaffApplicationSource;
 
   // Страна, выбранная клиентом на лендинге; менеджер может исправить.
   @IsOptional()

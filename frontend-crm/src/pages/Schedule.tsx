@@ -8,7 +8,7 @@ import { useAuth } from '../store/auth';
 import { isAcademyManager, roleCan } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { keys } from '../lib/queryKeys';
-import { tjDateInput, tjFormatTime, tjMonthRange, tjToday } from '../lib/tjTime';
+import { fmtDateText, tjDateInput, tjFormatTime, tjMonthRange, tjToday } from '../lib/tjTime';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
 import ClassSessionModal from '../components/ClassSessionModal';
@@ -335,7 +335,7 @@ export default function Schedule() {
       {view === 'month' && (
         <div className="card sched-day-card" style={{ padding: 20 }}>
           <h3 style={{ marginBottom: 12 }}>
-            {t('classes.dayOf')} {selectedDay} ({daySessions.length})
+            {t('classes.dayOf')} {fmtDateText(`${selectedDay}T12:00:00+05:00`, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Dushanbe' }) || selectedDay} ({daySessions.length})
           </h3>
           {daySessions.length === 0 ? (
             <div style={{ color: 'var(--text-soft)', fontSize: 13 }}>{t('classes.noSessionsDay')}</div>

@@ -8,6 +8,9 @@ import { createCall } from '../api/calls';
 import { api } from '../api/client';
 import { useT } from '../lib/i18n';
 
+/** Поле набора начинается с кода Таджикистана. */
+const DEFAULT_NUMBER = '+992';
+
 /**
  * Плавающий dialpad — программа-телефон в CRM (по ТЗ §6d).
  *
@@ -32,7 +35,7 @@ export default function Dialpad() {
   const { t } = useT();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [number, setNumber] = useState('+992');
+  const [number, setNumber] = useState(DEFAULT_NUMBER);
   const [callState, setCallState] = useState<'idle' | 'connecting' | 'in-call' | 'finishing'>('idle');
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
@@ -52,13 +55,16 @@ export default function Dialpad() {
     if (callState !== 'idle') return;
     setNumber((n) => (n + digit).slice(0, 20));
   };
+  // QA-3 (BUG-21): код страны «+992» — часть поля, а не ввод человека: «×»
+  // возвращает его целиком (раньше оставался один «+»), а «стереть» не уходит
+  // левее «+».
   const backspace = () => {
     if (callState !== 'idle') return;
-    setNumber((n) => n.slice(0, -1));
+    setNumber((n) => (n.length > 1 ? n.slice(0, -1) : '+'));
   };
   const clear = () => {
     if (callState !== 'idle') return;
-    setNumber('+');
+    setNumber(DEFAULT_NUMBER);
   };
 
   const dial = async () => {
@@ -166,7 +172,9 @@ export default function Dialpad() {
         onClick={() => setOpen((v) => !v)}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        title={t('calls.title')}
+        title={t(open ? 'dialpad.fab.close' : 'dialpad.fab.open')}
+        aria-label={t(open ? 'dialpad.fab.close' : 'dialpad.fab.open')}
+        data-testid="dialpad-fab"
         style={{
           position: 'fixed',
           right: 20,
@@ -327,7 +335,9 @@ export default function Dialpad() {
                   cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
-                title={t('common.reset')}
+                title={t('dialpad.clear')}
+                aria-label={t('dialpad.clear')}
+                data-testid="dialpad-clear"
               >
                 <Icon name="clear" size={18} />
               </button>

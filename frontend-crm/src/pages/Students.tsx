@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import CrmSelect from '../components/CrmSelect';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,6 +35,7 @@ import {
   stringParam,
   useUrlListState,
 } from '../lib/useUrlListState';
+import { useEscClose } from '../lib/useEscClose';
 
 type Scope = 'all' | 'mine';
 
@@ -126,6 +127,7 @@ export default function Students() {
   const [reportFrom, setReportFrom] = useState('');
   const [reportTo, setReportTo] = useState('');
   const [generating, setGenerating] = useState(false);
+  useEscClose(reportOpen, () => setReportOpen(false), generating);
 
   // Инпут поиска локальный (мгновенный отклик), в URL уезжает только
   // «устаканившееся» значение — дебаунс те же 300 мс.
@@ -255,6 +257,21 @@ export default function Students() {
     const all = [u.role, ...((u as any).roles || [])].filter(Boolean);
     return all.some((r) => MANAGER_ROLES.has(r as string));
   });
+  // QA-3 (BUG-14): менеджером студента бывает и не «менеджер» по должности
+  // (основатель вёл двух студентов, а в фильтре его не было). В список
+  // добавляем всех, кто стоит менеджером (TJ или CN) у загруженных студентов;
+  // запоминаем их, чтобы пункт не пропадал, когда фильтр уже выбран.
+  const seenManagers = useRef(new Map<string, string>());
+  for (const s of items) {
+    for (const m of [s.manager, (s as any).chinaManager]) {
+      if (m?.id && m.fullName) seenManagers.current.set(m.id, m.fullName);
+    }
+  }
+  const managerOptions = (() => {
+    const map = new Map<string, string>(users.map((u) => [u.id, u.fullName]));
+    for (const [id, name] of seenManagers.current) if (!map.has(id)) map.set(id, name);
+    return [...map].map(([id, fullName]) => ({ id, fullName })).sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru'));
+  })();
 
   useRealtime({
     'student:updated': () => qc.invalidateQueries({ queryKey: keys.students.all }),
@@ -409,16 +426,16 @@ export default function Students() {
               <option key={c} value={String(c)}>{t('app.field.cabinet')} {c}</option>
             ))}
           </CrmSelect>
-          {wide && users.length > 0 && (
+          {wide && managerOptions.length > 0 && (
             <CrmSelect
               className="crm-select"
-             
               value={manager}
               onChange={(e) => setValue('manager', e.target.value)}
               title={t('app.filter.manager')}
+              data-testid="students-filter-manager"
             >
               <option value="">{t('app.filter.manager')}</option>
-              {users.map((u) => (
+              {managerOptions.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
               ))}
             </CrmSelect>

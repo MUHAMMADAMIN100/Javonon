@@ -15,6 +15,7 @@ import {
   type PaymentStage,
   type PaymentStageStatus,
 } from '../api/installments';
+import { useEscClose } from '../lib/useEscClose';
 
 /**
  * Этапы рассрочки в карточке сделки.
@@ -314,16 +315,7 @@ function EditStageModal({
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !mut.isPending) {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, mut.isPending]);
+  useEscClose(true, onClose, mut.isPending);
 
   const parsed = parseFloat(amount);
   const canSubmit = locked || (isFinite(parsed) && parsed > 0 && !!dueDate);

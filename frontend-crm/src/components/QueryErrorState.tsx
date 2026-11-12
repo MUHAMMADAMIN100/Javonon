@@ -13,12 +13,17 @@ export default function QueryErrorState({
   backTo = '/dashboard',
   backLabelKey = 'errorState.toHome',
   onRetry,
+  titleKey,
+  textKey,
 }: {
   error?: unknown;
   kind?: 'denied' | 'notFound' | 'failed';
   backTo?: string;
   backLabelKey?: string;
   onRetry?: () => void;
+  /** Свой заголовок и текст (например, «Нет доступа к разделу» — для целого раздела, а не записи). */
+  titleKey?: string;
+  textKey?: string;
 }) {
   const { t } = useT();
   const navigate = useNavigate();
@@ -29,8 +34,8 @@ export default function QueryErrorState({
     <div className={`err-state is-${k}`} role="alert" data-testid={`err-state-${k}`}>
       <span className="err-state-icon" aria-hidden="true"><Icon name={icon} size={28} /></span>
       {k === 'notFound' && !error && <span className="err-state-code">404</span>}
-      <h2 className="err-state-title">{t(`errorState.${k}.title`)}</h2>
-      <p className="err-state-text">{t(`errorState.${k}.text`)}</p>
+      <h2 className="err-state-title">{t(titleKey ?? `errorState.${k}.title`)}</h2>
+      <p className="err-state-text">{t(textKey ?? `errorState.${k}.text`)}</p>
       <div className="err-state-actions">
         {k === 'failed' && onRetry && (
           <button type="button" className="btn btn-primary" onClick={onRetry} data-testid="err-state-retry">

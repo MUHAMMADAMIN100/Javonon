@@ -344,24 +344,53 @@ export function needsDecision(s: {
 /**
  * «По каким дням» группа занимается — из ближайших занятий: уникальные
  * пары «день недели + время», по порядку дней. weekday: 1 = Пн … 7 = Вс.
+ *
+ * QA-3 (BUG-38): разовое занятие — не «день недели группы». Раньше оно
+ * попадало в шапку как регулярное: «Пн, Ср · 18:00–19:30; Чт · 09:00–11:30».
+ * Слот ближайших занятий считается регулярным, если:
+ *   • хоть одно его занятие создано «Занятиями по шаблону» (fromTemplate), или
+ *   • он повторяется — два и больше занятий в этот день недели и время среди
+ *     `history` (прошлые 8 недель + ближайшие 4; так распознаются занятия,
+ *     заведённые до появления отметки fromTemplate).
+ * Если регулярных слотов нет вовсе (расписание только начали вести вручную),
+ * показываем все ближайшие — как раньше.
  */
-export function weeklyPattern(sessions: Array<{ startsAt: Date; endsAt: Date }>) {
+type PatternSession = { startsAt: Date; endsAt: Date; fromTemplate?: boolean };
+
+export function weeklyPattern(sessions: PatternSession[], history: PatternSession[] = sessions) {
   const fmt = (d: Date) =>
     new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dushanbe', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d).replace(/^24:/, '00:');
-  const seen = new Map<string, { weekday: number; from: string; to: string }>();
-  for (const s of sessions) {
+  const slotOf = (s: PatternSession) => {
     // Занятие длиннее суток или без длительности — старые кривые данные
     // («00:00–00:00», QA-2 №13): в расписание по дням недели не идут.
     const len = s.endsAt.getTime() - s.startsAt.getTime();
-    if (!(len > 0 && len <= 24 * 60 * 60 * 1000)) continue;
+    if (!(len > 0 && len <= 24 * 60 * 60 * 1000)) return null;
     const wdName = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dushanbe', weekday: 'short' }).format(s.startsAt);
     const weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(wdName) + 1;
     const from = fmt(s.startsAt);
     const to = fmt(s.endsAt);
-    const key = `${weekday}|${from}|${to}`;
-    if (!seen.has(key)) seen.set(key, { weekday, from, to });
+    return { key: `${weekday}|${from}|${to}`, weekday, from, to };
+  };
+  // Сколько раз слот встречается в истории (прошлые и ближайшие занятия).
+  const repeats = new Map<string, number>();
+  for (const s of history) {
+    const slot = slotOf(s);
+    if (slot) repeats.set(slot.key, (repeats.get(slot.key) ?? 0) + 1);
   }
-  return [...seen.values()].sort((a, b) => a.weekday - b.weekday || a.from.localeCompare(b.from));
+  const seen = new Map<string, { weekday: number; from: string; to: string; regular: boolean }>();
+  for (const s of sessions) {
+    const slot = slotOf(s);
+    if (!slot) continue;
+    const regular = !!s.fromTemplate || (repeats.get(slot.key) ?? 0) >= 2;
+    const cur = seen.get(slot.key);
+    if (cur) cur.regular = cur.regular || regular;
+    else seen.set(slot.key, { weekday: slot.weekday, from: slot.from, to: slot.to, regular });
+  }
+  const all = [...seen.values()];
+  const shown = all.some((x) => x.regular) ? all.filter((x) => x.regular) : all;
+  return shown
+    .map(({ weekday, from, to }) => ({ weekday, from, to }))
+    .sort((a, b) => a.weekday - b.weekday || a.from.localeCompare(b.from));
 }
 
 /**

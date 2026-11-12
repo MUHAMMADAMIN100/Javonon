@@ -53,6 +53,14 @@ export default function CompleteCourseModal({
   });
 
   const p = preview.data;
+  // QA-3 (BUG-39): текст = данные. Раньше окно всегда писало «у каждого уже
+  // выбран следующий уровень», даже когда у всех стояло «Без уровня → Без уровня».
+  const noneCount = p ? p.students.filter((s) => !(choice[s.id] ?? '')).length : 0;
+  const hintText = !p || !p.students.length
+    ? t('academy.course.noStudents')
+    : noneCount === 0
+      ? t('academy.course.hint')
+      : t('academy.course.hintSome').replace('{n}', String(noneCount)).replace('{m}', String(p.students.length));
   return (
     <FormModal
       open
@@ -68,7 +76,7 @@ export default function CompleteCourseModal({
         <>
           <div className="acad-note" style={{ marginBottom: 14 }}>
             <Icon name="school" size={18} />
-            <span>{p.students.length ? t('academy.course.hint') : t('academy.course.noStudents')}</span>
+            <span data-testid="course-hint">{hintText}</span>
           </div>
           {p.students.length > 0 && p.levels.length === 0 && (
             <div className="acad-warn" style={{ marginBottom: 12 }}>

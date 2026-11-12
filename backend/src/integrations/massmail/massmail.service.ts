@@ -133,7 +133,35 @@ export class MassmailService {
    *   paid-students — Student с TUITION_PAYMENT
    *   by-direction  — Application по direction = value
    */
+  /** Сколько человек получит рассылку с такой аудиторией (для формы и окна подтверждения). */
+  async audienceCount(audience: { type?: string; value?: any }) {
+    return { count: (await this.resolveAudience(audience || {})).length };
+  }
+
+  /** То же — для уже созданной кампании. */
+  async recipientsCount(id: string) {
+    const c = await this.prisma.massMailCampaign.findUnique({ where: { id }, select: { audience: true } });
+    if (!c) throw new NotFoundException('Кампания не найдена');
+    return this.audienceCount(c.audience as any);
+  }
+
+  /**
+   * Один получатель — один номер: без лидов из корзины и без повторов одного
+   * телефона (QA-3, набл. 20: раньше в «все лиды» входили удалённые лиды, а
+   * клиент с двумя лидами получал сообщение дважды).
+   */
   private async resolveAudience(audience: { type?: string; value?: any }) {
+    const rows = await this.resolveAudienceRaw(audience);
+    const seen = new Set<string>();
+    return rows.filter((r) => {
+      const key = (r.phone || '').replace(/\D/g, '') || `id:${r.applicationId || r.studentId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private async resolveAudienceRaw(audience: { type?: string; value?: any }) {
     const t = audience?.type || 'all-leads';
     if (t === 'paid-students') {
       const rows = await this.prisma.student.findMany({
@@ -147,7 +175,7 @@ export class MassmailService {
     }
     if (t === 'by-direction' && audience.value) {
       const rows = await this.prisma.application.findMany({
-        where: { direction: audience.value },
+        where: { direction: audience.value, deletedAt: null },
         select: { id: true, phone: true, email: true, studentId: true },
       });
       return rows.map((a) => ({
@@ -157,6 +185,7 @@ export class MassmailService {
     }
     // default: all leads
     const rows = await this.prisma.application.findMany({
+      where: { deletedAt: null },
       select: { id: true, phone: true, email: true, studentId: true },
     });
     return rows.map((a) => ({

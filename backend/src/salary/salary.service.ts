@@ -89,7 +89,7 @@ export class SalaryService {
         ...(filters.to && { periodEnd: { lte: filters.to } }),
       },
       orderBy: { periodStart: 'desc' },
-      include: { user: { select: { id: true, fullName: true, isActive: true, role: true, email: true } } },
+      include: { user: { select: { id: true, fullName: true, isActive: true, role: true, email: true, customRole: { select: { name: true, isActive: true } } } } },
     });
   }
 
@@ -100,8 +100,11 @@ export class SalaryService {
    * Считаем пачками по шесть, чтобы не занимать весь пул соединений.
    */
   async previewAll(periodStart: Date, periodEnd: Date) {
+    // customRole — подпись должности в таблице («Руководитель отдела продаж»,
+    // «Lead Qualifier»), как в списке сотрудников; без неё — базовая роль (QA-3, BUG-40).
     const userSelect = {
       id: true, fullName: true, role: true, roles: true, baseSalary: true, hourlyRate: true, isActive: true,
+      customRole: { select: { name: true, isActive: true } },
     } as const;
     const users = await this.prisma.user.findMany({
       where: { isActive: true },
@@ -162,7 +165,7 @@ export class SalaryService {
           if (rec) {
             return {
               userId: u.id,
-              user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles, isActive: u.isActive },
+              user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles, isActive: u.isActive, customRole: u.customRole },
               hasRate: (u.baseSalary || 0) > 0 || (u.hourlyRate || 0) > 0,
               workedMinutes: rec.workedMinutes,
               lateMinutes: rec.lateMinutes,
@@ -184,7 +187,7 @@ export class SalaryService {
           const p = await this.preview(u.id, periodStart, periodEnd, 0);
           return {
             userId: u.id,
-            user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles, isActive: u.isActive },
+            user: { id: u.id, fullName: u.fullName, role: u.role, roles: u.roles, isActive: u.isActive, customRole: u.customRole },
             /** Оклад или ставка заданы — иначе база всегда 0 и это стоит заметить. */
             hasRate: (u.baseSalary || 0) > 0 || (u.hourlyRate || 0) > 0,
             workedMinutes: p.workedMinutes,
@@ -882,7 +885,7 @@ export class SalaryService {
                 bonusSource: args.bonusSource,
                 comment: args.comment,
               },
-              include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
+              include: { user: { select: { id: true, fullName: true, isActive: true, role: true, customRole: { select: { name: true, isActive: true } } } } },
             });
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -999,7 +1002,7 @@ export class SalaryService {
       }
       return tx.salaryRecord.findUnique({
         where: { id },
-        include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
+        include: { user: { select: { id: true, fullName: true, isActive: true, role: true, customRole: { select: { name: true, isActive: true } } } } },
       });
     });
   }

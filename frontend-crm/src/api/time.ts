@@ -12,6 +12,8 @@ export interface TimeEntry {
   clockOut: string | null;
   totalMinutes: number;
   totalLunchMinutes: number;
+  /** Перерыв между «Закончить день» и «Продолжить работу» в тот же день — в отработанное не входит. */
+  pausedMinutes?: number;
   lateMinutes: number;
   clockInLat?: number | null;
   clockInLon?: number | null;
@@ -60,13 +62,14 @@ export const clockOut = () => api.post<TimeEntry>('/time/clock-out').then((r) =>
 export const getScheduleEnd = () => api.get<{ endsAt: string | null }>('/time/schedule-end').then((r) => r.data);
 export const teamStatus = () => api.get<TeamMemberStatus[]>('/time/team').then((r) => r.data);
 
-export const uploadTimeProof = (file: File) => {
+/** kind: presence — подтверждение присутствия (фото/видео); excuse — файл к причине опоздания (ещё и PDF). */
+export const uploadTimeProof = (file: File, kind: 'presence' | 'excuse' = 'presence') => {
   const fd = new FormData();
   fd.append('file', file);
   return api.post<{ url: string; originalName: string; size: number }>(
     '/time/proofs',
     fd,
-    { headers: { 'Content-Type': 'multipart/form-data' } },
+    { headers: { 'Content-Type': 'multipart/form-data' }, params: { kind } },
   ).then((r) => r.data);
 };
 
