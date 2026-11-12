@@ -4260,6 +4260,8 @@ const DICT: Record<Lang, Record<string, string>> = {
     'tl.visible': 'Видно студенту в его кабинете',
     'tl.addEntry': 'Добавить запись',
     'docs.dropHint': 'Перетащите файл на плитку документа или нажмите «Загрузить».',
+    'leads.bulk.export': 'Выгрузить выбранных',
+    'leads.bulk.exported': 'Выгружено лидов: {n}',
   },
   tg: {
     // ===== common =====
@@ -8447,6 +8449,8 @@ const DICT: Record<Lang, Record<string, string>> = {
     'tl.visible': 'Ба донишҷӯ дар кабинеташ намоён',
     'tl.addEntry': 'Сабтро илова кардан',
     'docs.dropHint': 'Файлро ба плиткаи ҳуҷҷат кашед ё «Боркунӣ»-ро пахш кунед.',
+    'leads.bulk.export': 'Боргирии интихобшудаҳо',
+    'leads.bulk.exported': 'Лидҳо боргирӣ шуданд: {n}',
   },
 };
 

@@ -51,7 +51,7 @@ import { useApplicationStatusLabel, useCountryLabel, useDirectionLabel } from '.
 import DirectionOptions from '../components/DirectionOptions';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
-import { tjFormatDate } from '../lib/tjTime';
+import { tjFormatDate, tjToday } from '../lib/tjTime';
 import { isTouchDevice } from '../lib/touch';
 import { useRealtime } from '../realtime';
 import { useUI } from '../ui/Dialogs';
@@ -1020,6 +1020,33 @@ export default function Leads() {
     lastToggledRef.current = null;
   };
 
+  // Макет UI (таблица «Лиды»): «Выгрузить выбранных» — CSV для Excel из того,
+  // что роли уже видно в списке (скрытое сервером сюда не попадает).
+  const exportSelected = () => {
+    const esc = (v: unknown) => {
+      const s = String(v ?? '');
+      return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const head = [t('app.field.fullName'), t('app.field.phone'), t('app.field.country'), t('app.field.direction'), t('app.field.source'), t('common.status'), t('app.field.manager'), t('reports.col.date')];
+    const rows = [...selected.values()].map((a) => [
+      a.fullName,
+      a.phone ?? '',
+      a.country ? countryLabel(a.country) : '',
+      a.direction ? directionLabel(a.direction) : '',
+      a.source ? SOURCE_LABEL[a.source as ApplicationSource] ?? a.source : '',
+      statusLabel(a.status),
+      (a as any).manager?.fullName ?? '',
+      tjFormatDate(a.createdAt),
+    ]);
+    // ﻿ — метка UTF-8: без неё Excel показывает кириллицу кракозябрами.
+    const csv = '﻿' + [head, ...rows].map((l) => l.map(esc).join(';')).join('\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    link.download = `javonon-leads-${tjToday()}.csv`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    toast(t('leads.bulk.exported').replace('{n}', String(rows.length)), 'success');
+  };
   const clearSelection = () => {
     setSelected(new Map());
     lastToggledRef.current = null;
@@ -1817,6 +1844,15 @@ export default function Leads() {
                           disabled={!bulkManagerId || bulkMut.isPending}
                         >
                           {bulkMut.isPending ? t('leads.bulk.assigning') : t('leads.bulk.assign')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm leads-bulk-export"
+                          data-testid="bulk-export"
+                          onClick={exportSelected}
+                          disabled={bulkMut.isPending}
+                        >
+                          <Icon name="download" size={16} /> {t('leads.bulk.export')}
                         </button>
                         <button
                           type="button"

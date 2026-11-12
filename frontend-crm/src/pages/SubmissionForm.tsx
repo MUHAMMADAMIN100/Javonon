@@ -441,7 +441,7 @@ export default function SubmissionForm() {
       </div>
 
       <motion.div
-        className="card"
+        className="card deal-wizard"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         style={{ padding: 24 }}

@@ -1706,3 +1706,15 @@ body:has(.dialog-backdrop) .impersonation-bar { top: 12px; bottom: auto; }
   .tl-chip { flex-shrink: 0; }
   .tl-form-actions .btn { flex: 1 1 0; justify-content: center; }
 }
+
+/* Макет: «кнопки внизу всегда видны» — низ формы сделки прилипает к низу экрана. */
+.deal-wizard-foot { position: sticky; bottom: 0; z-index: 5; background: var(--bg-card, #fff); margin-left: -24px; margin-right: -24px; padding: 14px 24px; border-radius: 0 0 16px 16px; box-shadow: 0 -8px 16px -12px rgba(10, 13, 26, .18); }
+/* Форма сделки открыта — кнопка звонка не закрывает «Далее» (как у окон-форм). */
+body:has(.deal-wizard-foot) .dialpad-fab { display: none !important; }
+/* Телефон: прокручивается всё окно, а main — свой контейнер, поэтому sticky здесь не держится —
+   низ формы закреплён над нижним меню, у формы снизу запас под него. */
+@media (max-width: 900px) {
+  .deal-wizard-foot { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h, 68px) + env(safe-area-inset-bottom, 0px));
+    margin: 0; border-radius: 0; padding: 10px 14px; z-index: 30; border-top: 1px solid var(--border); }
+  .deal-wizard { padding-bottom: 132px !important; }
+}
