@@ -1661,3 +1661,48 @@ body:has(.dialog-backdrop) .impersonation-bar { top: 12px; bottom: auto; }
 .deal-drop small { font-size: 12px; color: var(--text-soft); }
 .deal-drop-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .deal-drop { transition: none; } }
+
+/* ── Макет UI, часть C2: лента истории по дням, перетаскивание на плитки документов (12.11.2026) ── */
+.tl-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
+.tl-filter-label { font-size: 13px; color: var(--text-soft); margin-right: 2px; flex-shrink: 0; white-space: nowrap; }
+.tl-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg-card, #fff); font: inherit; font-size: 13px; color: var(--text); cursor: pointer; }
+.tl-chip:hover:not(:disabled) { border-color: #C9D3E3; }
+.tl-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.tl-chip:disabled { opacity: .45; cursor: default; }
+.tl-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.tl-chip-n { font-size: 12px; opacity: .75; font-variant-numeric: tabular-nums; }
+.tl-feed { display: flex; flex-direction: column; gap: 14px; }
+.tl-day-label { font: 700 12.5px var(--font-display); color: var(--text-soft); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 8px; }
+.tl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; border-left: 2px solid var(--border); margin-left: 17px; }
+.tl-item { position: relative; display: flex; gap: 12px; padding: 0 0 14px 22px; min-width: 0; }
+.tl-item:last-child { padding-bottom: 2px; }
+.tl-icon { position: absolute; left: -18px; top: 0; width: 34px; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+  background: var(--primary-soft, #EEF4FF); color: var(--primary-dark, #01368B); box-shadow: 0 0 0 3px var(--bg-card, #fff); }
+.tl-item.k-call .tl-icon { background: #DBEAFE; }
+.tl-item.k-message .tl-icon { background: #FCE7F3; color: #9D174D; }
+.tl-item.k-meeting .tl-icon { background: #E7F6EC; color: var(--success); }
+.tl-item.k-note .tl-icon { background: #FEF3C7; color: #92400E; }
+.tl-body { flex: 1; min-width: 0; padding-left: 4px; }
+.tl-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; }
+.tl-meta { font-size: 12.5px; color: var(--text-soft); margin-top: 2px; }
+.tl-text { font-size: 14px; margin-top: 6px; overflow-wrap: anywhere; }
+.tl-details { font-size: 13px; color: var(--text-soft); white-space: pre-wrap; margin-top: 4px; overflow-wrap: anywhere; }
+.tl-audio { height: 32px; margin-top: 6px; width: 100%; max-width: 280px; }
+.tl-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--bg-soft); color: var(--text-soft); }
+.tl-tag.is-visible { background: var(--primary-soft, #EEF4FF); color: var(--primary-dark, #01368B); }
+.tl-del { align-self: flex-start; width: 34px; padding: 0 !important; justify-content: center; color: var(--danger); }
+.tl-form { background: var(--bg-soft); padding: 18px; border-radius: 14px; border: 1px solid var(--border-soft, var(--border)); display: flex; flex-direction: column; gap: 12px; }
+.tl-form-title { font: 800 15px var(--font-display); }
+.tl-types { display: flex; flex-wrap: wrap; gap: 6px; }
+.tl-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-soft); }
+.tl-field small { font-size: 12px; opacity: .8; }
+.tl-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
+.tl-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.docs-drop-hint { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 13px; color: var(--text-soft); }
+.doc-slot.is-drop { border-color: var(--primary) !important; box-shadow: 0 0 0 2px var(--primary) inset; background: #EEF4FF; }
+@media (max-width: 600px) {
+  .tl-filter { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .tl-chip { flex-shrink: 0; }
+  .tl-form-actions .btn { flex: 1 1 0; justify-content: center; }
+}

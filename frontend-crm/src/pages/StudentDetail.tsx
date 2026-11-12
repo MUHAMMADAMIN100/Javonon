@@ -2,7 +2,7 @@ import { useFileToken } from '../lib/fileUrl';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { assignStudentManager, deleteStudent, ensureStudentApplication, getStudent, regenerateStudentPassword, updateStudent, uploadPhoto } from '../api/students';
+import { assignStudentManager, deleteStudent, ensureStudentApplication, getStudent, regenerateStudentPassword, studentDeals, updateStudent, uploadPhoto } from '../api/students';
 import { updateApplication } from '../api/applications';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Application, ApplicationStatus, Student } from '../api/types';
@@ -45,6 +45,8 @@ import StudentAcademyBlock from '../components/academy/StudentAcademyBlock';
 import { useEscClose } from '../lib/useEscClose';
 import BusyLabel from '../components/BusyLabel';
 import { DetailSkeleton } from '../components/Skeleton';
+import { ClientOverviewCards, ClientTabsBar, useClientTab, useTimeline } from '../components/ClientTabs';
+import { canOpenDeals } from '../components/navGroups';
 
 function CredRow({ label, value }: { label: string; value: string }) {
   const { t } = useT();
@@ -98,6 +100,10 @@ export default function StudentDetail() {
   const channelLabel = useChannelLabel();
   const countryLabel = useCountryLabel();
   const [editing, setEditing] = useState(false);
+  // Макет UI: вкладки как у карточки лида; «Обзор» — данные, академия, блоки, оплаты.
+  const [tab, setTab] = useClientTab(true);
+  const timelineQ = useTimeline(id);
+  const dealsQ = useQuery({ queryKey: ['students', 'deals', id], queryFn: () => studentDeals(id!), enabled: !!id });
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
   useEscClose(!!credentials, () => setCredentials(null));
 
@@ -264,6 +270,8 @@ export default function StudentDetail() {
   // Права роли (Настройки → Роли → «Студенты»); у должности — как раньше.
   const canEdit = canAccess && roleCan(me, 'students:update');
   const canDocs = canAccess && roleCan(me, 'students:documents');
+  // «Создать сделку» из карточки студента — через его лид (связь с партнёром и менеджером лида).
+  const canCreateDeal = !!app0 && (isAdmin || isMine) && roleCan(me, 'submissions:create') && canOpenDeals(me);
   const canDelete = roleCan(me, 'students:delete', isAdmin || isMine) && canAccess;
   const canPassword = roleCan(me, 'students:password', isAdmin) && canAccess;
   const canAssign = roleCan(me, 'students:assign', isAdmin);
@@ -350,6 +358,10 @@ export default function StudentDetail() {
         }
       />
 
+      <ClientTabsBar tab={tab} setTab={setTab} historyCount={timelineQ.data?.length} documents={student.documents} />
+
+      {tab === 'overview' && (
+      <>
       <section className="card profile-section" data-testid="client-main">
         <div className="profile-cols">
           <div className="profile-group" data-testid="group-client">
@@ -446,28 +458,44 @@ export default function StudentDetail() {
 
       <StudentAcademyBlock studentId={student.id} />
 
-      <section className="card profile-section" data-testid="client-docs">
-        <h3 className="profile-h">{t('client.section.docs')}</h3>
-        <DocumentsChecklist
-          studentId={student.id}
-          studentName={student.fullName}
-          documents={student.documents || []}
-          applicationForm={student.applicationForm}
-          onChange={reload}
-          editable={canDocs}
-        />
-      </section>
+      <ClientOverviewCards
+        studentId={student.id}
+        documents={student.documents}
+        setTab={setTab}
+        deals={dealsQ.data}
+        dealsLoading={dealsQ.isLoading}
+        canCreateDeal={canCreateDeal}
+        onCreateDeal={() => app0 && navigate(`/submissions/new?applicationId=${encodeURIComponent(app0.id)}`)}
+      />
 
       <StudentPaymentsSection studentId={student.id} />
+      </>
+      )}
 
-      <InteractionsLog studentId={student.id} canEdit={canAccess} />
+      {tab === 'docs' && (
+        <section className="card profile-section" data-testid="client-docs">
+          <h3 className="profile-h">{t('client.section.docs')}</h3>
+          <DocumentsChecklist
+            studentId={student.id}
+            studentName={student.fullName}
+            documents={student.documents || []}
+            applicationForm={student.applicationForm}
+            onChange={reload}
+            editable={canDocs}
+          />
+        </section>
+      )}
 
-      <ApplicationFormSection
-        studentId={student.id}
-        initialForm={student.applicationForm}
-        canEdit={canEdit}
-        onSaved={reload}
-      />
+      {tab === 'history' && <InteractionsLog studentId={student.id} canEdit={canAccess} />}
+
+      {tab === 'form' && (
+        <ApplicationFormSection
+          studentId={student.id}
+          initialForm={student.applicationForm}
+          canEdit={canEdit}
+          onSaved={reload}
+        />
+      )}
 
       <AnimatePresence>
         {credentials && (

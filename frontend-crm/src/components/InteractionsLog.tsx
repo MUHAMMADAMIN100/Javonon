@@ -1,4 +1,4 @@
-import { fmtDateText, TJ_TZ } from '../lib/tjTime';
+import { fmtDateText, TJ_TZ, tjDateInput, tjFormatTime, tjToday, addDaysYmd } from '../lib/tjTime';
 import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
 import { roleCan } from '../lib/permissions';
@@ -9,8 +9,6 @@ import {
   Interaction,
   InteractionType,
   INTERACTION_LABEL,
-  INTERACTION_ICON,
-  listInteractions,
   fullTimeline,
   type TimelineItem,
   createInteraction,
@@ -22,26 +20,30 @@ import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
 import { tr, useT } from '../lib/i18n';
+import { timelineVisuals, type TimelineKind } from '../lib/timeline';
 import { EmptyLine } from './ClientCard';
 import DismissedMark from './DismissedMark';
+import BusyLabel from './BusyLabel';
 
-const TYPES: InteractionType[] = ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'SMS', 'TELEGRAM', 'WHATSAPP'];
+const TYPES: InteractionType[] = ['CALL', 'WHATSAPP', 'MEETING', 'NOTE', 'TELEGRAM', 'SMS', 'EMAIL'];
+type Filter = 'all' | TimelineKind;
+const FILTERS: Filter[] = ['all', 'call', 'message', 'meeting', 'note'];
 
-function fmtRelative(iso: string) {
-  const d = new Date(iso);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  // Меньше минуты — «только что», а не «1 мин назад» (QA №35).
-  if (diffMin < 1) return tr('time.justNow');
-  if (diffMin < 60) return tr('ago.min').replace('{n}', String(diffMin));
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return tr('ago.h').replace('{n}', String(diffH));
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return tr('ago.d').replace('{n}', String(diffD));
-  return fmtDateText(d, { day: '2-digit', month: 'short', year: 'numeric', timeZone: TJ_TZ });
+/** «Сегодня», «Вчера», «5 ноября» (с годом — если не текущий). По Душанбе. */
+function dayLabel(ymd: string) {
+  const today = tjToday();
+  if (ymd === today) return tr('tl.today');
+  if (ymd === addDaysYmd(today, -1)) return tr('tl.yesterday');
+  const d = new Date(`${ymd}T12:00:00Z`);
+  const sameYear = ymd.slice(0, 4) === today.slice(0, 4);
+  return fmtDateText(d, { day: 'numeric', month: 'long', ...(sameYear ? {} : { year: 'numeric' }), timeZone: TJ_TZ });
 }
 
+/**
+ * История общения клиента — лентой по дням (макет UI 11.11.2026): ручные
+ * записи, звонки телефонии и переписка вместе; фильтр «Звонки / Переписка /
+ * Встречи / Заметки»; у ручной записи — метка «видно студенту» или «внутреннее».
+ */
 export default function InteractionsLog({ studentId, canEdit = true }: { studentId: string; canEdit?: boolean }) {
   const { toast, confirm } = useUI();
   const { t } = useT();
@@ -53,24 +55,17 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
   const canRemove = canEdit && roleCan(me, 'interactions:delete');
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  // По ТЗ §8 «вся связанная информация» — переключатель показывает либо
-  // только ручные записи (старое поведение), либо полную ленту (звонки
-  // через dialpad + WhatsApp/IG/SMS переписка + ручные записи).
-  const [showFullTimeline, setShowFullTimeline] = useState(true);
+  const [filter, setFilter] = useState<Filter>('all');
 
   const listKey = keys.interactions.list(studentId);
-  const interactionsQuery = useQuery<Interaction[]>({
-    queryKey: listKey,
-    queryFn: () => listInteractions(studentId),
-    enabled: !!studentId && !showFullTimeline,
-  });
+  // Тот же ключ, что у «Обзора» карточки (ClientTabs.timelineKey) — один запрос.
   const timelineKey = ['interactions', 'timeline', studentId] as const;
   const timelineQuery = useQuery<TimelineItem[]>({
     queryKey: timelineKey,
     queryFn: () => fullTimeline(studentId),
-    enabled: !!studentId && showFullTimeline,
+    enabled: !!studentId,
   });
-  const items = showFullTimeline ? (timelineQuery.data ?? []) : (interactionsQuery.data ?? []);
+  const items = [...(timelineQuery.data ?? [])].sort((x, y) => y.occurredAt.localeCompare(x.occurredAt));
 
   useRealtimeEvent('interaction:new', () => {
     qc.invalidateQueries({ queryKey: listKey });
@@ -79,8 +74,6 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
 
   const createMut = useInvalidatingMutation({
     mutationFn: createInteraction,
-    // Полная лента открыта по умолчанию — без её сброса новая запись
-    // появлялась только после события по сокету.
     invalidate: [listKey, timelineKey],
     onSuccess: () => {
       toast(t('toast.created'), 'success');
@@ -89,11 +82,11 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
 
-  const deleteMut = useOptimisticMutation<unknown, string, Interaction[]>({
+  const deleteMut = useOptimisticMutation<unknown, string, TimelineItem[]>({
     mutationFn: deleteInteraction,
-    queryKey: listKey,
+    queryKey: timelineKey as unknown as readonly unknown[],
     applyOptimistic: (cur, id) => optimistic.removeById(cur, id),
-    invalidateAlso: [timelineKey],
+    invalidateAlso: [listKey],
     onSuccess: () => toast(t('toast.deleted'), 'success'),
     onError: (e: any) => toast(e?.response?.data?.message || t('toast.error'), 'error'),
   });
@@ -102,89 +95,38 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
     createMut.mutate({ ...data, studentId });
   };
 
-  const onDelete = async (it: Interaction | TimelineItem) => {
-    // Удаляем только записи типа Interaction. CallLog/ExternalMessage —
-    // источники внешних данных, удалять их с этой ленты бессмысленно.
-    const source = (it as any).source;
-    if (source && source !== 'interaction') return;
-    const ok = await confirm({
-      title: t('common.delete'),
-      message: it.summary,
-      danger: true,
-      confirmText: t('common.delete'),
-    });
+  const onDelete = async (it: TimelineItem) => {
+    // Удаляем только ручные записи. Звонки и переписка — внешние данные.
+    if (it.source && it.source !== 'interaction') return;
+    const ok = await confirm({ title: t('common.delete'), message: it.summary, danger: true, confirmText: t('common.delete') });
     if (!ok) return;
     deleteMut.mutate(it.id);
   };
 
-  /** Преобразует TimelineItem в визуальные параметры (label, icon, type). */
-  const resolveVisuals = (it: Interaction | TimelineItem): { label: string; icon: string; bg: string } => {
-    // Старая модель Interaction всегда имеет type.
-    if ('type' in it && it.type && !(it as any).source) {
-      return {
-        label: INTERACTION_LABEL[it.type as InteractionType] || it.type,
-        icon: INTERACTION_ICON[it.type as InteractionType] || 'chat',
-        bg: 'var(--primary-soft)',
-      };
-    }
-    const item = it as TimelineItem;
-    if (item.source === 'call') {
-      return {
-        label: item.direction === 'INCOMING' ? t('interactions.call.in') : t('interactions.call.out'),
-        icon: 'call',
-        bg: '#dbeafe',
-      };
-    }
-    if (item.source === 'message') {
-      const labels: Record<string, string> = {
-        WHATSAPP: 'WhatsApp',
-        INSTAGRAM: 'Instagram',
-        TELEGRAM: 'Telegram',
-        SMS: 'SMS',
-      };
-      return {
-        label: `${labels[item.channel || ''] || item.channel} ${item.direction === 'IN' ? t('interactions.from') : t('interactions.to')}`,
-        icon: item.channel === 'INSTAGRAM' ? 'photo_camera' : item.channel === 'SMS' ? 'sms' : 'chat_bubble',
-        bg: '#fce7f3',
-      };
-    }
-    return {
-      label: item.type ? INTERACTION_LABEL[item.type] : t('interactions.entry'),
-      icon: item.type ? INTERACTION_ICON[item.type] : 'chat',
-      bg: 'var(--primary-soft)',
-    };
-  };
-
-  const timelineToggle = (
-    <button
-      type="button"
-      onClick={() => setShowFullTimeline((v) => !v)}
-      className={`client-toggle${showFullTimeline ? ' is-on' : ''}`}
-      title={t('interactions.fullTimeline')}
-      data-testid="interactions-full-toggle"
-    >
-      {showFullTimeline ? '◉ ' : '○ '}{t('interactions.fullTimeline')}
-    </button>
-  );
   const addButton = canAdd && !showForm && (
     <button className="btn btn-sm btn-primary" onClick={() => setShowForm(true)} data-testid="interaction-add">
-      <Icon name="add" size={14} /> {t('common.add')}
+      <Icon name="add" size={14} /> {t('tl.add')}
     </button>
   );
-  const loading = showFullTimeline ? timelineQuery.isLoading : interactionsQuery.isLoading;
+  const loading = timelineQuery.isLoading;
 
   // Записей нет — одной строкой, как пустые блоки карточки сотрудника.
-  // Переключатель ленты нужен только чтобы вернуться к полной ленте: в ней
-  // и так есть все ручные записи.
   if (!loading && items.length === 0 && !showForm) {
-    return (
-      <EmptyLine
-        title={t('interactions.title')}
-        text={t('interactions.emptyLine')}
-        testId="interactions-empty"
-        actions={<>{!showFullTimeline && timelineToggle}{addButton}</>}
-      />
-    );
+    return <EmptyLine title={t('interactions.title')} text={t('interactions.emptyLine')} testId="interactions-empty" actions={addButton || undefined} />;
+  }
+
+  const kindOf = (it: TimelineItem) => timelineVisuals(it, t).kind;
+  const counts = FILTERS.reduce<Record<Filter, number>>((acc, f) => {
+    acc[f] = f === 'all' ? items.length : items.filter((it) => kindOf(it) === f).length;
+    return acc;
+  }, {} as Record<Filter, number>);
+  const shown = filter === 'all' ? items : items.filter((it) => kindOf(it) === filter);
+  const days: { ymd: string; list: TimelineItem[] }[] = [];
+  for (const it of shown) {
+    const ymd = tjDateInput(it.occurredAt);
+    const last = days[days.length - 1];
+    if (last && last.ymd === ymd) last.list.push(it);
+    else days.push({ ymd, list: [it] });
   }
 
   return (
@@ -194,10 +136,7 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
           {t('interactions.title')}
           {items.length > 0 && <span className="client-count">{items.length}</span>}
         </h3>
-        <div className="client-block-actions">
-          {timelineToggle}
-          {addButton}
-        </div>
+        <div className="client-block-actions">{addButton}</div>
       </div>
 
       <AnimatePresence>
@@ -208,107 +147,84 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
             exit={{ opacity: 0, height: 0 }}
             style={{ overflow: 'hidden', marginBottom: 16 }}
           >
-            <NewInteractionForm onSubmit={onCreate} onCancel={() => setShowForm(false)} />
+            <NewInteractionForm onSubmit={onCreate} onCancel={() => setShowForm(false)} busy={createMut.isPending} />
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {items.length === 0 && (
-          <div className="profile-empty" style={{ padding: '4px 0' }}>{loading ? t('common.loading') : t('interactions.emptyLine')}</div>
-        )}
-        {items.map((it) => {
-          const vis = resolveVisuals(it);
-          const source = (it as any).source;
-          const isInteraction = !source || source === 'interaction';
-          // QA-2 №12: нет признака — не показываем «видно студенту».
-          const visibleToStudent = (it as any).visibleToStudent === true;
-          return (
-          <motion.div
-            key={`${source || 'interaction'}-${it.id}`}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            style={{
-              display: 'flex',
-              gap: 14,
-              padding: 16,
-              border: '1px solid var(--border-soft)',
-              borderRadius: 14,
-              background: isInteraction && !visibleToStudent ? 'var(--bg-soft)' : 'white',
-              borderLeft: `3px solid ${isInteraction && visibleToStudent ? 'var(--primary)' : 'var(--text-light)'}`,
-            }}
-          >
-            <div style={{
-              width: 36, height: 36, borderRadius: 10,
-              background: vis.bg,
-              color: 'var(--primary-dark)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              <Icon name={vis.icon} size={18} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  letterSpacing: '0.10em',
-                  textTransform: 'uppercase',
-                  color: 'var(--primary-dark)',
-                }}>{vis.label}</span>
-                {isInteraction && !visibleToStudent && (
-                  <span style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 9,
-                    color: 'var(--text-light)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.10em',
-                  }}>· {t('interactions.internal')}</span>
-                )}
-                {/* Что видит студент — видно сразу в списке (QA №30). */}
-                {isInteraction && visibleToStudent && (
-                  <span className="interaction-visible-mark" data-testid="interaction-visible" title={t('interactions.visibleToStudent')}>
-                    <Icon name="visibility" size={12} /> {t('interactions.visibleMark')}
-                  </span>
-                )}
-                {(it as TimelineItem).durationSeconds !== undefined && (
-                  <span style={{ fontSize: 11, color: 'var(--text-soft)', fontFamily: 'var(--font-mono)' }}>
-                    · {Math.floor((it as TimelineItem).durationSeconds! / 60)}{tr('time.m')} {(it as TimelineItem).durationSeconds! % 60}{tr('time.sec')}
-                  </span>
-                )}
-                <span style={{ fontSize: 11, color: 'var(--text-light)', marginLeft: 'auto' }}>
-                  {fmtRelative(it.occurredAt)}
-                </span>
-              </div>
-              <div style={{ fontWeight: 500, fontSize: 14, marginBottom: it.details ? 4 : 0 }}>{it.summary}</div>
-              {it.details && (
-                <div style={{ fontSize: 13, color: 'var(--text-soft)', whiteSpace: 'pre-wrap', marginTop: 4 }}>{it.details}</div>
-              )}
-              {(it as TimelineItem).recordingUrl && (
-                <audio src={(it as TimelineItem).recordingUrl!} controls preload="none" style={{ height: 32, marginTop: 6, width: '100%', maxWidth: 280 }} />
-              )}
-              {it.author && (
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  letterSpacing: '0.06em',
-                  color: 'var(--text-light)',
-                  marginTop: 8,
-                }}>
-                  {it.author.fullName}
-                  <DismissedMark person={it.author} />
-                </div>
-              )}
-            </div>
-            {/* Удалять — автору или руководству (так же проверяет сервер). */}
-            {canRemove && isInteraction && (elevated || (it as any).authorId === me?.id || it.author?.id === me?.id) && (
-              <button className="btn btn-sm btn-danger" data-testid="interaction-delete" onClick={() => onDelete(it)} style={{ alignSelf: 'flex-start' }}>
-                <Icon name="delete" size={14} />
-              </button>
-            )}
-          </motion.div>
-          );
-        })}
+      {items.length > 0 && (
+        <div className="tl-filter" role="radiogroup" aria-label={t('tl.show')} data-testid="tl-filter">
+          <span className="tl-filter-label">{t('tl.show')}</span>
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              role="radio"
+              aria-checked={filter === f}
+              className={`tl-chip${filter === f ? ' active' : ''}`}
+              onClick={() => setFilter(f)}
+              disabled={f !== 'all' && counts[f] === 0}
+              data-testid={`tl-filter-${f}`}
+            >
+              {t(`tl.filter.${f}`)} <span className="tl-chip-n">{counts[f]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {loading && <div className="profile-empty" style={{ padding: '4px 0' }}>{t('common.loading')}</div>}
+      {!loading && shown.length === 0 && items.length > 0 && <div className="profile-empty" style={{ padding: '4px 0' }}>{t('tl.filter.none')}</div>}
+
+      <div className="tl-feed">
+        {days.map((day) => (
+          <div key={day.ymd} className="tl-day" data-testid="tl-day">
+            <div className="tl-day-label">{dayLabel(day.ymd)}</div>
+            <ul className="tl-list">
+              {day.list.map((it) => {
+                const vis = timelineVisuals(it, t);
+                const isInteraction = !it.source || it.source === 'interaction';
+                // QA-2 №12: нет признака — не показываем «видно студенту».
+                const visible = (it as unknown as Interaction).visibleToStudent === true;
+                const dur = it.durationSeconds;
+                const meta = [
+                  tjFormatTime(it.occurredAt),
+                  it.author?.fullName,
+                  dur !== undefined ? `${Math.floor(dur / 60)} ${tr('time.m')} ${dur % 60} ${tr('time.sec')}` : '',
+                ].filter(Boolean).join(' · ');
+                return (
+                  <li key={`${it.source || 'interaction'}-${it.id}`} className={`tl-item k-${vis.kind}`} data-testid="tl-item">
+                    <span className="tl-icon" aria-hidden="true"><Icon name={vis.icon} size={18} /></span>
+                    <div className="tl-body">
+                      <div className="tl-head">
+                        <b>{vis.label}</b>
+                        {isInteraction && (visible ? (
+                          <span className="tl-tag is-visible" data-testid="interaction-visible" title={t('interactions.visibleToStudent')}>
+                            <Icon name="visibility" size={12} /> {t('interactions.visibleMark')}
+                          </span>
+                        ) : (
+                          <span className="tl-tag">{t('interactions.internal')}</span>
+                        ))}
+                      </div>
+                      <div className="tl-meta">
+                        {meta}
+                        {it.author && <DismissedMark person={it.author} />}
+                      </div>
+                      <div className="tl-text">{it.summary}</div>
+                      {it.details && <div className="tl-details">{it.details}</div>}
+                      {it.recordingUrl && <audio src={it.recordingUrl} controls preload="none" className="tl-audio" />}
+                    </div>
+                    {/* Удалять — автору или руководству (так же проверяет сервер). */}
+                    {canRemove && isInteraction && (elevated || (it as unknown as Interaction).authorId === me?.id || it.author?.id === me?.id) && (
+                      <button className="btn btn-sm btn-secondary tl-del" data-testid="interaction-delete" onClick={() => onDelete(it)} aria-label={t('common.delete')} title={t('common.delete')}>
+                        <Icon name="delete" size={14} />
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -317,9 +233,11 @@ export default function InteractionsLog({ studentId, canEdit = true }: { student
 function NewInteractionForm({
   onSubmit,
   onCancel,
+  busy,
 }: {
   onSubmit: (data: { type: InteractionType; summary: string; details?: string; visibleToStudent: boolean }) => void;
   onCancel: () => void;
+  busy: boolean;
 }) {
   const { t } = useT();
   const [type, setType] = useState<InteractionType>('CALL');
@@ -331,62 +249,42 @@ function NewInteractionForm({
 
   return (
     <form
+      className="tl-form"
       onSubmit={(e) => { e.preventDefault(); onSubmit({ type, summary, details: details || undefined, visibleToStudent }); }}
-      style={{
-        background: 'var(--bg-soft)',
-        padding: 20,
-        borderRadius: 14,
-        border: '1px solid var(--border-soft)',
-      }}
+      data-testid="interaction-form"
     >
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+      <div className="tl-form-title">{t('tl.newEntry')}</div>
+      <div className="tl-types" role="radiogroup" aria-label={t('tl.type')}>
         {TYPES.map((tp) => (
           <button
             key={tp}
             type="button"
+            role="radio"
+            aria-checked={type === tp}
             onClick={() => setType(tp)}
-            className={`btn btn-sm ${type === tp ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ padding: '6px 12px' }}
+            className={`tl-chip${type === tp ? ' active' : ''}`}
           >
             {INTERACTION_LABEL[tp]}
           </button>
         ))}
       </div>
-      <div className="form-group">
-        <label>{t('interactions.field.summary')}</label>
-        <input
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-          required
-        />
-      </div>
-      <div className="form-group">
-        <label>{t('interactions.field.details')}</label>
-        <textarea
-          value={details}
-          onChange={(e) => setDetails(e.target.value)}
-          rows={3}
-        />
-      </div>
-      <label style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 16,
-        fontSize: 13,
-        cursor: 'pointer',
-      }}>
-        <input
-          type="checkbox"
-          checked={visibleToStudent}
-          onChange={(e) => setVisibleToStudent(e.target.checked)}
-          style={{ width: 16, height: 16 }}
-        />
-        {t('interactions.visibleToStudent')}
+      <label className="tl-field">
+        <span>{t('interactions.field.summary')}</span>
+        <input className="crm-input" value={summary} onChange={(e) => setSummary(e.target.value)} placeholder={t('tl.summary.ph')} required />
       </label>
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+      <label className="tl-field">
+        <span>{t('interactions.field.details')} <small>{t('tl.optional')}</small></span>
+        <textarea className="crm-textarea" value={details} onChange={(e) => setDetails(e.target.value)} rows={3} />
+      </label>
+      <label className="tl-check">
+        <input type="checkbox" className="crm-checkbox" checked={visibleToStudent} onChange={(e) => setVisibleToStudent(e.target.checked)} />
+        {t('tl.visible')}
+      </label>
+      <div className="tl-form-actions">
         <button type="button" className="btn btn-sm btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
-        <button type="submit" className="btn btn-sm btn-primary" disabled={!summary.trim()}>{t('common.save')}</button>
+        <button type="submit" className="btn btn-sm btn-primary" disabled={!summary.trim() || busy} data-testid="interaction-save">
+          <BusyLabel busy={busy}>{t('tl.addEntry')}</BusyLabel>
+        </button>
       </div>
     </form>
   );

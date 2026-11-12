@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { MAX_AGE, MIN_AGE, ageFromBirthday, birthdayBounds, email as emailRule, phoneRule, tjPhoneError } from '../utils/validators';
 import CrmDatePicker from '../components/CrmDatePicker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -17,7 +17,7 @@ import { keys } from '../lib/queryKeys';
 import { useFileToken } from '../lib/fileUrl';
 import Loading from '../components/Loading';
 import { optimistic, useInvalidatingMutation, useOptimisticMutation } from '../lib/optimistic';
-import DocumentsChecklist, { REQUIRED_DOCUMENTS } from '../components/DocumentsChecklist';
+import DocumentsChecklist from '../components/DocumentsChecklist';
 import DirectionOptions from '../components/DirectionOptions';
 import ManagerBar from '../components/ManagerBar';
 import PartnerAttributionCard from '../components/PartnerAttributionCard';
@@ -51,11 +51,11 @@ import {
 } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { useChannelLabel, useCountryLabel, useDirectionLabel, useStudentStatusLabel } from '../lib/labels';
-import { tjFormatDate, tjFormatDateTime, tjFormatFull } from '../lib/tjTime';
+import { tjFormatDate, tjFormatFull } from '../lib/tjTime';
 import { canOpenDeals } from '../components/navGroups';
 import QueryErrorState from '../components/QueryErrorState';
 import { DetailSkeleton } from '../components/Skeleton';
-import { INTERACTION_ICON, INTERACTION_LABEL, listInteractions } from '../api/interactions';
+import { ClientOverviewCards, ClientTabsBar, useClientTab, useTimeline } from '../components/ClientTabs';
 
 /**
  * Карточка заявки. Устроена как карточка сотрудника: шапка (аватар, имя,
@@ -67,7 +67,7 @@ export default function ApplicationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   // Вкладка карточки — в ссылке (?tab=history): «назад» и обновление её помнят.
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [tabRaw, setTab] = useClientTab(true);
   const me = useAuth((s) => s.user);
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
@@ -95,13 +95,8 @@ export default function ApplicationDetail() {
     enabled: !!studentId,
   });
   const student = studentQuery.data ?? null;
-  // «Обзор»: последние записи истории (тот же кеш, что у вкладки «История») и сделки клиента.
-  const studentTabs = !!studentId && !!app && !isNewLeadApplicationStatus(app.status);
-  const interactionsQ = useQuery({
-    queryKey: keys.interactions.list(studentId ?? ''),
-    queryFn: () => listInteractions(studentId!),
-    enabled: studentTabs,
-  });
+  // «Обзор»: лента истории (тот же запрос, что у вкладки «История») и сделки клиента.
+  const timelineQ = useTimeline(studentId, !!app && !isNewLeadApplicationStatus(app.status));
   const dealsQ = useQuery({ queryKey: ['applications', 'deals', id], queryFn: () => leadDeals(id!), enabled: !!id });
 
   const reload = () => {
@@ -278,20 +273,7 @@ export default function ApplicationDetail() {
 
   // Макет (часть C): вкладки карточки — только у клиента со студентом (история,
   // документы и анкета принадлежат студенту); у нового лида — один «Обзор».
-  const TABS = ['overview', 'history', 'docs', 'form'] as const;
-  type Tab = (typeof TABS)[number];
-  const rawTab = searchParams.get('tab') as Tab | null;
-  const tab: Tab = withStudent && rawTab && TABS.includes(rawTab) ? rawTab : 'overview';
-  const setTab = (next: Tab) => {
-    const p = new URLSearchParams(searchParams);
-    if (next === 'overview') p.delete('tab');
-    else p.set('tab', next);
-    setSearchParams(p, { replace: true });
-  };
-  const interactionsCount = interactionsQ.data?.length;
-  const typedDocs = (student?.documents ?? []).filter((d: any) => d.type && d.type !== 'OTHER');
-  const docsUploaded = REQUIRED_DOCUMENTS.filter((r) => typedDocs.some((d: any) => d.type === r.type)).length;
-  const docsMissing = REQUIRED_DOCUMENTS.filter((r) => !typedDocs.some((d: any) => d.type === r.type));
+  const tab = withStudent ? tabRaw : 'overview';
   const canCreateDeal = (isAdmin || isMine) && !isEnrolled && roleCan(me, 'submissions:create') && canOpenDeals(me);
   const goCreateDeal = () => navigate(`/submissions/new?applicationId=${encodeURIComponent(app.id)}`);
 
@@ -379,27 +361,7 @@ export default function ApplicationDetail() {
       />
 
       {withStudent && (
-        <div className="client-tabs" role="tablist" aria-label={t('client.tabs.label')} data-testid="client-tabs">
-          {([
-            ['overview', t('client.tab.overview'), null],
-            ['history', t('client.tab.history'), interactionsCount],
-            ['docs', t('client.tab.docs'), `${docsUploaded} / ${REQUIRED_DOCUMENTS.length}`],
-            ['form', t('client.tab.form'), null],
-          ] as const).map(([key, label, badge]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={tab === key}
-              className={`client-tab${tab === key ? ' active' : ''}`}
-              onClick={() => setTab(key)}
-              data-testid={`client-tab-${key}`}
-            >
-              {label}
-              {badge !== null && badge !== undefined && <span className="client-tab-badge">{badge}</span>}
-            </button>
-          ))}
-        </div>
+        <ClientTabsBar tab={tab} setTab={setTab} historyCount={timelineQ.data?.length} documents={student!.documents} />
       )}
 
       {tab === 'overview' && (
@@ -506,92 +468,15 @@ export default function ApplicationDetail() {
           </section>
 
 
-          <div className="client-overview-grid">
-            {withStudent && (
-              <section className="card client-ov-card" data-testid="ov-history">
-                <div className="client-ov-head">
-                  <h3 className="profile-h">{t('client.tab.history')}</h3>
-                  <button type="button" className="profile-link-btn" onClick={() => setTab('history')} data-testid="ov-history-all">
-                    {t('client.ov.allHistory').replace('{n}', String(interactionsCount ?? 0))} →
-                  </button>
-                </div>
-                {(interactionsQ.data ?? []).length === 0 ? (
-                  <p className="client-muted" style={{ margin: 0 }}>{t('client.ov.noHistory')}</p>
-                ) : (
-                  <ul className="client-ov-list">
-                    {[...(interactionsQ.data ?? [])]
-                      .sort((x, y) => y.occurredAt.localeCompare(x.occurredAt))
-                      .slice(0, 3)
-                      .map((it) => (
-                        <li key={it.id}>
-                          <Icon name={INTERACTION_ICON[it.type] ?? 'chat'} size={18} />
-                          <span className="client-ov-text">
-                            <span><b>{INTERACTION_LABEL[it.type] ?? it.type}</b> · {it.summary}</span>
-                            <span className="client-ov-when">{tjFormatDateTime(it.occurredAt)}</span>
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                )}
-              </section>
-            )}
-            {withStudent && (
-              <section className="card client-ov-card" data-testid="ov-docs">
-                <div className="client-ov-head">
-                  <h3 className="profile-h">{t('client.tab.docs')}</h3>
-                  <span className="client-ov-count">{t('client.ov.docsOf').replace('{n}', String(docsUploaded)).replace('{m}', String(REQUIRED_DOCUMENTS.length))}</span>
-                </div>
-                <div className="client-ov-progress" role="progressbar" aria-valuemin={0} aria-valuemax={REQUIRED_DOCUMENTS.length} aria-valuenow={docsUploaded}>
-                  <span style={{ width: `${Math.round((docsUploaded / REQUIRED_DOCUMENTS.length) * 100)}%` }} />
-                </div>
-                {docsMissing.length > 0 && (
-                  <p className="client-ov-missing">
-                    {t('client.ov.missing')} {docsMissing.slice(0, 3).map((d) => d.label).join(', ')}
-                    {docsMissing.length > 3 ? ` ${t('client.ov.more').replace('{n}', String(docsMissing.length - 3))}` : ''}
-                  </p>
-                )}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTab('docs')} data-testid="ov-docs-open">{t('client.ov.openDocs')}</button>
-              </section>
-            )}
-            <section className="card client-ov-card" data-testid="ov-deals">
-              <div className="client-ov-head">
-                <h3 className="profile-h">{t('client.ov.deals')}</h3>
-              </div>
-              {dealsQ.isLoading ? (
-                <span className="sk-line" style={{ width: '60%' }} />
-              ) : (dealsQ.data ?? []).length === 0 ? (
-                <>
-                  <p className="client-muted" style={{ margin: canCreateDeal ? '0 0 10px' : 0 }}>{t(canCreateDeal ? 'client.ov.noDeals' : 'client.ov.noDealsShort')}</p>
-                  {canCreateDeal && (
-                    <button type="button" className="btn btn-primary btn-sm" onClick={goCreateDeal} data-testid="ov-deals-create">
-                      <Icon name="handshake" size={16} /> {t('applicationDetail.createDeal')}
-                    </button>
-                  )}
-                </>
-              ) : (
-                <ul className="client-ov-list">
-                  {(dealsQ.data ?? []).map((d) => {
-                    const body = (
-                      <span className="client-ov-text">
-                        <span><b>{d.program || '—'}</b> · {t(`deal.status.${d.status}`)}</span>
-                        {d.total !== null && (
-                          <span className="client-ov-when">{t('client.ov.paidOf').replace('{paid}', (d.paid ?? 0).toLocaleString('ru-RU')).replace('{total}', d.total.toLocaleString('ru-RU')).replace('{cur}', d.currency)}</span>
-                        )}
-                      </span>
-                    );
-                    return (
-                      <li key={d.id} data-testid="ov-deal">
-                        <Icon name="handshake" size={18} />
-                        {d.canOpen && canOpenDeals(me)
-                          ? <a className="client-link" href={`/admin/submissions/${d.id}`} onClick={(e) => { e.preventDefault(); navigate(`/submissions/${d.id}`); }}>{body}</a>
-                          : body}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          </div>
+          <ClientOverviewCards
+            studentId={withStudent ? student!.id : null}
+            documents={student?.documents}
+            setTab={setTab}
+            deals={dealsQ.data}
+            dealsLoading={dealsQ.isLoading}
+            canCreateDeal={canCreateDeal}
+            onCreateDeal={goCreateDeal}
+          />
         </>
       )}
 

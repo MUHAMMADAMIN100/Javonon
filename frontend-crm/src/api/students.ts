@@ -111,3 +111,7 @@ export async function studentStats(range?: { from?: string; to?: string }) {
   const { data } = await api.get('/students/stats', { params: range });
   return data;
 }
+
+/** Сделки студента для блока «Сделки» его карточки (суммы — null, если деньги клиентов роли не видны). */
+export const studentDeals = (id: string) =>
+  api.get<import('./applications').LeadDeal[]>(`/students/${id}/deals`).then((r) => r.data);

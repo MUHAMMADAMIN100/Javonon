@@ -64,8 +64,7 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
   const total = REQUIRED_DOCUMENTS.length;
   const percent = Math.round((uploadedCount / total) * 100);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
-    const files = Array.from(e.target.files || []);
+  const uploadFiles = async (files: File[], type: string) => {
     if (files.length === 0) return;
     setUploadingType(type);
     try {
@@ -78,9 +77,27 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
       toast(err?.response?.data?.message || t('toast.error'), 'error');
     } finally {
       setUploadingType(null);
-      e.target.value = '';
     }
   };
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    await uploadFiles(files, type);
+  };
+  // Макет UI: файл можно перетащить прямо на плитку документа.
+  const [dropType, setDropType] = useState<string | null>(null);
+  const dropProps = (type: string) =>
+    editable
+      ? {
+          onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (!uploadingType) setDropType(type); },
+          onDragLeave: () => setDropType((cur) => (cur === type ? null : cur)),
+          onDrop: (e: React.DragEvent) => {
+            e.preventDefault();
+            setDropType(null);
+            if (!uploadingType) uploadFiles(Array.from(e.dataTransfer.files || []), type);
+          },
+        }
+      : {};
 
   const handleDownloadZip = async () => {
     if (documents.length === 0 && !applicationForm) return;
@@ -194,6 +211,8 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
         </div>
       </div>
 
+      {editable && <p className="docs-drop-hint" data-testid="docs-drop-hint"><Icon name="upload_file" size={16} /> {t('docs.dropHint')}</p>}
+
       <div className="docs-grid">
         {REQUIRED_DOCUMENTS.map((req) => {
           const docs = typedDocs.filter((d) => d.type === req.type);
@@ -203,8 +222,10 @@ export default function DocumentsChecklist({ studentId, studentName, documents, 
           return (
             <motion.div
               key={req.type}
-              className={`doc-slot${isUploaded ? ' uploaded' : ''}`}
+              className={`doc-slot${isUploaded ? ' uploaded' : ''}${dropType === req.type ? ' is-drop' : ''}`}
               layout
+              data-testid={`doc-slot-${req.type}`}
+              {...dropProps(req.type)}
             >
               <div className="doc-slot-header">
                 <div className={`doc-slot-status ${isUploaded ? 'ok' : 'missing'}`}>
