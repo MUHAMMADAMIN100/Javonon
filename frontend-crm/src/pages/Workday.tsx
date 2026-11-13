@@ -4,22 +4,21 @@ import { useAuth } from '../store/auth';
 import { isFounder } from '../lib/roles';
 import { hasActiveRole, hasPermission } from '../lib/permissions';
 import { useT } from '../lib/i18n';
+import Icon from '../Icon';
 import TimeTracker from './TimeTracker';
-import Attendance from './Attendance';
 import Excuses from './Excuses';
+import Activity from './Activity';
+import ScheduleEditor from '../components/ScheduleEditor';
+import { MyMonth, TeamToday, Timesheet } from '../components/ShiftsBoard';
 
 /**
- * Объединённая страница «Рабочий день» (ТЗ-доработка).
- * Раньше было 3 отдельных пункта в Sidebar — теперь один с тремя
- * вкладками. Видимость табов зависит от роли:
- *   - «Моё время» — для всех залогиненных (кроме основателя)
- *   - «Посещаемость» — FOUNDER и роль с «Посещаемость»
- *   - «Причины опозданий» — FOUNDER и роль с «Причины опозданий»
- *
- * Старые роуты /time, /attendance, /excuses перенаправляются сюда
- * на нужный таб (см. App.tsx).
+ * «Активность и смены» (13.11.2026, как в Sabt) — бывший «Рабочий день».
+ * Руководитель: табель месяца, смены сегодня (просьбы, отгулы), график
+ * работы, лента событий и причины опозданий. Сотрудник: свой месяц и своё
+ * время (приход с подтверждением, обед, причины опозданий).
+ * Старые адреса /time, /attendance, /excuses ведут сюда на нужную вкладку.
  */
-type Tab = 'time' | 'attendance' | 'excuses';
+type Tab = 'timesheet' | 'today' | 'schedule' | 'feed' | 'excuses' | 'month' | 'time';
 
 export default function Workday() {
   const me = useAuth((s) => s.user);
@@ -27,27 +26,36 @@ export default function Workday() {
   const location = useLocation();
   const navigate = useNavigate();
   const founder = isFounder(me as any);
-  // Табель и опоздания команды: основатель; сотрудник с ролью — по её галочкам.
   const viewerRole = hasActiveRole(me) && !founder;
-  const seeAttendance = founder || (viewerRole && hasPermission(me, 'attendance:read'));
+  const seeTeam = founder || (viewerRole && hasPermission(me, 'attendance:read'));
   const seeExcuses = founder || (viewerRole && hasPermission(me, 'excuses:read', 'excuses:approve'));
+  const seeFeed = founder || (viewerRole && hasPermission(me, 'activity:read'));
+  const ownTime = !founder;
 
-  // Таб из URL ?tab=… или из path (legacy). По умолчанию time.
+  const tabs: Array<{ key: Tab; label: string; visible: boolean }> = [
+    { key: 'timesheet', label: t('wd.tab.timesheet'), visible: seeTeam },
+    { key: 'today', label: t('wd.tab.today'), visible: seeTeam },
+    { key: 'schedule', label: t('wd.tab.schedule'), visible: seeTeam },
+    { key: 'feed', label: t('wd.tab.feed'), visible: seeFeed },
+    { key: 'excuses', label: t('workday.tab.excuses'), visible: seeExcuses },
+    { key: 'month', label: t('wd.tab.month'), visible: ownTime && !seeTeam },
+    { key: 'time', label: t('workday.tab.time'), visible: ownTime },
+  ];
+  const visible = tabs.filter((x) => x.visible);
+  const allowed = (k: Tab) => visible.some((x) => x.key === k);
+
   const search = new URLSearchParams(location.search);
-  const fromQuery = (search.get('tab') as Tab) || null;
+  const raw = search.get('tab');
+  const legacy: Record<string, Tab> = { attendance: 'timesheet' };
+  const fromQuery = (raw && (legacy[raw] ?? raw)) as Tab | null;
   const fromPath: Tab | null =
-    location.pathname.startsWith('/attendance') ? 'attendance' :
+    location.pathname.startsWith('/attendance') ? 'timesheet' :
     location.pathname.startsWith('/excuses') ? 'excuses' :
     location.pathname.startsWith('/time') ? 'time' : null;
-  // Основатель не отмечает приход — его страница начинается с посещаемости команды.
-  const fallback: Tab = founder ? 'attendance' : 'time';
+  const fallback: Tab = seeTeam ? 'timesheet' : 'month';
   const requested = fromQuery || fromPath || fallback;
-  const allowed = (tb: Tab) =>
-    tb === 'time' ? !founder : tb === 'attendance' ? seeAttendance : seeExcuses;
-  const initial: Tab = allowed(requested) ? requested : fallback;
-  const [tab, setTab] = useState<Tab>(initial);
+  const [tab, setTab] = useState<Tab>(allowed(requested) ? requested : allowed(fallback) ? fallback : (visible[0]?.key ?? 'time'));
 
-  // Когда юзер кликает таб — обновляем URL чтобы можно было поделиться.
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('tab') !== tab) {
@@ -56,54 +64,31 @@ export default function Workday() {
     }
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Своё время — все, кроме основателя; табель и опоздания — см. выше.
-  const tabs: Array<{ key: Tab; label: string; visible: boolean }> = [
-    { key: 'time', label: t('workday.tab.time'), visible: allowed('time') },
-    { key: 'attendance', label: t('workday.tab.attendance'), visible: allowed('attendance') },
-    { key: 'excuses', label: t('workday.tab.excuses'), visible: allowed('excuses') },
-  ];
-  const visibleTabs = tabs.filter((tb) => tb.visible);
-
   return (
-    <>
-      {visibleTabs.length > 1 && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 6,
-            flexWrap: 'wrap',
-            marginBottom: 18,
-            borderBottom: '1px solid var(--border)',
-            paddingBottom: 12,
-          }}
-        >
-          {visibleTabs.map((tb) => (
-            <button
-              key={tb.key}
-              onClick={() => setTab(tb.key)}
-              data-testid={`workday-tab-${tb.key}`}
-              style={{
-                padding: '10px 18px',
-                borderRadius: 10,
-                border: '1.5px solid',
-                borderColor: tab === tb.key ? 'var(--primary)' : 'var(--border)',
-                // Активная — синяя со светлым текстом (тёмный на синем не читался).
-                background: tab === tb.key ? 'var(--primary)' : 'white',
-                color: tab === tb.key ? '#fff' : 'var(--text-soft)',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: 14,
-              }}
-            >
-              {tb.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {tab === 'time' && allowed('time') && <TimeTracker />}
-      {tab === 'attendance' && allowed('attendance') && <Attendance />}
-      {tab === 'excuses' && allowed('excuses') && <Excuses />}
-    </>
+    <div className="wd-page">
+      <div className="client-tabs wd-tabs" role="tablist" data-testid="wd-tabs">
+        {visible.map((x) => (
+          <button
+            key={x.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === x.key}
+            className={`client-tab${tab === x.key ? ' active' : ''}`}
+            onClick={() => setTab(x.key)}
+            data-testid={`workday-tab-${x.key}`}
+          >
+            {x.label}
+          </button>
+        ))}
+        <span className="wd-live"><Icon name="sensors" size={14} />{t('wd.live')}</span>
+      </div>
+      {tab === 'timesheet' && <Timesheet />}
+      {tab === 'today' && <TeamToday />}
+      {tab === 'schedule' && <div className="card wd-schedule"><ScheduleEditor userId={null} /></div>}
+      {tab === 'feed' && <Activity />}
+      {tab === 'excuses' && <Excuses />}
+      {tab === 'month' && <MyMonth />}
+      {tab === 'time' && <TimeTracker />}
+    </div>
   );
 }

@@ -171,9 +171,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/tasks', icon: 'task_alt', labelKey: 'sidebar.tasks', visible: (c) => c.show('tasks:read', c.isWorkforce) },
       // «Время / Посещаемость / Причины» схлопнуты в /workday со вкладками,
       // но старые роуты живы в App.tsx и рендерят тот же Workday.
-      { to: '/workday', icon: 'schedule', labelKey: 'sidebar.workday', aliases: ['/time', '/attendance', '/excuses'], visible: (c) => !c.isTeacherOnly },
-      // Аудит-лог — основатель; роли — пункт «Журнал активности».
-      { to: '/activity', icon: 'history', labelKey: 'sidebar.activity', visible: (c) => c.isFounder || (c.hasCustomRole && c.can('activity:read')) },
+      // «Активность и смены» (13.11.2026, как в Sabt): табель, смены сегодня, график,
+      // лента событий (бывший «Журнал активности» — /activity ведёт сюда же).
+      { to: '/workday', icon: 'schedule', labelKey: 'sidebar.workday', aliases: ['/time', '/attendance', '/excuses', '/activity'], visible: (c) => !c.isTeacherOnly },
     ],
   },
   {
