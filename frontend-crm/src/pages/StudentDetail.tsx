@@ -47,6 +47,7 @@ import BusyLabel from '../components/BusyLabel';
 import { DetailSkeleton } from '../components/Skeleton';
 import { ClientOverviewCards, ClientTabsBar, useClientTab, useTimeline } from '../components/ClientTabs';
 import { canOpenDeals } from '../components/navGroups';
+import { CustomFieldRows } from '../components/CustomFields';
 
 function CredRow({ label, value }: { label: string; value: string }) {
   const { t } = useT();
@@ -428,6 +429,7 @@ export default function StudentDetail() {
                   ) : undefined}
                 />
               )}
+              <CustomFieldRows values={student.customFields} />
               <Field label={t('client.created.student')} testId="field-created" value={tjFormatFull(student.createdAt)} />
               <Field label={t('app.field.comment')} testId="field-comment" wide value={<span className="client-pre">{student.comment || '—'}</span>} />
             </div>

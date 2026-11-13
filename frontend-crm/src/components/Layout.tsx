@@ -23,6 +23,7 @@ import { routeDenied, TEACHER_HOME } from './ProtectedRoute';
 import QueryErrorState from './QueryErrorState';
 import { fmtDateText } from '../lib/tjTime';
 import { LOOKUPS_KEY, useLookupItems } from '../lib/lookups';
+import { LEAD_FIELDS_KEY } from './CustomFields';
 
 /**
  * Заголовок страницы — ОДИН, и живёт он здесь.
@@ -128,6 +129,7 @@ export default function Layout() {
   useLookupItems();
   useRealtimeEvent('lookups:changed', () => {
     queryClient.invalidateQueries({ queryKey: LOOKUPS_KEY });
+    queryClient.invalidateQueries({ queryKey: LEAD_FIELDS_KEY });
   });
 
   useRealtimeEvent('user:deleted', () => {

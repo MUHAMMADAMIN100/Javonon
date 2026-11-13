@@ -393,6 +393,8 @@ model Application {
   // @default(false) — все строки, существовавшие до колонки, получают false,
   // и настоящих должников среди них восстанавливает backfill миграции.
   paymentPending        Boolean           @default(false)
+  // Свои поля анкеты лида: { [LeadField.key]: значение } (13.11.2026).
+  customFields          Json?
   // QA-2: сделка из лида переводит САМ лид в «Успешные» и помнит прежний
   // статус — отмена или удаление сделки возвращает его. Лид, который создала
   // сама сделка (сделка без лида), помечен её id: при отмене он уходит в корзину.
@@ -467,6 +469,8 @@ model Student {
   /// после reset пароля старый JWT жил ещё 7 дней — sec audit fix.
   tokenVersion     Int             @default(0)
   applicationForm  Json?
+  // Свои поля анкеты — переходят из лида при оформлении (13.11.2026).
+  customFields     Json?
   photoUrl         String?
   direction        String
   // Тот же смысл, что у Application.directionConfirmed:
@@ -2028,6 +2032,36 @@ model LookupItem {
 
   @@unique([kind, key])
   @@index([kind, order])
+}
+
+/// Свои поля анкеты лида («Лиды → Настройки → Поля анкеты», 13.11.2026):
+/// вопросы, которые основатель добавляет сам. Значения — в
+/// Application.customFields / Student.customFields под ключом поля (key).
+enum LeadFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  MULTI
+  BOOL
+}
+
+model LeadField {
+  id        String        @id @default(uuid())
+  /// Ключ в customFields («F_…»); при переименовании не меняется.
+  key       String        @unique
+  labelRu   String
+  labelTg   String
+  type      LeadFieldType
+  /// Варианты списка: [{ key, labelRu, labelTg }]
+  options   Json?
+  /// Без ответа сотрудник не сохранит лида (заявки с сайта — без проверки).
+  required  Boolean       @default(false)
+  order     Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([order])
 }
 
 // ============================================================

@@ -108,7 +108,13 @@ export class ApplicationsController {
     @Query('brief') brief?: string,
     // QA-3 (набл. 13): без страницы список можно ограничить (?limit=50).
     @Query('limit') limit?: string,
+    // Свои поля анкеты: ?cf_<ключ>=значение.
+    @Query() query?: Record<string, unknown>,
   ) {
+    const customFilters = Object.entries(query ?? {})
+      .filter(([k, v]) => k.startsWith('cf_') && typeof v === 'string' && v.length <= 60)
+      .slice(0, 10)
+      .map(([k, v]) => ({ key: k.slice(3), value: String(v) }));
     // QA-fix #45: неизвестное значение фильтра — 400, а не пустой список.
     // Источник истины — справочники «Лиды → Настройки» (13.11.2026); статус
     // ещё и легаси-ключом старой воронки (старые строки читаются).
@@ -148,6 +154,7 @@ export class ApplicationsController {
       // «Дубли» — только руководству: остальным список и так ограничен своими.
       duplicates: (duplicates === '1' || duplicates === 'true') && isElevated(user),
       debt: debt === '1' || debt === 'true',
+      customFilters,
       brief: brief === '1' || brief === 'true',
       limit: limit ? Math.min(500, Math.max(1, parseInt(limit, 10) || 0)) || undefined : undefined,
     });

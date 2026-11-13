@@ -2106,7 +2106,7 @@ export class SubmissionsService {
               id: true, status: true, studentId: true, programId: true, deletedAt: true, source: true,
               phone: true, secondaryPhone: true, secondaryContactLabel: true, whatsappPhone: true,
               email: true, birthday: true, country: true, preferredChannel: true, comment: true,
-              chinaManagerId: true, managerId: true,
+              chinaManagerId: true, managerId: true, customFields: true,
             },
           })
         : null;
@@ -2146,6 +2146,8 @@ export class SubmissionsService {
               email,
               birthday: srcApp?.birthday ?? null,
               country: srcApp?.country ?? null,
+              // Ответы на свои поля анкеты лида переходят в карточку студента.
+              ...(srcApp?.customFields ? { customFields: srcApp.customFields as Prisma.InputJsonValue } : {}),
               preferredChannel: srcApp?.preferredChannel ?? null,
               comment: srcApp?.comment ?? null,
               chinaManagerId: srcApp?.chinaManagerId ?? null,

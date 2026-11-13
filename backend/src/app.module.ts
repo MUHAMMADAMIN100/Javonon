@@ -24,6 +24,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { ProgramsModule } from './programs/programs.module';
 import { ActivityModule } from './activity/activity.module';
 import { LookupsModule } from './lookups/lookups.module';
+import { LeadFieldsModule } from './lead-fields/lead-fields.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { FinanceModule } from './finance/finance.module';
 import { SalaryModule } from './salary/salary.module';
@@ -108,6 +109,7 @@ import { InstallmentsModule } from './installments/installments.module';
     ProgramsModule,
     ActivityModule,
     LookupsModule,
+    LeadFieldsModule,
     TimeTrackingModule,
     FinanceModule,
     SalaryModule,

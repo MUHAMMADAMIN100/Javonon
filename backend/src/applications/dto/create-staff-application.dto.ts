@@ -1,15 +1,4 @@
-import {
-  IsBoolean,
-  IsDateString,
-  IsEmail,
-  IsEnum,
-  IsIn,
-  IsOptional,
-  IsString,
-  Matches,
-  MinLength,
-  MaxLength,
-} from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsEnum, IsIn, IsOptional, IsString, Matches, MinLength, MaxLength, IsObject } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ContactChannel } from '@prisma/client';
 import { ApplicationSource, ApplicationStatus, Country, Direction } from '../../common/lookup-keys';
@@ -160,4 +149,9 @@ export class CreateStaffApplicationDto {
   @IsOptional()
   @IsLookupKey('Выберите статус из списка')
   status?: ApplicationStatus;
+
+  // Свои поля анкеты: { [ключ поля]: значение } — проверяет LeadFieldsService.
+  @IsOptional()
+  @IsObject({ message: 'Поля анкеты: неверный формат' })
+  customFields?: Record<string, unknown>;
 }

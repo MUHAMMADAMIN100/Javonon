@@ -59,6 +59,7 @@ import { useLookups } from '../lib/lookups';
 import { MACHINE_SOURCES } from '../api/lookups';
 import LookupOptions from '../components/LookupOptions';
 import { useSourceLabel } from '../lib/labels';
+import { CustomFieldInputs, CustomFieldRows, draftChanged, draftToPayload, toDraft, useLeadFields, validateDraft, type CustomDraft } from '../components/CustomFields';
 
 /**
  * Карточка заявки. Устроена как карточка сотрудника: шапка (аватар, имя,
@@ -432,6 +433,7 @@ export default function ApplicationDetail() {
                   )}
                   {withStudent && <Field label={t('common.status')} testId="field-student-status" value={studentStatusLabel(student!.status)} />}
                   {channel && <Field label={t('app.field.preferredChannel')} testId="field-channel" value={channelLabel(channel)} />}
+                  <CustomFieldRows values={withStudent ? student!.customFields : app.customFields} />
                   <Field label={t('client.created.lead')} testId="field-created" value={tjFormatFull(app.createdAt)} />
                   <Field label={t('app.field.comment')} testId="field-comment" wide value={<span className="client-pre">{comment || '—'}</span>} />
                 </div>
@@ -549,6 +551,10 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
   };
   const [form, setForm] = useState(initial);
   const [showErrors, setShowErrors] = useState(false);
+  // Свои поля анкеты лида.
+  const leadFields = useLeadFields();
+  const [cfDraft, setCfDraft] = useState<CustomDraft>(() => toDraft([], app.customFields));
+  const cfErrors = validateDraft(leadFields, cfDraft, t);
   const [saving, setSaving] = useState(false);
   // QA-3 (BUG-08): WhatsApp правится здесь же. Галочка «тот же номер» — как в
   // «Новом лиде»: сменили основной телефон — WhatsApp меняется вместе с ним.
@@ -592,7 +598,7 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
   const err = (k: keyof typeof form) => (showErrors ? errors[k] : undefined);
 
   const save = async () => {
-    if (Object.keys(errors).length > 0) {
+    if (Object.keys(errors).length > 0 || Object.keys(cfErrors).length > 0) {
       setShowErrors(true);
       return;
     }
@@ -611,6 +617,7 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
     // пришедший direction как подтверждение (directionConfirmed=true).
     if (changed('direction') && form.direction) patch.direction = form.direction;
     if (changed('comment')) patch.comment = form.comment.trim();
+    if (leadFields.length && draftChanged(leadFields, cfDraft, app.customFields)) patch.customFields = draftToPayload(leadFields, cfDraft);
     if (Object.keys(patch).length === 0) {
       onCancel();
       return;
@@ -728,6 +735,13 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
         </CrmSelect>
         {sourceLocked && <div className="form-hint-text">{t('leads.source.locked')}</div>}
       </EditField>
+      <CustomFieldInputs
+        fields={leadFields}
+        draft={cfDraft}
+        onChange={(k, v) => setCfDraft((d) => ({ ...d, [k]: v }))}
+        errors={cfErrors}
+        showErrors={showErrors}
+      />
     </EditForm>
   );
 }

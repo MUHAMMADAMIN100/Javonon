@@ -21,6 +21,7 @@ import { dateRangeFilter } from '../common/query-date';
 import { clientDeals } from '../submissions/client-deals';
 import { phoneDigitsPattern } from '../common/search';
 import { LookupsService } from '../lookups/lookups.service';
+import { LeadFieldsService } from '../lead-fields/lead-fields.service';
 
 /**
  * DOB из CRM → UTC-полночь. Раньше здесь стоял голый `new Date(b)`: для
@@ -59,6 +60,7 @@ export class StudentsService {
     private activity: ActivityService,
     private notifications: NotificationsService,
     private lookups: LookupsService,
+    private leadFields: LeadFieldsService,
     // Блок «Партнёр» в карточке студента (см. findOne). @Optional() — как в
     // ApplicationsService: без PartnersModule карточка работает, просто без
     // партнёрского блока.
@@ -423,6 +425,13 @@ export class StudentsService {
     const existing = await this.findOne(id);
     this.ensureCanEdit(existing, user);
     if (dto.direction !== undefined && dto.direction !== existing.direction) this.lookups.assert('DIRECTION', dto.direction);
+    // Свои поля анкеты (из лида): обязательность — только в форме лида.
+    if ((dto as any).customFields !== undefined) {
+      (dto as any).customFields = this.leadFields.clean((dto as any).customFields, {
+        requireAll: false,
+        current: (existing as any).customFields,
+      });
+    }
 
     const data: Prisma.StudentUpdateInput = {};
     if (dto.fullName !== undefined) data.fullName = dto.fullName;
@@ -436,6 +445,7 @@ export class StudentsService {
         .filter((x): x is string => !!x);
     }
     if (dto.phoneLabels !== undefined) data.phoneLabels = dto.phoneLabels;
+    if ((dto as any).customFields !== undefined) data.customFields = (dto as any).customFields as Prisma.InputJsonValue;
     if (dto.preferredChannel !== undefined) data.preferredChannel = dto.preferredChannel;
     // Онбординг: по ТЗ ведёт CLIENT_MANAGER + elevated (FOUNDER/ADMIN/
     // ACCOUNTANT). SALES_MANAGER, даже будучи назначенным managerId, не

@@ -1770,3 +1770,35 @@ body:has(.deal-wizard-foot) .dialpad-fab { display: none !important; }
   .lk-actions { grid-column: 1 / -1; justify-content: flex-end; }
   .leads-settings-label { display: none; }
 }
+
+/* ===== Свои поля анкеты лида (13.11.2026) ===== */
+.cf-block { grid-column: 1 / -1; min-width: 0; margin: 6px 0 4px; padding: 14px 16px 4px; border: 1px solid var(--border); border-radius: 12px; background: #FAFBFD; }
+.cf-legend { padding: 0 6px; font-weight: 700; font-size: 13px; color: var(--text); }
+.cf-grid .cf-wide { grid-column: 1 / -1; }
+.cf-multi { display: flex; flex-wrap: wrap; gap: 8px; }
+.cf-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--border); background: #fff; font-size: 13px; cursor: pointer; user-select: none;
+}
+.form-group label.cf-chip { display: inline-flex; margin: 0; font-weight: 500; line-height: 1.2; }
+.cf-chip input { position: static; flex: 0 0 auto; width: 15px; height: 15px; margin: 0; accent-color: var(--primary); }
+.cf-grid { row-gap: 14px; }
+.cf-grid > .form-group { margin-bottom: 0; }
+.cf-chip.is-on { border-color: var(--primary); background: #EAF1FC; color: #1E3A8A; }
+.lf-type-icon { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: #EEF2F8; color: var(--text-soft); }
+.lf-row { grid-template-columns: 20px 22px minmax(0, 1fr) auto; }
+.lf-name { font-weight: 600; }
+.lf-opts { color: var(--text); }
+.lk-tag.is-required { background: #FFF4E5; color: #B45309; }
+.lf-options { display: grid; gap: 8px; margin-bottom: 8px; }
+.lf-option { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 8px; align-items: center; }
+.lf-option .icon-btn { margin-left: 0; }
+.lf-opt-add { margin-bottom: 6px; }
+.cols-menu-sep { margin: 6px 0 4px; padding-top: 6px; border-top: 1px solid var(--border-soft); font-size: 11.5px; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: .04em; }
+.lead-cf { white-space: nowrap; }
+@media (max-width: 600px) {
+  .lf-row { grid-template-columns: 22px minmax(0, 1fr); }
+  .lf-option { grid-template-columns: minmax(0, 1fr) 32px; }
+  .lf-option input:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .cf-block { padding: 12px 12px 2px; }
+}

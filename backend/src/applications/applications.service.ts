@@ -47,6 +47,7 @@ import {
 } from '../common/application-status';
 import { LookupsService } from '../lookups/lookups.service';
 import { MACHINE_SOURCES } from '../lookups/lookup-defaults';
+import { LeadFieldsService } from '../lead-fields/lead-fields.service';
 
 /** Сколько лидов отдаёт список без страницы и без ?limit (самые новые). */
 const UNPAGED_LIST_MAX = 500;
@@ -147,6 +148,7 @@ export class ApplicationsService {
     private activity: ActivityService,
     private realtime: RealtimeGateway,
     private lookups: LookupsService,
+    private leadFields: LeadFieldsService,
     @Optional() private referrals?: ReferralsService,
     @Optional() private sales?: SalesService,
   ) {}
@@ -433,6 +435,10 @@ export class ApplicationsService {
         managerId: opts.managerId ?? assignedManagerId,
         pipelineId,
         pipelineStageId,
+        // Свои поля анкеты — только у лида, заведённого сотрудником (createByStaff).
+        ...((dto as any).customFields && Object.keys((dto as any).customFields).length
+          ? { customFields: (dto as any).customFields as Prisma.InputJsonValue }
+          : {}),
       },
     });
   }
@@ -601,6 +607,8 @@ export class ApplicationsService {
     if (dto.source && !this.lookups.isStaffSource(dto.source)) {
       throw new BadRequestException('Недопустимый источник для лида, введённого вручную');
     }
+    // Свои поля анкеты («Лиды → Настройки → Поля анкеты»): обязательные — тоже.
+    (dto as any).customFields = this.leadFields.clean(dto.customFields, { requireAll: true });
     const moves = !NEW_LEAD_APPLICATION_STATUSES.includes(status);
     if (moves && !roleAllowsApplication(user as any, ApplicationStatus.NEW_LEAD, 'update')) {
       throw new ForbiddenException('Нет права переводить лид в работу');
@@ -811,6 +819,8 @@ export class ApplicationsService {
     debt?: boolean;
     /** QA-2: «Дубли» — лиды с одним телефоном и лиды-дубли старых сделок (только руководство). */
     duplicates?: boolean;
+    /** Свои поля анкеты: ?cf_<ключ>=значение (списки и «да/нет»). */
+    customFilters?: Array<{ key: string; value: string }>;
   }) {
     const where: Prisma.ApplicationWhereInput = {};
     if (filters.deleted) where.deletedAt = { not: null };
@@ -928,6 +938,10 @@ export class ApplicationsService {
         if (rows.length) or.push({ id: { in: rows.map((r) => r.id) } });
       }
       and.push({ OR: or });
+    }
+    for (const cf of filters.customFilters ?? []) {
+      const cond = this.leadFields.whereFor(cf.key, cf.value);
+      if (cond) and.push(cond);
     }
     if (and.length) where.AND = and;
     if (!filters.page) {
@@ -1182,9 +1196,19 @@ export class ApplicationsService {
     // Направление, пришедшее из карточки заявки, — это уже решение живого
     // менеджера, а не плейсхолдер. Снимаем пометку, и заявка возвращается
     // в срез «по направлениям» на дашборде и в фильтр списка.
+    // Свои поля анкеты: пришли — проверяем и сливаем с прежними (пустое снимает).
+    const customPatch: { customFields?: Prisma.InputJsonValue } = {};
+    if (dto.customFields !== undefined) {
+      customPatch.customFields = this.leadFields.clean(dto.customFields, {
+        requireAll: true,
+        current: (existing as any).customFields,
+      }) as Prisma.InputJsonValue;
+      delete (dto as any).customFields;
+    }
     const data = {
-      ...dto,
+      ...(dto as Omit<typeof dto, 'customFields'>),
       ...birthdayPatch,
+      ...customPatch,
       ...(dto.direction != null ? { directionConfirmed: true } : {}),
     };
     // Направление, которое будет у заявки ПОСЛЕ этого PATCH. Студента ниже
@@ -1273,6 +1297,8 @@ export class ApplicationsService {
           // только из исходной Application.
           country: (existing as any).country ?? null,
           comment: existing.comment,
+          // Ответы на свои поля анкеты переходят в карточку студента.
+          ...((existing as any).customFields ? { customFields: (existing as any).customFields } : {}),
         };
         try {
           const student = await this.prisma.student.create({ data: studentData });

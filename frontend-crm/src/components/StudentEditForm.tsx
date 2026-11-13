@@ -10,6 +10,7 @@ import { useUI } from '../ui/Dialogs';
 import { useT } from '../lib/i18n';
 import { useChannelLabel, useOnboardingLabel, useStudentStatusLabel } from '../lib/labels';
 import { tjDateInput } from '../lib/tjTime';
+import { CustomFieldInputs, draftChanged, draftToPayload, toDraft, useLeadFields, validateDraft, type CustomDraft } from './CustomFields';
 
 export type StudentPatch = Parameters<typeof updateStudent>[1];
 
@@ -49,6 +50,11 @@ export default function StudentEditForm({ student, withOnboarding, saving, onSav
     comment: student.comment || '',
   }));
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  // Свои поля анкеты (перешли из лида). У студента они необязательные.
+  const allFields = useLeadFields();
+  const cfFields = allFields.map((f) => ({ ...f, required: false }));
+  const [cfDraft, setCfDraft] = useState<CustomDraft>(() => toDraft([], student.customFields));
+  const cfErrors = validateDraft(cfFields, cfDraft, t);
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const touch = (k: string) => () => setTouched((tt) => ({ ...tt, [k]: true }));
 
@@ -80,8 +86,8 @@ export default function StudentEditForm({ student, withOnboarding, saving, onSav
   const err = (k: string) => (touched[k] && (errors as any)[k]) || undefined;
 
   const save = () => {
-    setTouched({ fullName: true, phones: true, email: true, cabinet: true, comment: true });
-    if (hasErrors(errors)) {
+    setTouched({ fullName: true, phones: true, email: true, cabinet: true, comment: true, cf: true });
+    if (hasErrors(errors) || Object.keys(cfErrors).length > 0) {
       toast(t('toast.error'), 'error');
       return;
     }
@@ -102,6 +108,7 @@ export default function StudentEditForm({ student, withOnboarding, saving, onSav
       status: form.status,
       ...(withOnboarding ? { onboardingStage: form.onboardingStage || undefined } : {}),
       comment: form.comment.trim() || undefined,
+      ...(cfFields.length && draftChanged(cfFields, cfDraft, student.customFields) ? { customFields: draftToPayload(cfFields, cfDraft) } : {}),
     } as StudentPatch);
   };
 
@@ -209,6 +216,13 @@ export default function StudentEditForm({ student, withOnboarding, saving, onSav
           </CrmSelect>
         </EditField>
       )}
+      <CustomFieldInputs
+        fields={cfFields}
+        draft={cfDraft}
+        onChange={(k, v) => setCfDraft((d) => ({ ...d, [k]: v }))}
+        errors={cfErrors}
+        showErrors={!!touched.cf}
+      />
     </EditForm>
   );
 }

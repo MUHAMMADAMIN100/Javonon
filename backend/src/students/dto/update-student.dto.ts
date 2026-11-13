@@ -1,4 +1,4 @@
-import { IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, IsObject } from 'class-validator';
 import { ContactChannel, OnboardingStage, StudentStatus } from '@prisma/client';
 import { Direction } from '../../common/lookup-keys';
 import { IsLookupKey } from '../../common/lookup-validators';
@@ -44,6 +44,11 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsLookupKey('Выберите направление из списка')
   direction?: Direction;
+
+  // Свои поля анкеты (перешли из лида; правятся в карточке студента).
+  @IsOptional()
+  @IsObject({ message: 'Поля анкеты: неверный формат' })
+  customFields?: Record<string, unknown>;
 
   @IsOptional()
   @IsInt()

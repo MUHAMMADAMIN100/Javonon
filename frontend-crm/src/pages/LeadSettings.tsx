@@ -26,6 +26,9 @@ import {
   type LookupItem,
   type LookupKind,
 } from '../api/lookups';
+import LeadFieldsTab from '../components/LeadFieldsTab';
+import { LEAD_FIELDS_KEY } from '../components/CustomFields';
+import { fetchLeadFields } from '../api/leadFields';
 
 /**
  * «Лиды → Настройки» (13.11.2026). Основатель (и роль с «Настройки лидов»)
@@ -37,13 +40,14 @@ import {
  * Значение, на котором есть записи, удаляется только с переносом записей
  * в другое значение того же списка.
  */
-type Tab = LookupKind;
+type Tab = LookupKind | 'FIELDS';
 
 const TABS: Array<{ key: Tab; labelKey: string; hintKey: string; newKey: string }> = [
   { key: 'LEAD_STATUS', labelKey: 'lk.tab.statuses', hintKey: 'lk.hint.statuses', newKey: 'lk.new.status' },
   { key: 'DIRECTION', labelKey: 'lk.tab.directions', hintKey: 'lk.hint.directions', newKey: 'lk.new.direction' },
   { key: 'COUNTRY', labelKey: 'lk.tab.countries', hintKey: 'lk.hint.countries', newKey: 'lk.new.country' },
   { key: 'LEAD_SOURCE', labelKey: 'lk.tab.sources', hintKey: 'lk.hint.sources', newKey: 'lk.new.source' },
+  { key: 'FIELDS', labelKey: 'lk.tab.fields', hintKey: 'lf.hint', newKey: 'lf.new' },
 ];
 
 /** Цвета на выбор — спокойные, читаются на белом и в плашке. */
@@ -70,7 +74,9 @@ export default function LeadSettings() {
   const setTab = (k: Tab) => setParams((p) => { p.set('tab', k); return p; }, { replace: true });
 
   const all = useLookupItems();
-  const usageQ = useQuery({ queryKey: USAGE_KEY, queryFn: fetchLookupUsage, enabled: allowed });
+  const usageQ = useQuery({ queryKey: USAGE_KEY, queryFn: fetchLookupUsage, enabled: allowed && tab !== 'FIELDS' });
+  const fieldsQ = useQuery({ queryKey: LEAD_FIELDS_KEY, queryFn: fetchLeadFields, enabled: allowed });
+  const fields = fieldsQ.data;
   const [editing, setEditing] = useState<LookupItem | 'new' | null>(null);
   const [moving, setMoving] = useState<LookupItem | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -80,7 +86,7 @@ export default function LeadSettings() {
     () => (all ?? []).filter((i) => i.kind === tab).sort((a, b) => a.order - b.order),
     [all, tab],
   );
-  const usage = usageQ.data?.[tab] ?? {};
+  const usage = tab === 'FIELDS' ? {} : usageQ.data?.[tab] ?? {};
   const meta = TABS.find((x) => x.key === tab)!;
 
   if (!allowed) return <QueryErrorState kind="denied" />;
@@ -101,7 +107,7 @@ export default function LeadSettings() {
       (old ?? []).map((i) => (i.kind === tab ? { ...i, order: ids.indexOf(i.id) } : i)),
     );
     try {
-      await reorderLookups(tab, ids);
+      await reorderLookups(tab as LookupKind, ids);
       toast(t('lk.toast.order'), 'success');
     } catch (e) {
       qc.setQueryData(LOOKUPS_KEY, prev);
@@ -181,11 +187,14 @@ export default function LeadSettings() {
               data-testid={`lk-tab-${x.key}`}
             >
               {t(x.labelKey)}
-              {all && <span className="client-tab-badge">{all.filter((i) => i.kind === x.key).length}</span>}
+              {x.key === 'FIELDS'
+                ? fields && <span className="client-tab-badge">{fields.length}</span>
+                : all && <span className="client-tab-badge">{all.filter((i) => i.kind === x.key).length}</span>}
             </button>
           ))}
         </div>
 
+        {tab === 'FIELDS' ? <LeadFieldsTab /> : (<>
         <div className="lk-head">
           <p className="lk-hint">{t(meta.hintKey)}</p>
           <button type="button" className="btn btn-primary" onClick={() => setEditing('new')} data-testid="lk-add">
@@ -262,9 +271,10 @@ export default function LeadSettings() {
             })}
           </ol>
         )}
+        </>)}
       </div>
 
-      {editing && (
+      {editing && tab !== 'FIELDS' && (
         <LookupForm
           kind={tab}
           item={editing === 'new' ? null : editing}
@@ -273,7 +283,7 @@ export default function LeadSettings() {
           onSaved={() => { setEditing(null); refresh(); }}
         />
       )}
-      {moving && (
+      {moving && tab !== 'FIELDS' && (
         <MoveModal
           item={moving}
           others={items.filter((x) => x.id !== moving.id)}

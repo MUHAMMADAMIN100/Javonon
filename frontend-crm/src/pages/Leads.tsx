@@ -80,6 +80,7 @@ import { LookupBadge, useLookups } from '../lib/lookups';
 import { MACHINE_SOURCES } from '../api/lookups';
 import LookupOptions from '../components/LookupOptions';
 import { canManageLookups } from './LeadSettings';
+import { CustomFieldInputs, draftToPayload, fieldLabel, toDraft, useFormatCustom, useLeadFields, validateDraft, type CustomDraft } from '../components/CustomFields';
 
 /**
  * Экран «Лиды» — все клиенты отдела продаж: ручной ввод, раздача
@@ -144,7 +145,7 @@ type EditVars = {
 };
 
 export default function Leads() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const countryLabel = useCountryLabel();
@@ -225,6 +226,10 @@ export default function Leads() {
   /** Кому лид: '' — при создании «мне», при правке — «не назначен». */
   const [managerPick, setManagerPick] = useState('');
   const [leadStatus, setLeadStatus] = useState<ApplicationStatus>('NEW_LEAD');
+  // Свои поля анкеты («Лиды → Настройки → Поля анкеты»).
+  const leadFields = useLeadFields();
+  const [cfDraft, setCfDraft] = useState<CustomDraft>({});
+  const fmtCustom = useFormatCustom();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   /** Форма нового лида живёт в окне: страница начинается сразу со списка. */
@@ -327,7 +332,8 @@ export default function Leads() {
   }, [fullName, phone, sameWhatsapp, whatsappPhone, birthday, country, comment, editing, contactsLocked, t]);
 
   const invalid = (f: keyof FormErrors) => (touched[f] ? errors[f] : undefined);
-  const hasErrors = Object.keys(errors).length > 0;
+  const cfErrors = useMemo(() => validateDraft(leadFields, cfDraft, t), [leadFields, cfDraft, t]);
+  const hasErrors = Object.keys(errors).length > 0 || (!contactsLocked && Object.keys(cfErrors).length > 0);
 
   const resetForm = () => {
     setFullName('');
@@ -341,6 +347,7 @@ export default function Leads() {
     setDirection('');
     setManagerPick('');
     setLeadStatus('NEW_LEAD');
+    setCfDraft({});
     setTouched({});
     setServerError(null);
   };
@@ -363,9 +370,10 @@ export default function Leads() {
       ownDigits(whatsappPhone) ||
       !!birthday ||
       !!country ||
-      !!comment.trim()
+      !!comment.trim() ||
+      Object.values(cfDraft).some((v) => (Array.isArray(v) ? v.length > 0 : !!String(v).trim()))
     );
-  }, [fullName, phone, whatsappPhone, birthday, country, comment]);
+  }, [fullName, phone, whatsappPhone, birthday, country, comment, cfDraft]);
 
   const openForm = () => {
     resetForm();
@@ -376,6 +384,7 @@ export default function Leads() {
   const resetLeadFilters = () => {
     setSearchInput('');
     resetPeriod(['status', 'direction', 'source', 'from', 'to', 'manager', 'country', 'search', 'directionPending', 'countryPending', 'debt']);
+    setCfParams((p) => { [...p.keys()].filter((k) => k.startsWith('cf_')).forEach((k) => p.delete(k)); return p; });
   };
 
 
@@ -397,6 +406,7 @@ export default function Leads() {
     setDirection(a.directionConfirmed === false ? '' : (a.direction as Direction) || '');
     setManagerPick(a.managerId ?? '');
     setLeadStatus(a.status);
+    setCfDraft(toDraft(leadFields, a.customFields));
     setFormOpen(true);
   };
 
@@ -533,6 +543,7 @@ export default function Leads() {
       birthday: true,
       country: true,
       comment: true,
+      cf: true,
     });
     if (hasErrors) return;
     setServerError(null);
@@ -565,6 +576,8 @@ export default function Leads() {
                 ...(direction && (editing.directionConfirmed === false || direction !== editing.direction) ? { direction } : {}),
               }),
           ...(statusChanged ? { status: leadStatus } : {}),
+          // Свои поля анкеты: у лида со студентом они правятся в карточке студента.
+          ...(!contactsLocked && leadFields.length ? { customFields: draftToPayload(leadFields, cfDraft) } : {}),
         } as Partial<Application>,
         managerId: managerChanged ? nextManager : undefined,
         dropSelf: managerChanged && nextManager === null && editing.managerId === me?.id,
@@ -580,7 +593,8 @@ export default function Leads() {
       // «Сайт»/«Самозапись»/«Реферал» для этого пути отвергает).
       source,
       ...(direction ? { direction } : {}),
-    });
+      ...(leadFields.length ? { customFields: draftToPayload(leadFields, cfDraft) } : {}),
+    } as any);
   };
 
   // Esc закрывает окно. Если поверх открыт календарь, список кодов стран или
@@ -709,6 +723,20 @@ export default function Leads() {
   const setUrlSearch = useCallback((v: string) => setPeriod('search', v), [setPeriod]);
   const { input: searchInput, setInput: setSearchInput, clear: clearSearch } = useUrlSearch(urlSearch, setUrlSearch);
 
+  // Фильтры по своим полям-спискам и «да/нет»: ?cf_<ключ>=значение.
+  const [cfParams, setCfParams] = useSearchParams();
+  const filterFields = leadFields.filter((f) => f.type === 'SELECT' || f.type === 'MULTI' || f.type === 'BOOL');
+  const cfFilters: Record<string, string> = {};
+  for (const f of filterFields) {
+    const v = cfParams.get(`cf_${f.key}`);
+    if (v) cfFilters[`cf_${f.key}`] = v;
+  }
+  const setCfFilter = (key: string, value: string) =>
+    setCfParams((p) => {
+      if (value) p.set(`cf_${key}`, value); else p.delete(`cf_${key}`);
+      p.delete('page');
+      return p;
+    });
   const leadFilters = {
     status: filterStatus || undefined,
     direction: filterDirection || undefined,
@@ -727,11 +755,12 @@ export default function Leads() {
     directionPending: directionPending && !filterDirection ? true : undefined,
     countryPending: countryPending && !filterCountry ? true : undefined,
     debt: debt && !trash ? true : undefined,
+    ...cfFilters,
   };
   /** Список сужен фильтром («Мои / Все» и корзина — режимы просмотра, а не фильтры). */
   const narrowed = !!(
     filterStatus || filterDirection || filterSource || from || to || manager || filterCountry || urlSearch ||
-    directionPending || countryPending || debt
+    directionPending || countryPending || debt || Object.keys(cfFilters).length
   );
 
   /**
@@ -782,6 +811,16 @@ export default function Leads() {
     try { return JSON.parse(localStorage.getItem('javonon_leads_cols') || '[]'); } catch { return []; }
   });
   const [colsOpen, setColsOpen] = useState(false);
+  // Свои поля анкеты колонками — по выбору (по умолчанию скрыты).
+  const [shownFields, setShownFields] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('javonon_leads_fields') || '[]'); } catch { return []; }
+  });
+  const toggleField = (k: string) => setShownFields((cur) => {
+    const next = cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k];
+    try { localStorage.setItem('javonon_leads_fields', JSON.stringify(next)); } catch { /* приватный режим */ }
+    return next;
+  });
+  const colFields = leadFields.filter((f) => shownFields.includes(f.key));
   const setDensity = (v: boolean) => { setDense(v); try { localStorage.setItem('javonon_leads_density', v ? 'dense' : 'comfy'); } catch { /* приватный режим */ } };
   const toggleCol = (c: string) => setHiddenCols((cur) => {
     const next = cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c];
@@ -1029,7 +1068,7 @@ export default function Leads() {
       const s = String(v ?? '');
       return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const head = [t('app.field.fullName'), t('app.field.phone'), t('app.field.country'), t('app.field.direction'), t('app.field.source'), t('common.status'), t('app.field.manager'), t('reports.col.date')];
+    const head = [t('app.field.fullName'), t('app.field.phone'), t('app.field.country'), t('app.field.direction'), t('app.field.source'), t('common.status'), t('app.field.manager'), t('reports.col.date'), ...leadFields.map((f) => fieldLabel(f, lang))];
     const rows = [...selected.values()].map((a) => [
       a.fullName,
       a.phone ?? '',
@@ -1039,6 +1078,7 @@ export default function Leads() {
       statusLabel(a.status),
       (a as any).manager?.fullName ?? '',
       tjFormatDate(a.createdAt),
+      ...leadFields.map((f) => fmtCustom(f, a.customFields?.[f.key])),
     ]);
     // ﻿ — метка UTF-8: без неё Excel показывает кириллицу кракозябрами.
     const csv = '﻿' + [head, ...rows].map((l) => l.map(esc).join(';')).join('\n');
@@ -1504,6 +1544,16 @@ export default function Leads() {
             </div>
             )}
 
+            {!contactsLocked && (
+              <CustomFieldInputs
+                fields={leadFields}
+                draft={cfDraft}
+                onChange={(k, v) => setCfDraft((d) => ({ ...d, [k]: v }))}
+                errors={cfErrors}
+                showErrors={!!touched.cf}
+              />
+            )}
+
             <div className="form-actions">
               <button
                 type="button"
@@ -1588,6 +1638,13 @@ export default function Leads() {
                           {c.label}
                         </label>
                       ))}
+                      {leadFields.length > 0 && <div className="cols-menu-sep">{t('cf.colsTitle')}</div>}
+                      {leadFields.map((f) => (
+                        <label key={f.key} className="crm-checkbox-label">
+                          <input type="checkbox" className="crm-checkbox" checked={shownFields.includes(f.key)} onChange={() => toggleField(f.key)} data-testid={`leads-col-cf-${f.key}`} />
+                          {fieldLabel(f, lang)}
+                        </label>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1665,6 +1722,26 @@ export default function Leads() {
               <option value="">{t('app.filter.country')}</option>
               <LookupOptions kind="COUNTRY" current={filterCountry || null} />
             </CrmSelect>
+            {filterFields.map((f) => (
+              <CrmSelect
+                key={f.key}
+                className="crm-select"
+                value={cfParams.get(`cf_${f.key}`) || ''}
+                onChange={(e) => setCfFilter(f.key, e.target.value)}
+                title={fieldLabel(f, lang)}
+                data-testid={`leads-filter-cf-${f.key}`}
+              >
+                <option value="">{t('cf.filterAll').replace('{x}', fieldLabel(f, lang))}</option>
+                {f.type === 'BOOL' ? (
+                  <>
+                    <option value="true">{t('common.yes')}</option>
+                    <option value="false">{t('common.no')}</option>
+                  </>
+                ) : (
+                  (f.options ?? []).map((o) => <option key={o.key} value={o.key}>{(lang === 'tg' ? o.labelTg : o.labelRu) || o.labelRu}</option>)
+                )}
+              </CrmSelect>
+            ))}
             <PeriodFilter
               from={from}
               to={to}
@@ -1720,6 +1797,13 @@ export default function Leads() {
               ...(filterSource
                 ? [{ key: 'source', label: sourceLabel(filterSource), onClear: () => resetPeriod(['source']) }]
                 : []),
+              ...filterFields
+                .filter((f) => cfParams.get(`cf_${f.key}`))
+                .map((f) => {
+                  const v = cfParams.get(`cf_${f.key}`) as string;
+                  const val = f.type === 'BOOL' ? (v === 'true' ? t('common.yes') : t('common.no')) : fmtCustom(f, f.type === 'MULTI' ? [v] : v);
+                  return { key: `cf_${f.key}`, label: `${fieldLabel(f, lang)}: ${val}`, onClear: () => setCfFilter(f.key, '') };
+                }),
               ...(directionPending && !filterDirection
                 ? [{
                     key: 'directionPending',
@@ -1916,6 +2000,7 @@ export default function Leads() {
                       <SortTh sort={sort} col="status" />
                       <SortTh sort={sort} col="manager" />
                       <SortTh sort={sort} col="createdAt" />
+                      {colFields.map((f) => <th key={f.key} data-testid={`th-cf-${f.key}`}>{fieldLabel(f, lang)}</th>)}
                       <th aria-label={t('common.actions')} />
                     </tr>
                   </thead>
@@ -2064,6 +2149,11 @@ export default function Leads() {
                           </div>
                         </td>
                         <td data-label={t('reports.col.date')} className="cl-right">{tjFormatDate(a.createdAt)}</td>
+                        {colFields.map((f) => (
+                          <td key={f.key} data-label={fieldLabel(f, lang)} className="lead-cf" data-testid={`td-cf-${f.key}`}>
+                            {fmtCustom(f, a.customFields?.[f.key]) || '—'}
+                          </td>
+                        ))}
                         <td className="lead-actions cl-actions" data-label={t('common.actions')}>
                           {trash ? (
                             applicationRight(me, a.status, 'delete') && (

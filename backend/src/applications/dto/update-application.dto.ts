@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength, IsObject } from 'class-validator';
 import { ContactChannel } from '@prisma/client';
 import { ApplicationStatus, Country, Direction } from '../../common/lookup-keys';
 import { NO_HTML_RE } from './create-application.dto';
@@ -14,6 +14,11 @@ export class UpdateApplicationDto {
   @IsOptional()
   @IsLookupKey('Выберите статус из списка')
   status?: ApplicationStatus;
+
+  // Свои поля анкеты: пришли — проверяем и сливаем с прежними (пустое снимает).
+  @IsOptional()
+  @IsObject({ message: 'Поля анкеты: неверный формат' })
+  customFields?: Record<string, unknown>;
 
   @IsOptional()
   @IsString()

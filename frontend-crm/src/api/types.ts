@@ -329,6 +329,8 @@ export interface PartnerAttributionView {
 }
 
 export interface Application {
+  /** Свои поля анкеты: { [ключ поля]: значение } (13.11.2026). */
+  customFields?: Record<string, string | number | boolean | string[]> | null;
   id: string;
   fullName: string;
   phone: string;
@@ -434,6 +436,8 @@ export const ONBOARDING_STAGE_LABEL: Record<OnboardingStage, string> = localized
 });
 
 export interface Student {
+  /** Свои поля анкеты — перешли из лида (13.11.2026). */
+  customFields?: Record<string, string | number | boolean | string[]> | null;
   id: string;
   fullName: string;
   /** ISO дата рождения (для авто-поздравления cron'ом). */
