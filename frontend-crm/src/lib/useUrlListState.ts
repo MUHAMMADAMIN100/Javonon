@@ -110,6 +110,18 @@ export function enumParam<T extends string, F extends T | '' = ''>(
   };
 }
 
+/**
+ * Ключ справочника «Лиды → Настройки» (статус, страна, направление,
+ * источник). Список правится в CRM и приходит асинхронно, поэтому здесь
+ * проверяется только форма ключа; есть ли такое значение — решает сервер.
+ */
+export function keyParam(): UrlParam<string> {
+  return {
+    fallback: '',
+    parse: (raw) => (/^[A-Z0-9_]{1,40}$/.test(raw) ? raw : undefined),
+  };
+}
+
 /** Целое число в заданных границах. */
 export function intParam(opts: {
   fallback: number;

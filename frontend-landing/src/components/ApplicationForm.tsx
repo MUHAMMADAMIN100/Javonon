@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { submitApplication, type Country, COUNTRY_ORDER, COUNTRY_LABEL } from '../api';
+import { submitApplication, type Country } from '../api';
+import { usePublicLookups } from '../lookups';
 import { birthdayBounds, birthdayRule } from '../validators';
 import { getReferral } from '../referral';
 import Icon from '../Icon';
@@ -21,6 +22,8 @@ const PERKS = [
 ];
 
 export default function ApplicationForm() {
+  // Страны — справочник CRM («Лиды → Настройки»): новая страна появляется здесь сама.
+  const countries = usePublicLookups().countries.filter((c) => c.showOnSite);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   // WhatsApp по умолчанию = основной номер: у подавляющего большинства клиентов
@@ -366,8 +369,8 @@ export default function ApplicationForm() {
                     className={invalid('country') ? 'error' : ''}
                   >
                     <option value="">Кишварро интихоб кунед</option>
-                    {COUNTRY_ORDER.map((c) => (
-                      <option key={c} value={c}>{COUNTRY_LABEL[c]}</option>
+                    {countries.map((c) => (
+                      <option key={c.key} value={c.key}>{c.labelTg}</option>
                     ))}
                   </select>
                   {invalid('country') && <div className="form-error">{errors.country}</div>}

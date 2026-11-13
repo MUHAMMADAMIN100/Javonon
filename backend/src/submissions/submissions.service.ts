@@ -41,11 +41,10 @@ import {
   IncomeSource,
   ProductCategory,
   PaymentPhaseStatus,
-  ApplicationStatus,
-  ApplicationSource,
   StudentStatus,
 } from '@prisma/client';
-import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
+import { ApplicationStatus, ApplicationSource } from '../common/lookup-keys';
+import { cabinetFor, DEFAULT_CABINET } from '../common/cabinets';
 import { InstallmentsService } from '../installments/installments.service';
 import { BONUS_MONTH_RULE, MANAGER_BONUS_CURRENCY, bonusMonthLockedFor } from '../common/manager-bonus-volume';
 import { tjLocalDay } from '../common/tj-time';
@@ -2153,7 +2152,7 @@ export class SubmissionsService {
               password: passwordHash,
               direction: program.direction,
               // Кабинет по направлению программы; FOUNDER может изменить вручную.
-              cabinet: CABINET_BY_DIRECTION[program.direction] ?? DEFAULT_CABINET,
+              cabinet: cabinetFor(program.direction),
               // QA-3 (BUG-13): студент — на менеджера лида; нет лида — на владельца сделки.
               managerId: srcApp?.managerId ?? submission.managerId,
               programId,

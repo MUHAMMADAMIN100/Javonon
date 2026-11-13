@@ -11,9 +11,10 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ApplicationSource, ApplicationStatus, ContactChannel, Country, Direction } from '@prisma/client';
+import { ContactChannel } from '@prisma/client';
+import { ApplicationSource, ApplicationStatus, Country, Direction } from '../../common/lookup-keys';
 import { NO_HTML_RE } from './create-application.dto';
-import { ACTIVE_APPLICATION_STATUSES } from '../../common/application-status';
+import { IsLookupKey } from '../../common/lookup-validators';
 
 /**
  * DTO ручного ввода лида сотрудником (экран /leads, роль «Квалификатор
@@ -111,7 +112,7 @@ export class CreateStaffApplicationDto {
   email?: string;
 
   @IsOptional()
-  @IsEnum(Country)
+  @IsLookupKey('Выберите страну из списка')
   country?: Country;
 
   // `YYYY-MM-DD`. Возраст 14–60 проверяется сервисом (parseBirthday),
@@ -131,14 +132,14 @@ export class CreateStaffApplicationDto {
   // LANDING_FORM / SELF_REGISTRATION / REFERRAL (см. блок выше).
   /** QA-3 (BUG-07): направление можно указать сразу при создании лида. */
   @IsOptional()
-  @IsEnum(Direction, { message: 'Выберите направление из списка' })
+  @IsLookupKey('Выберите направление из списка')
   direction?: Direction;
 
+  // Источник со слов клиента — значение справочника, кроме машинных
+  // (Сайт, Самозапись, Реферал); проверяет ApplicationsService.createByStaff.
   @IsOptional()
-  @IsIn(STAFF_ALLOWED_SOURCES as readonly string[], {
-    message: 'Недопустимый источник для лида, введённого вручную',
-  })
-  source?: StaffApplicationSource;
+  @IsLookupKey('Недопустимый источник для лида, введённого вручную')
+  source?: string;
 
   // Кому лид (23.10.2026). Пусто — тому, кто создаёт. Другому — только с
   // правом раздавать лиды (проверяет ApplicationsService.createByStaff).
@@ -157,8 +158,6 @@ export class CreateStaffApplicationDto {
   // Статус сразу в форме; по умолчанию «Новый лид». Только актуальные
   // значения — как у смены статуса в карточке (UpdateApplicationDto).
   @IsOptional()
-  @IsIn(ACTIVE_APPLICATION_STATUSES, {
-    message: 'status: допустимы только актуальные статусы — обновите страницу CRM',
-  })
+  @IsLookupKey('Выберите статус из списка')
   status?: ApplicationStatus;
 }

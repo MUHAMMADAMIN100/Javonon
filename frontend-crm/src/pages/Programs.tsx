@@ -13,7 +13,6 @@ import {
   type Program, type ProgramScholarship,
 } from '../api/programs';
 import type { Direction } from '../api/types';
-import { DIRECTION_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
@@ -28,6 +27,7 @@ import { isElevated } from '../lib/roles';
 import { useEscClose } from '../lib/useEscClose';
 import { fmtDurationRu } from '../lib/plural';
 import { CardsSkeleton } from '../components/Skeleton';
+import { useDirectionLabel } from '../lib/labels';
 
 // Допускаем кириллицу и латиницу в названиях программ/университетов
 // (по запросу основателя — пишут на русском тоже). Защита только от
@@ -130,6 +130,7 @@ export default function Programs() {
   const { confirm, toast } = useUI();
   const qc = useQueryClient();
   const { t, lang } = useT();
+  const directionLabel = useDirectionLabel();
   const isAdmin = isElevated(me);
   // Права роли «Программы — …»; должность — руководство, как раньше.
   const canCreate = roleCan(me, 'programs:create', isAdmin);
@@ -465,7 +466,7 @@ export default function Programs() {
                   </div>
                   <div className="program-card-meta">
                     <span><Icon name="location_on" size={14} /> {p.city}</span>
-                    <span><Icon name="menu_book" size={14} /> {DIRECTION_LABEL[p.direction]}</span>
+                    <span><Icon name="menu_book" size={14} /> {directionLabel(p.direction)}</span>
                     <span><Icon name="school" size={14} /> {p.major}</span>
                     {p.duration && <span data-testid="program-duration"><Icon name="schedule" size={14} /> {lang === 'ru' ? fmtDurationRu(p.duration) : p.duration}</span>}
                     {p.language && <span><Icon name="translate" size={14} /> {p.language}</span>}

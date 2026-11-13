@@ -63,84 +63,6 @@ enum SalaryStatus {
   PAID
 }
 
-enum Direction {
-  BACHELOR
-  MASTER
-  LANGUAGE
-  LANGUAGE_COLLEGE
-  LANGUAGE_BACHELOR
-  COLLEGE
-}
-
-// Страна обучения, которую клиент выбирает в форме на лендинге.
-// Заменяет собой вопрос «Ҳадаф» (direction) на лендинге, но НЕ заменяет
-// сам enum Direction: Direction остаётся рабочим полем CRM (менеджер его
-// правит вручную) и уже проставлен у существующих Application/Student/
-// Program-строк. Postgres не умеет удалять значения enum'а, на которые
-// ссылаются строки, а Railway деплоит через `prisma db push
-// --accept-data-loss` — поэтому изменения только аддитивные.
-enum Country {
-  USA
-  KOREA
-  CHINA
-  LATVIA
-  MALAYSIA
-  ITALY
-  GERMANY
-}
-
-/// Статусы заявки. Значения разбиты на два блока: сначала легаси, затем
-/// актуальный набор. Порядок объяснён в конце комментария — он не косметика.
-///
-/// АКТУАЛЬНЫЙ НАБОР (NEW_LEAD … SUCCESSFUL_LEAD) — квалификация лида. Это то,
-/// что менеджер видит и выбирает в CRM, и то, что пишет весь новый код.
-/// Это НЕ воронка-лестница: «Вне города» и «До 17 лет» — исходы квалификации,
-/// а не этапы, поэтому UI перешёл с шагов «назад/вперёд» на плоский select.
-///
-/// ЛЕГАСИ (NEW … ENROLLED) — эти значения НЕЛЬЗЯ удалять или переименовывать:
-///   • в проде ~496 строк Application всё ещё ссылаются на них до того, как
-///     отработает prisma/migrate-lead-statuses.ts, а Postgres не умеет
-///     удалять значение enum'а, на которое есть ссылки;
-///   • `start:prod` выполняет `prisma db push` ДО миграционных скриптов и
-///     без `--accept-data-loss` — удаление значения уронило бы деплой.
-/// Ни одна поверхность UI их больше не предлагает: они остаются только для
-/// того, чтобы старые строки читались, и ради совместимости на время окна
-/// «деплой прошёл, миграция ещё не догнала» (см. FINISHED_APPLICATION_STATUSES
-/// в src/common/application-status.ts). Отдельной уборкой их можно будет
-/// выпилить, когда ни одна строка на них не ссылается.
-///
-/// ПОЧЕМУ ЛЕГАСИ ИДЁТ ПЕРВЫМ. Старый блок оставлен ровно таким, каким был, а
-/// новые значения ДОПИСАНЫ в конец: так diff схемы получается чисто
-/// аддитивным, и `prisma db push` выдаёт только
-/// `ALTER TYPE "ApplicationStatus" ADD VALUE ...`. Перестановка уже
-/// существующих значений заставила бы движок пересоздавать тип (drop → create),
-/// а это data-loss-операция, которая на деплое упадёт. Порядок пунктов в UI
-/// задаётся отдельным списком (ACTIVE_APPLICATION_STATUSES + фронтенд),
-/// а не порядком строк в этом enum.
-enum ApplicationStatus {
-  // --- Легаси: только для чтения старых строк, в UI не предлагается ---
-  NEW // legacy → NEW_LEAD
-  IN_PROGRESS // legacy → IN_PROCESSING
-  COMPLETED // legacy → SUCCESSFUL_LEAD
-  DOCS_REVIEW // legacy → IN_PROCESSING
-  DOCS_SUBMITTED // legacy → IN_PROCESSING
-  PRE_ADMISSION // legacy → IN_PROCESSING
-  AWAITING_PAYMENT // legacy → IN_PROCESSING
-  ENROLLED // legacy → SUCCESSFUL_LEAD
-
-  // --- Актуальный набор квалификации лида (UI-порядок 1..10) ---
-  NEW_LEAD // 1  Новые лиды
-  IN_PROCESSING // 2  В обработке
-  ONLINE_CONSULTATION // 3  Онлайн консультации
-  OFFLINE_CONSULTATION // 4  Оффлайн консультации
-  THINKING // 5  Думает
-  OUT_OF_TOWN // 6  Вне города
-  UNDER_17 // 7  До 17 лет
-  POTENTIAL_LEAD // 8  Потенциальные лиды
-  LOW_QUALITY_LEAD // 9  Некачественные лиды
-  SUCCESSFUL_LEAD // 10 Успешные лиды
-}
-
 enum StudentStatus {
   ACTIVE
   PAUSED
@@ -396,26 +318,6 @@ model UserDocument {
   @@index([userId, type])
 }
 
-// Заявка на обучение: создаётся через лендинг (POST /applications/public),
-// либо автоматически вместе со студентом из CRM ("+ Студент").
-// При удалении любого из связанных объектов (User-менеджер, Program) заявка
-// остаётся в БД с обнулённой ссылкой (SetNull) — историю не теряем.
-// При удалении Student — Application НЕ удаляется автоматически
-// (нет onDelete: Cascade на student-связи), поэтому в applications.service.remove()
-// студент явно удаляется отдельно.
-enum ApplicationSource {
-  LANDING_FORM
-  SELF_REGISTRATION
-  REFERRAL
-  INSTAGRAM
-  TELEGRAM
-  GOOGLE_ADS
-  TIKTOK
-  WORD_OF_MOUTH
-  EVENT
-  OTHER
-}
-
 model Application {
   id                    String            @id @default(uuid())
   fullName              String
@@ -436,7 +338,7 @@ model Application {
   //    а Railway на деплое гоняет `prisma db push --accept-data-loss`.
   // При создании заявки с лендинга сервис подставляет плейсхолдер
   // (Direction.BACHELOR), который менеджер правит в CRM.
-  direction             Direction
+  direction             String
   // Отличает ОТВЕТ от ПЛЕЙСХОЛДЕРА в колонке direction выше.
   //   true  — направление реально прислали: CRM (StudentsService.create),
   //           самозапись (StudentAuthService.register), approve заявки
@@ -453,7 +355,7 @@ model Application {
   directionConfirmed    Boolean           @default(true)
   // Страна, которую клиент реально выбрал в форме лендинга. Nullable:
   // у всех заявок, созданных до этого изменения, её нет.
-  country               Country?
+  country               String?
   // WhatsApp-номер. На лендинге по умолчанию совпадает с phone
   // (чекбокс «Ҳамон рақами телефон» включён), но клиент может указать другой.
   // Нормализуется так же, как phone (trim).
@@ -466,12 +368,12 @@ model Application {
   // по сырой UTC-колонке и получил бы предыдущие сутки.
   birthday              DateTime?
   comment               String?
-  source                ApplicationSource @default(LANDING_FORM)
+  source                String            @default("LANDING_FORM")
   // Корзина: удалённый лид скрыт из всех списков и счётчиков, но остаётся в
   // базе и возвращается кнопкой «Восстановить». NULL — не удалён.
   deletedAt   DateTime?
   deletedById String?
-  status                ApplicationStatus @default(NEW)
+  status                String            @default("NEW_LEAD")
   // За заявкой числится долг («ждёт оплаты») — источник правды для
   // раздела «Задолженность студентов» (GET /finance/pending-payments,
   // карточка «Студентов с задолженностью» на дашборде).
@@ -494,7 +396,7 @@ model Application {
   // QA-2: сделка из лида переводит САМ лид в «Успешные» и помнит прежний
   // статус — отмена или удаление сделки возвращает его. Лид, который создала
   // сама сделка (сделка без лида), помечен её id: при отмене он уходит в корзину.
-  statusBeforeDeal      ApplicationStatus?
+  statusBeforeDeal      String?
   createdBySubmissionId String?
   studentId             String?
   // student → SetNull-семантика по сути не задана, потому что removed применяется в коде вручную.
@@ -566,7 +468,7 @@ model Student {
   tokenVersion     Int             @default(0)
   applicationForm  Json?
   photoUrl         String?
-  direction        Direction
+  direction        String
   // Тот же смысл, что у Application.directionConfirmed:
   //   true  — направление выбрал живой человек (менеджер в CRM, самозапись,
   //           одобрение заявки партнёра);
@@ -585,7 +487,7 @@ model Student {
   // только placeholder-direction, и менеджеру пришлось бы возвращаться
   // в исходную Application. Nullable — у студентов, заведённых вручную
   // и созданных до этой колонки, страны нет.
-  country          Country?
+  country          String?
   status           StudentStatus   @default(ACTIVE)
   onboardingStage  OnboardingStage @default(WELCOME)
   comment          String?
@@ -733,7 +635,7 @@ model Program {
   university           String
   city                 String
   major                String
-  direction            Direction
+  direction            String
   cost                 Float
   currency             String    @default("CNY")
   duration             String?
@@ -2087,6 +1989,45 @@ model PipelineStage {
 
   @@unique([pipelineId, order])
   @@index([pipelineId])
+}
+
+/// Справочники, которые основатель правит сам («Лиды → Настройки», 13.11.2026).
+/// Раньше это были enum'ы Postgres (ApplicationStatus, Direction, Country,
+/// ApplicationSource): добавить статус или страну мог только программист.
+/// Строки Application/Student/Program хранят КЛЮЧ (key) текстом; ключи
+/// прежних значений сохранены (NEW_LEAD, SUCCESSFUL_LEAD, KOREA, …), и вся
+/// логика на них работает как раньше. Ключ новых значений — «X_» + случайное.
+enum LookupKind {
+  LEAD_STATUS
+  DIRECTION
+  COUNTRY
+  LEAD_SOURCE
+}
+
+model LookupItem {
+  id          String     @id @default(uuid())
+  kind        LookupKind
+  key         String
+  labelRu     String
+  labelTg     String
+  /// hex («#2563EB») — цвет плашки в CRM
+  color       String?
+  order       Int        @default(0)
+  /// На значении держится логика (заявка с сайта, сделка, заглушка
+  /// направления…): переименовать и перекрасить можно, удалить — нет.
+  isSystem    Boolean    @default(false)
+  /// Направления и страны: показывать в форме и каталоге на сайте.
+  showOnSite  Boolean    @default(true)
+  /// Статусы: как назвать статус клиенту в СМС. Пусто — статус внутренний,
+  /// клиенту о нём не пишем.
+  clientLabel String?
+  /// Статусы: лид закрыт (не в работе) — не попадает в автораспределение.
+  isClosed    Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([kind, key])
+  @@index([kind, order])
 }
 
 // ============================================================

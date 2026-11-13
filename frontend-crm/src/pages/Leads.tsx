@@ -23,14 +23,7 @@ import {
 } from '../api/applications';
 import type { Application, ApplicationSource, ApplicationStatus, Country, Direction } from '../api/types';
 import {
-  APPLICATION_SOURCES,
-  APPLICATION_STATUSES,
-  COUNTRIES,
-  DIRECTION_LABEL,
-  SOURCE_BADGE,
-  SOURCE_LABEL,
-  STAFF_SOURCES,
-  STATUS_BADGE,
+  LEGACY_APPLICATION_STATUSES,
   isLegacyApplicationStatus,
 } from '../api/types';
 import { useAuth } from '../store/auth';
@@ -70,6 +63,7 @@ import {
   boolParam,
   dateParam,
   enumParam,
+  keyParam,
   ignoredParam,
   pageParam,
   stringParam,
@@ -82,6 +76,10 @@ import BusyLabel from '../components/BusyLabel';
 import { TableSkeleton } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import QueryErrorState from '../components/QueryErrorState';
+import { LookupBadge, useLookups } from '../lib/lookups';
+import { MACHINE_SOURCES } from '../api/lookups';
+import LookupOptions from '../components/LookupOptions';
+import { canManageLookups } from './LeadSettings';
 
 /**
  * Экран «Лиды» — все клиенты отдела продаж: ручной ввод, раздача
@@ -121,13 +119,6 @@ const PAGE_SIZE = 25;
 /** То же значение, что понимает бэкенд: заявки вообще без менеджера. */
 const UNASSIGNED_MANAGER = 'none';
 
-/**
- * Все значения статуса, включая старые: и для порядка сортировки по подписи,
- * и для разбора ?status= — ссылка вида ?status=ENROLLED (бывшие «Заявки»)
- * обязана работать, пока в базе есть строки со старым статусом.
- */
-const STATUS_SORT_VALUES = Object.keys(STATUS_BADGE) as ApplicationStatus[];
-const DIRECTION_VALUES = Object.keys(DIRECTION_LABEL) as Direction[];
 
 /** «Мои / Все» — режим просмотра у тех, кто видит чужих лидов (как было в «Заявках»). */
 type Scope = 'all' | 'mine';
@@ -159,6 +150,14 @@ export default function Leads() {
   const countryLabel = useCountryLabel();
   const statusLabel = useApplicationStatusLabel();
   const directionLabel = useDirectionLabel();
+  // Статусы, направления, страны, источники — справочник «Лиды → Настройки».
+  const L = useLookups();
+  const sourceLabel = (s: string | null | undefined) => L.label('LEAD_SOURCE', s);
+  /**
+   * Все значения статуса, включая старые: для порядка сортировки по подписи —
+   * строки со старым статусом (бывшие «Заявки») тоже должны встать на место.
+   */
+  const statusSortValues = [...L.keys('LEAD_STATUS'), ...LEGACY_APPLICATION_STATUSES];
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
 
@@ -523,7 +522,7 @@ export default function Leads() {
   const managerLocked = !!editing && !canAssignRow(editing);
   const showStatusField = editing ? canEditRow(editing) && seesApplications : canPickStatus;
   /** «Сайт», «Самозапись», «Реферал» поставила система — источник не меняется. */
-  const sourceLocked = !!editing && !STAFF_SOURCES.includes(editing.source ?? 'OTHER');
+  const sourceLocked = !!editing && MACHINE_SOURCES.includes(editing.source ?? 'OTHER');
 
   const submit = (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -663,11 +662,14 @@ export default function Leads() {
       // асинхронно) — ограничиваем длину. Тому, кто видит только своих,
       // фильтр не нужен.
       manager: wide ? stringParam('', 64) : ignoredParam(''),
-      country: enumParam(COUNTRIES),
+      // Значения справочников (правятся в «Лиды → Настройки»): проверяем
+      // форму ключа, есть ли значение — решает сервер. Ссылка ?status=ENROLLED
+      // (бывшие «Заявки») по-прежнему работает.
+      country: keyParam(),
       // Список — лиды всех статусов; фильтр сужает до одного.
-      status: enumParam(STATUS_SORT_VALUES),
-      direction: enumParam(DIRECTION_VALUES),
-      source: enumParam(APPLICATION_SOURCES),
+      status: keyParam(),
+      direction: keyParam(),
+      source: keyParam(),
       // «Мои / Все» — режим просмотра, а не фильтр; дефолт зависит от прав
       // и в ссылку не пишется.
       scope: enumParam<Scope, Scope>(
@@ -802,10 +804,10 @@ export default function Leads() {
   const sortParam = searchParams.get('sort') || undefined;
   const sortKey = sortParam?.replace(/^-/, '');
   const ranks =
-    sortKey === 'status' ? labelRanks(STATUS_SORT_VALUES, statusLabel)
-    : sortKey === 'country' ? labelRanks(COUNTRIES, countryLabel)
-    : sortKey === 'direction' ? labelRanks(DIRECTION_VALUES, directionLabel)
-    : sortKey === 'source' ? labelRanks(APPLICATION_SOURCES, (s) => SOURCE_LABEL[s as ApplicationSource])
+    sortKey === 'status' ? labelRanks(statusSortValues, statusLabel)
+    : sortKey === 'country' ? labelRanks(L.keys('COUNTRY'), countryLabel)
+    : sortKey === 'direction' ? labelRanks(L.keys('DIRECTION'), directionLabel)
+    : sortKey === 'source' ? labelRanks(L.keys('LEAD_SOURCE'), sourceLabel)
     : undefined;
   const pageQuery = { ...leadFilters, page, pageSize, sort: sortParam, ranks };
   const leadsKey = keys.applications.list(pageQuery);
@@ -890,7 +892,7 @@ export default function Leads() {
         // Неподтверждённое направление в таблице — прочерк, в сортировке тоже пусто.
         value: (a) => (a.directionConfirmed === false ? null : directionLabel(a.direction)),
       },
-      { key: 'source', label: t('app.field.source'), value: (a) => SOURCE_LABEL[a.source ?? 'OTHER'] },
+      { key: 'source', label: t('app.field.source'), value: (a) => sourceLabel(a.source ?? 'OTHER') },
       { key: 'status', label: t('common.status'), value: (a) => statusLabel(a.status) },
       { key: 'manager', label: t('app.field.manager'), value: (a) => a.manager?.fullName || null },
       { key: 'createdAt', label: t('reports.col.date'), type: 'date', value: (a) => a.createdAt },
@@ -1033,7 +1035,7 @@ export default function Leads() {
       a.phone ?? '',
       a.country ? countryLabel(a.country) : '',
       a.direction ? directionLabel(a.direction) : '',
-      a.source ? SOURCE_LABEL[a.source as ApplicationSource] ?? a.source : '',
+      a.source ? sourceLabel(a.source) : '',
       statusLabel(a.status),
       (a as any).manager?.fullName ?? '',
       tjFormatDate(a.createdAt),
@@ -1381,9 +1383,7 @@ export default function Leads() {
                   }}
                 >
                   <option value="">{t('leads.field.countryPlaceholder')}</option>
-                  {COUNTRIES.map((c) => (
-                    <option key={c} value={c}>{countryLabel(c)}</option>
-                  ))}
+                  <LookupOptions kind="COUNTRY" current={country} />
                 </CrmSelect>
                 {invalid('country') && <div className="form-error-text">{errors.country}</div>}
               </div>
@@ -1399,10 +1399,7 @@ export default function Leads() {
                   disabled={sourceLocked}
                   data-testid="lead-form-source"
                 >
-                  {sourceLocked && <option value={source}>{SOURCE_LABEL[source]}</option>}
-                  {STAFF_SOURCES.map((s) => (
-                    <option key={s} value={s}>{SOURCE_LABEL[s]}</option>
-                  ))}
+                  <LookupOptions kind="LEAD_SOURCE" current={source} only={L.staffSources} />
                 </CrmSelect>
                 {sourceLocked && <div className="form-hint-text" data-testid="lead-source-locked">{t('leads.source.locked')}</div>}
               </div>
@@ -1415,7 +1412,7 @@ export default function Leads() {
                   data-testid="lead-form-direction"
                 >
                   <option value="">{t('app.direction.notChosen')}</option>
-                  <DirectionOptions />
+                  <DirectionOptions current={direction} />
                 </CrmSelect>
               </div>
             </div>
@@ -1476,7 +1473,7 @@ export default function Leads() {
                       {editing && isLegacyApplicationStatus(editing.status) && (
                         <option value={editing.status} disabled>{statusLabel(editing.status)}</option>
                       )}
-                      {APPLICATION_STATUSES.map((s) => (
+                      {L.keys('LEAD_STATUS').map((s) => (
                         <option key={s} value={s}>{statusLabel(s)}</option>
                       ))}
                     </CrmSelect>
@@ -1539,12 +1536,21 @@ export default function Leads() {
             testId="leads-total"
           />
 
-          {canCreate && (
-            <button type="button" className="btn btn-primary" data-testid="lead-new" onClick={openForm}>
-              <Icon name="add" size={18} />
-              {t('leads.form.title')}
-            </button>
-          )}
+          <div className="leads-head-actions">
+            {/* «Лиды → Настройки»: статусы, направления, страны, источники (13.11.2026). */}
+            {canManageLookups(me) && (
+              <Link to="/leads/settings" className="btn btn-secondary leads-settings-btn" data-testid="leads-settings" title={t('lk.title')}>
+                <Icon name="tune" size={18} />
+                <span className="leads-settings-label">{t('lk.button')}</span>
+              </Link>
+            )}
+            {canCreate && (
+              <button type="button" className="btn btn-primary" data-testid="lead-new" onClick={openForm}>
+                <Icon name="add" size={18} />
+                {t('leads.form.title')}
+              </button>
+            )}
+          </div>
         </div>
         <div className="card-body">
           {!trash && !dups && (
@@ -1611,9 +1617,7 @@ export default function Leads() {
                 data-testid="leads-filter-status"
               >
                 <option value="">{t('app.filter.status')}</option>
-                {APPLICATION_STATUSES.map((s) => (
-                  <option key={s} value={s}>{statusLabel(s)}</option>
-                ))}
+                <LookupOptions kind="LEAD_STATUS" current={filterStatus || null} />
               </CrmSelect>
             )}
             {wide && (
@@ -1639,7 +1643,7 @@ export default function Leads() {
               data-testid="leads-filter-direction"
             >
               <option value="">{t('app.filter.direction')}</option>
-              <DirectionOptions />
+              <DirectionOptions current={filterDirection || null} />
             </CrmSelect>
             <CrmSelect
               className="crm-select"
@@ -1649,21 +1653,17 @@ export default function Leads() {
               data-testid="leads-filter-source"
             >
               <option value="">{t('app.filter.source')}</option>
-              {APPLICATION_SOURCES.map((s) => (
-                <option key={s} value={s}>{SOURCE_LABEL[s]}</option>
-              ))}
+              <LookupOptions kind="LEAD_SOURCE" current={filterSource || null} />
             </CrmSelect>
             <CrmSelect
               className="crm-select"
               value={filterCountry}
-              onChange={(e) => setPeriod('country', e.target.value as typeof COUNTRIES[number] | '')}
+              onChange={(e) => setPeriod('country', e.target.value)}
               title={t('app.field.country')}
               data-testid="leads-filter-country"
             >
               <option value="">{t('app.filter.country')}</option>
-              {COUNTRIES.map((c) => (
-                <option key={c} value={c}>{countryLabel(c)}</option>
-              ))}
+              <LookupOptions kind="COUNTRY" current={filterCountry || null} />
             </CrmSelect>
             <PeriodFilter
               from={from}
@@ -1718,7 +1718,7 @@ export default function Leads() {
                 ? [{ key: 'direction', label: directionLabel(filterDirection), onClear: () => resetPeriod(['direction']) }]
                 : []),
               ...(filterSource
-                ? [{ key: 'source', label: SOURCE_LABEL[filterSource as ApplicationSource], onClear: () => resetPeriod(['source']) }]
+                ? [{ key: 'source', label: sourceLabel(filterSource), onClear: () => resetPeriod(['source']) }]
                 : []),
               ...(directionPending && !filterDirection
                 ? [{
@@ -1980,15 +1980,11 @@ export default function Leads() {
                             {a.directionConfirmed !== false && (
                               <span className="lead-dir" data-testid="lead-direction">{directionLabel(a.direction)}</span>
                             )}
-                            <span className={`badge ${SOURCE_BADGE[a.source ?? 'OTHER']}`} data-testid="lead-source">
-                              {SOURCE_LABEL[a.source ?? 'OTHER']}
-                            </span>
+                            <LookupBadge kind="LEAD_SOURCE" value={a.source ?? 'OTHER'} testId="lead-source" />
                           </div>
                         </td>
                         <td data-label={t('common.status')} className="cl-top">
-                          <span className={`badge ${STATUS_BADGE[a.status] ?? 'badge-gray'}`} data-testid="lead-status-badge">
-                            {statusLabel(a.status)}
-                          </span>
+                          <LookupBadge kind="LEAD_STATUS" value={a.status} testId="lead-status-badge" />
                         </td>
                         <td data-label={t('app.field.manager')} className="td-stack cl-mgr">
                           <div className="mgr-cell">

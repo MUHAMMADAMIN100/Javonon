@@ -14,7 +14,7 @@
  * кабинеты 2–6 перестали бы наполняться. Для неподтверждённого направления
  * пишите DEFAULT_CABINET явно (см. ApplicationsService.update).
  */
-import { Direction } from '@prisma/client';
+import { Direction } from './lookup-keys';
 
 export const CABINET_BY_DIRECTION: Record<Direction, number> = {
   BACHELOR: 1,
@@ -32,3 +32,11 @@ export const CABINET_BY_DIRECTION: Record<Direction, number> = {
  * и в CRM показываются как «направление не подтверждено».
  */
 export const DEFAULT_CABINET = 1;
+
+/**
+ * Кабинет по направлению. Направление, которое основатель добавил сам
+ * («Лиды → Настройки»), своего кабинета не имеет — уходит в приёмник.
+ */
+export function cabinetFor(direction: string | null | undefined): number {
+  return (direction && CABINET_BY_DIRECTION[direction]) || DEFAULT_CABINET;
+}

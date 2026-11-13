@@ -10,17 +10,13 @@ import { useStudentRealtime } from '../realtime';
 import { toTajik } from '../programLabels';
 import Icon from '../Icon';
 import Loading from './Loading';
+import { useDirectionLabel, usePublicLookups } from '../lookups';
 
-const DIRECTION_LABEL: Record<string, string> = {
-  BACHELOR: 'Бакалавр',
-  MASTER: 'Магистр',
-  LANGUAGE: 'Курсҳои забонӣ',
-  LANGUAGE_COLLEGE: 'Забонӣ + коллеҷ',
-  LANGUAGE_BACHELOR: 'Забонӣ + бакалавр',
-  COLLEGE: 'Коллеҷ',
-};
 
 export default function ProgramsSection() {
+  // Направления — справочник CRM («Лиды → Настройки»).
+  const lookups = usePublicLookups();
+  const directionLabel = useDirectionLabel();
   const [items, setItems] = useState<StudentProgram[]>([]);
   const [cities, setCities] = useState<string[]>([]);
   const [majors, setMajors] = useState<string[]>([]);
@@ -143,8 +139,8 @@ export default function ProgramsSection() {
               <label>Самт</label>
               <select value={direction} onChange={(e) => setDirection(e.target.value)}>
                 <option value="">Ҳама</option>
-                {Object.entries(DIRECTION_LABEL).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
+                {lookups.directions.filter((d) => d.showOnSite).map((d) => (
+                  <option key={d.key} value={d.key}>{d.labelTg}</option>
                 ))}
               </select>
             </div>
@@ -207,7 +203,7 @@ export default function ProgramsSection() {
               </div>
               <div className="sp-item-body">
                 <div className="sp-item-head">
-                  <div className="sp-badge">{DIRECTION_LABEL[p.direction]}</div>
+                  <div className="sp-badge">{directionLabel(p.direction)}</div>
                   <div className="sp-cost">
                     {p.cost.toLocaleString('ru-RU')} <span>{p.currency}/сол</span>
                   </div>
@@ -268,7 +264,7 @@ export default function ProgramsSection() {
                 </div>
               )}
               <div className="sp-modal-body">
-                <div className="sp-badge">{DIRECTION_LABEL[selected.direction]}</div>
+                <div className="sp-badge">{directionLabel(selected.direction)}</div>
                 <h2 className="sp-modal-name">{selected.name}</h2>
                 <div className="sp-modal-uni">{selected.university}</div>
                 <div className="sp-modal-meta">

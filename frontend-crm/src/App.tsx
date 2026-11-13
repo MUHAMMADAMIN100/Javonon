@@ -52,6 +52,7 @@ import AcademyStudentDetail from './pages/AcademyStudentDetail';
 import AcademyLevels from './pages/AcademyLevels';
 import Loading from './components/Loading';
 import QueryErrorState from './components/QueryErrorState';
+import LeadSettings from './pages/LeadSettings';
 
 export default function App() {
   const bootstrap = useAuth((s) => s.bootstrap);
@@ -82,6 +83,7 @@ export default function App() {
             страница тем же предикатом, что и пункт меню, а по-настоящему —
             сервер. */}
         <Route path="/leads" element={<Leads />} />
+        <Route path="/leads/settings" element={<LeadSettings />} />
         <Route path="/students" element={<Students />} />
         <Route path="/students/new" element={<StudentNew />} />
         <Route path="/students/:id" element={<StudentDetail />} />

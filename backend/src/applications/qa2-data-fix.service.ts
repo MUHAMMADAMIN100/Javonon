@@ -60,7 +60,7 @@ export class Qa2DataFixService implements OnApplicationBootstrap {
     for (const p of pairs) {
       await this.prisma.$transaction([
         this.prisma.$executeRaw`
-          UPDATE "Application" SET status = 'SUCCESSFUL_LEAD', "statusBeforeDeal" = ${p.srcStatus}::"ApplicationStatus",
+          UPDATE "Application" SET status = 'SUCCESSFUL_LEAD', "statusBeforeDeal" = ${p.srcStatus},
                  "studentId" = ${p.studentId}, "paymentPending" = ("paymentPending" OR ${p.dupPending})
           WHERE id = ${p.srcId}`,
         this.prisma.$executeRaw`UPDATE "SaleSubmission" SET "applicationId" = ${p.srcId} WHERE id = ${p.subId}`,

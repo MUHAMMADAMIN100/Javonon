@@ -1,22 +1,6 @@
-import { DIRECTION_LABEL, type Direction } from '../api/types';
+import LookupOptions from './LookupOptions';
 
-const ORDER: Direction[] = [
-  'BACHELOR',
-  'MASTER',
-  'LANGUAGE',
-  'LANGUAGE_COLLEGE',
-  'LANGUAGE_BACHELOR',
-  'COLLEGE',
-];
-
-export default function DirectionOptions() {
-  return (
-    <>
-      {ORDER.map((d) => (
-        <option key={d} value={d}>
-          {DIRECTION_LABEL[d]}
-        </option>
-      ))}
-    </>
-  );
+/** Направления из справочника «Лиды → Настройки» (порядок и подписи — оттуда). */
+export default function DirectionOptions({ current }: { current?: string | null } = {}) {
+  return <LookupOptions kind="DIRECTION" current={current} />;
 }

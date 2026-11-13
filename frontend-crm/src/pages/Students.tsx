@@ -8,7 +8,7 @@ import { listUsers } from '../api/users';
 import { listAssignableManagers } from '../api/applications';
 import { canSeeAllClients, roleCan } from '../lib/permissions';
 import type { Direction } from '../api/types';
-import { APPLICATION_STATUSES, DIRECTION_LABEL, STATUS_BADGE, STATUS_LABEL, STUDENT_STATUS_BADGE, STUDENT_STATUS_LABEL } from '../api/types';
+import { STUDENT_STATUS_BADGE, STUDENT_STATUS_LABEL } from '../api/types';
 import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { useRealtime } from '../realtime';
@@ -27,19 +27,14 @@ import { isElevated, isFounder } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useDirectionLabel, useStudentStatusLabel, useApplicationStatusLabel } from '../lib/labels';
 import DismissedMark from '../components/DismissedMark';
-import {
-  dateParam,
-  enumParam,
-  ignoredParam,
-  pageParam,
-  stringParam,
-  useUrlListState,
-} from '../lib/useUrlListState';
+import { dateParam, enumParam, ignoredParam, pageParam, stringParam, useUrlListState, keyParam } from '../lib/useUrlListState';
 import { useEscClose } from '../lib/useEscClose';
 import BusyLabel from '../components/BusyLabel';
 import { TableSkeleton } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import QueryErrorState from '../components/QueryErrorState';
+import { LookupBadge } from '../lib/lookups';
+import LookupOptions from '../components/LookupOptions';
 
 type Scope = 'all' | 'mine';
 
@@ -47,18 +42,10 @@ type Scope = 'all' | 'mine';
 const SPECIAL_STUDENT_STATUSES = ['PAUSED', 'GRADUATED', 'ARCHIVED'];
 
 /**
- * Белые списки для разбора URL. Дропдаун «этап/статус» смешивает два
- * перечисления, поэтому и фильтр принимает объединение: статусы заявки
- * (ключи STATUS_BADGE — Record<ApplicationStatus, string>, то есть enum
- * целиком, включая legacy: старая ссылка обязана работать, пока миграция
- * строк не доехала) плюс три «специальных» статуса студента.
- * Всё остальное при чтении URL молча падает в «без фильтра».
+ * Разбор URL. Дропдаун «этап/статус» смешивает два перечисления: статусы
+ * лида (справочник «Лиды → Настройки», правится в CRM — проверяем только
+ * форму ключа) и три «специальных» статуса студента (они тоже вида ключа).
  */
-const STAGE_FILTER_VALUES = [
-  ...(Object.keys(STATUS_BADGE) as string[]),
-  ...SPECIAL_STUDENT_STATUSES,
-];
-const DIRECTION_VALUES = Object.keys(DIRECTION_LABEL) as Direction[];
 // «Оплата»: по умолчанию — оплатившие (студент = оплативший, решение
 // учредителя). Созданные вручную без оплаты находятся фильтром «Без оплаты».
 const PAY_VALUES = ['paid', 'unpaid', 'all'] as const;
@@ -94,10 +81,10 @@ export default function Students() {
   const { values, setValue, reset } = useUrlListState(
     {
       search: stringParam(),
-      direction: enumParam(DIRECTION_VALUES),
+      direction: keyParam(),
       // В URL — просто `status`: для читающего ссылку это статус, а не
       // «stage», хотя внутри дропдаун смешивает этап заявки и статус студента.
-      status: enumParam(STAGE_FILTER_VALUES),
+      status: keyParam(),
       // Номер кабинета — любой (список берётся из базы, QA №27).
       cabinet: stringParam('', 3),
       pay: enumParam<PayFilter, PayFilter>(PAY_VALUES, 'paid'),
@@ -403,9 +390,7 @@ export default function Students() {
           >
             <option value="">{t('app.filter.status')}</option>
             <optgroup label={t('app.field.stage')}>
-              {APPLICATION_STATUSES.map((s) => (
-                <option key={s} value={s}>{appStatusLabel(s)}</option>
-              ))}
+              <LookupOptions kind="LEAD_STATUS" />
             </optgroup>
             <optgroup label={t('common.status')}>
               <option value="PAUSED">{studentStatusLabel('PAUSED' as any)}</option>
@@ -578,9 +563,7 @@ export default function Students() {
                             );
                           }
                           return (
-                            <span className={`badge ${STATUS_BADGE[appStatus]}`}>
-                              {appStatusLabel(appStatus)}
-                            </span>
+                            <LookupBadge kind="LEAD_STATUS" value={appStatus} />
                           );
                         })()}
                       </td>

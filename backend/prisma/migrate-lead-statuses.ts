@@ -202,7 +202,7 @@ async function migrateBucket(bucket: { to: string; from: string[] }): Promise<nu
     // Целевое значение кастуем — оно обязано быть в enum'е, и если db push ещё
     // не доехал, ловим это ниже как «значение ещё не в enum'е».
     const count = await prisma.$executeRawUnsafe(
-      `UPDATE "Application" SET status = $1::"ApplicationStatus" WHERE status::text IN (${placeholders})`,
+      `UPDATE "Application" SET status = $1 WHERE status::text IN (${placeholders})`,
       bucket.to,
       ...bucket.from,
     );

@@ -1,4 +1,5 @@
-import { ApplicationStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { ApplicationStatus } from '../common/lookup-keys';
 import { hasPermission, isElevated, isFounder, isStaff, roleAllows, UserWithRoles } from '../auth/role-utils';
 import { hasSeeAllGrant } from '../auth/client-access';
 import { NEW_LEAD_APPLICATION_STATUSES } from '../common/application-status';

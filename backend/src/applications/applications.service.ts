@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Optional } from '@nestjs/common';
 import { normalizePhoneOrNull } from '../common/phone';
-import { ApplicationSource, ApplicationStatus, Country, Direction, Prisma, Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
+import { ApplicationSource, ApplicationStatus, Country, Direction } from '../common/lookup-keys';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
@@ -33,19 +34,19 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { REQUIRED_DOCUMENT_TYPES } from '../common/documents';
 import { ReferralsService } from '../partners/referrals.service';
 import { SalesService } from '../sales/sales.service';
-import { CABINET_BY_DIRECTION, DEFAULT_CABINET } from '../common/cabinets';
+import { cabinetFor, DEFAULT_CABINET } from '../common/cabinets';
 import { parseCalendarDateUtc, tjLocalDay, tjYMD } from '../common/tj-time';
 import { dateRangeFilter } from '../common/query-date';
 import { likeLiteral, phoneDigitsPattern } from '../common/search';
 import {
-  ACTIVE_APPLICATION_STATUSES,
   CLIENT_SMS_STATUS_LABEL,
   FINISHED_APPLICATION_STATUSES,
   NEW_LEAD_APPLICATION_STATUSES,
   applicationStatusFilterValues,
   isFinishedApplicationStatus,
-  isWritableApplicationStatus,
 } from '../common/application-status';
+import { LookupsService } from '../lookups/lookups.service';
+import { MACHINE_SOURCES } from '../lookups/lookup-defaults';
 
 /** Сколько лидов отдаёт список без страницы и без ?limit (самые новые). */
 const UNPAGED_LIST_MAX = 500;
@@ -72,16 +73,6 @@ const DEFAULT_DIRECTION: Direction = Direction.BACHELOR;
 // не берут ни на одну программу; выше 60 — заведомо опечатка в годе.
 const MIN_AGE = 14;
 const MAX_AGE = 60;
-
-const COUNTRY_LABEL: Record<Country, string> = {
-  USA: 'США',
-  KOREA: 'Корея',
-  CHINA: 'Китай',
-  LATVIA: 'Латвия',
-  MALAYSIA: 'Малайзия',
-  ITALY: 'Италия',
-  GERMANY: 'Германия',
-};
 
 const MANAGER_INCLUDE = {
   student: {
@@ -155,37 +146,24 @@ export class ApplicationsService {
     private sms: SmsService,
     private activity: ActivityService,
     private realtime: RealtimeGateway,
+    private lookups: LookupsService,
     @Optional() private referrals?: ReferralsService,
     @Optional() private sales?: SalesService,
   ) {}
 
-  // Порядок статусов — для определения, "понизили" или "продвинули" заявку.
-  // Раньше это был порядок ЭТАПОВ старой воронки (NEW → DOCS_REVIEW → … →
-  // ENROLLED). Теперь это порядок пунктов нового набора квалификации
-  // (ACTIVE_APPLICATION_STATUSES). Строгой «лестницей» он больше не является —
-  // «Вне города» и «До 17 лет» это исходы, а не ступени, — но ранг здесь
-  // используется ровно для одного: выбрать формулировку SMS («возвращена
-  // с … на …» против «изменён … → …»). Поведение то же, что и было.
-  private static STAGE_ORDER: ApplicationStatus[] = ACTIVE_APPLICATION_STATUSES;
-
-  /**
-   * Ранг статуса в STAGE_ORDER. Легаси-значение отдаёт ранг своего нового
-   * эквивалента: prev вполне может прийти старым (перенос строк опт-ин, см.
-   * LEAD_STATUS_MIGRATION_ENV — пока его не прогнали, легаси-статусы лежат в
-   * БД), и без этой подстановки переход «ENROLLED → THINKING» не распознался
-   * бы как откат.
-   */
-  private static stageRank(status: ApplicationStatus): number {
-    const direct = ApplicationsService.STAGE_ORDER.indexOf(status);
+  // Порядок статусов — для выбора формулировки SMS («возвращена с … на …»
+  // против «изменён … → …»). С 13.11.2026 это порядок справочника «Лиды →
+  // Настройки» (основатель переставляет статусы сам). Легаси-статус старой
+  // воронки получает ранг своего нового эквивалента.
+  private stageRank(status: ApplicationStatus): number {
+    const direct = this.lookups.statusRank(status);
     if (direct >= 0) return direct;
     const legacyEquivalent = ApplicationsService.LEGACY_STAGE_EQUIVALENT[status];
-    return legacyEquivalent
-      ? ApplicationsService.STAGE_ORDER.indexOf(legacyEquivalent)
-      : -1;
+    return legacyEquivalent ? this.lookups.statusRank(legacyEquivalent) : -1;
   }
 
   /** Легаси-статус → его новый эквивалент (тот же маппинг, что в миграции). */
-  private static LEGACY_STAGE_EQUIVALENT: Partial<Record<ApplicationStatus, ApplicationStatus>> = {
+  private static LEGACY_STAGE_EQUIVALENT: Record<string, string> = {
     NEW: 'NEW_LEAD',
     IN_PROGRESS: 'IN_PROCESSING',
     DOCS_REVIEW: 'IN_PROCESSING',
@@ -197,9 +175,19 @@ export class ApplicationsService {
   };
 
   private isDowngrade(prev: ApplicationStatus, next: ApplicationStatus): boolean {
-    const a = ApplicationsService.stageRank(prev);
-    const b = ApplicationsService.stageRank(next);
+    const a = this.stageRank(prev);
+    const b = this.stageRank(next);
     return a >= 0 && b >= 0 && b < a;
+  }
+
+  /**
+   * Как назвать статус клиенту: «Как назвать клиенту» из справочника; у
+   * легаси-статуса — прежняя клиентская подпись. null — статус внутренний.
+   */
+  private clientStatusLabel(status: ApplicationStatus): string | null {
+    const item = this.lookups.get('LEAD_STATUS', status);
+    if (item) return item.clientLabel || null;
+    return CLIENT_SMS_STATUS_LABEL[status] ?? null;
   }
 
   /**
@@ -221,7 +209,7 @@ export class ApplicationsService {
    *     потому что назвать клиенту, откуда его вернули, нельзя.
    */
   private smsTextForStatus(prev: ApplicationStatus, next: ApplicationStatus): string | null {
-    const labelNext = CLIENT_SMS_STATUS_LABEL[next];
+    const labelNext = this.clientStatusLabel(next);
     if (!labelNext) return null;
     // Успешный лид. Формулировка НЕ про зачисление в вуз: SUCCESSFUL_LEAD
     // означает «лид доведён до результата» — заявка оформлена, человек стал
@@ -233,7 +221,7 @@ export class ApplicationsService {
     if (isFinishedApplicationStatus(next)) {
       return `🎉 Javonon: Ваша заявка успешно оформлена! Менеджер свяжется с Вами по дальнейшим шагам. Подробности в личном кабинете.`;
     }
-    const labelPrev = CLIENT_SMS_STATUS_LABEL[prev];
+    const labelPrev = this.clientStatusLabel(prev);
     if (!labelPrev) {
       return `Javonon: Статус Вашей заявки: «${labelNext}».`;
     }
@@ -256,48 +244,6 @@ export class ApplicationsService {
     }
     return null;
   }
-
-  /**
-   * ВНУТРЕННИЕ подписи статусов — для СОТРУДНИКА, не для клиента.
-   *
-   * Это названия колонок воронки как их видит менеджер в CRM («Новые лиды»,
-   * «Некачественные лиды»). Единственный потребитель — текст ошибки про
-   * устаревший статус в update(): её читает тот, кто прислал PATCH, то есть
-   * сотрудник со старой вкладкой CRM.
-   *
-   * В SMS клиенту это НЕ идёт: там свой словарь CLIENT_SMS_STATUS_LABEL
-   * (common/application-status.ts), в котором внутренние оценки лида вообще
-   * не имеют подписи. Не подставлять сюда клиентские тексты и наоборот —
-   * половина этих строк для клиента оскорбительна, а половина клиентских
-   * («Принята») ничего не говорит менеджеру о колонке воронки.
-   *
-   * Легаси-значения оставлены НАМЕРЕННО: именно они и попадают в текст
-   * ошибки — старая вкладка присылает DOCS_REVIEW, и менеджер должен увидеть
-   * «Документы на проверке», а не сырой ключ enum'а. Record<ApplicationStatus,
-   * string> обязывает покрыть весь enum: забытая подпись — ошибка компиляции.
-   */
-  private static STATUS_LABEL: Record<ApplicationStatus, string> = {
-    // Актуальный набор квалификации лида.
-    NEW_LEAD: 'Новые лиды',
-    IN_PROCESSING: 'В обработке',
-    ONLINE_CONSULTATION: 'Онлайн консультации',
-    OFFLINE_CONSULTATION: 'Оффлайн консультации',
-    THINKING: 'Думает',
-    OUT_OF_TOWN: 'Вне города',
-    UNDER_17: 'До 17 лет',
-    POTENTIAL_LEAD: 'Потенциальные лиды',
-    LOW_QUALITY_LEAD: 'Некачественные лиды',
-    SUCCESSFUL_LEAD: 'Успешные лиды',
-    // Легаси — только для чтения старых строк, в UI не предлагаются.
-    NEW: 'Новый лид',
-    IN_PROGRESS: 'В работе',
-    COMPLETED: 'Завершена',
-    DOCS_REVIEW: 'Документы на проверке',
-    DOCS_SUBMITTED: 'Документы поданы',
-    PRE_ADMISSION: 'Предварительное зачисление',
-    AWAITING_PAYMENT: 'Ожидание оплаты',
-    ENROLLED: 'Зачислен',
-  };
 
   /**
    * Парсит дату рождения с лендинга и проверяет возрастное окно 14–60.
@@ -411,7 +357,8 @@ export class ApplicationsService {
    * По закрытой клиент заводится заново — это новая сделка.
    */
   private async findOpenByPhone(tx: Prisma.TransactionClient, key: string) {
-    const closed: ApplicationStatus[] = [...FINISHED_APPLICATION_STATUSES, 'LOW_QUALITY_LEAD'];
+    // «Закрытые» статусы — галочка «Лид закрыт» в «Лиды → Настройки».
+    const closed: ApplicationStatus[] = [...FINISHED_APPLICATION_STATUSES, ...this.lookups.closedStatusKeys()];
     const rows = await tx.$queryRaw<{ id: string; comment: string | null }[]>`
       SELECT id, comment FROM "Application"
       WHERE right(regexp_replace(phone, '[^0-9]', '', 'g'), 9) = ${key}
@@ -491,6 +438,8 @@ export class ApplicationsService {
   }
 
   async create(dto: CreateApplicationDto & { ref?: string }) {
+    this.lookups.assert('COUNTRY', dto.country);
+    this.lookups.assert('LEAD_SOURCE', dto.source, 'Неизвестный источник');
     const { app, duplicate } = await this.persistNewLead(dto, {
       source: dto.source || 'LANDING_FORM',
       autoAssignManager: true,
@@ -522,7 +471,7 @@ export class ApplicationsService {
     // методом, в нём всегда плейсхолдер (directionConfirmed=false выше), и
     // «Бакалавриат» в уведомлении читался бы как ответ клиента. Печатаем
     // страну — единственное, что клиент действительно выбрал.
-    const countryText = app.country ? COUNTRY_LABEL[app.country] : null;
+    const countryText = app.country ? this.lookups.labelRu('COUNTRY', app.country) : null;
     // DOB лежит UTC-полуночью (parseBirthday) → календарный день читаем прямо
     // из ISO-префикса. Прогонять его через tjLocalDay() нельзя: это сдвиг
     // календарной даты в таймзону, а 12 марта остаётся 12 марта везде.
@@ -646,6 +595,12 @@ export class ApplicationsService {
     // Статус не «Новый лид» — это перевод лида дальше: «Лиды — изменение и
     // перевод в работу», как в карточке.
     const status = dto.status ?? ApplicationStatus.NEW_LEAD;
+    this.lookups.assert('LEAD_STATUS', status);
+    this.lookups.assert('COUNTRY', dto.country);
+    this.lookups.assert('DIRECTION', dto.direction);
+    if (dto.source && !this.lookups.isStaffSource(dto.source)) {
+      throw new BadRequestException('Недопустимый источник для лида, введённого вручную');
+    }
     const moves = !NEW_LEAD_APPLICATION_STATUSES.includes(status);
     if (moves && !roleAllowsApplication(user as any, ApplicationStatus.NEW_LEAD, 'update')) {
       throw new ForbiddenException('Нет права переводить лид в работу');
@@ -1186,11 +1141,13 @@ export class ApplicationsService {
     // QA-3 (BUG-07): «Сайт», «Самозапись», «Реферал» поставила система — это
     // подтверждённое происхождение лида, руками его не переписать.
     if (dto.source != null && dto.source !== existing.source) {
-      const machine: ApplicationSource[] = ['LANDING_FORM', 'SELF_REGISTRATION', 'REFERRAL'];
-      if (machine.includes(existing.source)) {
+      if (MACHINE_SOURCES.includes(existing.source)) {
         throw new BadRequestException('Источник этого лида определён автоматически — изменить его нельзя');
       }
+      if (!this.lookups.isStaffSource(dto.source)) throw new BadRequestException('Выберите источник из списка');
     }
+    if (dto.direction != null && dto.direction !== existing.direction) this.lookups.assert('DIRECTION', dto.direction);
+    if (dto.country && dto.country !== existing.country) this.lookups.assert('COUNTRY', dto.country);
 
     if (dto.phone != null) {
       const key = phoneKey(dto.phone);
@@ -1216,9 +1173,9 @@ export class ApplicationsService {
     // только по явному MIGRATE_LEAD_STATUSES, и после раскатки флаг снимают —
     // никто эту строку заново не перенесёт) и сопровождается SMS клиенту
     // «Заявка возвращена».
-    if (dto.status != null && !isWritableApplicationStatus(dto.status)) {
+    if (dto.status != null && dto.status !== existing.status && !this.lookups.has('LEAD_STATUS', dto.status)) {
       throw new BadRequestException(
-        `Статус «${ApplicationsService.STATUS_LABEL[dto.status] || dto.status}» устарел и доступен только для чтения. Обновите страницу CRM и выберите статус заново.`,
+        `Статуса «${this.lookups.labelRu('LEAD_STATUS', dto.status)}» нет в списке. Обновите страницу CRM и выберите статус заново.`,
       );
     }
 
@@ -1308,7 +1265,7 @@ export class ApplicationsService {
           // или в карточке студента после — StudentsService.update), кабинет
           // пересчитается по CABINET_BY_DIRECTION.
           cabinet: directionConfirmed
-            ? CABINET_BY_DIRECTION[effectiveDirection]
+            ? cabinetFor(effectiveDirection)
             : DEFAULT_CABINET,
           // Страна — единственный настоящий ответ клиента о его цели
           // («Кишвар» вместо снятого вопроса «Ҳадаф»). Переносим её на
@@ -1413,7 +1370,7 @@ export class ApplicationsService {
           data: {
             direction: dto.direction,
             directionConfirmed: true,
-            cabinet: CABINET_BY_DIRECTION[dto.direction],
+            cabinet: cabinetFor(dto.direction),
           },
         })
         .catch(() => undefined);

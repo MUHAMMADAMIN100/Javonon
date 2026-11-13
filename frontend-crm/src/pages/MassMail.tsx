@@ -24,6 +24,7 @@ import {
   campaignRecipients,
 } from '../api/massmail';
 import BusyLabel from '../components/BusyLabel';
+import DirectionOptions from '../components/DirectionOptions';
 
 const STATUS_COLOR: Record<string, string> = {
   DRAFT: '#94a3b8',
@@ -323,12 +324,7 @@ function CreateForm({ onClose }: { onClose: () => void }) {
             <label>{t('app.field.direction')}</label>
             <CrmSelect className="crm-select" value={audienceValue} onChange={(e) => setAudienceValue(e.target.value)}>
               <option value="">—</option>
-              <option value="BACHELOR">{directionLabel('BACHELOR')}</option>
-              <option value="MASTER">{directionLabel('MASTER')}</option>
-              <option value="LANGUAGE">{directionLabel('LANGUAGE')}</option>
-              <option value="LANGUAGE_COLLEGE">{directionLabel('LANGUAGE_COLLEGE')}</option>
-              <option value="LANGUAGE_BACHELOR">{directionLabel('LANGUAGE_BACHELOR')}</option>
-              <option value="COLLEGE">{directionLabel('COLLEGE')}</option>
+              <DirectionOptions current={audienceValue || null} />
             </CrmSelect>
           </div>
         )}

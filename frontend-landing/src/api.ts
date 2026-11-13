@@ -33,14 +33,8 @@ export const DIRECTION_LABEL: Record<Direction, string> = {
  * поэтому строки НЕЛЬЗЯ переименовывать: они уходят в БД как есть.
  * Порядок в COUNTRY_ORDER задан основателем и определяет порядок в <select>.
  */
-export type Country =
-  | 'USA'
-  | 'KOREA'
-  | 'CHINA'
-  | 'LATVIA'
-  | 'MALAYSIA'
-  | 'ITALY'
-  | 'GERMANY';
+/** Ключ страны из справочника CRM (список правится в «Лиды → Настройки»). */
+export type Country = string;
 
 export const COUNTRY_ORDER: Country[] = [
   'USA',

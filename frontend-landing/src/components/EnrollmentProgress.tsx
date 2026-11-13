@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import Icon from '../Icon';
 import { STUDENT_STAGES, resolveStudentStage } from '../applicationStage';
+import { usePublicLookups } from '../lookups';
 
 /**
  * Шкала «где моя заявка» в кабинете студента.
@@ -46,7 +47,9 @@ function EnrollmentNote({ title }: { title: string }) {
 }
 
 export default function EnrollmentProgress({ currentStatus }: Props) {
-  const stage = resolveStudentStage(currentStatus);
+  // Статус, добавленный основателем в «Лиды → Настройки», шкала узнаёт по справочнику.
+  const custom = usePublicLookups().statuses.find((s) => s.key === currentStatus) ?? null;
+  const stage = resolveStudentStage(currentStatus, custom);
 
   // Заявки нет — прогрессу неоткуда взяться. Пустая карточка «Аризаи нав»
   // сообщала бы студенту о заявке, которой не существует.

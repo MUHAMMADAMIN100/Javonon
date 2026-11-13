@@ -1,5 +1,5 @@
 import { useT } from './i18n';
-import { STATUS_LABEL } from '../api/types';
+import { useLookups } from './lookups';
 
 /**
  * Helpers для перевода динамических enum-меток (ROLE_LABEL,
@@ -21,51 +21,31 @@ export function useRoleLabel(): (role: string | null | undefined) => string {
   };
 }
 
+/**
+ * Направление, страна, статус лида, источник — значения справочников
+ * «Лиды → Настройки» (13.11.2026): подпись берётся оттуда на текущем языке,
+ * а до загрузки справочника — из словаря i18n (см. lib/lookups.tsx).
+ * Для пустого значения — «—» (у старых заявок страны нет).
+ */
 export function useDirectionLabel(): (dir: string | null | undefined) => string {
-  const { t } = useT();
-  return (dir) => {
-    if (!dir) return '—';
-    const key = `direction.${dir}`;
-    const val = t(key);
-    return val === key ? String(dir) : val;
-  };
+  const L = useLookups();
+  return (dir) => L.label('DIRECTION', dir);
 }
 
-/**
- * Страна заявки («Кишвар» из формы лендинга). Возвращает «—» для заявок
- * без страны — их много: всё, что создано до релиза новой формы, плюс
- * заявки, заведённые в обход формы (ручное создание в CRM, самозапись
- * студента, approve заявки партнёра).
- */
 export function useCountryLabel(): (country: string | null | undefined) => string {
-  const { t } = useT();
-  return (c) => {
-    if (!c) return '—';
-    const key = `country.${c}`;
-    const val = t(key);
-    return val === key ? String(c) : val;
-  };
+  const L = useLookups();
+  return (c) => L.label('COUNTRY', c);
 }
 
-/**
- * Метка статуса заявки. Резолвит и 10 актуальных статусов, и legacy-значения:
- * пока перенос строк не прогнали, API реально отдаёт ENROLLED/DOCS_REVIEW
- * и т.д., и показать менеджеру сырой ключ enum — хуже, чем показать русскую
- * метку в TJ-локали. Поэтому порядок: i18n → RU-фоллбэк STATUS_LABEL → ключ.
- *
- * Перенос строк на бэкенде — ЯВНО ОПТ-ИН (MIGRATE_LEAD_STATUSES, см.
- * backend/src/common/application-status.ts), то есть «пока» тут может длиться
- * сколько угодно; это не временный костыль на пару минут деплоя.
- */
+/** Статус лида; легаси-значения старой воронки — русской подписью (STATUS_LABEL). */
 export function useApplicationStatusLabel(): (status: string | null | undefined) => string {
-  const { t } = useT();
-  return (s) => {
-    if (!s) return '—';
-    const key = `app.status.${s}`;
-    const val = t(key);
-    if (val !== key) return val;
-    return STATUS_LABEL[s as keyof typeof STATUS_LABEL] ?? String(s);
-  };
+  const L = useLookups();
+  return (s) => L.label('LEAD_STATUS', s);
+}
+
+export function useSourceLabel(): (source: string | null | undefined) => string {
+  const L = useLookups();
+  return (s) => L.label('LEAD_SOURCE', s);
 }
 
 export function useTaskStatusLabel(): (status: string | null | undefined) => string {

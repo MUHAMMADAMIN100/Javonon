@@ -2,7 +2,8 @@ import { saveAs } from 'file-saver';
 import { tr } from '../lib/i18n';
 import { tjToday } from '../lib/tjTime';
 import type { Student } from '../api/types';
-import { DIRECTION_LABEL, STUDENT_STATUS_LABEL } from '../api/types';
+import { STUDENT_STATUS_LABEL } from '../api/types';
+import { lookupsSnapshot } from '../lib/lookups';
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('ru-RU');
 
@@ -114,7 +115,7 @@ export async function generateStudentsReport(params: {
             // Прочерк, а не «Бакалавриат»: направление ещё не подтверждено
             // человеком (см. byDirection выше).
             bodyCell(
-              s.directionConfirmed === false ? '—' : DIRECTION_LABEL[s.direction],
+              s.directionConfirmed === false ? '—' : lookupsSnapshot().label('DIRECTION', s.direction),
               2,
               i % 2 === 1,
             ),
@@ -217,7 +218,7 @@ export async function generateStudentsReport(params: {
                     text: `  • ${
                       k === DIRECTION_UNCONFIRMED_KEY
                         ? DIRECTION_UNCONFIRMED_LABEL
-                        : DIRECTION_LABEL[k as keyof typeof DIRECTION_LABEL] || k
+                        : lookupsSnapshot().label('DIRECTION', k)
                     }: ${v}`,
                     size: 20,
                     color: '5B6478',

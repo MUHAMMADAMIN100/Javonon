@@ -129,7 +129,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       const moved: string[] = [];
       for (const { from, to } of buckets) {
         const count = await this.$executeRawUnsafe(
-          `UPDATE "Application" SET status = $1::"ApplicationStatus" WHERE status::text = $2`,
+          `UPDATE "Application" SET status = $1 WHERE status = $2`,
           to,
           from,
         );

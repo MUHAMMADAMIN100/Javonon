@@ -2,7 +2,8 @@ import { secureRandomString } from '../common/random';
 import { normalizePhoneOrNull } from '../common/phone';
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Optional } from '@nestjs/common';
 import { PAID_STUDENT_WHERE, UNPAID_STUDENT_WHERE } from '../common/paid-student';
-import { Direction, Prisma, Role, StudentStatus } from '@prisma/client';
+import { Prisma, Role, StudentStatus } from '@prisma/client';
+import { Direction } from '../common/lookup-keys';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudentDto } from './dto/create-student.dto';
@@ -14,11 +15,12 @@ import { canSeePartnerAttribution, isElevated, isFounder, roleAllows, UserWithRo
 import { canReadStudents, canSeeAllStudents } from '../auth/client-access';
 import { canTransferOthers, transferDeniedMessage } from '../applications/application-access';
 import { ReferralsService } from '../partners/referrals.service';
-import { CABINET_BY_DIRECTION } from '../common/cabinets';
+import { cabinetFor } from '../common/cabinets';
 import { parseCalendarDateUtc } from '../common/tj-time';
 import { dateRangeFilter } from '../common/query-date';
 import { clientDeals } from '../submissions/client-deals';
 import { phoneDigitsPattern } from '../common/search';
+import { LookupsService } from '../lookups/lookups.service';
 
 /**
  * DOB из CRM → UTC-полночь. Раньше здесь стоял голый `new Date(b)`: для
@@ -56,6 +58,7 @@ export class StudentsService {
     private realtime: RealtimeGateway,
     private activity: ActivityService,
     private notifications: NotificationsService,
+    private lookups: LookupsService,
     // Блок «Партнёр» в карточке студента (см. findOne). @Optional() — как в
     // ApplicationsService: без PartnersModule карточка работает, просто без
     // партнёрского блока.
@@ -94,9 +97,10 @@ export class StudentsService {
   }
 
   async create(dto: CreateStudentDto, _user?: CurrentUser) {
+    this.lookups.assert('DIRECTION', dto.direction);
     // QA-2: все номера — в общий формат «+<код><номер>» (+992 — ровно 9 цифр).
     if (dto.phones) dto.phones = dto.phones.map((ph) => normalizePhoneOrNull(ph, 'Телефон')).filter((x): x is string => !!x);
-    const cabinet = dto.cabinet ?? CABINET_BY_DIRECTION[dto.direction];
+    const cabinet = dto.cabinet ?? cabinetFor(dto.direction);
     const emailNormalized = dto.email.trim().toLowerCase();
 
     // Проверяем уникальность email среди студентов и пользователей
@@ -418,6 +422,7 @@ export class StudentsService {
   async update(id: string, dto: UpdateStudentDto, user: CurrentUser) {
     const existing = await this.findOne(id);
     this.ensureCanEdit(existing, user);
+    if (dto.direction !== undefined && dto.direction !== existing.direction) this.lookups.assert('DIRECTION', dto.direction);
 
     const data: Prisma.StudentUpdateInput = {};
     if (dto.fullName !== undefined) data.fullName = dto.fullName;
@@ -473,7 +478,7 @@ export class StudentsService {
         (existing as any).directionConfirmed === false &&
         dto.cabinet === existing.cabinet;
       if (dto.cabinet === undefined || cabinetWasPlaceholder) {
-        data.cabinet = CABINET_BY_DIRECTION[dto.direction];
+        data.cabinet = cabinetFor(dto.direction);
       }
     }
 

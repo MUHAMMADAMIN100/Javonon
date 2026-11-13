@@ -1,5 +1,6 @@
 import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { Direction } from '@prisma/client';
+import { Direction } from '../../common/lookup-keys';
+import { IsLookupKey } from '../../common/lookup-validators';
 
 // ТЗ-доработка: обязательные только name + university. Остальное опц.
 // (программа может быть бесплатной, без фиксированного города и т.д.).
@@ -27,7 +28,7 @@ export class CreateProgramDto {
   major?: string;
 
   @IsOptional()
-  @IsEnum(Direction)
+  @IsLookupKey('Выберите направление из списка')
   direction?: Direction;
 
   @IsOptional()

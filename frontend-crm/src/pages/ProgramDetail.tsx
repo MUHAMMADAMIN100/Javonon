@@ -10,7 +10,6 @@ import {
   listProgramComments, addProgramComment, deleteProgramComment,
   type ProgramDocument, type ProgramComment,
 } from '../api/programs';
-import { DIRECTION_LABEL } from '../api/types';
 import Icon from '../Icon';
 import Loading from '../components/Loading';
 import BackButton from '../components/BackButton';
@@ -21,6 +20,7 @@ import { useAuth } from '../store/auth';
 import { useUI } from '../ui/Dialogs';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
+import { useDirectionLabel } from '../lib/labels';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
 const fileUrl = (u: string) => absFileUrl(u);
@@ -32,6 +32,7 @@ const fileUrl = (u: string) => absFileUrl(u);
  */
 export default function ProgramDetail() {
   const { t } = useT();
+  const directionLabel = useDirectionLabel();
   useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   const { id } = useParams<{ id: string }>();
   const query = useQuery({
@@ -127,7 +128,7 @@ export default function ProgramDetail() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 16 }}>
         <div className="card" style={{ padding: 20 }}>
           <h3 style={{ marginBottom: 12 }}>{t('programs.section.main')}</h3>
-          <Row label={t('app.field.direction')} value={p.direction ? DIRECTION_LABEL[p.direction] : '—'} />
+          <Row label={t('app.field.direction')} value={directionLabel(p.direction)} />
           <Row label={t('programs.row.major')} value={p.major || '—'} />
           <Row label={t('programs.row.cost')} value={p.cost ? `${p.cost.toLocaleString('ru-RU')} ${p.currency} / ${t(costUnitKey(p.duration))}` : t('programs.costUnknown')} />
           <Row label={t('programs.row.duration')} value={p.duration} />

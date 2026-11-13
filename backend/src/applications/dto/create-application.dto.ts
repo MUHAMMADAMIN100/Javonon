@@ -8,7 +8,9 @@ import {
   MinLength,
   MaxLength,
 } from 'class-validator';
-import { ContactChannel, Country, ApplicationSource } from '@prisma/client';
+import { ContactChannel } from '@prisma/client';
+import { Country, ApplicationSource } from '../../common/lookup-keys';
+import { IsLookupKey } from '../../common/lookup-validators';
 
 // E.164: '+' необязателен, 7–15 цифр всего, разрешаем пробелы/дефисы при вводе.
 export const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
@@ -78,7 +80,7 @@ export class CreateApplicationDto {
 
   // Страна обучения — то, что теперь реально спрашивает лендинг.
   @IsOptional()
-  @IsEnum(Country)
+  @IsLookupKey('Выберите страну из списка')
   country?: Country;
 
   // Дата рождения, ISO (`YYYY-MM-DD` из <input type="date">).
@@ -100,7 +102,7 @@ export class CreateApplicationDto {
   programId?: string;
 
   @IsOptional()
-  @IsEnum(ApplicationSource)
+  @IsLookupKey('Неизвестный источник')
   source?: ApplicationSource;
 
   // Реферальный код партнёра из query-параметра ?ref= на лендинге.

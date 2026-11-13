@@ -14,7 +14,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { Direction } from '@prisma/client';
+import { Direction } from '../common/lookup-keys';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -168,13 +168,8 @@ export class ProgramsController {
         throw new BadRequestException('Стоимость слишком большая');
       }
     }
-    // Direction опц.: BACHELOR по умолч., если задано — валидируем enum.
-    if (dto.direction) {
-      const VALID_DIRECTIONS = ['BACHELOR', 'MASTER', 'LANGUAGE', 'LANGUAGE_COLLEGE', 'LANGUAGE_BACHELOR', 'COLLEGE'];
-      if (!VALID_DIRECTIONS.includes(dto.direction as string)) {
-        throw new BadRequestException(`Неизвестное направление. Доступно: ${VALID_DIRECTIONS.join(', ')}`);
-      }
-    }
+    // Direction опц.: BACHELOR по умолч.; есть ли такое направление в
+    // справочнике, проверяет ProgramsService.create.
     // HTML/script-теги в текстовых полях запрещены. Раньше только 4
     // обязательных проверялись — description/duration/language/grant*
     // обходили проверку и попадали на публичный лендинг как раз там,

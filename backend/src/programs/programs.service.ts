@@ -1,23 +1,16 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Direction, Prisma, Program, Role } from '@prisma/client';
+import { Prisma, Program, Role } from '@prisma/client';
+import { Direction } from '../common/lookup-keys';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProgramDto } from './dto/create-program.dto';
 import { UpdateProgramDto } from './dto/update-program.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { TelegramService } from '../telegram/telegram.service';
 import { isElevated, isFounder, roleAllows } from '../auth/role-utils';
+import { LookupsService } from '../lookups/lookups.service';
 
 type CurrentUser = { id: string; role: Role; roles?: Role[] };
-
-const DIRECTION_LABEL: Record<Direction, string> = {
-  BACHELOR: 'Бакалавриат',
-  MASTER: 'Магистратура',
-  LANGUAGE: 'Языковые курсы',
-  LANGUAGE_COLLEGE: 'Языковой + колледж',
-  LANGUAGE_BACHELOR: 'Языковой + бакалавриат',
-  COLLEGE: 'Колледж',
-};
 
 @Injectable()
 export class ProgramsService {
@@ -26,6 +19,7 @@ export class ProgramsService {
     private realtime: RealtimeGateway,
     private telegram: TelegramService,
     private config: ConfigService,
+    private lookups: LookupsService,
   ) {}
 
   async findAll(filters: {
@@ -215,6 +209,7 @@ export class ProgramsService {
     if (!roleAllows(user as any, 'programs:create', () => isElevated(user as any))) {
       throw new ForbiddenException('Только администратор может создавать программы');
     }
+    this.lookups.assert('DIRECTION', dto.direction);
     const program = await this.prisma.program.create({
       data: {
         name: dto.name.trim(),
@@ -262,6 +257,7 @@ export class ProgramsService {
     if (!roleAllows(user as any, 'programs:update', () => isElevated(user as any))) {
       throw new ForbiddenException('Только администратор может редактировать программы');
     }
+    this.lookups.assert('DIRECTION', dto.direction);
     const existing = await this.findOne(id);
     // Чистим массивы — null/undefined нельзя писать в String[] колонки
     const data: any = { ...dto };
@@ -339,7 +335,7 @@ export class ProgramsService {
       `📚 *${this.escape(program.name)}*\n` +
       `🏛 ${this.escape(program.university)}\n` +
       `📍 ${this.escape(program.city)}\n` +
-      `🎯 ${this.escape(program.major)} · ${DIRECTION_LABEL[program.direction]}\n` +
+      `🎯 ${this.escape(program.major)} · ${this.lookups.labelRu('DIRECTION', program.direction)}\n` +
       (program.duration ? `⏱ ${this.escape(program.duration)}\n` : '') +
       (program.language ? `🌐 ${this.escape(program.language)}\n` : '') +
       `\n💰 Стоимость: *${program.cost.toLocaleString('ru-RU')} ${program.currency}* / год\n` +

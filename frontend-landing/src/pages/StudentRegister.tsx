@@ -6,17 +6,12 @@ import { getReferral } from '../referral';
 import Icon from '../Icon';
 import PasswordInput from '../components/PasswordInput';
 import PhoneInput, { COUNTRIES } from '../components/PhoneInput';
+import { usePublicLookups } from '../lookups';
 
-const DIRECTIONS = [
-  { value: 'BACHELOR', label: 'Бакалавр' },
-  { value: 'MASTER', label: 'Магистр' },
-  { value: 'LANGUAGE', label: 'Курсҳои забонӣ' },
-  { value: 'LANGUAGE_BACHELOR', label: 'Забонӣ + бакалавр' },
-  { value: 'LANGUAGE_COLLEGE', label: 'Забонӣ + коллеҷ' },
-  { value: 'COLLEGE', label: 'Коллеҷ' },
-];
 
 export default function StudentRegister() {
+  // Направления — справочник CRM («Лиды → Настройки»), только «показывать на сайте».
+  const directions = usePublicLookups().directions.filter((d) => d.showOnSite);
   const navigate = useNavigate();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -177,8 +172,8 @@ export default function StudentRegister() {
             <div className="form-row">
               <label>Самт</label>
               <select value={direction} onChange={(e) => setDirection(e.target.value)}>
-                {DIRECTIONS.map((d) => (
-                  <option key={d.value} value={d.value}>{d.label}</option>
+                {directions.map((d) => (
+                  <option key={d.key} value={d.key}>{d.labelTg}</option>
                 ))}
               </select>
             </div>

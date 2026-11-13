@@ -6,7 +6,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ClassMaterialKind, ClassSessionStatus, Direction, Prisma, StudyGroupStatus } from '@prisma/client';
+import { ClassMaterialKind, ClassSessionStatus, Prisma, StudyGroupStatus } from '@prisma/client';
+import { Direction } from '../common/lookup-keys';
 import * as bcrypt from 'bcryptjs';
 import { promises as fsp } from 'fs';
 import { basename, join, resolve } from 'path';

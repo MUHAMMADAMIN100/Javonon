@@ -54,7 +54,7 @@
  * старые значения. Сначала хвосты из этих констант, потом сами значения из
  * enum'а (отдельным деплоем — иначе ловим ту же 500-ю проблему зеркально).
  */
-import { ApplicationStatus } from '@prisma/client';
+import { ApplicationStatus } from './lookup-keys';
 
 /**
  * Переменная окружения, разрешающая ПЕРЕНОС СТРОК Application.status на новый

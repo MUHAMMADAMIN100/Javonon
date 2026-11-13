@@ -22,6 +22,7 @@ import { isTeacherOnly } from '../lib/roles';
 import { routeDenied, TEACHER_HOME } from './ProtectedRoute';
 import QueryErrorState from './QueryErrorState';
 import { fmtDateText } from '../lib/tjTime';
+import { LOOKUPS_KEY, useLookupItems } from '../lib/lookups';
 
 /**
  * Заголовок страницы — ОДИН, и живёт он здесь.
@@ -64,6 +65,7 @@ const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; title
   { path: '/lms',          eyebrowKey: 'eyebrow.lms',            num: '14', titleKey: 'lms.title' },
   { path: '/partners',     eyebrowKey: 'eyebrow.partners',       num: '15', titleKey: 'partners.title' },
   { path: '/me',           eyebrowKey: 'eyebrow.profile',        num: '16', titleKey: 'profile.title' },
+  { path: '/leads/settings', eyebrowKey: 'eyebrow.sales',        num: '02', titleKey: 'lk.title' },
   { path: '/leads',        eyebrowKey: 'eyebrow.sales',          num: '02', titleKey: 'leads.title' },
   { path: '/submissions',  eyebrowKey: 'eyebrow.sales',          num: '18', titleKey: 'submissions.title' },
   { path: '/pipelines',    eyebrowKey: 'eyebrow.salesPipelines', num: '19', titleKey: 'pipelines.title' },
@@ -119,6 +121,13 @@ export default function Layout() {
   useRealtimeEvent('user:roles-updated', () => {
     toast(t('layout.rolesUpdated'), 'info');
     setTimeout(() => logout(), 4000);
+  });
+
+  // «Лиды → Настройки»: кто-то поменял статусы, страны, источники — подписи
+  // и списки у всех открытых CRM обновляются без перезагрузки.
+  useLookupItems();
+  useRealtimeEvent('lookups:changed', () => {
+    queryClient.invalidateQueries({ queryKey: LOOKUPS_KEY });
   });
 
   useRealtimeEvent('user:deleted', () => {

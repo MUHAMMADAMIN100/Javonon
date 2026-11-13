@@ -17,6 +17,7 @@ import { useDirectionLabel, useChannelLabel } from '../lib/labels';
 import CredRow from '../components/CredRow';
 import { STUDENT_LOGIN_URL } from '../lib/landingUrl';
 import BusyLabel from '../components/BusyLabel';
+import DirectionOptions from '../components/DirectionOptions';
 
 export default function StudentNew() {
   const navigate = useNavigate();
@@ -203,12 +204,7 @@ export default function StudentNew() {
           <div className="form-group">
             <label>{t('app.field.direction')} *</label>
             <CrmSelect className="crm-select" value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
-              <option value="BACHELOR">{directionLabel('BACHELOR')}</option>
-              <option value="MASTER">{directionLabel('MASTER')}</option>
-              <option value="LANGUAGE">{directionLabel('LANGUAGE')}</option>
-              <option value="LANGUAGE_COLLEGE">{directionLabel('LANGUAGE_COLLEGE')}</option>
-              <option value="LANGUAGE_BACHELOR">{directionLabel('LANGUAGE_BACHELOR')}</option>
-              <option value="COLLEGE">{directionLabel('COLLEGE')}</option>
+              <DirectionOptions current={direction} />
             </CrmSelect>
           </div>
           <div className="form-group">

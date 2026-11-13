@@ -1,6 +1,7 @@
 import { IsEmail, IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { Direction } from '@prisma/client';
+import { Direction } from '../../common/lookup-keys';
+import { IsLookupKey } from '../../common/lookup-validators';
 
 const NO_HTML_RE = /^[^<>]*$/;
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
@@ -37,7 +38,7 @@ export class StudentRegisterDto {
   @MaxLength(128)
   password!: string;
 
-  @IsEnum(Direction, { message: 'Некорректное направление' })
+  @IsLookupKey('Некорректное направление')
   direction!: Direction;
 
   @IsOptional()

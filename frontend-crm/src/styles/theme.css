@@ -1718,3 +1718,55 @@ body:has(.deal-wizard-foot) .dialpad-fab { display: none !important; }
     margin: 0; border-radius: 0; padding: 10px 14px; z-index: 30; border-top: 1px solid var(--border); }
   .deal-wizard { padding-bottom: 132px !important; }
 }
+
+/* ===== «Лиды → Настройки» (13.11.2026): справочники статусов, направлений, стран, источников ===== */
+.leads-head-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.lk-page { display: grid; gap: 12px; }
+.lk-tabs { padding: 0 16px; margin: 0; }
+.lk-head { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--border-soft); }
+.lk-hint { margin: 0; flex: 1 1 auto; color: var(--text-soft); font-size: 13px; line-height: 1.5; max-width: 640px; }
+.lk-head > .btn { margin-left: auto; flex-shrink: 0; }
+.lk-tabs .client-tab { flex: 0 0 auto; white-space: nowrap; }
+.lk-list { list-style: none; margin: 0; padding: 4px 0; }
+.lk-row {
+  display: grid; grid-template-columns: 20px 10px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 10px 20px; border-bottom: 1px solid var(--border-soft); background: var(--bg-card, #fff);
+  transition: background .12s, box-shadow .12s, opacity .12s;
+}
+.lk-row:last-child { border-bottom: 0; }
+.lk-row:hover { background: #FAFBFD; }
+.lk-row.is-dragging { opacity: .45; }
+.lk-row.is-over { box-shadow: inset 0 2px 0 var(--primary); }
+.lk-grip { display: flex; color: var(--text-light); cursor: grab; }
+.lk-dot { width: 10px; height: 10px; border-radius: 50%; }
+.lk-names { min-width: 0; }
+.lk-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.lk-sub { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 5px; font-size: 12.5px; color: var(--text-soft); }
+.lk-sub .lk-off { color: var(--warning); font-weight: 600; }
+.lk-tag {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px;
+  background: #EEF2F8; color: var(--text-soft); font-size: 11.5px; font-weight: 600; white-space: nowrap;
+}
+.lk-tag.is-closed { background: var(--danger-soft); color: #B91C1C; }
+.lk-actions { display: flex; align-items: center; }
+.lk-actions .icon-btn:disabled { opacity: .35; cursor: default; background: transparent; }
+.lk-empty { margin: 0; padding: 32px 20px; color: var(--text-soft); text-align: center; }
+.lk-palette { display: flex; flex-wrap: wrap; gap: 7px; }
+.lk-swatch {
+  position: relative; display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: 50%; background: #fff; color: var(--text-soft); cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(10, 13, 26, .12);
+}
+.lk-swatch.active { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--primary); }
+.lk-swatch.is-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.lk-preview { margin-top: 12px; }
+.lk-check-hint { margin: 2px 0 14px 28px; }
+.lk-form-err { margin-top: 12px; }
+.lk-move-text { margin: 0 0 14px; color: var(--text-soft); line-height: 1.5; }
+@media (max-width: 600px) {
+  .lk-head { flex-direction: column; align-items: stretch; padding: 12px; }
+  .lk-row { grid-template-columns: 10px minmax(0, 1fr); row-gap: 8px; padding: 10px 12px; }
+  .lk-grip { display: none; }
+  .lk-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .leads-settings-label { display: none; }
+}

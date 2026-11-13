@@ -1,5 +1,7 @@
 import { IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { ContactChannel, Direction, OnboardingStage, StudentStatus } from '@prisma/client';
+import { ContactChannel, OnboardingStage, StudentStatus } from '@prisma/client';
+import { Direction } from '../../common/lookup-keys';
+import { IsLookupKey } from '../../common/lookup-validators';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 
@@ -40,7 +42,7 @@ export class UpdateStudentDto {
   photoUrl?: string;
 
   @IsOptional()
-  @IsEnum(Direction)
+  @IsLookupKey('Выберите направление из списка')
   direction?: Direction;
 
   @IsOptional()

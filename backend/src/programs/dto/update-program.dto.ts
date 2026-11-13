@@ -1,5 +1,6 @@
 import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { Direction } from '@prisma/client';
+import { Direction } from '../../common/lookup-keys';
+import { IsLookupKey } from '../../common/lookup-validators';
 
 // Раньше эти поля принимались с одним только MaxLength — `<script>`,
 // `<img onerror=...>` лежали в БД и рендерились на публичном лендинге
@@ -21,7 +22,7 @@ export class UpdateProgramDto {
   // фиксированного города/специальности, или стоимость 0).
   @IsOptional() @IsString() @MaxLength(100) @Matches(NO_HTML, { message: 'city содержит HTML-теги' }) city?: string;
   @IsOptional() @IsString() @MaxLength(200) @Matches(NO_HTML, { message: 'major содержит HTML-теги' }) major?: string;
-  @IsOptional() @IsEnum(Direction) direction?: Direction;
+  @IsOptional() @IsLookupKey('Выберите направление из списка') direction?: Direction;
   @IsOptional() @IsNumber() @Min(0) @Max(10_000_000) cost?: number;
   @IsOptional() @IsString() @MaxLength(10) currency?: string;
   @IsOptional() @IsString() @MaxLength(80) @Matches(NO_HTML, { message: 'duration содержит HTML-теги' }) duration?: string;

@@ -2,18 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getPublicProgram, type Program } from '../programs';
 import { toTajik } from '../programLabels';
+import { useDirectionLabel } from '../lookups';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
 const API_ROOT = API_URL.replace(/\/api$/, '');
 
-const DIRECTION_LABEL: Record<string, string> = {
-  BACHELOR: 'Бакалавр',
-  MASTER: 'Магистр',
-  LANGUAGE: 'Курсҳои забонӣ',
-  LANGUAGE_COLLEGE: 'Забонӣ + коллеҷ',
-  LANGUAGE_BACHELOR: 'Забонӣ + бакалавр',
-  COLLEGE: 'Коллеҷ',
-};
 
 interface Scholarship {
   id: string;
@@ -36,6 +29,7 @@ function imgUrl(u: string): string {
  * URL: /program/:id
  */
 export default function PublicProgramDetail() {
+  const directionLabel = useDirectionLabel();
   const { id } = useParams<{ id: string }>();
   const [program, setProgram] = useState<Program | null>(null);
   const [scholarships, setScholarships] = useState<Scholarship[]>([]);
@@ -158,7 +152,7 @@ export default function PublicProgramDetail() {
             {/* Аудит-фикс: майдонҳои озод аз БД метавонанд русӣ бошанд —
                 toTajik() онҳоро тарҷума мекунад, то нимҷумлаи русӣ дар назди
                 нишонаи тоҷикӣ набошад. */}
-            <Row label="Самт" value={p.direction ? DIRECTION_LABEL[p.direction] : null} />
+            <Row label="Самт" value={p.direction ? directionLabel(p.direction) : null} />
             <Row label="Ихтисос" value={toTajik(p.major)} />
             <Row
               label="Арзиш / сол"

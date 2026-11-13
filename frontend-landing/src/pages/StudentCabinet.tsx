@@ -27,15 +27,8 @@ import Icon from '../Icon';
 import Loading from '../components/Loading';
 import { lkeys, optimistic, useOptimisticMutation } from '../queryClient';
 import { isFinishedApplicationStatus } from '../applicationStatus';
+import { useDirectionLabel } from '../lookups';
 
-const DIRECTION_LABEL: Record<string, string> = {
-  BACHELOR: 'Бакалавр',
-  MASTER: 'Магистр',
-  LANGUAGE: 'Курсҳои забонӣ',
-  LANGUAGE_COLLEGE: 'Забонӣ + коллеҷ',
-  LANGUAGE_BACHELOR: 'Забонӣ + бакалавр',
-  COLLEGE: 'Коллеҷ',
-};
 const STATUS_LABEL: Record<string, string> = {
   ACTIVE: 'Фаъол',
   PAUSED: 'Дар таваққуф',
@@ -63,6 +56,7 @@ const fmtBytes = (b: number) => {
 };
 
 export default function StudentCabinet() {
+  const directionLabel = useDirectionLabel();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [uploading, setUploading] = useState<string | null>(null);
@@ -451,7 +445,7 @@ export default function StudentCabinet() {
             <div className="stu-profile-info">
               <h1 className="stu-profile-name">{me.fullName}</h1>
               <div className="stu-badges">
-                <span className="stu-badge">{DIRECTION_LABEL[me.direction]}</span>
+                <span className="stu-badge">{directionLabel(me.direction)}</span>
                 <span className="stu-badge">Кабинети №{me.cabinet}</span>
                 <span className={`stu-badge stu-status-${me.status.toLowerCase()}`}>
                   {STATUS_LABEL[me.status]}

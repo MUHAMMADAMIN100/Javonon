@@ -11,7 +11,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApplicationSource, ApplicationStatus, Country, Direction, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
+import { ApplicationSource, ApplicationStatus, Country, Direction } from '../common/lookup-keys';
 import { Throttle } from '@nestjs/throttler';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -24,10 +25,12 @@ import { Permissions } from '../auth/permissions.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { parseDate } from '../common/query-date';
 import { isAccountantOnly, isElevated } from '../auth/role-utils';
+import { LookupsService } from '../lookups/lookups.service';
+import { LEGACY_STATUS_LABEL } from '../lookups/lookup-defaults';
 
 @Controller('applications')
 export class ApplicationsController {
-  constructor(private apps: ApplicationsService) {}
+  constructor(private apps: ApplicationsService, private lookups: LookupsService) {}
 
   // Лимит: 5 заявок в минуту с одного IP — защита от спама из формы лендинга.
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -106,18 +109,13 @@ export class ApplicationsController {
     // QA-3 (набл. 13): без страницы список можно ограничить (?limit=50).
     @Query('limit') limit?: string,
   ) {
-    // QA-fix #45: validate enum query params (раньше bad value → 500).
-    // Единый источник истины — Prisma enum'ы. Добавили значение в schema.prisma
-    // → prisma generate → фильтр здесь автоматически знает о новом значении.
-    // Раньше были ручные массивы, которые забывали синхронизировать (P2009 / 400).
-    const VALID_STATUS = Object.values(ApplicationStatus) as string[];
-    const VALID_DIR = Object.values(Direction) as string[];
-    const VALID_SOURCE = Object.values(ApplicationSource) as string[];
-    const VALID_COUNTRY = Object.values(Country) as string[];
-    if (status && !VALID_STATUS.includes(status)) throw new BadRequestException('Неизвестный статус');
-    if (direction && !VALID_DIR.includes(direction)) throw new BadRequestException('Неизвестное направление');
-    if (country && !VALID_COUNTRY.includes(country)) throw new BadRequestException('Неизвестная страна');
-    if (source && !VALID_SOURCE.includes(source)) throw new BadRequestException('Неизвестный источник');
+    // QA-fix #45: неизвестное значение фильтра — 400, а не пустой список.
+    // Источник истины — справочники «Лиды → Настройки» (13.11.2026); статус
+    // ещё и легаси-ключом старой воронки (старые строки читаются).
+    if (status && !this.lookups.has('LEAD_STATUS', status) && !LEGACY_STATUS_LABEL[status]) throw new BadRequestException('Неизвестный статус');
+    if (direction && !this.lookups.has('DIRECTION', direction)) throw new BadRequestException('Неизвестное направление');
+    if (country && !this.lookups.has('COUNTRY', country)) throw new BadRequestException('Неизвестная страна');
+    if (source && !this.lookups.has('LEAD_SOURCE', source)) throw new BadRequestException('Неизвестный источник');
     // search cap: без него юзер мог запросить ?search=AAA...×100k →
     // ILIKE %AAA% сканировал бы всю Application таблицу с гигантским
     // паттерном. 200 символов хватит для любого реального поиска.

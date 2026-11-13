@@ -7,8 +7,6 @@ import { useUI } from '../ui/Dialogs';
 import { absFileUrl } from '../lib/fileUrl';
 import { listPipelines, moveApplicationStage } from '../api/sales';
 import {
-  APPLICATION_STATUSES,
-  STATUS_BADGE,
   isClientNotifiedApplicationStatus,
   isLegacyApplicationStatus,
   type ApplicationStatus,
@@ -16,6 +14,7 @@ import {
 import { useApplicationStatusLabel } from '../lib/labels';
 import { tjFormatDate, tjYMD } from '../lib/tjTime';
 import { heroColor, heroInitials } from './ProfileParts';
+import { pillStyle, useLookups } from '../lib/lookups';
 
 /**
  * Карточка клиента — заявка (ApplicationDetail) и студент (StudentDetail).
@@ -199,16 +198,6 @@ export function ClientHero({
   );
 }
 
-const BADGE_TONE: Record<string, string> = {
-  'badge-info': 'info',
-  'badge-warning': 'warning',
-  'badge-gray': 'gray',
-  'badge-danger': 'danger',
-  'badge-success': 'success',
-};
-function statusTone(status: string): string {
-  return BADGE_TONE[STATUS_BADGE[status as ApplicationStatus] || 'badge-gray'] || 'gray';
-}
 
 /**
  * Таблетка-список: подпись и выбранное значение в одной рамке по ширине
@@ -262,13 +251,17 @@ export function StatusPill({ status, canEdit, busy, onChange }: {
 }) {
   const { t } = useT();
   const label = useApplicationStatusLabel();
-  const tone = statusTone(status);
+  // Цвет статуса — из «Лиды → Настройки»; без цвета — серая таблетка.
+  const L = useLookups();
+  const color = L.color('LEAD_STATUS', status);
+  const tone = color ? 'plain' : 'gray';
   if (!canEdit) {
-    return <span className={`client-pill is-status is-${tone}`} data-testid="client-status" title={t('app.field.status')}>{label(status)}</span>;
+    return <span className={`client-pill is-status is-${tone}`} style={pillStyle(color)} data-testid="client-status" title={t('app.field.status')}>{label(status)}</span>;
   }
   return (
     <PillSelect
       tone={`${tone} is-status`}
+      style={pillStyle(color)}
       testId="client-status"
       title={t('app.field.status')}
       value={status}
@@ -280,7 +273,7 @@ export function StatusPill({ status, canEdit, busy, onChange }: {
       {isLegacyApplicationStatus(status) && (
         <option value={status} disabled>{label(status)}</option>
       )}
-      {APPLICATION_STATUSES.map((s) => (
+      {L.keys('LEAD_STATUS').map((s) => (
         <option key={s} value={s}>{label(s)}</option>
       ))}
     </PillSelect>

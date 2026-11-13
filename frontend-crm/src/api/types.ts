@@ -21,13 +21,8 @@ export const ROLE_LABEL: Record<Role, string> = localized('role', {
   TEACHER: 'Учитель',
   EMPLOYEE: 'Менеджер по продажам',
 });
-export type Direction =
-  | 'BACHELOR'
-  | 'MASTER'
-  | 'LANGUAGE'
-  | 'LANGUAGE_COLLEGE'
-  | 'LANGUAGE_BACHELOR'
-  | 'COLLEGE';
+/** Ключ значения справочника «Лиды → Настройки» (13.11.2026): список правится в CRM. */
+export type Direction = string;
 /**
  * Страна, которую клиент выбирает в форме лендинга («Кишвар»).
  * Соответствует Prisma enum Country (backend/prisma/schema.prisma) —
@@ -37,14 +32,8 @@ export type Direction =
  * Заменяет собой старый вопрос «Ҳадаф» на лендинге, но НЕ заменяет
  * Direction: направление менеджер по-прежнему проставляет руками в CRM.
  */
-export type Country =
-  | 'USA'
-  | 'KOREA'
-  | 'CHINA'
-  | 'LATVIA'
-  | 'MALAYSIA'
-  | 'ITALY'
-  | 'GERMANY';
+/** Ключ значения справочника «Лиды → Настройки» (13.11.2026): список правится в CRM. */
+export type Country = string;
 
 /** Порядок как на лендинге — чтобы дропдаун CRM читался так же, как форма. */
 export const COUNTRIES: Country[] = [
@@ -92,42 +81,14 @@ export const COUNTRY_LABEL: Record<Country, string> = localized('country', {
  * них держим — иначе старая заявка отрисуется пустым бейджем с сырым ключом
  * enum.
  */
-export type ApplicationStatus =
-  // ===== актуальные =====
-  | 'NEW_LEAD'
-  | 'IN_PROCESSING'
-  | 'ONLINE_CONSULTATION'
-  | 'OFFLINE_CONSULTATION'
-  | 'THINKING'
-  | 'OUT_OF_TOWN'
-  | 'UNDER_17'
-  | 'POTENTIAL_LEAD'
-  | 'LOW_QUALITY_LEAD'
-  | 'SUCCESSFUL_LEAD'
-  // ===== legacy (мигрируются скриптом migrate-lead-statuses.ts) =====
-  | 'NEW'
-  | 'DOCS_REVIEW'
-  | 'DOCS_SUBMITTED'
-  | 'PRE_ADMISSION'
-  | 'AWAITING_PAYMENT'
-  | 'ENROLLED'
-  | 'IN_PROGRESS'
-  | 'COMPLETED';
+/** Ключ значения справочника «Лиды → Настройки» (13.11.2026): список правится в CRM. */
+export type ApplicationStatus = string;
 
 // Источник заявки — соответствует Prisma enum ApplicationSource
 // (backend/prisma/schema.prisma). Значения обязаны совпадать с БД, иначе
 // backend вернёт 400 «Неизвестный источник».
-export type ApplicationSource =
-  | 'LANDING_FORM'
-  | 'SELF_REGISTRATION'
-  | 'REFERRAL'
-  | 'INSTAGRAM'
-  | 'TELEGRAM'
-  | 'GOOGLE_ADS'
-  | 'TIKTOK'
-  | 'WORD_OF_MOUTH'
-  | 'EVENT'
-  | 'OTHER';
+/** Ключ значения справочника «Лиды → Настройки» (13.11.2026): список правится в CRM. */
+export type ApplicationSource = string;
 
 /**
  * Источники, которые сотрудник ставит руками (зеркало STAFF_ALLOWED_SOURCES на

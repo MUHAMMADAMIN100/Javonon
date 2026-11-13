@@ -121,6 +121,12 @@ function step(key: StudentStageKey): StageResolution {
  */
 export function resolveStudentStage(
   status: string | null | undefined,
+  /**
+   * Статус из справочника CRM («Лиды → Настройки»), которого шкала не знает:
+   * основатель добавил его сам. С подписью для клиента — это «идёт работа»,
+   * без подписи или закрытый — внутренний (нейтральная карточка).
+   */
+  custom?: { clientLabel: string | null; isClosed: boolean } | null,
 ): StageResolution {
   if (!status) return { kind: 'none' };
   // Порядок важен: «успешный» проверяем первым, чтобы шкала гарантированно
@@ -131,6 +137,9 @@ export function resolveStudentStage(
   if (isInProcessingApplicationStatus(status)) return step('IN_WORK');
 
   const ungrouped = UNGROUPED_STAGE[status as UngroupedApplicationStatus];
-  if (!ungrouped) return { kind: 'unknown' };
+  if (!ungrouped) {
+    if (custom) return custom.clientLabel && !custom.isClosed ? step('IN_WORK') : { kind: 'internal' };
+    return { kind: 'unknown' };
+  }
   return ungrouped === 'internal' ? { kind: 'internal' } : step(ungrouped);
 }

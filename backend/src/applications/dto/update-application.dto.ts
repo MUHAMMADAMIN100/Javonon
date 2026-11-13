@@ -1,31 +1,18 @@
 import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { ApplicationStatus, ContactChannel, Country, Direction } from '@prisma/client';
-import { ACTIVE_APPLICATION_STATUSES } from '../../common/application-status';
+import { ContactChannel } from '@prisma/client';
+import { ApplicationStatus, Country, Direction } from '../../common/lookup-keys';
 import { NO_HTML_RE } from './create-application.dto';
-import { STAFF_ALLOWED_SOURCES, StaffApplicationSource } from './create-staff-application.dto';
+import { IsLookupKey } from '../../common/lookup-validators';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 
 export class UpdateApplicationDto {
-  // ВНИМАНИЕ: здесь НЕ @IsEnum(ApplicationStatus).
-  //
-  // Prisma-enum по-прежнему содержит все восемь легаси-значений (NEW,
-  // IN_PROGRESS, DOCS_REVIEW, DOCS_SUBMITTED, PRE_ADMISSION, AWAITING_PAYMENT,
-  // COMPLETED, ENROLLED) и удалить их нельзя: Postgres не дропает значения, на
-  // которые ссылаются строки, а `start:prod` делает `prisma db push` без
-  // --accept-data-loss. То есть @IsEnum пропускал бы легаси-статус на запись —
-  // и заявка откатывалась бы ЗА уже отработавшую миграцию (повторно её никто
-  // не перенесёт), плюс клиенту уходила бы SMS «Заявка возвращена с …».
-  //
-  // Ограничиваем набор до ACTIVE_APPLICATION_STATUSES — того же списка, что
-  // CRM показывает в дропдауне. Валидация серверная СПЕЦИАЛЬНО: главный
-  // источник таких запросов — вкладка CRM, открытая до деплоя (Vercel отдаёт
-  // хэшированные бандлы как immutable, поэтому старый JS в ней живёт до
-  // перезагрузки и всё ещё умеет слать DOCS_REVIEW). Такой клиент получит 400.
+  // Статус — ключ из справочника «Лиды → Настройки». Есть ли он там, проверяет
+  // ApplicationsService.update (isWritableStatus): легаси-значения старой
+  // воронки в справочнике отсутствуют, поэтому записать их нельзя — старая
+  // вкладка CRM получит 400, а не откатит заявку за миграцию.
   @IsOptional()
-  @IsIn(ACTIVE_APPLICATION_STATUSES, {
-    message: `status: допустимы только актуальные статусы (${ACTIVE_APPLICATION_STATUSES.join(', ')}). Старые значения доступны только для чтения — обновите страницу CRM.`,
-  })
+  @IsLookupKey('Выберите статус из списка')
   status?: ApplicationStatus;
 
   @IsOptional()
@@ -68,7 +55,7 @@ export class UpdateApplicationDto {
   // Направление менеджер по-прежнему правит руками — у заявок с лендинга
   // здесь лежит плейсхолдер (см. ApplicationsService.DEFAULT_DIRECTION).
   @IsOptional()
-  @IsEnum(Direction)
+  @IsLookupKey('Выберите направление из списка')
   direction?: Direction;
 
   /**
@@ -77,12 +64,12 @@ export class UpdateApplicationDto {
    * определяются автоматически и не меняются (см. ApplicationsService.update).
    */
   @IsOptional()
-  @IsIn(STAFF_ALLOWED_SOURCES as readonly string[], { message: 'Выберите источник из списка' })
-  source?: StaffApplicationSource;
+  @IsLookupKey('Выберите источник из списка')
+  source?: string;
 
   // Страна, выбранная клиентом на лендинге; менеджер может исправить.
   @IsOptional()
-  @IsEnum(Country)
+  @IsLookupKey('Выберите страну из списка')
   country?: Country;
 
   // Те же правила, что у «Нового лида» (QA №23): раньше карточка сохраняла

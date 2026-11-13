@@ -5,6 +5,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { ReferralsService } from '../partners/referrals.service';
+import { LookupsService } from '../lookups/lookups.service';
 
 function generatePassword(length = 8): string {
   return secureRandomString('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789', length);
@@ -32,6 +33,7 @@ export class StudentAuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private mail: MailService,
+    private lookups: LookupsService,
     @Optional() private referrals?: ReferralsService,
   ) {}
 
@@ -118,6 +120,7 @@ export class StudentAuthService {
     // ниже пометить заявку directionConfirmed=false: плейсхолдер, попавший
     // в БД как «подтверждённый», неотличим от настоящего ответа клиента и
     // утекает в срез дашборда «по направлениям» и в фильтр списка заявок.
+    this.lookups.assert('DIRECTION', dto.direction, 'Некорректное направление');
     const directionAnswered = dto.direction != null;
     const direction: any = dto.direction || 'BACHELOR';
     // Cabinet auto-assigned by direction.

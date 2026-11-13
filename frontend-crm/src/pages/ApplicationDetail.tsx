@@ -6,7 +6,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assignApplicationManager, deleteApplication, getApplication, leadDeals, updateApplication } from '../api/applications';
 import { getStudent, updateStudent, uploadPhoto } from '../api/students';
 import type { Application, ApplicationSource, ApplicationStatus, Country, Direction, Student } from '../api/types';
-import { COUNTRIES, SOURCE_LABEL, STAFF_SOURCES } from '../api/types';
 import PhoneInput from '../components/PhoneInput';
 import { leadPhoneError, phoneHasOwnDigits } from '../lib/leadPhone';
 import { isFinishedApplicationStatus, isNewLeadApplicationStatus } from '../api/types';
@@ -56,6 +55,10 @@ import { canOpenDeals } from '../components/navGroups';
 import QueryErrorState from '../components/QueryErrorState';
 import { DetailSkeleton } from '../components/Skeleton';
 import { ClientOverviewCards, ClientTabsBar, useClientTab, useTimeline } from '../components/ClientTabs';
+import { useLookups } from '../lib/lookups';
+import { MACHINE_SOURCES } from '../api/lookups';
+import LookupOptions from '../components/LookupOptions';
+import { useSourceLabel } from '../lib/labels';
 
 /**
  * Карточка заявки. Устроена как карточка сотрудника: шапка (аватар, имя,
@@ -74,6 +77,7 @@ export default function ApplicationDetail() {
   const { t } = useT();
   useFileToken(); // ссылки на файлы — с файловым токеном, перерисовка когда он придёт
   const directionLabel = useDirectionLabel();
+  const sourceLabel = useSourceLabel();
   const studentStatusLabel = useStudentStatusLabel();
   const channelLabel = useChannelLabel();
   const countryLabel = useCountryLabel();
@@ -282,7 +286,7 @@ export default function ApplicationDetail() {
       <BackButton fallback="/leads" />
 
       <ClientHero
-        eyebrow={`${t('client.eyebrow.lead')} · ${t('client.meta.created').replace('{date}', tjFormatDate(app.createdAt))}${app.source ? ` · ${t('client.meta.source').replace('{source}', SOURCE_LABEL[app.source as ApplicationSource] ?? app.source)}` : ''}`}
+        eyebrow={`${t('client.eyebrow.lead')} · ${t('client.meta.created').replace('{date}', tjFormatDate(app.createdAt))}${app.source ? ` · ${t('client.meta.source').replace('{source}', sourceLabel(app.source))}` : ''}`}
         name={withStudent ? student!.fullName : app.fullName}
         avatarId={app.studentId || app.id}
         photoUrl={withStudent ? student!.photoUrl : null}
@@ -552,7 +556,9 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const changed = (k: keyof typeof form) => form[k].trim() !== initial[k].trim();
   /** «Сайт», «Самозапись», «Реферал» поставила система — источник не меняется. */
-  const sourceLocked = !STAFF_SOURCES.includes((app.source || 'OTHER') as ApplicationSource);
+  // «Сайт», «Самозапись», «Реферал» поставила система — источник не меняется.
+  const sourceLocked = MACHINE_SOURCES.includes(app.source || 'OTHER');
+  const L = useLookups();
   const waValue = sameWa ? form.phone : form.whatsappPhone;
   const waChanged = waValue.trim() !== initial.whatsappPhone.trim() && !(sameWa && !initial.whatsappPhone && !changed('phone'));
 
@@ -657,7 +663,7 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
       <EditField label={t('app.field.country')}>
         <CrmSelect className="crm-select" value={form.country} onChange={(e) => set({ country: e.target.value as Country | '' })} data-testid="edit-country">
           <option value="">—</option>
-          {COUNTRIES.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+          <LookupOptions kind="COUNTRY" current={form.country || null} />
         </CrmSelect>
       </EditField>
       <EditField label={t('app.field.mainPhone')} error={err('phone')}>
@@ -712,14 +718,13 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
       <EditField label={t('app.field.direction')}>
         <CrmSelect className="crm-select" value={form.direction} onChange={(e) => set({ direction: e.target.value as Direction | '' })} data-testid="edit-direction">
           <option value="">{t('app.direction.notChosen')}</option>
-          <DirectionOptions />
+          <DirectionOptions current={form.direction || null} />
         </CrmSelect>
       </EditField>
       {/* QA-3 (BUG-07): источник — в карточке, как и в «Новом лиде». */}
       <EditField label={t('app.field.source')}>
         <CrmSelect className="crm-select" value={form.source} onChange={(e) => set({ source: e.target.value })} disabled={sourceLocked} data-testid="edit-source">
-          {sourceLocked && <option value={form.source}>{SOURCE_LABEL[form.source as ApplicationSource]}</option>}
-          {STAFF_SOURCES.map((s) => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
+          <LookupOptions kind="LEAD_SOURCE" current={form.source || null} only={L.staffSources} />
         </CrmSelect>
         {sourceLocked && <div className="form-hint-text">{t('leads.source.locked')}</div>}
       </EditField>

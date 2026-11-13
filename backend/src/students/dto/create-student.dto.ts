@@ -1,5 +1,7 @@
 import { IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { ContactChannel, Direction, StudentStatus } from '@prisma/client';
+import { ContactChannel, StudentStatus } from '@prisma/client';
+import { Direction } from '../../common/lookup-keys';
+import { IsLookupKey } from '../../common/lookup-validators';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
 // QA-fix: запрет HTML/script-тегов в текстовых полях (XSS protection).
@@ -43,7 +45,7 @@ export class CreateStudentDto {
   @MaxLength(500)
   photoUrl?: string;
 
-  @IsEnum(Direction)
+  @IsLookupKey('Выберите направление из списка')
   direction: Direction;
 
   @IsOptional()
