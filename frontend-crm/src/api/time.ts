@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type TimeEntryStatus = 'WORKING' | 'ON_LUNCH' | 'OFF';
+export type TimeEntryStatus = 'WORKING' | 'ON_LUNCH' | 'OFF' | 'ON_BREAK';
 
 export interface TimeEntry {
   id: string;

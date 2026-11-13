@@ -5,6 +5,8 @@ import { TimeEntryStatus } from '@prisma/client';
 import { SettingsService } from '../settings/settings.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { tjLocalDay, tjStartOfDay, tjStartOfNextDay } from '../common/tj-time';
+import { tjCalendarDay } from '../common/tj-time';
+import { Prisma } from '@prisma/client';
 
 // Норма прихода в офис — 09:00 локального времени.
 const OFFICE_START_HOUR = 9;
@@ -61,10 +63,10 @@ export class TimeTrackingService {
     private realtime: RealtimeGateway,
   ) {}
 
-  /** Возвращает активную запись (WORKING или ON_LUNCH) либо null. */
+  /** Возвращает активную запись (работает, обед или перерыв) либо null. */
   async getActive(userId: string) {
     return this.prisma.timeEntry.findFirst({
-      where: { userId, status: { in: [TimeEntryStatus.WORKING, TimeEntryStatus.ON_LUNCH] } },
+      where: { userId, status: { in: [TimeEntryStatus.WORKING, TimeEntryStatus.ON_LUNCH, TimeEntryStatus.ON_BREAK] } },
       orderBy: { clockIn: 'desc' },
     });
   }
@@ -199,6 +201,8 @@ export class TimeTrackingService {
       });
       return { entry: created, action: 'clockIn' as const };
     });
+    // «Приду позже» одобрено — опоздание до обещанного времени не считается.
+    if (action === 'clockIn') await this.applyApprovedNotice(entry.id);
     // По ТЗ — посещаемость у основателя обновляется мгновенно.
     this.realtime.emitStaff('attendance:updated', { userId, entryId: entry.id, action });
     return entry;
@@ -367,7 +371,7 @@ export class TimeTrackingService {
    * Закрыть забытую сессию: уход = конец рабочего дня по графику (но не
    * раньше последней отметки), обед, если он не закрыт, — до этого момента.
    */
-  private async closeAutomatically(active: { id: string; userId: string; clockIn: Date; lunchIn: Date | null; lunchOut: Date | null; status: TimeEntryStatus; totalLunchMinutes: number; pausedMinutes?: number }) {
+  private async closeAutomatically(active: { id: string; userId: string; clockIn: Date; lunchIn: Date | null; lunchOut: Date | null; status: TimeEntryStatus; totalLunchMinutes: number; pausedMinutes?: number; personalBreakMinutes?: number }) {
     const lastTouch = active.lunchIn || active.lunchOut || active.clockIn;
     const end = await this.scheduledEnd(active.userId, active.clockIn);
     const at = end.getTime() > lastTouch.getTime() ? end : lastTouch;
@@ -375,6 +379,7 @@ export class TimeTrackingService {
     if (active.status === TimeEntryStatus.ON_LUNCH && active.lunchOut) {
       lunch += Math.max(0, Math.round((at.getTime() - active.lunchOut.getTime()) / 60000));
     }
+    const personal = (active.personalBreakMinutes ?? 0) + (active.status === TimeEntryStatus.ON_BREAK ? await this.closeOpenBreak(active.id, at) : 0);
     const wallMin = Math.max(0, Math.round((at.getTime() - active.clockIn.getTime()) / 60000));
     await this.prisma.timeEntry.update({
       where: { id: active.id },
@@ -382,7 +387,8 @@ export class TimeTrackingService {
         status: TimeEntryStatus.OFF,
         clockOut: at,
         totalLunchMinutes: lunch,
-        totalMinutes: Math.max(0, wallMin - lunch - (active.pausedMinutes ?? 0)),
+        personalBreakMinutes: personal,
+        totalMinutes: Math.max(0, wallMin - lunch - (active.pausedMinutes ?? 0) - personal),
         autoClosed: true,
       },
     });
@@ -399,7 +405,7 @@ export class TimeTrackingService {
     try {
       const open = await this.prisma.timeEntry.findMany({
         where: { clockOut: null, status: { not: TimeEntryStatus.OFF } },
-        select: { id: true, userId: true, clockIn: true, lunchIn: true, lunchOut: true, status: true, totalLunchMinutes: true, pausedMinutes: true },
+        select: { id: true, userId: true, clockIn: true, lunchIn: true, lunchOut: true, status: true, totalLunchMinutes: true, pausedMinutes: true, personalBreakMinutes: true },
       });
       const now = Date.now();
       for (const e of open) {
@@ -421,9 +427,12 @@ export class TimeTrackingService {
       extraLunch = Math.max(0, Math.round((now.getTime() - active.lunchOut.getTime()) / 60000));
     }
     const totalLunch = active.totalLunchMinutes + extraLunch;
+    // Ушёл прямо с перерыва — перерыв закрывается тем же моментом.
+    const personal = active.personalBreakMinutes + (active.status === TimeEntryStatus.ON_BREAK ? await this.closeOpenBreak(active.id, now) : 0);
     const totalMs = now.getTime() - active.clockIn.getTime();
-    // Перерыв между «закончил» и «начал снова» в тот же день — не работа (QA-3).
-    const totalMin = Math.max(0, Math.round(totalMs / 60000) - totalLunch - active.pausedMinutes);
+    // Перерыв между «закончил» и «начал снова» в тот же день — не работа (QA-3),
+    // личные перерывы — тоже (13.11.2026).
+    const totalMin = Math.max(0, Math.round(totalMs / 60000) - totalLunch - active.pausedMinutes - personal);
     // ПЕРЕРАБОТКА УБРАНА (решение учредителя): раньше здесь считалась норма
     // дня по графику и overtimeMinutes = totalMin − норма, и значение
     // писалось в TimeEntry. Больше не считаем и не пишем — колонка
@@ -438,10 +447,60 @@ export class TimeTrackingService {
         clockOut: now,
         totalMinutes: totalMin,
         totalLunchMinutes: totalLunch,
+        personalBreakMinutes: personal,
       },
     });
     this.realtime.emitStaff('attendance:updated', { userId, entryId: upd.id, action: 'clockOut' });
     return upd;
+  }
+
+  /**
+   * Закрыть открытый перерыв («по работе» / «личное») моментом `end`.
+   * Возвращает личные минуты — они в отработанное не входят.
+   */
+  async closeOpenBreak(entryId: string, end: Date, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<number> {
+    const open = await db.timeBreak.findFirst({ where: { entryId, endedAt: null } });
+    if (!open) return 0;
+    const minutes = Math.max(0, Math.round((end.getTime() - open.startedAt.getTime()) / 60000));
+    await db.timeBreak.update({ where: { id: open.id }, data: { endedAt: end, minutes } });
+    return open.kind === 'PERSONAL' ? minutes : 0;
+  }
+
+  /**
+   * «Приду позже» одобрено (13.11.2026): пришёл не позже обещанного — опоздание
+   * прощено (как одобренная причина: штраф дня снимается, запись закрыта для
+   * шкалы); пришёл позже обещанного — опоздание считается от обещанного времени.
+   */
+  async applyApprovedNotice(entryId: string) {
+    const e = await this.prisma.timeEntry.findUnique({ where: { id: entryId } });
+    if (!e) return;
+    const day = tjLocalDay(e.clockIn);
+    const notice = await this.prisma.lateNotice.findUnique({
+      where: { userId_date: { userId: e.userId, date: new Date(`${day}T00:00:00.000Z`) } },
+    });
+    if (!notice || notice.status !== 'APPROVED') return;
+    const { minutesFromMidnight } = localDayAndMinutes(e.clockIn);
+    const over = Math.max(0, minutesFromMidnight - notice.plannedMinute);
+    const planned = `${String(Math.floor(notice.plannedMinute / 60)).padStart(2, '0')}:${String(notice.plannedMinute % 60).padStart(2, '0')}`;
+    if (over === 0) {
+      await this.prisma.penalty.deleteMany({
+        where: { userId: e.userId, reason: 'LATE_ARRIVAL', applied: false, date: tjCalendarDay(e.clockIn) },
+      });
+      await this.prisma.timeEntry.update({
+        where: { id: e.id },
+        data: {
+          lateExcuseStatus: 'APPROVED' as any,
+          lateExcuseReason: `Предупредил заранее: приду в ${planned}${notice.reason ? ` — ${notice.reason}` : ''}`,
+          lateExcuseAt: e.lateExcuseAt ?? new Date(),
+          lateExcuseReviewedAt: notice.reviewedAt ?? new Date(),
+          lateExcuseReviewedBy: notice.reviewedById,
+          latePenaltyApplied: true,
+        },
+      });
+    } else if (!e.latePenaltyApplied) {
+      await this.prisma.timeEntry.update({ where: { id: e.id }, data: { lateMinutes: Math.min(e.lateMinutes, over) } });
+    }
+    this.realtime.emitStaff('attendance:updated', { userId: e.userId, entryId: e.id, action: 'notice' });
   }
 
   async history(userId: string, opts: { from?: Date; to?: Date; take?: number } = {}) {

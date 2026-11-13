@@ -24,6 +24,7 @@ import { tr, useT } from '../lib/i18n';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { useEscClose } from '../lib/useEscClose';
 import { checkProofFile, PROOF_ACCEPT, type ProofKind } from '../lib/proofFile';
+import { resumeShift } from '../api/shift';
 
 function fmtMin(min: number): string {
   if (min <= 0) return `0${tr('time.m')}`;
@@ -106,6 +107,7 @@ export default function TimeTracker() {
   useRealtimeEvent('excuse:approved', () => {
     qc.invalidateQueries({ queryKey: todayKey });
     qc.invalidateQueries({ queryKey: historyKey });
+    qc.invalidateQueries({ queryKey: ['shift'] });
     toast(t('excuses.status.APPROVED'), 'success');
   });
   useRealtimeEvent('excuse:rejected', () => {
@@ -130,8 +132,15 @@ export default function TimeTracker() {
   ]);
 
   const status = today?.status || 'OFF';
+  const refreshAll = () => {
+    qc.invalidateQueries({ queryKey: todayKey });
+    qc.invalidateQueries({ queryKey: historyKey });
+    qc.invalidateQueries({ queryKey: ['shift'] });
+  };
   const isWorking = status === 'WORKING';
   const isOnLunch = status === 'ON_LUNCH';
+  // Перерыв «по работе» или «личное» (кнопка смены в меню, 13.11.2026).
+  const isOnBreak = status === 'ON_BREAK';
   const isClockedOut = !today || status === 'OFF';
   // Сегодня уже отмечался и закончил день: «Начать» = продолжить ту же запись.
   const resumeDay = !!today && status === 'OFF';
@@ -246,7 +255,7 @@ export default function TimeTracker() {
     }
   }
 
-  const statusLabel = isClockedOut ? t('workday.notWorking') : isWorking ? t('time.status.working') : t('time.status.lunch');
+  const statusLabel = isClockedOut ? t('workday.notWorking') : isWorking ? t('time.status.working') : isOnBreak ? t('sh.onBreak') : t('time.status.lunch');
   const statusColor = isClockedOut
     ? 'var(--text-light)'
     : isWorking
@@ -424,6 +433,26 @@ export default function TimeTracker() {
               </motion.button>
             </>
           )}
+          {isOnBreak && (
+            <>
+              <motion.button
+                className="btn btn-primary"
+                onClick={async () => {
+                  try { await resumeShift(); refreshAll(); } catch (e: any) { toast(e?.response?.data?.message || t('toast.error'), 'error'); }
+                }}
+                disabled={loading}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                data-testid="time-break-resume"
+              >
+                <Icon name="play_arrow" size={18} />
+                {t('sh.resume')}
+              </motion.button>
+              <motion.button className="btn btn-secondary" onClick={onClockOut} disabled={loading} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                {t('time.clockOut')}
+              </motion.button>
+            </>
+          )}
           {isOnLunch && (
             <>
               <motion.button
@@ -593,7 +622,7 @@ function ProofFileInput({
   );
 }
 
-function ClockInModal({
+export function ClockInModal({
   resume,
   onCancel,
   onConfirm,

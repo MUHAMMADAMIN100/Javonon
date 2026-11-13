@@ -288,7 +288,7 @@ export class CronService implements OnApplicationBootstrap {
     try {
       this.logger.log('Cron: remindClockOut');
       const open = await this.prisma.timeEntry.findMany({
-        where: { status: { in: ['WORKING', 'ON_LUNCH'] } },
+        where: { status: { in: ['WORKING', 'ON_LUNCH', 'ON_BREAK'] } },
         include: { user: { select: { id: true, fullName: true, isActive: true } } },
       });
       for (const e of open) {

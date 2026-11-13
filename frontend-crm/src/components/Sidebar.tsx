@@ -23,6 +23,7 @@ import { resolveLandingBaseUrl } from '../lib/landingUrl';
 import { useT } from '../lib/i18n';
 import UserMenu from './UserMenu';
 import { buildNavCtx, visibleGroups, resolveRoute, PROFILE_ITEM, type VisibleGroup, type NavItem } from './navGroups';
+import ShiftButton from './ShiftWidget';
 
 /**
  * Меню CRM.
@@ -342,6 +343,9 @@ export default function Sidebar() {
                 <Icon name="close" size={22} />
               </button>
             </div>
+            <div className="more-shift">
+              <ShiftButton variant="sheet" />
+            </div>
             <div className="user-menu-foot is-mobile">
               <UserMenu variant="mobile" {...userMenuProps} />
             </div>
@@ -576,11 +580,30 @@ export default function Sidebar() {
               >
                 {renderItems(panelGroup)}
               </motion.nav>
+              {/* Низ панели — как развёрнутое меню Sabt: смена, кто вошёл, обновить, выйти. */}
+              <div className="sidebar-panel-foot" data-testid="sidebar-panel-foot">
+                <ShiftButton variant="panel" />
+                <div className="panel-user">
+                  <span className="panel-user-avatar" aria-hidden="true">{initials}</span>
+                  <span className="panel-user-text">
+                    <b>{user?.fullName ?? ''}</b>
+                    <small>{displayRoleLabel(user as any)}</small>
+                  </span>
+                  <button type="button" className="panel-user-btn" onClick={() => window.location.reload()} title={t('sh.reload')} aria-label={t('sh.reload')} data-testid="panel-reload">
+                    <Icon name="refresh" size={18} />
+                  </button>
+                  <button type="button" className="panel-user-btn is-danger" onClick={logout} title={t('auth.logout')} aria-label={t('auth.logout')} data-testid="panel-logout">
+                    <Icon name="logout" size={18} />
+                  </button>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
       <div className="sidebar-foot rail-foot user-menu-foot">
+        {/* «Начать работу» — всегда под рукой (13.11.2026, как в Sabt). */}
+        <ShiftButton variant="rail" />
         <UserMenu variant="rail" {...userMenuProps} />
       </div>
       {pwdModal}

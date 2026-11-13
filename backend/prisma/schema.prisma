@@ -26,6 +26,92 @@ enum TimeEntryStatus {
   WORKING // clocked in, not on lunch
   ON_LUNCH // на обеде
   OFF // закончил день
+  // Перерыв «по работе» или «личное» (13.11.2026, как в Sabt): отрезок — в TimeBreak.
+  ON_BREAK
+}
+
+/// Причина перерыва (обед — прежние lunchOut/lunchIn TimeEntry).
+enum TimeBreakKind {
+  WORK // выехал по работе — время идёт в часы
+  PERSONAL // личное — в часы не идёт
+}
+
+/// Отрезок перерыва внутри рабочего дня (13.11.2026).
+model TimeBreak {
+  id        String        @id @default(uuid())
+  entryId   String
+  entry     TimeEntry     @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  userId    String
+  kind      TimeBreakKind
+  startedAt DateTime
+  endedAt   DateTime?
+  minutes   Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  @@index([entryId])
+  @@index([userId, startedAt])
+}
+
+/// «Приду позже — предупредить заранее»: одобренная снимает опоздание
+/// до указанного времени (13.11.2026, как в Sabt).
+model LateNotice {
+  id            String       @id @default(uuid())
+  userId        String
+  user          User         @relation("LateNoticeUser", fields: [userId], references: [id], onDelete: Cascade)
+  /// Календарный день по Душанбе (UTC-полночь).
+  date          DateTime     @db.Date
+  /// Во сколько придёт: минуты от полуночи по Душанбе.
+  plannedMinute Int
+  reason        String?
+  status        ExcuseStatus @default(PENDING)
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime     @default(now())
+
+  @@unique([userId, date])
+  @@index([status])
+}
+
+/// «Забыл отметить — поправить время»: до решения руководителя в табеле
+/// остаётся то, что записала система (13.11.2026).
+model ShiftEditRequest {
+  id              String       @id @default(uuid())
+  userId          String
+  user            User         @relation("ShiftEditUser", fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime     @db.Date
+  /// start — приход, end — уход
+  field           String
+  requestedMinute Int
+  /// Что стояло в табеле на момент просьбы (минуты по Душанбе), null — не было.
+  currentMinute   Int?
+  note            String?
+  status          ExcuseStatus @default(PENDING)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime     @default(now())
+
+  @@index([status])
+  @@index([userId, date])
+}
+
+/// Отгул, отпуск, больничный, праздник — отмечает руководитель (13.11.2026).
+enum AbsenceKind {
+  DAYOFF
+  VACATION
+  SICK
+  HOLIDAY
+}
+
+model ShiftAbsence {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation("ShiftAbsenceUser", fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime    @db.Date
+  kind        AbsenceKind
+  createdById String?
+  createdAt   DateTime    @default(now())
+
+  @@unique([userId, date])
 }
 
 // Статус одобрения причины опоздания основателем.
@@ -224,6 +310,9 @@ model User {
   academyExpelledStudents Student[]      @relation("StudentAcademyExpelledBy")
   academyLevelChanges    AcademyLevelChange[] @relation("AcademyLevelChangedBy")
   academyCompletedGroups StudyGroup[]    @relation("StudyGroupCompletedBy")
+  lateNotices        LateNotice[]       @relation("LateNoticeUser")
+  shiftEditRequests  ShiftEditRequest[] @relation("ShiftEditUser")
+  shiftAbsences      ShiftAbsence[]     @relation("ShiftAbsenceUser")
 }
 
 // ============================================================
@@ -810,6 +899,9 @@ model TimeEntry {
   // QA-3 (BUG-30): минуты между «Закончить день» и повторным «Начать работу»
   // в тот же день. День остаётся одной записью, пауза в отработанное не входит.
   pausedMinutes             Int             @default(0)
+  // Перерывы «личное» за день (в отработанное не входят); «по работе» — входят.
+  personalBreakMinutes      Int             @default(0)
+  breaks                    TimeBreak[]
   // Опоздание относительно нормы (в минутах). Расчёт: clockIn - 09:00.
   lateMinutes               Int             @default(0)
   // Опоздание после обеда (lunchIn - scheduled lunch end). Штраф
