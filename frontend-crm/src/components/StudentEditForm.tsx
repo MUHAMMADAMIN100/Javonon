@@ -11,6 +11,7 @@ import { useT } from '../lib/i18n';
 import { useChannelLabel, useOnboardingLabel, useStudentStatusLabel } from '../lib/labels';
 import { tjDateInput } from '../lib/tjTime';
 import { CustomFieldInputs, draftChanged, draftToPayload, toDraft, useLeadFields, validateDraft, type CustomDraft } from './CustomFields';
+import LookupOptions from './LookupOptions';
 
 export type StudentPatch = Parameters<typeof updateStudent>[1];
 
@@ -160,11 +161,7 @@ export default function StudentEditForm({ student, withOnboarding, saving, onSav
       <EditField label={t('app.field.preferredChannel')}>
         <CrmSelect className="crm-select" value={form.preferredChannel} onChange={(e) => set({ preferredChannel: e.target.value })}>
           <option value="">—</option>
-          <option value="WHATSAPP">{channelLabel('WHATSAPP')}</option>
-          <option value="PHONE">{channelLabel('PHONE')}</option>
-          <option value="INSTAGRAM">{channelLabel('INSTAGRAM')}</option>
-          <option value="TELEGRAM">{channelLabel('TELEGRAM')}</option>
-          <option value="EMAIL">{channelLabel('EMAIL')}</option>
+          <LookupOptions kind="CONTACT_CHANNEL" />
         </CrmSelect>
       </EditField>
       <EditField label={t('app.field.birthday')}>
@@ -199,20 +196,13 @@ export default function StudentEditForm({ student, withOnboarding, saving, onSav
       </EditField>
       <EditField label={t('common.status')}>
         <CrmSelect className="crm-select" value={form.status} onChange={(e) => set({ status: e.target.value as StudentStatus })}>
-          <option value="ACTIVE">{statusLabel('ACTIVE')}</option>
-          <option value="PAUSED">{statusLabel('PAUSED')}</option>
-          <option value="GRADUATED">{statusLabel('GRADUATED')}</option>
-          <option value="ARCHIVED">{statusLabel('ARCHIVED')}</option>
+          <LookupOptions kind="STUDENT_STATUS" />
         </CrmSelect>
       </EditField>
       {withOnboarding && (
         <EditField label={t('app.field.onboarding')}>
           <CrmSelect className="crm-select" value={form.onboardingStage} onChange={(e) => set({ onboardingStage: e.target.value as OnboardingStage })}>
-            <option value="WELCOME">{onboardingLabel('WELCOME')}</option>
-            <option value="DOCS_COLLECTED">{onboardingLabel('DOCS_COLLECTED')}</option>
-            <option value="CABINET_OPENED">{onboardingLabel('CABINET_OPENED')}</option>
-            <option value="ACADEMY_INTRO">{onboardingLabel('ACADEMY_INTRO')}</option>
-            <option value="ACTIVE">{onboardingLabel('ACTIVE')}</option>
+            <LookupOptions kind="ONBOARDING_STAGE" />
           </CrmSelect>
         </EditField>
       )}

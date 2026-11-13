@@ -30,9 +30,18 @@ const COLUMNS: Array<[string, string, string | null]> = [
   ['Student', 'direction', null],
   ['Student', 'country', null],
   ['Program', 'direction', null],
+  // Справочники-2 (13.11.2026): студенты, задачи, общение, звонки, оплата сделки.
+  ['Application', 'preferredChannel', null],
+  ['Student', 'preferredChannel', null],
+  ['Student', 'status', 'ACTIVE'],
+  ['Student', 'onboardingStage', 'WELCOME'],
+  ['Task', 'status', 'TODO'],
+  ['CallLog', 'outcome', 'ANSWERED'],
+  ['Interaction', 'type', null],
+  ['SubmissionPayment', 'paymentMethod', 'TRANSFER'],
 ];
 
-const ENUM_TYPES = ['ApplicationStatus', 'Direction', 'Country', 'ApplicationSource'];
+const ENUM_TYPES = ['ApplicationStatus', 'Direction', 'Country', 'ApplicationSource', 'StudentStatus', 'OnboardingStage', 'TaskStatus', 'ContactChannel', 'InteractionType', 'CallOutcome', 'SubmissionPaymentMethod'];
 
 async function main() {
   console.log('🔎 Справочники: колонки enum → text перед db push...');

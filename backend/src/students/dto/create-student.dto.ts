@@ -1,6 +1,5 @@
 import { IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { ContactChannel, StudentStatus } from '@prisma/client';
-import { Direction } from '../../common/lookup-keys';
+import { Direction, ContactChannel, StudentStatus } from '../../common/lookup-keys';
 import { IsLookupKey } from '../../common/lookup-validators';
 
 const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/;
@@ -29,7 +28,7 @@ export class CreateStudentDto {
   phoneLabels?: string[];
 
   @IsOptional()
-  @IsEnum(ContactChannel)
+  @IsLookupKey('Выберите канал связи из списка')
   preferredChannel?: ContactChannel;
 
   // ISO дата рождения — для cron birthdayGreetings.
@@ -55,7 +54,7 @@ export class CreateStudentDto {
   cabinet?: number;
 
   @IsOptional()
-  @IsEnum(StudentStatus)
+  @IsLookupKey('Выберите статус студента из списка')
   status?: StudentStatus;
 
   @IsOptional()

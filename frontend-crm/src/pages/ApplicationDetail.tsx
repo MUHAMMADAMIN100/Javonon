@@ -708,11 +708,7 @@ function NewApplicationEditor({ app, onSaved, onCancel }: { app: Application; on
       <EditField label={t('app.field.preferredChannel')}>
         <CrmSelect className="crm-select" value={form.preferredChannel} onChange={(e) => set({ preferredChannel: e.target.value })}>
           <option value="">—</option>
-          <option value="WHATSAPP">{channelLabel('WHATSAPP')}</option>
-          <option value="PHONE">{channelLabel('PHONE')}</option>
-          <option value="INSTAGRAM">{channelLabel('INSTAGRAM')}</option>
-          <option value="TELEGRAM">{channelLabel('TELEGRAM')}</option>
-          <option value="EMAIL">{channelLabel('EMAIL')}</option>
+          <LookupOptions kind="CONTACT_CHANNEL" />
         </CrmSelect>
       </EditField>
       <EditField label={t('userDetail.field.email')} error={err('email')}>

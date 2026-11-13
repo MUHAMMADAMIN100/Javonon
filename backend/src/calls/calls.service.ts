@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CallDirection, CallOutcome } from '@prisma/client';
+import { CallDirection } from '@prisma/client';
+import { CallOutcome } from '../common/lookup-keys';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhoneOrNull } from '../common/phone';
+import { LookupsService } from '../lookups/lookups.service';
 
 export interface CreateCallDto {
   clientName: string;
@@ -15,13 +17,10 @@ export interface CreateCallDto {
 }
 
 const VALID_DIRECTIONS: CallDirection[] = ['INCOMING', 'OUTGOING'];
-const VALID_OUTCOMES: CallOutcome[] = [
-  'ANSWERED', 'NO_ANSWER', 'BUSY', 'CALLBACK', 'CONVERTED',
-];
 
 @Injectable()
 export class CallsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private lookups: LookupsService) {}
 
   async create(userId: string, dto: CreateCallDto) {
     const clientName = (dto.clientName || '').trim();
@@ -31,7 +30,7 @@ export class CallsService {
     if (dto.direction && !VALID_DIRECTIONS.includes(dto.direction)) {
       throw new BadRequestException('Неизвестное направление звонка');
     }
-    if (dto.outcome && !VALID_OUTCOMES.includes(dto.outcome)) {
+    if (dto.outcome && !this.lookups.has('CALL_OUTCOME', dto.outcome)) {
       throw new BadRequestException('Неизвестный результат звонка');
     }
 

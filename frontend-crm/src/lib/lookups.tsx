@@ -31,6 +31,13 @@ const FALLBACK: Record<LookupKind, string[]> = {
     'LANDING_FORM', 'SELF_REGISTRATION', 'REFERRAL', 'INSTAGRAM', 'TELEGRAM',
     'GOOGLE_ADS', 'TIKTOK', 'WORD_OF_MOUTH', 'EVENT', 'OTHER',
   ],
+  STUDENT_STATUS: ['ACTIVE', 'PAUSED', 'GRADUATED', 'ARCHIVED'],
+  ONBOARDING_STAGE: ['WELCOME', 'DOCS_COLLECTED', 'CABINET_OPENED', 'ACADEMY_INTRO', 'ACTIVE'],
+  TASK_STATUS: ['TODO', 'IN_PROGRESS', 'DONE'],
+  CONTACT_CHANNEL: ['WHATSAPP', 'PHONE', 'INSTAGRAM', 'TELEGRAM', 'EMAIL'],
+  INTERACTION_TYPE: ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'SMS', 'TELEGRAM', 'WHATSAPP'],
+  CALL_OUTCOME: ['ANSWERED', 'NO_ANSWER', 'BUSY', 'CALLBACK', 'CONVERTED'],
+  DEAL_PAYMENT_METHOD: ['TRANSFER', 'CASH', 'OTHER'],
 };
 
 /** Цвета по умолчанию — те же, что в справочнике сервера (lookup-defaults.ts). */
@@ -62,6 +69,13 @@ const I18N_PREFIX: Record<LookupKind, string> = {
   DIRECTION: 'direction',
   COUNTRY: 'country',
   LEAD_SOURCE: 'source',
+  STUDENT_STATUS: 'student.status',
+  ONBOARDING_STAGE: 'onboarding',
+  TASK_STATUS: 'task.status',
+  CONTACT_CHANNEL: 'channel',
+  INTERACTION_TYPE: 'interactions.type',
+  CALL_OUTCOME: 'calls.out',
+  DEAL_PAYMENT_METHOD: 'deal.method',
 };
 
 export interface Lookups {

@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { StudentJwtGuard } from '../student-auth/student-jwt.guard';
 import { InteractionsService } from './interactions.service';
-import { InteractionType } from '@prisma/client';
+import { InteractionType } from '../common/lookup-keys';
 import { Permissions } from '../auth/permissions.decorator';
 
 // Staff-side: список и CRUD

@@ -8,8 +8,7 @@ import {
   MinLength,
   MaxLength,
 } from 'class-validator';
-import { ContactChannel } from '@prisma/client';
-import { Country, ApplicationSource } from '../../common/lookup-keys';
+import { Country, ApplicationSource, ContactChannel } from '../../common/lookup-keys';
 import { IsLookupKey } from '../../common/lookup-validators';
 
 // E.164: '+' необязателен, 7–15 цифр всего, разрешаем пробелы/дефисы при вводе.
@@ -58,7 +57,7 @@ export class CreateApplicationDto {
 
   // Предпочтительный канал связи (WhatsApp/Phone/Instagram/Telegram/Email).
   @IsOptional()
-  @IsEnum(ContactChannel)
+  @IsLookupKey('Выберите канал связи из списка')
   preferredChannel?: ContactChannel;
 
   @IsOptional()

@@ -2,8 +2,8 @@ import { secureRandomString } from '../common/random';
 import { normalizePhoneOrNull } from '../common/phone';
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Optional } from '@nestjs/common';
 import { PAID_STUDENT_WHERE, UNPAID_STUDENT_WHERE } from '../common/paid-student';
-import { Prisma, Role, StudentStatus } from '@prisma/client';
-import { Direction } from '../common/lookup-keys';
+import { Prisma, Role } from '@prisma/client';
+import { Direction, StudentStatus } from '../common/lookup-keys';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudentDto } from './dto/create-student.dto';
@@ -100,6 +100,8 @@ export class StudentsService {
 
   async create(dto: CreateStudentDto, _user?: CurrentUser) {
     this.lookups.assert('DIRECTION', dto.direction);
+    this.lookups.assert('STUDENT_STATUS', (dto as any).status);
+    this.lookups.assert('CONTACT_CHANNEL', (dto as any).preferredChannel);
     // QA-2: все номера — в общий формат «+<код><номер>» (+992 — ровно 9 цифр).
     if (dto.phones) dto.phones = dto.phones.map((ph) => normalizePhoneOrNull(ph, 'Телефон')).filter((x): x is string => !!x);
     const cabinet = dto.cabinet ?? cabinetFor(dto.direction);
@@ -425,6 +427,9 @@ export class StudentsService {
     const existing = await this.findOne(id);
     this.ensureCanEdit(existing, user);
     if (dto.direction !== undefined && dto.direction !== existing.direction) this.lookups.assert('DIRECTION', dto.direction);
+    if (dto.status !== undefined && dto.status !== existing.status) this.lookups.assert('STUDENT_STATUS', dto.status);
+    if ((dto as any).onboardingStage !== undefined && (dto as any).onboardingStage !== (existing as any).onboardingStage) this.lookups.assert('ONBOARDING_STAGE', (dto as any).onboardingStage);
+    if (dto.preferredChannel && dto.preferredChannel !== existing.preferredChannel) this.lookups.assert('CONTACT_CHANNEL', dto.preferredChannel);
     // Свои поля анкеты (из лида): обязательность — только в форме лида.
     if ((dto as any).customFields !== undefined) {
       (dto as any).customFields = this.leadFields.clean((dto as any).customFields, {

@@ -84,6 +84,7 @@ export default function App() {
             сервер. */}
         <Route path="/leads" element={<Leads />} />
         <Route path="/leads/settings" element={<LeadSettings />} />
+        <Route path="/settings/lists" element={<LeadSettings />} />
         <Route path="/students" element={<Students />} />
         <Route path="/students/new" element={<StudentNew />} />
         <Route path="/students/:id" element={<StudentDetail />} />

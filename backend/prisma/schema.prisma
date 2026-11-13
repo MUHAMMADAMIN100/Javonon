@@ -149,19 +149,6 @@ enum SalaryStatus {
   PAID
 }
 
-enum StudentStatus {
-  ACTIVE
-  PAUSED
-  GRADUATED
-  ARCHIVED
-}
-
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  DONE
-}
-
 enum Weekday {
   MON
   TUE
@@ -170,27 +157,6 @@ enum Weekday {
   FRI
   SAT
   SUN
-}
-
-// Предпочтительный канал связи с клиентом (по ТЗ — WhatsApp / Телефон,
-// плюс на будущее Instagram/Telegram/Email).
-enum ContactChannel {
-  WHATSAPP
-  PHONE
-  INSTAGRAM
-  TELEGRAM
-  EMAIL
-}
-
-// Onboarding-этапы для уже зачисленного студента (после оплаты).
-// Используются клиентским менеджером для отслеживания прогресса
-// введения студента в курс.
-enum OnboardingStage {
-  WELCOME // приветствие
-  DOCS_COLLECTED // собраны документы
-  CABINET_OPENED // открыт личный кабинет
-  ACADEMY_INTRO // ознакомление с программой
-  ACTIVE // в активной работе
 }
 
 model User {
@@ -417,7 +383,7 @@ model Application {
   secondaryContactLabel String?
   email                 String?
   // Предпочтительный канал связи с клиентом.
-  preferredChannel      ContactChannel?
+  preferredChannel      String?
   // Направление обучения. Лендинг его БОЛЬШЕ НЕ СПРАШИВАЕТ (вместо него
   // теперь спрашивается country), но поле остаётся обязательным:
   //  • на него ссылаются существующие строки Application/Student/Program,
@@ -546,7 +512,7 @@ model Student {
   // от phones — недостающие позиции считаются пустыми.
   phoneLabels      String[]        @default([])
   // Предпочтительный канал связи (ТЗ: WhatsApp / Телефон).
-  preferredChannel ContactChannel?
+  preferredChannel String?
   // QA-fix #43: уникальный email — параллельные регистрации создавали N дублей,
   // forgot-password/login находили только первого через findFirst.
   // Multiple null-email'ов разрешены (Prisma allows multiple NULLs).
@@ -581,8 +547,8 @@ model Student {
   // в исходную Application. Nullable — у студентов, заведённых вручную
   // и созданных до этой колонки, страны нет.
   country          String?
-  status           StudentStatus   @default(ACTIVE)
-  onboardingStage  OnboardingStage @default(WELCOME)
+  status           String          @default("ACTIVE")
+  onboardingStage  String          @default("WELCOME")
   comment          String?
   managerId        String?
   manager          User?           @relation("StudentManager", fields: [managerId], references: [id], onDelete: SetNull)
@@ -663,7 +629,7 @@ model Task {
   id                   String     @id @default(uuid())
   title                String
   description          String
-  status               TaskStatus @default(TODO)
+  status               String @default("TODO")
   // Дедлайн задачи (ТЗ §3.7). Null = без дедлайна.
   deadline             DateTime?
   // Cron уже отправил напоминание (за 24ч до дедлайна) — чтобы не спамить.
@@ -1244,14 +1210,6 @@ enum CallDirection {
   OUTGOING
 }
 
-enum CallOutcome {
-  ANSWERED // дозвонился, поговорили
-  NO_ANSWER // не ответили
-  BUSY // занято
-  CALLBACK // договорились перезвонить
-  CONVERTED // привело к продаже/заявке
-}
-
 model CallLog {
   id              String        @id @default(uuid())
   userId          String
@@ -1262,7 +1220,7 @@ model CallLog {
   studentId       String?
   student         Student?      @relation("CallLogStudent", fields: [studentId], references: [id], onDelete: SetNull)
   direction       CallDirection @default(OUTGOING)
-  outcome         CallOutcome   @default(ANSWERED)
+  outcome         String   @default("ANSWERED")
   // Длительность разговора в секундах (время на линии)
   durationSeconds Int           @default(0)
   notes           String?
@@ -1442,26 +1400,13 @@ model LessonProgress {
   @@index([studentId])
 }
 
-// ============================================================
-// INTERACTIONS — журнал общения с клиентом (ТЗ §3.2 «История взаимодействий», §3.3 «История общения»)
-// ============================================================
-enum InteractionType {
-  CALL // звонок
-  EMAIL // email-переписка
-  MEETING // встреча
-  NOTE // заметка менеджера
-  SMS // sms
-  TELEGRAM // переписка в TG
-  WHATSAPP // переписка в WA
-}
-
 model Interaction {
   id               String          @id @default(uuid())
   studentId        String
   student          Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
   authorId         String?
   author           User?           @relation("InteractionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-  type             InteractionType
+  type             String
   summary          String // краткое описание ("обсудили дедлайны", "клиент перезвонит во вторник")
   details          String? // длинная заметка
   // Студент видит запись, если visibleToStudent=true (по умолчанию true,
@@ -2098,6 +2043,13 @@ enum LookupKind {
   DIRECTION
   COUNTRY
   LEAD_SOURCE
+  STUDENT_STATUS
+  ONBOARDING_STAGE
+  TASK_STATUS
+  CONTACT_CHANNEL
+  INTERACTION_TYPE
+  CALL_OUTCOME
+  DEAL_PAYMENT_METHOD
 }
 
 model LookupItem {
@@ -2209,12 +2161,6 @@ enum SubmissionPaymentStatus {
   PENDING // менеджер прислал, ждёт одобрения FOUNDER
   APPROVED // FOUNDER сверил с реальным платежом → засчитано в доход + бонус
   REJECTED // FOUNDER отклонил (фейк/ошибка), менеджер должен переделать
-}
-
-enum SubmissionPaymentMethod {
-  TRANSFER // банковский перевод на реквизиты компании
-  CASH // наличкой, вечером пополняется на счёт + скрин пополнения
-  OTHER
 }
 
 model SaleSubmission {
@@ -2330,7 +2276,7 @@ model SubmissionPayment {
   submission           SaleSubmission          @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   // Сколько фактически внёс этим траншем.
   amount               Float
-  paymentMethod        SubmissionPaymentMethod @default(TRANSFER)
+  paymentMethod        String @default("TRANSFER")
   // Когда менеджер получил деньги.
   paidAt               DateTime
   // Чек/скриншот перевода — обязательно при TRANSFER.

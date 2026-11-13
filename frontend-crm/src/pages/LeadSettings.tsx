@@ -42,12 +42,28 @@ import { fetchLeadFields } from '../api/leadFields';
  */
 type Tab = LookupKind | 'FIELDS';
 
+type Section = 'leads' | 'students' | 'comms' | 'deals' | 'tasks';
+const SECTIONS: Array<{ key: Section; labelKey: string; tabs: Tab[] }> = [
+  { key: 'leads', labelKey: 'ls.sec.leads', tabs: ['LEAD_STATUS', 'DIRECTION', 'COUNTRY', 'LEAD_SOURCE', 'FIELDS'] },
+  { key: 'students', labelKey: 'ls.sec.students', tabs: ['STUDENT_STATUS', 'ONBOARDING_STAGE', 'FIELDS'] },
+  { key: 'comms', labelKey: 'ls.sec.comms', tabs: ['CONTACT_CHANNEL', 'INTERACTION_TYPE', 'CALL_OUTCOME'] },
+  { key: 'deals', labelKey: 'ls.sec.deals', tabs: ['DEAL_PAYMENT_METHOD'] },
+  { key: 'tasks', labelKey: 'ls.sec.tasks', tabs: ['TASK_STATUS'] },
+];
+
 const TABS: Array<{ key: Tab; labelKey: string; hintKey: string; newKey: string }> = [
   { key: 'LEAD_STATUS', labelKey: 'lk.tab.statuses', hintKey: 'lk.hint.statuses', newKey: 'lk.new.status' },
   { key: 'DIRECTION', labelKey: 'lk.tab.directions', hintKey: 'lk.hint.directions', newKey: 'lk.new.direction' },
   { key: 'COUNTRY', labelKey: 'lk.tab.countries', hintKey: 'lk.hint.countries', newKey: 'lk.new.country' },
   { key: 'LEAD_SOURCE', labelKey: 'lk.tab.sources', hintKey: 'lk.hint.sources', newKey: 'lk.new.source' },
   { key: 'FIELDS', labelKey: 'lk.tab.fields', hintKey: 'lf.hint', newKey: 'lf.new' },
+  { key: 'STUDENT_STATUS', labelKey: 'ls.tab.studentStatus', hintKey: 'ls.hint.system', newKey: 'ls.new' },
+  { key: 'ONBOARDING_STAGE', labelKey: 'ls.tab.onboarding', hintKey: 'ls.hint.system', newKey: 'ls.new' },
+  { key: 'CONTACT_CHANNEL', labelKey: 'ls.tab.channel', hintKey: 'ls.hint.system', newKey: 'ls.new' },
+  { key: 'INTERACTION_TYPE', labelKey: 'ls.tab.interaction', hintKey: 'ls.hint.system', newKey: 'ls.new' },
+  { key: 'CALL_OUTCOME', labelKey: 'ls.tab.callOutcome', hintKey: 'ls.hint.system', newKey: 'ls.new' },
+  { key: 'DEAL_PAYMENT_METHOD', labelKey: 'ls.tab.payMethod', hintKey: 'ls.hint.system', newKey: 'ls.new' },
+  { key: 'TASK_STATUS', labelKey: 'ls.tab.taskStatus', hintKey: 'ls.hint.system', newKey: 'ls.new' },
 ];
 
 /** Цвета на выбор — спокойные, читаются на белом и в плашке. */
@@ -70,8 +86,11 @@ export default function LeadSettings() {
   const allowed = canManageLookups(me);
   const [params, setParams] = useSearchParams();
   const tabParam = params.get('tab') as Tab | null;
-  const tab: Tab = TABS.some((x) => x.key === tabParam) ? (tabParam as Tab) : 'LEAD_STATUS';
-  const setTab = (k: Tab) => setParams((p) => { p.set('tab', k); return p; }, { replace: true });
+  const secParam = params.get('section') as Section | null;
+  const section = SECTIONS.find((x) => x.key === secParam) ?? SECTIONS.find((x) => x.tabs.includes(tabParam as Tab)) ?? SECTIONS[0];
+  const tab: Tab = section.tabs.includes(tabParam as Tab) ? (tabParam as Tab) : section.tabs[0];
+  const setTab = (k: Tab) => setParams((p) => { p.set('section', section.key); p.set('tab', k); return p; }, { replace: true });
+  const setSection = (k: Section) => setParams((p) => { p.set('section', k); p.delete('tab'); return p; }, { replace: true });
 
   const all = useLookupItems();
   const usageQ = useQuery({ queryKey: USAGE_KEY, queryFn: fetchLookupUsage, enabled: allowed && tab !== 'FIELDS' });
@@ -173,10 +192,18 @@ export default function LeadSettings() {
 
   return (
     <div className="lk-page" data-testid="lead-settings">
-      <BackButton fallback="/leads" label={t('leads.title')} />
+      <BackButton fallback="/leads" />
+      <div className="ls-sections" role="tablist" data-testid="ls-sections">
+        {SECTIONS.map((x) => (
+          <button key={x.key} type="button" role="tab" aria-selected={section.key === x.key}
+            className={`ls-section${section.key === x.key ? ' active' : ''}`} onClick={() => setSection(x.key)} data-testid={`ls-sec-${x.key}`}>
+            {t(x.labelKey)}
+          </button>
+        ))}
+      </div>
       <div className="card">
         <div className="client-tabs lk-tabs" role="tablist" data-testid="lk-tabs">
-          {TABS.map((x) => (
+          {TABS.filter((x) => section.tabs.includes(x.key)).map((x) => (
             <button
               key={x.key}
               type="button"

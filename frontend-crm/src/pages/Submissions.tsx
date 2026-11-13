@@ -29,6 +29,7 @@ import { dateParam, enumParam, ignoredParam, stringParam, useUrlListState } from
 import { absFileUrl as absUrl, useFileToken } from '../lib/fileUrl';
 import DismissedMark, { withDismissed } from '../components/DismissedMark';
 import { TableSkeleton } from '../components/Skeleton';
+import ListSettingsButton from '../components/ListSettingsButton';
 
 const STATUS_COLOR: Record<SubmissionStatus, string> = {
   ACTIVE: '#0ea5e9',
@@ -150,6 +151,7 @@ export default function Submissions() {
           {tabs.includes('approved') && tabBtn('approved', t('deals.tab.approved'))}
           {tabs.includes('all') && tabBtn('all', t('deals.tab.all'))}
         </div>
+        <ListSettingsButton section="deals" />
         {roleCan(me, 'submissions:create') && (
           <button className="btn btn-primary deals-new" onClick={() => navigate('/submissions/new')} data-testid="deals-new">
             <Icon name="add" size={16} /> {t('dealForm.title')}

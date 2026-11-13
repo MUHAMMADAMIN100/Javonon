@@ -24,6 +24,7 @@ import { timelineVisuals, type TimelineKind } from '../lib/timeline';
 import { EmptyLine } from './ClientCard';
 import DismissedMark from './DismissedMark';
 import BusyLabel from './BusyLabel';
+import { useLookups } from '../lib/lookups';
 
 const TYPES: InteractionType[] = ['CALL', 'WHATSAPP', 'MEETING', 'NOTE', 'TELEGRAM', 'SMS', 'EMAIL'];
 type Filter = 'all' | TimelineKind;
@@ -239,6 +240,7 @@ function NewInteractionForm({
   onCancel: () => void;
   busy: boolean;
 }) {
+  const L = useLookups();
   const { t } = useT();
   const [type, setType] = useState<InteractionType>('CALL');
   const [summary, setSummary] = useState('');
@@ -255,7 +257,7 @@ function NewInteractionForm({
     >
       <div className="tl-form-title">{t('tl.newEntry')}</div>
       <div className="tl-types" role="radiogroup" aria-label={t('tl.type')}>
-        {TYPES.map((tp) => (
+        {L.keys('INTERACTION_TYPE').map((tp) => (
           <button
             key={tp}
             type="button"
@@ -264,7 +266,7 @@ function NewInteractionForm({
             onClick={() => setType(tp)}
             className={`tl-chip${type === tp ? ' active' : ''}`}
           >
-            {INTERACTION_LABEL[tp]}
+            {L.label('INTERACTION_TYPE', tp)}
           </button>
         ))}
       </div>

@@ -30,6 +30,13 @@ const USAGE_COLUMNS: Record<LookupKind, Array<[table: string, column: string]>> 
   DIRECTION: [['Application', 'direction'], ['Student', 'direction'], ['Program', 'direction']],
   COUNTRY: [['Application', 'country'], ['Student', 'country']],
   LEAD_SOURCE: [['Application', 'source']],
+  STUDENT_STATUS: [['Student', 'status']],
+  ONBOARDING_STAGE: [['Student', 'onboardingStage']],
+  TASK_STATUS: [['Task', 'status']],
+  CONTACT_CHANNEL: [['Application', 'preferredChannel'], ['Student', 'preferredChannel']],
+  INTERACTION_TYPE: [['Interaction', 'type']],
+  CALL_OUTCOME: [['CallLog', 'outcome']],
+  DEAL_PAYMENT_METHOD: [['SubmissionPayment', 'paymentMethod']],
 };
 
 export interface LookupInput {
@@ -345,4 +352,11 @@ export const KIND_TITLE: Record<LookupKind, string> = {
   DIRECTION: 'Направления',
   COUNTRY: 'Страны',
   LEAD_SOURCE: 'Источники',
+  STUDENT_STATUS: 'Статусы студента',
+  ONBOARDING_STAGE: 'Этапы онбординга',
+  TASK_STATUS: 'Статусы задач',
+  CONTACT_CHANNEL: 'Каналы связи',
+  INTERACTION_TYPE: 'Типы записей истории',
+  CALL_OUTCOME: 'Итоги звонков',
+  DEAL_PAYMENT_METHOD: 'Способы оплаты',
 };

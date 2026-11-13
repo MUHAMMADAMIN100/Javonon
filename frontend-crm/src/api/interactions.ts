@@ -1,7 +1,8 @@
 import { localized } from '../lib/i18n';
 import { api } from './client';
 
-export type InteractionType = 'CALL' | 'EMAIL' | 'MEETING' | 'NOTE' | 'SMS' | 'TELEGRAM' | 'WHATSAPP';
+/** Ключ значения справочника «Настройки списков» (13.11.2026). */
+export type InteractionType = string;
 
 export const INTERACTION_LABEL: Record<InteractionType, string> = localized('interactions.type', {
   CALL: 'Звонок',

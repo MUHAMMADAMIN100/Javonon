@@ -35,6 +35,7 @@ import EmptyState from '../components/EmptyState';
 import QueryErrorState from '../components/QueryErrorState';
 import { LookupBadge } from '../lib/lookups';
 import LookupOptions from '../components/LookupOptions';
+import ListSettingsButton from '../components/ListSettingsButton';
 
 type Scope = 'all' | 'mine';
 
@@ -350,6 +351,7 @@ export default function Students() {
               </button>
             </div>
           )}
+          <ListSettingsButton section="students" />
           <motion.button
             className="btn btn-secondary"
             onClick={() => setReportOpen(true)}

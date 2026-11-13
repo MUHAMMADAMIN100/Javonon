@@ -1,6 +1,5 @@
 import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength, IsObject } from 'class-validator';
-import { ContactChannel } from '@prisma/client';
-import { ApplicationStatus, Country, Direction } from '../../common/lookup-keys';
+import { ApplicationStatus, Country, Direction, ContactChannel } from '../../common/lookup-keys';
 import { NO_HTML_RE } from './create-application.dto';
 import { IsLookupKey } from '../../common/lookup-validators';
 
@@ -49,7 +48,7 @@ export class UpdateApplicationDto {
   secondaryContactLabel?: string;
 
   @IsOptional()
-  @IsEnum(ContactChannel)
+  @IsLookupKey('Выберите канал связи из списка')
   preferredChannel?: ContactChannel;
 
   @IsOptional()

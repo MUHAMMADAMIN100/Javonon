@@ -67,6 +67,7 @@ const TITLE_ROUTES: Array<{ path: string; eyebrowKey: string; num: string; title
   { path: '/partners',     eyebrowKey: 'eyebrow.partners',       num: '15', titleKey: 'partners.title' },
   { path: '/me',           eyebrowKey: 'eyebrow.profile',        num: '16', titleKey: 'profile.title' },
   { path: '/leads/settings', eyebrowKey: 'eyebrow.sales',        num: '02', titleKey: 'lk.title' },
+  { path: '/settings/lists', eyebrowKey: 'eyebrow.system',        num: '25', titleKey: 'ls.title' },
   { path: '/leads',        eyebrowKey: 'eyebrow.sales',          num: '02', titleKey: 'leads.title' },
   { path: '/submissions',  eyebrowKey: 'eyebrow.sales',          num: '18', titleKey: 'submissions.title' },
   { path: '/pipelines',    eyebrowKey: 'eyebrow.salesPipelines', num: '19', titleKey: 'pipelines.title' },

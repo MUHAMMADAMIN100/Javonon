@@ -26,6 +26,9 @@ import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import BusyLabel from '../components/BusyLabel';
+import LookupOptions from '../components/LookupOptions';
+import { useLookups } from '../lib/lookups';
+import ListSettingsButton from '../components/ListSettingsButton';
 
 function fmtDateTime(iso: string) {
   return fmtDateText(iso, {
@@ -43,6 +46,8 @@ const OUTCOME_COLOR: Record<CallOutcome, string> = {
 
 export default function Calls() {
   const { t } = useT();
+  const L = useLookups();
+  const lookupLabel = (k: Parameters<typeof L.label>[0], v: string | null | undefined) => L.label(k, v);
   const { toast, confirm } = useUI();
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
@@ -168,7 +173,7 @@ export default function Calls() {
       ? [{ key: 'employee', label: t('kpi.col.employee'), value: (c: CallLog) => c.user?.fullName }]
       : []),
     { key: 'direction', label: t('calls.col.direction'), value: (c) => t(`calls.dir.${c.direction}`) },
-    { key: 'outcome', label: t('calls.col.outcome'), value: (c) => t(`calls.out.${c.outcome}`) },
+    { key: 'outcome', label: t('calls.col.outcome'), value: (c) => lookupLabel('CALL_OUTCOME', c.outcome) },
     { key: 'duration', label: t('calls.col.duration'), type: 'number', value: (c) => c.durationSeconds },
     { key: 'notes', label: t('calls.field.notes'), value: (c) => c.notes },
   ]);
@@ -189,6 +194,7 @@ export default function Calls() {
           всегда, хотя нужна в момент, когда звонок только что закончился. */}
       {canAdd && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <ListSettingsButton section="comms" />
           <button className="btn btn-primary" data-testid="call-new" onClick={() => setFormOpen(true)}>
             <Icon name="call" size={16} /> {t('calls.new')}
           </button>
@@ -235,9 +241,7 @@ export default function Calls() {
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>{t('calls.field.outcome')}</label>
             <CrmSelect className="crm-select" value={outcome} onChange={(e) => setOutcome(e.target.value as CallOutcome)}>
-              {(Object.keys(CALL_OUTCOME_LABEL) as CallOutcome[]).map((o) => (
-                <option key={o} value={o}>{t(`calls.out.${o}`)}</option>
-              ))}
+              <LookupOptions kind="CALL_OUTCOME" current={outcome} />
             </CrmSelect>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
@@ -369,7 +373,7 @@ export default function Calls() {
                 )}
                 <td data-label={t('calls.col.direction')} style={{ fontSize: 13 }}>{t(`calls.dir.${c.direction}`)}</td>
                 <td data-label={t('calls.col.outcome')} style={{ fontSize: 13, fontWeight: 600, color: OUTCOME_COLOR[c.outcome] }}>
-                  {t(`calls.out.${c.outcome}`)}
+                  {lookupLabel('CALL_OUTCOME', c.outcome)}
                 </td>
                 <td data-label={t('calls.col.duration')} style={{ fontFamily: 'var(--font-mono)' }}>{fmtDuration(c.durationSeconds)}</td>
                 <td data-label={t('calls.field.notes')} className="td-stack" style={{ color: 'var(--text-soft)', fontSize: 13 }}>

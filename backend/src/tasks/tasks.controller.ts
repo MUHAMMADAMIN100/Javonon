@@ -11,7 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { TaskStatus } from '@prisma/client';
+import { TaskStatus } from '../common/lookup-keys';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -41,7 +41,7 @@ export class TasksController {
     // Валидация status — enum TaskStatus, чтобы не пропустить мусор в prisma.
     let statusFilter: TaskStatus | undefined;
     if (status) {
-      if (!Object.values(TaskStatus).includes(status as TaskStatus)) {
+      if (!/^[A-Z0-9_]{1,40}$/.test(status)) {
         throw new BadRequestException('Некорректный status');
       }
       statusFilter = status as TaskStatus;

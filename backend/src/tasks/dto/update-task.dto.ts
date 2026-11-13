@@ -12,7 +12,8 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { TaskStatus } from '@prisma/client';
+import { TaskStatus } from '../../common/lookup-keys';
+import { IsLookupKey } from '../../common/lookup-validators';
 
 export class UpdateTaskDto {
   @IsOptional()
@@ -28,7 +29,7 @@ export class UpdateTaskDto {
   description?: string;
 
   @IsOptional()
-  @IsEnum(TaskStatus)
+  @IsLookupKey('Выберите статус задачи из списка')
   status?: TaskStatus;
 
   // Мульти-исполнители: если передан — синхронизирует M2M через set.

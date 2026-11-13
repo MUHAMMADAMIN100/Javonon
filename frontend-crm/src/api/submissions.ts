@@ -5,7 +5,8 @@ import type { PartnerAttributionView } from './types';
 
 export type SubmissionStatus = 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 export type SubmissionPaymentStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type SubmissionPaymentMethod = 'TRANSFER' | 'CASH' | 'OTHER';
+/** Ключ значения справочника «Настройки списков» (13.11.2026). */
+export type SubmissionPaymentMethod = string;
 
 export interface SubmissionPayment {
   /** Роль без «Деньги клиентов»: суммы и чеки пришли пустыми. */

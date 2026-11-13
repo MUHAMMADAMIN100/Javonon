@@ -16,8 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { randomUUID } from 'crypto';
-import { StudentStatus } from '@prisma/client';
-import { Direction } from '../common/lookup-keys';
+import { Direction, StudentStatus } from '../common/lookup-keys';
 
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';

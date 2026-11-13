@@ -2,12 +2,13 @@ import { isElevated, isFounder } from '../auth/role-utils';
 import { canSeeAllStudents } from '../auth/client-access';
 import { BadRequestException, ForbiddenException, NotFoundException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { InteractionType } from '@prisma/client';
+import { InteractionType } from '../common/lookup-keys';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { LookupsService } from '../lookups/lookups.service';
 
 @Injectable()
 export class InteractionsService {
-  constructor(private prisma: PrismaService, private realtime: RealtimeGateway) {}
+  constructor(private prisma: PrismaService, private realtime: RealtimeGateway, private lookups: LookupsService) {}
 
   /**
    * История общения — тем, кто видит студента (руководство, его менеджер или
@@ -186,11 +187,11 @@ export class InteractionsService {
     data: { type?: any; summary?: string; details?: string; occurredAt?: string },
     partial: boolean,
   ): { type?: any; summary?: string; details?: string | null; occurredAt?: Date } {
-    const VALID_TYPES: InteractionType[] = ['CALL', 'EMAIL', 'MEETING', 'NOTE', 'SMS', 'TELEGRAM', 'WHATSAPP'];
     const result: any = {};
     if (data.type !== undefined || !partial) {
-      if (!VALID_TYPES.includes(data.type)) {
-        throw new BadRequestException(`type должен быть один из: ${VALID_TYPES.join(', ')}`);
+      // Типы записей — справочник «Настройки → Общение» (13.11.2026).
+      if (typeof data.type !== 'string' || !this.lookups.has('INTERACTION_TYPE', data.type)) {
+        throw new BadRequestException('Выберите тип записи из списка');
       }
       result.type = data.type;
     }

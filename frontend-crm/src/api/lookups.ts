@@ -5,7 +5,9 @@ import { api } from './client';
  * страны, источники. Раньше это были зашитые списки в api/types.ts —
  * добавить статус или страну мог только программист.
  */
-export type LookupKind = 'LEAD_STATUS' | 'DIRECTION' | 'COUNTRY' | 'LEAD_SOURCE';
+export type LookupKind =
+  | 'LEAD_STATUS' | 'DIRECTION' | 'COUNTRY' | 'LEAD_SOURCE'
+  | 'STUDENT_STATUS' | 'ONBOARDING_STAGE' | 'TASK_STATUS' | 'CONTACT_CHANNEL' | 'INTERACTION_TYPE' | 'CALL_OUTCOME' | 'DEAL_PAYMENT_METHOD';
 
 export interface LookupItem {
   id: string;
@@ -32,7 +34,7 @@ export interface LookupInput {
   isClosed?: boolean;
 }
 
-export const LOOKUP_KINDS: LookupKind[] = ['LEAD_STATUS', 'DIRECTION', 'COUNTRY', 'LEAD_SOURCE'];
+export const LOOKUP_KINDS: LookupKind[] = ['LEAD_STATUS', 'DIRECTION', 'COUNTRY', 'LEAD_SOURCE', 'STUDENT_STATUS', 'ONBOARDING_STAGE', 'TASK_STATUS', 'CONTACT_CHANNEL', 'INTERACTION_TYPE', 'CALL_OUTCOME', 'DEAL_PAYMENT_METHOD'];
 
 /** Источники, которые ставит только система (зеркало MACHINE_SOURCES на сервере). */
 export const MACHINE_SOURCES = ['LANDING_FORM', 'SELF_REGISTRATION', 'REFERRAL'];

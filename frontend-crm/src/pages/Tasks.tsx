@@ -27,6 +27,8 @@ import { useT } from '../lib/i18n';
 import TaskDiary, { DiaryCountdown } from '../components/TaskDiary';
 import { useEscClose } from '../lib/useEscClose';
 import { TableSkeleton } from '../components/Skeleton';
+import LookupOptions from '../components/LookupOptions';
+import ListSettingsButton from '../components/ListSettingsButton';
 
 type Scope = 'all' | 'mine';
 /** Значение фильтра «Исполнитель» для задач, которые ещё никому не назначены. */
@@ -301,6 +303,7 @@ export default function Tasks() {
               </button>
             </div>
           )}
+          <ListSettingsButton section="tasks" />
           {canCreate && !creating && (
             <motion.button
               className="btn btn-primary"
@@ -326,9 +329,7 @@ export default function Tasks() {
             data-testid="tasks-filter-status"
           >
             <option value="">{t('tasks.filter.allStatuses')}</option>
-            <option value="TODO">{t('task.status.TODO')}</option>
-            <option value="IN_PROGRESS">{t('task.status.IN_PROGRESS')}</option>
-            <option value="DONE">{t('task.status.DONE')}</option>
+            <LookupOptions kind="TASK_STATUS" />
           </CrmSelect>
           {scope === 'all' && (
             <CrmSelect
@@ -658,9 +659,7 @@ function TaskStatusSelect({ task, canChange, onChange }: { task: Task; canChange
       title={canChange ? t('common.status') : t('task.statusLocked')}
       data-testid="task-status"
     >
-      <option value="TODO">{t('task.status.TODO')}</option>
-      <option value="IN_PROGRESS">{t('task.status.IN_PROGRESS')}</option>
-      <option value="DONE">{t('task.status.DONE')}</option>
+      <LookupOptions kind="TASK_STATUS" />
     </CrmSelect>
   );
 }

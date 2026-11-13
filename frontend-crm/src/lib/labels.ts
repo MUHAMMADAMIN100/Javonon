@@ -48,42 +48,28 @@ export function useSourceLabel(): (source: string | null | undefined) => string 
   return (s) => L.label('LEAD_SOURCE', s);
 }
 
-export function useTaskStatusLabel(): (status: string | null | undefined) => string {
-  const { t } = useT();
-  return (s) => {
-    if (!s) return '—';
-    const key = `task.status.${s}`;
-    const val = t(key);
-    return val === key ? String(s) : val;
-  };
+export function useTaskStatusLabel(): (value: string | null | undefined) => string {
+  const L = useLookups();
+  return (v) => L.label('TASK_STATUS', v);
 }
 
-export function useStudentStatusLabel(): (status: string | null | undefined) => string {
-  const { t } = useT();
-  return (s) => {
-    if (!s) return '—';
-    const key = `student.status.${s}`;
-    const val = t(key);
-    return val === key ? String(s) : val;
-  };
+export function useStudentStatusLabel(): (value: string | null | undefined) => string {
+  const L = useLookups();
+  return (v) => L.label('STUDENT_STATUS', v);
 }
 
-export function useOnboardingLabel(): (stage: string | null | undefined) => string {
-  const { t } = useT();
-  return (s) => {
-    if (!s) return '—';
-    const key = `onboarding.${s}`;
-    const val = t(key);
-    return val === key ? String(s) : val;
-  };
+export function useOnboardingLabel(): (value: string | null | undefined) => string {
+  const L = useLookups();
+  return (v) => L.label('ONBOARDING_STAGE', v);
 }
 
-export function useChannelLabel(): (channel: string | null | undefined) => string {
-  const { t } = useT();
-  return (c) => {
-    if (!c) return '—';
-    const key = `channel.${c}`;
-    const val = t(key);
-    return val === key ? String(c) : val;
-  };
+export function useChannelLabel(): (value: string | null | undefined) => string {
+  const L = useLookups();
+  return (v) => L.label('CONTACT_CHANNEL', v);
+}
+
+/** Тип записи истории общения, итог звонка, способ оплаты сделки — справочник «Настройки». */
+export function useLookupLabel(kind: import('../api/lookups').LookupKind): (value: string | null | undefined) => string {
+  const L = useLookups();
+  return (v) => L.label(kind, v);
 }

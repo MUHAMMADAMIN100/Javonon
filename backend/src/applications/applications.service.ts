@@ -446,6 +446,7 @@ export class ApplicationsService {
   async create(dto: CreateApplicationDto & { ref?: string }) {
     this.lookups.assert('COUNTRY', dto.country);
     this.lookups.assert('LEAD_SOURCE', dto.source, 'Неизвестный источник');
+    this.lookups.assert('CONTACT_CHANNEL', (dto as any).preferredChannel);
     const { app, duplicate } = await this.persistNewLead(dto, {
       source: dto.source || 'LANDING_FORM',
       autoAssignManager: true,
@@ -604,6 +605,7 @@ export class ApplicationsService {
     this.lookups.assert('LEAD_STATUS', status);
     this.lookups.assert('COUNTRY', dto.country);
     this.lookups.assert('DIRECTION', dto.direction);
+    this.lookups.assert('CONTACT_CHANNEL', (dto as any).preferredChannel);
     if (dto.source && !this.lookups.isStaffSource(dto.source)) {
       throw new BadRequestException('Недопустимый источник для лида, введённого вручную');
     }
@@ -1162,6 +1164,7 @@ export class ApplicationsService {
     }
     if (dto.direction != null && dto.direction !== existing.direction) this.lookups.assert('DIRECTION', dto.direction);
     if (dto.country && dto.country !== existing.country) this.lookups.assert('COUNTRY', dto.country);
+    if (dto.preferredChannel && dto.preferredChannel !== existing.preferredChannel) this.lookups.assert('CONTACT_CHANNEL', dto.preferredChannel);
 
     if (dto.phone != null) {
       const key = phoneKey(dto.phone);

@@ -245,7 +245,8 @@ const NEW_LEAD_SET = new Set<string>(NEW_LEAD_APPLICATION_STATUSES);
 export function isNewLeadApplicationStatus(status: string | null | undefined): boolean {
   return !!status && NEW_LEAD_SET.has(status);
 }
-export type StudentStatus = 'ACTIVE' | 'PAUSED' | 'GRADUATED' | 'ARCHIVED';
+/** Ключ значения справочника «Настройки списков» (13.11.2026). */
+export type StudentStatus = string;
 
 export interface User {
   id: string;
@@ -410,7 +411,8 @@ export interface Document {
   createdAt: string;
 }
 
-export type ContactChannel = 'WHATSAPP' | 'PHONE' | 'INSTAGRAM' | 'TELEGRAM' | 'EMAIL';
+/** Ключ значения справочника «Настройки списков» (13.11.2026). */
+export type ContactChannel = string;
 
 export const CONTACT_CHANNEL_LABEL: Record<ContactChannel, string> = localized('channel', {
   WHATSAPP: 'WhatsApp',
@@ -420,12 +422,8 @@ export const CONTACT_CHANNEL_LABEL: Record<ContactChannel, string> = localized('
   EMAIL: 'Email',
 });
 
-export type OnboardingStage =
-  | 'WELCOME'
-  | 'DOCS_COLLECTED'
-  | 'CABINET_OPENED'
-  | 'ACADEMY_INTRO'
-  | 'ACTIVE';
+/** Ключ значения справочника «Настройки списков» (13.11.2026). */
+export type OnboardingStage = string;
 
 export const ONBOARDING_STAGE_LABEL: Record<OnboardingStage, string> = localized('onboarding', {
   WELCOME: 'Приветствие',
@@ -499,7 +497,8 @@ export interface Notification {
   createdAt: string;
 }
 
-export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
+/** Ключ значения справочника «Настройки списков» (13.11.2026). */
+export type TaskStatus = string;
 
 export interface TaskUserSummary {
   id: string;

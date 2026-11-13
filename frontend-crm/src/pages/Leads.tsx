@@ -1589,7 +1589,7 @@ export default function Leads() {
           <div className="leads-head-actions">
             {/* «Лиды → Настройки»: статусы, направления, страны, источники (13.11.2026). */}
             {canManageLookups(me) && (
-              <Link to="/leads/settings" className="btn btn-secondary leads-settings-btn" data-testid="leads-settings" title={t('lk.title')}>
+              <Link to="/settings/lists?section=leads" className="btn btn-secondary leads-settings-btn" data-testid="leads-settings" title={t('lk.title')}>
                 <Icon name="tune" size={18} />
                 <span className="leads-settings-label">{t('lk.button')}</span>
               </Link>

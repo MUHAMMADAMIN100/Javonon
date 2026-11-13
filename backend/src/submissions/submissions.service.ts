@@ -33,22 +33,14 @@ import {
   phoneMatchPrefilterTail,
   phonesMatch,
 } from '../common/phone';
-import {
-  SubmissionStatus,
-  SubmissionPaymentStatus,
-  SubmissionPaymentMethod,
-  Prisma,
-  IncomeSource,
-  ProductCategory,
-  PaymentPhaseStatus,
-  StudentStatus,
-} from '@prisma/client';
-import { ApplicationStatus, ApplicationSource } from '../common/lookup-keys';
+import { SubmissionStatus, SubmissionPaymentStatus, Prisma, IncomeSource, ProductCategory, PaymentPhaseStatus } from '@prisma/client';
+import { ApplicationStatus, ApplicationSource, SubmissionPaymentMethod, StudentStatus } from '../common/lookup-keys';
 import { cabinetFor, DEFAULT_CABINET } from '../common/cabinets';
 import { InstallmentsService } from '../installments/installments.service';
 import { BONUS_MONTH_RULE, MANAGER_BONUS_CURRENCY, bonusMonthLockedFor } from '../common/manager-bonus-volume';
 import { tjLocalDay } from '../common/tj-time';
 import { alignManagersTx } from '../common/manager-sync';
+import { LookupsService } from '../lookups/lookups.service';
 
 /**
  * Отказ закрыть сделку, пока у неё есть неодобренные платежи. Фронт узнаёт
@@ -241,6 +233,7 @@ export class SubmissionsService {
   private readonly logger = new Logger(SubmissionsService.name);
 
   constructor(
+    private lookups: LookupsService,
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
     // ActivityService для audit-trail финансовых мутаций (approvePayment /
@@ -418,6 +411,7 @@ export class SubmissionsService {
     // Валидация файлов первого платежа: TRANSFER требует минимум 1 чек,
     // CASH — минимум 1 скрин пополнения.
     const firstMethod = p.paymentMethod || SubmissionPaymentMethod.TRANSFER;
+    this.lookups.assert('DEAL_PAYMENT_METHOD', firstMethod);
     const firstReceiptUrls: string[] = Array.isArray(p.receiptUrls) ? p.receiptUrls : [];
     const firstDepositProofUrls: string[] = Array.isArray(p.depositProofUrls) ? p.depositProofUrls : [];
     if (firstMethod === SubmissionPaymentMethod.TRANSFER && firstReceiptUrls.length === 0) {
@@ -1298,6 +1292,7 @@ export class SubmissionsService {
     }
 
     const method = dto.paymentMethod || SubmissionPaymentMethod.TRANSFER;
+    this.lookups.assert('DEAL_PAYMENT_METHOD', method);
     const addReceiptUrls: string[] = Array.isArray(dto.receiptUrls) ? dto.receiptUrls : [];
     const addDepositProofUrls: string[] = Array.isArray(dto.depositProofUrls) ? dto.depositProofUrls : [];
     // Чек обязателен для менеджера; бухгалтер или основатель, принимающий оплату

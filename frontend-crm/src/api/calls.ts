@@ -2,7 +2,8 @@ import { localized, tr } from '../lib/i18n';
 import { api } from './client';
 
 export type CallDirection = 'INCOMING' | 'OUTGOING';
-export type CallOutcome = 'ANSWERED' | 'NO_ANSWER' | 'BUSY' | 'CALLBACK' | 'CONVERTED';
+/** Ключ значения справочника «Настройки списков» (13.11.2026). */
+export type CallOutcome = string;
 
 export const CALL_DIRECTION_LABEL: Record<CallDirection, string> = localized('calls.dir', {
   INCOMING: 'Входящий',

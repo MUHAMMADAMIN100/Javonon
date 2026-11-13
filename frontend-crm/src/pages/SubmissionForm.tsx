@@ -26,6 +26,7 @@ import BackButton from '../components/BackButton';
 import { useT } from '../lib/i18n';
 import { nextDueError, nextDueMin, tjFormatDate } from '../lib/tjTime';
 import { useAuth } from '../store/auth';
+import { useLookups } from '../lib/lookups';
 
 type Mode = 'existing' | 'new';
 
@@ -34,6 +35,7 @@ type Mode = 'existing' | 'new';
 type UploadMeta = { mime: string; size: number; originalName: string };
 
 export default function SubmissionForm() {
+  const L = useLookups();
   const navigate = useNavigate();
   const { toast } = useUI();
   const { t } = useT();
@@ -424,7 +426,7 @@ export default function SubmissionForm() {
   ].filter(Boolean).join(' · ') || '—';
   const reviewPayment = [
     isFinite(paNum) && paNum > 0 ? fmtSum(paNum) : '',
-    t(`deal.method.${payMethod}`).toLowerCase(),
+    L.label('DEAL_PAYMENT_METHOD', payMethod).toLowerCase(),
     payDate ? tjFormatDate(payDate) : '',
     (payMethod === 'CASH' ? depositProofUrls.length : receiptUrls.length) ? t('dealForm.review.proof') : '',
     nextDueAmount.trim() && nextDueDate
@@ -740,7 +742,7 @@ export default function SubmissionForm() {
             </div>
             <Field label={`${t('deal.field.method')} *`}>
               <div className="seg-toggle deal-method" role="radiogroup" aria-label={t('deal.field.method')} data-testid="deal-method">
-                {(['CASH', 'TRANSFER', 'OTHER'] as const).map((m) => (
+                {L.keys('DEAL_PAYMENT_METHOD').map((m) => (
                   <button
                     key={m}
                     type="button"
@@ -750,7 +752,7 @@ export default function SubmissionForm() {
                     onClick={() => setPayMethod(m)}
                     data-testid={`deal-method-${m}`}
                   >
-                    {t(`deal.method.${m}`)}
+                    {L.label('DEAL_PAYMENT_METHOD', m)}
                   </button>
                 ))}
               </div>

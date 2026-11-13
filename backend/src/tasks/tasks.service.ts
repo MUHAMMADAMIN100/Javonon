@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Role, TaskStatus } from '@prisma/client';
+import { Role } from '@prisma/client';
+import { TaskStatus } from '../common/lookup-keys';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -9,6 +10,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { hasRole, isElevated, isFounder, roleAllows } from '../auth/role-utils';
 import { canSeeTask, seesAllTasks, TaskDiaryService } from './task-diary.service';
 import { tjParseLocalDate, tjParseLocalDateEnd } from '../common/tj-time';
+import { LookupsService } from '../lookups/lookups.service';
 
 /**
  * Срок задачи из формы (QA №49). Только дата («2026-11-02») — это конец того
@@ -45,6 +47,7 @@ const TASK_INCLUDE = {
 @Injectable()
 export class TasksService {
   constructor(
+    private lookups: LookupsService,
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private mail: MailService,
@@ -250,6 +253,7 @@ export class TasksService {
   }
 
   async update(id: string, dto: UpdateTaskDto, user: CurrentUser) {
+    if ((dto as any).status !== undefined) this.lookups.assert('TASK_STATUS', (dto as any).status);
     const task = await this.findOne(id);
     const currentAssigneeIds = (task as any).assignees?.map((a: any) => a.id) ?? [];
     const isOwner =

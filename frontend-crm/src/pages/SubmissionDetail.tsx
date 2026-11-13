@@ -50,6 +50,7 @@ import DismissedMark from '../components/DismissedMark';
 import { useEscClose } from '../lib/useEscClose';
 import BusyLabel from '../components/BusyLabel';
 import { DetailSkeleton } from '../components/Skeleton';
+import LookupOptions from '../components/LookupOptions';
 
 /** Отказ бэкенда закрыть сделку с неодобренными платежами (changeStatus) — его текст узнаём, чтобы показать перевод. */
 const CLOSE_WITH_PENDING_MESSAGE = 'Нельзя закрыть сделку: есть неодобренные платежи. Сначала их нужно одобрить или отклонить.';
@@ -915,9 +916,7 @@ function AddPaymentModal({
           </Field>
           <Field label={t('deal.field.method')}>
             <CrmSelect className="crm-select" value={method} onChange={(e) => setMethod(e.target.value as any)}>
-              <option value="TRANSFER">{t('deal.method.TRANSFER')}</option>
-              <option value="CASH">{t('deal.method.CASH')}</option>
-              <option value="OTHER">{t('deal.method.OTHER')}</option>
+              <LookupOptions kind="DEAL_PAYMENT_METHOD" />
             </CrmSelect>
           </Field>
           <Field label={t('deal.col.paidAt')}>
@@ -1669,9 +1668,7 @@ function EditPaymentModal({
               onChange={(e) => setMethod(e.target.value as SubmissionPaymentMethod)}
               disabled={readOnly}
             >
-              <option value="TRANSFER">{t('deal.method.TRANSFER')}</option>
-              <option value="CASH">{t('deal.method.CASH')}</option>
-              <option value="OTHER">{t('deal.method.OTHER')}</option>
+              <LookupOptions kind="DEAL_PAYMENT_METHOD" />
             </CrmSelect>
           </Field>
           <Field label={t('deal.col.paidAt')}>

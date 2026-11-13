@@ -18,6 +18,7 @@ import CredRow from '../components/CredRow';
 import { STUDENT_LOGIN_URL } from '../lib/landingUrl';
 import BusyLabel from '../components/BusyLabel';
 import DirectionOptions from '../components/DirectionOptions';
+import LookupOptions from '../components/LookupOptions';
 
 export default function StudentNew() {
   const navigate = useNavigate();
@@ -173,11 +174,7 @@ export default function StudentNew() {
               <label>{t('app.field.preferredChannel')}</label>
               <CrmSelect className="crm-select" value={preferredChannel} onChange={(e) => setPreferredChannel(e.target.value)}>
                 <option value="">—</option>
-                <option value="WHATSAPP">{channelLabel('WHATSAPP' as any)}</option>
-                <option value="PHONE">{channelLabel('PHONE' as any)}</option>
-                <option value="INSTAGRAM">{channelLabel('INSTAGRAM' as any)}</option>
-                <option value="TELEGRAM">{channelLabel('TELEGRAM' as any)}</option>
-                <option value="EMAIL">{channelLabel('EMAIL' as any)}</option>
+                <LookupOptions kind="CONTACT_CHANNEL" />
               </CrmSelect>
             </div>
             <div className="form-group">
