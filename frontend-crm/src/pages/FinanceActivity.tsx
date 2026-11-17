@@ -87,17 +87,18 @@ export default function FinanceActivity() {
       <FinanceSubnav />
       <div className="fin-toolbar">
         <p className="fin-muted-line inc-lead">{t('finance.act.lead')}</p>
+      </div>
+      {/* Два фильтра одной строкой, по половине ширины (на телефоне — друг под
+          другом). Раньше раздел выбирали рядом «голых» кнопок: их стиль жил
+          только в мобильном @media, и на компьютере они выглядели текстом. */}
+      <div className="act-filters fin-block">
         <CrmSelect className="crm-select act-actor" value={actorId} onChange={(e) => setActorId(e.target.value)} data-testid="act-actor" aria-label={t('finance.act.who')}>
           <option value="">{t('finance.act.everyone')}</option>
           {(first?.actors ?? []).map((a) => <option key={a.id} value={a.id}>{a.name ?? '—'}</option>)}
         </CrmSelect>
-      </div>
-      <div className="act-groups fin-block" role="radiogroup" aria-label={t('finance.act.filter')}>
-        {GROUPS.map((g) => (
-          <button key={g} type="button" role="radio" aria-checked={group === g} className={`fin-subnav-chip act-chip${group === g ? ' is-active' : ''}`} onClick={() => { setGroup(g); setOpen(null); }} data-testid={`act-group-${g}`}>
-            {t(`finance.act.g.${g}`)}
-          </button>
-        ))}
+        <CrmSelect className="crm-select act-group" value={group} onChange={(e) => { setGroup(e.target.value as Group); setOpen(null); }} data-testid="act-group" aria-label={t('finance.act.filter')}>
+          {GROUPS.map((g) => <option key={g} value={g}>{t(g === 'all' ? 'finance.act.g.allSections' : `finance.act.g.${g}`)}</option>)}
+        </CrmSelect>
       </div>
       <section className="fin-card fin-block" data-testid="act-list">
         {q.isLoading ? <p className="fin-empty-line">{t('common.loading')}</p> : rows.length === 0 ? (

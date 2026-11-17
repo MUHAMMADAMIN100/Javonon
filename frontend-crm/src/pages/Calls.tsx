@@ -301,7 +301,7 @@ export default function Calls() {
         <SmallStat eyebrow={t('eyebrow.calls')} value={String(mine.total)} label={t('calls.col.total')} span="span-3" accent />
         <SmallStat eyebrow={t('calls.col.onLine')} value={fmtDuration(mine.seconds)} label={t('calls.col.onLineLabel')} span="span-3" />
         <SmallStat eyebrow={t('calls.col.answered')} value={String(mine.answered)} label={t('calls.col.withAnswer')} span="span-3" />
-        <SmallStat eyebrow={t('eyebrow.deals30')} value={String(mine.converted)} label={t('calls.col.conversions')} span="span-3" />
+        <SmallStat eyebrow={t('eyebrow.dealsP')} value={String(mine.converted)} label={t('calls.col.conversions')} span="span-3" />
       </div>
 
       {/* Статистика по команде — ADMIN */}

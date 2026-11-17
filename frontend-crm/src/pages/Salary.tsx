@@ -1112,7 +1112,7 @@ function BonusBreakdown({ preview }: { preview: SalaryPreview }) {
           иначе ставка зависела бы от выбранного на экране диапазона. */}
       {multi && (
         <div style={{ marginBottom: 12, overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          <table className="sal-months-table" style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
             <thead>
               <tr style={{ color: 'var(--text-soft)', textAlign: 'left' }}>
                 <SortTh sort={monthsSort} col="month" style={{ padding: '4px 10px 4px 0', fontWeight: 400 }} />

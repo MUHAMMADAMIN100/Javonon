@@ -4493,6 +4493,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     'ls.tab.taskStatus': 'Статусы задач',
     'ls.hint.system': 'Порядок здесь — порядок в списках. Системные значения (на них держится логика CRM) можно переименовать и перекрасить, но не удалить.',
     'ls.new': 'Новое значение',
+    'eyebrow.salesP': 'ПРОДАЖИ',
+    'eyebrow.dealsP': 'СДЕЛКИ',
+    'eyebrow.historyP': 'ИСТОРИЯ',
+    'finance.act.g.allSections': 'Все разделы',
+    'finance.plan.f.allRecords': 'Все записи',
   },
   tg: {
     // ===== common =====
@@ -8913,6 +8918,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     'ls.tab.taskStatus': 'Ҳолатҳои вазифаҳо',
     'ls.hint.system': 'Тартиби ин ҷо — тартиб дар рӯйхатҳо. Қиматҳои системавиро номашон ва рангашонро иваз кардан мумкин, нест кардан не.',
     'ls.new': 'Қимати нав',
+    'eyebrow.salesP': 'ФУРӮШ',
+    'eyebrow.dealsP': 'АҲДҲО',
+    'eyebrow.historyP': 'ТАЪРИХ',
+    'finance.act.g.allSections': 'Ҳамаи бахшҳо',
+    'finance.plan.f.allRecords': 'Ҳамаи сабтҳо',
   },
 };
 

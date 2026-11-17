@@ -7,7 +7,7 @@ import { useAuth } from '../store/auth';
 import { isElevated } from '../lib/roles';
 import { useT } from '../lib/i18n';
 import { useRoleLabel } from '../lib/labels';
-import { tjLastDaysRange } from '../lib/tjTime';
+import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
 import KpiDetailsModal from '../components/KpiDetailsModal';
 import FitNumber from '../components/FitNumber';
 import Icon from '../Icon';
@@ -32,13 +32,6 @@ function nonTjsLine(row: KpiRow): string | null {
   return entries.map(([cur, sum]) => fmtMoney(sum, cur)).join(' · ');
 }
 
-const RANGE_KEYS: Array<{ key: string; days: number | null }> = [
-  { key: 'kpi.range.all', days: null },
-  { key: 'kpi.range.7', days: 7 },
-  { key: 'kpi.range.30', days: 30 },
-  { key: 'kpi.range.90', days: 90 },
-];
-
 export default function Kpi() {
   const { t } = useT();
   const roleLabel = useRoleLabel();
@@ -47,7 +40,10 @@ export default function Kpi() {
   const roleText = (r: { role: string; customRole?: { name: string; isActive?: boolean } | null }) =>
     r.customRole?.name && r.customRole.isActive !== false ? r.customRole.name : roleLabel(r.role);
   const me = useAuth((s) => s.user);
-  const [rangeIdx, setRangeIdx] = useState(2); // 30 days по умолчанию
+  // Период — календарный, как на дашборде и в «Финансах»: «Этот месяц» =
+  // с 1-го числа по сегодня (Asia/Dushanbe), «Прошлый месяц» = 1-е — 30/31-е.
+  // Раньше было скользящее «30 дней» — в ноябрь попадала оплата от 26.10.
+  const period = useDashboardPeriod();
   /** Строка, по которой открыто окно подробностей (id, а не объект: после
    *  перезапроса рейтинга объект строки уже другой). */
   const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -58,17 +54,17 @@ export default function Kpi() {
   // Карточка лучшего по продажам — суммы компании: руководство; роль — «Деньги компании».
   const showTop = hasActiveRole(me) ? canSeeData(me, 'visibility:company-money') : isElevated(me);
 
-  const range = RANGE_KEYS[rangeIdx];
   // Границы — календарные дни Asia/Dushanbe (YYYY-MM-DD), как их ждёт
   // общий parseDate на бэке: он поднимет `to` до 23:59:59.999 TJT.
-  // «Все время» — params undefined, запрос уходит без from/to, и KPI
-  // считается ровно как раньше, за всё время.
-  const params = range.days ? tjLastDaysRange(range.days) : undefined;
+  // «Всё время» — params undefined, запрос уходит без from/to.
+  const params = period.range.from || period.range.to ? period.range : undefined;
   const kpiQuery = useQuery<KpiRow[]>({
     // Ключ по самим границам, а не по индексу кнопки: в полночь по
     // Душанбе окно «30 дней» съезжает, и кэш обязан это заметить.
     queryKey: ['kpi', 'leaderboard', params?.from ?? 'all', params?.to ?? 'all'],
     queryFn: () => leaderboard(params),
+    // Неполный «свой период» не уходит в API — иначе {} = «за всё время».
+    enabled: !period.invalid,
   });
   const rows = kpiQuery.data ?? [];
   // Место считает сервер (продажи → зачислено → конверсия → лиды; равные
@@ -96,20 +92,8 @@ export default function Kpi() {
 
   return (
     <>
-      <div className="filters" style={{ alignItems: 'center' }}>
-        {/* Тот же вид, что у периода дашборда: на телефоне — сетка 2 × 2. */}
-        <div className="pagination-controls period-switcher-options" data-testid="period-options">
-          {RANGE_KEYS.map((rg, i) => (
-            <button
-              key={rg.key}
-              type="button"
-              className={i === rangeIdx ? 'active' : ''}
-              aria-pressed={i === rangeIdx}
-              onClick={() => setRangeIdx(i)}
-              data-testid={`kpi-range-${i}`}
-            >{t(rg.key)}</button>
-          ))}
-        </div>
+      <PeriodSwitcher state={period} busy={kpiQuery.isFetching} />
+      <div className="filters kpi-range-hint" style={{ alignItems: 'center' }}>
         {/* Показатели за период читаются одинаково на всех экранах:
             «из записей, СОЗДАННЫХ за период». Без этой подписи цифры
             выглядят как «закрыто/зачислено за период», а это другое
@@ -333,14 +317,14 @@ export default function Kpi() {
       <p className="kpi-cols-note" data-testid="kpi-cols-note">{t('kpi.colsNote')}</p>
       <p className="kpi-cols-note" data-testid="kpi-rank-rule">{t('kpi.rankRule')}</p>
       {/* Сверка с дашбордом: что не вошло в сумму по сотрудникам. */}
-      {showTop && <KpiOutsideNote params={params} />}
+      {showTop && !period.invalid && <KpiOutsideNote params={params} />}
       <AnimatePresence>
         {detailsId && rows.find((r) => r.id === detailsId) && (
           <KpiDetailsModal
             key={detailsId}
             row={rows.find((r) => r.id === detailsId)!}
             params={params}
-            rangeLabel={t(range.key)}
+            rangeLabel={period.suffix}
             onClose={() => setDetailsId(null)}
           />
         )}
@@ -385,7 +369,7 @@ function KpiBento({ eyebrow, label, value, accent, span = 'span-3' }: {
  * весь доход и все зачисленные лиды, рейтинг — только действующих менеджеров
  * и только продажи по сделкам. Показываем, куда ушла разница.
  */
-function KpiOutsideNote({ params }: { params?: { from: string; to: string } }) {
+function KpiOutsideNote({ params }: { params?: { from?: string; to?: string } }) {
   const { t } = useT();
   const q = useQuery({ queryKey: ['kpi', 'outside', params ?? {}], queryFn: () => kpiOutside(params) });
   const d = q.data;

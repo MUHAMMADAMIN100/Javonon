@@ -1319,9 +1319,9 @@ a.inc-tile:hover { border-color: #B9C7DD; }
 @media (max-width: 380px) { .pay-cards { grid-template-columns: 1fr; } }
 
 /* ── Финансы → Активность (часть 3, 11.11.2026) ── */
-.act-actor { min-width: 220px; }
-.act-groups { display: flex; flex-wrap: wrap; gap: 6px; }
-.act-chip { cursor: pointer; }
+.act-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.act-filters > .crm-select-trigger { width: 100%; min-width: 0; }
+.plan-filter { width: 260px; max-width: 100%; }
 .act-row { cursor: pointer; }
 .act-row:hover td, .act-row.is-open td { background: #F8FAFD; }
 .act-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
@@ -1335,7 +1335,7 @@ a.inc-tile:hover { border-color: #B9C7DD; }
 .act-changes dd { margin: 0; overflow-wrap: anywhere; }
 .act-changes s { color: var(--text-light); }
 .act-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
-@media (max-width: 720px) { .act-actor { min-width: 0; flex: 1 1 100%; } .act-groups { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } }
+@media (max-width: 720px) { .act-filters { grid-template-columns: 1fr; } .plan-filter { width: 100%; } }
 
 /* ── Финансы → Настройки → Резервные копии (часть 3) ── */
 .bk-report { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; }
@@ -2029,3 +2029,31 @@ body:has(.deal-wizard-foot) .dialpad-fab { display: none !important; }
 .ls-sections { display: flex; flex-wrap: wrap; gap: 6px; }
 .ls-section { border: 1px solid var(--border); background: #fff; color: var(--text-soft); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .ls-section.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* ===== Таблицы: полная сетка (17.11.2026) =====
+   Рамка вокруг таблицы, линии между всеми столбцами и строками, серая шапка —
+   чтобы сразу было видно, к какому столбцу относится значение. Одно правило на
+   все таблицы CRM (класс .table). Только ≥901px: ниже таблицы становятся
+   карточками со своими рамками. */
+@media (min-width: 901px) {
+  .table { border-collapse: collapse; border: 1px solid var(--tbl-line); }
+  .table th, .table td { border: 1px solid var(--tbl-line); }
+  .table thead th { background: var(--tbl-head-bg); color: var(--text-soft); border-bottom-color: var(--tbl-head-line); }
+  /* Таблица вплотную к краям карточки: рамкой служит сама карточка, иначе
+     у края линия двоится (карточка 1px + ячейка 1px). */
+  .card[style*="padding: 0"] > .table,
+  .card[style*="padding: 0"] > .table-wrap > .table,
+  .fin-table-wrap > .table { border-style: solid hidden hidden; }
+  .card[style*="padding: 0"] > .table:first-child,
+  .card[style*="padding: 0"] > .table-wrap:first-child > .table { border-top-style: hidden; }
+  /* Таблица — первое в финансовой карточке («Активность»): без пустой белой
+     полосы отступа над шапкой; углы шапки обрезает скругление карточки. */
+  .fin-card:has(> .fin-table-wrap:first-child) { overflow: hidden; }
+  .fin-card > .fin-table-wrap:first-child { margin-top: -18px; }
+  .fin-card > .fin-table-wrap:first-child > .table { border-top-style: hidden; }
+}
+:root { --tbl-line: #DCE2EB; --tbl-head-line: #CBD3DF; --tbl-head-bg: #F1F4F9; }
+/* Помесячная разбивка бонуса в «Зарплате» (своя маленькая таблица, не .table) — та же сетка. */
+.sal-months-table { border: 1px solid var(--tbl-line); }
+.sal-months-table th, .sal-months-table td { border: 1px solid var(--tbl-line); padding: 5px 10px !important; }
+.sal-months-table thead th { background: var(--tbl-head-bg); border-bottom-color: var(--tbl-head-line); }

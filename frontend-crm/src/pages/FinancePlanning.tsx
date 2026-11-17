@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import CrmSelect from '../components/CrmSelect';
 import { Link } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -162,13 +163,9 @@ export default function FinancePlanning() {
         </div>
       )}
       <div className="plan-filters fin-block">
-        <div className="act-groups" role="radiogroup" aria-label={t('finance.act.filter')}>
-          {(['all', 'in', 'out', 'todo'] as const).map((f) => (
-            <button key={f} type="button" role="radio" aria-checked={filter === f} className={`fin-subnav-chip act-chip${filter === f ? ' is-active' : ''}`} onClick={() => setFilter(f)} data-testid={`plan-filter-${f}`}>
-              {t(`finance.plan.f.${f}`)}
-            </button>
-          ))}
-        </div>
+        <CrmSelect className="crm-select plan-filter" value={filter} onChange={(e) => setFilter(e.target.value as Filter)} data-testid="plan-filter" aria-label={t('finance.act.filter')}>
+          {(['all', 'in', 'out', 'todo'] as const).map((f) => <option key={f} value={f}>{t(f === 'all' ? 'finance.plan.f.allRecords' : `finance.plan.f.${f}`)}</option>)}
+        </CrmSelect>
         <span className="plan-legend">✓ {t('finance.plan.legendDone')} · ○ {t('finance.plan.legendWait')} · ! {t('finance.plan.legendLate')}</span>
       </div>
       <section className="fin-card fin-block" data-testid="plan-calendar">

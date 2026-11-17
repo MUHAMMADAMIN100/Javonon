@@ -17,6 +17,7 @@ import {
 import { useUI } from '../ui/Dialogs';
 import Icon from '../Icon';
 import { keys } from '../lib/queryKeys';
+import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
 import { useOptimisticMutation } from '../lib/optimistic';
 import { useRealtimeEvent } from '../realtime';
 import { fmtDateText, tjFormatTime, TJ_TZ } from '../lib/tjTime';
@@ -75,7 +76,11 @@ export default function TimeTracker() {
   const [showLunchExcuseModal, setShowLunchExcuseModal] = useState(false);
 
   const todayKey = keys.time.today();
-  const historyKey = keys.time.history({ take: 30 });
+  // Журнал — за календарный период (по умолчанию этот месяц), а не
+  // «последние 30 записей».
+  const period = useDashboardPeriod();
+  const historyParams = { ...period.range, take: 400 };
+  const historyKey = keys.time.history(historyParams);
 
   const todayQuery = useQuery<TimeEntry | null>({
     queryKey: todayKey,
@@ -99,7 +104,8 @@ export default function TimeTracker() {
 
   const historyQuery = useQuery<TimeEntry[]>({
     queryKey: historyKey,
-    queryFn: () => getHistory({ take: 30 }),
+    queryFn: () => getHistory(historyParams),
+    enabled: !period.invalid,
   });
 
   // По ТЗ §5 — когда FOUNDER одобрит/отклонит причину, плашка
@@ -482,11 +488,12 @@ export default function TimeTracker() {
 
       {/* История */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
-        <span className="crm-section-eyebrow">{t('eyebrow.historyLast30')}</span>
+        <span className="crm-section-eyebrow">{`${t('eyebrow.historyP')} · ${period.suffix}`}</span>
         <h2 className="crm-section-title">
           {t('workday.journal')}
         </h2>
       </div>
+      <PeriodSwitcher state={period} busy={historyQuery.isFetching} />
 
       {history.length > 0 && <SortSelect sort={sort} />}
       <div className="card" style={{ padding: 0 }}>

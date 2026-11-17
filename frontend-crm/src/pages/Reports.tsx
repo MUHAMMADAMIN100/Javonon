@@ -1,4 +1,5 @@
-import { fmtDateText, TJ_TZ, tjLastDaysRange } from '../lib/tjTime';
+import { fmtDateText, TJ_TZ } from '../lib/tjTime';
+import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -52,14 +53,15 @@ export default function Reports() {
   });
   const today = todayQuery.data ?? null;
 
-  // «30 дней» — это последние 30 календарных дней (сегодня и 29 до него),
-  // а не 30 последних отчётов: раньше в «30 дней» попадал отчёт от июня.
-  const last30 = tjLastDaysRange(30);
-  const historyParams = { from: last30.from, to: last30.to, take: 31 };
+  // Период — календарный, как на дашборде: «Этот месяц» = с 1-го числа по
+  // сегодня (Asia/Dushanbe). Раньше было скользящее «30 дней».
+  const period = useDashboardPeriod();
+  const historyParams = { ...period.range, take: 366 };
   const historyKey = keys.reports.mine(historyParams);
   const historyQuery = useQuery<DailyReport[]>({
     queryKey: historyKey,
     queryFn: () => reportsMine(historyParams),
+    enabled: !period.invalid,
   });
   const history = historyQuery.data ?? [];
   const sort = useTableSort(history, [
@@ -238,10 +240,11 @@ export default function Reports() {
         </div>
       </FormModal>
 
+      <PeriodSwitcher state={period} busy={historyQuery.isFetching} />
       {/* Сводка за период */}
       <div className="bento" style={{ marginBottom: 24 }}>
-        <SmallStat eyebrow={t('eyebrow.sales30')} value={fmtTjs(totalSalesAmount)} label={t('reports.up.totalSales')} span="span-3" accent />
-        <SmallStat eyebrow={t('eyebrow.deals30')} value={String(totalSalesCount)} label={t('reports.up.dealsClosed')} span="span-3" />
+        <SmallStat eyebrow={`${t('eyebrow.salesP')} · ${period.suffix}`} value={fmtTjs(totalSalesAmount)} label={t('reports.up.totalSales')} span="span-3" accent />
+        <SmallStat eyebrow={`${t('eyebrow.dealsP')} · ${period.suffix}`} value={String(totalSalesCount)} label={t('reports.up.dealsClosed')} span="span-3" />
         <SmallStat eyebrow={t('eyebrow.calls')} value={String(totalCalls)} label={t('reports.up.calls')} span="span-2" />
         <SmallStat eyebrow={t('eyebrow.meetings')} value={String(totalMeetings)} label={t('reports.up.meetings')} span="span-2" />
         <SmallStat eyebrow={t('eyebrow.leadContacts')} value={String(totalContacted)} label={t('reports.up.apps')} span="span-2" />
@@ -249,7 +252,7 @@ export default function Reports() {
 
       {/* История */}
       <div className="crm-section-head" style={{ marginTop: 32 }}>
-        <span className="crm-section-eyebrow">{t('eyebrow.historyLast30')}</span>
+        <span className="crm-section-eyebrow">{`${t('eyebrow.historyP')} · ${period.suffix}`}</span>
         <h2 className="crm-section-title">{t('reports.history')}</h2>
       </div>
       {history.length > 0 && <SortSelect sort={sort} />}
