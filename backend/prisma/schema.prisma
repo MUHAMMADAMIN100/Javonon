@@ -164,6 +164,9 @@ model User {
   email              String      @unique
   password           String
   fullName           String
+  // Фото на аватарке (21.11.2026): /uploads/avatar-*.jpg, квадрат 256×256 —
+  // обрезает CRM перед загрузкой. null — кружок с инициалами.
+  avatarUrl          String?
   // Основная роль — для UI/исторических проверок.
   role               Role        @default(SALES_MANAGER)
   // Дополнительные роли (один человек может быть, например, и ADMIN, и ACCOUNTANT

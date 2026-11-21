@@ -7,6 +7,8 @@ export interface PipelineStage {
   order: number;
   color: string | null;
   isClosingStage: boolean;
+  /** Лидов на этапе (без удалённых): всех — или только своих, см. Pipeline.leadScope. */
+  leadCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -18,6 +20,8 @@ export interface Pipeline {
   isDefault: boolean;
   isActive: boolean;
   stages: PipelineStage[];
+  /** Чьих лидов число на этапах: all — всех, own — только свои (менеджер). */
+  leadScope?: 'all' | 'own';
   createdAt: string;
   updatedAt: string;
 }
@@ -45,6 +49,10 @@ export const addStage = (pipelineId: string, data: { name: string; color?: strin
 
 export const updateStage = (id: string, patch: Partial<Pick<PipelineStage, 'name' | 'order' | 'color' | 'isClosingStage'>>) =>
   api.patch<PipelineStage>(`/sales/stages/${id}`, patch).then((r) => r.data);
+
+/** Новый порядок этапов целиком (перетаскивание плиток) — одной транзакцией. */
+export const reorderStages = (pipelineId: string, ids: string[]) =>
+  api.put<PipelineStage[]>(`/sales/pipelines/${pipelineId}/stages/order`, { ids }).then((r) => r.data);
 
 export const deleteStage = (id: string) =>
   api.delete(`/sales/stages/${id}`).then((r) => r.data);

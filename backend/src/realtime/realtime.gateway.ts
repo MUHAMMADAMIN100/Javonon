@@ -264,6 +264,10 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         if (u.role === 'FOUNDER' || (u.roles || []).includes('FOUNDER')) {
           client.join('founders');
         }
+        // Вкладку могли закрыть, пока мы ходили в базу (подключение клиенту
+        // уже подтверждено): отключение уже обработано, и отметка «в сети»
+        // сейчас залипла бы до перезапуска сервера (21.11.2026).
+        if (client.disconnected) return;
         // Сотрудник не становится «в сети» оттого, что основатель смотрит
         // CRM его глазами.
         if (!impersonated) this.presence.connected(id, client.id);

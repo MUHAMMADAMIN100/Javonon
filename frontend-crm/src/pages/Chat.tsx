@@ -46,6 +46,7 @@ import { isTouchDevice } from '../lib/touch';
 import { useEscClose } from '../lib/useEscClose';
 import { ROLE_LABEL, type Role } from '../api/types';
 import DismissedMark from '../components/DismissedMark';
+import { AvatarFace, avatarClass } from '../components/AvatarFace';
 
 // Базовый URL для статических attachments (chat-uploads).
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
@@ -1275,12 +1276,17 @@ export default function Chat() {
                     onPointerCancel={cancelLongPress}
                     onPointerMove={(e) => { if (Math.abs(e.movementX) + Math.abs(e.movementY) > 6) cancelLongPress(); }}
                   >
-                    <span
-                      className="chat-avatar chat-avatar-lg"
-                      style={{ background: r.type === 'GENERAL' ? 'var(--text)' : avatarColor(r.id) }}
-                    >
-                      {r.type === 'GENERAL' ? '#' : initials(title)}
-                    </span>
+                    {(() => {
+                      const peerPhoto = r.type === 'DIRECT' ? r.members.find((m) => m.userId !== me?.id)?.user?.avatarUrl : null;
+                      return (
+                        <span
+                          className={avatarClass('chat-avatar chat-avatar-lg', peerPhoto)}
+                          style={{ background: r.type === 'GENERAL' ? 'var(--text)' : avatarColor(r.id) }}
+                        >
+                          {r.type === 'GENERAL' ? '#' : <AvatarFace url={peerPhoto} initials={initials(title)} />}
+                        </span>
+                      );
+                    })()}
                     <span className="chat-room-main">
                       <span className="chat-room-top">
                         <span className="chat-room-title">{title}</span>
@@ -1445,10 +1451,10 @@ export default function Chat() {
                   title={t('chat.members.open')}
                 >
                   <span
-                    className={`chat-avatar chat-avatar-lg${directPeer?.online ? ' is-online' : ''}`}
+                    className={avatarClass(`chat-avatar chat-avatar-lg${directPeer?.online ? ' is-online' : ''}`, directPeer?.avatarUrl)}
                     style={{ background: activeRoom.type === 'GENERAL' ? 'var(--text)' : avatarColor(activeRoom.id) }}
                   >
-                    {activeRoom.type === 'GENERAL' ? '#' : initials(title)}
+                    {activeRoom.type === 'GENERAL' ? '#' : <AvatarFace url={directPeer?.avatarUrl} initials={initials(title)} />}
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span className="chat-thread-title">{title}</span>
@@ -1619,8 +1625,8 @@ export default function Chat() {
                     {showAvatarSlot && (
                       sameAsNext
                         ? <span className="chat-avatar-space" />
-                        : <span className="chat-avatar" style={{ background: isBot ? 'linear-gradient(135deg, var(--primary), var(--text))' : color }}>
-                            {isBot ? '🤖' : initials(m.author?.fullName || '?')}
+                        : <span className={avatarClass('chat-avatar', isBot ? null : m.author?.avatarUrl)} style={{ background: isBot ? 'linear-gradient(135deg, var(--primary), var(--text))' : color }}>
+                            {isBot ? '🤖' : <AvatarFace url={m.author?.avatarUrl} initials={initials(m.author?.fullName || '?')} />}
                           </span>
                     )}
                     <div className="chat-bubble-wrap">
@@ -1743,9 +1749,10 @@ export default function Chat() {
                   className="chat-row chat-typing-row"
                   data-testid="chat-typing-bubble"
                 >
-                  {activeRoom?.type !== 'DIRECT' && (
-                    <span className="chat-avatar" style={{ background: avatarColor(firstId) }}>{initials(first.name || '?')}</span>
-                  )}
+                  {activeRoom?.type !== 'DIRECT' && (() => {
+                    const photo = roomMembers.find((u) => u.id === firstId)?.avatarUrl;
+                    return <span className={avatarClass('chat-avatar', photo)} style={{ background: avatarColor(firstId) }}><AvatarFace url={photo} initials={initials(first.name || '?')} /></span>;
+                  })()}
                   <div className="chat-bubble tail chat-typing-bubble">
                     <span className="typing-dots" aria-hidden="true"><span /><span /><span /></span>
                     <span className="chat-typing-text">{label}</span>
@@ -2187,8 +2194,8 @@ export default function Chat() {
                       setMobileShowList(false);
                     }}
                   >
-                    <span className={`chat-avatar${u.online ? ' is-online' : ''}`} style={{ background: avatarColor(u.id), alignSelf: 'center' }}>
-                      {initials(u.fullName)}
+                    <span className={avatarClass(`chat-avatar${u.online ? ' is-online' : ''}`, u.avatarUrl)} style={{ background: avatarColor(u.id), alignSelf: 'center' }}>
+                      <AvatarFace url={u.avatarUrl} initials={initials(u.fullName)} />
                     </span>
                     <span className="chat-member-main">
                       <span className="chat-member-name">
@@ -2494,8 +2501,8 @@ function MessageReadsInfo({ messageId, direct }: { messageId: string; direct: bo
         <div className="chat-reads-list" data-testid="chat-reads-list">
           {list.map((r) => (
             <div key={r.userId} className="chat-reads-row" data-testid="chat-reads-row">
-              <span className="chat-avatar" style={{ background: avatarColor(r.userId), width: 26, height: 26, fontSize: 10, alignSelf: 'center' }}>
-                {initials(r.fullName)}
+              <span className={avatarClass('chat-avatar', r.avatarUrl)} style={{ background: avatarColor(r.userId), width: 26, height: 26, fontSize: 10, alignSelf: 'center' }}>
+                <AvatarFace url={r.avatarUrl} initials={initials(r.fullName)} />
               </span>
               <span className="chat-reads-name">{r.fullName}</span>
               <span className="chat-reads-time">{when(r.readAt)}</span>

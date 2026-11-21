@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, PenaltyReason } from '@prisma/client';
 import { SettingsService } from '../settings/settings.service';
+import { isFounder } from '../auth/role-utils';
 import {
   parseCalendarDateUtc,
   tjCalendarDay,
@@ -73,7 +74,16 @@ export class PenaltiesService {
     });
   }
 
+  /** Основателю штрафы не начисляются (решение заказчика 21.11.2026): ни опоздания, ни ручные. */
+  private async founderUser(userId: string) {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, roles: true } });
+    return isFounder(u as any);
+  }
+
   async createManual(userId: string, dto: { reason?: PenaltyReason; amount: number; details: string; date?: string }) {
+    if (await this.founderUser(userId)) {
+      throw new BadRequestException('Основателю штрафы не начисляются');
+    }
     // QA-fix #25-28: типы, диапазоны, валидация enum, проверка существования.
     if (typeof dto.amount !== 'number' || !isFinite(dto.amount) || isNaN(dto.amount)) {
       throw new BadRequestException('Сумма должна быть числом');
@@ -187,6 +197,7 @@ export class PenaltiesService {
       select: { ...ENTRY_SELECT, latePenaltyApplied: true, lateLunchPenaltyApplied: true },
     });
     if (!e) return 0;
+    if (await this.founderUser(e.userId)) return 0;
     const minutes = kind === 'arrival' ? e.lateMinutes : e.lateLunchMinutes;
     if (minutes < LATE_THRESHOLD_MIN) return 0;
     if (kind === 'arrival' ? e.latePenaltyApplied : e.lateLunchPenaltyApplied) return 0;
@@ -221,6 +232,11 @@ export class PenaltiesService {
       (await db.timeEntry.updateMany({ where: claimWhere, data: claimData })).count === 1;
 
     if (minutes < LATE_THRESHOLD_MIN) return 'none';
+    // Основатель: опоздание закрываем без штрафа (запись больше не попадёт в выборку).
+    if (await this.founderUser(e.userId)) {
+      await claim(this.prisma);
+      return 'none';
+    }
     // QA-3 (BUG-30): опоздание — одно на день, по ПЕРВОМУ приходу. Вторая
     // запись того же дня (старые данные до правки) штраф не создаёт.
     if (kind === 'arrival') {
@@ -294,6 +310,11 @@ export class PenaltiesService {
   async effectivePenaltiesForUser(userId: string, from: Date, to: Date, alsoAppliedIds: string[] = []) {
     // alsoAppliedIds — учтённые штрафы, которые надо считать неучтёнными:
     // предпросмотр пересчёта зарплаты, где её штрафы вот-вот вернутся.
+    // Основатель: старые штрафы остаются в базе (удалять запрещено), но в
+    // расчёт не идут — штрафы ему не начисляются.
+    if (await this.founderUser(userId)) {
+      return { effective: 0, pending: 0, excused: 0, items: [] as Array<any> };
+    }
     const penalties = await this.prisma.penalty.findMany({
       where: {
         userId,

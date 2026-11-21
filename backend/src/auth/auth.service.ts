@@ -187,6 +187,7 @@ export class AuthService {
       where: { id: userId },
       select: {
         id: true, email: true, fullName: true, role: true, roles: true,
+        avatarUrl: true,
         customRoleId: true,
         customRole: { select: CUSTOM_ROLE_SELECT },
       },
@@ -197,6 +198,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
+      avatarUrl: user.avatarUrl ?? null,
       role: user.role,
       roles: user.roles || [],
       customRoleId: user.customRoleId || null,

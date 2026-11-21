@@ -168,7 +168,7 @@ export class UsersService {
       where,
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, email: true, fullName: true, role: true, roles: true, createdAt: true,
+        id: true, email: true, fullName: true, avatarUrl: true, role: true, roles: true, createdAt: true,
         isActive: true,
         customRoleId: true,
         customRole: { select: { id: true, name: true, isActive: true, permissions: true } },
@@ -219,6 +219,22 @@ export class UsersService {
    * «Заявок всего» — счёт по всей компании; список здесь только СВОИХ
    * заявок сотрудника («N моих»): чужих клиентов в профиле не показываем.
    */
+  /** Кто может менять фото сотрудника: он сам; основатель и админ — любому, кроме основателя. */
+  async assertAvatarAccess(me: any, targetId: string) {
+    const target = await this.prisma.user.findUnique({ where: { id: targetId }, select: { id: true, role: true, roles: true } });
+    if (!target) throw new NotFoundException('Сотрудник не найден');
+    if (me?.id === targetId) return;
+    const manager = isFounder(me) || (me?.role === 'ADMIN' || (Array.isArray(me?.roles) && me.roles.includes('ADMIN')));
+    if (!manager) throw new ForbiddenException('Фото другого сотрудника меняют только основатель и админ');
+    if (isFounder(target as any) && !isFounder(me)) throw new ForbiddenException('Фото основателя меняет только он сам');
+  }
+
+  async setAvatar(id: string, avatarUrl: string | null) {
+    const u = await this.prisma.user.update({ where: { id }, data: { avatarUrl }, select: { id: true, avatarUrl: true } });
+    this.realtime?.emitStaff?.('user:avatar', { userId: id, avatarUrl });
+    return u;
+  }
+
   async monthDetails(id: string) {
     const now = new Date();
     const monthStart = tjStartOfMonth(now);
@@ -259,7 +275,10 @@ export class UsersService {
         orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       }),
     ]);
-    return { periodStart: monthStart, periodEnd: monthEnd, time, sales, ownApplications, enrolled, penalties };
+    // Основателю штрафы не начисляются — и в окне плитки их не показываем.
+    const owner = await this.prisma.user.findUnique({ where: { id }, select: { role: true, roles: true } });
+    const shownPenalties = isFounder(owner as any) ? [] : penalties;
+    return { periodStart: monthStart, periodEnd: monthEnd, time, sales, ownApplications, enrolled, penalties: shownPenalties };
   }
 
   /**
@@ -325,6 +344,7 @@ export class UsersService {
         id: true,
         email: true,
         fullName: true,
+        avatarUrl: true,
         role: true,
         roles: true,
         phone: true,
@@ -437,6 +457,9 @@ export class UsersService {
     // Учитель академии в продажах и KPI не участвует: число всех заявок
     // агентства за месяц ему не показываем (досье учителя их не рисует).
     const teacherOnly = isTeacherOnly({ role: user.role, roles: user.roles });
+    // Основателю штрафы не начисляются (21.11.2026): старые остаются в базе,
+    // но в профиле их нет и в сумму месяца они не входят.
+    const founderProfile = isFounder({ role: user.role, roles: user.roles } as any);
 
     return {
       user,
@@ -467,9 +490,9 @@ export class UsersService {
       },
       penalties: {
         /** История — последние 50 за всё время (таблица внизу профиля). */
-        list: penalties,
+        list: founderProfile ? [] : penalties,
         /** Плитка «Штрафы»: сумма за текущий месяц, удержанные и нет. */
-        monthTotal: monthPenaltiesAmount._sum.amount || 0,
+        monthTotal: founderProfile ? 0 : monthPenaltiesAmount._sum.amount || 0,
       },
       // «Продажи» — по правилу зарплаты (common/manager-sales.ts);
       // ручные приходы — отдельно (monthOtherIncome), валюты — monthOther.

@@ -7,6 +7,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { tjLocalDay, tjStartOfDay, tjStartOfNextDay } from '../common/tj-time';
 import { tjCalendarDay } from '../common/tj-time';
 import { Prisma } from '@prisma/client';
+import { isFounder } from '../auth/role-utils';
 
 // Норма прихода в офис — 09:00 локального времени.
 const OFFICE_START_HOUR = 9;
@@ -64,6 +65,15 @@ export class TimeTrackingService {
   ) {}
 
   /** Возвращает активную запись (работает, обед или перерыв) либо null. */
+  /**
+   * Основатель не работает по общему графику: «Начать работу» нажимает по
+   * желанию, опоздания и штрафы ему не считаются (решение заказчика 21.11.2026).
+   */
+  private async founderUser(userId: string) {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, roles: true } });
+    return isFounder(u as any);
+  }
+
   async getActive(userId: string) {
     return this.prisma.timeEntry.findFirst({
       where: { userId, status: { in: [TimeEntryStatus.WORKING, TimeEntryStatus.ON_LUNCH, TimeEntryStatus.ON_BREAK] } },
@@ -150,7 +160,7 @@ export class TimeTrackingService {
     const sched = await this.settings.getEffectiveScheduleForUser(userId, weekday);
     // Если день нерабочий по графику — lateMinutes=0 (выход в субботу
     // не штрафуется).
-    const lateMinutes = sched.isWorkday
+    const lateMinutes = sched.isWorkday && !(await this.founderUser(userId))
       ? Math.max(0, minutesFromMidnight - sched.startMinute)
       : 0;
 
@@ -322,7 +332,7 @@ export class TimeTrackingService {
     try {
       const { weekday } = localDayAndMinutes(active.clockIn);
       const sched = await this.settings.getEffectiveScheduleForUser(userId, weekday);
-      if (sched.isWorkday && sched.lunchEndMinute !== null) {
+      if (sched.isWorkday && sched.lunchEndMinute !== null && !(await this.founderUser(userId))) {
         const { minutesFromMidnight: nowMin } = localDayAndMinutes(now);
         const overdue = nowMin - sched.lunchEndMinute;
         if (overdue > 0) lateLunchMinutes = overdue;

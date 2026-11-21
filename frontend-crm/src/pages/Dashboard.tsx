@@ -24,6 +24,7 @@ import { useApplicationStatusLabel, useCountryLabel, useDirectionLabel } from '.
 import PeriodSwitcher, { useDashboardPeriod } from '../components/PeriodSwitcher';
 import FitNumber from '../components/FitNumber';
 import DashboardDetails, { type DashboardDetailKind } from '../components/DashboardDetails';
+import { AvatarFace, avatarClass } from '../components/AvatarFace';
 
 function fmtMoney(n: number, c = 'TJS') {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
@@ -393,8 +394,12 @@ export default function Dashboard() {
         </>
       )}
 
-      <section className="dash-grid-3">
+      {/* Воронка — во всю ширину, статусы в 3 колонки: она больше не тянет
+          строку вниз, и рядом не остаётся пустоты (21.11.2026). */}
+      <section className="dash-wide">
         <BreakdownCard
+          wide
+          testId="dash-funnel"
           title={t('dashboard.breakdown.funnel')}
           subtitle={period.suffix}
           total={appStats?.total}
@@ -406,7 +411,10 @@ export default function Dashboard() {
           }))}
           style={staleStyle}
         />
+      </section>
 
+      {(showTasks || showTop) && (
+      <section className="dash-grid-2 dash-equal" data-testid="dash-tasks-top">
         {showTasks && (
           <div className="card dash-card" data-testid="dash-tasks">
             <div className="dash-card-head">
@@ -455,7 +463,7 @@ export default function Dashboard() {
                 {topPerformers.map((p, i) => (
                   <li key={p.id} className="dash-person">
                     <span className={`dash-rank r${i + 1}`}>#{i + 1}</span>
-                    <span className="dash-avatar">{initialsOf(p.fullName)}</span>
+                    <span className={avatarClass('dash-avatar', p.avatarUrl)}><AvatarFace url={p.avatarUrl} initials={initialsOf(p.fullName)} /></span>
                     <span className="dash-row-main">
                       <span className="dash-row-title">{p.fullName}</span>
                       <span className="dash-row-sub">
@@ -471,9 +479,10 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+      )}
 
       {(canApprove || canOpenApps) && (
-        <section className="dash-grid-2">
+        <section className="dash-grid-2 dash-equal">
           {canApprove && (
             <div className="card dash-card" data-testid="dash-approvals">
               <div className="dash-card-head">
@@ -544,7 +553,7 @@ export default function Dashboard() {
           <PeriodChip suffix={period.suffix} />
         </div>
       </div>
-      <section className="dash-grid-3" style={staleStyle}>
+      <section className="dash-grid-3 dash-equal" style={staleStyle}>
         {/* Страны первыми: это единственный вопрос о цели обучения, на который
             клиент реально отвечает в форме сайта (направление там не спрашивают). */}
         <BreakdownCard
@@ -662,7 +671,10 @@ function KpiCard({ def, note, noteTitle, open, index, money, accent, warn, value
 }
 
 /** Разрез «строка → число → доля» со ссылкой в отфильтрованный список. */
-function BreakdownCard({ title, subtitle, rows, total, action, style }: {
+function BreakdownCard({ title, subtitle, rows, total, action, style, wide, testId }: {
+  /** Во всю ширину: строки в несколько колонок (воронка статусов). */
+  wide?: boolean;
+  testId?: string;
   title: string;
   subtitle?: string;
   rows: Array<{ label: string; value: any; to?: string; muted?: boolean }>;
@@ -675,7 +687,7 @@ function BreakdownCard({ title, subtitle, rows, total, action, style }: {
   const rowsSum = rows.reduce((s, r) => s + (Number(r.value) || 0), 0);
   const base = total && total > 0 ? total : rowsSum || 1;
   return (
-    <div className="card dash-card" style={style}>
+    <div className={`card dash-card${wide ? ' is-wide' : ''}`} style={style} data-testid={testId}>
       <div className="dash-card-head">
         <h3 className="dash-card-title">{title}</h3>
         {subtitle && <span className="dash-card-sub">{subtitle}</span>}
@@ -683,7 +695,7 @@ function BreakdownCard({ title, subtitle, rows, total, action, style }: {
       {rows.length === 0 ? (
         <div className="dash-empty">{t('common.empty')}</div>
       ) : (
-        <div className="dash-bars">
+        <div className={`dash-bars${wide ? ' is-cols' : ''}`}>
           {rows.map((r) => {
             const n = Number(r.value) || 0;
             const exact = (n / base) * 100;

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Icon from '../Icon';
 import { useT } from '../lib/i18n';
 import { useAuth } from '../store/auth';
+import { AvatarFace, avatarClass } from './AvatarFace';
 
 /**
  * Меню пользователя внизу сайдбара: вместо шести значков в узком rail —
@@ -39,6 +40,7 @@ export default function UserMenu({
 }) {
   const { t, lang, setLang } = useT();
   const impersonating = !!useAuth((s) => s.user?.impersonation);
+  const avatarUrl = useAuth((s) => s.user?.avatarUrl ?? null);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -99,7 +101,7 @@ export default function UserMenu({
         title={`${fullName} · ${roleLabel}`}
         data-testid="user-menu-trigger"
       >
-        <span className="user-avatar">{initials}</span>
+        <span className={avatarClass('user-avatar', avatarUrl)} data-testid="user-avatar"><AvatarFace url={avatarUrl} initials={initials} /></span>
         {variant === 'mobile' && (
           <>
             <span className="user-menu-trigger-text">
@@ -125,7 +127,7 @@ export default function UserMenu({
               transition={{ duration: 0.14 }}
             >
               <div className="user-menu-head">
-                <span className="user-avatar">{initials}</span>
+                <span className={avatarClass('user-avatar', avatarUrl)} data-testid="user-avatar"><AvatarFace url={avatarUrl} initials={initials} /></span>
                 <span className="user-menu-head-text">
                   <span className="user-menu-name">{fullName}</span>
                   <span className="user-menu-role">{roleLabel}</span>

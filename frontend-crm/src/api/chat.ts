@@ -34,7 +34,7 @@ export interface ChatMessage {
   mentionsIds: string[];
   createdAt: string;
   editedAt: string | null;
-  author?: { id: string; fullName: string; role: string };
+  author?: { id: string; fullName: string; role: string; avatarUrl?: string | null };
   attachments?: ChatAttachment[] | null;
   replyToId?: string | null;
   replyTo?: ChatMessageReplyTo | null;
@@ -48,7 +48,7 @@ export interface ChatMessage {
 export interface ChatMember {
   id: string;
   userId: string;
-  user: { id: string; fullName: string; role: string };
+  user: { id: string; fullName: string; role: string; avatarUrl?: string | null };
   lastReadAt: string | null;
   clearedAt?: string | null;
 }
@@ -72,6 +72,7 @@ export const getChatRoom = (id: string, before?: string) =>
 export interface ChatRoomMember {
   id: string;
   fullName: string;
+  avatarUrl?: string | null;
   role: string;
   roles?: string[];
   online: boolean;
@@ -204,6 +205,7 @@ export function markRoomRead(roomId: string): Promise<unknown> {
 export interface ChatMessageRead {
   userId: string;
   fullName: string;
+  avatarUrl?: string | null;
   readAt: string | null;
 }
 export const getMessageReads = (messageId: string) =>

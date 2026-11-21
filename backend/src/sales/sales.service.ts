@@ -11,7 +11,7 @@ import {
   transferScopeOf,
 } from '../applications/application-access';
 import { hasSeeAllGrant } from '../auth/client-access';
-import { isLeadStatus } from '../applications/application-access';
+import { canSeeAllApplications, isLeadStatus } from '../applications/application-access';
 import { FINISHED_APPLICATION_STATUSES } from '../common/application-status';
 
 /**
@@ -195,11 +195,62 @@ export class SalesService {
 
   // ===== Pipelines =====
 
-  async listPipelines() {
-    return this.prisma.pipeline.findMany({
+  /**
+   * Воронки с этапами и числом лидов на каждом этапе (плитки «Воронок продаж»).
+   * Удалённые лиды не считаются. Кто видит всех лидов (canSeeAllApplications) —
+   * получает общее число; остальные — только своих (leadScope: 'own'), чтобы
+   * менеджер не узнавал по воронке объёмы чужих лидов.
+   */
+  async listPipelines(me?: any) {
+    const pipelines = await this.prisma.pipeline.findMany({
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
       include: { stages: { orderBy: { order: 'asc' } } },
     });
+    const all = canSeeAllApplications(me);
+    const stageIds = pipelines.flatMap((p) => p.stages.map((s) => s.id));
+    const counts = stageIds.length && me?.id
+      ? await this.prisma.application.groupBy({
+          by: ['pipelineStageId'],
+          where: { pipelineStageId: { in: stageIds }, deletedAt: null, ...(all ? {} : { managerId: me.id }) },
+          _count: { _all: true },
+        })
+      : [];
+    const byStage = new Map(counts.map((c) => [c.pipelineStageId, c._count._all]));
+    const leadScope = all ? 'all' : 'own';
+    return pipelines.map((p) => ({
+      ...p,
+      leadScope,
+      stages: p.stages.map((s) => ({ ...s, leadCount: byStage.get(s.id) ?? 0 })),
+    }));
+  }
+
+  /**
+   * Перетаскивание плиток: новый порядок этапов воронки целиком. Список должен
+   * совпадать с этапами воронки (ни лишних, ни пропущенных, без повторов) —
+   * иначе кто-то поменял воронку параллельно, и порядок собран по старой
+   * картинке. Уникальность (pipelineId, order) обходим временными отрицательными
+   * значениями внутри одной транзакции.
+   */
+  async reorderStages(pipelineId: string, ids: unknown) {
+    if (!Array.isArray(ids) || ids.length === 0 || ids.some((x) => typeof x !== 'string')) {
+      throw new BadRequestException('Передайте этапы воронки по порядку');
+    }
+    const pipeline = await this.prisma.pipeline.findUnique({ where: { id: pipelineId }, include: { stages: { select: { id: true } } } });
+    if (!pipeline) throw new NotFoundException('Воронка не найдена');
+    const own = new Set(pipeline.stages.map((s) => s.id));
+    const given = new Set(ids as string[]);
+    if (given.size !== ids.length || given.size !== own.size || [...given].some((id) => !own.has(id))) {
+      throw new BadRequestException('Этапы воронки успели измениться — обновите страницу и перетащите ещё раз');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      for (let i = 0; i < ids.length; i++) {
+        await tx.pipelineStage.update({ where: { id: ids[i] as string }, data: { order: -(i + 1) } });
+      }
+      for (let i = 0; i < ids.length; i++) {
+        await tx.pipelineStage.update({ where: { id: ids[i] as string }, data: { order: i } });
+      }
+    });
+    return this.prisma.pipelineStage.findMany({ where: { pipelineId }, orderBy: { order: 'asc' } });
   }
 
   async createPipeline(data: {
@@ -384,6 +435,16 @@ export class SalesService {
     const cur = await this.prisma.pipelineStage.findUnique({ where: { id } });
     if (!cur) throw new NotFoundException('Этап не найден');
     if (data.name !== undefined) await this.assertStageNameFree(cur.pipelineId, data.name, id);
+    // Единственный финальный этап нельзя «разфинальнить» — как и удалить
+    // (QA-3, BUG-16): без него лиды воронки некуда завершать.
+    if (data.isClosingStage === false && cur.isClosingStage) {
+      const otherFinal = await this.prisma.pipelineStage.count({
+        where: { pipelineId: cur.pipelineId, isClosingStage: true, id: { not: id } },
+      });
+      if (otherFinal === 0) {
+        throw new BadRequestException(`«${cur.name}» — единственный финальный этап воронки. Сначала отметьте финальным другой этап.`);
+      }
+    }
     // QA-2: «‹ ›» отвечали 409 — порядок уникален в воронке, а фронт слал две
     // правки сразу. Теперь сервер сам меняет этапы местами в одной транзакции
     // (через временный порядок, чтобы не задеть уникальность).

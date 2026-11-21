@@ -29,6 +29,8 @@ export interface BonusProgressData {
 }
 
 export interface KpiRow {
+  /** Фото на аватарке (21.11.2026). */
+  avatarUrl?: string | null;
   id: string;
   /** Место в рейтинге (равные результаты делят место); null — результата за период нет. */
   rank?: number | null;

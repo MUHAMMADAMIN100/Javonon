@@ -77,3 +77,19 @@ export async function restoreUser(id: string) {
   const { data } = await api.post(`/users/${id}/restore`);
   return data;
 }
+
+/**
+ * Фото на аватарке (21.11.2026). Своё — каждый; чужое — основатель и админ
+ * (сервер проверяет сам). blob — уже обрезанный квадрат (lib/avatarCrop).
+ */
+export async function uploadAvatar(userId: string, blob: Blob) {
+  const fd = new FormData();
+  fd.append('file', blob, 'avatar.jpg');
+  const { data } = await api.post<{ id: string; avatarUrl: string | null }>(`/me/avatar/${userId}`, fd);
+  return data;
+}
+
+export async function removeAvatar(userId: string) {
+  const { data } = await api.delete<{ id: string; avatarUrl: string | null }>(`/me/avatar/${userId}`);
+  return data;
+}

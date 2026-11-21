@@ -252,6 +252,8 @@ export interface User {
   id: string;
   email: string;
   fullName: string;
+  /** Фото на аватарке (/uploads/avatar-…); null — кружок с инициалами. */
+  avatarUrl?: string | null;
   role: Role;
   /** Может вести группы академии (список сотрудников): должность «Учитель» или роль с ведением групп. */
   canTeach?: boolean;

@@ -24,6 +24,7 @@ import { useT } from '../lib/i18n';
 import UserMenu from './UserMenu';
 import { buildNavCtx, visibleGroups, resolveRoute, PROFILE_ITEM, type VisibleGroup, type NavItem } from './navGroups';
 import ShiftButton from './ShiftWidget';
+import { AvatarFace, avatarClass } from './AvatarFace';
 
 /**
  * Меню CRM.
@@ -584,7 +585,7 @@ export default function Sidebar() {
               <div className="sidebar-panel-foot" data-testid="sidebar-panel-foot">
                 <ShiftButton variant="panel" />
                 <div className="panel-user">
-                  <span className="panel-user-avatar" aria-hidden="true">{initials}</span>
+                  <span className={avatarClass('panel-user-avatar', user?.avatarUrl)} aria-hidden="true" data-testid="panel-user-avatar"><AvatarFace url={user?.avatarUrl} initials={initials} /></span>
                   <span className="panel-user-text">
                     <b>{user?.fullName ?? ''}</b>
                     <small>{displayRoleLabel(user as any)}</small>

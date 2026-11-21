@@ -29,7 +29,7 @@ import { useRoleLabel } from '../lib/labels';
 import { useUI } from '../ui/Dialogs';
 import { useAuth, beginImpersonation } from '../store/auth';
 import { impersonate } from '../api/auth';
-import { isElevated, isFounder, displayRoleLabel, isTeacherOnly } from '../lib/roles';
+import { hasRole, isElevated, isFounder, displayRoleLabel, isTeacherOnly } from '../lib/roles';
 import { hasActiveRole, hiddenAmount, roleCan } from '../lib/permissions';
 import { bandRangeLabel } from '../lib/bonusBands';
 import { SortSelect, SortTh, useTableSort } from '../components/TableSort';
@@ -39,7 +39,8 @@ import PresenceDot from '../components/PresenceDot';
 import { agoText, presenceText, usePresence } from '../lib/usePresence';
 import { tjFormatDateTime } from '../lib/tjTime';
 import ProfileMonthDetails, { type MonthTile } from '../components/ProfileMonthDetails';
-import { EditButton, EditForm, Field, LabelInput, heroColor, heroInitials } from '../components/ProfileParts';
+import { EditButton, EditForm, Field, LabelInput } from '../components/ProfileParts';
+import ProfileAvatar from '../components/ProfileAvatar';
 import BonusProgress from '../components/BonusProgress';
 import BusyLabel from '../components/BusyLabel';
 import { DetailSkeleton } from '../components/Skeleton';
@@ -211,15 +212,16 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
   const canGrantAccess = isAdmin || (viewerRole && !own && roleCan(meStore, 'users:access'));
   // Учитель академии: продажи, KPI, табель и ежедневные отчёты его не касаются.
   const teacherProfile = isTeacherOnly(user as any);
+  // Фото на аватарке: своё — каждый; чужое — основатель и админ, фото
+  // основателя — только он сам (так же проверяет сервер, /me/avatar/:id).
+  const canEditAvatar = own || ((isFounder(meStore) || hasRole(meStore, 'ADMIN')) && (!isFounderTarget || isFounder(meStore)));
 
   return (
     <>
       {back}
       {/* Шапка: аватар, имя, роль, контакты и действия — главное о человеке одним взглядом. */}
       <section className="card profile-hero" data-testid="profile-hero">
-        <span className="profile-hero-avatar" style={{ background: heroColor(user.id) }} aria-hidden="true">
-          {heroInitials(user.fullName)}
-        </span>
+        <ProfileAvatar userId={realId} name={user.fullName} url={(user as any).avatarUrl} canEdit={canEditAvatar} queryKey={queryKey} />
         <div className="profile-hero-main">
           <span className="crm-section-eyebrow profile-hero-eyebrow">
             {isAdmin || !own ? `${t('eyebrow.team')} · ${displayRoleLabel(user as any).toUpperCase()}` : t('eyebrow.profile')}
@@ -329,7 +331,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                 <EditButton active={editing === 'personal'} testId="edit-personal" onClick={() => toggleEdit('personal')} />
               )}
             </div>
-            <div className="profile-grid">
+            <div className="profile-grid is-list" data-testid="personal-list">
               <Field label={t('userDetail.field.email')} value={user.email} />
               <Field
                 label={t('userDetail.field.role')}
@@ -437,14 +439,16 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       <section className="card profile-section">
         <h3 className="profile-h">{t('profile.month.current')}</h3>
         <div className="profile-stats">
-          <Stat {...tileProps('hours')} icon="schedule" tone="blue" label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />
-          <Stat {...tileProps('late')} icon="alarm" tone={attendance.lateMinutes > 0 ? 'red' : 'green'} label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />
+          {/* Основатель не отмечает рабочий день и штрафов не получает (21.11.2026) —
+              часов, опозданий и штрафов у него нет. */}
+          {!isFounderTarget && <Stat {...tileProps('hours')} icon="schedule" tone="blue" label={t('profile.month.hours')} value={fmtMinutes(attendance.workedMinutes)} sub={`${attendance.daysWorked} ${t('profile.month.workDays')}`} />}
+          {!isFounderTarget && <Stat {...tileProps('late')} icon="alarm" tone={attendance.lateMinutes > 0 ? 'red' : 'green'} label={t('profile.month.late')} value={fmtMinutes(attendance.lateMinutes)} accent={attendance.lateMinutes > 0 ? 'red' : 'green'} />}
           <Stat {...tileProps('sales')} icon="payments" tone="green" label={t('profile.month.sales')} value={sales.monthAmount == null ? hiddenAmount('TJS') : fmtMoney(sales.monthAmount)} sub={`${sales.monthCount} ${t('profile.month.deals')}${(sales.monthOtherIncome ?? 0) > 0 ? ` · ${t('sales.otherIncome').toLowerCase()} ${fmtMoney(sales.monthOtherIncome!)}` : ''}${otherCurrencies(sales.monthOther)}`} />
           <Stat {...tileProps('leads')} icon="group_add" tone="purple" label={t('profile.month.leadsTotal')} value={String(kpi.totalLeadsMonth)} sub={`${kpi.ownClientsMonth} ${t('profile.month.myOwn')}`} />
           <Stat {...tileProps('enrolled')} icon="how_to_reg" tone={kpi.onTrack ? 'green' : 'red'} label={t('profile.month.enrolled')} value={`${kpi.enrolledMonth} / ${kpi.requiredClosed}`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.required')} ≥${kpi.requiredClosed}`} />
           <Stat {...tileProps('kpi')} icon="trending_up" tone={kpi.onTrack ? 'green' : 'red'} label={t('profile.month.kpiPct')} value={`${kpi.achievedPct}%`} accent={kpi.onTrack ? 'green' : 'red'} sub={`${t('profile.month.target')} ${kpi.targetPct}%`} />
           {/* Без «Зарплат и окладов» штрафы коллеги скрыты — плитка без окна. */}
-          <Stat {...(payHidden ? {} : tileProps('penalties'))} icon="gavel" tone="red" label={t('profile.month.penalties')} value={penalties.monthTotal == null ? hiddenAmount('TJS') : fmtMoney(penalties.monthTotal)} accent="red" />
+          {!isFounderTarget && <Stat {...(payHidden ? {} : tileProps('penalties'))} icon="gavel" tone="red" label={t('profile.month.penalties')} value={penalties.monthTotal == null ? hiddenAmount('TJS') : fmtMoney(penalties.monthTotal)} accent="red" />}
         </div>
         <ProfileMonthDetails
           tile={monthTile}
@@ -456,7 +460,8 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
       </section>
       )}
 
-      {salary && (
+      {/* Основателю зарплату не начисляют — «Истории начислений» у него нет. */}
+      {salary && !isFounderTarget && (
       <>
       {/* История зарплат */}
       <section className={`card profile-section${salary.records.length === 0 ? ' is-empty' : ''}`}>
@@ -504,7 +509,7 @@ function ProfileView({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
       {/* История штрафов за всё время (плитка выше — только текущий месяц).
           Скрыта вместе с окладом — «Зарплаты и оклады» роли. */}
-      {!payHidden && (
+      {!payHidden && !isFounderTarget && (
       <section className={`card profile-section${penalties.list.length === 0 ? ' is-empty' : ''}`}>
         <h3 className="profile-h">{t('profile.penaltiesHistory')}</h3>
         {penalties.list.length === 0 ? (

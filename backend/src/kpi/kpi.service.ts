@@ -172,7 +172,7 @@ export class KpiService {
       },
       // customRole — подпись роли как в списке сотрудников (SMM, Lead
       // Qualifier…), а не базовая должность-«подложка» (QA №13).
-      select: { id: true, fullName: true, role: true, email: true, bonusPercent: true, customRole: { select: { name: true, isActive: true } } },
+      select: { id: true, fullName: true, avatarUrl: true, role: true, email: true, bonusPercent: true, customRole: { select: { name: true, isActive: true } } },
     });
 
     // «Продажи» — по правилу зарплаты (common/manager-sales.ts): одобренные

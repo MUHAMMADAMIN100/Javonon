@@ -14,7 +14,7 @@ import { ChatRoomType } from '@prisma/client';
  */
 const MESSAGE_INCLUDE = {
   // isActive — чтобы у сообщений уволенного сотрудника CRM показала пометку.
-  author: { select: { id: true, fullName: true, role: true, isActive: true } },
+  author: { select: { id: true, fullName: true, avatarUrl: true, role: true, isActive: true } },
   replyTo: {
     select: {
       id: true, text: true, authorId: true, attachments: true, deletedAt: true,
@@ -121,11 +121,12 @@ export class ChatService implements OnModuleInit {
     // считается. Вернут — снова появится (кеш живёт CACHE_MS).
     const rows = await this.prisma.user.findMany({
       where: { isActive: true },
-      select: { id: true, fullName: true, email: true, role: true, roles: true },
+      select: { id: true, fullName: true, avatarUrl: true, email: true, role: true, roles: true },
     });
     const list = rows.map((u) => ({
       id: u.id,
       fullName: u.fullName,
+      avatarUrl: u.avatarUrl,
       email: u.email,
       isFounder: u.role === 'FOUNDER' || (u.roles || []).includes('FOUNDER'),
     }));
@@ -207,7 +208,7 @@ export class ChatService implements OnModuleInit {
           // Уволенных в составе чата не показываем: ни в аватарах, ни в
           // счётчике участников. Членство остаётся — на случай «Вернуть».
           where: { user: { isActive: true } },
-          include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } },
+          include: { user: { select: { id: true, fullName: true, avatarUrl: true, isActive: true, role: true } } },
         },
         // Последнее живое сообщение: удалённые исчезают совсем (как в Telegram).
         messages: {
@@ -293,7 +294,7 @@ export class ChatService implements OnModuleInit {
     const rows = await this.prisma.chatMember.findMany({
       // Уволенные в участниках не показываются и в «N участников» не входят.
       where: { roomId, user: { isActive: true } },
-      select: { user: { select: { id: true, fullName: true, role: true, roles: true, isActive: true, lastSeenAt: true } } },
+      select: { user: { select: { id: true, fullName: true, avatarUrl: true, role: true, roles: true, isActive: true, lastSeenAt: true } } },
     });
     const live = this.presence.snapshot();
     const idx = await this.usersIndex();
@@ -303,6 +304,7 @@ export class ChatService implements OnModuleInit {
         return {
           id: u.id,
           fullName: u.fullName,
+          avatarUrl: u.avatarUrl,
           role: u.role,
           roles: u.roles,
           online: now?.state === 'ONLINE',
@@ -370,7 +372,7 @@ export class ChatService implements OnModuleInit {
     const [members, reads] = await Promise.all([
       this.prisma.chatMember.findMany({
         where: { roomId: msg.roomId, userId: { not: userId }, user: { isActive: true } },
-        select: { userId: true, lastReadAt: true, user: { select: { fullName: true } } },
+        select: { userId: true, lastReadAt: true, user: { select: { fullName: true, avatarUrl: true } } },
       }),
       this.prisma.chatMessageRead.findMany({ where: { messageId }, select: { userId: true, readAt: true } }),
     ]);
@@ -379,13 +381,14 @@ export class ChatService implements OnModuleInit {
       .map((m) => ({
         userId: m.userId,
         fullName: m.user.fullName,
+        avatarUrl: m.user.avatarUrl,
         readAt: at.get(m.userId) ?? null,
         read: at.has(m.userId) || (!!m.lastReadAt && m.lastReadAt >= msg.createdAt),
       }))
       .filter((r) => r.read)
       // Свежие прочтения сверху, «без времени» — в конце.
       .sort((a, b) => (b.readAt?.getTime() ?? 0) - (a.readAt?.getTime() ?? 0) || a.fullName.localeCompare(b.fullName, 'ru'))
-      .map(({ userId: id, fullName, readAt }) => ({ userId: id, fullName, readAt }));
+      .map(({ userId: id, fullName, avatarUrl, readAt }) => ({ userId: id, fullName, avatarUrl, readAt }));
   }
 
   // ============ СООБЩЕНИЯ ============
@@ -653,7 +656,7 @@ export class ChatService implements OnModuleInit {
         members: { create: ids.map((id) => ({ userId: id })) },
       },
       include: {
-        members: { include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } } },
+        members: { include: { user: { select: { id: true, fullName: true, avatarUrl: true, isActive: true, role: true } } } },
       },
     });
     this.forgetRoom(room.id);
@@ -672,7 +675,7 @@ export class ChatService implements OnModuleInit {
     if (!otherUser.isActive) throw new BadRequestException('Сотрудник уволен');
 
     const includeAll = {
-      members: { include: { user: { select: { id: true, fullName: true, isActive: true, role: true } } } },
+      members: { include: { user: { select: { id: true, fullName: true, avatarUrl: true, isActive: true, role: true } } } },
     };
 
     // QA-fix #6: атомарный find-or-create в $transaction. Раньше при двух

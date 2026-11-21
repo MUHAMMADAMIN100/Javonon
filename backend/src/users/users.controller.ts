@@ -27,6 +27,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { isFounder } from '../auth/role-utils';
+import { assertFileContent } from '../common/file-sniff';
 import { Permissions } from '../auth/permissions.decorator';
 import { PEOPLE_PICKER_PERMISSIONS } from '../auth/permissions';
 import { canSeeData, maskEmail } from '../common/redact';
@@ -46,6 +47,26 @@ const userDocStorage = diskStorage({
     cb(null, `userdoc-${randomUUID()}${ext}`);
   },
 });
+
+// Фото на аватарке: CRM сама обрезает квадрат 256×256 и шлёт JPEG/WEBP;
+// с сервера — только картинки до 5 МБ, проверка по содержимому.
+const AVATAR_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const AVATAR_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const avatarStorage = diskStorage({
+  destination: process.env.UPLOADS_DIR || './uploads',
+  filename: (_req, file, cb) => {
+    const ext = (extname(file.originalname || '') || '.jpg').toLowerCase();
+    cb(null, `avatar-${randomUUID()}${AVATAR_EXT.has(ext) ? ext : '.jpg'}`);
+  },
+});
+const avatarFilter: any = (_req: any, file: any, cb: any) => {
+  const ext = (extname(file.originalname || '') || '').toLowerCase();
+  if (!AVATAR_EXT.has(ext) || !AVATAR_MIME.has(file.mimetype)) {
+    return cb(new BadRequestException('Для фото подходят JPG, PNG или WEBP'), false);
+  }
+  cb(null, true);
+};
+const AVATAR_UPLOAD = FileInterceptor('file', { storage: avatarStorage, fileFilter: avatarFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
 const userDocFilter: any = (_req: any, file: any, cb: any) => {
   const ext = (extname(file.originalname || '') || '').toLowerCase();
@@ -124,6 +145,25 @@ export class MeController {
   @Delete('documents/:docId')
   deleteMyDocument(@CurrentUser() me: any, @Param('docId') docId: string) {
     return this.users.deleteDocument(me.id, docId);
+  }
+
+  /**
+   * Фото на аватарке. Своё — каждый; чужое — основатель и админ (фото
+   * основателя — только он сам). Права — UsersService.assertAvatarAccess.
+   */
+  @Post('avatar/:id')
+  @UseInterceptors(AVATAR_UPLOAD)
+  async uploadAvatar(@CurrentUser() me: any, @Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Выберите фото');
+    await this.users.assertAvatarAccess(me, id);
+    assertFileContent(file, ['image'], 'Фото');
+    return this.users.setAvatar(id, `/uploads/${file.filename}`);
+  }
+
+  @Delete('avatar/:id')
+  async removeAvatar(@CurrentUser() me: any, @Param('id') id: string) {
+    await this.users.assertAvatarAccess(me, id);
+    return this.users.setAvatar(id, null);
   }
 
   /** Изменить тип / комментарий своего документа. Файл не меняется. */

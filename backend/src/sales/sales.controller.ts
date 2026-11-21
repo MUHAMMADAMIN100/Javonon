@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
@@ -53,8 +54,8 @@ export class SalesController {
 
   // Pipelines — все авторизованные читают; пишут elevated + sales manager
   @Get('pipelines')
-  listPipelines() {
-    return this.svc.listPipelines();
+  listPipelines(@CurrentUser() me: any) {
+    return this.svc.listPipelines(me);
   }
 
   @Post('pipelines')
@@ -87,6 +88,15 @@ export class SalesController {
   @Permissions('pipelines:create')
   addStage(@Param('id') id: string, @Body() body: any) {
     return this.svc.addStage(id, body);
+  }
+
+  /** Новый порядок этапов воронки целиком (перетаскивание плиток) — одной транзакцией. */
+  @Put('pipelines/:id/stages/order')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Permissions('pipelines:update')
+  reorderStages(@Param('id') id: string, @Body() body: { ids?: unknown }) {
+    return this.svc.reorderStages(id, body?.ids);
   }
 
   @Patch('stages/:id')

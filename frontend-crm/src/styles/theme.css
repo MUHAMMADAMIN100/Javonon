@@ -1581,3 +1581,152 @@ body:has(.deal-wizard-foot) .dialpad-fab { display: none !important; }
 .sal-months-table { border: 1px solid var(--tbl-line); }
 .sal-months-table th, .sal-months-table td { border: 1px solid var(--tbl-line); padding: 5px 10px !important; }
 .sal-months-table thead th { background: var(--tbl-head-bg); border-bottom-color: var(--tbl-head-line); }
+
+/* ── Фото на аватарке (21.11.2026) ──────────────────────────────────────────
+   Кружок сотрудника: фото вместо инициалов (components/AvatarFace). Круглится
+   сама картинка, а не кружок, — точка «в сети» у чата остаётся видна. */
+.user-avatar.has-photo, .panel-user-avatar.has-photo, .chat-avatar.has-photo, .dash-avatar.has-photo, .team-avatar.has-photo { padding: 0; }
+.user-avatar.has-photo > img, .panel-user-avatar.has-photo > img, .chat-avatar.has-photo > img,
+.dash-avatar.has-photo > img, .team-avatar.has-photo > img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;
+}
+/* Меню камеры в шапке профиля: «Сменить фото / Удалить фото». */
+.profile-avatar-box { align-self: flex-start; }
+.profile-avatar-menu {
+  position: absolute; left: calc(100% - 24px); top: calc(100% + 4px); z-index: 30;
+  min-width: 190px; padding: 6px; border-radius: 12px;
+  background: var(--bg-card); border: 1px solid var(--border-soft);
+  box-shadow: 0 12px 32px rgba(15, 19, 32, .16);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.profile-avatar-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 10px; border: 0; border-radius: 8px; background: transparent;
+  font: 500 14px var(--font-body, inherit); color: var(--text); text-align: left; cursor: pointer;
+}
+.profile-avatar-menu button:hover, .profile-avatar-menu button:focus-visible { background: var(--bg-soft); outline: none; }
+.profile-avatar-menu button.is-danger { color: var(--danger); }
+
+/* «Личные данные» в профиле — списком «подпись — значение» (21.11.2026):
+   строки на всю высоту группы, без пустого поля рядом с «Оплатой». */
+.profile-grid.is-list { display: flex; flex-direction: column; gap: 0; flex: 1 1 auto; }
+.profile-grid.is-list > .profile-field {
+  flex: 1 1 auto; display: grid; grid-template-columns: minmax(110px, 180px) minmax(0, 1fr); column-gap: 16px;
+  align-content: center; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--border-soft);
+}
+/* Группа «Личные данные» тянется на высоту «Оплаты», строки делят её поровну. */
+.profile-cols > .profile-group[data-testid="group-personal"] { display: flex; flex-direction: column; }
+.profile-grid.is-list > .profile-field:first-child { padding-top: 2px; }
+.profile-grid.is-list > .profile-field:last-child { border-bottom: 0; padding-bottom: 0; }
+.profile-grid.is-list .profile-field-label { margin: 0; font-size: 13px; }
+.profile-grid.is-list .profile-field-value { font-size: 14px; }
+.profile-grid.is-list .profile-field > :not(.profile-field-label):not(.profile-field-value) { grid-column: 2; }
+@media (max-width: 480px) {
+  .profile-grid.is-list > .profile-field { grid-template-columns: minmax(96px, 40%) minmax(0, 1fr); column-gap: 12px; }
+}
+/* «Сотрудники»: кружок у имени — фото или инициалы. */
+.team-avatar {
+  width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%;
+  display: inline-grid; place-items: center; color: #fff;
+  font: 700 11px var(--font-display); letter-spacing: .02em; margin-right: 2px;
+}
+
+/* ── Дашборд без пустот (21.11.2026) ────────────────────────────────────────
+   Воронка — во всю ширину, статусы колонками; карточки в строке одной высоты,
+   ссылка «Все …» прижата к низу; одинокая карточка занимает всю строку. */
+.dash-wide { margin-bottom: 14px; }
+.dash-wide + .dash-grid-2 { margin-bottom: 24px; }
+.dash-bars.is-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 32px; row-gap: 2px; }
+@media (max-width: 1100px) { .dash-bars.is-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; } }
+@media (max-width: 640px) { .dash-bars.is-cols { grid-template-columns: minmax(0, 1fr); } }
+.dash-equal { align-items: stretch; }
+.dash-equal > .dash-card:only-child { grid-column: 1 / -1; }
+.dash-equal > .dash-card > .dash-link { margin-top: auto; }
+
+/* ── «Воронки продаж»: этапы плитками (21.11.2026) ──────────────────────────
+   Плитка: цветная полоса сверху, название, число лидов, «⋯»; порядок —
+   перетаскиванием; в конце ряда — плитка «+ Этап». */
+.pl-intro { padding: 18px 22px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.pl-intro-text { margin: 0; max-width: 640px; color: var(--text-soft); font-size: 13.5px; line-height: 1.5; }
+.pl-list { display: flex; flex-direction: column; gap: 14px; }
+.pl-empty { padding: 32px; text-align: center; color: var(--text-soft); }
+.pl-card { padding: 18px 22px 16px; }
+.pl-card.is-off { opacity: .65; }
+.pl-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.pl-head-main { min-width: 0; }
+.pl-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.pl-badge { font: 600 11px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text-light); }
+.pl-badge.is-default { color: var(--primary-dark); }
+.pl-badge.is-off { color: var(--danger); }
+.pl-name { margin: 0; font: 600 20px var(--font-display); letter-spacing: -.01em; overflow-wrap: anywhere; }
+.pl-desc { margin-top: 3px; color: var(--text-soft); font-size: 13px; }
+.pl-stages { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 10px; }
+.pl-stage {
+  position: relative; display: flex; flex-direction: column; gap: 6px; min-height: 96px;
+  padding: 14px 10px 12px 12px; border: 1px solid var(--border-soft); border-radius: 12px;
+  background: var(--bg-card); transition: box-shadow .15s, opacity .15s;
+}
+.pl-stage::before { content: ''; position: absolute; left: -1px; right: -1px; top: -1px; height: 4px; border-radius: 12px 12px 0 0; background: var(--stage-color); }
+.pl-stage.is-draggable { cursor: grab; }
+.pl-stage.is-draggable:hover { box-shadow: 0 6px 18px rgba(15, 19, 32, .08); }
+.pl-stage.is-dragging { opacity: .45; box-shadow: none; }
+.pl-stage-top { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.pl-stage-handle { display: inline-flex; color: var(--text-light); margin-left: -4px; }
+.pl-stage-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; line-height: 1.3; overflow-wrap: break-word; hyphens: auto; }
+.pl-stage-input { flex: 1; min-width: 0; height: 32px; padding: 0 8px; font-size: 14px; }
+.pl-stage-count { font-size: 13px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.pl-final {
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-top: auto;
+  padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  color: #047857; background: rgba(16, 185, 129, .12);
+}
+.pl-add {
+  min-height: 96px; border: 1.5px dashed var(--border); border-radius: 12px; background: transparent;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  color: var(--primary); font: 600 14px var(--font-body, inherit); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.pl-add:hover { border-color: var(--primary); background: #F5F8FD; }
+.pl-add-form { min-height: 96px; padding: 10px; border: 1.5px dashed var(--primary); border-radius: 12px; display: flex; flex-direction: column; gap: 8px; }
+.pl-add-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.pl-hint { margin-top: 10px; font-size: 12px; color: var(--text-light); }
+.pl-menu-wrap { position: relative; flex: 0 0 auto; }
+.pl-icon-btn {
+  width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--text-soft);
+  display: inline-grid; place-items: center; cursor: pointer;
+}
+.pl-icon-btn:hover, .pl-icon-btn.is-open { background: var(--bg-soft); color: var(--text); }
+.pl-menu {
+  position: fixed; z-index: 1200; min-width: 210px; max-width: calc(100vw - 16px); padding: 6px;
+  border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-soft);
+  box-shadow: 0 12px 32px rgba(15, 19, 32, .16); display: flex; flex-direction: column; gap: 2px; cursor: default;
+}
+.pl-menu > button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--text); font: 500 14px var(--font-body, inherit); text-align: left; cursor: pointer; white-space: nowrap;
+}
+.pl-menu > button:hover, .pl-menu > button:focus-visible { background: var(--bg-soft); outline: none; }
+.pl-menu > button.is-danger { color: var(--danger); }
+.pl-menu-colors { padding: 6px 10px 8px; border-bottom: 1px solid var(--border-soft); margin-bottom: 2px; }
+.pl-menu-label { display: block; font-size: 12px; color: var(--text-light); margin-bottom: 6px; }
+.pl-colors { display: grid; grid-template-columns: repeat(5, 24px); gap: 8px; }
+.pl-color { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; }
+.pl-color.is-active { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--text); }
+@media (max-width: 600px) {
+  .pl-card { padding: 14px; }
+  .pl-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .pl-name { font-size: 18px; }
+  /* Телефон: ручки нет (порядок — через «⋯»), «⋯» в углу — название на всю ширину. */
+  .pl-stage { padding-right: 34px; min-height: 84px; }
+  .pl-stage-handle, .pl-hint { display: none; }
+  .pl-stage .pl-menu-wrap { position: absolute; top: 8px; right: 4px; }
+  .pl-add, .pl-add-form { min-height: 84px; }
+}
+
+/* Сенсорный экран: перетаскивание в браузере телефона не работает — ручки и
+   подсказки нет, порядок меняется через «⋯» (Переместить левее/правее). */
+@media (hover: none), (pointer: coarse) {
+  .pl-stage-handle, .pl-hint { display: none; }
+  .pl-stage.is-draggable { cursor: default; }
+}
+/* Пустая карточка в ровной строке дашборда: надпись по центру, а не белое поле под ней. */
+.dash-equal > .dash-card > .dash-empty { flex: 1 1 auto; display: grid; place-items: center; text-align: center; min-height: 72px; }

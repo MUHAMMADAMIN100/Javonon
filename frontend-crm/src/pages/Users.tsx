@@ -32,6 +32,8 @@ import type { PresenceState } from '../api/presence';
 import PresenceDot from '../components/PresenceDot';
 import { useEscClose } from '../lib/useEscClose';
 import BusyLabel from '../components/BusyLabel';
+import { AvatarFace, avatarClass } from '../components/AvatarFace';
+import { heroColor, heroInitials } from '../components/ProfileParts';
 
 const EMPTY_FORM = {
   email: '', fullName: '', password: '',
@@ -362,6 +364,10 @@ export default function Users() {
                 >
                   <td>
                     <span className="presence-name">
+                      {/* Кружок сотрудника: фото или инициалы (21.11.2026). */}
+                      <span className={avatarClass('team-avatar', u.avatarUrl)} style={u.avatarUrl ? undefined : { background: heroColor(u.id) }} aria-hidden="true" data-testid="team-avatar">
+                        <AvatarFace url={u.avatarUrl} initials={heroInitials(u.fullName)} />
+                      </span>
                       {founder && <PresenceDot state={presenceOf(u)?.state} title={presenceText(presenceOf(u), presence.now, t)} />}
                       <span style={{ fontWeight: 600 }}>{u.fullName}</span>
                       {u.isActive === false && <span className="badge badge-gray" data-testid="user-dismissed-badge">{t('users.dismissed')}</span>}
