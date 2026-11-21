@@ -25,7 +25,6 @@ import { MANAGER_ROLES, hasRole } from '../auth/role-utils';
 import { tjEndOfMonth, tjLocalDay, tjStartOfMonth, tjStartOfNextMonth, tjYMD } from '../common/tj-time';
 import { REPORTING_CURRENCY } from '../common/reporting-currency';
 import { RevenueSchemeService } from '../revenue-scheme/revenue-scheme.service';
-import { FinanceAccountsService } from './finance-accounts.service';
 
 /**
  * Actor context for create(): id + флаг elevated. Elevated (FOUNDER/ADMIN/
@@ -123,11 +122,6 @@ export interface CreateTransactionDto {
   productCategoryEnum?: ProductCategory | null;
   paymentPhase?: PaymentPhaseStatus | null;
   paidViaId?: string | null;
-  /** Счёт операции; валюта операции = валюта счёта. */
-  accountId?: string | null;
-  /** Оплата позиции «Аренда и подписки» / платёж по долгу (Финансы → Расход). */
-  subscriptionId?: string | null;
-  debtId?: string | null;
 }
 
 // Валидация значения против enum-объекта, экспортируемого prisma-client-js
@@ -280,8 +274,6 @@ export class FinanceService {
     // FinanceService (создающиеся без RevenueSchemeModule) не падали при
     // построении инстанса; в проде модуль всегда есть — см. FinanceModule.
     @Optional() private revenueScheme?: RevenueSchemeService,
-    // Счета (раздел «Финансы», 10.11.2026): проверка счёта операции.
-    @Optional() private accounts?: FinanceAccountsService,
   ) {}
 
   /**
@@ -368,7 +360,6 @@ export class FinanceService {
         student: { select: { id: true, fullName: true } },
         manager: { select: { id: true, fullName: true, isActive: true, role: true } },
         recordedBy: { select: { id: true, fullName: true, isActive: true, role: true } },
-        account: { select: { id: true, name: true, currency: true, color: true } },
       },
     });
   }
@@ -403,30 +394,6 @@ export class FinanceService {
         throw new BadRequestException(`currency должен быть один из: ${[...VALID_CURRENCIES].join(', ')}`);
       }
       dto.currency = c;
-    }
-    // Счёт: существует, не в архиве; валюта операции — валюта счёта.
-    let accountId: string | null = null;
-    if (dto.accountId) {
-      if (!this.accounts) throw new BadRequestException('Счета недоступны');
-      const acc = await this.accounts.accountForTransaction(dto.accountId, dto.currency);
-      dto.currency = acc.currency;
-      accountId = acc.id;
-    }
-    // Позиция аренды/подписки или долг — только у расхода, в их валюте.
-    let subscriptionId: string | null = null;
-    let debtId: string | null = null;
-    if (dto.subscriptionId || dto.debtId) {
-      if (dto.type !== 'EXPENSE') throw new BadRequestException('Оплата позиции или долга — это расход');
-      const target = dto.subscriptionId
-        ? await this.prisma.financeSubscription.findUnique({ where: { id: dto.subscriptionId }, select: { id: true, name: true, currency: true, archived: true } })
-        : await this.prisma.financeDebt.findUnique({ where: { id: dto.debtId! }, select: { id: true, name: true, currency: true, archived: true } });
-      if (!target || target.archived) throw new BadRequestException(dto.subscriptionId ? 'Позиция не найдена' : 'Долг не найден');
-      const cur = (dto.currency || 'TJS').toUpperCase();
-      if (target.currency !== cur) {
-        throw new BadRequestException(`«${target.name}» в ${target.currency}, а оплата в ${cur} — выберите счёт в ${target.currency}`);
-      }
-      if (dto.subscriptionId) subscriptionId = target.id;
-      else debtId = target.id;
     }
     // === Invariant: TUITION_PAYMENT принадлежит только SubmissionPayment-потоку.
     // Аудит HIGH (Finance vs Salary divergence): finance.breakdown группирует
@@ -666,16 +633,12 @@ export class FinanceService {
         productCategoryEnum: productCategoryEnumFinal,
         paymentPhase: isIncome ? (paymentPhase ?? null) : null,
         paidViaId: isExpense ? paidViaId : null,
-        accountId,
-        subscriptionId,
-        debtId,
       },
       include: {
         student: { select: { id: true, fullName: true } },
         manager: { select: { id: true, fullName: true, isActive: true } },
         recordedBy: { select: { id: true, fullName: true, isActive: true } },
         paidVia: { select: { id: true, fullName: true } },
-        account: { select: { id: true, name: true, currency: true, color: true } },
       },
     });
     // WS-нотификация finance-staff-комнате: у второго пользователя, у которого
@@ -751,7 +714,6 @@ export class FinanceService {
         managerId: true,
         studentId: true,
         reversedAt: true,
-        accountId: true,
         // Receipt/enum поля нужны для Q4 fix: (а) при flip'е type в
         // EXPENSE мы валидируем «есть ли effective чек» с учётом того,
         // что чек мог быть уже приложен ДО патча (только type меняется);
@@ -912,25 +874,6 @@ export class FinanceService {
         throw new BadRequestException(`currency должен быть один из: ${[...VALID_CURRENCIES].join(', ')}`);
       }
       patch.currency = c;
-    }
-    // Счёт операции: валюта операции должна совпадать с валютой счёта.
-    // Поставить счёт можно и оплате по сделке — сумму и дату это не меняет.
-    // Сумма «на счёт в другой валюте» (accountAmount) относится к прежнему счёту —
-    // при смене счёта сбрасывается: в журнале счёт ставится только в валюте операции.
-    let accountPatch: { accountId: string | null; accountAmount: null } | Record<string, never> = {};
-    if (patch.accountId !== undefined && (patch.accountId || null) !== before.accountId) {
-      if (!patch.accountId) {
-        accountPatch = { accountId: null, accountAmount: null };
-      } else {
-        if (!this.accounts) throw new BadRequestException('Счета недоступны');
-        const acc = await this.accounts.accountForTransaction(patch.accountId, (patch.currency ?? before.currency) as string);
-        accountPatch = { accountId: acc.id, accountAmount: null };
-      }
-    } else if (patch.currency && patch.currency !== before.currency && before.accountId) {
-      const acc = await this.prisma.financeAccount.findUnique({ where: { id: before.accountId }, select: { currency: true, name: true } });
-      if (acc && acc.currency !== patch.currency) {
-        throw new BadRequestException(`Валюта операции (${patch.currency}) не совпадает с валютой счёта «${acc.name}» (${acc.currency})`);
-      }
     }
     // Инвариант TUITION_PAYMENT (см. одноимённый комментарий в create()).
     // PATCH-flip category=OTHER_INCOME → TUITION_PAYMENT воспроизводит ту же
@@ -1122,7 +1065,6 @@ export class FinanceService {
         ...(patch.category && { category: patch.category }),
         ...(patch.amount !== undefined && { amount: patch.amount }),
         ...(patch.currency && { currency: patch.currency }),
-        ...accountPatch,
         ...(patch.comment !== undefined && { comment: patch.comment?.trim() || null }),
         ...(patch.date && { date: new Date(patch.date) }),
         ...(patch.studentId !== undefined && { studentId: patch.studentId || null }),
@@ -1146,7 +1088,6 @@ export class FinanceService {
       include: {
         student: { select: { id: true, fullName: true } },
         manager: { select: { id: true, fullName: true, isActive: true } },
-        account: { select: { id: true, name: true, currency: true, color: true } },
       },
     });
     // WS-нотификация finance-staff-комнате: тот же сценарий, что в create() —

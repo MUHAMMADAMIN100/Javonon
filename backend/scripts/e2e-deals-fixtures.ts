@@ -13,7 +13,7 @@
  *     npx ts-node -T scripts/e2e-deals-fixtures.ts
  */
 import 'dotenv/config';
-import { Direction, PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 const url = process.env.DATABASE_URL || '';
 if (!/@127\.0\.0\.1:\d+\/javonon_e2e$/.test(url)) {
@@ -42,26 +42,26 @@ async function main() {
   await prisma.program.deleteMany({ where: { description: MARK } });
 
   const progAll = await prisma.program.create({
-    data: { name: 'Академия все включено', university: 'Deals U', city: 'Шанхай', major: 'Lang', direction: Direction.LANGUAGE, cost: 9000, description: MARK },
+    data: { name: 'Академия все включено', university: 'Deals U', city: 'Шанхай', major: 'Lang', direction: 'LANGUAGE', cost: 9000, description: MARK },
   });
   const progNoIelts = await prisma.program.create({
-    data: { name: 'Академия без IELTS', university: 'Deals U', city: 'Шанхай', major: 'Lang', direction: Direction.LANGUAGE, cost: 7000, description: MARK },
+    data: { name: 'Академия без IELTS', university: 'Deals U', city: 'Шанхай', major: 'Lang', direction: 'LANGUAGE', cost: 7000, description: MARK },
   });
 
   const stAbdullaev = await prisma.student.create({
     data: {
-      fullName: 'Абдуллаев Абдулочон Нусратьулоевич', direction: Direction.LANGUAGE, cabinet: 1, comment: MARK,
+      fullName: 'Абдуллаев Абдулочон Нусратьулоевич', direction: 'LANGUAGE', cabinet: 1, comment: MARK,
       phones: ['+992 91 700 11 22', '+79035550011'],
     },
   });
   const stPartner = await prisma.student.create({
-    data: { fullName: 'Кабиров Мухаммад Довудович', direction: Direction.LANGUAGE, cabinet: 1, comment: MARK, phones: ['+992930001122'] },
+    data: { fullName: 'Кабиров Мухаммад Довудович', direction: 'LANGUAGE', cabinet: 1, comment: MARK, phones: ['+992930001122'] },
   });
   // Клиент партнёра: привязка по студенту.
   await prisma.referralAttribution.create({ data: { partnerId: partner.id, studentId: stPartner.id, emailHint: MARK } });
   // Клиент только из заявки: телефон лежит у заявки, в сделке его нет.
   const app = await prisma.application.create({
-    data: { fullName: 'Давлатзода Сумая', phone: '+992 55 444 33 22', direction: Direction.LANGUAGE, comment: MARK, status: 'IN_PROCESSING' },
+    data: { fullName: 'Давлатзода Сумая', phone: '+992 55 444 33 22', direction: 'LANGUAGE', comment: MARK, status: 'IN_PROCESSING' },
   });
 
   const deals = [

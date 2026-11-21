@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Logger, Param, Patch, Post, Put, Query, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Logger, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -19,15 +19,6 @@ export function financeElevated(me: any): boolean {
   return roleAllows(me, 'finance:update', () => isElevated(me));
 }
 import { FinanceService, CreateTransactionDto } from './finance.service';
-import { FinanceAccountsService, AccountDto, TransferDto } from './finance-accounts.service';
-import { FinanceIncomeService, AcceptPaymentDto } from './finance-income.service';
-import { FinanceExpenseService, SubscriptionDto, DebtDto } from './finance-expense.service';
-import { FinancePayrollService } from './finance-payroll.service';
-import { FinanceBackupService } from './finance-backup.service';
-import { FinancePlanningService } from './finance-planning.service';
-import type { Response } from 'express';
-import { logFinance, diffFields, txSnapshot, txSummary, TX_FIELDS } from './finance-activity';
-import { tjLocalDay } from '../common/tj-time';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionCategory, TransactionType } from '@prisma/client';
@@ -224,347 +215,7 @@ export class FinanceController {
     private svc: FinanceService,
     private prisma: PrismaService,
     private notifications: NotificationsService,
-    private accounts: FinanceAccountsService,
-    private incomeSvc: FinanceIncomeService,
-    private expenseSvc: FinanceExpenseService,
-    private payrollSvc: FinancePayrollService,
-    private backupSvc: FinanceBackupService,
-    private planningSvc: FinancePlanningService,
   ) {}
-
-  // ── Счета (раздел «Финансы», 10.11.2026) ──────────────────────────────
-  // Смотреть — всем, кому открыт раздел (finance:read на контроллере);
-  // менять счета и раскладку — «Финансы — изменение»; переводы вносить —
-  // «Финансы — внесение», отменять — «Финансы — удаление». У должностей —
-  // основатель, админ, бухгалтер.
-
-  /** Счета с остатками на сегодня и сколько операций ещё без счёта. */
-  @Get('accounts')
-  listAccounts() {
-    return this.accounts.listAccounts();
-  }
-
-  @Post('accounts')
-  @Permissions('finance:update')
-  async createAccount(@Body() dto: AccountDto, @CurrentUser() me: any) {
-    const a = await this.accounts.createAccount(dto);
-    await logFinance(this.prisma, { actorId: me?.id, action: 'account.create', entity: 'FinanceAccount', entityId: a.id,
-      summary: `${a.name} · ${a.currency}`, meta: { startBalance: a.startBalance } });
-    return a;
-  }
-
-  @Patch('accounts/:id')
-  @Permissions('finance:update')
-  async updateAccount(@Param('id') id: string, @Body() dto: AccountDto, @CurrentUser() me: any) {
-    const before = await this.prisma.financeAccount.findUnique({ where: { id } });
-    const a = await this.accounts.updateAccount(id, dto);
-    if (before) {
-      const changes = diffFields(before as any, a as any, ['name', 'kind', 'currency', 'startBalance', 'archived', 'color']);
-      if (changes.length) await logFinance(this.prisma, { actorId: me?.id, action: 'account.update', entity: 'FinanceAccount', entityId: id,
-        summary: `${a.name} · ${a.currency}`, changes });
-    }
-    return a;
-  }
-
-  /** «Доход»: направления за месяц, сделки «ждём / оплачено», оплаты остальных направлений. */
-  @Get('income')
-  income(@Query('ym') ym?: string) {
-    return this.incomeSvc.income(ym || tjLocalDay(new Date()).slice(0, 7));
-  }
-
-  /** «Принять оплату» по сделке: платёж на выбранный счёт; кто может одобрять — одобряет сразу. */
-  @Post('income/contracts/:id/pay')
-  @Permissions('finance:create')
-  async acceptContractPayment(@CurrentUser() me: any, @Param('id') id: string, @Body() dto: AcceptPaymentDto) {
-    const res = await this.incomeSvc.acceptContractPayment(me, id, dto);
-    const sub = await this.prisma.saleSubmission.findUnique({ where: { id }, select: { currency: true, newStudentName: true, student: { select: { fullName: true } } } });
-    const acc = dto?.accountId ? await this.prisma.financeAccount.findUnique({ where: { id: dto.accountId }, select: { name: true } }) : null;
-    await logFinance(this.prisma, { actorId: me.id, action: res.status === 'APPROVED' ? 'income.accept' : 'income.acceptPending', entity: 'SubmissionPayment', entityId: res.paymentId,
-      summary: `${sub?.student?.fullName ?? sub?.newStudentName ?? ''} · ${Number(dto?.amount).toLocaleString('ru-RU')} ${sub?.currency ?? ''}${acc ? ` · → «${acc.name}»` : ''}` });
-    return res;
-  }
-
-  // ── «Расход» (часть 2): сводка, план вперёд, график, статьи ──────────────
-  @Get('expense/summary')
-  expenseSummary(@Query('ym') ym?: string) {
-    return this.expenseSvc.summary(ym || tjLocalDay(new Date()).slice(0, 7));
-  }
-
-  @Get('expense/plan')
-  expensePlan(@Query('months') months?: string) {
-    return this.expenseSvc.plan(Number(months) || 3);
-  }
-
-  @Get('expense/chart')
-  expenseChart(@Query('ym') ym?: string) {
-    return this.expenseSvc.chart(ym || tjLocalDay(new Date()).slice(0, 7));
-  }
-
-  @Get('expense/subscriptions')
-  subscriptions(@Query('ym') ym?: string) {
-    return this.expenseSvc.subscriptions(ym || tjLocalDay(new Date()).slice(0, 7));
-  }
-
-  @Post('expense/subscriptions')
-  @Permissions('finance:update')
-  async createSubscription(@Body() dto: SubscriptionDto, @CurrentUser() me: any) {
-    const r = await this.expenseSvc.createSubscription(dto);
-    await logFinance(this.prisma, { actorId: me?.id, action: 'subscription.create', entity: 'FinanceSubscription', entityId: r.id,
-      summary: `${r.name} · ${r.amount.toLocaleString('ru-RU')} ${r.currency}` });
-    return r;
-  }
-
-  @Patch('expense/subscriptions/:id')
-  @Permissions('finance:update')
-  async updateSubscription(@Param('id') id: string, @Body() dto: SubscriptionDto, @CurrentUser() me: any) {
-    const before = await this.prisma.financeSubscription.findUnique({ where: { id } });
-    const r = await this.expenseSvc.updateSubscription(id, dto);
-    const changes = before ? diffFields(before as any, r as any, ['name', 'kind', 'amount', 'currency', 'payDay', 'startYm', 'endYm', 'accountId', 'note', 'archived']) : [];
-    if (changes.length) await logFinance(this.prisma, { actorId: me?.id, action: 'subscription.update', entity: 'FinanceSubscription', entityId: id,
-      summary: `${r.name} · ${r.amount.toLocaleString('ru-RU')} ${r.currency}`, changes });
-    return r;
-  }
-
-  @Get('expense/debts')
-  debts(@Query('ym') ym?: string) {
-    return this.expenseSvc.debts(ym || tjLocalDay(new Date()).slice(0, 7));
-  }
-
-  @Post('expense/debts')
-  @Permissions('finance:update')
-  async createDebt(@Body() dto: DebtDto, @CurrentUser() me: any) {
-    const r = await this.expenseSvc.createDebt(dto);
-    await logFinance(this.prisma, { actorId: me?.id, action: 'debt.create', entity: 'FinanceDebt', entityId: r.id,
-      summary: `${r.name} · ${r.total.toLocaleString('ru-RU')} ${r.currency}` });
-    return r;
-  }
-
-  @Patch('expense/debts/:id')
-  @Permissions('finance:update')
-  async updateDebt(@Param('id') id: string, @Body() dto: DebtDto, @CurrentUser() me: any) {
-    const before = await this.prisma.financeDebt.findUnique({ where: { id } });
-    const r = await this.expenseSvc.updateDebt(id, dto);
-    const changes = before ? diffFields(before as any, r as any, ['name', 'kind', 'total', 'currency', 'paidBefore', 'monthlyAmount', 'payDay', 'startYm', 'dueDate', 'accountId', 'note']) : [];
-    if (changes.length) await logFinance(this.prisma, { actorId: me?.id, action: 'debt.update', entity: 'FinanceDebt', entityId: id,
-      summary: `${r.name} · ${r.total.toLocaleString('ru-RU')} ${r.currency}`, changes });
-    return r;
-  }
-
-  @Delete('expense/debts/:id')
-  @Permissions('finance:update')
-  async removeDebt(@Param('id') id: string, @CurrentUser() me: any) {
-    const d = await this.prisma.financeDebt.findUnique({ where: { id } });
-    const res = await this.expenseSvc.removeDebt(id);
-    if (d) await logFinance(this.prisma, { actorId: me?.id, action: 'debt.delete', entity: 'FinanceDebt', entityId: id,
-      summary: `${d.name} · ${d.total.toLocaleString('ru-RU')} ${d.currency}` });
-    return res;
-  }
-
-  @Get('expense/partners')
-  partnersBoard(@Query('ym') ym?: string) {
-    return this.expenseSvc.partnersBoard(ym || tjLocalDay(new Date()).slice(0, 7));
-  }
-
-  /** Выплата по заявке партнёра со счёта — расход «Выплата партнёру». */
-  @Post('expense/partners/payouts/:id/pay')
-  @Permissions('finance:create')
-  async payPartnerPayout(@CurrentUser() me: any, @Param('id') id: string, @Body() dto: { accountId?: string; date?: string; receiptUrl?: string }) {
-    const po = await this.prisma.partnerPayout.findUnique({ where: { id }, include: { partner: { select: { fullName: true } } } });
-    const res = await this.expenseSvc.payPartnerPayout(me, id, dto);
-    if (po) await logFinance(this.prisma, { actorId: me.id, action: 'payout.pay', entity: 'PartnerPayout', entityId: id,
-      summary: `${po.partner?.fullName ?? ''} · ${(po.amountCents / 100).toLocaleString('ru-RU')} ${po.currency}` });
-    return res;
-  }
-
-  @Get('expense/other')
-  otherExpense(@Query('ym') ym?: string) {
-    return this.expenseSvc.other(ym || tjLocalDay(new Date()).slice(0, 7));
-  }
-
-  @Put('expense/other-plan')
-  @Permissions('finance:update')
-  async setOtherPlan(@Body() dto: { ym?: string; amount?: number | string | null }, @CurrentUser() me: any) {
-    const res = await this.expenseSvc.setOtherPlan(dto);
-    await logFinance(this.prisma, { actorId: me?.id, action: 'otherPlan.set', entity: 'FinanceOtherPlan', entityId: String(dto?.ym ?? ''),
-      summary: `${dto?.ym} · ${dto?.amount === null || dto?.amount === undefined || dto?.amount === '' ? '—' : dto.amount}` });
-    return res;
-  }
-
-  // ── «Расход → Зарплата»: ведомость месяца, авансы, выплата, закрытие ──
-  @Get('payroll')
-  payroll(@Query('ym') ym?: string) {
-    return this.payrollSvc.sheet(ym || undefined);
-  }
-
-  @Get('payroll/history/:userId')
-  payrollHistory(@Param('userId') userId: string) {
-    return this.payrollSvc.history(userId);
-  }
-
-  @Post('payroll/advance')
-  @Permissions('salary:pay')
-  async payrollAdvance(@CurrentUser() me: any, @Body() dto: { userId?: string; ym?: string; amount?: number | string; accountId?: string; date?: string; note?: string }) {
-    const res = await this.payrollSvc.giveAdvance(me, dto);
-    this.payrollSvc.invalidateSheet();
-    await logFinance(this.prisma, { actorId: me.id, action: 'payroll.advance', entity: 'Transaction', entityId: res.id,
-      summary: `${(await this.prisma.user.findUnique({ where: { id: dto.userId }, select: { fullName: true } }))?.fullName ?? ''} · ${res.amount.toLocaleString('ru-RU')} TJS · ${dto.ym}` });
-    return res;
-  }
-
-  @Post('payroll/pay')
-  @Permissions('salary:pay')
-  async payrollPay(@CurrentUser() me: any, @Body() dto: { userId?: string; ym?: string; accountId?: string; date?: string }) {
-    const res: any = await this.payrollSvc.pay(me, dto);
-    this.payrollSvc.invalidateSheet();
-    await logFinance(this.prisma, { actorId: me.id, action: 'payroll.pay', entity: 'SalaryRecord', entityId: res?.id ?? null,
-      summary: `${(await this.prisma.user.findUnique({ where: { id: dto.userId }, select: { fullName: true } }))?.fullName ?? ''} · ${Number(res?.netAmount ?? 0).toLocaleString('ru-RU')} TJS · ${dto.ym}` });
-    return res;
-  }
-
-  @Post('payroll/close')
-  @Permissions('salary:pay')
-  async payrollClose(@CurrentUser() me: any, @Body() dto: { ym?: string }) {
-    const res = await this.payrollSvc.close(me, dto?.ym);
-    this.payrollSvc.invalidateSheet();
-    await logFinance(this.prisma, { actorId: me.id, action: 'payroll.close', entity: 'FinancePayrollMonth', entityId: dto?.ym ?? null, summary: String(dto?.ym ?? '') });
-    return res;
-  }
-
-  @Post('payroll/reopen')
-  @Permissions('salary:pay')
-  async payrollReopen(@Body() dto: { ym?: string }, @CurrentUser() me: any) {
-    const res = await this.payrollSvc.reopen(dto?.ym);
-    this.payrollSvc.invalidateSheet();
-    await logFinance(this.prisma, { actorId: me?.id, action: 'payroll.reopen', entity: 'FinancePayrollMonth', entityId: dto?.ym ?? null, summary: String(dto?.ym ?? '') });
-    return res;
-  }
-
-  /** «Планирование»: календарь месяца — факт и план, просрочки. */
-  @Get('planning')
-  planning(@Query('ym') ym?: string) {
-    return this.planningSvc.month(ym || tjLocalDay(new Date()).slice(0, 7));
-  }
-
-  // ── Резервные копии и отчёт Excel (часть 3) ──
-  @Get('backups')
-  backups() {
-    return this.backupSvc.list();
-  }
-
-  @Post('backups')
-  @Permissions('finance:update')
-  createBackup(@CurrentUser() me: any) {
-    return this.backupSvc.create('MANUAL', me?.id ?? null);
-  }
-
-  @Get('backups/:id/download')
-  @Permissions('finance:update')
-  async downloadBackup(@Param('id') id: string, @Res() res: Response) {
-    const f = await this.backupSvc.download(id);
-    res.setHeader('Content-Type', 'application/gzip');
-    res.setHeader('Content-Disposition', `attachment; filename="${f.filename}"`);
-    res.send(f.data);
-  }
-
-  @Get('report.xlsx')
-  async report(@Query('ym') ym: string, @Res() res: Response) {
-    const f = await this.backupSvc.report(ym || tjLocalDay(new Date()).slice(0, 7));
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${f.filename}"`);
-    res.send(f.data);
-  }
-
-  /** «Активность»: журнал изменений в финансах, новые сверху. */
-  @Get('activity')
-  async activity(@Query('take') takeQ?: string, @Query('before') before?: string, @Query('group') group?: string, @Query('actorId') actorId?: string) {
-    const take = Math.min(200, Math.max(1, Number(takeQ) || 50));
-    const GROUPS: Record<string, string[]> = {
-      ops: ['tx.'], income: ['income.'], expense: ['subscription.', 'debt.', 'payout.', 'otherPlan.'],
-      salary: ['payroll.'], accounts: ['account.', 'transfer.', 'channelMap.', 'config.'], backups: ['backup.'],
-    };
-    const prefixes = group && GROUPS[group] ? GROUPS[group] : null;
-    const where: any = {
-      ...(prefixes && { OR: prefixes.map((pfx) => ({ action: { startsWith: pfx } })) }),
-      ...(actorId && { actorId }),
-    };
-    const beforeDate = before ? new Date(before) : null;
-    const [rows, total, actors] = await Promise.all([
-      this.prisma.financeActivity.findMany({
-        where: { ...where, ...(beforeDate && !Number.isNaN(beforeDate.getTime()) && { at: { lt: beforeDate } }) },
-        orderBy: { at: 'desc' },
-        take,
-      }),
-      this.prisma.financeActivity.count({ where }),
-      this.prisma.financeActivity.groupBy({ by: ['actorId', 'actorName'], _count: { _all: true } }),
-    ]);
-    return {
-      rows,
-      total,
-      actors: actors.filter((a) => a.actorId).map((a) => ({ id: a.actorId, name: a.actorName, count: a._count._all })),
-    };
-  }
-
-  /** С какого дня ведутся остатки счетов. */
-  @Get('config')
-  getConfig() {
-    return this.accounts.getConfig();
-  }
-
-  @Put('config')
-  @Permissions('finance:update')
-  async setConfig(@Body() dto: { balanceSince?: string | null }, @CurrentUser() me: any) {
-    const before = await this.accounts.getConfig();
-    const res = await this.accounts.setConfig(dto);
-    if (before.balanceSince !== res.balanceSince) await logFinance(this.prisma, { actorId: me?.id, action: 'config.set', entity: 'FinanceConfig',
-      summary: res.balanceSince ?? '—', changes: [{ field: 'balanceSince', before: before.balanceSince, after: res.balanceSince }] });
-    return res;
-  }
-
-  /** Раскладка операций без счёта: способ оплаты · валюта → счёт. */
-  @Get('channel-map')
-  channelMap() {
-    return this.accounts.channelMap();
-  }
-
-  @Put('channel-map')
-  @Permissions('finance:update')
-  async setChannelMap(@Body() dto: { channel?: string; currency?: string; accountId?: string | null }, @CurrentUser() me: any) {
-    const res = await this.accounts.setChannelMap(dto);
-    const acc = dto?.accountId ? await this.prisma.financeAccount.findUnique({ where: { id: dto.accountId }, select: { name: true } }) : null;
-    await logFinance(this.prisma, { actorId: me?.id, action: 'channelMap.set', entity: 'FinanceChannelMap',
-      summary: `${dto?.channel} · ${dto?.currency} → ${acc?.name ?? '—'}`, meta: { channel: dto?.channel, currency: dto?.currency } });
-    return res;
-  }
-
-  /** Остаток в сомони на конец каждого дня месяца (?ym=ГГГГ-ММ). */
-  @Get('balance-days')
-  balanceDays(@Query('ym') ym?: string) {
-    return this.accounts.balanceDays(String(ym || ''));
-  }
-
-  @Get('transfers')
-  listTransfers(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.accounts.listTransfers({ from: parseDate(from, 'from'), to: parseDate(to, 'to', true) });
-  }
-
-  @Post('transfers')
-  @Permissions('finance:create')
-  async createTransfer(@Body() dto: TransferDto, @CurrentUser() me: any) {
-    const tr = await this.accounts.createTransfer(dto, me.id);
-    await logFinance(this.prisma, { actorId: me.id, action: 'transfer.create', entity: 'FinanceTransfer', entityId: tr.id,
-      summary: `${tr.fromAccount.name} → ${tr.toAccount.name} · ${tr.amount.toLocaleString('ru-RU')} ${tr.fromAccount.currency}` });
-    return tr;
-  }
-
-  @Delete('transfers/:id')
-  @Permissions('finance:delete')
-  async reverseTransfer(@Param('id') id: string, @CurrentUser() me: any) {
-    const tr = await this.prisma.financeTransfer.findUnique({ where: { id }, include: { fromAccount: { select: { name: true, currency: true } }, toAccount: { select: { name: true } } } });
-    const res = await this.accounts.reverseTransfer(id);
-    if (tr && !tr.reversedAt) await logFinance(this.prisma, { actorId: me?.id, action: 'transfer.reverse', entity: 'FinanceTransfer', entityId: id,
-      summary: `${tr.fromAccount.name} → ${tr.toAccount.name} · ${tr.amount.toLocaleString('ru-RU')} ${tr.fromAccount.currency}` });
-    return res;
-  }
 
   @Get('transactions')
   list(
@@ -637,16 +288,10 @@ export class FinanceController {
     // бы указать любой managerId в dto — bonus inflation).
     // `role` пробрасываем в ActivityLog.actorRole — без неё FOUNDER не мог
     // отфильтровать /activity по «FINANCE_CREATE от SALES_MANAGER».
-    this.payrollSvc.invalidateSheet();
     const tx = await this.svc.create(dto, me.id, {
       id: me.id,
       role: me?.role,
       isElevated: financeElevated(me),
-    });
-    const snap = await txSnapshot(this.prisma, tx.id);
-    if (snap) await logFinance(this.prisma, {
-      actorId: me.id, action: 'tx.create', entity: 'Transaction', entityId: tx.id, summary: txSummary(snap),
-      meta: { type: snap.type, category: snap.category, amount: snap.amount, currency: snap.currency },
     });
     // Спам-детектор для INCOME. fire-and-forget: даже если ветка алерта
     // упадёт, ответ клиенту не должен ломаться. Ошибки логируем — иначе
@@ -700,7 +345,7 @@ export class FinanceController {
   @Roles('FOUNDER')
   @Permissions('finance:update')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
-  async update(
+  update(
     @Param('id') id: string,
     @Body() patch: Partial<CreateTransactionDto>,
     @CurrentUser() me: any,
@@ -722,27 +367,16 @@ export class FinanceController {
     // `role` — для ActivityLog.actorRole (FINANCE_UPDATE /
     // TRANSACTION_MANAGER_CHANGE), без него FOUNDER не мог бы фильтровать
     // /activity по роли автора правки.
-    const before = await txSnapshot(this.prisma, id);
-    this.payrollSvc.invalidateSheet();
-    const res = await this.svc.update(id, patch, {
+    return this.svc.update(id, patch, {
       id: me.id,
       role: me?.role,
       isElevated: financeElevated(me),
     });
-    const after = await txSnapshot(this.prisma, id);
-    if (before && after) {
-      const changes = diffFields(before, after, TX_FIELDS);
-      if (changes.length) await logFinance(this.prisma, {
-        actorId: me.id, action: 'tx.update', entity: 'Transaction', entityId: id, summary: txSummary(after),
-        meta: { type: after.type, category: after.category }, changes,
-      });
-    }
-    return res;
   }
 
   @Delete('transactions/:id')
   @Permissions('finance:delete')
-  async remove(
+  remove(
     @Param('id') id: string,
     @CurrentUser() me: any,
     // hardDelete=true — физическое удаление (prisma.delete), необратимо.
@@ -786,9 +420,7 @@ export class FinanceController {
     // Передаём actor, чтобы FINANCE_DELETE в ActivityLog содержал имя
     // и роль удалившего. Без этого FOUNDER увидел бы факт удаления
     // только через emit + мог только грепом по логам искать автора.
-    const before = await txSnapshot(this.prisma, id);
-    this.payrollSvc.invalidateSheet();
-    const res = await this.svc.remove(
+    return this.svc.remove(
       id,
       {
         id: me.id,
@@ -797,11 +429,6 @@ export class FinanceController {
       },
       { hardDelete, overrideBonusApplied },
     );
-    if (before) await logFinance(this.prisma, {
-      actorId: me.id, action: 'tx.delete', entity: 'Transaction', entityId: id, summary: txSummary(before),
-      meta: { type: before.type, category: before.category, amount: before.amount, currency: before.currency },
-    });
-    return res;
   }
 
   /** Главные цифры для владельца — карточки вверху «Финансов». */

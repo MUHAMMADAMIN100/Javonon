@@ -318,7 +318,7 @@ export default function Sidebar() {
               {...prefetchProps(it.to)}
             >
               <span className="tab-link-pill"><Icon name={it.icon} size={22} /></span>
-              <span className="tab-link-label">{t(it.tabLabelKey ?? it.labelKey)}</span>
+              <span className="tab-link-label">{t(it.labelKey)}</span>
               {badgeFor(it.to) > 0 && <span className="tab-badge">{badgeText(badgeFor(it.to), mentionFor(it.to))}</span>}
             </NavLink>
           ))}

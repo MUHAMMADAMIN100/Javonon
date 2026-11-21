@@ -31,8 +31,6 @@ import { Role, SubmissionStatus, SubmissionPaymentStatus } from '@prisma/client'
 import { Permissions } from '../auth/permissions.decorator';
 import { ClientMoneyInterceptor } from '../common/client-money.interceptor';
 import { hasPermission, isFounder, roleAllows } from '../auth/role-utils';
-import { logFinance } from '../finance/finance-activity';
-import { PrismaService } from '../prisma/prisma.service';
 import { assertFileContent } from '../common/file-sniff';
 
 // Те же типы файлов что и в time-tracking (паспорт/контракт/чек).
@@ -67,7 +65,6 @@ export class SubmissionsController {
     // permission-пути `submissions:*` из PERMISSION_CATALOG, и кастомной
     // роли не нужен отдельный ключ ради блока внутри той же карточки.
     private installments: InstallmentsService,
-    private prisma: PrismaService,
   ) {}
 
   /** Менеджер создаёт новую сделку. */
@@ -290,49 +287,17 @@ export class SubmissionsController {
   @Post('payments/:id/approve')
   @Roles(Role.FOUNDER)
   @Permissions('submissions:approve')
-  async approve(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { amountTjs?: number | string; accountId?: string | null }) {
+  approve(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { amountTjs?: number | string }) {
     // amountTjs — сумма в сомони; обязательна только для сделки не в TJS.
-    const res = await this.svc.approvePayment(id, me.id, {
-      amountTjs: body?.amountTjs,
-      allowed: roleAllows(me, 'submissions:approve', () => isFounder(me)),
-      // Счёт, на который пришли деньги (необязательно; без него — по способу оплаты).
-      ...(body?.accountId !== undefined && { accountId: body.accountId || null }),
-    });
-    // Журнал «Финансы → Активность»
-    const pay = await this.prisma.submissionPayment.findUnique({
-      where: { id },
-      select: { amount: true, account: { select: { name: true } }, submission: { select: { currency: true, newStudentName: true, student: { select: { fullName: true } } } } },
-    });
-    if (pay) await logFinance(this.prisma, { actorId: me.id, action: 'income.approve', entity: 'SubmissionPayment', entityId: id,
-      summary: `${pay.submission.student?.fullName ?? pay.submission.newStudentName ?? ''} · ${pay.amount.toLocaleString('ru-RU')} ${pay.submission.currency}${pay.account ? ` · → «${pay.account.name}»` : ''}` });
-    return res;
+    return this.svc.approvePayment(id, me.id, { amountTjs: body?.amountTjs, allowed: roleAllows(me, 'submissions:approve', () => isFounder(me)) });
   }
 
   /** FOUNDER отклоняет платёж с причиной. */
   @Post('payments/:id/reject')
   @Roles(Role.FOUNDER)
   @Permissions('submissions:approve')
-  async reject(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { reason: string }) {
-    const res = await this.svc.rejectPayment(id, me.id, body?.reason || '', roleAllows(me, 'submissions:approve', () => isFounder(me)));
-    // QA-3 (BUG-22): отклонение платежа — в журнале «Финансы → Активность».
-    const pay = await this.paymentForLog(id);
-    if (pay) await logFinance(this.prisma, { actorId: me.id, action: 'income.reject', entity: 'SubmissionPayment', entityId: id,
-      summary: `${pay.who} · ${pay.sum} · причина: ${String(body?.reason || '').trim().slice(0, 120)}` });
-    return res;
-  }
-
-  /** Кто и сколько — для строки журнала финансов. */
-  private async paymentForLog(paymentId: string) {
-    const p = await this.prisma.submissionPayment.findUnique({
-      where: { id: paymentId },
-      select: { amount: true, status: true, submission: { select: { currency: true, newStudentName: true, student: { select: { fullName: true } } } } },
-    });
-    if (!p) return null;
-    return {
-      who: p.submission.student?.fullName ?? p.submission.newStudentName ?? '',
-      sum: `${p.amount.toLocaleString('ru-RU')} ${p.submission.currency}`,
-      approved: p.status === 'APPROVED',
-    };
+  reject(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { reason: string }) {
+    return this.svc.rejectPayment(id, me.id, body?.reason || '', roleAllows(me, 'submissions:approve', () => isFounder(me)));
   }
 
   /** Редактирование платежа.
@@ -350,13 +315,8 @@ export class SubmissionsController {
   @Delete('payments/:id')
   @Roles(Role.FOUNDER)
   @Permissions('submissions:payment-delete')
-  async deletePayment(@CurrentUser() me: any, @Param('id') id: string) {
-    // Снимок — до удаления: после него платежа в базе уже нет (QA-3, BUG-22).
-    const pay = await this.paymentForLog(id);
-    const res = await this.svc.deletePayment(me, id);
-    if (pay) await logFinance(this.prisma, { actorId: me.id, action: 'income.delete', entity: 'SubmissionPayment', entityId: id,
-      summary: `${pay.who} · ${pay.sum}${pay.approved ? ' · был одобрен, доход сторнирован' : ''}` });
-    return res;
+  deletePayment(@CurrentUser() me: any, @Param('id') id: string) {
+    return this.svc.deletePayment(me, id);
   }
 
   /** Менеджер меняет статус всей сделки (COMPLETED / CANCELLED).
@@ -365,22 +325,8 @@ export class SubmissionsController {
   @Post(':id/status')
   @Permissions('submissions:status')
   @Roles(Role.FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.CLIENT_MANAGER)
-  async changeStatus(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { status: SubmissionStatus }) {
-    const before = await this.prisma.saleSubmission.findUnique({
-      where: { id },
-      select: {
-        status: true, currency: true, newStudentName: true, student: { select: { fullName: true } },
-        payments: { where: { status: 'APPROVED' }, select: { amount: true } },
-      },
-    });
-    const res = await this.svc.changeStatus(me, id, body.status);
-    // Отмена сделки сторнирует её доход — это событие «Финансов» (QA-3, BUG-22).
-    if (before && body.status === 'CANCELLED' && before.status !== 'CANCELLED') {
-      const sum = before.payments.reduce((a, p) => a + p.amount, 0);
-      await logFinance(this.prisma, { actorId: me.id, action: 'deal.cancel', entity: 'SaleSubmission', entityId: id,
-        summary: `${before.student?.fullName ?? before.newStudentName ?? ''} · ${sum > 0 ? `сторнировано ${sum.toLocaleString('ru-RU')} ${before.currency}` : 'одобренных платежей не было'}` });
-    }
-    return res;
+  changeStatus(@CurrentUser() me: any, @Param('id') id: string, @Body() body: { status: SubmissionStatus }) {
+    return this.svc.changeStatus(me, id, body.status);
   }
 
   /** Редактирование сделки.

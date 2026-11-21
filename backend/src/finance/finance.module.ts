@@ -1,15 +1,6 @@
 import { Module } from '@nestjs/common';
 import { FinanceController } from './finance.controller';
 import { FinanceService } from './finance.service';
-import { FinanceAccountsService } from './finance-accounts.service';
-import { FinanceIncomeService } from './finance-income.service';
-import { FinanceExpenseService } from './finance-expense.service';
-import { FinancePayrollService } from './finance-payroll.service';
-import { FinanceBackupService } from './finance-backup.service';
-import { FinancePlanningService } from './finance-planning.service';
-import { SalaryModule } from '../salary/salary.module';
-import { PartnersModule } from '../partners/partners.module';
-import { SubmissionsModule } from '../submissions/submissions.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RealtimeModule } from '../realtime/realtime.module';
@@ -46,14 +37,9 @@ import { RevenueSchemeModule } from '../revenue-scheme/revenue-scheme.module';
     // RevenueSchemeModule нужен FinanceService.distribution() — читает
     // активную FOUNDER-editable схему и раскладывает доход по её buckets.
     RevenueSchemeModule,
-    // «Доход → Контракты»: принять оплату по сделке тем же путём, что и в «Сделках».
-    SubmissionsModule,
-    // «Расход»: начисления зарплаты (SalaryService.previewAll) и выплаты партнёрам.
-    SalaryModule,
-    PartnersModule,
   ],
   controllers: [FinanceController],
-  providers: [FinanceService, FinanceAccountsService, FinanceIncomeService, FinanceExpenseService, FinancePayrollService, FinanceBackupService, FinancePlanningService],
-  exports: [FinanceService, FinanceAccountsService],
+  providers: [FinanceService],
+  exports: [FinanceService],
 })
 export class FinanceModule {}

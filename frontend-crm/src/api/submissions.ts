@@ -31,8 +31,6 @@ export interface SubmissionPayment {
    * не в TJS; вводит основатель при одобрении. null у TJS-сделок.
    */
   amountTjs?: number | null;
-  /** Счёт, на который пришли деньги (Финансы). */
-  accountId?: string | null;
   /** По какому правилу платёж лёг в бонусный месяц (null — старые строки, по дате получения). */
   bonusMonthBy?: 'APPROVAL' | 'PAYMENT' | null;
   createdAt: string;
@@ -304,16 +302,10 @@ export const previewSubmissionPartner = (
 export const getSubmission = (id: string) =>
   api.get<SaleSubmission>(`/submissions/${id}`).then((r) => r.data);
 
-/**
- * amountTjs — сумма в сомони; обязательна для сделки не в TJS (по ней считается бонус).
- * accountId — счёт, на который пришли деньги (Финансы); без него — по способу оплаты.
- */
-export const approvePayment = (id: string, amountTjs?: number, accountId?: string) =>
+/** amountTjs — сумма в сомони; обязательна для сделки не в TJS (по ней считается бонус). */
+export const approvePayment = (id: string, amountTjs?: number) =>
   api
-    .post<SubmissionPayment>(`/submissions/payments/${id}/approve`, {
-      ...(amountTjs !== undefined && { amountTjs }),
-      ...(accountId && { accountId }),
-    })
+    .post<SubmissionPayment>(`/submissions/payments/${id}/approve`, amountTjs !== undefined ? { amountTjs } : {})
     .then((r) => r.data);
 
 export const rejectPayment = (id: string, reason: string) =>

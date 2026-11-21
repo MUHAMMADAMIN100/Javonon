@@ -2867,6 +2867,14 @@ enum FinanceAccountKind {
   SAVINGS
 }
 
+// ─── Раздел «Финансы» из Sabt (10–21.11.2026) ────────────────────────────────
+// Раздел убран из CRM 21.11.2026 (решение заказчика), код удалён. Таблицы ниже
+// (FinanceAccount … FinanceBackup) и поля Transaction.accountId/accountAmount/
+// subscriptionId/debtId/salaryYm/salaryKind ОСТАВЛЕНЫ: в них данные, а удалять
+// что-либо из боевой базы заказчик запретил (и db push без --accept-data-loss
+// упал бы). CRM их не читает и не пишет; исключение — salary.service.markPaid:
+// вычитает уже выданные авансы (salaryKind=ADVANCE), чтобы не заплатить дважды.
+
 /// Счёт компании: банк, наличные или накопления. Остаток не хранится —
 /// считается: стартовый остаток + доходы − расходы ± переводы.
 model FinanceAccount {
